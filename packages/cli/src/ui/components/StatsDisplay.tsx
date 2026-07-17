@@ -194,45 +194,47 @@ interface ModelRowData {
 }
 
 const ModelTableRow: React.FC<{ row: ModelRowData }> = ({ row }) => (
-  <Box key={row.key}>
-    <Box width={MODEL_TABLE_WIDTHS.name}>
-      <Text color={theme.text.primary} wrap="truncate-end">
-        {row.modelName}
-      </Text>
+  <Box key={row.key} flexDirection="column">
+    <Box>
+      <Box width={MODEL_TABLE_WIDTHS.name}>
+        <Text color={theme.text.primary} wrap="truncate-end">
+          {row.modelName}
+        </Text>
+      </Box>
+      <Box
+        width={MODEL_TABLE_WIDTHS.requests}
+        flexDirection="column"
+        alignItems="flex-end"
+        flexShrink={0}
+      >
+        <Text color={theme.text.primary}>{row.requests}</Text>
+      </Box>
+      <Box
+        width={MODEL_TABLE_WIDTHS.uncached}
+        flexDirection="column"
+        alignItems="flex-end"
+        flexShrink={0}
+      >
+        <Text color={theme.text.primary}>{row.inputTokens}</Text>
+      </Box>
+      <Box
+        width={MODEL_TABLE_WIDTHS.cached}
+        flexDirection="column"
+        alignItems="flex-end"
+        flexShrink={0}
+      >
+        <Text color={theme.text.secondary}>{row.cachedTokens}</Text>
+      </Box>
+      <Box
+        width={MODEL_TABLE_WIDTHS.output}
+        flexDirection="column"
+        alignItems="flex-end"
+        flexShrink={0}
+      >
+        <Text color={theme.text.primary}>{row.outputTokens}</Text>
+      </Box>
     </Box>
-    <Box
-      width={MODEL_TABLE_WIDTHS.requests}
-      flexDirection="column"
-      alignItems="flex-end"
-      flexShrink={0}
-    >
-      <Text color={theme.text.primary}>{row.requests}</Text>
-    </Box>
-    <Box
-      width={MODEL_TABLE_WIDTHS.uncached}
-      flexDirection="column"
-      alignItems="flex-end"
-      flexShrink={0}
-    >
-      <Text color={theme.text.primary}>{row.inputTokens}</Text>
-    </Box>
-    <Box
-      width={MODEL_TABLE_WIDTHS.cached}
-      flexDirection="column"
-      alignItems="flex-end"
-      flexShrink={0}
-    >
-      <Text color={theme.text.secondary}>{row.cachedTokens}</Text>
-    </Box>
-    <Box
-      width={MODEL_TABLE_WIDTHS.output}
-      flexDirection="column"
-      alignItems="flex-end"
-      flexShrink={0}
-    >
-      <Text color={theme.text.primary}>{row.outputTokens}</Text>
-    </Box>
-    <Box width={MODEL_TABLE_WIDTHS.name} paddingLeft={2}>
+    <Box paddingLeft={2}>
       <Text color={theme.text.secondary} wrap="truncate-end">
         Latency: {row.avgLatency} avg / {row.totalLatency} total
         {row.errors > 0 ? ` (${row.errors} errors)` : ''}

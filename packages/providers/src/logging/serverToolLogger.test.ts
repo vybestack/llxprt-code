@@ -16,6 +16,7 @@ import type { ServerToolLogContext } from './serverToolLogger.js';
 import type { IProvider } from '../IProvider.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import * as conversationLogger from './conversationLogger.js';
 
 function makeLogCtx(debug: {
   warn: (cb: () => string) => void;
@@ -86,6 +87,17 @@ describe('invokeServerToolWithLogging', () => {
     });
     const warnFn = vi.fn();
     const ctx = makeLogCtx({ warn: warnFn });
+
+    // Enable conversation logging so the error-path logging branch is
+    // actually exercised.
+    vi.spyOn(
+      config as unknown as { getConversationLoggingEnabled: () => boolean },
+      'getConversationLoggingEnabled',
+    ).mockReturnValue(true);
+    // Make the logging dependency reject to verify fail-open.
+    vi.spyOn(conversationLogger, 'logToolCallEntry').mockRejectedValue(
+      new Error('Logging infrastructure failed'),
+    );
 
     await expect(
       invokeServerToolWithLogging(provider, 'tool', {}, config, ctx),

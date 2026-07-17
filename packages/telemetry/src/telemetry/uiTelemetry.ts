@@ -135,23 +135,6 @@ export interface SessionMetrics {
   };
 }
 
-const createInitialModelMetrics = (): ModelMetrics => ({
-  api: {
-    totalRequests: 0,
-    totalErrors: 0,
-    totalLatencyMs: 0,
-  },
-  tokens: {
-    input: 0,
-    prompt: 0,
-    candidates: 0,
-    total: 0,
-    cached: 0,
-    thoughts: 0,
-    tool: 0,
-  },
-});
-
 const createInitialTimingMetrics = (): SessionTimingMetrics => ({
   completeTokensPerMinute: 0,
   outputGenerationTps: 0,
@@ -320,11 +303,41 @@ export class UiTelemetryService extends EventEmitter {
     });
   }
 
-  private getOrCreateModelMetrics(modelName: string): ModelMetrics {
-    if (!(modelName in this.#metrics.models)) {
-      this.#metrics.models[modelName] = createInitialModelMetrics();
+  /**
+   * Project all model metrics from the aggregator's canonical breakdown.
+   * This replaces the partial manual increments so that totalErrors and
+   * error-attempt token totals are included consistently with the
+   * aggregator snapshot.
+   */
+  private projectModelMetricsFromAggregator(): void {
+    const snap = this.#aggregator.getSnapshot();
+    const newModels: Record<string, ModelMetrics> = {};
+    for (const [modelName, breakdown] of Object.entries(snap.models)) {
+      newModels[modelName] = {
+        api: {
+          totalRequests: breakdown.totalRequests,
+          totalErrors: breakdown.totalErrors,
+          totalLatencyMs: breakdown.totalLatencyMs,
+        },
+        tokens: {
+          input: Math.max(
+            0,
+            breakdown.totalInputTokens - breakdown.totalCachedTokens,
+          ),
+          prompt: breakdown.totalInputTokens,
+          candidates: breakdown.totalOutputTokens,
+          total:
+            breakdown.totalInputTokens +
+            breakdown.totalOutputTokens +
+            breakdown.totalThoughtsTokens +
+            breakdown.totalToolTokens,
+          cached: breakdown.totalCachedTokens,
+          thoughts: breakdown.totalThoughtsTokens,
+          tool: breakdown.totalToolTokens,
+        },
+      };
     }
-    return this.#metrics.models[modelName];
+    this.#metrics.models = newModels;
   }
 
   private processApiResponse(event: ApiResponseEvent): boolean {
@@ -338,7 +351,6 @@ export class UiTelemetryService extends EventEmitter {
     const cachedTokens = norm(event.cached_content_token_count);
     const thoughtsTokens = norm(event.thoughts_token_count);
     const toolTokens = norm(event.tool_token_count);
-    const totalTokens = norm(event.total_token_count);
     const ttft = event.time_to_first_token_ms ?? null;
 
     const attemptId = event.attempt_id ?? event.prompt_id;
@@ -360,26 +372,17 @@ export class UiTelemetryService extends EventEmitter {
         event.cache_read_input_tokens ??
         (cachedTokens > 0 ? cachedTokens : undefined),
       cacheWrites: event.cache_creation_input_tokens ?? undefined,
-      timestampMs: event.start_ms ?? Date.now() - durationMs,
+      timestampMs: event.start_ms ?? performance.now() - durationMs,
     });
 
     if (!isNew) {
       return false;
     }
 
-    const modelMetrics = this.getOrCreateModelMetrics(event.model);
-    modelMetrics.api.totalRequests++;
-    modelMetrics.api.totalLatencyMs += durationMs;
-    modelMetrics.tokens.prompt += inputTokens;
-    modelMetrics.tokens.candidates += outputTokens;
-    modelMetrics.tokens.total += totalTokens;
-    modelMetrics.tokens.cached += cachedTokens;
-    modelMetrics.tokens.thoughts += thoughtsTokens;
-    modelMetrics.tokens.tool += toolTokens;
-    modelMetrics.tokens.input = Math.max(
-      0,
-      modelMetrics.tokens.prompt - modelMetrics.tokens.cached,
-    );
+    // Project model metrics from the aggregator's canonical breakdown
+    // rather than maintaining a partial manual mirror. This ensures
+    // totalErrors and error-attempt token totals are included consistently.
+    this.projectModelMetricsFromAggregator();
 
     this.syncTimingFromAggregator();
     return true;
@@ -412,17 +415,15 @@ export class UiTelemetryService extends EventEmitter {
         event.cache_read_input_tokens ??
         (cachedTokens > 0 ? cachedTokens : undefined),
       cacheWrites: event.cache_creation_input_tokens ?? undefined,
-      timestampMs: event.start_ms ?? Date.now() - durationMs,
+      timestampMs: event.start_ms ?? performance.now() - durationMs,
     });
 
     if (!isNew) {
       return false;
     }
 
-    const modelMetrics = this.getOrCreateModelMetrics(event.model);
-    modelMetrics.api.totalRequests++;
-    modelMetrics.api.totalErrors++;
-    modelMetrics.api.totalLatencyMs += durationMs;
+    // Project model metrics from the aggregator's canonical breakdown
+    this.projectModelMetricsFromAggregator();
 
     this.syncTimingFromAggregator();
     return true;
@@ -461,7 +462,12 @@ export class UiTelemetryService extends EventEmitter {
     const { tools, files } = this.#metrics;
     const callId = event.call_id;
     const isCancelled = event.status === 'cancelled';
-    const durationMs = norm(event.duration_ms);
+    // Explicit start/end timestamps take precedence over duration_ms
+    // per the event contract.
+    const durationMs =
+      event.start_ms !== undefined && event.end_ms !== undefined
+        ? norm(event.end_ms - event.start_ms)
+        : norm(event.duration_ms);
 
     const isNew = this.#aggregator.recordToolActivity(
       event.function_name,

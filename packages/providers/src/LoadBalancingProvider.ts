@@ -19,8 +19,6 @@ import { LoadBalancerFailoverError } from './errors.js';
 import { getAttemptLifecycleObserver } from './logging/attemptLifecycle.js';
 import {
   notifyBackendStart,
-  notifyBackendResult,
-  recordBackendSuccess,
   yieldWithBackendMetrics,
   type BackendAttemptLifecycleState,
   type BackendMetricsHooks,
@@ -33,10 +31,7 @@ import { CircuitBreakerManager } from './loadBalancing/circuitBreakerManager.js'
 import { TPMTracker } from './loadBalancing/tpmTracker.js';
 import { BackendMetricsCollector } from './loadBalancing/backendMetrics.js';
 import { extractFailoverSettings as extractFailoverSettingsFromEphemeral } from './loadBalancing/failoverSettings.js';
-import {
-  wrapWithTimeout,
-  isTimeoutError,
-} from './loadBalancing/streamTimeout.js';
+import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
 import { cloneContentsForCompression } from './loadBalancing/contentClone.js';
@@ -45,11 +40,8 @@ import {
   rethrowIfAborted,
 } from './loadBalancing/requestAbort.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
-import {
-  cleanupDelegateAttempt,
-  createDelegateAttempt,
-  requireTransportAttempt,
-} from './loadBalancing/delegateAttempt.js';
+import { requireTransportAttempt } from './loadBalancing/delegateAttempt.js';
+import { executeBackendAttempt } from './loadBalancing/backendAttemptExecutor.js';
 import {
   observeDelegateFailure,
   shouldSkipBackend,
@@ -368,6 +360,7 @@ export class LoadBalancingProvider implements IProvider {
     const { lifecycleObserver, attemptCtx } = this.startBackendAttempt(
       options,
       subProfile,
+      0,
     );
 
     yield* yieldWithBackendMetrics(
@@ -762,6 +755,7 @@ export class LoadBalancingProvider implements IProvider {
           settings,
           startTime,
           chunksYielded,
+          attempts - 1,
         );
         this.failoverState.setIfOwner(requestOwner, currentIndex);
         return true;
@@ -806,14 +800,18 @@ export class LoadBalancingProvider implements IProvider {
   private startBackendAttempt(
     options: GenerateChatOptions,
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    requestLocalAttemptIndex: number,
   ): BackendAttemptLifecycleState {
     const lifecycleObserver = getAttemptLifecycleObserver(options.metadata);
-    const attemptIndex = this.lbAttemptCounter++;
+    // Global counter only provides ID uniqueness; the attemptIndex is
+    // request-local so concurrent and later requests get correct indexes.
+    const idSequence = this.lbAttemptCounter++;
     const attemptCtx = notifyBackendStart(
       lifecycleObserver,
       this.config.profileName,
       subProfile,
-      attemptIndex,
+      requestLocalAttemptIndex,
+      idSequence,
       this.logger,
     );
     return { lifecycleObserver, attemptCtx };
@@ -825,79 +823,31 @@ export class LoadBalancingProvider implements IProvider {
     settings: FailoverSettings,
     startTime: number,
     chunksYielded: { value: boolean },
+    requestLocalAttemptIndex: number,
   ): AsyncGenerator<IContent> {
-    this.logger.debug(
-      () =>
-        `[LB:failover] Trying backend: ${subProfile.name} (start time: ${startTime})`,
-    );
-
-    this.markActiveSelection(subProfile.name);
-
     const { lifecycleObserver, attemptCtx } = this.startBackendAttempt(
       options,
       subProfile,
+      requestLocalAttemptIndex,
     );
-
-    const resolvedOptions = this.buildResolvedOptions(subProfile, options);
-    const delegateProvider = this.providerManager.getProviderByName(
-      subProfile.providerName,
-    );
-    if (!delegateProvider) {
-      notifyBackendResult(
-        lifecycleObserver,
-        attemptCtx,
-        subProfile,
-        'error',
-        `Provider "${subProfile.providerName}" not found`,
-      );
-      throw new Error(`Provider "${subProfile.providerName}" not found`);
-    }
-    requireTransportAttempt(resolvedOptions);
-
-    const attempt = createDelegateAttempt(resolvedOptions);
-    const chunks: IContent[] = [];
-    const rawIterator = delegateProvider.generateChatCompletion(
-      attempt.options,
-    );
-    const iterator = wrapWithTimeout(
-      rawIterator,
-      settings.timeoutMs,
-      subProfile.name,
-      this.logger,
-      {
-        signal: attempt.linked.controller.signal,
-        cancel: () => attempt.linked.controller.abort(),
+    yield* executeBackendAttempt({
+      subProfile,
+      options,
+      settings,
+      startTime,
+      chunksYielded,
+      lifecycleObserver,
+      attemptCtx,
+      deps: {
+        logger: this.logger,
+        circuitBreaker: this.circuitBreaker,
+        providerManager: this.providerManager,
+        markActiveSelection: (name) => this.markActiveSelection(name),
+        buildResolvedOptions: (sp, opt) => this.buildResolvedOptions(sp, opt),
+        getMetricsHooks: () => this.getMetricsHooks(),
+        incrementStats: (name) => this.incrementStats(name),
       },
-    );
-    try {
-      for await (const chunk of cleanupDelegateAttempt(attempt, iterator)) {
-        chunksYielded.value = true;
-        chunks.push(chunk);
-        yield chunk;
-      }
-      recordBackendSuccess(
-        subProfile,
-        startTime,
-        chunks,
-        this.getMetricsHooks(),
-        lifecycleObserver,
-        attemptCtx,
-      );
-      this.incrementStats(subProfile.name);
-      this.circuitBreaker.recordBackendSuccess(subProfile.name);
-      this.logger.debug(
-        () => `[LB:failover] Success on backend: ${subProfile.name}`,
-      );
-    } catch (error) {
-      notifyBackendResult(
-        lifecycleObserver,
-        attemptCtx,
-        subProfile,
-        'error',
-        error instanceof Error ? error.message : String(error),
-      );
-      throw error;
-    }
+    });
   }
 
   private recordFail(name: string, startTime: number, error: Error): void {

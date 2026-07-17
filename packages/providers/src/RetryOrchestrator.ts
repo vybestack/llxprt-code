@@ -95,6 +95,7 @@ import {
   getBucketFailoverHandlerFromOptions,
   getOnAuthErrorHandlerFromOptions,
 } from './retryConfigHandlers.js';
+import { resolveAuthTokenFromOptions } from './retryAuthTokenResolver.js';
 import { randomUUID } from 'node:crypto';
 
 function extractSignal(options: GenerateChatOptions): AbortSignal | undefined {
@@ -363,7 +364,11 @@ export class RetryOrchestrator implements IProvider {
       } catch (error) {
         attemptError = error;
         lastError = error;
-        terminalStatus = isTerminalRetryError(error) ? 'aborted' : 'error';
+        // Only genuine abort/cancellation is recorded as 'aborted'.
+        // Errors after partial stream output (marked by
+        // isTerminalRetryError) are transport failures and must remain
+        // 'error' so error-vs-cancellation metrics are not corrupted.
+        terminalStatus = isAbortError(error) ? 'aborted' : 'error';
       } finally {
         linked.controller.abort();
         linked.dispose();
@@ -902,63 +907,19 @@ function resolveAttemptErrorMessage(
   status: AttemptStatus,
   error: unknown,
 ): string | undefined {
-  if (status === 'success') return undefined;
+  if (status === 'success' || error === undefined) return undefined;
   if (error instanceof Error) return error.message;
   return String(error);
 }
 
 /**
- * Resolves the auth token from options (handles string, object with
- * provide(), and plain function). All callable invocations are wrapped in
- * try/catch so a rejecting token provider does not become an unhandled
- * rejection that masks the real error.
- * @fix issue1861
+ * Returns true only for genuine abort/cancellation errors. Partial-output
+ * transport failures (marked by isTerminalRetryError) are NOT aborts.
  */
-const tokenResolverLogger = new DebugLogger('llxprt:retry:auth-token');
-
-async function resolveAuthTokenFromOptions(
-  options: GenerateChatOptions,
-): Promise<string> {
-  const authToken = options.resolved?.authToken;
-  if (typeof authToken === 'string') {
-    return authToken;
-  }
-  // Handle RuntimeAuthTokenProvider object with provide method — check
-  // this BEFORE the plain-function branch so callable objects that also
-  // expose `provide` are routed correctly.
-  if (
-    authToken &&
-    typeof authToken === 'object' &&
-    'provide' in authToken &&
-    typeof (authToken as { provide?: unknown }).provide === 'function'
-  ) {
-    try {
-      const result = await (
-        authToken as {
-          provide: () => Promise<string | undefined> | string | undefined;
-        }
-      ).provide();
-      return typeof result === 'string' ? result : '';
-    } catch (err) {
-      tokenResolverLogger.debug(
-        () =>
-          `Token provider threw, returning empty token: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return '';
-    }
-  }
-  // Handle plain function returning string or Promise<string>
-  if (typeof authToken === 'function') {
-    try {
-      const result = await (authToken as () => string | Promise<string>)();
-      return typeof result === 'string' ? result : '';
-    } catch (err) {
-      tokenResolverLogger.debug(
-        () =>
-          `Token provider function threw, returning empty token: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      return '';
-    }
-  }
-  return '';
+function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === 'AbortError' ||
+    (error as NodeJS.ErrnoException).code === 'ABORT_ERR'
+  );
 }

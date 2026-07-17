@@ -513,6 +513,26 @@ describe('SessionMetricsAggregator', () => {
       expect(snap.totalOutputTokens).toBe(0);
     });
 
+    it('excludes hasUsage:false records from TPM and rate calculations', () => {
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'no-usage',
+          inputTokens: 500,
+          outputTokens: 200,
+          durationMs: 1000,
+          hasUsage: false,
+        }),
+      );
+      const snap = agg.getSnapshot();
+      // The record counts as an API request but must NOT contribute
+      // to rate numerators or denominators.
+      expect(snap.totalApiRequests).toBe(1);
+      expect(snap.completeTokensPerMinute).toBe(0);
+      // Token totals are still accumulated for display
+      expect(snap.totalInputTokens).toBe(500);
+      expect(snap.totalOutputTokens).toBe(200);
+    });
+
     it('handles nonfinite values by treating as zero', () => {
       agg.recordApiAttempt({
         ...makeAttempt({ attemptId: 'a1' }),

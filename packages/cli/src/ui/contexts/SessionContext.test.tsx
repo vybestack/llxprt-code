@@ -6,9 +6,8 @@
 
 /** @vitest-environment jsdom */
 
-import { type MutableRefObject } from 'react';
+import { type MutableRefObject, act } from 'react';
 import { render, renderHook } from '../../test-utils/render.js';
-import { act } from 'react-dom/test-utils';
 import type { SessionMetrics } from './SessionContext.js';
 import { SessionStatsProvider, useSessionStats } from './SessionContext.js';
 import { describe, it, expect } from 'vitest';
@@ -356,6 +355,7 @@ describe('SessionStatsContext', () => {
         totalCalls: 0,
         totalSuccess: 0,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 0,
         totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
@@ -445,6 +445,7 @@ describe('SessionStatsContext', () => {
         totalCalls: 0,
         totalSuccess: 0,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 0,
         totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},

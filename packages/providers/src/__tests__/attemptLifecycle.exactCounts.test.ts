@@ -188,7 +188,8 @@ describe('#10 logging parity and conversation write count', () => {
 describe('#10 relative TTFT / last token / generation', () => {
   it('TTFT and lastTokenMs are relative to request start (not absolute)', () => {
     const tracker = new ProviderPerformanceTracker('test');
-    tracker.recordCompletion(5000, 200, 500, 10, 3000);
+    // TPS uses output tokens: 500 output / (3000-200)ms ≈ 178.57 tok/s
+    tracker.recordCompletion(5000, 200, 1000, 500, 10, 3000);
     const metrics = tracker.getLatestMetrics();
     expect(metrics.timeToFirstToken).toBe(200);
     expect(metrics.tokensPerSecond).toBeCloseTo(178.57, 0);

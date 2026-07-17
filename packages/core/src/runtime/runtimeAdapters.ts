@@ -21,6 +21,7 @@ import {
   ApiResponseEvent as LegacyApiResponseEvent,
   ApiErrorEvent as LegacyApiErrorEvent,
 } from '../telemetry/types.js';
+import { randomUUID } from 'node:crypto';
 import type {
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
@@ -95,14 +96,15 @@ export function createTelemetryAdapterFromConfig(
               totalTokenCount: event.usage.totalTokens,
             }
           : undefined);
-      const attemptId =
-        event.promptId ??
-        event.runtimeId ??
-        `runtime:${event.model}:${Date.now()}:${Math.random()}`;
+      // Stable prompt identity matches logApiRequest's correlation key.
+      const promptId = event.promptId ?? event.runtimeId ?? 'runtime';
+      // Caller-provided attempt identity; fall back to a unique per-event
+      // ID so distinct prompt-less attempts are never deduped together.
+      const attemptId = event.attemptId ?? randomUUID();
       const legacy = new LegacyApiResponseEvent(
         event.model,
         event.durationMs,
-        attemptId,
+        promptId,
         usageForLegacy,
         event.responseText,
         event.error,
@@ -113,15 +115,16 @@ export function createTelemetryAdapterFromConfig(
       logApiResponse(config, legacy);
     },
     logApiError: (event) => {
-      const attemptId =
-        event.promptId ??
-        event.runtimeId ??
-        `runtime:${event.model}:${Date.now()}:${Math.random()}`;
+      // Stable prompt identity matches logApiRequest's correlation key.
+      const promptId = event.promptId ?? event.runtimeId ?? 'runtime';
+      // Caller-provided attempt identity; fall back to a unique per-event
+      // ID so distinct prompt-less attempts are never deduped together.
+      const attemptId = event.attemptId ?? randomUUID();
       const legacy = new LegacyApiErrorEvent(
         event.model,
         event.error,
         event.durationMs,
-        attemptId,
+        promptId,
         event.errorType,
         event.statusCode,
         attemptId,

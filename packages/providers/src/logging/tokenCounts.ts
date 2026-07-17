@@ -44,6 +44,23 @@ export function firstTruthyNumber(
 }
 
 /**
+ * Select the first *defined* value, treating canonical `0` as authoritative
+ * over a legacy fallback. Unlike {@link firstTruthyNumber}, a reported zero
+ * canonical field wins over a nonzero legacy field so that providers can
+ * explicitly report "zero cache reads."
+ */
+export function firstDefinedNumber(
+  firstValue: unknown,
+  secondValue: unknown,
+): number {
+  if (firstValue !== undefined && firstValue !== null) {
+    const n = numberOrZero(firstValue);
+    return n;
+  }
+  return numberOrZero(secondValue);
+}
+
+/**
  * Extract token counts from tokenUsage metadata
  */
 export function extractTokenCountsFromTokenUsage(
@@ -57,7 +74,7 @@ export function extractTokenCountsFromTokenUsage(
   const cacheReads = hasCacheReadData
     ? Math.max(
         0,
-        firstTruthyNumber(
+        firstDefinedNumber(
           tokenUsage.cachedTokens,
           tokenUsage.cache_read_input_tokens,
         ),
@@ -72,7 +89,7 @@ export function extractTokenCountsFromTokenUsage(
   const cacheWrites = hasCacheWriteData
     ? Math.max(
         0,
-        firstTruthyNumber(
+        firstDefinedNumber(
           tokenUsage.cacheCreationTokens,
           tokenUsage.cache_creation_input_tokens,
         ),
@@ -223,7 +240,10 @@ function clampTokenCounts(counts: TokenCounts): TokenCounts {
     cached_content_token_count: Math.max(0, counts.cached_content_token_count),
     thoughts_token_count: Math.max(0, counts.thoughts_token_count),
     tool_token_count: Math.max(0, counts.tool_token_count),
-    cache_read_input_tokens: Math.max(0, counts.cache_read_input_tokens ?? 0),
+    cache_read_input_tokens:
+      counts.cache_read_input_tokens === undefined
+        ? undefined
+        : Math.max(0, counts.cache_read_input_tokens),
     cache_creation_input_tokens:
       counts.cache_creation_input_tokens === null
         ? null

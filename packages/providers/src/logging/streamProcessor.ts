@@ -190,7 +190,7 @@ export function processLoggedStreamChunk(
       currentAttemptId,
       isTokenBearing,
       chunkUsage,
-      '',
+      content,
       acc.lastFinishReason,
       recorder,
     );
@@ -230,6 +230,7 @@ export async function* processStreamWithRecorderGen(
       duration,
       acc.firstChunkTime,
       totalTokens,
+      tokenCounts.output_token_count,
       acc.chunkCount,
       acc.lastChunkTime,
     );
@@ -379,6 +380,7 @@ export async function* logResponseStreamWithRecorderGen(
       duration,
       acc.firstChunkTime,
       perfTotalTokens,
+      tokenCounts.output_token_count,
       acc.chunkCount,
       acc.lastChunkTime,
     );

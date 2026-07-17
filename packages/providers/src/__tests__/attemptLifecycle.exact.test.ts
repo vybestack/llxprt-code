@@ -355,20 +355,20 @@ describe('Focused lifecycle review findings', () => {
     it('TPS is 0 when no lastTokenMs provided (no duration fallback)', () => {
       const tracker = new ProviderPerformanceTracker('test');
       // totalTime=1000, TTFT=200, but no lastTokenMs → TPS stays 0
-      tracker.recordCompletion(1000, 200, 500, 10);
+      tracker.recordCompletion(1000, 200, 500, 250, 10);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBe(0);
     });
 
     it('TPS is valid when lastTokenMs - TTFT > 0', () => {
       const tracker = new ProviderPerformanceTracker('test');
-      // TTFT=200, lastToken=1200 → generation=1000ms → 500/1 = 500 tok/s
-      tracker.recordCompletion(1400, 200, 500, 10, 1200);
+      // TTFT=200, lastToken=1200 → generation=1000ms → 500 output / 1s = 500 tok/s
+      tracker.recordCompletion(1400, 200, 1000, 500, 10, 1200);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBe(500);
     });
 
     it('TPS is 0 when lastTokenMs <= TTFT', () => {
       const tracker = new ProviderPerformanceTracker('test');
-      tracker.recordCompletion(600, 500, 100, 1, 500);
+      tracker.recordCompletion(600, 500, 200, 100, 1, 500);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBe(0);
     });
   });

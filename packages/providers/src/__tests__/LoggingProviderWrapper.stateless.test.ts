@@ -287,5 +287,24 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       expect(result.cache_read_input_tokens).toBe(40);
       expect(result.cache_creation_input_tokens).toBe(20);
     });
+
+    it('treats canonical zero as authoritative over legacy nonzero', () => {
+      const result = extractTokenCountsFromTokenUsage(
+        {
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          cachedTokens: 0,
+          cacheCreationTokens: 0,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 15,
+        },
+        debug,
+      );
+
+      // Canonical 0 wins over legacy 30 — reported zero is authoritative
+      expect(result.cache_read_input_tokens).toBe(0);
+      expect(result.cache_creation_input_tokens).toBe(0);
+    });
   });
 });

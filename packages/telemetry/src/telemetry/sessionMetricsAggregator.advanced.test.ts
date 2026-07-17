@@ -10,7 +10,7 @@
  * Split from sessionMetricsAggregator.test.ts to stay within max-lines.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   SessionMetricsAggregator,
   type ApiAttemptRecord,
@@ -342,6 +342,50 @@ describe('SessionMetricsAggregator', () => {
       expect(snap.agentActiveTimeMs).toBe(1000);
       // Accumulated work counts both = 2000
       expect(snap.accumulatedWorkMs).toBe(2000);
+    });
+
+    it('handles more than 200 disjoint intervals without bridging gaps', () => {
+      // Insert 250 disjoint 10ms intervals with 10ms gaps between them.
+      // Interval  i:  start = i*20, duration = 10  -> [i*20, i*20+10)
+      // Gap between consecutive intervals = 10ms
+      // Use a fixed clock so the wall-clock clamp in getSnapshot() does
+      // not interfere — we are testing the interval union compaction
+      // behavior, not wall-clock consistency.
+      const clockNow = vi.spyOn(performance, 'now');
+      const fixedNow = 1_000_000;
+      clockNow.mockReturnValue(fixedNow);
+      try {
+        for (let i = 0; i < 250; i++) {
+          agg.recordApiAttempt(
+            makeAttempt({
+              attemptId: `disjoint_${i}`,
+              durationMs: 10,
+              timestampMs: i * 20,
+            }),
+          );
+        }
+        const snap = agg.getSnapshot();
+        // With MAX_INTERVALS=200 and shift-based compaction, 50 oldest
+        // intervals are dropped, leaving 200 intervals * 10ms = 2000ms.
+        // The critical assertion: gaps must NOT be bridged (would be ~4980).
+        expect(snap.agentActiveTimeMs).toBeLessThanOrEqual(2000);
+        expect(snap.agentActiveTimeMs).toBeGreaterThanOrEqual(1990);
+      } finally {
+        clockNow.mockRestore();
+      }
+    });
+
+    it('rejects non-finite interval endpoints', () => {
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'a1',
+          durationMs: 1000,
+          timestampMs: Number.NaN,
+        }),
+      );
+      const snap = agg.getSnapshot();
+      // NaN timestamp should be rejected — no interval added
+      expect(snap.agentActiveTimeMs).toBe(0);
     });
   });
 

@@ -49,13 +49,18 @@ export function handleFailoverError(
   transportAttemptRemaining: boolean,
   ctx: FailoverErrorContext,
 ): FailoverErrorAction {
+  // Normalize non-Error throws (null, string, plain object) so downstream
+  // logging and recording never throws while reading .message.
+  const normalizedError =
+    error instanceof Error ? error : new Error(String(error));
+
   if (chunksYielded) {
     ctx.logger.debug(
       () =>
         `[LB:failover] ${subProfile.name} failed after yielding chunks, aborting stream`,
     );
-    ctx.recordFail(subProfile.name, startTime, error as Error);
-    ctx.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
+    ctx.recordFail(subProfile.name, startTime, normalizedError);
+    ctx.circuitBreaker.recordBackendFailure(subProfile.name, normalizedError);
     return 'immediate-throw';
   }
   if (!permitsLoadBalancerFailover(error)) return 'immediate-throw';
@@ -64,9 +69,9 @@ export function handleFailoverError(
       () =>
         `[LB:failover] ${subProfile.name} returned immediate failover error (${getErrorStatus(error)}), skipping retries`,
     );
-    ctx.recordFail(subProfile.name, startTime, error as Error);
-    ctx.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
-    errors.push({ profile: subProfile.name, error: error as Error });
+    ctx.recordFail(subProfile.name, startTime, normalizedError);
+    ctx.circuitBreaker.recordBackendFailure(subProfile.name, normalizedError);
+    errors.push({ profile: subProfile.name, error: normalizedError });
     ctx.failoverState.advanceFrom(requestOwner, currentIndex, numProfiles);
     return 'break';
   }
@@ -81,7 +86,7 @@ export function handleFailoverError(
     if (settings.retryDelayMs > 0) {
       ctx.logger.debug(
         () =>
-          `[LB:failover] ${subProfile.name} attempt ${attempts} failed, retrying after ${settings.retryDelayMs}ms: ${(error as Error).message}`,
+          `[LB:failover] ${subProfile.name} attempt ${attempts} failed, retrying after ${settings.retryDelayMs}ms: ${normalizedError.message}`,
       );
     }
     return 'retry';
@@ -89,11 +94,11 @@ export function handleFailoverError(
 
   ctx.logger.debug(
     () =>
-      `[LB:failover] ${subProfile.name} failed after ${attempts} attempts: ${(error as Error).message}`,
+      `[LB:failover] ${subProfile.name} failed after ${attempts} attempts: ${normalizedError.message}`,
   );
-  ctx.recordFail(subProfile.name, startTime, error as Error);
-  ctx.circuitBreaker.recordBackendFailure(subProfile.name, error as Error);
-  errors.push({ profile: subProfile.name, error: error as Error });
+  ctx.recordFail(subProfile.name, startTime, normalizedError);
+  ctx.circuitBreaker.recordBackendFailure(subProfile.name, normalizedError);
+  errors.push({ profile: subProfile.name, error: normalizedError });
   ctx.failoverState.advanceFrom(requestOwner, currentIndex, numProfiles);
   return 'break';
 }

@@ -231,20 +231,24 @@ class CacheDataProvider implements IProvider {
   ): AsyncIterableIterator<IContent> {
     const cacheReads = this.cacheReads;
     const cacheWrites = this.cacheWrites;
-    const baseUsage = this.includeCacheInUsage
-      ? TOKEN_USAGE
-      : TOKEN_USAGE_NO_CACHE;
+    // Build usage using recognized field names so the zero-cache
+    // scenario genuinely overrides cachedTokens instead of inheriting 10.
+    const usage: Record<string, unknown> = {
+      ...(this.includeCacheInUsage ? TOKEN_USAGE : TOKEN_USAGE_NO_CACHE),
+    };
+    if (this.includeCacheInUsage) {
+      if (cacheReads !== undefined) {
+        usage.cachedTokens = cacheReads;
+      }
+      if (cacheWrites !== null) {
+        usage.cacheCreationTokens = cacheWrites;
+      }
+    }
     return (async function* (): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Cache test' }],
-        metadata: {
-          usage: {
-            ...baseUsage,
-            cacheReadInputTokens: cacheReads,
-            cacheCreationInputTokens: cacheWrites,
-          },
-        },
+        metadata: { usage },
       } as IContent;
     })();
   }

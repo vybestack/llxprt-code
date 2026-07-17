@@ -16,7 +16,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
-import type { ApiResponseEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
+import type { UiEvent } from '@vybestack/llxprt-code-telemetry';
+import { EVENT_API_RESPONSE } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
   const actual = await importOriginal<typeof SessionContext>();
@@ -37,16 +38,19 @@ function emitCacheResponse(opts: {
   cacheWrites?: number | null;
   promptTokens?: number;
   cachedTokens?: number;
+  outputTokens?: number;
   model?: string;
 }): void {
+  const inputTokens = opts.promptTokens ?? 1000;
+  const outputTokens = opts.outputTokens ?? 50;
   const event = {
-    'event.name': 'llxprt_code.api_response' as const,
+    'event.name': EVENT_API_RESPONSE,
     'event.timestamp': new Date().toISOString(),
     model: opts.model ?? 'cache-test-model',
     duration_ms: 1000,
-    input_token_count: opts.promptTokens ?? 1000,
-    output_token_count: 50,
-    total_token_count: 1050,
+    input_token_count: inputTokens,
+    output_token_count: outputTokens,
+    total_token_count: inputTokens + outputTokens,
     cached_content_token_count: opts.cachedTokens ?? 0,
     thoughts_token_count: 0,
     tool_token_count: 0,
@@ -56,12 +60,8 @@ function emitCacheResponse(opts: {
     usage_metadata_present: true,
     cache_read_input_tokens: opts.cacheReads,
     cache_creation_input_tokens: opts.cacheWrites,
-  };
-  uiTelemetryService.addEvent(
-    event as ApiResponseEvent & {
-      'event.name': 'llxprt_code.api_response';
-    },
-  );
+  } as UiEvent;
+  uiTelemetryService.addEvent(event);
 }
 
 const renderCacheStats = () => {

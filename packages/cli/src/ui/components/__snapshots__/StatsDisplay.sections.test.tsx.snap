@@ -18,7 +18,8 @@ exports[`<StatsDisplay /> sections > Model Usage Table Updates > should apply co
 │                                                                                                  │
 │  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │
 │  ────────────────────────────────────────────────────────────────────────────                    │
-│  gemini-2.5-pro              1            500           500            100  Latency: 100ms avg…  │
+│  gemini-2.5-pro                 1            500           500            100                    │
+│    Latency: 100ms avg / 100ms total                                                              │
 │                                                                                                  │
 │  Savings Highlight: 500 (50.0%) of input tokens were served from the cache, reducing costs.      │
 │                                                                                                  │
@@ -43,7 +44,8 @@ exports[`<StatsDisplay /> sections > Model Usage Table Updates > should display 
 │                                                                                                  │
 │  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │
 │  ────────────────────────────────────────────────────────────────────────────                    │
-│  gemini-2.5-pro              5            600           400            500  Latency: 200ms avg…  │
+│  gemini-2.5-pro                 5            600           400            500                    │
+│    Latency: 200ms avg / 1.0s total                                                               │
 │                                                                                                  │
 │  Savings Highlight: 400 (40.0%) of input tokens were served from the cache, reducing costs.      │
 │                                                                                                  │
@@ -96,7 +98,8 @@ exports[`<StatsDisplay /> sections > Quota Display > renders quota information w
 │                                                                                                  │
 │  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │
 │  ────────────────────────────────────────────────────────────────────────────                    │
-│  gemini-2.5-pro              1             50            50            100  Latency: 100ms avg…  │
+│  gemini-2.5-pro                 1             50            50            100                    │
+│    Latency: 100ms avg / 100ms total                                                              │
 │                                                                                                  │
 │  Savings Highlight: 50 (50.0%) of input tokens were served from the cache, reducing costs.       │
 │                                                                                                  │
@@ -211,7 +214,8 @@ exports[`<StatsDisplay /> sections > performance metrics display > shows through
 │                                                                                                  │
 │  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │
 │  ────────────────────────────────────────────────────────────────────────────                    │
-│  gemini-2.5-pro              2            600           300            400  Latency: 1.3s avg …  │
+│  gemini-2.5-pro                 2            600           300            400                    │
+│    Latency: 1.3s avg / 2.5s total                                                                │
 │                                                                                                  │
 │  Savings Highlight: 300 (33.3%) of input tokens were served from the cache, reducing costs.      │
 │                                                                                                  │

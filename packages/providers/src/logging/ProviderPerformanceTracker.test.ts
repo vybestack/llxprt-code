@@ -40,8 +40,8 @@ describe('ProviderPerformanceTracker', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
 
     // Finding #7: TPS requires lastTokenMs. TTFT=200, lastToken=1200 → gen=1000ms
-    // 500 tokens / 1000ms = 500 tok/s
-    tracker.recordCompletion(1000, 200, 500, 10, 1200);
+    // 250 output tokens / 1000ms = 250 tok/s (TPS uses output only)
+    tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
 
     const metrics = tracker.getLatestMetrics();
 
@@ -49,7 +49,7 @@ describe('ProviderPerformanceTracker', () => {
     expect(metrics.totalTokens).toBe(500);
     expect(metrics.averageLatency).toBe(1000);
     expect(metrics.timeToFirstToken).toBe(200);
-    expect(metrics.tokensPerSecond).toBe(500);
+    expect(metrics.tokensPerSecond).toBe(250);
     expect(metrics.chunksReceived).toBe(10);
     // TPM = 60000 * Σ(P+O) / ΣD = 60000 * 500 / 1000 = 30000
     expect(metrics.tokensPerMinute).toBe(30000);
@@ -59,16 +59,16 @@ describe('ProviderPerformanceTracker', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
 
     // Request 1: 200 tokens in 500ms
-    tracker.recordCompletion(500, 100, 200, 5);
+    tracker.recordCompletion(500, 100, 200, 100, 5);
     // Request 2: 300 tokens in 600ms
     // TPM = 60000 * (200+300) / (500+600) = 60000 * 500 / 1100 = 27272.7...
-    tracker.recordCompletion(600, 120, 300, 8);
+    tracker.recordCompletion(600, 120, 300, 150, 8);
     const metrics = tracker.getLatestMetrics();
     expect(metrics.tokensPerMinute).toBeCloseTo(27272.7, 0);
 
     // Request 3: 150 tokens in 400ms
     // TPM = 60000 * (500+150) / (1100+400) = 60000 * 650 / 1500 = 26000
-    tracker.recordCompletion(400, 80, 150, 6);
+    tracker.recordCompletion(400, 80, 150, 75, 6);
     const updatedMetrics = tracker.getLatestMetrics();
     expect(updatedMetrics.tokensPerMinute).toBeCloseTo(26000, 0);
   });
@@ -77,8 +77,8 @@ describe('ProviderPerformanceTracker', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
 
     // Two requests with same token counts and durations
-    tracker.recordCompletion(5000, null, 1000, 10);
-    tracker.recordCompletion(5000, null, 1000, 10);
+    tracker.recordCompletion(5000, null, 1000, 500, 10);
+    tracker.recordCompletion(5000, null, 1000, 500, 10);
 
     // TPM = 60000 * 2000 / 10000 = 12000
     const metrics = tracker.getLatestMetrics();
@@ -86,7 +86,7 @@ describe('ProviderPerformanceTracker', () => {
 
     // Adding a huge wall-clock gap between requests should NOT change TPM
     // because TPM is based on summed durations, not wall span.
-    tracker.recordCompletion(5000, null, 1000, 10);
+    tracker.recordCompletion(5000, null, 1000, 500, 10);
     // TPM = 60000 * 3000 / 15000 = 12000
     const metricsAfterGap = tracker.getLatestMetrics();
     expect(metricsAfterGap.tokensPerMinute).toBe(12000);
@@ -95,7 +95,7 @@ describe('ProviderPerformanceTracker', () => {
   it('should produce accurate TPM for long-running request', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
 
-    tracker.recordCompletion(60000, null, 10000, 100);
+    tracker.recordCompletion(60000, null, 10000, 5000, 100);
 
     const metrics = tracker.getLatestMetrics();
     // TPM = 60000 * 10000 / 60000 = 10000
@@ -128,7 +128,7 @@ describe('ProviderPerformanceTracker', () => {
     vi.setSystemTime(mockDate);
 
     // Record successful completion first
-    tracker.recordCompletion(1000, 200, 500, 10, 1200);
+    tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
 
     // Record an error
     tracker.recordError(500, 'Test error');
@@ -141,7 +141,7 @@ describe('ProviderPerformanceTracker', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
     vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
 
-    tracker.recordCompletion(1000, 200, 500, 10, 1200);
+    tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
     tracker.recordError(500, 'Error 1');
     tracker.recordError(300, 'Error 2');
 
@@ -180,7 +180,7 @@ describe('ProviderPerformanceTracker', () => {
     vi.setSystemTime(mockDate);
 
     // Record some metrics
-    tracker.recordCompletion(1000, 200, 500, 10, 1200);
+    tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
     tracker.recordError(500, 'Test error');
     tracker.addThrottleWaitTime(1000);
 
@@ -209,12 +209,12 @@ describe('ProviderPerformanceTracker', () => {
     vi.setSystemTime(mockDate);
 
     // Record some metrics
-    tracker.recordCompletion(1000, 200, 500, 10, 1200);
+    tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
     tracker.recordError(500, 'Test error');
 
     const summary = tracker.getPerformanceSummary();
     expect(summary).toBe(
-      'Provider: test-provider, Requests: 1, Avg Latency: 1000.00ms, Tokens/sec: 500.00, Error Rate: 50.0%',
+      'Provider: test-provider, Requests: 1, Avg Latency: 1000.00ms, Tokens/sec: 250.00, Error Rate: 50.0%',
     );
   });
 
@@ -225,11 +225,11 @@ describe('ProviderPerformanceTracker', () => {
       vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
 
       // Simulate: 100 input + 50 output = 150 total tokens
-      tracker.recordCompletion(1000, null, 150, 1);
+      tracker.recordCompletion(1000, null, 150, 50, 1);
       expect(tracker.getLatestMetrics().totalTokens).toBe(150);
 
       // Simulate: 200 input + 100 output = 300 total tokens
-      tracker.recordCompletion(1000, null, 300, 1);
+      tracker.recordCompletion(1000, null, 300, 100, 1);
       expect(tracker.getLatestMetrics().totalTokens).toBe(450);
     });
 
@@ -240,7 +240,7 @@ describe('ProviderPerformanceTracker', () => {
       vi.setSystemTime(now);
 
       // 150 total tokens (input+output), not 50 output-only
-      tracker.recordCompletion(1000, null, 150, 1);
+      tracker.recordCompletion(1000, null, 150, 50, 1);
       const metrics = tracker.getLatestMetrics();
       expect(metrics.totalTokens).toBe(150);
       expect(metrics.tokensPerMinute).toBeGreaterThan(0);
@@ -250,23 +250,23 @@ describe('ProviderPerformanceTracker', () => {
   describe('Issue #1805: TTFT (timeToFirstToken) tracking', () => {
     it('should store timeToFirstToken when provided', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      tracker.recordCompletion(1000, 250, 100, 3);
+      tracker.recordCompletion(1000, 250, 100, 50, 3);
       expect(tracker.getLatestMetrics().timeToFirstToken).toBe(250);
     });
 
     it('should keep timeToFirstToken as null when not provided', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      tracker.recordCompletion(1000, null, 100, 3);
+      tracker.recordCompletion(1000, null, 100, 50, 3);
       expect(tracker.getLatestMetrics().timeToFirstToken).toBeNull();
     });
 
     it('should update TTFT only when non-null', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
-      tracker.recordCompletion(1000, null, 100, 1);
+      tracker.recordCompletion(1000, null, 100, 50, 1);
       expect(tracker.getLatestMetrics().timeToFirstToken).toBeNull();
 
-      tracker.recordCompletion(1000, 300, 100, 1);
+      tracker.recordCompletion(1000, 300, 100, 50, 1);
       expect(tracker.getLatestMetrics().timeToFirstToken).toBe(300);
     });
   });
@@ -274,14 +274,14 @@ describe('ProviderPerformanceTracker', () => {
   describe('Issue #1805: chunkCount tracking', () => {
     it('should track chunkCount from recordCompletion', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      tracker.recordCompletion(1000, null, 100, 42);
+      tracker.recordCompletion(1000, null, 100, 50, 42);
       expect(tracker.getLatestMetrics().chunksReceived).toBe(42);
     });
 
     it('should reflect last chunkCount when multiple completions recorded', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      tracker.recordCompletion(500, null, 50, 5);
-      tracker.recordCompletion(600, null, 60, 10);
+      tracker.recordCompletion(500, null, 50, 25, 5);
+      tracker.recordCompletion(600, null, 60, 30, 10);
       // chunksReceived is set to the last value, not accumulated
       expect(tracker.getLatestMetrics().chunksReceived).toBe(10);
     });
@@ -292,18 +292,18 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // First request: TTFT=100ms, lastToken=1100ms → generation=1000ms
-      // 100 tokens / 1000ms = 100 tok/s
-      tracker.recordCompletion(1200, 100, 100, 1, 1100);
+      // 100 output tokens / 1000ms = 100 tok/s
+      tracker.recordCompletion(1200, 100, 200, 100, 1, 1100);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(100, 1);
 
       // Second request: TTFT=100ms, lastToken=1100ms → generation=1000ms
-      // Cumulative: 300 tokens / 2000ms = 150 tok/s
-      tracker.recordCompletion(1200, 100, 200, 1, 1100);
+      // Cumulative: 300 output tokens / 2000ms = 150 tok/s
+      tracker.recordCompletion(1200, 100, 400, 200, 1, 1100);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(150, 1);
 
       // Third request: TTFT=200ms, lastToken=2200ms → generation=2000ms
-      // Cumulative: 600 tokens / 4000ms = 150 tok/s
-      tracker.recordCompletion(2400, 200, 300, 1, 2200);
+      // Cumulative: 600 output tokens / 4000ms = 150 tok/s
+      tracker.recordCompletion(2400, 200, 600, 300, 1, 2200);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(150, 1);
     });
 
@@ -311,11 +311,11 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // TTFT=100, lastToken=1100 → generation=1000ms → 100 tok/s
-      tracker.recordCompletion(1000, 100, 100, 1, 1100);
+      tracker.recordCompletion(1000, 100, 200, 100, 1, 1100);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(100, 1);
 
       // Zero generation window (lastToken == TTFT) should not change rate
-      tracker.recordCompletion(0, 100, 500, 1, 100);
+      tracker.recordCompletion(0, 100, 700, 500, 1, 100);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(100, 1);
     });
 
@@ -323,10 +323,10 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // TTFT=100, lastToken=1100 → generation=1000ms → 100 tok/s
-      tracker.recordCompletion(1000, 100, 100, 1, 1100);
+      tracker.recordCompletion(1000, 100, 200, 100, 1, 1100);
       tracker.reset();
       // TTFT=100, lastToken=1100 → generation=1000ms → 200 tok/s
-      tracker.recordCompletion(1000, 100, 200, 1, 1100);
+      tracker.recordCompletion(1000, 100, 400, 200, 1, 1100);
 
       // After reset, tokensPerSecond = 200 / (1000/1000) = 200
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(200, 1);
@@ -336,17 +336,17 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // TTFT=100, lastToken=600 → generation=500ms → 1000/0.5 = 2000 tok/s
-      tracker.recordCompletion(700, 100, 1000, 1, 600);
+      tracker.recordCompletion(700, 100, 2000, 1000, 1, 600);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(2000, 1);
 
       // TTFT=100, lastToken=600 → generation=500ms
-      // Cumulative: 2000 tokens / 1000ms = 2000 tok/s
-      tracker.recordCompletion(700, 100, 1000, 1, 600);
+      // Cumulative: 2000 output tokens / 1000ms = 2000 tok/s
+      tracker.recordCompletion(700, 100, 4000, 1000, 1, 600);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(2000, 1);
 
       // TTFT=200, lastToken=3200 → generation=3000ms
-      // Cumulative: 3000 tokens / 4000ms = 750 tok/s
-      tracker.recordCompletion(3400, 200, 1000, 1, 3200);
+      // Cumulative: 3000 output tokens / 4000ms = 750 tok/s
+      tracker.recordCompletion(3400, 200, 5000, 1000, 1, 3200);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(750, 1);
     });
 
@@ -354,7 +354,7 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // TTFT=200, but no lastTokenMs → no generation window → TPS stays 0
-      tracker.recordCompletion(1000, 200, 500, 10);
+      tracker.recordCompletion(1000, 200, 500, 250, 10);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBe(0);
     });
 
@@ -362,7 +362,7 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // No TTFT, lastTokenMs=800 → can't compute generation window → TPS stays 0
-      tracker.recordCompletion(1000, null, 500, 10, 800);
+      tracker.recordCompletion(1000, null, 500, 250, 10, 800);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBe(0);
     });
 
@@ -370,7 +370,7 @@ describe('ProviderPerformanceTracker', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 
       // TTFT=500, lastToken=500 → generation=0 → no valid window → TPS stays 0
-      tracker.recordCompletion(600, 500, 100, 1, 500);
+      tracker.recordCompletion(600, 500, 200, 100, 1, 500);
       expect(tracker.getLatestMetrics().tokensPerSecond).toBe(0);
     });
   });

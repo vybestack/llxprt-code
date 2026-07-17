@@ -56,6 +56,25 @@ export async function logToolCall(
 }
 
 /**
+ * Safely resolve whether conversation logging is enabled. Any error from
+ * the config callback is treated as logging-disabled (fail-open) so the
+ * tool call or original provider error is never affected.
+ */
+function resolveLoggingEnabledSafely(
+  config: unknown,
+  debug: DebugLogger,
+): boolean {
+  try {
+    const loggingConfig = resolveLoggingConfig(config);
+    return loggingConfig?.getConversationLoggingEnabled() === true;
+  } catch (err) {
+    // Fail-open: treat resolution errors as logging-disabled
+    debug.warn(() => `getConversationLoggingEnabled threw: ${String(err)}`);
+    return false;
+  }
+}
+
+/**
  * Invoke a server tool with conversation logging support.
  */
 export async function invokeServerToolWithLogging(
@@ -66,36 +85,47 @@ export async function invokeServerToolWithLogging(
   logCtx: ServerToolLogContext,
 ): Promise<unknown> {
   const startTime = Date.now();
-  const loggingConfig = resolveLoggingConfig(config);
+  // Resolve the logging flag once, fail-open on any error
+  const loggingEnabled = resolveLoggingEnabledSafely(config, logCtx.debug);
 
   try {
     const result = await provider.invokeServerTool(toolName, params, config);
 
-    if (loggingConfig?.getConversationLoggingEnabled() === true) {
-      await logToolCall(
-        loggingConfig,
-        toolName,
-        params,
-        result,
-        startTime,
-        true,
-        undefined,
-        logCtx,
-      );
+    if (loggingEnabled) {
+      try {
+        await logToolCall(
+          resolveLoggingConfig(config),
+          toolName,
+          params,
+          result,
+          startTime,
+          true,
+          undefined,
+          logCtx,
+        );
+      } catch (logError) {
+        logCtx.debug.warn(
+          () => `Failed to log successful tool call: ${logError}`,
+        );
+      }
     }
     return result;
   } catch (error) {
-    if (loggingConfig?.getConversationLoggingEnabled() === true) {
-      await logToolCall(
-        loggingConfig,
-        toolName,
-        params,
-        null,
-        startTime,
-        false,
-        error,
-        logCtx,
-      );
+    if (loggingEnabled) {
+      try {
+        await logToolCall(
+          resolveLoggingConfig(config),
+          toolName,
+          params,
+          null,
+          startTime,
+          false,
+          error,
+          logCtx,
+        );
+      } catch (logError) {
+        logCtx.debug.warn(() => `Failed to log failed tool call: ${logError}`);
+      }
     }
     throw error;
   }

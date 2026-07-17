@@ -7,6 +7,7 @@
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi } from 'vitest';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
+import { ToolCallDecision } from '@vybestack/llxprt-code-core/telemetry/index.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
 import {
@@ -55,6 +56,7 @@ describe('<ToolStatsDisplay />', () => {
         totalCalls: 0,
         totalSuccess: 0,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 0,
         totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
@@ -74,6 +76,7 @@ describe('<ToolStatsDisplay />', () => {
         totalCalls: 1,
         totalSuccess: 1,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 100,
         totalDecisions: { accept: 1, reject: 0, modify: 0, auto_accept: 0 },
         byName: {
@@ -81,6 +84,7 @@ describe('<ToolStatsDisplay />', () => {
             count: 1,
             success: 1,
             fail: 0,
+            cancelled: 0,
             durationMs: 100,
             decisions: { accept: 1, reject: 0, modify: 0, auto_accept: 0 },
           },
@@ -100,6 +104,7 @@ describe('<ToolStatsDisplay />', () => {
         totalCalls: 3,
         totalSuccess: 2,
         totalFail: 1,
+        totalCancelled: 0,
         totalDurationMs: 300,
         totalDecisions: { accept: 1, reject: 1, modify: 1, auto_accept: 0 },
         byName: {
@@ -107,6 +112,7 @@ describe('<ToolStatsDisplay />', () => {
             count: 2,
             success: 1,
             fail: 1,
+            cancelled: 0,
             durationMs: 200,
             decisions: { accept: 1, reject: 1, modify: 0, auto_accept: 0 },
           },
@@ -114,6 +120,7 @@ describe('<ToolStatsDisplay />', () => {
             count: 1,
             success: 1,
             fail: 0,
+            cancelled: 0,
             durationMs: 100,
             decisions: { accept: 0, reject: 0, modify: 1, auto_accept: 0 },
           },
@@ -134,6 +141,7 @@ describe('<ToolStatsDisplay />', () => {
         totalCalls: 999999999,
         totalSuccess: 888888888,
         totalFail: 111111111,
+        totalCancelled: 0,
         totalDurationMs: 987654321,
         totalDecisions: {
           accept: 123456789,
@@ -146,6 +154,7 @@ describe('<ToolStatsDisplay />', () => {
             count: 999999999,
             success: 888888888,
             fail: 111111111,
+            cancelled: 0,
             durationMs: 987654321,
             decisions: {
               accept: 123456789,
@@ -168,6 +177,7 @@ describe('<ToolStatsDisplay />', () => {
         totalCalls: 1,
         totalSuccess: 1,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 100,
         totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {
@@ -175,6 +185,7 @@ describe('<ToolStatsDisplay />', () => {
             count: 1,
             success: 1,
             fail: 0,
+            cancelled: 0,
             durationMs: 100,
             decisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           },

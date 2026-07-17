@@ -125,6 +125,7 @@ describe('computeSessionStats', () => {
       totalCalls: 0,
       totalSuccess: 0,
       totalFail: 0,
+      totalCancelled: 0,
       totalDurationMs: 0,
       totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
       byName: {},

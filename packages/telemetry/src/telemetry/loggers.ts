@@ -118,6 +118,24 @@ function emitLogRecord(logRecord: LogRecord): void {
   }
 }
 
+/**
+ * Fail-open wrapper for SDK metric recording. Errors in metric instruments
+ * must never break the calling stream/tool/api/file/routing path.
+ */
+function recordSafely(fn: () => void, context: string): void {
+  try {
+    fn();
+  } catch (err) {
+    try {
+      debugLogger.error(
+        `[TELEMETRY] ${context} failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } catch {
+      // Secondary logger failure must not escape the fail-open wrapper
+    }
+  }
+}
+
 function getCommonAttributes(config: SessionConfig): LogAttributes {
   return {
     'session.id': config.getSessionId(),
@@ -239,13 +257,17 @@ export function logToolCall(
     attributes,
   };
   emitLogRecord(logRecord);
-  recordToolCallMetrics(
-    config,
-    event.function_name,
-    event.duration_ms,
-    event.success,
-    event.decision,
-    event.tool_type,
+  recordSafely(
+    () =>
+      recordToolCallMetrics(
+        config,
+        event.function_name,
+        event.duration_ms,
+        event.success,
+        event.decision,
+        event.tool_type,
+      ),
+    'recordToolCallMetrics',
   );
 }
 
@@ -325,12 +347,16 @@ export function logFileOperation(
   };
   emitLogRecord(logRecord);
 
-  recordFileOperationMetric(
-    config,
-    event.operation as FileOperation,
-    event.lines,
-    event.mimetype,
-    event.extension,
+  recordSafely(
+    () =>
+      recordFileOperationMetric(
+        config,
+        event.operation as FileOperation,
+        event.lines,
+        event.mimetype,
+        event.extension,
+      ),
+    'recordFileOperationMetric',
   );
 }
 
@@ -384,12 +410,16 @@ export function logApiError(config: Config, event: ApiErrorEvent): void {
     attributes,
   };
   emitLogRecord(logRecord);
-  recordApiErrorMetrics(
-    config,
-    event.model,
-    event.duration_ms,
-    event.status_code,
-    event.error_type,
+  recordSafely(
+    () =>
+      recordApiErrorMetrics(
+        config,
+        event.model,
+        event.duration_ms,
+        event.status_code,
+        event.error_type,
+      ),
+    'recordApiErrorMetrics',
   );
 }
 
@@ -404,6 +434,30 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
 
   if (!isTelemetrySdkInitialized()) return;
 
+  const attributes = buildApiResponseAttributes(config, event);
+  const logRecord: LogRecord = {
+    body: `API response from ${event.model}. Status: ${formatStatusCode(event.status_code)}. Duration: ${event.duration_ms}ms.`,
+    attributes,
+  };
+  emitLogRecord(logRecord);
+  recordSafely(
+    () =>
+      recordApiResponseMetrics(
+        config,
+        event.model,
+        event.duration_ms,
+        event.status_code,
+        event.error,
+      ),
+    'recordApiResponseMetrics',
+  );
+  recordTokenUsageMetricsForResponse(config, event);
+}
+
+function buildApiResponseAttributes(
+  config: Config,
+  event: ApiResponseEvent,
+): LogAttributes {
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
     ...event,
@@ -421,44 +475,63 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
   ) {
     attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
   }
+  return attributes;
+}
 
-  const logRecord: LogRecord = {
-    body: `API response from ${event.model}. Status: ${formatStatusCode(event.status_code)}. Duration: ${event.duration_ms}ms.`,
-    attributes,
-  };
-  emitLogRecord(logRecord);
-  recordApiResponseMetrics(
-    config,
-    event.model,
-    event.duration_ms,
-    event.status_code,
-    event.error,
+function recordTokenUsageMetricsForResponse(
+  config: Config,
+  event: ApiResponseEvent,
+): void {
+  recordSafely(
+    () =>
+      recordTokenUsageMetrics(
+        config,
+        event.model,
+        event.input_token_count,
+        'input',
+      ),
+    'recordTokenUsageMetrics(input)',
   );
-  recordTokenUsageMetrics(
-    config,
-    event.model,
-    event.input_token_count,
-    'input',
+  recordSafely(
+    () =>
+      recordTokenUsageMetrics(
+        config,
+        event.model,
+        event.output_token_count,
+        'output',
+      ),
+    'recordTokenUsageMetrics(output)',
   );
-  recordTokenUsageMetrics(
-    config,
-    event.model,
-    event.output_token_count,
-    'output',
+  recordSafely(
+    () =>
+      recordTokenUsageMetrics(
+        config,
+        event.model,
+        event.cached_content_token_count,
+        'cache',
+      ),
+    'recordTokenUsageMetrics(cache)',
   );
-  recordTokenUsageMetrics(
-    config,
-    event.model,
-    event.cached_content_token_count,
-    'cache',
+  recordSafely(
+    () =>
+      recordTokenUsageMetrics(
+        config,
+        event.model,
+        event.thoughts_token_count,
+        'thought',
+      ),
+    'recordTokenUsageMetrics(thought)',
   );
-  recordTokenUsageMetrics(
-    config,
-    event.model,
-    event.thoughts_token_count,
-    'thought',
+  recordSafely(
+    () =>
+      recordTokenUsageMetrics(
+        config,
+        event.model,
+        event.tool_token_count,
+        'tool',
+      ),
+    'recordTokenUsageMetrics(tool)',
   );
-  recordTokenUsageMetrics(config, event.model, event.tool_token_count, 'tool');
 }
 
 export function logLoopDetected(
@@ -719,7 +792,10 @@ export function logModelRouting(
   };
   emitLogRecord(logRecord);
 
-  recordModelRoutingMetrics(config, event);
+  recordSafely(
+    () => recordModelRoutingMetrics(config, event),
+    'recordModelRoutingMetrics',
+  );
 }
 
 export function logExtensionInstallEvent(

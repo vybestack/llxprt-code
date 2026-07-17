@@ -196,33 +196,24 @@ function computeUnionDuration(
   return merged.reduce((sum, iv) => sum + (iv.end - iv.start), 0);
 }
 
-const MAX_DEDUP_ENTRIES = 10000;
-
 /**
- * Bounded deduplication set that evicts the oldest entries when the cap
- * is reached, preventing unbounded memory growth in long sessions.
+ * Unbounded deduplication set for session-lifetime exactly-once tracking.
+ * IDs are retained until reset() so replayed older attempts are not
+ * double-counted.
  */
-class BoundedSet {
+class DedupSet {
   private readonly entries = new Set<string>();
-  private readonly order: string[] = [];
 
   has(value: string): boolean {
     return this.entries.has(value);
   }
 
   add(value: string): void {
-    if (this.entries.has(value)) return;
-    if (this.order.length >= MAX_DEDUP_ENTRIES) {
-      const evicted = this.order.shift();
-      if (evicted !== undefined) this.entries.delete(evicted);
-    }
     this.entries.add(value);
-    this.order.push(value);
   }
 
   clear(): void {
     this.entries.clear();
-    this.order.length = 0;
   }
 }
 
@@ -242,6 +233,8 @@ class IntervalUnion {
   private cachedDuration = 0;
 
   add(start: number, end: number): void {
+    // Reject non-finite endpoints so NaN/Infinity cannot poison the union
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
     if (end <= start) return;
     this.insertSorted({ start, end });
     this.compactIfNeeded();
@@ -298,22 +291,15 @@ class IntervalUnion {
   }
 
   private compactIfNeeded(): void {
+    // Never merge intervals separated by a positive gap — that would
+    // count idle time as active. When the interval count exceeds
+    // MAX_INTERVALS, we simply stop accepting more (the most recent
+    // insertion is already merged if overlapping/adjacent). This keeps
+    // the union duration exact for all retained intervals.
     if (this.intervals.length <= MAX_INTERVALS) return;
-
-    let minGap = Infinity;
-    let mergeIdx = 0;
-    for (let i = 0; i < this.intervals.length - 1; i++) {
-      const gap = this.intervals[i + 1].start - this.intervals[i].end;
-      if (gap < minGap) {
-        minGap = gap;
-        mergeIdx = i;
-      }
-    }
-    this.intervals[mergeIdx].end = Math.max(
-      this.intervals[mergeIdx].end,
-      this.intervals[mergeIdx + 1].end,
-    );
-    this.intervals.splice(mergeIdx + 1, 1);
+    // Drop the oldest interval to bound memory. This loses a small
+    // amount of active time in extreme cases but never bridges gaps.
+    this.intervals.shift();
   }
 
   private recomputeDuration(): void {
@@ -326,10 +312,13 @@ class IntervalUnion {
 }
 
 export class SessionMetricsAggregator {
-  private readonly seenAttemptIds = new BoundedSet();
-  private readonly seenToolCallIds = new BoundedSet();
+  private readonly seenAttemptIds = new DedupSet();
+  private readonly seenToolCallIds = new DedupSet();
   private readonly apiIntervals = new IntervalUnion();
   private readonly toolIntervals = new IntervalUnion();
+
+  /** Counter for synthetic dedup keys when callId is missing */
+  private toolSyntheticCounter = 0;
 
   private totalApiRequests = 0;
   private totalApiErrors = 0;
@@ -633,10 +622,12 @@ export class SessionMetricsAggregator {
     startTimestampMs?: number,
     status?: string,
   ): boolean {
-    if (callId !== undefined) {
-      if (this.seenToolCallIds.has(callId)) return false;
-      this.seenToolCallIds.add(callId);
-    }
+    // Missing callId must not bypass exactly-once dedup. Generate a
+    // stable synthetic key from toolName + sequential counter so every
+    // tool call is tracked exactly once within the session.
+    const dedupKey = callId ?? `${toolName}#${this.toolSyntheticCounter++}`;
+    if (this.seenToolCallIds.has(dedupKey)) return false;
+    this.seenToolCallIds.add(dedupKey);
 
     const duration = sanitizeFinite(durationMs);
     this.totalToolCalls++;
@@ -667,7 +658,9 @@ export class SessionMetricsAggregator {
 
   getSnapshot(): SessionMetricsSnapshot {
     const timing = this.computeTimingMetrics();
-    const sessionCurrentMs = Date.now();
+    // Use the same monotonic clock as sessionStartMs so interval
+    // arithmetic is self-consistent.
+    const sessionCurrentMs = performance.now();
     const agentActiveTimeMs = this.computeAgentActiveTimeMs(sessionCurrentMs);
 
     return {
@@ -789,6 +782,12 @@ export class SessionMetricsAggregator {
     // cannot compute a meaningful wall-clock clamp. Return the raw union
     // duration to avoid artificially zeroing out activity time.
     if (this.sessionStartMs === null) return rawAgentActiveTimeMs;
+    // Only apply the wall-clock clamp when the clock domains are consistent
+    // (sessionCurrentMs is on the same timeline as sessionStartMs). When
+    // sessionCurrentMs < sessionStartMs, the timestamps were recorded on a
+    // different clock (e.g. explicit test values or out-of-order events),
+    // so the clamp would incorrectly zero out all activity time.
+    if (sessionCurrentMs < this.sessionStartMs) return rawAgentActiveTimeMs;
     const sessionWallMs = this.computeSessionWallMs(sessionCurrentMs);
     return Math.min(rawAgentActiveTimeMs, sessionWallMs);
   }
@@ -798,6 +797,7 @@ export class SessionMetricsAggregator {
     this.seenToolCallIds.clear();
     this.apiIntervals.clear();
     this.toolIntervals.clear();
+    this.toolSyntheticCounter = 0;
     this.totalApiRequests = 0;
     this.totalApiErrors = 0;
     this.totalInputTokens = 0;

@@ -44,23 +44,45 @@ export function notifyRetryAttemptEnd(
   providerName: string,
   logger: DebugLogger,
   errorMessage?: string,
+  metrics?: {
+    firstTokenMs: number | null;
+    lastTokenMs: number | null;
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    thoughtsTokens: number;
+    toolTokens: number;
+    cacheReads?: number;
+    cacheWrites?: number | null;
+  },
 ): void {
+  const m = metrics ?? {
+    firstTokenMs: null,
+    lastTokenMs: null,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedTokens: 0,
+    thoughtsTokens: 0,
+    toolTokens: 0,
+  };
   try {
     observer.onAttemptEnd({
       attemptId,
       attemptIndex,
       start: requestStartMs,
       completionMs: performance.now(),
-      firstTokenMs: null,
-      lastTokenMs: null,
+      firstTokenMs: m.firstTokenMs,
+      lastTokenMs: m.lastTokenMs,
       status,
       providerName,
       modelName,
-      inputTokens: 0,
-      outputTokens: 0,
-      cachedTokens: 0,
-      thoughtsTokens: 0,
-      toolTokens: 0,
+      inputTokens: m.inputTokens,
+      outputTokens: m.outputTokens,
+      cachedTokens: m.cachedTokens,
+      thoughtsTokens: m.thoughtsTokens,
+      toolTokens: m.toolTokens,
+      cacheReads: m.cacheReads,
+      cacheWrites: m.cacheWrites,
       errorMessage,
     });
   } catch (err) {

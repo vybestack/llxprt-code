@@ -80,6 +80,10 @@ export class ProviderPerformanceTracker {
   /**
    * Record completion of a request with performance data.
    *
+   * Generation TPS uses output tokens only (not prompt-plus-output), so
+   * large prompts don't inflate tokens-per-second. TPM uses total tokens
+   * (input + output) for session work-rate.
+   *
    * Finding #7: Generation TPS is only valid when
    * `lastTokenMs - timeToFirstToken > 0`. When there is no meaningful
    * generation window (single chunk or no tokens), TPS is left unchanged.
@@ -88,15 +92,17 @@ export class ProviderPerformanceTracker {
   recordCompletion(
     totalTime: number,
     timeToFirstToken: number | null,
-    tokenCount: number,
+    totalTokenCount: number,
+    outputTokenCount: number,
     chunkCount: number,
     lastTokenMs?: number | null,
   ): void {
     const safeTotalTime = sanitizeNonNegative(totalTime);
-    const safeTokenCount = sanitizeNonNegative(tokenCount);
+    const safeTotalTokenCount = sanitizeNonNegative(totalTokenCount);
+    const safeOutputTokenCount = sanitizeNonNegative(outputTokenCount);
     const safeChunkCount = sanitizeNonNegative(chunkCount);
     this.metrics.totalRequests++;
-    this.metrics.totalTokens += safeTokenCount;
+    this.metrics.totalTokens += safeTotalTokenCount;
     this.metrics.averageLatency =
       (this.metrics.averageLatency * (this.metrics.totalRequests - 1) +
         safeTotalTime) /
@@ -109,14 +115,14 @@ export class ProviderPerformanceTracker {
 
     // Finding #7: Generation TPS only uses lastTokenMs - TTFT as the
     // generation window. No duration fallback. Only accumulate when the
-    // generation window is strictly positive.
+    // generation window is strictly positive. Uses OUTPUT tokens only.
     const safeLastToken = toSafePositiveMs(lastTokenMs);
 
     if (safeTtft !== null && safeLastToken !== null) {
       const generationMs = safeLastToken - safeTtft;
       if (generationMs > 0) {
         this.totalGenerationTimeMs += generationMs;
-        this.totalTokensWithMeasuredTime += safeTokenCount;
+        this.totalTokensWithMeasuredTime += safeOutputTokenCount;
         this.metrics.tokensPerSecond =
           this.totalGenerationTimeMs > 0
             ? this.totalTokensWithMeasuredTime /
@@ -128,8 +134,8 @@ export class ProviderPerformanceTracker {
     this.metrics.chunksReceived = safeChunkCount;
 
     // Complete TPM = 60000 * Σ(P+O) / ΣD (D in ms)
-    // Uses summed durations, not wall-clock span
-    this.completeTpmSumTokens += safeTokenCount;
+    // Uses total tokens (input + output) and summed durations, not wall-clock
+    this.completeTpmSumTokens += safeTotalTokenCount;
     this.completeTpmSumDuration += safeTotalTime;
     this.metrics.tokensPerMinute =
       this.completeTpmSumDuration > 0

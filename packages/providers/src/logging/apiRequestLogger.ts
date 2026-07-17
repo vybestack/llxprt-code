@@ -11,7 +11,9 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /**
- * Log API request telemetry event.
+ * Log API request telemetry event. The entire telemetry block is wrapped
+ * fail-open so JSON.stringify, model resolution, or logApiRequest failures
+ * never prevent provider invocation.
  */
 export function logApiRequestTelemetry(
   activeConfig: Config,
@@ -21,24 +23,26 @@ export function logApiRequestTelemetry(
   debug: DebugLogger,
 ): void {
   debug.log(() => `Before API request telemetry section`);
-  debug.log(
-    () =>
-      `Before JSON.stringify: contents length=${normalizedOptions.contents.length}`,
-  );
-  const requestText = JSON.stringify(normalizedOptions.contents);
-  debug.log(
-    () => `After JSON.stringify: requestText length=${requestText.length}`,
-  );
-  const modelName = normalizedOptions.resolved?.model ?? defaultModelName;
-  debug.log(
-    () => `Logging API request: model=${modelName}, promptId=${promptId}`,
-  );
-  logApiRequest(
-    activeConfig,
-    new ApiRequestEvent(modelName, promptId, requestText),
-  );
-  debug.log(
-    () =>
-      `After API request logged: contents length=${normalizedOptions.contents.length}`,
-  );
+  try {
+    const requestText = JSON.stringify(normalizedOptions.contents);
+    debug.log(
+      () => `After JSON.stringify: requestText length=${requestText.length}`,
+    );
+    const modelName = normalizedOptions.resolved?.model ?? defaultModelName;
+    debug.log(
+      () => `Logging API request: model=${modelName}, promptId=${promptId}`,
+    );
+    logApiRequest(
+      activeConfig,
+      new ApiRequestEvent(modelName, promptId, requestText),
+    );
+    debug.log(
+      () =>
+        `After API request logged: contents length=${normalizedOptions.contents.length}`,
+    );
+  } catch (error) {
+    debug.warn(
+      () => `API request telemetry failed (fail-open): ${String(error)}`,
+    );
+  }
 }

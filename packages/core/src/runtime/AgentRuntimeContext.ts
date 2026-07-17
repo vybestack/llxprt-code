@@ -167,6 +167,8 @@ export interface ApiResponseEvent {
   };
   responseText?: string;
   error?: string;
+  /** Caller-provided stable unique attempt ID for deduplication. */
+  attemptId?: string;
 }
 
 /**
@@ -186,6 +188,8 @@ export interface ApiErrorEvent {
   runtimeId?: string;
   provider?: string;
   timestamp?: number;
+  /** Caller-provided stable unique attempt ID for deduplication. */
+  attemptId?: string;
 }
 
 /**
