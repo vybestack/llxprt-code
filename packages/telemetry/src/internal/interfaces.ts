@@ -132,6 +132,11 @@ export interface CompletedToolCallShape {
   response: ToolCallResponse;
   tool?: ToolLike | unknown;
   durationMs?: number;
+  /** Monotonic start timestamp (ms). When both are provided alongside
+   * endMs, they take precedence over durationMs-derived timestamps. */
+  startMs?: number;
+  /** Monotonic end timestamp (ms). */
+  endMs?: number;
   outcome?: ToolConfirmationOutcome;
 }
 

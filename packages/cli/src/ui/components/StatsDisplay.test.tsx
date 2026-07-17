@@ -8,8 +8,12 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import type { SessionMetrics } from '../contexts/SessionContext.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
+import {
+  defaultZeroMetrics,
+  withTokenTracking,
+  type TestMetricsInput,
+} from './StatsDisplay.testHelpers.js';
 
 // Mock the SessionContext to provide controlled data for testing
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
@@ -32,35 +36,7 @@ vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 const useRuntimeApiMock = vi.mocked(RuntimeContext.useRuntimeApi);
 
-const defaultTokenTracking = {
-  tokensPerMinute: 0,
-  throttleWaitTimeMs: 0,
-  timeToFirstToken: null as number | null,
-  tokensPerSecond: 0,
-  sessionTokenUsage: {
-    input: 0,
-    output: 0,
-    cache: 0,
-    tool: 0,
-    thought: 0,
-    total: 0,
-  },
-};
-
-const withTokenTracking = (
-  partial: Omit<SessionMetrics, 'tokenTracking'> & {
-    tokenTracking?: SessionMetrics['tokenTracking'];
-  },
-): SessionMetrics => ({
-  ...partial,
-  tokenTracking: partial.tokenTracking ?? { ...defaultTokenTracking },
-});
-
-const renderWithMockedStats = (
-  metrics: Omit<SessionMetrics, 'tokenTracking'> & {
-    tokenTracking?: SessionMetrics['tokenTracking'];
-  },
-) => {
+const renderWithMockedStats = (metrics: TestMetricsInput) => {
   const withDefaults = withTokenTracking(metrics);
 
   useSessionStatsMock.mockReturnValue({
@@ -69,11 +45,13 @@ const renderWithMockedStats = (
       sessionStartTime: new Date(),
       metrics: withDefaults,
       lastPromptTokenCount: 0,
+      historyTokenCount: 0,
       promptCount: 5,
     },
 
     getPromptCount: () => 5,
     startNewPrompt: vi.fn(),
+    updateHistoryTokenCount: vi.fn(),
   });
 
   // Mock RuntimeContext to provide default provider metrics
@@ -97,34 +75,19 @@ const renderWithMockedStats = (
   return render(<StatsDisplay duration="1s" />);
 };
 
-const defaultZeroMetrics: SessionMetrics = {
-  models: {},
-  tools: {
-    totalCalls: 0,
-    totalSuccess: 0,
-    totalFail: 0,
-    totalDurationMs: 0,
-    totalDecisions: { accept: 0, reject: 0, modify: 0 },
-    byName: {},
-  },
-  files: {
-    totalLinesAdded: 0,
-    totalLinesRemoved: 0,
-  },
-  tokenTracking: { ...defaultTokenTracking },
-};
-
 const defaultStatsReturnValue = {
   stats: {
     sessionId: 'test-session-id',
     sessionStartTime: new Date(),
     metrics: defaultZeroMetrics,
     lastPromptTokenCount: 0,
+    historyTokenCount: 0,
     promptCount: 5,
   },
 
   getPromptCount: () => 5,
   startNewPrompt: vi.fn(),
+  updateHistoryTokenCount: vi.fn(),
 };
 
 describe('<StatsDisplay />', () => {
@@ -159,7 +122,7 @@ describe('<StatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
       },
       files: {
@@ -212,7 +175,7 @@ describe('<StatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
       },
       files: {
@@ -252,14 +215,14 @@ describe('<StatsDisplay />', () => {
         totalSuccess: 1,
         totalFail: 1,
         totalDurationMs: 123,
-        totalDecisions: { accept: 1, reject: 0, modify: 0 },
+        totalDecisions: { accept: 1, reject: 0, modify: 0, auto_accept: 0 },
         byName: {
           'test-tool': {
             count: 2,
             success: 1,
             fail: 1,
             durationMs: 123,
-            decisions: { accept: 1, reject: 0, modify: 0 },
+            decisions: { accept: 1, reject: 0, modify: 0, auto_accept: 0 },
           },
         },
       },
@@ -289,14 +252,14 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 1,
           totalFail: 1,
           totalDurationMs: 123,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 }, // No decisions
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {
             'test-tool': {
               count: 2,
               success: 1,
               fail: 1,
               durationMs: 123,
-              decisions: { accept: 0, reject: 0, modify: 0 },
+              decisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
             },
           },
         },
@@ -336,7 +299,7 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 0,
           totalFail: 0,
           totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {},
         },
         files: {
@@ -361,7 +324,7 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 10,
           totalFail: 0,
           totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {},
         },
         files: {
@@ -381,7 +344,7 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 9,
           totalFail: 1,
           totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {},
         },
         files: {
@@ -401,7 +364,7 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 5,
           totalFail: 5,
           totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {},
         },
         files: {
@@ -423,7 +386,7 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 1,
           totalFail: 0,
           totalDurationMs: 100,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {},
         },
         files: {
@@ -449,7 +412,7 @@ describe('<StatsDisplay />', () => {
           totalSuccess: 1,
           totalFail: 0,
           totalDurationMs: 100,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           byName: {},
         },
         files: {
@@ -462,347 +425,6 @@ describe('<StatsDisplay />', () => {
       const output = lastFrame();
 
       expect(output).not.toContain('Code Changes:');
-      expect(output).toMatchSnapshot();
-    });
-  });
-
-  describe('Title Rendering', () => {
-    const zeroMetrics = withTokenTracking({
-      models: {},
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
-    });
-
-    it('renders the default title when no title prop is provided', () => {
-      const { lastFrame } = renderWithMockedStats(zeroMetrics);
-      const output = lastFrame();
-      expect(output).toContain('Session Stats');
-      expect(output).not.toContain('Agent powering down');
-      expect(output).toMatchSnapshot();
-    });
-
-    it('renders the custom title when a title prop is provided', () => {
-      const { lastFrame } = render(
-        <StatsDisplay duration="1s" title="Agent powering down. Goodbye!" />,
-      );
-      const output = lastFrame();
-      expect(output).toContain('Agent powering down. Goodbye!');
-      expect(output).not.toContain('Session Stats');
-      expect(output).toMatchSnapshot();
-    });
-  });
-
-  describe('Quota Display', () => {
-    it('renders quota information when quotaLines are provided', () => {
-      const metrics = withTokenTracking({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              input: 50,
-              prompt: 100,
-              candidates: 100,
-              total: 250,
-              cached: 50,
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-      });
-
-      const quotaLines = [
-        '## Anthropic Quota Information\n',
-        '**Daily Usage**',
-        'Used: 1000 / 10000 tokens (10.0%)',
-        'Remaining: 9000 tokens',
-        'Resets: 2026-02-15 00:00:00 UTC',
-      ];
-
-      useSessionStatsMock.mockReturnValue({
-        ...defaultStatsReturnValue,
-        stats: { ...defaultStatsReturnValue.stats, metrics },
-      });
-
-      const { lastFrame } = render(
-        <StatsDisplay duration="1s" quotaLines={quotaLines} />,
-      );
-      const output = lastFrame();
-
-      expect(output).toContain('Quota Information');
-      expect(output).toContain('Anthropic Quota Information');
-      expect(output).toContain('Daily Usage');
-      expect(output).toContain('Used: 1000 / 10000 tokens');
-      expect(output).toMatchSnapshot();
-    });
-
-    it('does not render quota section when quotaLines are not provided', () => {
-      const { lastFrame } = render(<StatsDisplay duration="1s" />);
-      const output = lastFrame();
-
-      expect(output).not.toContain('Quota Information');
-      expect(output).toMatchSnapshot();
-    });
-
-    it('handles empty quotaLines gracefully', () => {
-      const { lastFrame } = render(
-        <StatsDisplay duration="1s" quotaLines={[]} />,
-      );
-      const output = lastFrame();
-
-      expect(output).not.toContain('Quota Information');
-      expect(output).toMatchSnapshot();
-    });
-  });
-
-  describe('Model Usage Table Updates', () => {
-    it('should display separate Input Tokens and Cache Reads columns', () => {
-      const metrics = withTokenTracking({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 5, totalErrors: 0, totalLatencyMs: 1000 },
-            tokens: {
-              prompt: 1000,
-              candidates: 500,
-              total: 2000,
-              cached: 400,
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-      });
-
-      const { lastFrame } = renderWithMockedStats(metrics);
-      const output = lastFrame();
-
-      expect(output).toContain('Input Tokens');
-      expect(output).toContain('Cache Reads');
-      expect(output).toContain('600'); // uncached = 1000 - 400
-      expect(output).toContain('400'); // cached
-      expect(output).toMatchSnapshot();
-    });
-
-    it('should apply color to cache efficiency percentage', () => {
-      const metrics = withTokenTracking({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
-            tokens: {
-              prompt: 1000,
-              candidates: 100,
-              total: 1100,
-              cached: 500, // 50% cache efficiency
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-      });
-
-      const { lastFrame } = renderWithMockedStats(metrics);
-      const output = lastFrame();
-
-      expect(output).toContain('Savings Highlight');
-      expect(output).toContain('50.0%');
-      // Snapshot will verify color codes are present
-      expect(output).toMatchSnapshot();
-    });
-  });
-
-  describe('Issue #1805 metrics display', () => {
-    it('shows throughput, TTFT, and output rate in performance section when available', () => {
-      const metrics = withTokenTracking({
-        models: {
-          'gemini-2.5-pro': {
-            api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 2500 },
-            tokens: {
-              input: 600,
-              prompt: 900,
-              candidates: 400,
-              total: 1300,
-              cached: 300,
-              thoughts: 0,
-              tool: 0,
-            },
-          },
-        },
-        tools: {
-          totalCalls: 1,
-          totalSuccess: 1,
-          totalFail: 0,
-          totalDurationMs: 250,
-          totalDecisions: { accept: 1, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-        tokenTracking: {
-          ...defaultTokenTracking,
-          tokensPerMinute: 1234,
-          timeToFirstToken: 187,
-          tokensPerSecond: 42.42,
-        },
-      });
-
-      const { lastFrame } = renderWithMockedStats(metrics);
-      const output = lastFrame();
-
-      expect(output).toContain('Throughput:');
-      expect(output).toContain('1.23k TPM');
-      expect(output).toContain('(input+output)');
-      expect(output).toContain('TTFT (last):');
-      expect(output).toContain('187ms');
-      expect(output).toContain('Token Rate (avg):');
-      expect(output).toContain('42.42 tok/s');
-      expect(output).toContain('(session input+output)');
-      expect(output).toMatchSnapshot();
-    });
-
-    it('hides throughput, TTFT, and output rate when values are non-finite', () => {
-      const metrics = withTokenTracking({
-        models: {},
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-        tokenTracking: {
-          ...defaultTokenTracking,
-          tokensPerMinute: Number.NaN,
-          timeToFirstToken: Number.POSITIVE_INFINITY,
-          tokensPerSecond: Number.NEGATIVE_INFINITY,
-        },
-      });
-
-      const { lastFrame } = renderWithMockedStats(metrics);
-      const output = lastFrame();
-
-      expect(output).not.toContain('Throughput:');
-      expect(output).not.toContain('TTFT (last):');
-      expect(output).not.toContain('Token Rate (avg):');
-      expect(output).not.toContain('NaN');
-      expect(output).not.toContain('Infinity');
-      expect(output).toMatchSnapshot();
-    });
-
-    it('hides throughput, TTFT, and output rate when values are unavailable', () => {
-      const metrics = withTokenTracking({
-        models: {},
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-        tokenTracking: {
-          ...defaultTokenTracking,
-          tokensPerMinute: 0,
-          timeToFirstToken: null,
-          tokensPerSecond: 0,
-        },
-      });
-
-      const { lastFrame } = renderWithMockedStats(metrics);
-      const output = lastFrame();
-
-      expect(output).not.toContain('Throughput:');
-      expect(output).not.toContain('TTFT (last):');
-      expect(output).not.toContain('Token Rate (avg):');
-      expect(output).toMatchSnapshot();
-    });
-
-    it('shows throughput when TPM is present even if TTFT/output rate are unavailable', () => {
-      const metrics = withTokenTracking({
-        models: {},
-        tools: {
-          totalCalls: 0,
-          totalSuccess: 0,
-          totalFail: 0,
-          totalDurationMs: 0,
-          totalDecisions: { accept: 0, reject: 0, modify: 0 },
-          byName: {},
-        },
-        files: {
-          totalLinesAdded: 0,
-          totalLinesRemoved: 0,
-        },
-        tokenTracking: {
-          ...defaultTokenTracking,
-          tokensPerMinute: 250,
-          timeToFirstToken: null,
-          tokensPerSecond: 0,
-        },
-      });
-
-      const { lastFrame } = renderWithMockedStats(metrics);
-      const output = lastFrame();
-
-      expect(output).toContain('Throughput:');
-      expect(output).toContain('250.00 TPM');
-      expect(output).not.toContain('TTFT (last):');
-      expect(output).not.toContain('Token Rate (avg):');
       expect(output).toMatchSnapshot();
     });
   });

@@ -50,14 +50,11 @@ function areModelMetricsEqual(a: ModelMetrics, b: ModelMetrics): boolean {
 }
 
 function areToolCallStatsEqual(a: ToolCallStats, b: ToolCallStats): boolean {
-  if (
-    a.count !== b.count ||
-    a.success !== b.success ||
-    a.fail !== b.fail ||
-    a.durationMs !== b.durationMs
-  ) {
-    return false;
-  }
+  if (a.count !== b.count) return false;
+  if (a.success !== b.success) return false;
+  if (a.fail !== b.fail) return false;
+  if (a.cancelled !== b.cancelled) return false;
+  if (a.durationMs !== b.durationMs) return false;
   if (
     a.decisions[ToolCallDecision.ACCEPT] !==
       b.decisions[ToolCallDecision.ACCEPT] ||
@@ -134,6 +131,7 @@ function cloneSessionMetrics(metrics: SessionMetrics): SessionMetrics {
       count: tool.count,
       success: tool.success,
       fail: tool.fail,
+      cancelled: tool.cancelled,
       durationMs: tool.durationMs,
       decisions: { ...tool.decisions },
     };
@@ -145,6 +143,7 @@ function cloneSessionMetrics(metrics: SessionMetrics): SessionMetrics {
       totalCalls: metrics.tools.totalCalls,
       totalSuccess: metrics.tools.totalSuccess,
       totalFail: metrics.tools.totalFail,
+      totalCancelled: metrics.tools.totalCancelled,
       totalDurationMs: metrics.tools.totalDurationMs,
       totalDecisions: { ...metrics.tools.totalDecisions },
       byName: toolsByName,
@@ -159,75 +158,142 @@ function cloneSessionMetrics(metrics: SessionMetrics): SessionMetrics {
         ...metrics.tokenTracking.sessionTokenUsage,
       },
     },
+    timing: { ...metrics.timing },
+    cache: { ...metrics.cache },
   };
 }
 
+function areFilesEqual(
+  a: SessionMetrics['files'],
+  b: SessionMetrics['files'],
+): boolean {
+  return (
+    a.totalLinesAdded === b.totalLinesAdded &&
+    a.totalLinesRemoved === b.totalLinesRemoved
+  );
+}
+
+function areToolsTotalsEqual(
+  a: SessionMetrics['tools'],
+  b: SessionMetrics['tools'],
+): boolean {
+  if (a.totalCalls !== b.totalCalls) return false;
+  if (a.totalSuccess !== b.totalSuccess) return false;
+  if (a.totalFail !== b.totalFail) return false;
+  if (a.totalCancelled !== b.totalCancelled) return false;
+  return a.totalDurationMs === b.totalDurationMs;
+}
+
+function areToolDecisionsEqual(
+  a: SessionMetrics['tools']['totalDecisions'],
+  b: SessionMetrics['tools']['totalDecisions'],
+): boolean {
+  return (
+    a[ToolCallDecision.ACCEPT] === b[ToolCallDecision.ACCEPT] &&
+    a[ToolCallDecision.REJECT] === b[ToolCallDecision.REJECT] &&
+    a[ToolCallDecision.MODIFY] === b[ToolCallDecision.MODIFY] &&
+    a[ToolCallDecision.AUTO_ACCEPT] === b[ToolCallDecision.AUTO_ACCEPT]
+  );
+}
+
+function areToolsByMapsEqual(
+  a: SessionMetrics['tools']['byName'],
+  b: SessionMetrics['tools']['byName'],
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!areToolCallStatsEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+function areModelsEqual(
+  a: SessionMetrics['models'],
+  b: SessionMetrics['models'],
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!areModelMetricsEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+function areTimingThroughputMetricsEqual(
+  a: SessionMetrics['timing'],
+  b: SessionMetrics['timing'],
+): boolean {
+  if (a.completeTokensPerMinute !== b.completeTokensPerMinute) return false;
+  if (a.outputGenerationTps !== b.outputGenerationTps) return false;
+  if (a.effectiveInputTps !== b.effectiveInputTps) return false;
+  if (a.uncachedInputTps !== b.uncachedInputTps) return false;
+  return a.lastRequestTpm === b.lastRequestTpm;
+}
+
+function areTimingLatencyMetricsEqual(
+  a: SessionMetrics['timing'],
+  b: SessionMetrics['timing'],
+): boolean {
+  return (
+    a.lastTtftMs === b.lastTtftMs &&
+    a.weightedAvgTtftMs === b.weightedAvgTtftMs &&
+    a.lastOutputGenerationTps === b.lastOutputGenerationTps &&
+    a.lastEffectiveInputTps === b.lastEffectiveInputTps
+  );
+}
+
+function areTimingAccumulatedMetricsEqual(
+  a: SessionMetrics['timing'],
+  b: SessionMetrics['timing'],
+): boolean {
+  return (
+    a.accumulatedApiTimeMs === b.accumulatedApiTimeMs &&
+    a.accumulatedToolTimeMs === b.accumulatedToolTimeMs &&
+    a.agentActiveTimeMs === b.agentActiveTimeMs &&
+    a.accumulatedWorkMs === b.accumulatedWorkMs
+  );
+}
+
+function areCacheMetricsEqual(
+  a: SessionMetrics['cache'],
+  b: SessionMetrics['cache'],
+): boolean {
+  if (a.hasReliableCacheData !== b.hasReliableCacheData) return false;
+  if (a.hasReliableCacheReads !== b.hasReliableCacheReads) return false;
+  if (a.hasReliableCacheWrites !== b.hasReliableCacheWrites) return false;
+  if (a.totalCacheReads !== b.totalCacheReads) return false;
+  if (a.totalCacheWrites !== b.totalCacheWrites) return false;
+  if (a.requestsWithCacheReads !== b.requestsWithCacheReads) return false;
+  return a.requestsWithCacheWrites === b.requestsWithCacheWrites;
+}
+
 function areMetricsEqual(a: SessionMetrics, b: SessionMetrics): boolean {
-  // Compare files
-  if (
-    a.files.totalLinesAdded !== b.files.totalLinesAdded ||
-    a.files.totalLinesRemoved !== b.files.totalLinesRemoved
-  ) {
+  if (!areFilesEqual(a.files, b.files)) return false;
+
+  if (!areToolsTotalsEqual(a.tools, b.tools)) return false;
+  if (!areToolDecisionsEqual(a.tools.totalDecisions, b.tools.totalDecisions)) {
+    return false;
+  }
+  if (!areToolsByMapsEqual(a.tools.byName, b.tools.byName)) return false;
+
+  if (!areModelsEqual(a.models, b.models)) return false;
+
+  if (!areTokenTrackingMetricsEqual(a.tokenTracking, b.tokenTracking)) {
     return false;
   }
 
-  // Compare tools
-  const toolsA = a.tools;
-  const toolsB = b.tools;
-  if (
-    toolsA.totalCalls !== toolsB.totalCalls ||
-    toolsA.totalSuccess !== toolsB.totalSuccess ||
-    toolsA.totalFail !== toolsB.totalFail ||
-    toolsA.totalDurationMs !== toolsB.totalDurationMs
-  ) {
-    return false;
-  }
+  const ta = a.timing;
+  const tb = b.timing;
+  if (!areTimingThroughputMetricsEqual(ta, tb)) return false;
+  if (!areTimingLatencyMetricsEqual(ta, tb)) return false;
+  if (!areTimingAccumulatedMetricsEqual(ta, tb)) return false;
 
-  // Compare tool decisions
-  if (
-    toolsA.totalDecisions[ToolCallDecision.ACCEPT] !==
-      toolsB.totalDecisions[ToolCallDecision.ACCEPT] ||
-    toolsA.totalDecisions[ToolCallDecision.REJECT] !==
-      toolsB.totalDecisions[ToolCallDecision.REJECT] ||
-    toolsA.totalDecisions[ToolCallDecision.MODIFY] !==
-      toolsB.totalDecisions[ToolCallDecision.MODIFY] ||
-    toolsA.totalDecisions[ToolCallDecision.AUTO_ACCEPT] !==
-      toolsB.totalDecisions[ToolCallDecision.AUTO_ACCEPT]
-  ) {
-    return false;
-  }
-
-  // Compare tools.byName
-  const toolsByNameAKeys = Object.keys(toolsA.byName);
-  const toolsByNameBKeys = Object.keys(toolsB.byName);
-  if (toolsByNameAKeys.length !== toolsByNameBKeys.length) return false;
-
-  for (const key of toolsByNameAKeys) {
-    if (!Object.prototype.hasOwnProperty.call(toolsB.byName, key)) {
-      return false;
-    }
-
-    if (!areToolCallStatsEqual(toolsA.byName[key], toolsB.byName[key])) {
-      return false;
-    }
-  }
-
-  // Compare models
-  const modelsAKeys = Object.keys(a.models);
-  const modelsBKeys = Object.keys(b.models);
-  if (modelsAKeys.length !== modelsBKeys.length) return false;
-
-  for (const key of modelsAKeys) {
-    if (!Object.prototype.hasOwnProperty.call(b.models, key)) {
-      return false;
-    }
-
-    if (!areModelMetricsEqual(a.models[key], b.models[key])) {
-      return false;
-    }
-  }
-
-  return areTokenTrackingMetricsEqual(a.tokenTracking, b.tokenTracking);
+  return areCacheMetricsEqual(a.cache, b.cache);
 }
 
 export type { SessionMetrics, ModelMetrics };

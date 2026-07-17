@@ -103,6 +103,12 @@ export {
 export { SpanStatusCode, ValueType } from '@opentelemetry/api';
 export { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 export * from './uiTelemetry.js';
+export {
+  SessionMetricsAggregator,
+  type SessionMetricsSnapshot,
+  type ModelBreakdown,
+  type ApiAttemptRecord,
+} from './sessionMetricsAggregator.js';
 export { ToolConfirmationOutcome } from '../internal/interfaces.js';
 export type {
   TelemetryConfig,

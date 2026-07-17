@@ -11,20 +11,8 @@ import {
   type GenerateChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
-import {
-  type IContent,
-  type UsageStats,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  logApiRequest,
-  logApiError,
-} from '@vybestack/llxprt-code-core/telemetry/loggers.js';
-import {
-  ApiRequestEvent,
-  ApiErrorEvent,
-} from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -36,38 +24,36 @@ import {
 } from './logging/ConfigBasedRedactor.js';
 import {
   type TokenCounts,
-  extractTokenCountsFromTokenUsage,
   extractTokenCountsFromResponse,
 } from './logging/tokenCounts.js';
-import {
-  extractChunkMetadata,
-  hasTokenBearingOutput,
-  extractSimpleContent,
-} from './logging/streamChunkUtils.js';
-import {
-  type ResponseTokenCounts,
-  emitMetricsTelemetry,
-  emitResponseTelemetry,
-  writeConversationLog,
-} from './logging/telemetryEmitter.js';
-import {
-  logConversationRequestEntry,
-  logToolCallEntry,
-} from './logging/conversationLogger.js';
-import { resolveAndValidateConfig } from './logging/configValidator.js';
+import { writeResponseLog as writeResponseLogEntry } from './logging/conversationResponseLogger.js';
+import { logApiRequestTelemetry as logApiRequestTelemetryEntry } from './logging/apiRequestLogger.js';
 import {
   normalizeChatCompletionOptions,
   ensureRuntimeContext,
 } from './logging/optionsNormalizer.js';
+import { resolveAndValidateConfig } from './logging/configValidator.js';
 import {
-  type AccumulableTokenCounts,
-  accumulateTokenUsage,
-  resolveLoggingConfig,
-} from './logging/tokenAccumulator.js';
+  setupRedactor,
+  checkConversationLoggingEnabled,
+  logRequestIfEnabled,
+} from './logging/requestSetupHelpers.js';
+import {
+  processStreamWithRecorderGen,
+  logResponseStreamWithRecorderGen,
+} from './logging/streamProcessor.js';
 import {
   delegateGetStats,
   delegateGetLoadBalancerConfig,
 } from './loadBalancing/wrappedProviderDelegation.js';
+import {
+  ATTEMPT_LIFECYCLE_KEY,
+  type AttemptLifecycleObserver,
+} from './logging/attemptLifecycle.js';
+import { AttemptRecorder } from './logging/attemptRecorder.js';
+import { isWrapperLifecycleOwner } from './logging/lifecycleOwnership.js';
+import { invokeServerToolWithLogging } from './logging/serverToolLogger.js';
+import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
 
 export type { ConversationDataRedactor };
 
@@ -206,7 +192,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   getDefaultModel(): string {
-    return this.wrapped.getDefaultModel();
+    return safeGetDefaultModel(this.wrapped);
   }
 
   /**
@@ -263,24 +249,83 @@ export class LoggingProviderWrapper implements IProvider {
       () =>
         `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents.length}`,
     );
-    const stream = this.wrapped.generateChatCompletion(normalizedOptions);
-    this.debug.log(() => `Wrapped provider call completed, processing stream`);
     const resolvedModelName =
-      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
+      normalizedOptions.resolved?.model ?? this.getDefaultModel();
+
+    // Determine lifecycle ownership BEFORE creating the recorder.
+    // Finding #1/#3: If the wrapped transport owns its own attempts
+    // (e.g. LoadBalancingProvider) or if there's a RetryOrchestrator in
+    // the chain, the wrapper does NOT own lifecycle. Only a direct
+    // (no-retry, no-transport-owned) provider makes the wrapper the owner.
+    const wrapperOwned = this.isWrapperLifecycleOwner();
+
+    // Create attempt recorder and install it in metadata so the
+    // RetryOrchestrator or provider-owned transport can invoke it per raw attempt.
+    const recorder = new AttemptRecorder({
+      providerName: this.wrapped.name,
+      defaultModelName: this.getDefaultModel(),
+      config: activeConfig,
+      logicalRequestId: promptId,
+      wrapperOwned,
+    });
+    const optionsWithLifecycle: GenerateChatOptions = {
+      ...normalizedOptions,
+      metadata: {
+        ...(normalizedOptions.metadata ?? {}),
+        [ATTEMPT_LIFECYCLE_KEY]: recorder satisfies AttemptLifecycleObserver,
+      },
+    };
+
+    // Finding #2: For the wrapper-owned path (direct/no-retry), start the
+    // attempt BEFORE invoking the provider. A synchronous throw from
+    // generateChatCompletion still has an active attempt to finalize.
+    if (wrapperOwned) {
+      recorder.ensureAttemptStarted();
+    }
+
+    let stream: AsyncIterableIterator<IContent>;
+    try {
+      stream = this.wrapped.generateChatCompletion(optionsWithLifecycle);
+    } catch (syncError) {
+      // Synchronous throw from the provider — record performance, finalize
+      // as error, and re-throw. Stream errors also call recordError, so this
+      // closes the observability gap for synchronous failures.
+      this.performanceTracker.recordError(0, String(syncError), null, 0);
+      recorder.finalizeAttempt(
+        'error',
+        resolvedModelName,
+        undefined,
+        syncError instanceof Error ? syncError.message : String(syncError),
+      );
+      throw syncError;
+    }
+    this.debug.log(() => `Wrapped provider call completed, processing stream`);
+
     if (!activeConfig.getConversationLoggingEnabled()) {
-      yield* this.processStreamForMetrics(
+      yield* this.processStreamWithRecorder(
         activeConfig,
         stream,
         resolvedModelName,
+        promptId,
+        recorder,
       );
       return;
     }
-    yield* this.logResponseStream(
+    yield* this.logResponseStreamWithRecorder(
       activeConfig,
       stream,
       promptId,
       resolvedModelName,
+      recorder,
     );
+  }
+
+  /**
+   * Determine whether this wrapper is the canonical lifecycle owner.
+   * Delegates to the standalone helper for chain inspection logic.
+   */
+  private isWrapperLifecycleOwner(): boolean {
+    return isWrapperLifecycleOwner(this.wrapped);
   }
 
   /** REQ-SP4-004: Normalize raw args into GenerateChatOptions, inject runtime, apply normalizer. */
@@ -313,45 +358,20 @@ export class LoggingProviderWrapper implements IProvider {
     normalizedOptions: GenerateChatOptions,
     activeConfig: Config,
   ): void {
-    const invocation = normalizedOptions.invocation;
-    if (this.injectedRedactor) {
-      this.redactor = this.injectedRedactor;
-      this.debug.log(
-        () => `After redactor setup: hasRedactor=${!!this.redactor}`,
-      );
-      return;
-    }
-
-    if (invocation?.redaction) {
-      this.redactor = new ConfigBasedRedactor({
-        ...invocation.redaction,
-      });
-    } else {
-      this.redactor = new ConfigBasedRedactor(
-        activeConfig.getRedactionConfig(),
-      );
-    }
-    this.debug.log(
-      () => `After redactor setup: hasRedactor=${!!this.redactor}`,
-    );
+    this.redactor = setupRedactor(normalizedOptions, activeConfig, {
+      providerName: this.wrapped.name,
+      conversationId: this.conversationId,
+      turnNumber: this.turnNumber,
+      defaultModelName: this.getDefaultModel(),
+      generatePromptId: () => this.generatePromptId(),
+      injectedRedactor: this.injectedRedactor,
+      debug: this.debug,
+    });
   }
 
   /** Check whether conversation logging is enabled, re-throwing on failure. */
   private checkConversationLoggingEnabled(activeConfig: Config): boolean {
-    try {
-      this.debug.log(() => `About to call getConversationLoggingEnabled()`);
-      const enabled = activeConfig.getConversationLoggingEnabled();
-      this.debug.log(
-        () => `getConversationLoggingEnabled() returned: ${enabled}`,
-      );
-      return enabled;
-    } catch (error) {
-      this.debug.error(
-        () =>
-          `getConversationLoggingEnabled() threw exception: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw error;
-    }
+    return checkConversationLoggingEnabled(activeConfig, this.debug);
   }
 
   /** Log the request if conversation logging is enabled. */
@@ -360,28 +380,21 @@ export class LoggingProviderWrapper implements IProvider {
     normalizedOptions: GenerateChatOptions,
     promptId: string,
   ): Promise<void> {
-    try {
-      this.debug.log(
-        () =>
-          `Before logRequest: contents length = ${normalizedOptions.contents.length}`,
-      );
-      await this.logRequest(
-        activeConfig,
-        normalizedOptions.contents,
-        normalizedOptions.tools,
-        promptId,
-      );
-      this.debug.log(
-        () =>
-          `After logRequest: contents length = ${normalizedOptions.contents.length}`,
-      );
-    } catch (error) {
-      this.debug.error(
-        () =>
-          `logRequest failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw error;
-    }
+    await logRequestIfEnabled(
+      activeConfig,
+      normalizedOptions,
+      promptId,
+      this.redactor,
+      {
+        providerName: this.wrapped.name,
+        conversationId: this.conversationId,
+        turnNumber: this.turnNumber,
+        defaultModelName: this.getDefaultModel(),
+        generatePromptId: () => this.generatePromptId(),
+        injectedRedactor: this.injectedRedactor,
+        debug: this.debug,
+      },
+    );
   }
 
   /** Log API request telemetry event. */
@@ -390,407 +403,84 @@ export class LoggingProviderWrapper implements IProvider {
     normalizedOptions: GenerateChatOptions,
     promptId: string,
   ): void {
-    this.debug.log(() => `Before API request telemetry section`);
-    this.debug.log(
-      () =>
-        `Before JSON.stringify: contents length=${normalizedOptions.contents.length}`,
-    );
-    const requestText = JSON.stringify(normalizedOptions.contents);
-    this.debug.log(
-      () => `After JSON.stringify: requestText length=${requestText.length}`,
-    );
-    const modelName =
-      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
-    this.debug.log(
-      () => `Logging API request: model=${modelName}, promptId=${promptId}`,
-    );
-    logApiRequest(
+    logApiRequestTelemetryEntry(
       activeConfig,
-      new ApiRequestEvent(modelName, promptId, requestText),
-    );
-    this.debug.log(
-      () =>
-        `After API request logged: contents length=${normalizedOptions.contents.length}`,
-    );
-  }
-
-  private async logRequest(
-    config: Config,
-    content: IContent[],
-    tools: ProviderToolset | undefined,
-    promptId: string | undefined,
-  ): Promise<void> {
-    try {
-      await logConversationRequestEntry(config, content, tools, promptId, {
-        providerName: this.wrapped.name,
-        conversationId: this.conversationId,
-        turnNumber: this.turnNumber,
-        generatePromptId: () => this.generatePromptId(),
-        redactor: this.redactor,
-      });
-    } catch (error) {
-      // Log error but don't fail the request
-      this.debug.warn(() => `Failed to log conversation request: ${error}`);
-    }
-  }
-
-  /**
-   * Process stream to extract token metrics without logging
-   * @plan PLAN-20250909-TOKTRACK
-   * @issue #684 - Fixed: Now logs API response telemetry for /stats model
-   */
-  private async *processStreamForMetrics(
-    config: Config | undefined,
-    stream: AsyncIterableIterator<IContent>,
-    modelName: string,
-  ): AsyncIterableIterator<IContent> {
-    const startTime = performance.now();
-    let latestTokenUsage: UsageStats | undefined;
-    let lastFinishReason: string | undefined;
-    let streamedText = '';
-    let firstChunkTime: number | null = null;
-    let chunkCount = 0;
-
-    try {
-      for await (const chunk of stream) {
-        chunkCount++;
-        if (firstChunkTime === null && this.hasTokenBearingOutput(chunk)) {
-          firstChunkTime = performance.now() - startTime;
-        }
-        this.extractChunkMetadata(
-          chunk,
-          (usage) => {
-            latestTokenUsage = usage;
-          },
-          (reason) => {
-            lastFinishReason = reason;
-          },
-          latestTokenUsage === undefined,
-          (text) => {
-            streamedText += text;
-          },
-        );
-        yield chunk;
-      }
-
-      const duration = performance.now() - startTime;
-      const tokenCounts = this.resolveTokenCounts(
-        latestTokenUsage,
-        streamedText,
-      );
-      this.emitMetricsTelemetry(
-        config,
-        tokenCounts,
-        modelName,
-        duration,
-        lastFinishReason,
-      );
-
-      if (latestTokenUsage) {
-        this.accumulateTokenUsage(tokenCounts, config);
-      }
-
-      const totalTokens =
-        tokenCounts.input_token_count + tokenCounts.output_token_count;
-      this.performanceTracker.recordCompletion(
-        duration,
-        firstChunkTime,
-        totalTokens,
-        chunkCount,
-      );
-    } catch (error) {
-      this.handleMetricsStreamError(
-        error,
-        config,
-        modelName,
-        startTime,
-        firstChunkTime,
-        chunkCount,
-      );
-      throw error;
-    }
-  }
-
-  /** Extract token usage, finish reason, and text from a stream chunk. */
-  private extractChunkMetadata(
-    chunk: IContent,
-    onUsage: (usage: UsageStats) => void,
-    onFinishReason: (reason: string) => void,
-    shouldAccumulateText: boolean,
-    onText: (text: string) => void,
-  ): void {
-    extractChunkMetadata(
-      chunk,
-      onUsage,
-      onFinishReason,
-      shouldAccumulateText,
-      onText,
-    );
-  }
-
-  /** Resolve token counts from usage stats or estimate from streamed text. */
-  private resolveTokenCounts(
-    latestTokenUsage: UsageStats | undefined,
-    streamedText: string,
-  ): ResponseTokenCounts {
-    return latestTokenUsage
-      ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
-      : {
-          input_token_count: 0,
-          output_token_count:
-            streamedText.length > 0 ? estimateTokens(streamedText) : 0,
-          cached_content_token_count: 0,
-          thoughts_token_count: 0,
-          tool_token_count: 0,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: null,
-        };
-  }
-
-  /** Issue #684: Emit API response telemetry for /stats model tracking. */
-  private emitMetricsTelemetry(
-    config: Config | undefined,
-    tokenCounts: ResponseTokenCounts,
-    modelName: string,
-    duration: number,
-    lastFinishReason: string | undefined,
-  ): void {
-    emitMetricsTelemetry(
-      config,
-      tokenCounts,
-      modelName,
-      duration,
-      lastFinishReason,
-    );
-  }
-
-  /** Handle stream error: record in performance tracker and log API error telemetry. */
-  private handleMetricsStreamError(
-    error: unknown,
-    config: Config | undefined,
-    modelName: string,
-    startTime: number,
-    firstChunkTime: number | null,
-    chunkCount: number,
-  ): void {
-    const duration = performance.now() - startTime;
-    this.performanceTracker.recordError(
-      duration,
-      String(error),
-      firstChunkTime,
-      chunkCount,
-    );
-    if (config) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      logApiError(
-        config,
-        new ApiErrorEvent(
-          modelName,
-          errorMessage,
-          duration,
-          '',
-          'stream_error',
-          undefined,
-        ),
-      );
-    }
-  }
-
-  private async *logResponseStream(
-    config: Config,
-    stream: AsyncIterableIterator<IContent>,
-    promptId: string,
-    modelName: string,
-  ): AsyncIterableIterator<IContent> {
-    const startTime = performance.now();
-    let responseContent = '';
-    let latestTokenUsage: UsageStats | undefined;
-    let lastFinishReason: string | undefined;
-    let firstChunkTime: number | null = null;
-    let chunkCount = 0;
-
-    try {
-      for await (const chunk of stream) {
-        chunkCount++;
-        if (firstChunkTime === null && this.hasTokenBearingOutput(chunk)) {
-          firstChunkTime = performance.now() - startTime;
-        }
-
-        const content = extractSimpleContent(chunk);
-        if (content) {
-          responseContent += content;
-        }
-
-        this.extractChunkMetadata(
-          chunk,
-          (usage) => {
-            latestTokenUsage = usage;
-          },
-          (reason) => {
-            lastFinishReason = reason;
-          },
-          false,
-          () => {},
-        );
-
-        yield chunk;
-      }
-    } catch (error) {
-      const errorTime = performance.now();
-      await this.logResponse(
-        config,
-        '',
-        promptId,
-        errorTime - startTime,
-        false,
-        error,
-        latestTokenUsage,
-        modelName,
-        lastFinishReason ? [lastFinishReason] : [],
-        firstChunkTime,
-        chunkCount,
-      );
-      throw error;
-    }
-
-    const totalTime = performance.now() - startTime;
-    await this.logResponse(
-      config,
-      responseContent,
+      normalizedOptions,
       promptId,
-      totalTime,
-      true,
-      undefined,
-      latestTokenUsage,
-      modelName,
-      lastFinishReason ? [lastFinishReason] : [],
-      firstChunkTime,
-      chunkCount,
+      this.getDefaultModel(),
+      this.debug,
     );
   }
 
-  // Simple content extraction without complex provider-specific logic
-  private hasTokenBearingOutput(chunk: unknown): boolean {
-    return hasTokenBearingOutput(chunk);
-  }
-
-  private async logResponse(
+  /** Write a conversation response log entry to telemetry and disk (fail-open). */
+  private async writeResponseLog(
     config: Config,
     content: string,
     promptId: string,
     duration: number,
     success: boolean,
-    error?: unknown,
-    tokenUsage?: UsageStats,
-    modelName?: string,
-    finishReasons?: string[],
-    timeToFirstToken?: number | null,
-    chunkCount?: number,
-  ): Promise<void> {
-    try {
-      const redactedContent = this.redactor
-        ? this.redactor.redactResponseContent(content, this.wrapped.name)
-        : content;
-
-      const tokenCounts = tokenUsage
-        ? this.extractTokenCountsFromTokenUsage(tokenUsage)
-        : this.extractTokenCountsFromResponse(content);
-
-      this.accumulateTokenUsage(tokenCounts, config);
-
-      const perfTotalTokens =
-        tokenCounts.input_token_count + tokenCounts.output_token_count;
-      if (success) {
-        this.performanceTracker.recordCompletion(
-          duration,
-          timeToFirstToken ?? null,
-          perfTotalTokens,
-          chunkCount ?? 0,
-        );
-      } else {
-        this.performanceTracker.recordError(
-          duration,
-          error != null ? String(error) : 'Unknown stream error',
-          timeToFirstToken ?? null,
-          chunkCount ?? 0,
-        );
-      }
-
-      this.emitResponseTelemetry(
-        config,
-        tokenCounts,
-        modelName,
-        promptId,
-        duration,
-        finishReasons,
-        success,
-        error,
-      );
-      await this.writeConversationLog(
-        config,
-        redactedContent,
-        promptId,
-        duration,
-        success,
-        error,
-      );
-    } catch (logError) {
-      this.debug.warn(() => `Failed to log conversation response: ${logError}`);
-    }
-  }
-
-  /** Emit token usage and API response telemetry events. */
-  private emitResponseTelemetry(
-    config: Config,
-    tokenCounts: ResponseTokenCounts,
-    modelName: string | undefined,
-    promptId: string,
-    duration: number,
-    finishReasons: string[] | undefined,
-    success: boolean,
     error: unknown,
-  ): void {
-    emitResponseTelemetry(
+  ): Promise<void> {
+    await writeResponseLogEntry(
       config,
-      tokenCounts,
-      modelName,
+      content,
       promptId,
       duration,
-      finishReasons,
       success,
       error,
       {
         providerName: this.wrapped.name,
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        defaultModelName: this.wrapped.getDefaultModel(),
+        defaultModelName: this.getDefaultModel(),
+        generatePromptId: () => this.generatePromptId(),
+        redactor: this.redactor,
+        debug: this.debug,
       },
     );
   }
 
-  /** Write conversation response event to telemetry and disk. */
-  private async writeConversationLog(
-    config: Config,
-    redactedContent: string,
+  private async *processStreamWithRecorder(
+    config: Config | undefined,
+    stream: AsyncIterableIterator<IContent>,
+    modelName: string,
     promptId: string,
-    duration: number,
-    success: boolean,
-    error: unknown,
-  ): Promise<void> {
-    await writeConversationLog(
+    recorder: AttemptRecorder,
+  ): AsyncIterableIterator<IContent> {
+    yield* processStreamWithRecorderGen(
       config,
-      redactedContent,
+      stream,
+      modelName,
       promptId,
-      duration,
-      success,
-      error,
+      recorder,
       {
         providerName: this.wrapped.name,
-        conversationId: this.conversationId,
-        turnNumber: this.turnNumber,
-        defaultModelName: this.wrapped.getDefaultModel(),
+        debug: this.debug,
+        performanceTracker: this.performanceTracker,
       },
+    );
+  }
+
+  private async *logResponseStreamWithRecorder(
+    config: Config,
+    stream: AsyncIterableIterator<IContent>,
+    promptId: string,
+    modelName: string,
+    recorder: AttemptRecorder,
+  ): AsyncIterableIterator<IContent> {
+    yield* logResponseStreamWithRecorderGen(
+      config,
+      stream,
+      promptId,
+      modelName,
+      recorder,
+      {
+        providerName: this.wrapped.name,
+        debug: this.debug,
+        performanceTracker: this.performanceTracker,
+      },
+      (content, pid, duration, success, error) =>
+        this.writeResponseLog(config, content, pid, duration, success, error),
     );
   }
 
@@ -802,66 +492,11 @@ export class LoggingProviderWrapper implements IProvider {
     return `prompt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
   /**
-   * Extract token counts from tokenUsage metadata
-   */
-  private extractTokenCountsFromTokenUsage(
-    tokenUsage: UsageStats,
-  ): TokenCounts {
-    return extractTokenCountsFromTokenUsage(tokenUsage, this.debug);
-  }
-
-  /**
    * Extract token counts from response object or headers
    */
   extractTokenCountsFromResponse(response: unknown): TokenCounts {
     return extractTokenCountsFromResponse(response);
   }
-
-  /**
-   * Accumulate token usage for session tracking
-   */
-  private accumulateTokenUsage(
-    tokenCounts: AccumulableTokenCounts,
-    config: Config | undefined,
-  ): void {
-    accumulateTokenUsage(tokenCounts, config, this.wrapped.name, this.debug);
-  }
-
-  private resolveLoggingConfig(candidate: unknown): Config | undefined {
-    return resolveLoggingConfig(candidate);
-  }
-
-  private async logToolCall(
-    config: Config | undefined,
-    toolName: string,
-    params: unknown,
-    result: unknown,
-    startTime: number,
-    success: boolean,
-    error: unknown | undefined,
-  ): Promise<void> {
-    try {
-      await logToolCallEntry(
-        config,
-        toolName,
-        params,
-        result,
-        startTime,
-        success,
-        error,
-        {
-          providerName: this.wrapped.name,
-          conversationId: this.conversationId,
-          turnNumber: this.turnNumber,
-          generatePromptId: () => this.generatePromptId(),
-          redactor: this.redactor,
-        },
-      );
-    } catch (logError) {
-      this.debug.warn(() => `Failed to log tool call: ${logError}`);
-    }
-  }
-
   // All other methods are simple passthroughs to wrapped provider
   getCurrentModel?(): string {
     return this.wrapped.getCurrentModel?.() ?? '';
@@ -917,45 +552,14 @@ export class LoggingProviderWrapper implements IProvider {
     params: unknown,
     config?: unknown,
   ): Promise<unknown> {
-    const startTime = Date.now();
-    const loggingConfig = this.resolveLoggingConfig(config);
-
-    try {
-      const result = await this.wrapped.invokeServerTool(
-        toolName,
-        params,
-        config,
-      );
-
-      // Log tool call if logging is enabled and result has metadata
-      if (loggingConfig?.getConversationLoggingEnabled() === true) {
-        await this.logToolCall(
-          loggingConfig,
-          toolName,
-          params,
-          result,
-          startTime,
-          true,
-          undefined,
-        );
-      }
-
-      return result;
-    } catch (error) {
-      // Log failed tool call if logging is enabled
-      if (loggingConfig?.getConversationLoggingEnabled() === true) {
-        await this.logToolCall(
-          loggingConfig,
-          toolName,
-          params,
-          null,
-          startTime,
-          false,
-          error,
-        );
-      }
-      throw error;
-    }
+    return invokeServerToolWithLogging(this.wrapped, toolName, params, config, {
+      providerName: this.wrapped.name,
+      conversationId: this.conversationId,
+      turnNumber: this.turnNumber,
+      generatePromptId: () => this.generatePromptId(),
+      redactor: this.redactor,
+      debug: this.debug,
+    });
   }
 
   getModelParams?(): Record<string, unknown> | undefined {

@@ -6,7 +6,7 @@
 
 import type { Mock } from 'vitest';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { clearCommand } from './clearCommand';
+import { clearCommand } from './clearCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 // Mock the telemetry service
@@ -24,7 +24,7 @@ vi.mock('@vybestack/llxprt-code-telemetry', async () => {
   return {
     ...actual,
     uiTelemetryService: {
-      setLastPromptTokenCount: vi.fn(),
+      reset: vi.fn(),
     },
   };
 });
@@ -72,8 +72,7 @@ describe('clearCommand', () => {
     expect(mockContext.ui.setDebugMessage).toHaveBeenCalledTimes(1);
 
     expect(mockResetChat).toHaveBeenCalledTimes(1);
-    expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(0);
-    expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(1);
+    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
     expect(mockContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(0);
     expect(mockContext.ui.updateHistoryTokenCount).toHaveBeenCalledTimes(1);
     expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
@@ -82,9 +81,8 @@ describe('clearCommand', () => {
     const setDebugMessageOrder = (mockContext.ui.setDebugMessage as Mock).mock
       .invocationCallOrder[0];
     const resetChatOrder = mockResetChat.mock.invocationCallOrder[0];
-    const resetTelemetryOrder = (
-      uiTelemetryService.setLastPromptTokenCount as Mock
-    ).mock.invocationCallOrder[0];
+    const resetTelemetryOrder = (uiTelemetryService.reset as Mock).mock
+      .invocationCallOrder[0];
     const updateHistoryTokenCountOrder = (
       mockContext.ui.updateHistoryTokenCount as Mock
     ).mock.invocationCallOrder[0];
@@ -111,8 +109,7 @@ describe('clearCommand', () => {
       'Clearing terminal.',
     );
     expect(mockResetChat).not.toHaveBeenCalled();
-    expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(0);
-    expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(1);
+    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
     expect(noAgentContext.ui.clear).toHaveBeenCalledTimes(1);
   });
 

@@ -264,7 +264,7 @@ export const statsCommand: SlashCommand = {
     },
     {
       name: 'cache',
-      description: 'Show cache usage statistics (Anthropic only).',
+      description: 'Show cache usage statistics.',
       kind: CommandKind.BUILT_IN,
       action: (context: CommandContext) => {
         context.ui.addItem(

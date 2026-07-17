@@ -10,7 +10,7 @@ import {
   calculateCacheHitRate,
   calculateErrorRate,
   computeSessionStats,
-} from './computeStats';
+} from './computeStats.js';
 import type {
   ModelMetrics,
   SessionMetrics,
@@ -119,24 +119,62 @@ describe('calculateCacheHitRate', () => {
 });
 
 describe('computeSessionStats', () => {
-  it('should return all zeros for initial empty metrics', () => {
-    const metrics: SessionMetrics = {
-      models: {},
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
-        byName: {},
+  const baseMetrics: SessionMetrics = {
+    models: {},
+    tools: {
+      totalCalls: 0,
+      totalSuccess: 0,
+      totalFail: 0,
+      totalDurationMs: 0,
+      totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
+      byName: {},
+    },
+    files: {
+      totalLinesAdded: 0,
+      totalLinesRemoved: 0,
+    },
+    tokenTracking: {
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
+      timeToFirstToken: null,
+      tokensPerSecond: 0,
+      sessionTokenUsage: {
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
       },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
-    };
+    },
+    timing: {
+      completeTokensPerMinute: 0,
+      outputGenerationTps: 0,
+      effectiveInputTps: 0,
+      uncachedInputTps: null,
+      lastRequestTpm: 0,
+      accumulatedApiTimeMs: 0,
+      accumulatedToolTimeMs: 0,
+      agentActiveTimeMs: 0,
+      accumulatedWorkMs: 0,
+      lastTtftMs: null,
+      weightedAvgTtftMs: null,
+      lastOutputGenerationTps: 0,
+      lastEffectiveInputTps: 0,
+    },
+    cache: {
+      hasReliableCacheData: false,
+      hasReliableCacheReads: false,
+      hasReliableCacheWrites: false,
+      requestsWithCacheReads: 0,
+      requestsWithCacheWrites: 0,
+      totalCacheReads: 0,
+      totalCacheWrites: null,
+    },
+  };
 
-    const result = computeSessionStats(metrics);
+  it('should return all zeros for initial empty metrics', () => {
+    const result = computeSessionStats(baseMetrics);
 
     expect(result).toStrictEqual({
       totalApiTime: 0,
@@ -158,6 +196,14 @@ describe('computeSessionStats', () => {
 
   it('should correctly calculate API and tool time percentages', () => {
     const metrics: SessionMetrics = {
+      ...baseMetrics,
+      timing: {
+        ...baseMetrics.timing,
+        accumulatedApiTimeMs: 750,
+        accumulatedToolTimeMs: 250,
+        agentActiveTimeMs: 1000,
+        accumulatedWorkMs: 1000,
+      },
       models: {
         'gemini-pro': {
           api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 750 },
@@ -173,16 +219,10 @@ describe('computeSessionStats', () => {
         },
       },
       tools: {
+        ...baseMetrics.tools,
         totalCalls: 1,
         totalSuccess: 1,
-        totalFail: 0,
         totalDurationMs: 250,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
       },
     };
 
@@ -197,6 +237,7 @@ describe('computeSessionStats', () => {
 
   it('should correctly calculate cache efficiency', () => {
     const metrics: SessionMetrics = {
+      ...baseMetrics,
       models: {
         'gemini-pro': {
           api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 1000 },
@@ -211,18 +252,6 @@ describe('computeSessionStats', () => {
           },
         },
       },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
     };
 
     const result = computeSessionStats(metrics);
@@ -232,18 +261,14 @@ describe('computeSessionStats', () => {
 
   it('should correctly calculate success and agreement rates', () => {
     const metrics: SessionMetrics = {
-      models: {},
+      ...baseMetrics,
       tools: {
+        ...baseMetrics.tools,
         totalCalls: 10,
         totalSuccess: 8,
         totalFail: 2,
         totalDurationMs: 1000,
-        totalDecisions: { accept: 6, reject: 2, modify: 2 },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
+        totalDecisions: { accept: 6, reject: 2, modify: 2, auto_accept: 0 },
       },
     };
 
@@ -253,24 +278,27 @@ describe('computeSessionStats', () => {
     expect(result.agreementRate).toBe(60); // 6 / 10
   });
 
-  it('should handle division by zero gracefully', () => {
+  it('should include auto_accept in agreement rate', () => {
     const metrics: SessionMetrics = {
-      models: {},
+      ...baseMetrics,
       tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
+        ...baseMetrics.tools,
+        totalCalls: 4,
+        totalSuccess: 4,
+        totalDurationMs: 1000,
+        totalDecisions: { accept: 1, reject: 1, modify: 0, auto_accept: 2 },
       },
     };
 
     const result = computeSessionStats(metrics);
+
+    // (accept + auto_accept) / total = (1 + 2) / 4 = 75%
+    expect(result.agreementRate).toBe(75);
+    expect(result.totalDecisions).toBe(4);
+  });
+
+  it('should handle division by zero gracefully', () => {
+    const result = computeSessionStats(baseMetrics);
 
     expect(result.apiTimePercent).toBe(0);
     expect(result.toolTimePercent).toBe(0);
@@ -281,15 +309,7 @@ describe('computeSessionStats', () => {
 
   it('should correctly include line counts', () => {
     const metrics: SessionMetrics = {
-      models: {},
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
-        byName: {},
-      },
+      ...baseMetrics,
       files: {
         totalLinesAdded: 42,
         totalLinesRemoved: 18,

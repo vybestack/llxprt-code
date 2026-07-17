@@ -19,7 +19,8 @@ export interface TokenCounts {
   cached_content_token_count: number;
   thoughts_token_count: number;
   tool_token_count: number;
-  cache_read_input_tokens: number;
+  /** undefined when the provider did not report any cache data */
+  cache_read_input_tokens: number | undefined;
   cache_creation_input_tokens: number | null;
 }
 
@@ -49,13 +50,19 @@ export function extractTokenCountsFromTokenUsage(
   tokenUsage: UsageStats,
   debug: DebugLogger,
 ): TokenCounts & { cache_creation_input_tokens: number | null } {
-  const cacheReads = Math.max(
-    0,
-    firstTruthyNumber(
-      tokenUsage.cachedTokens,
-      tokenUsage.cache_read_input_tokens,
-    ),
-  );
+  const hasCacheReadData =
+    tokenUsage.cachedTokens !== undefined ||
+    tokenUsage.cache_read_input_tokens !== undefined;
+
+  const cacheReads = hasCacheReadData
+    ? Math.max(
+        0,
+        firstTruthyNumber(
+          tokenUsage.cachedTokens,
+          tokenUsage.cache_read_input_tokens,
+        ),
+      )
+    : undefined;
 
   // Check if cache writes are actually reported by the provider
   const hasCacheWriteData =
@@ -72,18 +79,25 @@ export function extractTokenCountsFromTokenUsage(
       )
     : null;
 
+  // Thoughts tokens: prefer reasoningTokens (UsageStats canonical) over
+  // any provider-specific alias. 0 when not reported.
+  const thoughtsTokens = numberOrZero(tokenUsage.reasoningTokens);
+
+  // Tool tokens: use the canonical UsageStats field. 0 when not reported.
+  const toolTokens = numberOrZero(tokenUsage.toolTokens);
+
   debug.debug(
     () =>
-      `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cachedTokens=${tokenUsage.cachedTokens}, cache_read=${tokenUsage.cache_read_input_tokens}, cacheCreationTokens=${tokenUsage.cacheCreationTokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
+      `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, thoughtsTokens=${thoughtsTokens}, toolTokens=${toolTokens}, raw values: cachedTokens=${tokenUsage.cachedTokens}, cache_read=${tokenUsage.cache_read_input_tokens}, cacheCreationTokens=${tokenUsage.cacheCreationTokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}, reasoningTokens=${tokenUsage.reasoningTokens}, toolTokens=${tokenUsage.toolTokens}`,
   );
 
   return {
     input_token_count: numberOrZero(tokenUsage.promptTokens),
     output_token_count: numberOrZero(tokenUsage.completionTokens),
     // Use cacheReads for cached_content_token_count so it flows to UI telemetry
-    cached_content_token_count: cacheReads,
-    thoughts_token_count: 0, // Not available in basic UsageStats
-    tool_token_count: 0, // Not available in basic UsageStats
+    cached_content_token_count: cacheReads ?? 0,
+    thoughts_token_count: thoughtsTokens,
+    tool_token_count: toolTokens,
     cache_read_input_tokens: cacheReads,
     cache_creation_input_tokens: cacheWrites,
   };
@@ -154,7 +168,12 @@ export function extractTokenCountsFromResponse(response: unknown): TokenCounts {
 }
 
 /** Extract numeric token counts from a usage object. */
-function extractUsageNumbers(usage: Record<string, unknown>): TokenCounts {
+function extractUsageNumbers(usage: Record<string, unknown>): Omit<
+  TokenCounts,
+  'cache_read_input_tokens'
+> & {
+  cache_read_input_tokens: number;
+} {
   const safeNum = (v: unknown) => {
     const n = Number(v);
     return !isNaN(n) && n !== 0 ? n : 0;
@@ -204,7 +223,7 @@ function clampTokenCounts(counts: TokenCounts): TokenCounts {
     cached_content_token_count: Math.max(0, counts.cached_content_token_count),
     thoughts_token_count: Math.max(0, counts.thoughts_token_count),
     tool_token_count: Math.max(0, counts.tool_token_count),
-    cache_read_input_tokens: Math.max(0, counts.cache_read_input_tokens),
+    cache_read_input_tokens: Math.max(0, counts.cache_read_input_tokens ?? 0),
     cache_creation_input_tokens:
       counts.cache_creation_input_tokens === null
         ? null

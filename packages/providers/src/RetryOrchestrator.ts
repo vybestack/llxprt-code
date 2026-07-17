@@ -34,26 +34,18 @@ import type {
   BucketFailoverHandler,
   FailoverContext,
 } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  getErrorStatus,
-  isNetworkTransientError,
-  isOverloadError,
-  isRetryableError,
-} from '@vybestack/llxprt-code-core/utils/retry.js';
+import { AllBucketsExhaustedError, permitsBucketFailover } from './errors.js';
+import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   delay,
   createAbortError,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { AllBucketsExhaustedError, permitsBucketFailover } from './errors.js';
-import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   claimProviderErrorObservation,
   invokeProviderErrorObserver,
-  isStreamTimeoutError,
   toObservedProviderError,
 } from './providerErrorObservation.js';
-import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
   delegateGetStats,
   delegateGetLoadBalancerConfig,
@@ -74,6 +66,7 @@ import {
   createInitialRetryState,
   providerOwnsTransportAttempts,
 } from './retryTransportOwnership.js';
+import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
 import { closeIteratorBeforeContinuing } from './utils/streamCleanup.js';
 import {
   classifyRetryError,
@@ -86,6 +79,23 @@ import {
   createRetriesExhaustedError,
   throwIfEmptyStreamExhaustsBudget,
 } from './retryExhaustion.js';
+import {
+  shouldRetryError,
+  getDelayDuration,
+  hasRetryAfterHeader,
+  resolveFailoverReason,
+} from './retryDelayPolicy.js';
+import { getAttemptLifecycleObserver } from './logging/attemptLifecycle.js';
+import type {
+  AttemptLifecycleObserver,
+  AttemptStatus,
+} from './logging/attemptLifecycle.js';
+import { AttemptNotificationContext } from './retryAttemptNotifier.js';
+import {
+  getBucketFailoverHandlerFromOptions,
+  getOnAuthErrorHandlerFromOptions,
+} from './retryConfigHandlers.js';
+import { randomUUID } from 'node:crypto';
 
 function extractSignal(options: GenerateChatOptions): AbortSignal | undefined {
   return getRequestSignal(options);
@@ -171,7 +181,7 @@ export class RetryOrchestrator implements IProvider {
   }
 
   getDefaultModel(): string {
-    return this.wrappedProvider.getDefaultModel();
+    return safeGetDefaultModel(this.wrappedProvider);
   }
 
   getCurrentModel?(): string {
@@ -291,14 +301,36 @@ export class RetryOrchestrator implements IProvider {
     }
   }
 
+  private createRetriesExhaustedError(
+    lastError: unknown,
+    budget: { used: number },
+  ): Error {
+    const finalError =
+      lastError ?? new Error('Shared transport attempt budget exhausted');
+    const { category, status } = classifyRetryError(finalError);
+    return createRetriesExhaustedError(
+      finalError,
+      budget.used,
+      category,
+      status,
+    );
+  }
+
   private async *runRetryRequest(
     request: RetryRequestContext,
     signal: AbortSignal | undefined,
   ): AsyncIterableIterator<IContent> {
     const { maxAttempts, initialDelayMs, authRetryTimeoutMs, budget } = request;
     const requestOptions = request.options;
-    const bucketFailoverHandler = this.getBucketFailoverHandler(requestOptions);
+    const bucketFailoverHandler =
+      getBucketFailoverHandlerFromOptions(requestOptions);
     const ownsAttempts = providerOwnsTransportAttempts(this.wrappedProvider);
+    const lifecycleObserver = getAttemptLifecycleObserver(
+      requestOptions.metadata,
+    );
+    const modelName =
+      requestOptions.resolved?.model ??
+      safeGetDefaultModel(this.wrappedProvider);
     let lastError: unknown;
     const retryState = createInitialRetryState(initialDelayMs);
     while (budget.used < budget.limit) {
@@ -309,41 +341,44 @@ export class RetryOrchestrator implements IProvider {
         requestOptions,
         linked.controller.signal,
       );
+      const notification = this.createAttemptNotification(
+        lifecycleObserver,
+        budget.used,
+        modelName,
+      );
+      notification.maybeNotifyStart();
       let attemptError: unknown;
+      let terminalStatus: AttemptStatus = 'aborted';
       try {
-        beginProviderTransportAttempt(ownsAttempts, attemptOptions);
-        const stream =
-          this.wrappedProvider.generateChatCompletion(attemptOptions);
-        const producedContent =
-          this.config.streamingTimeoutMs > 0
-            ? yield* this.streamWithTimeout(
-                stream,
-                this.config.streamingTimeoutMs,
-                linked.controller,
-              )
-            : yield* this.yieldStreamUnprotected(stream, linked.controller);
-        throwIfEmptyStreamExhaustsBudget(
-          producedContent,
-          budget.used,
-          budget.limit,
+        yield* this.executeRawAttempt(
+          ownsAttempts,
+          attemptOptions,
+          linked,
+          retryState,
+          bucketFailoverHandler,
+          budget,
         );
-        resetRetryErrorCounters(retryState);
-        bucketFailoverHandler?.resetSession?.();
+        terminalStatus = 'success';
         return;
       } catch (error) {
         attemptError = error;
         lastError = error;
+        terminalStatus = isTerminalRetryError(error) ? 'aborted' : 'error';
       } finally {
         linked.controller.abort();
         linked.dispose();
+        accountProviderAttempt(
+          this.wrappedProvider,
+          attemptOptions,
+          budget,
+          usedBefore,
+        );
+        notification.notifyEnd(
+          terminalStatus,
+          resolveAttemptErrorMessage(terminalStatus, attemptError),
+        );
       }
-      accountProviderAttempt(
-        this.wrappedProvider,
-        requestOptions,
-        budget,
-        usedBefore,
-      );
-      retryState.attempt = budget.used;
+      if (attemptError === undefined) continue;
       const action = await this.handleRetryError(
         attemptError,
         requestOptions,
@@ -354,18 +389,61 @@ export class RetryOrchestrator implements IProvider {
         bucketFailoverHandler,
         signal,
         authRetryTimeoutMs,
+        budget,
       );
       if (action.type === 'throw') throw action.error;
     }
 
-    const finalError =
-      lastError ?? new Error('Shared transport attempt budget exhausted');
-    const { category, status } = classifyRetryError(finalError);
-    throw createRetriesExhaustedError(
-      finalError,
+    throw this.createRetriesExhaustedError(lastError, budget);
+  }
+
+  private async *executeRawAttempt(
+    ownsAttempts: boolean,
+    attemptOptions: GenerateChatOptions,
+    linked: { controller: AbortController },
+    retryState: {
+      attempt: number;
+      currentDelay: number;
+      consecutive429s: number;
+      consecutiveAuthErrors: number;
+      consecutiveNetworkErrors: number;
+    },
+    bucketFailoverHandler: BucketFailoverHandler | undefined,
+    budget: { used: number; limit: number },
+  ): AsyncIterableIterator<IContent> {
+    beginProviderTransportAttempt(ownsAttempts, attemptOptions);
+    const stream = this.wrappedProvider.generateChatCompletion(attemptOptions);
+    const producedContent =
+      this.config.streamingTimeoutMs > 0
+        ? yield* this.streamWithTimeout(
+            stream,
+            this.config.streamingTimeoutMs,
+            linked.controller,
+          )
+        : yield* this.yieldStreamUnprotected(stream, linked.controller);
+    throwIfEmptyStreamExhaustsBudget(
+      producedContent,
       budget.used,
-      category,
-      status,
+      budget.limit,
+    );
+    resetRetryErrorCounters(retryState);
+    bucketFailoverHandler?.resetSession?.();
+  }
+
+  private createAttemptNotification(
+    observer: AttemptLifecycleObserver | undefined,
+    attemptIndex: number,
+    modelName: string,
+  ): AttemptNotificationContext {
+    return new AttemptNotificationContext(
+      observer,
+      observer !== undefined,
+      attemptIndex,
+      randomUUID(),
+      modelName,
+      performance.now(),
+      this.name,
+      this.logger,
     );
   }
 
@@ -445,7 +523,9 @@ export class RetryOrchestrator implements IProvider {
     bucketFailoverHandler: BucketFailoverHandler | undefined,
     signal: AbortSignal | undefined,
     authRetryTimeoutMs: number,
+    budget: { used: number; limit: number },
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
+    state.attempt = budget.used;
     if (isTerminalRetryError(error)) return { type: 'throw', error };
 
     const classification = classifyRetryError(error);
@@ -594,7 +674,7 @@ export class RetryOrchestrator implements IProvider {
     category: StructuredErrorCategory | undefined,
     status: number | undefined,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
-    const shouldRetry = this.shouldRetryError(error);
+    const shouldRetry = shouldRetryError(error);
     if (!shouldRetry && !shouldAttemptRefreshRetry) {
       return { type: 'throw', error };
     }
@@ -610,7 +690,7 @@ export class RetryOrchestrator implements IProvider {
       };
     }
 
-    const delayMs = this.getDelayDuration(error, state.currentDelay);
+    const delayMs = getDelayDuration(error, state.currentDelay);
     this.logger.debug(
       () =>
         `Retrying after ${delayMs}ms (attempt ${state.attempt}/${maxAttempts})`,
@@ -619,7 +699,7 @@ export class RetryOrchestrator implements IProvider {
     await delay(delayMs, signal);
     this.config.trackThrottleWaitTime(delayMs);
 
-    if (this.hasRetryAfterHeader(error)) {
+    if (hasRetryAfterHeader(error)) {
       state.currentDelay = initialDelayMs;
     } else {
       state.currentDelay = Math.min(
@@ -640,11 +720,11 @@ export class RetryOrchestrator implements IProvider {
     errorStatus: number | undefined,
     signal: AbortSignal | undefined,
   ): Promise<void> {
-    const authErrorHandler = this.getOnAuthErrorHandler(options);
+    const authErrorHandler = getOnAuthErrorHandlerFromOptions(options);
     if (authErrorHandler) {
       try {
         const failedAccessToken = await raceWithAbort(
-          this.resolveAuthToken(options),
+          resolveAuthTokenFromOptions(options),
           signal,
         );
         const providerId = this.name;
@@ -670,6 +750,8 @@ export class RetryOrchestrator implements IProvider {
   /**
    * Attempt bucket failover; returns 'continue' if failover succeeded
    * (counters reset, retry immediately), or 'exhausted' if no buckets remain.
+   * Any rejection from tryFailover is treated as 'exhausted' to honor the
+   * 'continue' | 'exhausted' return contract.
    */
   private async attemptBucketFailover(
     errorStatus: number | undefined,
@@ -702,10 +784,20 @@ export class RetryOrchestrator implements IProvider {
       signal,
     };
 
-    const failoverResult = await raceWithAbort(
-      bucketFailoverHandler.tryFailover(failoverContext),
-      signal,
-    );
+    let failoverResult: boolean;
+    try {
+      failoverResult = await raceWithAbort(
+        bucketFailoverHandler.tryFailover(failoverContext),
+        signal,
+      );
+    } catch (failoverError) {
+      if (signal?.aborted === true) throw failoverError;
+      this.logger.debug(
+        () =>
+          `Bucket failover handler rejected, treating as exhausted: ${failoverError}`,
+      );
+      return 'exhausted';
+    }
 
     if (failoverResult) {
       this.logger.debug(
@@ -769,182 +861,6 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
-   * Determines if an error should trigger a retry
-   */
-  private shouldRetryError(error: unknown): boolean {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      Array.isArray((error as { failures?: unknown }).failures) &&
-      typeof (error as { isRetryable?: unknown }).isRetryable === 'boolean'
-    ) {
-      return isRetryableError(error);
-    }
-    const status = getErrorStatus(error);
-
-    // Don't retry client errors (4xx except 429)
-    if (status === 400 || status === 404) {
-      return false;
-    }
-
-    // Retry rate limits (429)
-    if (status === 429 || isOverloadError(error)) {
-      return true;
-    }
-
-    // Retry server errors (5xx)
-    if (status !== undefined && status >= 500 && status < 600) {
-      return true;
-    }
-
-    // Retry network transient errors
-    if (isNetworkTransientError(error)) {
-      return true;
-    }
-
-    // Retry auth errors (allow one retry for token refresh)
-    if (status === 401 || status === 403) {
-      return true;
-    }
-
-    // Retry stream timeouts
-    if (isStreamTimeoutError(error)) return true;
-
-    return false;
-  }
-
-  /**
-   * Gets the delay duration for a retry, respecting Retry-After header
-   */
-  private getDelayDuration(error: unknown, defaultDelay: number): number {
-    const retryAfterMs = this.getRetryAfterDelayMs(error);
-
-    if (retryAfterMs > 0) {
-      return retryAfterMs;
-    }
-
-    // Apply jitter to default delay: +/- 30%
-    const jitter = defaultDelay * 0.3 * (Math.random() * 2 - 1);
-    return Math.max(0, defaultDelay + jitter);
-  }
-
-  /**
-   * Extracts Retry-After delay from error headers
-   */
-  private getRetryAfterDelayMs(error: unknown): number {
-    if (typeof error === 'object' && error !== null) {
-      const errorObj = error as {
-        response?: { headers?: { 'retry-after'?: unknown } };
-      };
-
-      const retryAfter = errorObj.response?.headers?.['retry-after'];
-      if (typeof retryAfter === 'string' && retryAfter !== '') {
-        const seconds = parseInt(retryAfter, 10);
-        if (!isNaN(seconds)) {
-          return seconds * 1000;
-        }
-
-        // Try parsing as HTTP date
-        const date = new Date(retryAfter);
-        if (!isNaN(date.getTime())) {
-          return Math.max(0, date.getTime() - Date.now());
-        }
-      }
-    }
-
-    return 0;
-  }
-
-  /**
-   * Checks if error has a Retry-After header
-   */
-  private hasRetryAfterHeader(error: unknown): boolean {
-    return this.getRetryAfterDelayMs(error) > 0;
-  }
-
-  /**
-   * Gets the bucket failover handler from options
-   */
-  private resolveBucketFailoverHandler(
-    config: unknown,
-  ): BucketFailoverHandler | undefined {
-    const configWithHandler = config as
-      | { getBucketFailoverHandler?: () => BucketFailoverHandler | undefined }
-      | null
-      | undefined;
-    return configWithHandler?.getBucketFailoverHandler?.();
-  }
-
-  private getBucketFailoverHandler(
-    options: GenerateChatOptions,
-  ): BucketFailoverHandler | undefined {
-    return (
-      this.resolveBucketFailoverHandler(options.runtime?.config) ??
-      this.resolveBucketFailoverHandler(options.config)
-    );
-  }
-
-  /**
-   * Gets the auth error handler from options
-   * @fix issue1861
-   */
-  private resolveOnAuthErrorHandler(
-    config: unknown,
-  ): OnAuthErrorHandler | undefined {
-    const configWithHandler = config as
-      | { getOnAuthErrorHandler?: () => OnAuthErrorHandler | undefined }
-      | null
-      | undefined;
-    return configWithHandler?.getOnAuthErrorHandler?.();
-  }
-
-  private getOnAuthErrorHandler(
-    options: GenerateChatOptions,
-  ): OnAuthErrorHandler | undefined {
-    return (
-      this.resolveOnAuthErrorHandler(options.runtime?.config) ??
-      this.resolveOnAuthErrorHandler(options.config)
-    );
-  }
-
-  /**
-   * Resolves the auth token from options (handles both string and RuntimeAuthTokenProvider)
-   * @fix issue1861
-   */
-  private async resolveAuthToken(
-    options: GenerateChatOptions,
-  ): Promise<string> {
-    const authToken = options.resolved?.authToken;
-    if (typeof authToken === 'string') {
-      return authToken;
-    }
-    // Handle plain function returning string or Promise<string>
-    // Note: tests may bypass type system, so we need runtime check
-    if (
-      typeof authToken === 'function' &&
-      !('provide' in (authToken as unknown as object))
-    ) {
-      const result = await (authToken as () => string | Promise<string>)();
-      return typeof result === 'string' ? result : '';
-    }
-    // Handle RuntimeAuthTokenProvider object with provide method
-    if (
-      authToken &&
-      typeof authToken === 'object' &&
-      'provide' in authToken &&
-      typeof (authToken as { provide?: unknown }).provide === 'function'
-    ) {
-      const result = await (
-        authToken as {
-          provide: () => Promise<string | undefined> | string | undefined;
-        }
-      ).provide();
-      return typeof result === 'string' ? result : '';
-    }
-    return '';
-  }
-
-  /**
    * Creates an AllBucketsExhaustedError with failure reasons
    * @plan PLAN-20260223-ISSUE1598.P16
    * @requirement REQ-1598-IC09
@@ -961,26 +877,6 @@ export class RetryOrchestrator implements IProvider {
     return new AllBucketsExhaustedError(this.name, buckets, lastError, reasons);
   }
 }
-
-/**
- * Resolve a human-readable reason for a bucket failover attempt.
- */
-function resolveFailoverReason(
-  is429: boolean,
-  isNetworkError: boolean,
-  consecutive429s: number,
-  consecutiveNetworkErrors: number,
-  errorStatus: number | undefined,
-): string {
-  if (is429) {
-    return `${consecutive429s} consecutive 429 errors`;
-  }
-  if (isNetworkError) {
-    return `${consecutiveNetworkErrors} consecutive network errors`;
-  }
-  return `status ${errorStatus}`;
-}
-
 /**
  * Race the first stream chunk against a timeout. Resolves with the iterator
  * result (clearing the timeout), or rejects with a stream-timeout error.
@@ -1000,4 +896,69 @@ async function raceFirstChunkWithTimeout<T>(
   } finally {
     timeoutController.abort();
   }
+}
+
+function resolveAttemptErrorMessage(
+  status: AttemptStatus,
+  error: unknown,
+): string | undefined {
+  if (status === 'success') return undefined;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+/**
+ * Resolves the auth token from options (handles string, object with
+ * provide(), and plain function). All callable invocations are wrapped in
+ * try/catch so a rejecting token provider does not become an unhandled
+ * rejection that masks the real error.
+ * @fix issue1861
+ */
+const tokenResolverLogger = new DebugLogger('llxprt:retry:auth-token');
+
+async function resolveAuthTokenFromOptions(
+  options: GenerateChatOptions,
+): Promise<string> {
+  const authToken = options.resolved?.authToken;
+  if (typeof authToken === 'string') {
+    return authToken;
+  }
+  // Handle RuntimeAuthTokenProvider object with provide method — check
+  // this BEFORE the plain-function branch so callable objects that also
+  // expose `provide` are routed correctly.
+  if (
+    authToken &&
+    typeof authToken === 'object' &&
+    'provide' in authToken &&
+    typeof (authToken as { provide?: unknown }).provide === 'function'
+  ) {
+    try {
+      const result = await (
+        authToken as {
+          provide: () => Promise<string | undefined> | string | undefined;
+        }
+      ).provide();
+      return typeof result === 'string' ? result : '';
+    } catch (err) {
+      tokenResolverLogger.debug(
+        () =>
+          `Token provider threw, returning empty token: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return '';
+    }
+  }
+  // Handle plain function returning string or Promise<string>
+  if (typeof authToken === 'function') {
+    try {
+      const result = await (authToken as () => string | Promise<string>)();
+      return typeof result === 'string' ? result : '';
+    } catch (err) {
+      tokenResolverLogger.debug(
+        () =>
+          `Token provider function threw, returning empty token: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return '';
+    }
+  }
+  return '';
 }

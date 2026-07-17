@@ -30,7 +30,24 @@ export class ApiErrorEvent {
   error_type?: string;
   status_code?: number | string;
   duration_ms: number;
+  /** Monotonic timestamp (ms) when the request started */
+  start_ms?: number;
   prompt_id: string;
+  /** Stable per-attempt ID for deduplication */
+  attempt_id?: string;
+  provider?: string;
+  time_to_first_token_ms?: number | null;
+  last_token_ms?: number | null;
+  input_token_count?: number;
+  output_token_count?: number;
+  cached_content_token_count?: number;
+  thoughts_token_count?: number;
+  tool_token_count?: number;
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number;
+  usage_metadata_present?: boolean;
+  /** True when emitted by the canonical provider wrapper (sole local-aggregation source). Agent/logical events leave this unset. */
+  provider_owned?: boolean;
 
   constructor(
     model: string,
@@ -39,6 +56,7 @@ export class ApiErrorEvent {
     prompt_id: string,
     error_type?: string,
     status_code?: number | string,
+    attempt_id?: string,
   ) {
     this['event.name'] = 'api_error';
     this['event.timestamp'] = new Date().toISOString();
@@ -48,6 +66,9 @@ export class ApiErrorEvent {
     this.status_code = status_code;
     this.duration_ms = duration_ms;
     this.prompt_id = prompt_id;
+    if (attempt_id !== undefined) {
+      this.attempt_id = attempt_id;
+    }
   }
 }
 
@@ -58,6 +79,8 @@ export class ApiResponseEvent {
   status_code?: number | string;
   duration_ms: number;
   error?: string;
+  /** Monotonic timestamp (ms) when the request started */
+  start_ms?: number;
   input_token_count: number;
   output_token_count: number;
   cached_content_token_count: number;
@@ -67,6 +90,16 @@ export class ApiResponseEvent {
   response_text?: string;
   prompt_id: string;
   finish_reasons: string[];
+  /** Stable per-attempt ID for deduplication */
+  attempt_id?: string;
+  provider?: string;
+  time_to_first_token_ms?: number | null;
+  last_token_ms?: number | null;
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number;
+  usage_metadata_present?: boolean;
+  /** True when emitted by the canonical provider wrapper (sole local-aggregation source). Agent/logical events leave this unset. */
+  provider_owned?: boolean;
 
   constructor(
     model: string,
@@ -76,6 +109,7 @@ export class ApiResponseEvent {
     response_text?: string,
     error?: string,
     finish_reasons?: string[],
+    attempt_id?: string,
   ) {
     this['event.name'] = 'api_response';
     this['event.timestamp'] = new Date().toISOString();
@@ -92,5 +126,8 @@ export class ApiResponseEvent {
     this.error = error;
     this.prompt_id = prompt_id;
     this.finish_reasons = finish_reasons ?? [];
+    if (attempt_id !== undefined) {
+      this.attempt_id = attempt_id;
+    }
   }
 }

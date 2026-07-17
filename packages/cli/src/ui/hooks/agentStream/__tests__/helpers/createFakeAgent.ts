@@ -54,6 +54,17 @@ function createStubStats(): Agent['getStats'] {
     contextWindowSize: 0,
     contextWindowUsed: 0,
     turnCount: 0,
+    apiRequests: 0,
+    apiErrors: 0,
+    toolCalls: 0,
+    toolSuccesses: 0,
+    toolFailures: 0,
+    toolCancellations: 0,
+    totalApiLatencyMs: 0,
+    totalToolDurationMs: 0,
+    completeTokensPerMinute: 0,
+    agentActiveTimeMs: 0,
+    sessionWallMs: 0,
   });
 }
 

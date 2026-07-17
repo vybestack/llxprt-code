@@ -5,185 +5,163 @@
  */
 
 /**
- * @plan:PLAN-20260603-ISSUE1584.P12
- * @requirement:REQ-API-001
- * @pseudocode consumer-migration.md lines 10-15
+ * Behavioral tests for CacheStatsDisplay reading from the canonical
+ * session snapshot via uiTelemetryService.getSessionSnapshot().
+ * The cache display is driven by real telemetry events flowing
+ * through the aggregator, not by a provider manager.
  */
 
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CacheStatistics } from '@vybestack/llxprt-code-providers';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
-import * as RuntimeContext from '../contexts/RuntimeContext.js';
+import * as SessionContext from '../contexts/SessionContext.js';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+import type { ApiResponseEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 
-// Mock the RuntimeContext to provide controlled data for testing
-vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof RuntimeContext>();
+vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof SessionContext>();
   return {
     ...actual,
-    useRuntimeApi: vi.fn(),
+    useSessionStats: vi.fn(),
   };
 });
 
-const useRuntimeApiMock = vi.mocked(RuntimeContext.useRuntimeApi);
+const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 
-const renderWithMockedCacheStats = (cacheStats: CacheStatistics | null) => {
-  const mockProviderManager =
-    cacheStats !== null
-      ? {
-          getCacheStatistics: vi.fn().mockReturnValue(cacheStats),
-        }
-      : null;
+/**
+ * Emit a provider-owned API response event with cache data through the
+ * real aggregation pipeline. This exercises the full event path.
+ */
+function emitCacheResponse(opts: {
+  cacheReads?: number;
+  cacheWrites?: number | null;
+  promptTokens?: number;
+  cachedTokens?: number;
+  model?: string;
+}): void {
+  const event = {
+    'event.name': 'llxprt_code.api_response' as const,
+    'event.timestamp': new Date().toISOString(),
+    model: opts.model ?? 'cache-test-model',
+    duration_ms: 1000,
+    input_token_count: opts.promptTokens ?? 1000,
+    output_token_count: 50,
+    total_token_count: 1050,
+    cached_content_token_count: opts.cachedTokens ?? 0,
+    thoughts_token_count: 0,
+    tool_token_count: 0,
+    finish_reasons: [],
+    prompt_id: `prompt-${Math.random()}`,
+    provider_owned: true,
+    usage_metadata_present: true,
+    cache_read_input_tokens: opts.cacheReads,
+    cache_creation_input_tokens: opts.cacheWrites,
+  };
+  uiTelemetryService.addEvent(
+    event as ApiResponseEvent & {
+      'event.name': 'llxprt_code.api_response';
+    },
+  );
+}
 
-  useRuntimeApiMock.mockReturnValue({
-    getCliProviderManager: vi.fn().mockReturnValue(mockProviderManager),
-  } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
-
+const renderCacheStats = () => {
+  useSessionStatsMock.mockReturnValue({
+    stats: {
+      sessionId: 'test-session',
+      sessionStartTime: new Date(),
+      metrics: uiTelemetryService.getMetrics(),
+      lastPromptTokenCount: 0,
+      historyTokenCount: 0,
+      promptCount: 0,
+    },
+    startNewPrompt: vi.fn(),
+    getPromptCount: () => 0,
+    updateHistoryTokenCount: vi.fn(),
+  });
   return render(<CacheStatsDisplay />);
 };
 
-describe('<CacheStatsDisplay />', () => {
+describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    uiTelemetryService.reset();
   });
 
-  it('should render error message when provider manager is not available', () => {
-    useRuntimeApiMock.mockReturnValue({
-      getCliProviderManager: vi.fn().mockReturnValue(null),
-    } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
-
-    const { lastFrame } = render(<CacheStatsDisplay />);
-
-    expect(lastFrame()).toContain('Provider manager not available');
-  });
-
-  it('should render "no cache data" message when there are no cache reads or writes', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 0,
-      totalCacheWrites: null, // No cache writes reported
-      requestsWithCacheHits: 0,
-      requestsWithCacheWrites: 0,
-      hitRate: 0,
-    } as CacheStatistics);
-
+  it('should show "no cache data" when no provider-owned events with cache data', () => {
+    const { lastFrame } = renderCacheStats();
     const output = lastFrame();
-    expect(output).toContain('No cache data available');
-    expect(output).not.toMatch(/Anthropic only/i);
-    expect(output).toContain('OpenAI');
-    expect(output).toContain('Groq');
-    expect(output).toContain('Deepseek');
-    expect(output).toContain('Fireworks');
-    expect(output).toContain('OpenRouter');
-    expect(output).toContain('Qwen');
+    expect(output).toContain('No cache data');
   });
 
-  it('should display cache statistics when cache data is available', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 2000,
-      totalCacheWrites: 500,
-      requestsWithCacheHits: 3,
-      requestsWithCacheWrites: 5,
-      hitRate: 20.0,
+  it('should display cache reads from canonical snapshot', () => {
+    emitCacheResponse({
+      cacheReads: 2000,
+      promptTokens: 1000,
+      cachedTokens: 200,
     });
-
+    const { lastFrame } = renderCacheStats();
     const output = lastFrame();
-
-    // Check for updated title
-    expect(output).toContain('Cache Stats');
-    expect(output).not.toContain('For Nerds');
-
-    // Check for metric labels
-    expect(output).toContain('Total Cache Reads');
-    expect(output).toContain('Total Cache Writes');
+    expect(output).toContain('Cache Reads');
     expect(output).toContain('Cache Hit Rate');
-    expect(output).toContain('Requests with Cache Hits');
-
-    // Verify removed metrics are not present
-    expect(output).not.toContain('Token Savings');
-    expect(output).not.toContain('Estimated Cost Savings');
-
-    // Check for values (using regex to match any locale format)
-    expect(output).toMatch(/2[,\s]?000/); // Cache reads
-    expect(output).toMatch(/500/); // Cache writes
-    expect(output).toMatch(/20\.0%/); // Hit rate
+    expect(output).toMatch(/2[,\s]?000/);
   });
 
-  it('should handle multiple cache hits correctly', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 15000,
-      totalCacheWrites: 3000,
-      requestsWithCacheHits: 12,
-      requestsWithCacheWrites: 15,
-      hitRate: 45.5,
+  it('should display cache writes from canonical snapshot', () => {
+    emitCacheResponse({
+      cacheReads: 500,
+      cacheWrites: 300,
+      promptTokens: 1000,
+      cachedTokens: 100,
     });
-
+    const { lastFrame } = renderCacheStats();
     const output = lastFrame();
-    expect(output).toContain('Total Cache Reads');
-    expect(output).toMatch(/15[,\s]?000/); // Cache reads
-    expect(output).toMatch(/45\.5%/); // Hit rate
-    expect(output).not.toContain('Token Savings');
-    expect(output).not.toContain('Estimated Cost Savings');
+    expect(output).toContain('Cache Writes');
+    expect(output).toMatch(/300/);
   });
 
-  it('should display hit rate with proper formatting', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 5000,
-      totalCacheWrites: 1000,
-      requestsWithCacheHits: 8,
-      requestsWithCacheWrites: 10,
-      hitRate: 33.3,
+  it('should show requests with cache reads and writes', () => {
+    emitCacheResponse({
+      cacheReads: 1000,
+      cacheWrites: 500,
+      promptTokens: 2000,
+      cachedTokens: 200,
     });
-
+    const { lastFrame } = renderCacheStats();
     const output = lastFrame();
-    expect(output).toMatch(/33\.3%/);
+    expect(output).toContain('Requests with Cache Reads');
+    expect(output).toContain('Requests with Cache Writes');
   });
 
-  it('should not display cost savings', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 10000,
-      totalCacheWrites: 2000,
-      requestsWithCacheHits: 5,
-      requestsWithCacheWrites: 8,
-      hitRate: 50.0,
+  it('should hide cache writes when no reliable writes data', () => {
+    emitCacheResponse({
+      cacheReads: 5000,
+      cacheWrites: undefined,
+      promptTokens: 1000,
+      cachedTokens: 200,
     });
-
+    const { lastFrame } = renderCacheStats();
     const output = lastFrame();
-    expect(output).not.toContain('Token Savings');
-    expect(output).not.toContain('Estimated Cost Savings');
-    expect(output).not.toMatch(/\$/);
+    expect(output).toContain('Cache Reads');
+    expect(output).not.toContain('Cache Writes');
   });
 
-  it('should hide cache writes row when provider does not report it (null)', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 5000,
-      totalCacheWrites: null, // Provider doesn't report cache writes (e.g., OpenAI/vLLM)
-      requestsWithCacheHits: 3,
-      requestsWithCacheWrites: 0,
-      hitRate: 25.0,
-    } as CacheStatistics);
-
-    const output = lastFrame();
-    // Should show cache reads
-    expect(output).toContain('Total Cache Reads');
-    expect(output).toMatch(/5[,\s]?000/);
-    // Should NOT show cache writes when null
-    expect(output).not.toContain('Total Cache Writes');
-    // Should still show other stats
-    expect(output).toContain('Cache Hit Rate');
-    expect(output).toMatch(/25\.0%/);
-  });
-
-  it('should show cache writes row when provider reports it as zero', () => {
-    const { lastFrame } = renderWithMockedCacheStats({
-      totalCacheReads: 5000,
-      totalCacheWrites: 0, // Provider explicitly reported 0 cache writes
-      requestsWithCacheHits: 3,
-      requestsWithCacheWrites: 0,
-      hitRate: 25.0,
+  it('should render Cache Writes row when cacheWrites is explicitly 0', () => {
+    emitCacheResponse({
+      cacheReads: 500,
+      cacheWrites: 0,
+      promptTokens: 1000,
+      cachedTokens: 100,
     });
-
+    const { lastFrame } = renderCacheStats();
     const output = lastFrame();
-    // Should show cache writes when explicitly 0
-    expect(output).toContain('Total Cache Writes');
+    expect(output).toContain('Cache Writes');
+    expect(output).toMatch(/0/);
+  });
+
+  it('should show "no cache data" empty state, not an old provider-manager error', () => {
+    const { lastFrame } = renderCacheStats();
+    const output = lastFrame();
+    expect(output).toContain('No cache data');
+    expect(output).not.toContain('Provider manager not available');
   });
 });

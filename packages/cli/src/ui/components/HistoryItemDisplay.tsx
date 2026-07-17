@@ -141,7 +141,15 @@ function renderStatsMessages(itemForDisplay: HistoryItem) {
     case 'lb_stats':
       return <LBStatsDisplay />;
     case 'quit':
-      return <SessionSummaryDisplay duration={itemForDisplay.duration} />;
+      return (
+        <SessionSummaryDisplay
+          duration={itemForDisplay.duration}
+          totalApiRequests={itemForDisplay.totalApiRequests}
+          totalTokens={itemForDisplay.totalTokens}
+          completeTokensPerMinute={itemForDisplay.completeTokensPerMinute}
+          totalToolCalls={itemForDisplay.totalToolCalls}
+        />
+      );
     default:
       return null;
   }

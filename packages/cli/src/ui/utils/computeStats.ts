@@ -34,17 +34,18 @@ export function calculateCacheHitRate(metrics: ModelMetrics): number {
 export const computeSessionStats = (
   metrics: SessionMetrics,
 ): ComputedSessionStats => {
-  const { models, tools, files } = metrics;
-  const totalApiTime = Object.values(models).reduce(
-    (acc, model) => acc + model.api.totalLatencyMs,
-    0,
-  );
-  const totalToolTime = tools.totalDurationMs;
-  const agentActiveTime = totalApiTime + totalToolTime;
+  const { models, tools, files, timing } = metrics;
+
+  const totalApiTime = timing.accumulatedApiTimeMs;
+  const totalToolTime = timing.accumulatedToolTimeMs;
+  const accumulatedWork = timing.accumulatedWorkMs;
+  const agentActiveTime = timing.agentActiveTimeMs;
+  // Percentages are relative to accumulated work (API + Tool), which is
+  // the denominator that makes the parts sum to 100%.
   const apiTimePercent =
-    agentActiveTime > 0 ? (totalApiTime / agentActiveTime) * 100 : 0;
+    accumulatedWork > 0 ? (totalApiTime / accumulatedWork) * 100 : 0;
   const toolTimePercent =
-    agentActiveTime > 0 ? (totalToolTime / agentActiveTime) * 100 : 0;
+    accumulatedWork > 0 ? (totalToolTime / accumulatedWork) * 100 : 0;
 
   const totalCachedTokens = Object.values(models).reduce(
     (acc, model) => acc + model.tokens.cached,
@@ -64,12 +65,15 @@ export const computeSessionStats = (
   const totalDecisions =
     tools.totalDecisions.accept +
     tools.totalDecisions.reject +
-    tools.totalDecisions.modify;
+    tools.totalDecisions.modify +
+    tools.totalDecisions.auto_accept;
   const successRate =
     tools.totalCalls > 0 ? (tools.totalSuccess / tools.totalCalls) * 100 : 0;
   const agreementRate =
     totalDecisions > 0
-      ? (tools.totalDecisions.accept / totalDecisions) * 100
+      ? ((tools.totalDecisions.accept + tools.totalDecisions.auto_accept) /
+          totalDecisions) *
+        100
       : 0;
 
   return {

@@ -9,6 +9,8 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { extractTokenCountsFromTokenUsage } from '../logging/tokenCounts.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 class StubProvider implements IProvider {
   name = 'stub-provider';
@@ -234,107 +236,53 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
   });
 
   describe('extractTokenCountsFromTokenUsage', () => {
-    it('extracts cachedTokens from new provider-agnostic field', () => {
-      const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+    const debug = new DebugLogger('test:tokenCounts');
 
-      const result = (
-        wrapper as unknown as {
-          extractTokenCountsFromTokenUsage: (usage: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-            cachedTokens?: number;
-            cacheCreationTokens?: number;
-          }) => {
-            input_token_count: number;
-            output_token_count: number;
-            cached_content_token_count: number;
-            thoughts_token_count: number;
-            tool_token_count: number;
-            cache_read_input_tokens: number;
-            cache_creation_input_tokens: number;
-          };
-        }
-      ).extractTokenCountsFromTokenUsage({
-        promptTokens: 100,
-        completionTokens: 50,
-        totalTokens: 150,
-        cachedTokens: 25,
-        cacheCreationTokens: 10,
-      });
+    it('extracts cachedTokens from new provider-agnostic field', () => {
+      const result = extractTokenCountsFromTokenUsage(
+        {
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          cachedTokens: 25,
+          cacheCreationTokens: 10,
+        },
+        debug,
+      );
 
       expect(result.cache_read_input_tokens).toBe(25);
       expect(result.cache_creation_input_tokens).toBe(10);
     });
 
     it('falls back to Anthropic field names', () => {
-      const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
-
-      const result = (
-        wrapper as unknown as {
-          extractTokenCountsFromTokenUsage: (usage: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-            cache_read_input_tokens?: number;
-            cache_creation_input_tokens?: number;
-          }) => {
-            input_token_count: number;
-            output_token_count: number;
-            cached_content_token_count: number;
-            thoughts_token_count: number;
-            tool_token_count: number;
-            cache_read_input_tokens: number;
-            cache_creation_input_tokens: number;
-          };
-        }
-      ).extractTokenCountsFromTokenUsage({
-        promptTokens: 100,
-        completionTokens: 50,
-        totalTokens: 150,
-        cache_read_input_tokens: 30,
-        cache_creation_input_tokens: 15,
-      });
+      const result = extractTokenCountsFromTokenUsage(
+        {
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 15,
+        },
+        debug,
+      );
 
       expect(result.cache_read_input_tokens).toBe(30);
       expect(result.cache_creation_input_tokens).toBe(15);
     });
 
     it('prefers new field names over legacy when both present', () => {
-      const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
-
-      const result = (
-        wrapper as unknown as {
-          extractTokenCountsFromTokenUsage: (usage: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-            cachedTokens?: number;
-            cacheCreationTokens?: number;
-            cache_read_input_tokens?: number;
-            cache_creation_input_tokens?: number;
-          }) => {
-            input_token_count: number;
-            output_token_count: number;
-            cached_content_token_count: number;
-            thoughts_token_count: number;
-            tool_token_count: number;
-            cache_read_input_tokens: number;
-            cache_creation_input_tokens: number;
-          };
-        }
-      ).extractTokenCountsFromTokenUsage({
-        promptTokens: 100,
-        completionTokens: 50,
-        totalTokens: 150,
-        cachedTokens: 40,
-        cacheCreationTokens: 20,
-        cache_read_input_tokens: 30,
-        cache_creation_input_tokens: 15,
-      });
+      const result = extractTokenCountsFromTokenUsage(
+        {
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          cachedTokens: 40,
+          cacheCreationTokens: 20,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 15,
+        },
+        debug,
+      );
 
       expect(result.cache_read_input_tokens).toBe(40);
       expect(result.cache_creation_input_tokens).toBe(20);

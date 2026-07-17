@@ -5,16 +5,16 @@
  */
 
 /**
- * @plan:PLAN-20260603-ISSUE1584.P12
- * @requirement:REQ-API-001
- * @pseudocode consumer-migration.md lines 10-15
+ * Reads cache statistics from the canonical session snapshot
+ * (SessionMetricsAggregator via uiTelemetryService.getSessionSnapshot()).
+ * This is the single source of truth — not the provider tracker.
  */
 
 import type React from 'react';
 import { Box, Text } from 'ink';
-import type { CacheStatistics } from '@vybestack/llxprt-code-providers';
-import { Colors } from '../colors.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+import { useSessionStats } from '../contexts/SessionContext.js';
+import { theme } from '../semantic-colors.js';
 
 const METRIC_COL_WIDTH = 35;
 const VALUE_COL_WIDTH = 20;
@@ -32,10 +32,10 @@ const StatRow: React.FC<StatRowProps> = ({
 }) => (
   <Box>
     <Box width={METRIC_COL_WIDTH}>
-      <Text color={Colors.LightBlue}>{isSubtle ? `  ↳ ${title}` : title}</Text>
+      <Text color={theme.text.link}>{isSubtle ? `  ↳ ${title}` : title}</Text>
     </Box>
     <Box width={VALUE_COL_WIDTH} justifyContent="flex-end">
-      <Text color={Colors.Foreground}>{value}</Text>
+      <Text color={theme.text.primary}>{value}</Text>
     </Box>
   </Box>
 );
@@ -45,124 +45,109 @@ interface NoStatsBoxProps {
 }
 
 const NoStatsBox: React.FC<NoStatsBoxProps> = ({ message }) => (
-  <Box borderStyle="round" borderColor={Colors.Gray} paddingY={1} paddingX={2}>
-    <Text color={Colors.Foreground}>{message}</Text>
+  <Box
+    borderStyle="round"
+    borderColor={theme.border.default}
+    paddingY={1}
+    paddingX={2}
+  >
+    <Text color={theme.text.primary}>{message}</Text>
   </Box>
 );
 
 const CacheStatsHeader: React.FC = () => (
   <>
-    <Text bold color={Colors.AccentPurple}>
+    <Text bold color={theme.text.accent}>
       Cache Stats
     </Text>
     <Box height={1} />
   </>
 );
 
-interface CacheStatsContentProps {
-  totalCacheReads: number;
-  totalCacheWrites: number | null;
-  cacheHitRate: number;
-  requestsWithCacheHits: number;
-}
-
-const CacheStatsContent: React.FC<CacheStatsContentProps> = ({
-  totalCacheReads,
-  totalCacheWrites,
-  cacheHitRate,
-  requestsWithCacheHits,
-}) => (
-  <>
-    <StatRow
-      title="Total Cache Reads (tokens)"
-      value={
-        <Text color={Colors.AccentGreen}>
-          {totalCacheReads.toLocaleString()}
-        </Text>
-      }
-    />
-    {totalCacheWrites !== null && (
-      <StatRow
-        title="Total Cache Writes (tokens)"
-        value={
-          <Text color={Colors.Foreground}>
-            {totalCacheWrites.toLocaleString()}
-          </Text>
-        }
-      />
-    )}
-    <StatRow
-      title="Cache Hit Rate"
-      value={
-        <Text color={cacheHitRate > 0 ? Colors.AccentGreen : Colors.Foreground}>
-          {cacheHitRate.toFixed(1)}%
-        </Text>
-      }
-    />
-    <StatRow
-      title="Requests with Cache Hits"
-      value={
-        <Text color={Colors.Foreground}>
-          {requestsWithCacheHits.toLocaleString()}
-        </Text>
-      }
-    />
-  </>
-);
-
 export const CacheStatsDisplay: React.FC = () => {
-  const { getCliProviderManager } = useRuntimeApi();
-  const providerManager = getCliProviderManager() as ReturnType<
-    typeof getCliProviderManager
-  > | null;
+  // Subscribe to telemetry updates so the display re-renders on new events
+  useSessionStats();
 
-  if (!providerManager) {
-    return <NoStatsBox message="Provider manager not available" />;
-  }
+  const snap = uiTelemetryService.getSessionSnapshot();
 
-  const cacheStats =
-    (
-      providerManager as {
-        getCacheStatistics?: () => CacheStatistics;
-      }
-    ).getCacheStatistics?.() ?? null;
-
-  if (cacheStats === null) {
+  if (!snap.hasReliableCacheReads && !snap.hasReliableCacheWrites) {
     return (
-      <NoStatsBox message="Cache statistics are not available for the current provider." />
+      <NoStatsBox message="No cache data available. Cache statistics are available for providers that support prompt caching (e.g. Anthropic, OpenAI, Groq, Deepseek, Fireworks, OpenRouter, Qwen)." />
     );
   }
 
-  const {
-    totalCacheReads,
-    totalCacheWrites,
-    requestsWithCacheHits,
-    hitRate: cacheHitRate,
-  } = cacheStats;
+  const cacheReads = snap.totalCacheReads;
+  const cacheWrites = snap.totalCacheWrites;
+  const requestsWithReads = snap.requestsWithCacheReads;
+  const requestsWithWrites = snap.requestsWithCacheWrites;
 
-  const hasCacheData = totalCacheReads > 0 || (totalCacheWrites ?? 0) > 0;
-
-  if (!hasCacheData) {
-    return (
-      <NoStatsBox message="No cache data available. Cache statistics are available for providers with prompt caching support (Anthropic, OpenAI, Groq, Deepseek, Fireworks, OpenRouter, Qwen)." />
-    );
-  }
+  // Compute hit rate from the canonical input/cached token totals
+  const hitRate =
+    snap.totalInputTokens > 0
+      ? (snap.totalCachedTokens / snap.totalInputTokens) * 100
+      : 0;
 
   return (
     <Box
       borderStyle="round"
-      borderColor={Colors.Gray}
+      borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}
       paddingX={2}
     >
       <CacheStatsHeader />
-      <CacheStatsContent
-        totalCacheReads={totalCacheReads}
-        totalCacheWrites={totalCacheWrites}
-        cacheHitRate={cacheHitRate}
-        requestsWithCacheHits={requestsWithCacheHits}
-      />
+      {snap.hasReliableCacheReads && (
+        <StatRow
+          title="Cache Reads (tokens)"
+          value={
+            <Text color={theme.status.success}>
+              {cacheReads.toLocaleString()}
+            </Text>
+          }
+        />
+      )}
+      {snap.hasReliableCacheWrites && cacheWrites !== null && (
+        <StatRow
+          title="Cache Writes (tokens)"
+          value={
+            <Text color={theme.text.primary}>
+              {cacheWrites.toLocaleString()}
+            </Text>
+          }
+        />
+      )}
+      {snap.hasReliableCacheReads && (
+        <StatRow
+          title="Cache Hit Rate"
+          value={
+            <Text
+              color={hitRate > 0 ? theme.status.success : theme.text.primary}
+            >
+              {hitRate.toFixed(1)}%
+            </Text>
+          }
+        />
+      )}
+      {snap.hasReliableCacheReads && (
+        <StatRow
+          title="Requests with Cache Reads"
+          value={
+            <Text color={theme.text.primary}>
+              {requestsWithReads.toLocaleString()}
+            </Text>
+          }
+        />
+      )}
+      {snap.hasReliableCacheWrites && (
+        <StatRow
+          title="Requests with Cache Writes"
+          value={
+            <Text color={theme.text.primary}>
+              {requestsWithWrites.toLocaleString()}
+            </Text>
+          }
+        />
+      )}
     </Box>
   );
 };

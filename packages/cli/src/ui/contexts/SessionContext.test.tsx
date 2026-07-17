@@ -7,11 +7,11 @@
 /** @vitest-environment jsdom */
 
 import { type MutableRefObject } from 'react';
-import { render, renderHook } from '../test-utils/render.js';
+import { render, renderHook } from '../../test-utils/render.js';
 import { act } from 'react-dom/test-utils';
 import type { SessionMetrics } from './SessionContext.js';
 import { SessionStatsProvider, useSessionStats } from './SessionContext.js';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 
 /**
@@ -28,6 +28,21 @@ const TestHarness = ({
   return null;
 };
 
+function createRenderCounters() {
+  let renderCount = 0;
+  const Harness = ({
+    contextRef,
+  }: {
+    contextRef: MutableRefObject<
+      ReturnType<typeof useSessionStats> | undefined
+    >;
+  }) => {
+    contextRef.current = useSessionStats();
+    renderCount++;
+    return null;
+  };
+  return { Harness, getRenderCount: () => renderCount };
+}
 describe('SessionStatsContext', () => {
   it('should provide the correct initial state', () => {
     const contextRef: MutableRefObject<
@@ -81,25 +96,71 @@ describe('SessionStatsContext', () => {
         totalCalls: 1,
         totalSuccess: 1,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 456,
         totalDecisions: {
           accept: 1,
           reject: 0,
           modify: 0,
+          auto_accept: 0,
         },
         byName: {
           'test-tool': {
             count: 1,
             success: 1,
             fail: 0,
+            cancelled: 0,
             durationMs: 456,
             decisions: {
               accept: 1,
               reject: 0,
               modify: 0,
+              auto_accept: 0,
             },
           },
         },
+      },
+      files: {
+        totalLinesAdded: 0,
+        totalLinesRemoved: 0,
+      },
+      tokenTracking: {
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 0,
+        timeToFirstToken: null,
+        tokensPerSecond: 0,
+        sessionTokenUsage: {
+          input: 0,
+          output: 0,
+          cache: 0,
+          tool: 0,
+          thought: 0,
+          total: 0,
+        },
+      },
+      timing: {
+        completeTokensPerMinute: 0,
+        outputGenerationTps: 0,
+        effectiveInputTps: 0,
+        uncachedInputTps: null,
+        lastRequestTpm: 0,
+        accumulatedApiTimeMs: 0,
+        accumulatedToolTimeMs: 0,
+        agentActiveTimeMs: 0,
+        accumulatedWorkMs: 0,
+        lastTtftMs: null,
+        weightedAvgTtftMs: null,
+        lastOutputGenerationTps: 0,
+        lastEffectiveInputTps: 0,
+      },
+      cache: {
+        hasReliableCacheData: false,
+        hasReliableCacheReads: false,
+        hasReliableCacheWrites: false,
+        requestsWithCacheReads: 0,
+        requestsWithCacheWrites: 0,
+        totalCacheReads: 0,
+        totalCacheWrites: null,
       },
     };
 
@@ -120,20 +181,16 @@ describe('SessionStatsContext', () => {
       ReturnType<typeof useSessionStats> | undefined
     > = { current: undefined };
 
-    let renderCount = 0;
-    const CountingTestHarness = () => {
-      contextRef.current = useSessionStats();
-      renderCount++;
-      return null;
-    };
+    const { Harness: CountingTestHarness, getRenderCount } =
+      createRenderCounters();
 
     render(
       <SessionStatsProvider>
-        <CountingTestHarness />
+        <CountingTestHarness contextRef={contextRef} />
       </SessionStatsProvider>,
     );
 
-    expect(renderCount).toBe(1);
+    expect(getRenderCount()).toBe(1);
 
     const metrics: SessionMetrics = {
       models: {
@@ -155,8 +212,47 @@ describe('SessionStatsContext', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
+      },
+      files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+      tokenTracking: {
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 0,
+        timeToFirstToken: null,
+        tokensPerSecond: 0,
+        sessionTokenUsage: {
+          input: 0,
+          output: 0,
+          cache: 0,
+          tool: 0,
+          thought: 0,
+          total: 0,
+        },
+      },
+      timing: {
+        completeTokensPerMinute: 0,
+        outputGenerationTps: 0,
+        effectiveInputTps: 0,
+        uncachedInputTps: null,
+        lastRequestTpm: 0,
+        accumulatedApiTimeMs: 0,
+        accumulatedToolTimeMs: 0,
+        agentActiveTimeMs: 0,
+        accumulatedWorkMs: 0,
+        lastTtftMs: null,
+        weightedAvgTtftMs: null,
+        lastOutputGenerationTps: 0,
+        lastEffectiveInputTps: 0,
+      },
+      cache: {
+        hasReliableCacheData: false,
+        hasReliableCacheReads: false,
+        hasReliableCacheWrites: false,
+        requestsWithCacheReads: 0,
+        requestsWithCacheWrites: 0,
+        totalCacheReads: 0,
+        totalCacheWrites: null,
       },
     };
 
@@ -164,13 +260,13 @@ describe('SessionStatsContext', () => {
       uiTelemetryService.emit('update', { metrics, lastPromptTokenCount: 10 });
     });
 
-    expect(renderCount).toBe(2);
+    expect(getRenderCount()).toBe(2);
 
     act(() => {
       uiTelemetryService.emit('update', { metrics, lastPromptTokenCount: 10 });
     });
 
-    expect(renderCount).toBe(2);
+    expect(getRenderCount()).toBe(2);
 
     const newMetrics = {
       ...metrics,
@@ -196,21 +292,25 @@ describe('SessionStatsContext', () => {
       });
     });
 
-    expect(renderCount).toBe(3);
+    expect(getRenderCount()).toBe(3);
   });
 
   it('should throw an error when useSessionStats is used outside of a provider', () => {
-    // Suppress globalThis.console.error for this test since we expect an error
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let receivedError: unknown;
+    const TestHarness = () => {
+      try {
+        useSessionStats();
+      } catch (error) {
+        receivedError = error;
+      }
+      return null;
+    };
 
-    try {
-      // Expect renderHook itself to throw when the hook is used outside a provider
-      expect(() => {
-        renderHook(() => useSessionStats());
-      }).toThrow('useSessionStats must be used within a SessionStatsProvider');
-    } finally {
-      consoleSpy.mockRestore();
-    }
+    render(<TestHarness />);
+
+    expect(receivedError).toStrictEqual(
+      new Error('useSessionStats must be used within a SessionStatsProvider'),
+    );
   });
 
   it('should not trigger re-render when history token count is unchanged', () => {
@@ -232,5 +332,171 @@ describe('SessionStatsContext', () => {
     });
 
     expect(result.all.length).toBe(initialRenderCount + 1);
+  });
+
+  it('should trigger re-render when timing fields change', () => {
+    const contextRef: MutableRefObject<
+      ReturnType<typeof useSessionStats> | undefined
+    > = { current: undefined };
+
+    const { Harness: CountingTestHarness, getRenderCount } =
+      createRenderCounters();
+
+    render(
+      <SessionStatsProvider>
+        <CountingTestHarness contextRef={contextRef} />
+      </SessionStatsProvider>,
+    );
+
+    const baseRenderCount = getRenderCount();
+
+    const metricsWithTiming: SessionMetrics = {
+      models: {},
+      tools: {
+        totalCalls: 0,
+        totalSuccess: 0,
+        totalFail: 0,
+        totalDurationMs: 0,
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
+        byName: {},
+      },
+      files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+      tokenTracking: {
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 0,
+        timeToFirstToken: null,
+        tokensPerSecond: 0,
+        sessionTokenUsage: {
+          input: 0,
+          output: 0,
+          cache: 0,
+          tool: 0,
+          thought: 0,
+          total: 0,
+        },
+      },
+      timing: {
+        completeTokensPerMinute: 1000,
+        outputGenerationTps: 10,
+        effectiveInputTps: 500,
+        uncachedInputTps: null,
+        lastRequestTpm: 2000,
+        accumulatedApiTimeMs: 5000,
+        accumulatedToolTimeMs: 3000,
+        agentActiveTimeMs: 7000,
+        accumulatedWorkMs: 8000,
+        lastTtftMs: null,
+        weightedAvgTtftMs: null,
+        lastOutputGenerationTps: 0,
+        lastEffectiveInputTps: 0,
+      },
+      cache: {
+        hasReliableCacheData: false,
+        hasReliableCacheReads: false,
+        hasReliableCacheWrites: false,
+        requestsWithCacheReads: 0,
+        requestsWithCacheWrites: 0,
+        totalCacheReads: 0,
+        totalCacheWrites: null,
+      },
+    };
+
+    act(() => {
+      uiTelemetryService.emit('update', {
+        metrics: metricsWithTiming,
+        lastPromptTokenCount: 0,
+      });
+    });
+
+    // Should re-render because timing fields changed
+    expect(getRenderCount()).toBeGreaterThan(baseRenderCount);
+    const updatedRenderCount = getRenderCount();
+
+    // Emit identical metrics — should NOT re-render
+    act(() => {
+      uiTelemetryService.emit('update', {
+        metrics: metricsWithTiming,
+        lastPromptTokenCount: 0,
+      });
+    });
+
+    expect(getRenderCount()).toBe(updatedRenderCount);
+  });
+
+  it('should trigger re-render when cache fields change', () => {
+    const contextRef: MutableRefObject<
+      ReturnType<typeof useSessionStats> | undefined
+    > = { current: undefined };
+
+    const { Harness: CountingTestHarness, getRenderCount } =
+      createRenderCounters();
+
+    render(
+      <SessionStatsProvider>
+        <CountingTestHarness contextRef={contextRef} />
+      </SessionStatsProvider>,
+    );
+
+    const baseRenderCount = getRenderCount();
+
+    const metricsWithCache: SessionMetrics = {
+      models: {},
+      tools: {
+        totalCalls: 0,
+        totalSuccess: 0,
+        totalFail: 0,
+        totalDurationMs: 0,
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
+        byName: {},
+      },
+      files: { totalLinesAdded: 0, totalLinesRemoved: 0 },
+      tokenTracking: {
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 0,
+        timeToFirstToken: null,
+        tokensPerSecond: 0,
+        sessionTokenUsage: {
+          input: 0,
+          output: 0,
+          cache: 0,
+          tool: 0,
+          thought: 0,
+          total: 0,
+        },
+      },
+      timing: {
+        completeTokensPerMinute: 0,
+        outputGenerationTps: 0,
+        effectiveInputTps: 0,
+        uncachedInputTps: null,
+        lastRequestTpm: 0,
+        accumulatedApiTimeMs: 0,
+        accumulatedToolTimeMs: 0,
+        agentActiveTimeMs: 0,
+        accumulatedWorkMs: 0,
+        lastTtftMs: null,
+        weightedAvgTtftMs: null,
+        lastOutputGenerationTps: 0,
+        lastEffectiveInputTps: 0,
+      },
+      cache: {
+        hasReliableCacheData: true,
+        hasReliableCacheReads: true,
+        hasReliableCacheWrites: true,
+        totalCacheReads: 500,
+        totalCacheWrites: 200,
+        requestsWithCacheReads: 3,
+        requestsWithCacheWrites: 2,
+      },
+    };
+
+    act(() => {
+      uiTelemetryService.emit('update', {
+        metrics: metricsWithCache,
+        lastPromptTokenCount: 0,
+      });
+    });
+
+    expect(getRenderCount()).toBeGreaterThan(baseRenderCount);
   });
 });

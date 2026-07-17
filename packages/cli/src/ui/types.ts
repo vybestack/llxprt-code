@@ -179,6 +179,11 @@ export type HistoryItemLBStats = HistoryItemBase & {
 export type HistoryItemQuit = HistoryItemBase & {
   type: 'quit';
   duration: string;
+  /** Canonical session snapshot at quit time */
+  totalApiRequests?: number;
+  totalTokens?: number;
+  completeTokensPerMinute?: number;
+  totalToolCalls?: number;
 };
 
 export type HistoryItemToolGroup = HistoryItemBase & {

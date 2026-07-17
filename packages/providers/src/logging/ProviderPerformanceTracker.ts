@@ -9,23 +9,39 @@
 import type { ProviderPerformanceMetrics } from '../types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
+/** Clamp to non-negative finite; NaN/Infinity/-negative become 0. */
+function sanitizeNonNegative(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return value;
+}
+
+/** Returns value if it is a non-negative finite number, otherwise null. */
+function toSafePositiveMs(value: number | null | undefined): number | null {
+  if (
+    value !== null &&
+    value !== undefined &&
+    Number.isFinite(value) &&
+    value >= 0
+  ) {
+    return value;
+  }
+  return null;
+}
+
 /**
  * Performance tracking utility for provider operations
  */
 export class ProviderPerformanceTracker {
   private metrics: ProviderPerformanceMetrics;
-  private tokenTimestamps: Array<{
-    startTimestamp: number;
-    completionTimestamp: number;
-    tokenCount: number;
-  }>;
   private totalGenerationTimeMs = 0;
   private totalTokensWithMeasuredTime = 0;
+  // Complete session TPM accumulators (duration-based, not wall-time)
+  private completeTpmSumTokens = 0;
+  private completeTpmSumDuration = 0;
   private logger: DebugLogger;
 
   constructor(private providerName: string) {
     this.metrics = this.initializeMetrics();
-    this.tokenTimestamps = [];
     this.logger = new DebugLogger('llxprt:performance:tracker');
   }
 
@@ -62,41 +78,63 @@ export class ProviderPerformanceTracker {
   }
 
   /**
-   * Record completion of a request with performance data
+   * Record completion of a request with performance data.
+   *
+   * Finding #7: Generation TPS is only valid when
+   * `lastTokenMs - timeToFirstToken > 0`. When there is no meaningful
+   * generation window (single chunk or no tokens), TPS is left unchanged.
+   * There is NO fallback to total duration.
    */
   recordCompletion(
     totalTime: number,
     timeToFirstToken: number | null,
     tokenCount: number,
     chunkCount: number,
+    lastTokenMs?: number | null,
   ): void {
+    const safeTotalTime = sanitizeNonNegative(totalTime);
+    const safeTokenCount = sanitizeNonNegative(tokenCount);
+    const safeChunkCount = sanitizeNonNegative(chunkCount);
     this.metrics.totalRequests++;
-    this.metrics.totalTokens += tokenCount;
+    this.metrics.totalTokens += safeTokenCount;
     this.metrics.averageLatency =
       (this.metrics.averageLatency * (this.metrics.totalRequests - 1) +
-        totalTime) /
+        safeTotalTime) /
       this.metrics.totalRequests;
 
-    if (timeToFirstToken !== null) {
-      this.metrics.timeToFirstToken = timeToFirstToken;
+    const safeTtft = toSafePositiveMs(timeToFirstToken);
+    if (safeTtft !== null) {
+      this.metrics.timeToFirstToken = safeTtft;
     }
 
-    if (totalTime > 0) {
-      this.totalGenerationTimeMs += totalTime;
-      this.totalTokensWithMeasuredTime += tokenCount;
-      this.metrics.tokensPerSecond =
-        this.totalTokensWithMeasuredTime / (this.totalGenerationTimeMs / 1000);
+    // Finding #7: Generation TPS only uses lastTokenMs - TTFT as the
+    // generation window. No duration fallback. Only accumulate when the
+    // generation window is strictly positive.
+    const safeLastToken = toSafePositiveMs(lastTokenMs);
+
+    if (safeTtft !== null && safeLastToken !== null) {
+      const generationMs = safeLastToken - safeTtft;
+      if (generationMs > 0) {
+        this.totalGenerationTimeMs += generationMs;
+        this.totalTokensWithMeasuredTime += safeTokenCount;
+        this.metrics.tokensPerSecond =
+          this.totalGenerationTimeMs > 0
+            ? this.totalTokensWithMeasuredTime /
+              (this.totalGenerationTimeMs / 1000)
+            : 0;
+      }
     }
 
-    this.metrics.chunksReceived = chunkCount;
+    this.metrics.chunksReceived = safeChunkCount;
 
-    const now = Date.now();
-    this.tokenTimestamps.push({
-      startTimestamp: now - totalTime,
-      completionTimestamp: now,
-      tokenCount,
-    });
-    this.calculateTokensPerMinute();
+    // Complete TPM = 60000 * Σ(P+O) / ΣD (D in ms)
+    // Uses summed durations, not wall-clock span
+    this.completeTpmSumTokens += safeTokenCount;
+    this.completeTpmSumDuration += safeTotalTime;
+    this.metrics.tokensPerMinute =
+      this.completeTpmSumDuration > 0
+        ? (60000 * this.completeTpmSumTokens) / this.completeTpmSumDuration
+        : 0;
   }
 
   /**
@@ -108,33 +146,47 @@ export class ProviderPerformanceTracker {
     timeToFirstToken?: number | null,
     chunkCount?: number,
   ): void {
-    if (timeToFirstToken !== undefined && timeToFirstToken !== null) {
+    const safeDuration = sanitizeNonNegative(duration);
+
+    if (
+      timeToFirstToken !== undefined &&
+      timeToFirstToken !== null &&
+      Number.isFinite(timeToFirstToken) &&
+      timeToFirstToken > 0
+    ) {
       this.metrics.timeToFirstToken = timeToFirstToken;
     }
 
     if (chunkCount !== undefined) {
-      this.metrics.chunksReceived = chunkCount;
+      this.metrics.chunksReceived = sanitizeNonNegative(chunkCount);
     }
 
     this.metrics.errors.push({
       timestamp: Date.now(),
-      duration,
+      duration: safeDuration,
       error: error.substring(0, 200), // Truncate long errors
     });
 
-    // Update error rate
-    const totalAttempts = this.metrics.totalRequests + 1;
-    this.metrics.errorRate = this.metrics.errors.length / totalAttempts;
+    // Update error rate — clamp to [0, 1].
+    // Denominator is total attempts (successes + errors), not just
+    // successes + 1, so multiple errors produce correct ratios.
+    const totalAttempts =
+      this.metrics.totalRequests + this.metrics.errors.length;
+    this.metrics.errorRate = Math.min(
+      1,
+      totalAttempts > 0 ? this.metrics.errors.length / totalAttempts : 0,
+    );
   }
 
   /**
    * Track throttle wait time from 429 retries
    */
   trackThrottleWaitTime(waitTimeMs: number): void {
-    this.metrics.throttleWaitTimeMs += waitTimeMs;
+    const safeWait = sanitizeNonNegative(waitTimeMs);
+    this.metrics.throttleWaitTimeMs += safeWait;
     this.logger.debug(
       () =>
-        `Tracked ${waitTimeMs}ms throttle wait. Total: ${this.metrics.throttleWaitTimeMs}ms for ${this.providerName}`,
+        `Tracked ${safeWait}ms throttle wait. Total: ${this.metrics.throttleWaitTimeMs}ms for ${this.providerName}`,
     );
   }
 
@@ -142,7 +194,14 @@ export class ProviderPerformanceTracker {
    * Get current performance metrics
    */
   getLatestMetrics(): ProviderPerformanceMetrics {
-    return { ...this.metrics };
+    return {
+      ...this.metrics,
+      averageLatency: sanitizeNonNegative(this.metrics.averageLatency),
+      tokensPerSecond: sanitizeNonNegative(this.metrics.tokensPerSecond),
+      tokensPerMinute: sanitizeNonNegative(this.metrics.tokensPerMinute),
+      errorRate: Math.min(1, sanitizeNonNegative(this.metrics.errorRate)),
+      throttleWaitTimeMs: sanitizeNonNegative(this.metrics.throttleWaitTimeMs),
+    };
   }
 
   /**
@@ -150,57 +209,19 @@ export class ProviderPerformanceTracker {
    */
   reset(): void {
     this.metrics = this.initializeMetrics();
-    this.tokenTimestamps = [];
     this.totalGenerationTimeMs = 0;
     this.totalTokensWithMeasuredTime = 0;
-  }
-
-  /**
-   * Calculate tokens per minute based on recent token usage
-   */
-  private calculateTokensPerMinute(): void {
-    const now = Date.now();
-    this.tokenTimestamps = this.tokenTimestamps.filter(
-      (entry) => now - entry.completionTimestamp <= 60000,
-    );
-
-    const totalRecentTokens = this.tokenTimestamps.reduce(
-      (sum, entry) => sum + entry.tokenCount,
-      0,
-    );
-
-    if (this.tokenTimestamps.length === 0) {
-      this.metrics.tokensPerMinute = 0;
-      return;
-    }
-
-    const oldestStartTimestamp = Math.min(
-      ...this.tokenTimestamps.map((entry) => entry.startTimestamp),
-    );
-    let timeSpanInMinutes = (now - oldestStartTimestamp) / 60000;
-
-    if (timeSpanInMinutes <= 0) {
-      timeSpanInMinutes = 0.001;
-    }
-
-    if (
-      timeSpanInMinutes > 0 &&
-      !isNaN(totalRecentTokens) &&
-      isFinite(totalRecentTokens / timeSpanInMinutes)
-    ) {
-      this.metrics.tokensPerMinute = totalRecentTokens / timeSpanInMinutes;
-    } else {
-      this.metrics.tokensPerMinute = 0;
-    }
+    this.completeTpmSumTokens = 0;
+    this.completeTpmSumDuration = 0;
   }
 
   /**
    * Add throttle wait time to metrics
    */
   addThrottleWaitTime(waitTimeMs: number): void {
-    // Only add positive wait times
-    if (waitTimeMs > 0) {
-      this.metrics.throttleWaitTimeMs += waitTimeMs;
+    const safeWait = sanitizeNonNegative(waitTimeMs);
+    if (safeWait > 0) {
+      this.metrics.throttleWaitTimeMs += safeWait;
     }
   }
 

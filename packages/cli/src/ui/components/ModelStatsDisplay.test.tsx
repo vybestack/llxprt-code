@@ -9,7 +9,10 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
-import { ToolCallDecision } from '@vybestack/llxprt-code-core';
+import {
+  withTokenTracking,
+  type TestMetricsInput,
+} from './StatsDisplay.testHelpers.js';
 
 // Mock the context to provide controlled data for testing
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
@@ -22,18 +25,24 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
 
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 
-const renderWithMockedStats = (metrics: SessionMetrics) => {
+const withMetrics = (partial: TestMetricsInput): SessionMetrics =>
+  withTokenTracking(partial);
+
+const renderWithMockedStats = (metrics: TestMetricsInput) => {
+  const fullMetrics = withMetrics(metrics);
   useSessionStatsMock.mockReturnValue({
     stats: {
       sessionId: 'test-session',
       sessionStartTime: new Date(),
-      metrics,
+      metrics: fullMetrics,
       lastPromptTokenCount: 0,
+      historyTokenCount: 0,
       promptCount: 5,
     },
 
     getPromptCount: () => 5,
     startNewPrompt: vi.fn(),
+    updateHistoryTokenCount: vi.fn(),
   });
 
   return render(<ModelStatsDisplay />);

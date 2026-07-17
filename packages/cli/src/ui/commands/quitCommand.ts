@@ -6,6 +6,7 @@
 
 import { formatDuration } from '../utils/formatters.js';
 import { CommandKind, type SlashCommand } from './types.js';
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
 export const quitCommand: SlashCommand = {
   name: 'quit',
@@ -18,18 +19,32 @@ export const quitCommand: SlashCommand = {
     const { sessionStartTime } = context.session.stats;
     const wallDuration = now - sessionStartTime.getTime();
 
+    // Capture a cloned immutable final session snapshot so the quit
+    // summary renders canonical operational metrics even after the
+    // service stops receiving events.
+    const finalSnapshot = uiTelemetryService.getSessionSnapshot();
+    const totalTokens =
+      finalSnapshot.totalInputTokens +
+      finalSnapshot.totalOutputTokens +
+      finalSnapshot.totalThoughtsTokens +
+      finalSnapshot.totalToolTokens;
+
     return {
       type: 'quit',
       messages: [
         {
           type: 'user',
-          text: `/quit`, // Keep it consistent, even if /exit was used
+          text: `/quit`,
           id: now - 1,
         },
         {
           type: 'quit',
           duration: formatDuration(wallDuration),
           id: now,
+          totalApiRequests: finalSnapshot.totalApiRequests,
+          totalTokens,
+          completeTokensPerMinute: finalSnapshot.completeTokensPerMinute,
+          totalToolCalls: finalSnapshot.totalToolCalls,
         },
       ],
     };

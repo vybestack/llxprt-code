@@ -25,6 +25,8 @@ export class ToolCallEvent {
   function_args: Record<string, unknown>;
   duration_ms: number;
   success: boolean;
+  /** Explicit terminal status: success, error, or cancelled */
+  status?: string;
   decision?: ToolCallDecision;
   error?: string;
   error_type?: string;
@@ -32,6 +34,12 @@ export class ToolCallEvent {
   tool_type: 'native' | 'mcp';
   metadata?: Record<string, unknown>;
   agent_id: string;
+  /** Unique tool call ID for deduplication */
+  call_id?: string;
+  /** Monotonic start timestamp (ms) for interval unioning */
+  start_ms?: number;
+  /** Monotonic end timestamp (ms) for interval unioning */
+  end_ms?: number;
 
   constructor(call: CompletedToolCallShape) {
     this['event.name'] = 'tool_call';
@@ -40,6 +48,7 @@ export class ToolCallEvent {
     this.function_args = call.request.args;
     this.duration_ms = call.durationMs ?? 0;
     this.success = call.status === 'success';
+    this.status = call.status;
     this.decision =
       call.outcome !== undefined
         ? getDecisionFromOutcome(call.outcome)
@@ -49,6 +58,21 @@ export class ToolCallEvent {
     this.prompt_id = call.request.prompt_id;
     this.tool_type = isMcpToolTelemetryShape(call.tool) ? 'mcp' : 'native';
     this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
+    this.call_id = call.request.callId;
+
+    // Preserve caller-supplied start/end timestamps when available; only
+    // derive from duration as a fallback so interval unioning works even
+    // when callers don't provide explicit monotonic timestamps.
+    const hasExplicitStartEnd =
+      call.startMs !== undefined && call.endMs !== undefined;
+    if (hasExplicitStartEnd) {
+      this.start_ms = call.startMs;
+      this.end_ms = call.endMs;
+    } else if (call.durationMs !== undefined && call.durationMs > 0) {
+      const endMs = performance.now();
+      this.end_ms = endMs;
+      this.start_ms = endMs - call.durationMs;
+    }
 
     const resultDisplay = call.response.resultDisplay;
     if (call.status === 'success' && hasDiffStat(resultDisplay)) {

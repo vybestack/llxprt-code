@@ -13,7 +13,7 @@ import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import * as loggers from '@vybestack/llxprt-code-core/telemetry/loggers.js';
+import * as loggers from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import {
   StubProvider,
   FinishReasonProvider,
@@ -25,7 +25,7 @@ import {
 
 // Mock the loggers module
 vi.mock(
-  '@vybestack/llxprt-code-core/telemetry/loggers.js',
+  '@vybestack/llxprt-code-telemetry/telemetry/loggers.js',
   async (importOriginal) => {
     const actual = await importOriginal<typeof loggers>();
     return {

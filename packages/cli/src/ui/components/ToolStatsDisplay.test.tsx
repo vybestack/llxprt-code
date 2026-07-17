@@ -9,6 +9,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
+import {
+  withTokenTracking,
+  type TestMetricsInput,
+} from './StatsDisplay.testHelpers.js';
 
 // Mock the context to provide controlled data for testing
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
@@ -21,17 +25,23 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
 
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 
-const renderWithMockedStats = (metrics: SessionMetrics) => {
+const withMetrics = (partial: TestMetricsInput): SessionMetrics =>
+  withTokenTracking(partial);
+
+const renderWithMockedStats = (metrics: TestMetricsInput) => {
   useSessionStatsMock.mockReturnValue({
     stats: {
+      sessionId: 'test-session',
       sessionStartTime: new Date(),
-      metrics,
+      metrics: withMetrics(metrics),
       lastPromptTokenCount: 0,
+      historyTokenCount: 0,
       promptCount: 5,
     },
 
     getPromptCount: () => 5,
     startNewPrompt: vi.fn(),
+    updateHistoryTokenCount: vi.fn(),
   });
 
   return render(<ToolStatsDisplay />);
@@ -46,7 +56,7 @@ describe('<ToolStatsDisplay />', () => {
         totalSuccess: 0,
         totalFail: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
       },
     });
@@ -65,14 +75,14 @@ describe('<ToolStatsDisplay />', () => {
         totalSuccess: 1,
         totalFail: 0,
         totalDurationMs: 100,
-        totalDecisions: { accept: 1, reject: 0, modify: 0 },
+        totalDecisions: { accept: 1, reject: 0, modify: 0, auto_accept: 0 },
         byName: {
           'test-tool': {
             count: 1,
             success: 1,
             fail: 0,
             durationMs: 100,
-            decisions: { accept: 1, reject: 0, modify: 0 },
+            decisions: { accept: 1, reject: 0, modify: 0, auto_accept: 0 },
           },
         },
       },
@@ -91,21 +101,21 @@ describe('<ToolStatsDisplay />', () => {
         totalSuccess: 2,
         totalFail: 1,
         totalDurationMs: 300,
-        totalDecisions: { accept: 1, reject: 1, modify: 1 },
+        totalDecisions: { accept: 1, reject: 1, modify: 1, auto_accept: 0 },
         byName: {
           'tool-a': {
             count: 2,
             success: 1,
             fail: 1,
             durationMs: 200,
-            decisions: { accept: 1, reject: 1, modify: 0 },
+            decisions: { accept: 1, reject: 1, modify: 0, auto_accept: 0 },
           },
           'tool-b': {
             count: 1,
             success: 1,
             fail: 0,
             durationMs: 100,
-            decisions: { accept: 0, reject: 0, modify: 1 },
+            decisions: { accept: 0, reject: 0, modify: 1, auto_accept: 0 },
           },
         },
       },
@@ -129,6 +139,7 @@ describe('<ToolStatsDisplay />', () => {
           accept: 123456789,
           reject: 98765432,
           modify: 12345,
+          [ToolCallDecision.AUTO_ACCEPT]: 0,
         },
         byName: {
           'long-named-tool-for-testing-wrapping-and-such': {
@@ -140,6 +151,7 @@ describe('<ToolStatsDisplay />', () => {
               accept: 123456789,
               reject: 98765432,
               modify: 12345,
+              [ToolCallDecision.AUTO_ACCEPT]: 0,
             },
           },
         },
@@ -157,14 +169,14 @@ describe('<ToolStatsDisplay />', () => {
         totalSuccess: 1,
         totalFail: 0,
         totalDurationMs: 100,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {
           'test-tool': {
             count: 1,
             success: 1,
             fail: 0,
             durationMs: 100,
-            decisions: { accept: 0, reject: 0, modify: 0 },
+            decisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
           },
         },
       },

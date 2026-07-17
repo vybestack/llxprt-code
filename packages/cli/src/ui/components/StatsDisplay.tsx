@@ -73,7 +73,7 @@ const getInputTokens = (
   inputTokens: number | undefined,
   promptTokens: number,
   cachedTokens: number,
-) => Math.max(0, (inputTokens ?? promptTokens) - cachedTokens);
+) => inputTokens ?? Math.max(0, promptTokens - cachedTokens);
 
 const hasCodeChanges = (
   files:
@@ -102,13 +102,20 @@ const buildModelRows = (models: Record<string, ModelMetrics>) => {
         promptTokens,
         cachedTokens,
       );
+      const avgLatency =
+        metrics.api.totalRequests > 0
+          ? metrics.api.totalLatencyMs / metrics.api.totalRequests
+          : 0;
       return {
         key: name,
         modelName,
         requests: metrics.api.totalRequests,
+        errors: metrics.api.totalErrors,
         cachedTokens: cachedTokens.toLocaleString(),
         inputTokens: inputTokens.toLocaleString(),
         outputTokens: metrics.tokens.candidates.toLocaleString(),
+        totalLatency: formatDuration(metrics.api.totalLatencyMs),
+        avgLatency: formatDuration(avgLatency),
       };
     },
   );
@@ -178,9 +185,12 @@ interface ModelRowData {
   key: string;
   modelName: string;
   requests: number;
+  errors: number;
   cachedTokens: string;
   inputTokens: string;
   outputTokens: string;
+  totalLatency: string;
+  avgLatency: string;
 }
 
 const ModelTableRow: React.FC<{ row: ModelRowData }> = ({ row }) => (
@@ -221,6 +231,12 @@ const ModelTableRow: React.FC<{ row: ModelRowData }> = ({ row }) => (
       flexShrink={0}
     >
       <Text color={theme.text.primary}>{row.outputTokens}</Text>
+    </Box>
+    <Box width={MODEL_TABLE_WIDTHS.name} paddingLeft={2}>
+      <Text color={theme.text.secondary} wrap="truncate-end">
+        Latency: {row.avgLatency} avg / {row.totalLatency} total
+        {row.errors > 0 ? ` (${row.errors} errors)` : ''}
+      </Text>
     </Box>
   </Box>
 );
@@ -286,7 +302,13 @@ const ModelUsageTable: React.FC<{
 
 interface InteractionSummaryProps {
   sessionId: string;
-  tools: { totalCalls: number; totalSuccess: number; totalFail: number };
+  tools: {
+    totalCalls: number;
+    totalSuccess: number;
+    totalFail: number;
+    totalCancelled: number;
+    totalDurationMs: number;
+  };
   files: { totalLinesAdded: number; totalLinesRemoved: number } | undefined;
   successRate: number;
   agreementRate: number;
@@ -318,10 +340,26 @@ const InteractionSummary: React.FC<InteractionSummaryProps> = ({
       <StatRow title="Tool Calls:">
         <Text color={theme.text.primary}>
           {tools.totalCalls} ({' '}
-          <Text color={theme.status.success}>✓ {tools.totalSuccess}</Text>{' '}
-          <Text color={theme.status.error}>x {tools.totalFail}</Text> )
+          <Text color={theme.status.success}>OK {tools.totalSuccess}</Text>{' '}
+          <Text color={theme.status.error}>ERR {tools.totalFail}</Text>
+          {tools.totalCancelled > 0 && (
+            <>
+              {' '}
+              <Text color={theme.text.secondary}>
+                CNL {tools.totalCancelled}
+              </Text>
+            </>
+          )}
+          {' )'}
         </Text>
       </StatRow>
+      {tools.totalDurationMs > 0 && (
+        <SubStatRow title="Total Duration:">
+          <Text color={theme.text.primary}>
+            {formatDuration(tools.totalDurationMs)}
+          </Text>
+        </SubStatRow>
+      )}
       <StatRow title="Success Rate:">
         <Text color={successColor}>{successRate.toFixed(1)}%</Text>
       </StatRow>
@@ -349,34 +387,163 @@ const InteractionSummary: React.FC<InteractionSummaryProps> = ({
 
 interface PerformanceSectionProps {
   duration: string;
-  agentActiveTime: number;
   totalApiTime: number;
   apiTimePercent: number;
   totalToolTime: number;
   toolTimePercent: number;
+  agentActiveTime: number;
+  accumulatedWorkMs: number;
   tokensPerMinute: number;
+  lastRequestTpm: number;
   timeToFirstToken: number | null;
-  tokensPerSecond: number;
+  weightedAvgTtftMs: number | null;
+  outputGenerationTps: number;
+  lastOutputGenerationTps: number;
+  effectiveInputTps: number;
+  lastEffectiveInputTps: number;
+  uncachedInputTps: number | null;
 }
+
+function formatThroughput(value: number): string {
+  return value < 1000
+    ? `${value.toFixed(2)} TPM`
+    : `${(value / 1000).toFixed(2)}k TPM`;
+}
+
+const ThroughputRows: React.FC<{
+  tokensPerMinute: number;
+  lastRequestTpm: number;
+}> = ({ tokensPerMinute, lastRequestTpm }) => (
+  <>
+    {Number.isFinite(tokensPerMinute) && tokensPerMinute > 0 && (
+      <SubStatRow title="Throughput (TPM):">
+        <Text color={theme.text.primary}>
+          {formatThroughput(tokensPerMinute)}
+          <Text color={theme.text.secondary}> (session weighted)</Text>
+        </Text>
+      </SubStatRow>
+    )}
+    {Number.isFinite(lastRequestTpm) && lastRequestTpm > 0 && (
+      <SubStatRow title="Last Request TPM:">
+        <Text color={theme.text.primary}>
+          {formatThroughput(lastRequestTpm)}
+        </Text>
+      </SubStatRow>
+    )}
+  </>
+);
+
+const LatencyRows: React.FC<{
+  timeToFirstToken: number | null;
+  weightedAvgTtftMs: number | null;
+}> = ({ timeToFirstToken, weightedAvgTtftMs }) => {
+  if (timeToFirstToken === null || !Number.isFinite(timeToFirstToken)) {
+    return null;
+  }
+  return (
+    <SubStatRow title="TTFT (last):">
+      <Text color={theme.text.primary}>{timeToFirstToken.toFixed(0)}ms</Text>
+      {weightedAvgTtftMs !== null && Number.isFinite(weightedAvgTtftMs) && (
+        <Text color={theme.text.secondary}>
+          {' '}
+          (avg: {weightedAvgTtftMs.toFixed(0)}ms)
+        </Text>
+      )}
+    </SubStatRow>
+  );
+};
+
+const RateRows: React.FC<{
+  outputGenerationTps: number;
+  lastOutputGenerationTps: number;
+  effectiveInputTps: number;
+  lastEffectiveInputTps: number;
+  uncachedInputTps: number | null;
+}> = ({
+  outputGenerationTps,
+  lastOutputGenerationTps,
+  effectiveInputTps,
+  lastEffectiveInputTps,
+  uncachedInputTps,
+}) => (
+  <>
+    {Number.isFinite(outputGenerationTps) && outputGenerationTps > 0 && (
+      <SubStatRow title="Output Gen Rate:">
+        <Text color={theme.text.primary}>
+          {outputGenerationTps.toFixed(2)} tok/s
+          <Text color={theme.text.secondary}> (session weighted)</Text>
+          {lastOutputGenerationTps > 0 && (
+            <Text color={theme.text.secondary}>
+              {' '}
+              (last: {lastOutputGenerationTps.toFixed(2)})
+            </Text>
+          )}
+        </Text>
+      </SubStatRow>
+    )}
+    {Number.isFinite(effectiveInputTps) && effectiveInputTps > 0 && (
+      <SubStatRow title="Input Rate (eff):">
+        <Text color={theme.text.primary}>
+          {effectiveInputTps.toFixed(2)} tok/s
+          <Text color={theme.text.secondary}> (ΣP/ΣTTFT)</Text>
+          {lastEffectiveInputTps > 0 && (
+            <Text color={theme.text.secondary}>
+              {' '}
+              (last: {lastEffectiveInputTps.toFixed(2)})
+            </Text>
+          )}
+        </Text>
+      </SubStatRow>
+    )}
+    {uncachedInputTps !== null && Number.isFinite(uncachedInputTps) && (
+      <SubStatRow title="Uncached Input:">
+        <Text color={theme.text.primary}>
+          {uncachedInputTps.toFixed(2)} tok/s
+          <Text color={theme.text.secondary}> (Σmax(0,P-C)/ΣTTFT)</Text>
+        </Text>
+      </SubStatRow>
+    )}
+  </>
+);
 
 const PerformanceSection: React.FC<PerformanceSectionProps> = ({
   duration,
-  agentActiveTime,
   totalApiTime,
   apiTimePercent,
   totalToolTime,
   toolTimePercent,
+  agentActiveTime,
+  accumulatedWorkMs,
   tokensPerMinute,
+  lastRequestTpm,
   timeToFirstToken,
-  tokensPerSecond,
+  weightedAvgTtftMs,
+  outputGenerationTps,
+  lastOutputGenerationTps,
+  effectiveInputTps,
+  lastEffectiveInputTps,
+  uncachedInputTps,
 }) => (
   <Section title="Performance">
     <StatRow title="Wall Time:">
       <Text color={theme.text.primary}>{duration}</Text>
     </StatRow>
-    <StatRow title="Agent Active:">
-      <Text color={theme.text.primary}>{formatDuration(agentActiveTime)}</Text>
-    </StatRow>
+    {agentActiveTime > 0 && (
+      <StatRow title="Agent Active:">
+        <Text color={theme.text.primary}>
+          {formatDuration(agentActiveTime)}
+          <Text color={theme.text.secondary}> (interval union)</Text>
+        </Text>
+      </StatRow>
+    )}
+    {accumulatedWorkMs > 0 && (
+      <StatRow title="Accumulated Work:">
+        <Text color={theme.text.primary}>
+          {formatDuration(accumulatedWorkMs)}
+          <Text color={theme.text.secondary}> (API+Tool)</Text>
+        </Text>
+      </StatRow>
+    )}
     <SubStatRow title="API Time:">
       <Text color={theme.text.primary}>
         {formatDuration(totalApiTime)}{' '}
@@ -391,29 +558,21 @@ const PerformanceSection: React.FC<PerformanceSectionProps> = ({
         </Text>
       </Text>
     </SubStatRow>
-    {Number.isFinite(tokensPerMinute) && tokensPerMinute > 0 && (
-      <SubStatRow title="Throughput:">
-        <Text color={theme.text.primary}>
-          {tokensPerMinute < 1000
-            ? `${tokensPerMinute.toFixed(2)} TPM`
-            : `${(tokensPerMinute / 1000).toFixed(2)}k TPM`}
-          <Text color={theme.text.secondary}> (input+output)</Text>
-        </Text>
-      </SubStatRow>
-    )}
-    {timeToFirstToken !== null && Number.isFinite(timeToFirstToken) && (
-      <SubStatRow title="TTFT (last):">
-        <Text color={theme.text.primary}>{timeToFirstToken.toFixed(0)}ms</Text>
-      </SubStatRow>
-    )}
-    {Number.isFinite(tokensPerSecond) && tokensPerSecond > 0 && (
-      <SubStatRow title="Token Rate (avg):">
-        <Text color={theme.text.primary}>
-          {tokensPerSecond.toFixed(2)} tok/s
-          <Text color={theme.text.secondary}> (session input+output)</Text>
-        </Text>
-      </SubStatRow>
-    )}
+    <ThroughputRows
+      tokensPerMinute={tokensPerMinute}
+      lastRequestTpm={lastRequestTpm}
+    />
+    <LatencyRows
+      timeToFirstToken={timeToFirstToken}
+      weightedAvgTtftMs={weightedAvgTtftMs}
+    />
+    <RateRows
+      outputGenerationTps={outputGenerationTps}
+      lastOutputGenerationTps={lastOutputGenerationTps}
+      effectiveInputTps={effectiveInputTps}
+      lastEffectiveInputTps={lastEffectiveInputTps}
+      uncachedInputTps={uncachedInputTps}
+    />
   </Section>
 );
 
@@ -445,6 +604,34 @@ const StatsTitle: React.FC<{ title?: string }> = ({ title }) =>
     </Text>
   );
 
+function sumModelApi(
+  models: Record<string, ModelMetrics>,
+  field: 'totalRequests' | 'totalErrors' | 'totalLatencyMs',
+): number {
+  return Object.values(models).reduce((acc, m) => acc + m.api[field], 0);
+}
+
+const SessionApiSection: React.FC<{
+  totalRequests: number;
+  totalErrors: number;
+  avgLatency: number;
+}> = ({ totalRequests, totalErrors, avgLatency }) => {
+  if (totalRequests <= 0) return null;
+  return (
+    <Section title="Session API">
+      <StatRow title="Total Requests:">
+        <Text color={theme.text.primary}>{totalRequests.toLocaleString()}</Text>
+      </StatRow>
+      <StatRow title="Total Errors:">
+        <Text color={theme.text.primary}>{totalErrors.toLocaleString()}</Text>
+      </StatRow>
+      <StatRow title="Avg Latency:">
+        <Text color={theme.text.primary}>{formatDuration(avgLatency)}</Text>
+      </StatRow>
+    </Section>
+  );
+};
+
 export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   duration,
   title,
@@ -454,6 +641,12 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   const { metrics } = stats;
   const { models, tools, files } = metrics;
   const computed = computeSessionStats(metrics);
+
+  const totalSessionRequests = sumModelApi(models, 'totalRequests');
+  const totalSessionErrors = sumModelApi(models, 'totalErrors');
+  const totalSessionLatency = sumModelApi(models, 'totalLatencyMs');
+  const avgLatency =
+    totalSessionRequests > 0 ? totalSessionLatency / totalSessionRequests : 0;
 
   return (
     <Box
@@ -466,6 +659,11 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
     >
       <StatsTitle title={title} />
       <Box height={1} />
+      <SessionApiSection
+        totalRequests={totalSessionRequests}
+        totalErrors={totalSessionErrors}
+        avgLatency={avgLatency}
+      />
       {tools.totalCalls > 0 && (
         <InteractionSummary
           sessionId={stats.sessionId}
@@ -478,14 +676,23 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       )}
       <PerformanceSection
         duration={duration}
-        agentActiveTime={computed.agentActiveTime}
         totalApiTime={computed.totalApiTime}
         apiTimePercent={computed.apiTimePercent}
         totalToolTime={computed.totalToolTime}
         toolTimePercent={computed.toolTimePercent}
-        tokensPerMinute={metrics.tokenTracking.tokensPerMinute}
-        timeToFirstToken={metrics.tokenTracking.timeToFirstToken}
-        tokensPerSecond={metrics.tokenTracking.tokensPerSecond}
+        agentActiveTime={metrics.timing.agentActiveTimeMs}
+        accumulatedWorkMs={metrics.timing.accumulatedWorkMs}
+        tokensPerMinute={metrics.timing.completeTokensPerMinute}
+        lastRequestTpm={metrics.timing.lastRequestTpm}
+        timeToFirstToken={
+          metrics.timing.lastTtftMs ?? metrics.tokenTracking.timeToFirstToken
+        }
+        weightedAvgTtftMs={metrics.timing.weightedAvgTtftMs}
+        outputGenerationTps={metrics.timing.outputGenerationTps}
+        lastOutputGenerationTps={metrics.timing.lastOutputGenerationTps}
+        effectiveInputTps={metrics.timing.effectiveInputTps}
+        lastEffectiveInputTps={metrics.timing.lastEffectiveInputTps}
+        uncachedInputTps={metrics.timing.uncachedInputTps}
       />
       <ModelUsageTable
         models={models}

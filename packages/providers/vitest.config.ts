@@ -39,6 +39,7 @@ const authPackagePrefix = '@vybestack/llxprt-code-auth/';
 const corePackagePrefix = '@vybestack/llxprt-code-core/';
 const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
+const telemetryPackagePrefix = '@vybestack/llxprt-code-telemetry/';
 const providersEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
 const providersSrcDir = fileURLToPath(new URL('./src/', import.meta.url));
 const authEntry = fileURLToPath(new URL('../auth/index.ts', import.meta.url));
@@ -71,6 +72,12 @@ const settingsEntry = fileURLToPath(
 );
 const settingsSrcDir = fileURLToPath(
   new URL('../settings/src/', import.meta.url),
+);
+const telemetryEntry = fileURLToPath(
+  new URL('../telemetry/index.ts', import.meta.url),
+);
+const telemetrySrcDir = fileURLToPath(
+  new URL('../telemetry/src/', import.meta.url),
 );
 
 function resolveTsSource(baseDir: string, specifier: string): string {
@@ -144,6 +151,15 @@ const workspaceAliasPlugin = {
         source.slice(settingsPackagePrefix.length),
       );
     }
+    if (source === '@vybestack/llxprt-code-telemetry') {
+      return telemetryEntry;
+    }
+    if (source.startsWith(telemetryPackagePrefix)) {
+      return resolveTsSource(
+        telemetrySrcDir,
+        source.slice(telemetryPackagePrefix.length),
+      );
+    }
     if (source === 'ajv') {
       return ajvCjsEntry;
     }
@@ -193,6 +209,7 @@ export default defineConfig({
           '@vybestack/llxprt-code-storage',
           '@vybestack/llxprt-code-providers',
           '@vybestack/llxprt-code-settings',
+          '@vybestack/llxprt-code-telemetry',
           'ajv',
         ],
       },

@@ -82,6 +82,42 @@ type ToolLoggingConfig = SessionConfig & TelemetryPromptConfig;
 const shouldLogUserPrompts = (config: TelemetryPromptConfig): boolean =>
   config.getTelemetryLogPromptsEnabled();
 
+/**
+ * Fail-open wrapper for local aggregation. Errors in the telemetry
+ * service must never break the calling stream/tool/api path.
+ */
+function aggregateLocally(event: UiEvent): void {
+  try {
+    uiTelemetryService.addEvent(event);
+  } catch (err) {
+    try {
+      debugLogger.error(
+        `[TELEMETRY] Local aggregation failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } catch {
+      // Secondary logger failure must not escape the fail-open wrapper
+    }
+  }
+}
+
+/**
+ * Fail-open wrapper for SDK export. Errors in the export pipeline must
+ * never break the calling stream/tool/api path.
+ */
+function emitLogRecord(logRecord: LogRecord): void {
+  try {
+    logs.getLogger(SERVICE_NAME).emit(logRecord);
+  } catch (err) {
+    try {
+      debugLogger.error(
+        `[TELEMETRY] SDK export failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } catch {
+      // Secondary logger failure must not escape the fail-open wrapper
+    }
+  }
+}
+
 function getCommonAttributes(config: SessionConfig): LogAttributes {
   return {
     'session.id': config.getSessionId(),
@@ -121,12 +157,11 @@ export function logCliConfiguration(
     mcp_servers: event.mcp_servers,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: 'CLI configuration loaded.',
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logUserPrompt(
@@ -146,12 +181,11 @@ export function logUserPrompt(
     attributes.prompt = event.prompt;
   }
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `User prompt. Length: ${event.prompt_length}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logToolCall(
@@ -162,19 +196,20 @@ export function logToolCall(
     debugLogger.error(`[TELEMETRY] logToolCall: ${event.function_name}`);
   }
 
-  if (!isTelemetrySdkInitialized()) {
-    if (process.env.VERBOSE === 'true') {
-      debugLogger.error(`[TELEMETRY] SDK not initialized, skipping log`);
-    }
-    return;
-  }
-
+  // Local aggregation always runs, regardless of SDK/export state
   const uiEvent = {
     ...event,
     'event.name': EVENT_TOOL_CALL,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  uiTelemetryService.addEvent(uiEvent);
+  aggregateLocally(uiEvent);
+
+  if (!isTelemetrySdkInitialized()) {
+    if (process.env.VERBOSE === 'true') {
+      debugLogger.error(`[TELEMETRY] SDK not initialized, skipping export`);
+    }
+    return;
+  }
 
   const { metadata, ...eventWithoutMetadata } = event;
   const attributes: LogAttributes = {
@@ -199,12 +234,11 @@ export function logToolCall(
     }
   }
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Tool call: ${event.function_name}${event.decision != null ? `. Decision: ${event.decision}` : ''}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
   recordToolCallMetrics(
     config,
     event.function_name,
@@ -227,12 +261,11 @@ export function logHookCall(config: Config, event: HookCallEvent): void {
     hook_output: safeJsonStringify(event.hook_output),
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Hook call: ${event.hook_event_name}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logToolOutputTruncated(
@@ -248,12 +281,11 @@ export function logToolOutputTruncated(
     'event.timestamp': new Date().toISOString(),
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Tool output truncated for ${event.tool_name}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logFileOperation(
@@ -287,12 +319,11 @@ export function logFileOperation(
     attributes['programming_language'] = event.programming_language;
   }
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `File operation: ${event.operation}. Lines: ${event.lines}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 
   recordFileOperationMetric(
     config,
@@ -313,22 +344,23 @@ export function logApiRequest(config: Config, event: ApiRequestEvent): void {
     'event.timestamp': new Date().toISOString(),
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `API request to ${event.model}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logApiError(config: Config, event: ApiErrorEvent): void {
-  if (!isTelemetrySdkInitialized()) return;
+  // Local aggregation always runs, regardless of SDK/export state
   const uiEvent = {
     ...event,
     'event.name': EVENT_API_ERROR,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  uiTelemetryService.addEvent(uiEvent);
+  aggregateLocally(uiEvent);
+
+  if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
@@ -347,12 +379,11 @@ export function logApiError(config: Config, event: ApiErrorEvent): void {
     attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
   }
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `API error for ${event.model}. Error: ${event.error}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
   recordApiErrorMetrics(
     config,
     event.model,
@@ -363,13 +394,16 @@ export function logApiError(config: Config, event: ApiErrorEvent): void {
 }
 
 export function logApiResponse(config: Config, event: ApiResponseEvent): void {
-  if (!isTelemetrySdkInitialized()) return;
+  // Local aggregation always runs, regardless of SDK/export state
   const uiEvent = {
     ...event,
     'event.name': EVENT_API_RESPONSE,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  uiTelemetryService.addEvent(uiEvent);
+  aggregateLocally(uiEvent);
+
+  if (!isTelemetrySdkInitialized()) return;
+
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
     ...event,
@@ -388,12 +422,11 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
     attributes[SemanticAttributes.HTTP_STATUS_CODE] = event.status_code;
   }
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `API response from ${event.model}. Status: ${formatStatusCode(event.status_code)}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
   recordApiResponseMetrics(
     config,
     event.model,
@@ -439,12 +472,11 @@ export function logLoopDetected(
     ...event,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Loop detected. Type: ${event.loop_type}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logNextSpeakerCheck(
@@ -459,12 +491,11 @@ export function logNextSpeakerCheck(
     'event.name': EVENT_NEXT_SPEAKER_CHECK,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Next speaker check.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logSlashCommand(
@@ -479,19 +510,17 @@ export function logSlashCommand(
     'event.name': EVENT_SLASH_COMMAND,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Slash command: ${event.command}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 // Generic function to log telemetry events to the configured system
 function logTelemetryEvent(config: Config, event: unknown): void {
   if (!isTelemetrySdkInitialized()) return;
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const eventObj = event as Record<string, unknown>;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
@@ -524,7 +553,7 @@ function logTelemetryEvent(config: Config, event: unknown): void {
     body: `Telemetry event: ${eventObj['event.name']}`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logConversationRequest(
@@ -598,12 +627,11 @@ export function logKittySequenceOverflow(
     ...event,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Kitty sequence overflow. Length: ${event.sequence_length}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 /**
@@ -619,12 +647,11 @@ export function logTokenUsage(config: Config, event: TokenUsageEvent): void {
     ...event,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Token usage. Provider: ${event.provider}, ConversationId: ${event.conversationId}, Input: ${event.input}, Output: ${event.output}, Cache: ${event.cache}, Tool: ${event.tool}, Thought: ${event.thought}, Total: ${event.total}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 /**
@@ -643,12 +670,11 @@ export function logPerformanceMetrics(
     ...event,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Performance metrics. Provider: ${event.provider}, TokensPerMinute: ${event.tokensPerMinute}, ThrottleWaitTimeMs: ${event.throttleWaitTimeMs}, TotalRequests: ${event.totalRequests}, ErrorRate: ${event.errorRate}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logMalformedJsonResponse(
@@ -664,12 +690,11 @@ export function logMalformedJsonResponse(
     model: event.model,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Malformed JSON response from ${event.model}.`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logModelRouting(
@@ -688,12 +713,11 @@ export function logModelRouting(
     'event.name': EVENT_MODEL_ROUTING,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Model routing decision. Model: ${event.model}, Source: ${event.source}`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 
   recordModelRoutingMetrics(config, event);
 }
@@ -714,12 +738,11 @@ export function logExtensionInstallEvent(
     status: event.status,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Installed extension ${event.extension_name}`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logExtensionUninstall(
@@ -736,12 +759,11 @@ export function logExtensionUninstall(
     status: event.status,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Uninstalled extension ${event.extension_name}`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logExtensionEnable(
@@ -758,12 +780,11 @@ export function logExtensionEnable(
     setting_scope: event.setting_scope,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Enabled extension ${event.extension_name}`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }
 
 export function logExtensionDisable(
@@ -780,10 +801,9 @@ export function logExtensionDisable(
     setting_scope: event.setting_scope,
   };
 
-  const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Disabled extension ${event.extension_name}`,
     attributes,
   };
-  logger.emit(logRecord);
+  emitLogRecord(logRecord);
 }

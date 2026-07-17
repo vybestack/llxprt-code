@@ -103,6 +103,25 @@ export interface StreamStats {
   output_tokens: number;
   duration_ms: number;
   tool_calls: number;
+  // Canonical timing fields
+  api_time_ms: number;
+  tool_time_ms: number;
+  agent_active_ms: number;
+  accumulated_work_ms: number;
+  complete_tpm: number;
+  output_generation_tps: number;
+  effective_input_tps: number;
+  // Canonical error fields
+  api_errors: number;
+  api_requests: number;
+  // Canonical tool outcome fields
+  tool_successes: number;
+  tool_failures: number;
+  tool_cancellations: number;
+  // Canonical cache fields
+  cache_reads: number;
+  cache_writes: number | null;
+  has_reliable_cache: boolean;
 }
 
 export interface ResultEvent extends BaseJsonStreamEvent {
@@ -221,8 +240,8 @@ export class StreamJsonFormatter {
   }
 
   /**
-   * Converts SessionMetrics to simplified StreamStats format.
-   * Aggregates token counts across all models.
+   * Converts SessionMetrics to StreamStats format including canonical
+   * timing/cache/error/tool fields from the aggregator snapshot.
    * @param metrics - The session metrics from telemetry
    * @param durationMs - The session duration in milliseconds
    * @returns Simplified stats for streaming output
@@ -235,12 +254,15 @@ export class StreamJsonFormatter {
     let inputTokens = 0;
     let outputTokens = 0;
 
-    // Aggregate token counts across all models
     for (const modelMetrics of Object.values(metrics.models)) {
       totalTokens += modelMetrics.tokens.total;
       inputTokens += modelMetrics.tokens.prompt;
       outputTokens += modelMetrics.tokens.candidates;
     }
+
+    // Canonical snapshot is the single source of truth for timing/cache/error/tool
+    const timing = metrics.timing;
+    const cache = metrics.cache;
 
     return {
       total_tokens: totalTokens,
@@ -248,6 +270,27 @@ export class StreamJsonFormatter {
       output_tokens: outputTokens,
       duration_ms: durationMs,
       tool_calls: metrics.tools.totalCalls,
+      api_time_ms: timing.accumulatedApiTimeMs,
+      tool_time_ms: timing.accumulatedToolTimeMs,
+      agent_active_ms: timing.agentActiveTimeMs,
+      accumulated_work_ms: timing.accumulatedWorkMs,
+      complete_tpm: timing.completeTokensPerMinute,
+      output_generation_tps: timing.outputGenerationTps,
+      effective_input_tps: timing.effectiveInputTps,
+      api_errors: Object.values(metrics.models).reduce(
+        (sum, m) => sum + m.api.totalErrors,
+        0,
+      ),
+      api_requests: Object.values(metrics.models).reduce(
+        (sum, m) => sum + m.api.totalRequests,
+        0,
+      ),
+      tool_successes: metrics.tools.totalSuccess,
+      tool_failures: metrics.tools.totalFail,
+      tool_cancellations: metrics.tools.totalCancelled,
+      cache_reads: cache.totalCacheReads,
+      cache_writes: cache.totalCacheWrites,
+      has_reliable_cache: cache.hasReliableCacheData,
     };
   }
 }

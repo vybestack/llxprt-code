@@ -84,6 +84,10 @@
       "bun": "./src/telemetry/uiTelemetry.ts",
       "import": "./dist/src/telemetry/uiTelemetry.js"
     },
+    "./telemetry/sessionMetricsAggregator.js": {
+      "bun": "./src/telemetry/sessionMetricsAggregator.ts",
+      "import": "./dist/src/telemetry/sessionMetricsAggregator.js"
+    },
     "./telemetry/tool-call-decision.js": {
       "bun": "./src/telemetry/tool-call-decision.ts",
       "import": "./dist/src/telemetry/tool-call-decision.js"

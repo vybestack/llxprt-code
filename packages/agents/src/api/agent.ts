@@ -95,6 +95,17 @@ export interface SessionStats {
   readonly contextWindowSize: number;
   readonly contextWindowUsed: number;
   readonly turnCount: number;
+  readonly apiRequests: number;
+  readonly apiErrors: number;
+  readonly toolCalls: number;
+  readonly toolSuccesses: number;
+  readonly toolFailures: number;
+  readonly toolCancellations: number;
+  readonly totalApiLatencyMs: number;
+  readonly totalToolDurationMs: number;
+  readonly completeTokensPerMinute: number;
+  readonly agentActiveTimeMs: number;
+  readonly sessionWallMs: number;
 }
 
 export interface AgentResult {

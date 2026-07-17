@@ -95,25 +95,38 @@ export function createTelemetryAdapterFromConfig(
               totalTokenCount: event.usage.totalTokens,
             }
           : undefined);
+      const attemptId =
+        event.promptId ??
+        event.runtimeId ??
+        `runtime:${event.model}:${Date.now()}:${Math.random()}`;
       const legacy = new LegacyApiResponseEvent(
         event.model,
         event.durationMs,
-        event.promptId ?? event.runtimeId ?? 'runtime',
+        attemptId,
         usageForLegacy,
         event.responseText,
         event.error,
+        undefined,
+        attemptId,
       );
+      legacy.provider = event.provider;
       logApiResponse(config, legacy);
     },
     logApiError: (event) => {
+      const attemptId =
+        event.promptId ??
+        event.runtimeId ??
+        `runtime:${event.model}:${Date.now()}:${Math.random()}`;
       const legacy = new LegacyApiErrorEvent(
         event.model,
         event.error,
         event.durationMs,
-        event.promptId ?? event.runtimeId ?? 'runtime',
+        attemptId,
         event.errorType,
         event.statusCode,
+        attemptId,
       );
+      legacy.provider = event.provider;
       logApiError(config, legacy);
     },
   };

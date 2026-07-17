@@ -247,6 +247,7 @@ export default defineConfig({
           '@vybestack/llxprt-code-agents',
           '@vybestack/llxprt-code-auth',
           '@vybestack/llxprt-code-core',
+          '@vybestack/llxprt-code-providers',
           '@vybestack/llxprt-code-settings',
           '@vybestack/llxprt-code-test-utils',
           'ajv',

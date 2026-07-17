@@ -21,6 +21,7 @@ import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 import { ProviderRuntimeNormalizationError } from './errors.js';
 import { getBaseUrlFromProvider } from './baseUrlResolver.js';
 import { isAbortSignal } from './utils/abortSignal.js';
+import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
 
@@ -259,7 +260,9 @@ function resolveModelField(
       return fromConfig;
     }
   }
-  const fromDefault = providerInstance?.getDefaultModel();
+  const fromDefault = providerInstance
+    ? safeGetDefaultModel(providerInstance)
+    : '';
   if (typeof fromDefault === 'string' && fromDefault.trim() !== '') {
     return fromDefault;
   }

@@ -108,6 +108,7 @@ const createTestContext = ({
       totalCalls: 0,
       totalSuccess: 0,
       totalFail: 0,
+      totalCancelled: 0,
       totalDurationMs: 0,
       totalDecisions: {
         accept: 0,
@@ -134,6 +135,30 @@ const createTestContext = ({
         thought: 0,
         total: 0,
       },
+    },
+    timing: {
+      completeTokensPerMinute: 0,
+      outputGenerationTps: 0,
+      effectiveInputTps: 0,
+      uncachedInputTps: null,
+      lastRequestTpm: 0,
+      accumulatedApiTimeMs: 0,
+      accumulatedToolTimeMs: 0,
+      agentActiveTimeMs: 0,
+      accumulatedWorkMs: 0,
+      lastTtftMs: null,
+      weightedAvgTtftMs: null,
+      lastOutputGenerationTps: 0,
+      lastEffectiveInputTps: 0,
+    },
+    cache: {
+      hasReliableCacheData: false,
+      hasReliableCacheReads: false,
+      hasReliableCacheWrites: false,
+      requestsWithCacheReads: 0,
+      requestsWithCacheWrites: 0,
+      totalCacheReads: 0,
+      totalCacheWrites: null,
     },
   };
 

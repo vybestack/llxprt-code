@@ -31,7 +31,7 @@ const createFakeCompletedToolCall = (
   error?: Error,
 ): CompletedToolCall => {
   const request = {
-    callId: `call_${name}_${Date.now()}`,
+    callId: `call_${name}_${Date.now()}_${Math.random()}`,
     name,
     args: { foo: 'bar' },
     isClientInitiated: false,
@@ -106,6 +106,7 @@ describe('UiTelemetryService', () => {
         totalCalls: 0,
         totalSuccess: 0,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 0,
         totalDecisions: {
           [ToolCallDecision.ACCEPT]: 0,
@@ -133,6 +134,30 @@ describe('UiTelemetryService', () => {
           total: 0,
         },
       },
+      timing: {
+        completeTokensPerMinute: 0,
+        outputGenerationTps: 0,
+        effectiveInputTps: 0,
+        uncachedInputTps: null,
+        lastRequestTpm: 0,
+        accumulatedApiTimeMs: 0,
+        accumulatedToolTimeMs: 0,
+        agentActiveTimeMs: 0,
+        accumulatedWorkMs: 0,
+        lastTtftMs: null,
+        weightedAvgTtftMs: null,
+        lastOutputGenerationTps: 0,
+        lastEffectiveInputTps: 0,
+      },
+      cache: {
+        hasReliableCacheData: false,
+        hasReliableCacheReads: false,
+        hasReliableCacheWrites: false,
+        totalCacheReads: 0,
+        totalCacheWrites: null,
+        requestsWithCacheReads: 0,
+        requestsWithCacheWrites: 0,
+      },
     });
     expect(service.getLastPromptTokenCount()).toBe(0);
   });
@@ -151,6 +176,7 @@ describe('UiTelemetryService', () => {
       cached_content_token_count: 5,
       thoughts_token_count: 2,
       tool_token_count: 3,
+      provider_owned: true,
     } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE };
 
     service.addEvent(event);
@@ -173,6 +199,7 @@ describe('UiTelemetryService', () => {
         cached_content_token_count: 5,
         thoughts_token_count: 2,
         tool_token_count: 3,
+        provider_owned: true,
       } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE };
 
       service.addEvent(event);
@@ -208,6 +235,8 @@ describe('UiTelemetryService', () => {
         cached_content_token_count: 5,
         thoughts_token_count: 2,
         tool_token_count: 3,
+        attempt_id: 'attempt-1',
+        provider_owned: true,
       } as ApiResponseEvent & {
         'event.name': typeof EVENT_API_RESPONSE;
       };
@@ -221,6 +250,8 @@ describe('UiTelemetryService', () => {
         cached_content_token_count: 10,
         thoughts_token_count: 4,
         tool_token_count: 6,
+        attempt_id: 'attempt-2',
+        provider_owned: true,
       } as ApiResponseEvent & {
         'event.name': typeof EVENT_API_RESPONSE;
       };
@@ -259,6 +290,8 @@ describe('UiTelemetryService', () => {
         cached_content_token_count: 5,
         thoughts_token_count: 2,
         tool_token_count: 3,
+        attempt_id: 'attempt-pro-1',
+        provider_owned: true,
       } as ApiResponseEvent & {
         'event.name': typeof EVENT_API_RESPONSE;
       };
@@ -272,6 +305,8 @@ describe('UiTelemetryService', () => {
         cached_content_token_count: 50,
         thoughts_token_count: 20,
         tool_token_count: 30,
+        attempt_id: 'attempt-flash-1',
+        provider_owned: true,
       } as ApiResponseEvent & {
         'event.name': typeof EVENT_API_RESPONSE;
       };
@@ -295,6 +330,7 @@ describe('UiTelemetryService', () => {
         model: 'gemini-2.5-pro',
         duration_ms: 300,
         error: 'Something went wrong',
+        provider_owned: true,
       } as ApiErrorEvent & { 'event.name': typeof EVENT_API_ERROR };
 
       service.addEvent(event);
@@ -329,6 +365,8 @@ describe('UiTelemetryService', () => {
         cached_content_token_count: 5,
         thoughts_token_count: 2,
         tool_token_count: 3,
+        attempt_id: 'attempt-resp-1',
+        provider_owned: true,
       } as ApiResponseEvent & {
         'event.name': typeof EVENT_API_RESPONSE;
       };
@@ -337,6 +375,8 @@ describe('UiTelemetryService', () => {
         model: 'gemini-2.5-pro',
         duration_ms: 300,
         error: 'Something went wrong',
+        attempt_id: 'attempt-err-1',
+        provider_owned: true,
       } as ApiErrorEvent & { 'event.name': typeof EVENT_API_ERROR };
 
       service.addEvent(responseEvent);
@@ -387,6 +427,7 @@ describe('UiTelemetryService', () => {
         count: 1,
         success: 1,
         fail: 0,
+        cancelled: 0,
         durationMs: 150,
         decisions: {
           [ToolCallDecision.ACCEPT]: 1,
@@ -421,6 +462,7 @@ describe('UiTelemetryService', () => {
         count: 1,
         success: 0,
         fail: 1,
+        cancelled: 0,
         durationMs: 200,
         decisions: {
           [ToolCallDecision.ACCEPT]: 0,
@@ -512,6 +554,7 @@ describe('UiTelemetryService', () => {
         count: 2,
         success: 1,
         fail: 1,
+        cancelled: 0,
         durationMs: 250,
         decisions: {
           [ToolCallDecision.ACCEPT]: 1,

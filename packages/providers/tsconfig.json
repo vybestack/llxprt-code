@@ -19,7 +19,9 @@
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
       "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
-      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
+      "@vybestack/llxprt-code-telemetry": ["../telemetry/index.ts"],
+      "@vybestack/llxprt-code-telemetry/*": ["../telemetry/src/*"]
     }
   },
   "include": [

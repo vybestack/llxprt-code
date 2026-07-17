@@ -51,11 +51,20 @@ export function hasTokenBearingOutput(chunk: unknown): boolean {
       if (block.type === 'text') {
         return typeof block.text === 'string' && block.text.length > 0;
       }
-      return (
-        block.type === 'thinking' ||
-        block.type === 'code' ||
-        block.type === 'tool_call'
-      );
+      if (block.type === 'thinking') {
+        return typeof block.thought === 'string' && block.thought.length > 0;
+      }
+      if (block.type === 'code') {
+        return typeof block.code === 'string' && block.code.length > 0;
+      }
+      if (block.type === 'tool_call') {
+        return (
+          typeof block.name === 'string' &&
+          block.name.length > 0 &&
+          block.parameters !== undefined
+        );
+      }
+      return false;
     });
   }
 
