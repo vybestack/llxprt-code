@@ -35,6 +35,10 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
+const ISSUE_CONTEXT_LIMIT = 262_144;
+const STANDARD_CONTEXT_LIMIT = 200_000;
+const COMPRESSION_THRESHOLD = 0.8;
+
 function makeLogger(): DebugLogger {
   return {
     debug: vi.fn(),
@@ -114,8 +118,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // is triggered, but even with zero reduction the capped margin keeps the
       // payload under the hard limit — no overflow error is thrown.
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 262_144,
-        compressionThreshold: 0.8,
+        contextLimit: ISSUE_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -146,8 +150,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
     it('still triggers compression when projected exceeds the capped cushion limit', async () => {
       // projected = 263000 > 262144 (capped limit) → compression needed
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 262_144,
-        compressionThreshold: 0.8,
+        contextLimit: ISSUE_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -182,8 +186,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('one-retry-before-truncation: ineffective first compression', () => {
     it('makes exactly one additional full compression attempt when first compression is ineffective (<5%) and second fits', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -247,8 +251,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('retry remains insufficient, truncation fits', () => {
     it('falls through to truncation when both compression attempts remain over limit, and preserves pending', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -307,8 +311,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('failure diagnostics', () => {
     it('does not redundantly retry full compression when first compression FAILED, proceeds to truncation', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -353,8 +357,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('does not redundantly retry full compression when first compression THREW, proceeds to truncation', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -399,8 +403,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('proceeds to truncation when the retry compression attempt fails, and includes compression failure diagnostics', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -454,8 +458,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('includes truncation failure details when truncation also fails', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -503,8 +507,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('unrecoverable boundary preservation (issues #2304/#2306)', () => {
     it('returns contents as-is when pendingContents is undefined but under capped hard limit', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 262_144,
-        compressionThreshold: 0.8,
+        contextLimit: ISSUE_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -526,8 +530,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('throws unrecoverable-boundary error when pendingContents is undefined and over capped hard limit', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 262_144,
-        compressionThreshold: 0.8,
+        contextLimit: ISSUE_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -556,8 +560,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('non-COMPRESSED skipped results (SKIPPED_EMPTY / SKIPPED_COOLDOWN)', () => {
     it('does not make an additional full retry when first compression returns SKIPPED_EMPTY, proceeds to truncation', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -603,8 +607,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('does not make an additional full retry when first compression returns SKIPPED_COOLDOWN, proceeds to truncation', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -644,8 +648,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('retains actionable diagnostics identifying the skipped result when overflow remains after truncation', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -690,8 +694,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('retry-failure cause preservation', () => {
     it('preserves the underlying retry error message in final diagnostics (not just generic message)', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -752,8 +756,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   describe('compressAndRecompose callback contract (rethrow compressionFailure)', () => {
     it('throws when performCompression throws during callback compression', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -775,8 +779,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
     it('throws when performCompression returns a non-COMPRESSED result during callback compression', async () => {
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
@@ -804,8 +808,8 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // proceeds to truncation. This proves the rethrow is isolated to
       // the compressAndRecompose callback entry point, not enforced globally.
       runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 200_000,
-        compressionThreshold: 0.8,
+        contextLimit: STANDARD_CONTEXT_LIMIT,
+        compressionThreshold: COMPRESSION_THRESHOLD,
       });
 
       historyService.add(makeUserMessage('established history'));
