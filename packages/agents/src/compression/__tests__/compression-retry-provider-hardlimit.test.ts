@@ -145,6 +145,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // No overflow error thrown — the capped cushion prevents the needless
       // error that the user saw in the issue (tokensStillNeeded=202, reduced 0)
       expect(result).toContainEqual(pending);
+      expect(harness.deps.performCompression).toHaveBeenCalledOnce();
     });
 
     it('still triggers compression when projected exceeds the capped cushion limit', async () => {

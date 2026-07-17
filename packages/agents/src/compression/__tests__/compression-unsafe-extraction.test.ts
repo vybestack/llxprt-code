@@ -79,7 +79,7 @@ function buildEnforcerHarness(
  * overflow/compression path.
  *
  * With contextLimit=200_000 and the default completion budget (65_536):
- *   compressionThreshold = min(199_995, 0.8 * 134_464 + 65_536) = 172_107
+ *   compressionThreshold = min(199_995, 0.8 * 134_464 + 65_536) = 173_107.2
  *   marginAdjustedLimit   = min(200_000, floor(199_000 + 199_000*0.005)) = 199_995
  *   initialProjected      = OVERFLOW_TOKENS + 65_536 = 200_536 > 199_995
  */
