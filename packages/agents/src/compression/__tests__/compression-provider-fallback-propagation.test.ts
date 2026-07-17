@@ -39,6 +39,11 @@ import * as compressionFactory from '../compressionStrategyFactory.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type {
+  CompressionProviderResult,
+  CompressionStrategy,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 
@@ -81,16 +86,16 @@ describe('Finding 1: provider fallback failure propagation through real Compress
       compressionThreshold: 0.8,
     });
 
+    const provider = {
+      name: 'test',
+      generateChatCompletion: vi.fn(),
+    } as unknown as RuntimeProvider;
+    const providerResult: CompressionProviderResult = { provider };
     handler = new CompressionHandler(
       runtimeContext,
       historyService,
       {},
-      vi.fn().mockResolvedValue({
-        provider: {
-          name: 'test',
-          generateChatCompletion: vi.fn(),
-        } as never,
-      }),
+      vi.fn().mockResolvedValue(providerResult),
       vi.fn().mockResolvedValue(undefined),
     );
   });
@@ -121,14 +126,17 @@ describe('Finding 1: provider fallback failure propagation through real Compress
       PerformCompressionResult.COMPRESSED,
     );
 
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
+    const strategy: CompressionStrategy = {
       name: 'top-down-truncation',
       requiresLLM: false,
       trigger: { mode: 'threshold', defaultThreshold: 0.8 },
       compress: vi
         .fn()
         .mockRejectedValue(new Error('truncation engine blew up')),
-    } as never);
+    };
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue(
+      strategy,
+    );
 
     let thrownError: Error | undefined;
     try {
@@ -227,16 +235,23 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     );
 
     const fallbackHistory = [makeUserMessage('truncated summary')];
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
+    const strategy: CompressionStrategy = {
       name: 'top-down-truncation',
       requiresLLM: false,
       trigger: { mode: 'threshold', defaultThreshold: 0.8 },
       compress: vi.fn().mockResolvedValue({
         newHistory: fallbackHistory,
-        strategy: 'top-down-truncation',
-        summary: undefined,
+        metadata: {
+          originalMessageCount: 1,
+          compressedMessageCount: 1,
+          strategyUsed: 'top-down-truncation',
+          llmCallMade: false,
+        },
       }),
-    } as never);
+    };
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue(
+      strategy,
+    );
 
     const result = await handler.enforceProviderContents(
       envelope,
@@ -340,7 +355,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
 
     expect(thrownError).toBeInstanceOf(Error);
     expect(thrownError!.message).toContain('estimation infrastructure down');
-    expect(thrownError!.message.toLowerCase()).toContain('compression');
+    expect(thrownError!.message).toContain('post-compression stage');
   });
 
   /**

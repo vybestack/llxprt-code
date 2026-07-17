@@ -370,6 +370,7 @@ export class ProviderContentEnforcer {
     if (retryResult.compressionFailure !== undefined) {
       const retryError = new Error(
         `Additional hard-limit compression attempt failed: ${retryResult.compressionFailure.message}`,
+        { cause: retryResult.compressionFailure },
       );
       this.deps.logger.warn(
         () =>
@@ -603,9 +604,10 @@ export class ProviderContentEnforcer {
         );
       return requestTokens + completionBudget;
     } catch (error) {
-      const cause = error instanceof Error ? error.message : String(error);
+      const projectionError = this.normalizeError(error);
       throw new Error(
-        `Token projection failed at ${stage} stage during provider-content hard-limit enforcement: ${cause}`,
+        `Token projection failed at ${stage} stage during provider-content hard-limit enforcement: ${projectionError.message}`,
+        { cause: projectionError },
       );
     }
   }
