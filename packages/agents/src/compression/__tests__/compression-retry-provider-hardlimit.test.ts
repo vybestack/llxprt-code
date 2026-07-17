@@ -277,8 +277,6 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // Truncation fits
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
-          historyService.clear();
-          historyService.add(makeUserMessage('truncated history'));
           estimateSpy.mockResolvedValue(50_000); // fits
           applyResult([makeUserMessage('truncated history')]);
           return true;
@@ -583,8 +581,6 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
       // Truncation fits so we observe the final return value.
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
-          historyService.clear();
-          historyService.add(makeUserMessage('truncated history'));
           estimateSpy.mockResolvedValue(50_000);
           applyResult([makeUserMessage('truncated history')]);
           return true;
@@ -628,8 +624,6 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       harness.deps.performFallbackCompression.mockImplementation(
         async (_promptId, applyResult) => {
-          historyService.clear();
-          historyService.add(makeUserMessage('truncated history'));
           estimateSpy.mockResolvedValue(50_000);
           applyResult([makeUserMessage('truncated history')]);
           return true;

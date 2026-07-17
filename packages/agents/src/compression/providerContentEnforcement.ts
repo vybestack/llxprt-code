@@ -483,29 +483,43 @@ export class ProviderContentEnforcer {
     };
   }
 
-  private async projectSuccess(
+  private projectSuccess(
     pendingContents: IContent[],
     completionBudget: number,
     model: string,
     stage: string,
   ): Promise<ProjectionResult> {
-    const contents = this.recomposeProviderContents(pendingContents);
-    const projected = await this.estimateProviderProjection(
-      contents,
+    return this.projectContents(
+      pendingContents,
       completionBudget,
       model,
       stage,
     );
-    return { contents, projected };
   }
 
-  private async projectWithFailure(
+  private projectWithFailure(
     pendingContents: IContent[],
     completionBudget: number,
     model: string,
     compressionFailure: Error,
     stage: string,
   ): Promise<ProjectionResult> {
+    return this.projectContents(
+      pendingContents,
+      completionBudget,
+      model,
+      stage,
+      compressionFailure,
+    );
+  }
+
+  private async projectContents(
+    pendingContents: IContent[],
+    completionBudget: number,
+    model: string,
+    stage: string,
+    compressionFailure?: Error,
+  ): Promise<ProjectionResult> {
     const contents = this.recomposeProviderContents(pendingContents);
     const projected = await this.estimateProviderProjection(
       contents,
@@ -513,7 +527,9 @@ export class ProviderContentEnforcer {
       model,
       stage,
     );
-    return { contents, projected, compressionFailure };
+    return compressionFailure === undefined
+      ? { contents, projected }
+      : { contents, projected, compressionFailure };
   }
 
   private restoreHistory(history: IContent[]): void {
