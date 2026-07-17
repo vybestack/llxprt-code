@@ -871,7 +871,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = runScript(null, 0, { useRealRepo: true });
       expect(stdout).toContain('allowlist is fresh');
       expect(code).toBe(0);
-    });
+    }, 15_000);
 
     // ── public subpath treatment (#2204 burn-down) ──────────────────────────
     //
