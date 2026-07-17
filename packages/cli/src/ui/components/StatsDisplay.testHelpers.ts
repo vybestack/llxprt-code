@@ -120,8 +120,8 @@ export const defaultZeroMetrics = (): SessionMetrics => ({
 
 /**
  * Builds a fully-typed RuntimeApi mock with every method stubbed as a vi.fn().
- * Overrides allow per-test customization of specific methods without the need
- * for unsafe `as unknown as ReturnType<...>` double assertions.
+ * Overrides allow per-test customization without repeating incomplete runtime
+ * objects throughout the test suite.
  *
  * Usage:
  *   const api = createMockRuntimeApi({
@@ -195,5 +195,5 @@ export function createMockRuntimeApi(
     })),
     ...overrides,
   };
-  return stubs as unknown as RuntimeApi;
+  return stubs as RuntimeApi;
 }
