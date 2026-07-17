@@ -369,10 +369,8 @@ jobs:
 
           BYTE_COUNT="$(wc -c < "${SMOKE_OUTPUT_FILE}" | tr -d '[:space:]')"
           if [[ "${BYTE_COUNT}" -gt "${MAX_OUTPUT_BYTES}" ]]; then
-            head -c "${HEAD_BYTES}" "${SMOKE_OUTPUT_FILE}" > "${TRIMMED_OUTPUT_FILE}"
-            printf '\n[output truncated: original output was %s bytes; showing first and final %s bytes]\n' \
-              "${BYTE_COUNT}" "${HEAD_BYTES}" >> "${TRIMMED_OUTPUT_FILE}"
-            tail -c "${TAIL_BYTES}" "${SMOKE_OUTPUT_FILE}" >> "${TRIMMED_OUTPUT_FILE}"
+            node -e "const fs=require('fs');const b=fs.readFileSync(process.argv[1]);const hn=Number(process.argv[3]);const tn=Number(process.argv[4]);const h=b.subarray(0,hn).toString('utf8');const t=b.subarray(-tn).toString('utf8');fs.writeFileSync(process.argv[2],h+'\\n[output truncated: original output was '+b.length+' bytes; showing first '+hn+' and final '+tn+' bytes]\\n'+t)" \
+              "${SMOKE_OUTPUT_FILE}" "${TRIMMED_OUTPUT_FILE}" "${HEAD_BYTES}" "${TAIL_BYTES}"
           else
             cp "${SMOKE_OUTPUT_FILE}" "${TRIMMED_OUTPUT_FILE}"
           fi

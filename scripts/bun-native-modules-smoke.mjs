@@ -44,7 +44,7 @@ if (!isPosix) {
 if (!isWindows) {
   skippedChecks += 1;
   console.log(
-    '[SKIP] @lydell/node-pty ConPTY check is Windows-only; native module checks still run on POSIX.',
+    '[SKIP] @lydell/node-pty ConPTY check is Windows-only; other native-module checks still run on POSIX.',
   );
 }
 
@@ -316,4 +316,3 @@ if (skippedChecks > 0) {
 } else {
   console.log('\nAll native-module smoke checks passed under Bun.');
 }
-process.exit(0);
