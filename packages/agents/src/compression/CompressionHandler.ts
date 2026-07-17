@@ -815,13 +815,17 @@ export class CompressionHandler {
       // Both strategies failed — track the failure
       this.compressionFailureCount++;
       this.lastCompressionFailureTime = Date.now();
+      if (!swallowErrors) {
+        this.logger.error(
+          'Provider truncation fallback failed during hard-limit enforcement',
+          { primaryError, fallbackError },
+        );
+        throw fallbackError;
+      }
       this.logger.error(
         'Fallback compression also failed — continuing without compression',
         { primaryError, fallbackError },
       );
-      if (!swallowErrors) {
-        throw fallbackError;
-      }
       return false;
     }
   }
