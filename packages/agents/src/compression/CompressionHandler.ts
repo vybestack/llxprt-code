@@ -820,7 +820,18 @@ export class CompressionHandler {
           'Provider truncation fallback failed during hard-limit enforcement',
           { primaryError, fallbackError },
         );
-        throw fallbackError;
+        const primaryMessage =
+          primaryError instanceof Error
+            ? primaryError.message
+            : String(primaryError);
+        const fallbackMessage =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : String(fallbackError);
+        throw new AggregateError(
+          [primaryError, fallbackError],
+          `Provider truncation fallback failed during hard-limit enforcement. Primary failure: ${primaryMessage}. Fallback failure: ${fallbackMessage}`,
+        );
       }
       this.logger.error(
         'Fallback compression also failed — continuing without compression',
