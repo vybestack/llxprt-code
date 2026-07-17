@@ -52,6 +52,12 @@ import {
   getCompletionBudget,
 } from './compressionBudgeting.js';
 import { ProviderContentEnforcer } from './providerContentEnforcement.js';
+import {
+  TOKEN_SAFETY_MARGIN,
+  CONTEXT_LIMIT_FUDGE_FACTOR,
+  INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
+  computeMarginAdjustedLimit,
+} from './contextLimitPolicy.js';
 
 /**
  * CompressionHandler orchestrates all compression logic for ChatSession.
@@ -61,18 +67,13 @@ import { ProviderContentEnforcer } from './providerContentEnforcement.js';
  * @requirement Module 3 specification
  */
 export class CompressionHandler {
-  static readonly TOKEN_SAFETY_MARGIN = 1000;
-  /**
-   * Estimation cushion (0.5%) applied on top of TOKEN_SAFETY_MARGIN so that
-   * marginally-over requests (e.g. a few tokens) are allowed through instead of
-   * blocking the turn. Interim solution for #2067; a targeted truncation
-   * strategy is planned for a future release.
-   */
-  static readonly CONTEXT_LIMIT_FUDGE_FACTOR = 0.005;
+  static readonly TOKEN_SAFETY_MARGIN = TOKEN_SAFETY_MARGIN;
+  static readonly CONTEXT_LIMIT_FUDGE_FACTOR = CONTEXT_LIMIT_FUDGE_FACTOR;
   static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   static readonly COMPRESSION_COOLDOWN_MS = 60_000;
   static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
-  static readonly INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
+  static readonly INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD =
+    INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD;
   static readonly RECENT_COMPRESSION_WINDOW_MS =
     CompressionHandler.COMPRESSION_COOLDOWN_MS;
 
@@ -399,17 +400,7 @@ export class CompressionHandler {
     );
     const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
     const limit = tokenLimit(this.runtimeContext.state.model, userContextLimit);
-    const safetyAdjustedLimit = Math.max(
-      0,
-      limit - CompressionHandler.TOKEN_SAFETY_MARGIN,
-    );
-    const marginAdjustedLimit = Math.min(
-      limit,
-      Math.floor(
-        safetyAdjustedLimit +
-          safetyAdjustedLimit * CompressionHandler.CONTEXT_LIMIT_FUDGE_FACTOR,
-      ),
-    );
+    const marginAdjustedLimit = computeMarginAdjustedLimit(limit);
     return { completionBudget, limit, marginAdjustedLimit };
   }
 
@@ -521,14 +512,8 @@ export class CompressionHandler {
             context,
             new Error('Provider content fallback truncation triggered'),
             applyAndResetPromptCount,
+            { swallowErrors: false },
           );
-        } catch (error) {
-          this.logger.warn(
-            () =>
-              '[CompressionHandler] Provider truncation fallback failed during hard-limit enforcement',
-            error,
-          );
-          return false;
         } finally {
           this.popSuppressDensityDirty();
         }
@@ -574,7 +559,7 @@ export class CompressionHandler {
       historyService: this.historyService,
       logger: this.logger,
       ineffectiveCompressionReductionThreshold:
-        CompressionHandler.INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
+        INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
       getContextLimits: (activeProvider) =>
         this.computeContextLimits(activeProvider),
       computeProjectedTokens: (tokens, completionBudget) =>
@@ -804,12 +789,19 @@ export class CompressionHandler {
    *
    * @plan PLAN-20260218-COMPRESSION-RETRY.P01
    * @requirement REQ-CR-004-005
+   *
+   * When `swallowErrors` is true (default), errors are caught and false is
+   * returned to avoid blocking the conversation turn. When false (provider
+   * hard-limit enforcement), errors propagate so the enforcer can capture
+   * them as truncationFailure for actionable overflow diagnostics.
    */
   private async performFallbackCompression(
     context: CompressionContext,
     primaryError: unknown,
     applyResult: (newHistory: IContent[]) => void,
+    options?: { swallowErrors?: boolean },
   ): Promise<boolean> {
+    const swallowErrors = options?.swallowErrors ?? true;
     try {
       // Use the strategy factory so tests can intercept
       const result = await this.compressWithFallbackStrategy(context);
@@ -819,14 +811,16 @@ export class CompressionHandler {
       );
       return true;
     } catch (fallbackError) {
-      // Both strategies failed — track the failure and continue without compression
+      // Both strategies failed — track the failure
       this.compressionFailureCount++;
       this.lastCompressionFailureTime = Date.now();
       this.logger.error(
         'Fallback compression also failed — continuing without compression',
         { primaryError, fallbackError },
       );
-      // Swallow error to avoid blocking the conversation turn
+      if (!swallowErrors) {
+        throw fallbackError;
+      }
       return false;
     }
   }

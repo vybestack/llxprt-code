@@ -79,11 +79,11 @@ function buildEnforcerHarness(
  * overflow/compression path.
  *
  * With contextLimit=200_000 and the default completion budget (65_536):
- *   compressionThreshold = min(199_000, 0.8 * 134_464 + 65_536) = 172_107
- *   marginAdjustedLimit   = 199_000
- *   initialProjected      = OVERFLOW_TOKENS + 65_536 = 199_536 > 199_000
+ *   compressionThreshold = min(199_995, 0.8 * 134_464 + 65_536) = 172_107
+ *   marginAdjustedLimit   = min(200_000, floor(199_000 + 199_000*0.005)) = 199_995
+ *   initialProjected      = OVERFLOW_TOKENS + 65_536 = 200_536 > 199_995
  */
-const OVERFLOW_TOKENS = 134_000;
+const OVERFLOW_TOKENS = 135_000;
 
 describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () => {
   let historyService: HistoryService;
