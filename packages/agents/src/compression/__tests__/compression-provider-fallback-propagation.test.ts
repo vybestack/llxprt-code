@@ -1,7 +1,7 @@
 /**
  * @license
  * Copyright 2025 Vybestack LLC
- * SPDX-License: Apache-2.0
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Behavioral tests for CompressionHandler provider fallback failure
  * propagation and stage-aware projection errors (Issue #2588 findings).
@@ -184,8 +184,14 @@ describe('Finding 1: provider fallback failure propagation through real Compress
   });
 
   /**
-   * When the fallback strategy succeeds, the normal happy path should work
-   * (no regression).
+   * When the fallback strategy succeeds, the normal happy path should work.
+   *
+   * The projections are scripted so that the real fallback stage is provably
+   * reached: initial, post-density, post-first-compression, and post-retry
+   * projections are all over-limit, and only the post-truncation projection
+   * fits. This ensures the test exercises the actual fallback path rather
+   * than returning early from an earlier stage. The returned contents must
+   * contain the truncated summary and preserve the pending message.
    */
   it('still succeeds when fallback truncation works correctly', async () => {
     historyService.add(makeUserMessage('established history'));
@@ -196,32 +202,57 @@ describe('Finding 1: provider fallback failure propagation through real Compress
       pendingContents: [pending],
     };
 
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(150_000);
+    // contextLimit = 200_000, completionBudget = 65_536
+    // marginAdjustedLimit = 199_995 → over-limit when projected > 199_995
+    // estimate + 65_536 > 199_995 → estimate > 134_459
+    const OVER_LIMIT_ESTIMATE = 150_000; // 150_000 + 65_536 = 215_536 > 199_995
+    const TRUNCATED_SUMMARY_ESTIMATE = 50_000; // 50_000 + 65_536 = 115_536 < 199_995
+
+    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
+    // 1. Initial projection — over-limit
+    estimateSpy.mockResolvedValueOnce(OVER_LIMIT_ESTIMATE);
+    // 2. Post-density-optimization — over-limit
+    estimateSpy.mockResolvedValueOnce(OVER_LIMIT_ESTIMATE);
+    // 3. Post-first-compression — still over-limit, but effective enough to
+    //    avoid retry (reduction >= 5% of pre-compression projection).
+    //    pre-compression projected = 215_536, need reduction >= ~10_777,
+    //    so post-compression estimate <= 139_223 keeps ratio >= 5%.
+    //    135_000 + 65_536 = 200_536 > 199_995 (still over margin limit).
+    estimateSpy.mockResolvedValueOnce(135_000);
+    // 4. Post-truncation — under-limit (fallback succeeded)
+    estimateSpy.mockResolvedValueOnce(TRUNCATED_SUMMARY_ESTIMATE);
 
     vi.spyOn(handler, 'performCompression').mockResolvedValue(
       PerformCompressionResult.COMPRESSED,
     );
 
+    const fallbackHistory = [makeUserMessage('truncated summary')];
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
       name: 'top-down-truncation',
       requiresLLM: false,
       trigger: { mode: 'threshold', defaultThreshold: 0.8 },
       compress: vi.fn().mockResolvedValue({
-        newHistory: [makeUserMessage('truncated summary')],
+        newHistory: fallbackHistory,
         strategy: 'top-down-truncation',
         summary: undefined,
       }),
     } as never);
-
-    estimateSpy.mockResolvedValue(50_000);
 
     const result = await handler.enforceProviderContents(
       envelope,
       'test-prompt',
     );
 
+    // The truncated summary content must appear in the returned provider
+    // contents, proving the fallback path applied its result.
+    const resultText = result
+      .flatMap((c) => c.blocks)
+      .filter((b) => b.type === 'text')
+      .map((b) => (b as { text: string }).text)
+      .join(' ');
+    expect(resultText).toContain('truncated summary');
+
+    // The pending request must be preserved in the returned contents.
     expect(result).toContainEqual(pending);
   });
 });
@@ -437,5 +468,61 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
     expect(thrownError).toBeInstanceOf(Error);
     expect(thrownError!.message).toContain('estimation infrastructure down');
     expect(thrownError!.message.toLowerCase()).toContain('projection');
+  });
+
+  /**
+   * Finding 4 (CodeRabbit PR #2598): Projection rejection must not be caught
+   * as a compression failure.
+   *
+   * When the first post-compression projection rejects, the stage-aware
+   * projection error must propagate directly — not be caught by the
+   * compression try/catch and re-projected as a compression failure. If the
+   * second estimate would succeed, enforcement must NOT proceed to truncation
+   * or fallback; it must surface the original projection error.
+   */
+  it('throws the stage-aware projection error when post-compression projection rejects, even if a subsequent estimate would succeed (CodeRabbit PR #2598)', async () => {
+    historyService.add(makeUserMessage('established history'));
+    const pending = makeUserMessage('pending request');
+    const contents: IContent[] = historyService.getCuratedForProvider([
+      pending,
+    ]);
+    const envelope: ProviderContentEnvelope = {
+      contents,
+      pendingContents: [pending],
+    };
+
+    const harness = buildEnforcerHarness();
+    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
+
+    // 1. Initial — over-limit (succeeds)
+    estimateSpy.mockResolvedValueOnce(200_000);
+    // 2. Post-density — over-limit (succeeds)
+    estimateSpy.mockResolvedValueOnce(200_000);
+    // 3. Post-first-compression — REJECTS with a specific stage error
+    estimateSpy.mockRejectedValueOnce(
+      new Error('estimation infrastructure down'),
+    );
+    // 4+. Any subsequent call would succeed (never reached)
+    estimateSpy.mockResolvedValueOnce(50_000);
+
+    harness.deps.performCompression.mockResolvedValue(
+      PerformCompressionResult.COMPRESSED,
+    );
+
+    let thrownError: Error | undefined;
+    try {
+      await harness.enforcer.enforce(envelope, 'test-prompt');
+    } catch (error) {
+      thrownError = error as Error;
+    }
+
+    // The original stage-aware projection error must propagate directly.
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError!.message).toContain('estimation infrastructure down');
+    expect(thrownError!.message.toLowerCase()).toContain('post-compression');
+
+    // Fallback must NOT be reached — the projection error surfaced before
+    // truncation.
+    expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
   });
 });

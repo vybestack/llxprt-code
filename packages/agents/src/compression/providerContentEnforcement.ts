@@ -61,6 +61,7 @@ interface OverflowReductionResult {
   projected: number;
   compressionFailure?: Error;
   truncationFailure?: Error;
+  truncationApplied: boolean;
 }
 
 export class ProviderContentEnforcer {
@@ -73,77 +74,126 @@ export class ProviderContentEnforcer {
   ): Promise<IContent[]> {
     await this.deps.historyService.waitForTokenUpdates();
     const model = this.resolveModel(provider);
-    const {
-      completionBudget,
-      limit,
-      marginAdjustedLimit,
-      compressionThreshold,
-    } = this.computeContextLimits(provider, model);
+    const limits = this.computeContextLimits(provider, model);
     const initialProjected = await this.estimateProviderProjection(
       envelope.contents,
-      completionBudget,
+      limits.completionBudget,
       model,
       'initial',
     );
 
-    if (initialProjected <= compressionThreshold) {
-      return envelope.contents;
+    const earlyReturn = this.checkEarlyReturn(
+      envelope,
+      limits,
+      initialProjected,
+    );
+    if (earlyReturn !== undefined) {
+      return earlyReturn;
     }
-
     if (envelope.pendingContents === undefined) {
-      if (initialProjected <= marginAdjustedLimit) {
-        return envelope.contents;
-      }
       throw this.buildUnrecoverableBoundaryError(
         initialProjected,
-        marginAdjustedLimit,
+        limits.marginAdjustedLimit,
       );
     }
 
     const postOpt = await this.optimizeAndProject(
       envelope.pendingContents,
-      completionBudget,
+      limits.completionBudget,
       model,
     );
-    if (postOpt.projected <= compressionThreshold) {
+    if (postOpt.projected <= limits.compressionThreshold) {
       return postOpt.contents;
     }
 
     const firstResult = await this.runCompressionAndRecompose(
       promptId,
       envelope.pendingContents,
-      completionBudget,
+      limits.completionBudget,
       model,
     );
-    if (firstResult.projected <= marginAdjustedLimit) {
+    if (firstResult.projected <= limits.marginAdjustedLimit) {
       return firstResult.contents;
     }
 
     const retryResult = await this.retryCompressionIfIneffective(
       promptId,
       envelope.pendingContents,
-      completionBudget,
+      limits.completionBudget,
       model,
-      marginAdjustedLimit,
+      limits.marginAdjustedLimit,
       postOpt.projected,
       firstResult,
     );
-    if (retryResult.projected <= marginAdjustedLimit) {
+    if (retryResult.projected <= limits.marginAdjustedLimit) {
       return retryResult.contents;
     }
 
-    const truncationResult = await this.forceTruncation(
+    return this.enforceTruncation(
       promptId,
       envelope.pendingContents,
-      completionBudget,
+      limits,
       model,
+      initialProjected,
       retryResult.compressionFailure,
     );
-    if (truncationResult.projected <= marginAdjustedLimit) {
+  }
+
+  private checkEarlyReturn(
+    envelope: ProviderContentEnvelope,
+    limits: ContextLimits,
+    initialProjected: number,
+  ): IContent[] | undefined {
+    if (initialProjected <= limits.compressionThreshold) {
+      return envelope.contents;
+    }
+    if (
+      envelope.pendingContents === undefined &&
+      initialProjected <= limits.marginAdjustedLimit
+    ) {
+      return envelope.contents;
+    }
+    return undefined;
+  }
+
+  private async enforceTruncation(
+    promptId: string,
+    pendingContents: IContent[],
+    limits: ContextLimits,
+    model: string,
+    initialProjected: number,
+    compressionFailure: Error | undefined,
+  ): Promise<IContent[]> {
+    const truncationResult = await this.forceTruncation(
+      promptId,
+      pendingContents,
+      limits.completionBudget,
+      model,
+      compressionFailure,
+    );
+    if (
+      truncationResult.truncationApplied &&
+      truncationResult.projected <= limits.marginAdjustedLimit
+    ) {
       return truncationResult.contents;
     }
+    throw this.buildOverflowError(
+      limits.limit,
+      limits.completionBudget,
+      limits.marginAdjustedLimit,
+      initialProjected,
+      truncationResult,
+    );
+  }
 
-    throw buildContextOverflowError({
+  private buildOverflowError(
+    limit: number,
+    completionBudget: number,
+    marginAdjustedLimit: number,
+    initialProjected: number,
+    truncationResult: OverflowReductionResult,
+  ): Error {
+    return buildContextOverflowError({
       limit,
       initialProjected,
       finalProjected: truncationResult.projected,
@@ -231,40 +281,29 @@ export class ProviderContentEnforcer {
     model: string,
     stage: string = 'post-compression',
   ): Promise<ProjectionResult> {
+    // The try/catch covers ONLY performCompression, the token-update wait,
+    // and compression-result handling. Projection calls (projectSuccess /
+    // projectWithFailure) are executed OUTSIDE the catch so that a projection
+    // rejection surfaces as a stage-aware error rather than being swallowed
+    // and re-projected as a compression failure.
+    let compressionResult: PerformCompressionResult;
+    let compressionError: Error | undefined;
     try {
-      const result = await this.deps.performCompression(promptId, {
+      compressionResult = await this.deps.performCompression(promptId, {
         bypassCooldown: true,
         trigger: 'auto',
       });
       await this.deps.historyService.waitForTokenUpdates();
-      if (result !== PerformCompressionResult.COMPRESSED) {
-        this.deps.logger.debug(
-          () =>
-            `[CompressionHandler] Provider-content compression finished without COMPRESSED result: ${result}`,
-        );
-        return await this.projectWithFailure(
-          pendingContents,
-          completionBudget,
-          model,
-          new Error(
-            `Auto compression did not complete during hard-limit enforcement (result: ${result})`,
-          ),
-          stage,
-        );
-      }
-      return await this.projectSuccess(
-        pendingContents,
-        completionBudget,
-        model,
-        stage,
-      );
     } catch (error) {
-      const compressionError = this.normalizeError(error);
+      compressionResult = PerformCompressionResult.FAILED;
+      compressionError = this.normalizeError(error);
       this.deps.logger.warn(
         () =>
           '[CompressionHandler] Auto compression failed during hard-limit enforcement',
         compressionError,
       );
+    }
+    if (compressionError !== undefined) {
       return this.projectWithFailure(
         pendingContents,
         completionBudget,
@@ -273,6 +312,22 @@ export class ProviderContentEnforcer {
         stage,
       );
     }
+    if (compressionResult !== PerformCompressionResult.COMPRESSED) {
+      this.deps.logger.debug(
+        () =>
+          `[CompressionHandler] Provider-content compression finished without COMPRESSED result: ${compressionResult}`,
+      );
+      return this.projectWithFailure(
+        pendingContents,
+        completionBudget,
+        model,
+        new Error(
+          `Auto compression did not complete during hard-limit enforcement (result: ${compressionResult})`,
+        ),
+        stage,
+      );
+    }
+    return this.projectSuccess(pendingContents, completionBudget, model, stage);
   }
 
   private async retryCompressionIfIneffective(
@@ -337,6 +392,38 @@ export class ProviderContentEnforcer {
     model: string,
     compressionFailure: Error | undefined,
   ): Promise<OverflowReductionResult> {
+    const fallbackOutcome = await this.executeFallbackTruncation(promptId);
+    await this.deps.historyService.waitForTokenUpdates();
+    const contents = this.recomposeProviderContents(pendingContents);
+    const projected = await this.estimateProviderProjection(
+      contents,
+      completionBudget,
+      model,
+      'post-truncation',
+    );
+    const result: OverflowReductionResult = {
+      contents,
+      projected,
+      truncationApplied: fallbackOutcome.truncationApplied,
+    };
+    if (compressionFailure !== undefined) {
+      result.compressionFailure = compressionFailure;
+    }
+    if (fallbackOutcome.truncationFailure !== undefined) {
+      result.truncationFailure = fallbackOutcome.truncationFailure;
+    }
+    return result;
+  }
+
+  /**
+   * Executes the fallback truncation strategy and manages history restoration.
+   * Truncation is only considered successfully applied when the fallback
+   * reported success AND history was restored into historyService.
+   */
+  private async executeFallbackTruncation(promptId: string): Promise<{
+    truncationApplied: boolean;
+    truncationFailure?: Error;
+  }> {
     const originalHistory = this.deps.historyService.getCurated();
     const fallbackState = { historyRestored: false };
     let truncationFailure: Error | undefined;
@@ -376,7 +463,7 @@ export class ProviderContentEnforcer {
         () =>
           '[CompressionHandler] Fallback compression returned false; restoring original history',
       );
-      this.tryRestoreHistory(
+      fallbackState.historyRestored = this.tryRestoreHistory(
         originalHistory,
         '[CompressionHandler] Failed to restore history after fallback returned false',
       );
@@ -385,27 +472,15 @@ export class ProviderContentEnforcer {
         () =>
           '[CompressionHandler] Fallback compression succeeded without applying history; restoring original history',
       );
-      this.tryRestoreHistory(
+      fallbackState.historyRestored = this.tryRestoreHistory(
         originalHistory,
         '[CompressionHandler] Failed to restore history after fallback succeeded without applying history',
       );
     }
-    await this.deps.historyService.waitForTokenUpdates();
-    const contents = this.recomposeProviderContents(pendingContents);
-    const projected = await this.estimateProviderProjection(
-      contents,
-      completionBudget,
-      model,
-      'post-truncation',
-    );
-    const result: OverflowReductionResult = { contents, projected };
-    if (compressionFailure !== undefined) {
-      result.compressionFailure = compressionFailure;
-    }
-    if (truncationFailure !== undefined) {
-      result.truncationFailure = truncationFailure;
-    }
-    return result;
+    return {
+      truncationApplied: fallbackSucceeded && fallbackState.historyRestored,
+      truncationFailure,
+    };
   }
 
   private async projectSuccess(
