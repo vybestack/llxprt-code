@@ -14,6 +14,15 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const execFileAsync = promisify(execFile);
+const HARNESS_TIMEOUT_MS = 60_000;
+const TEST_TIMEOUT_MS = 70_000;
+
+function collectProcessDiagnostics(error) {
+  return [error.stdout, error.stderr]
+    .filter((output) => typeof output === 'string' && output.trim())
+    .join('\n')
+    .trim();
+}
 
 function stepNamed(job, name) {
   expect(
@@ -143,17 +152,57 @@ describe('nightly Windows Bun native-module smoke', () => {
 });
 
 describe('Bun native-module smoke harness', () => {
-  it('passes its real checks for the current platform', async () => {
-    const { stdout } = await execFileAsync(
-      'bun',
-      ['scripts/bun-native-modules-smoke.mjs'],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-        timeout: 60_000,
-      },
-    );
+  it(
+    'passes its real checks for the current platform',
+    async () => {
+      let stdout;
+      try {
+        ({ stdout } = await execFileAsync(
+          'bun',
+          ['scripts/bun-native-modules-smoke.mjs'],
+          {
+            cwd: ROOT,
+            encoding: 'utf8',
+            signal: AbortSignal.timeout(HARNESS_TIMEOUT_MS),
+          },
+        ));
+      } catch (error) {
+        if (error && typeof error === 'object') {
+          if (error.code === 'ENOENT') {
+            throw new Error(
+              'Bun is required to run the native-module smoke harness; install the version pinned in .bun-version and ensure bun is on PATH.',
+              { cause: error },
+            );
+          }
+          const diagnostics = collectProcessDiagnostics(error);
+          if (error.code === 'ABORT_ERR' && error.name === 'AbortError') {
+            throw new Error(
+              `Bun native-module smoke harness exceeded its ${HARNESS_TIMEOUT_MS}ms subprocess timeout${diagnostics ? `:\n${diagnostics}` : '.'}`,
+              { cause: error },
+            );
+          }
+          if (typeof error.code === 'number') {
+            throw new Error(
+              `Bun native-module smoke harness failed with exit code ${error.code}${diagnostics ? `:\n${diagnostics}` : '.'}`,
+              { cause: error },
+            );
+          }
+          const detail =
+            typeof error.message === 'string' && error.message.trim()
+              ? error.message.trim()
+              : `system error ${String(error.code)}`;
+          throw new Error(
+            `Bun native-module smoke harness could not execute: ${detail}${diagnostics ? `\n${diagnostics}` : ''}`,
+            { cause: error },
+          );
+        }
+        throw error;
+      }
 
-    expect(stdout).toContain('All native-module smoke checks passed under Bun');
-  }, 70_000);
+      expect(stdout).toContain(
+        'All native-module smoke checks passed under Bun',
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

@@ -161,13 +161,17 @@ async function checkNodePty() {
     return;
   }
   let ptyProcess;
+  let exitPromise;
   let didExit = false;
   try {
     const nodePty = await import('@lydell/node-pty');
     const spawn = nodePty.default?.spawn ?? nodePty.spawn;
+    if (typeof spawn !== 'function') {
+      throw new Error('@lydell/node-pty is missing its spawn() export');
+    }
 
     let output = '';
-    const exitPromise = createExitPromise(NODE_PTY_TIMEOUT_MS);
+    exitPromise = createExitPromise(NODE_PTY_TIMEOUT_MS);
 
     ptyProcess = spawn(
       process.env.COMSPEC ?? 'cmd.exe',
@@ -181,6 +185,11 @@ async function checkNodePty() {
 
     if (typeof ptyProcess.pid !== 'number' || ptyProcess.pid <= 0) {
       throw new Error(`invalid pid: ${ptyProcess.pid}`);
+    }
+    for (const methodName of ['onData', 'onExit', 'kill']) {
+      if (typeof ptyProcess[methodName] !== 'function') {
+        throw new Error(`@lydell/node-pty process is missing ${methodName}()`);
+      }
     }
 
     ptyProcess.onData((data) => {
@@ -212,6 +221,7 @@ async function checkNodePty() {
   } catch (e) {
     fail('@lydell/node-pty ConPTY', e);
   } finally {
+    exitPromise?.resolve(null);
     if (ptyProcess && !didExit) {
       try {
         ptyProcess.kill();
