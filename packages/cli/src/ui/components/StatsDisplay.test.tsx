@@ -10,6 +10,7 @@ import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
 import {
+  createMockRuntimeApi,
   defaultZeroMetrics,
   withTokenTracking,
   type TestMetricsInput,
@@ -55,22 +56,7 @@ const renderWithMockedStats = (metrics: TestMetricsInput) => {
   });
 
   // Mock RuntimeContext to provide default provider metrics
-  useRuntimeApiMock.mockReturnValue({
-    getActiveProviderMetrics: vi.fn().mockReturnValue({
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      totalTokens: 0,
-      totalRequests: 0,
-    }),
-    getSessionTokenUsage: vi.fn().mockReturnValue({
-      input: 0,
-      output: 0,
-      cache: 0,
-      tool: 0,
-      thought: 0,
-      total: 0,
-    }),
-  } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
+  useRuntimeApiMock.mockReturnValue(createMockRuntimeApi());
 
   return render(<StatsDisplay duration="1s" />);
 };
@@ -79,7 +65,7 @@ const defaultStatsReturnValue = {
   stats: {
     sessionId: 'test-session-id',
     sessionStartTime: new Date(),
-    metrics: defaultZeroMetrics,
+    metrics: defaultZeroMetrics(),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 5,
@@ -96,22 +82,7 @@ describe('<StatsDisplay />', () => {
 
     useSessionStatsMock.mockReturnValue(defaultStatsReturnValue);
 
-    useRuntimeApiMock.mockReturnValue({
-      getActiveProviderMetrics: vi.fn().mockReturnValue({
-        tokensPerMinute: 0,
-        throttleWaitTimeMs: 0,
-        totalTokens: 0,
-        totalRequests: 0,
-      }),
-      getSessionTokenUsage: vi.fn().mockReturnValue({
-        input: 0,
-        output: 0,
-        cache: 0,
-        tool: 0,
-        thought: 0,
-        total: 0,
-      }),
-    } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
+    useRuntimeApiMock.mockReturnValue(createMockRuntimeApi());
   });
 
   it('renders only the Performance section in its zero state', () => {

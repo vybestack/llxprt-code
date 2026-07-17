@@ -10,6 +10,7 @@ import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
 import {
+  createMockRuntimeApi,
   defaultTokenTracking,
   defaultTiming,
   defaultZeroMetrics,
@@ -57,22 +58,7 @@ const renderWithMockedStats = (metrics: TestMetricsInput) => {
   });
 
   // Mock RuntimeContext to provide default provider metrics
-  useRuntimeApiMock.mockReturnValue({
-    getActiveProviderMetrics: vi.fn().mockReturnValue({
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      totalTokens: 0,
-      totalRequests: 0,
-    }),
-    getSessionTokenUsage: vi.fn().mockReturnValue({
-      input: 0,
-      output: 0,
-      cache: 0,
-      tool: 0,
-      thought: 0,
-      total: 0,
-    }),
-  } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
+  useRuntimeApiMock.mockReturnValue(createMockRuntimeApi());
 
   return render(<StatsDisplay duration="1s" />);
 };
@@ -81,7 +67,7 @@ const defaultStatsReturnValue = {
   stats: {
     sessionId: 'test-session-id',
     sessionStartTime: new Date(),
-    metrics: defaultZeroMetrics,
+    metrics: defaultZeroMetrics(),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 5,
@@ -98,22 +84,7 @@ describe('<StatsDisplay /> sections', () => {
 
     useSessionStatsMock.mockReturnValue(defaultStatsReturnValue);
 
-    useRuntimeApiMock.mockReturnValue({
-      getActiveProviderMetrics: vi.fn().mockReturnValue({
-        tokensPerMinute: 0,
-        throttleWaitTimeMs: 0,
-        totalTokens: 0,
-        totalRequests: 0,
-      }),
-      getSessionTokenUsage: vi.fn().mockReturnValue({
-        input: 0,
-        output: 0,
-        cache: 0,
-        tool: 0,
-        thought: 0,
-        total: 0,
-      }),
-    } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
+    useRuntimeApiMock.mockReturnValue(createMockRuntimeApi());
   });
 
   describe('Title Rendering', () => {
@@ -511,11 +482,12 @@ describe('<StatsDisplay /> sections', () => {
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
 
-      // Total requests across models = 5 + 3 = 8
+      // Total requests across models = 5 + 3 = 8; assert the specific label
+      // and value rather than a bare number that could match anywhere.
       expect(output).toContain('Session API');
-      expect(output).toContain('8');
-      // Total errors = 1
-      expect(output).toContain('1');
+      expect(output).toMatch(/Total Requests:[\s\S]*8/);
+      // Total errors = 1 (only gemini-pro has errors)
+      expect(output).toMatch(/Total Errors:[\s\S]*1/);
     });
 
     it('hides Session API section when total requests is 0', () => {

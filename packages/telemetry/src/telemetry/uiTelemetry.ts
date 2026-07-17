@@ -326,11 +326,7 @@ export class UiTelemetryService extends EventEmitter {
           ),
           prompt: breakdown.totalInputTokens,
           candidates: breakdown.totalOutputTokens,
-          total:
-            breakdown.totalInputTokens +
-            breakdown.totalOutputTokens +
-            breakdown.totalThoughtsTokens +
-            breakdown.totalToolTokens,
+          total: breakdown.totalInputTokens + breakdown.totalOutputTokens,
           cached: breakdown.totalCachedTokens,
           thoughts: breakdown.totalThoughtsTokens,
           tool: breakdown.totalToolTokens,

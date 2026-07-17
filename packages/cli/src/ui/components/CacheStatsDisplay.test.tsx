@@ -29,6 +29,11 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
 
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 
+// Deterministic counter for unique prompt IDs so test events are
+// distinguishable without relying on Math.random().
+let promptIdCounter = 0;
+const nextPromptId = (): string => `prompt-cache-${++promptIdCounter}`;
+
 /**
  * Emit a provider-owned API response event with cache data through the
  * real aggregation pipeline. This exercises the full event path.
@@ -55,7 +60,7 @@ function emitCacheResponse(opts: {
     thoughts_token_count: 0,
     tool_token_count: 0,
     finish_reasons: [],
-    prompt_id: `prompt-${Math.random()}`,
+    prompt_id: nextPromptId(),
     provider_owned: true,
     usage_metadata_present: true,
     cache_read_input_tokens: opts.cacheReads,
@@ -119,17 +124,35 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     expect(output).toMatch(/300/);
   });
 
-  it('should show requests with cache reads and writes', () => {
+  it('should show the actual count of requests with cache reads and writes', () => {
+    // Two events with cache reads; one event with cache writes.
     emitCacheResponse({
       cacheReads: 1000,
       cacheWrites: 500,
       promptTokens: 2000,
       cachedTokens: 200,
     });
+    emitCacheResponse({
+      cacheReads: 500,
+      cacheWrites: 0,
+      promptTokens: 1500,
+      cachedTokens: 100,
+    });
+    emitCacheResponse({
+      cacheReads: 300,
+      promptTokens: 1000,
+      cachedTokens: 50,
+    });
+
     const { lastFrame } = renderCacheStats();
     const output = lastFrame();
+
+    // Three distinct requests had cache reads.
     expect(output).toContain('Requests with Cache Reads');
+    expect(output).toMatch(/Requests with Cache Reads[\s\S]*3/);
+    // Two distinct requests had cache writes (non-null value).
     expect(output).toContain('Requests with Cache Writes');
+    expect(output).toMatch(/Requests with Cache Writes[\s\S]*2/);
   });
 
   it('should hide cache writes when no reliable writes data', () => {
@@ -156,6 +179,24 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     const output = lastFrame();
     expect(output).toContain('Cache Writes');
     expect(output).toMatch(/0/);
+  });
+
+  it('should clamp cache hit rate to 100% when cached tokens exceed input tokens', () => {
+    // cachedTokens (2000) > promptTokens (1000) — a 200% raw ratio that
+    // should be clamped to the maximum of 100%.
+    emitCacheResponse({
+      cacheReads: 2000,
+      promptTokens: 1000,
+      cachedTokens: 2000,
+    });
+
+    const { lastFrame } = renderCacheStats();
+    const output = lastFrame();
+
+    expect(output).toContain('Cache Hit Rate');
+    // The clamped hit rate is exactly 100.0%, not the raw 200.0%.
+    expect(output).toContain('100.0%');
+    expect(output).not.toContain('200.0%');
   });
 
   it('should show "no cache data" empty state, not an old provider-manager error', () => {

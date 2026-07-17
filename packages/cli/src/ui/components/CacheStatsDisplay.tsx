@@ -81,10 +81,12 @@ export const CacheStatsDisplay: React.FC = () => {
   const requestsWithReads = snap.requestsWithCacheReads;
   const requestsWithWrites = snap.requestsWithCacheWrites;
 
-  // Compute hit rate from the canonical input/cached token totals
+  // Compute hit rate from the canonical input/cached token totals.
+  // Clamp to 100 in case inconsistent event metadata reports more cached
+  // tokens than total input tokens — a hit rate above 100% is nonsensical.
   const hitRate =
     snap.totalInputTokens > 0
-      ? (snap.totalCachedTokens / snap.totalInputTokens) * 100
+      ? Math.min(100, (snap.totalCachedTokens / snap.totalInputTokens) * 100)
       : 0;
 
   return (

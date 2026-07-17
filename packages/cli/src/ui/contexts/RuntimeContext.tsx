@@ -118,7 +118,9 @@ type AgentSetProvider = (
   options?: AgentProviderSwitchOptions,
 ) => Promise<AgentProviderSwitchResult>;
 
-type RuntimeApi = { [K in keyof RuntimeFunctions]: RuntimeFunctions[K] } & {
+export type RuntimeApi = {
+  [K in keyof RuntimeFunctions]: RuntimeFunctions[K];
+} & {
   setProvider: AgentSetProvider;
 };
 

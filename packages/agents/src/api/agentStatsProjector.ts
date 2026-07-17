@@ -25,6 +25,14 @@ import type { SessionStats } from './agent.js';
  * counts, tool counts, and timing all come from the single canonical
  * SessionMetricsAggregator snapshot — no split fallback to
  * tokenTracking.sessionTokenUsage.
+ *
+ * Token definitions (see SessionMetricsSnapshot):
+ * - promptTokens   = totalInputTokens   (raw prompt/input tokens)
+ * - candidateTokens = totalOutputTokens (completion/output tokens)
+ * - totalTokens    = input + output, preserving the public prompt/candidate
+ *                    token contract. Thought and tool categories remain
+ *                    available in the canonical session snapshot.
+ * - cachedTokens   = totalCachedTokens (subset of input served from cache)
  */
 export function projectSessionStats(
   historyService: HistoryService | null,
@@ -33,11 +41,7 @@ export function projectSessionStats(
   return {
     promptTokens: snap.totalInputTokens,
     candidateTokens: snap.totalOutputTokens,
-    totalTokens:
-      snap.totalInputTokens +
-      snap.totalOutputTokens +
-      snap.totalThoughtsTokens +
-      snap.totalToolTokens,
+    totalTokens: snap.totalInputTokens + snap.totalOutputTokens,
     cachedTokens: snap.totalCachedTokens,
     contextWindowSize: 0,
     contextWindowUsed: uiTelemetryService.getLastPromptTokenCount(),

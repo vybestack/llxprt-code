@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { vi } from 'vitest';
 import type { SessionMetrics } from '../contexts/SessionContext.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const defaultTokenTracking = {
   tokensPerMinute: 0,
@@ -60,6 +62,18 @@ type TestMetricsInput = {
 
 export type { TestMetricsInput };
 
+// Deep-clone the nested default objects so that tests that mutate spread
+// copies cannot corrupt the shared module-level singletons. Each invocation
+// of withTokenTracking / defaultZeroMetrics must see pristine nested state.
+const cloneTokenTracking = () => ({
+  ...defaultTokenTracking,
+  sessionTokenUsage: { ...defaultTokenTracking.sessionTokenUsage },
+});
+
+const cloneTiming = () => ({ ...defaultTiming });
+
+const cloneCache = () => ({ ...defaultCache });
+
 export const withTokenTracking = (
   partial: TestMetricsInput,
 ): SessionMetrics => ({
@@ -79,12 +93,12 @@ export const withTokenTracking = (
     byName: partial.tools?.byName ?? {},
   },
   files: partial.files ?? { totalLinesAdded: 0, totalLinesRemoved: 0 },
-  tokenTracking: { ...defaultTokenTracking, ...partial.tokenTracking },
-  timing: { ...defaultTiming, ...partial.timing },
-  cache: { ...defaultCache, ...partial.cache },
+  tokenTracking: { ...cloneTokenTracking(), ...partial.tokenTracking },
+  timing: { ...cloneTiming(), ...partial.timing },
+  cache: { ...cloneCache(), ...partial.cache },
 });
 
-export const defaultZeroMetrics: SessionMetrics = {
+export const defaultZeroMetrics = (): SessionMetrics => ({
   models: {},
   tools: {
     totalCalls: 0,
@@ -99,7 +113,87 @@ export const defaultZeroMetrics: SessionMetrics = {
     totalLinesAdded: 0,
     totalLinesRemoved: 0,
   },
-  tokenTracking: { ...defaultTokenTracking },
-  timing: { ...defaultTiming },
-  cache: { ...defaultCache },
-};
+  tokenTracking: cloneTokenTracking(),
+  timing: cloneTiming(),
+  cache: cloneCache(),
+});
+
+/**
+ * Builds a fully-typed RuntimeApi mock with every method stubbed as a vi.fn().
+ * Overrides allow per-test customization of specific methods without the need
+ * for unsafe `as unknown as ReturnType<...>` double assertions.
+ *
+ * Usage:
+ *   const api = createMockRuntimeApi({
+ *     getActiveProviderMetrics: () => ({ tokensPerMinute: 1234, ... }),
+ *   });
+ */
+export function createMockRuntimeApi(
+  overrides: Partial<
+    Record<keyof RuntimeApi, (...args: unknown[]) => unknown>
+  > = {},
+): RuntimeApi {
+  const stubs = {
+    listProviders: vi.fn(() => []),
+    getActiveProviderName: vi.fn(() => 'mock-provider'),
+    setActiveModel: vi.fn(async () => {}),
+    listAvailableModels: vi.fn(() => []),
+    getActiveModelName: vi.fn(() => 'mock-model'),
+    getActiveProfileName: vi.fn(() => null),
+    getActiveProviderStatus: vi.fn(() => ({ status: 'ready' })),
+    getActiveModelParams: vi.fn(() => ({})),
+    getEphemeralSettings: vi.fn(() => ({})),
+    setEphemeralSetting: vi.fn(() => {}),
+    getEphemeralSetting: vi.fn(() => undefined),
+    setActiveModelParam: vi.fn(() => {}),
+    clearActiveModelParam: vi.fn(() => {}),
+    saveProfileSnapshot: vi.fn(async () => {}),
+    saveLoadBalancerProfile: vi.fn(async () => {}),
+    loadProfileByName: vi.fn(async () => {}),
+    deleteProfileByName: vi.fn(async () => {}),
+    listSavedProfiles: vi.fn(() => []),
+    getProfileByName: vi.fn(() => null),
+    setDefaultProfileName: vi.fn(() => {}),
+    updateActiveProviderBaseUrl: vi.fn(async () => {}),
+    updateActiveProviderApiKey: vi.fn(async () => {}),
+    getActiveProviderMetrics: vi.fn(() => ({
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
+      totalTokens: 0,
+      totalRequests: 0,
+    })),
+    getCliProviderManager: vi.fn(() => null),
+    getCliOAuthManager: vi.fn(() => {
+      throw new Error('OAuthManager missing from runtime registration');
+    }),
+    maybeGetCliOAuthManager: vi.fn(() => null),
+    registerCliProviderInfrastructure: vi.fn(() => {}),
+    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
+    getActiveToolFormatState: vi.fn(() => ({
+      format: 'default',
+      isOverridden: false,
+    })),
+    setActiveToolFormatOverride: vi.fn(() => {}),
+    getSessionTokenUsage: vi.fn(() => ({
+      input: 0,
+      output: 0,
+      cache: 0,
+      tool: 0,
+      thought: 0,
+      total: 0,
+    })),
+    getCliRuntimeServices: vi.fn(() => null),
+    getLoadBalancerStats: vi.fn(() => null),
+    getLoadBalancerLastSelected: vi.fn(() => null),
+    getAllLoadBalancerStats: vi.fn(() => []),
+    enterRuntimeScope: vi.fn(() => {}),
+    runWithRuntimeScope: vi.fn(<T>(cb: () => T): T => cb()),
+    setProvider: vi.fn(async () => ({
+      success: true,
+      provider: 'mock-provider',
+      model: 'mock-model',
+    })),
+    ...overrides,
+  };
+  return stubs as unknown as RuntimeApi;
+}

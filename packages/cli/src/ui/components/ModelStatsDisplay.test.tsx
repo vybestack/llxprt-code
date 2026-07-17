@@ -63,26 +63,7 @@ describe('<ModelStatsDisplay />', () => {
   });
 
   it('should render "no API calls" message when there are no active models', () => {
-    const { lastFrame } = renderWithMockedStats({
-      models: {},
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
-    });
+    const { lastFrame } = renderWithMockedStats({ models: {} });
 
     expect(lastFrame()).toContain(
       'No API calls have been made in this session.',
@@ -105,23 +86,6 @@ describe('<ModelStatsDisplay />', () => {
             tool: 0,
           },
         },
-      },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
       },
     });
 
@@ -160,23 +124,6 @@ describe('<ModelStatsDisplay />', () => {
           },
         },
       },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
     });
 
     const output = lastFrame();
@@ -214,23 +161,6 @@ describe('<ModelStatsDisplay />', () => {
           },
         },
       },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
     });
 
     const output = lastFrame();
@@ -259,23 +189,6 @@ describe('<ModelStatsDisplay />', () => {
           },
         },
       },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
-      },
     });
 
     expect(lastFrame()).toMatchSnapshot();
@@ -296,23 +209,6 @@ describe('<ModelStatsDisplay />', () => {
             tool: 1,
           },
         },
-      },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
       },
     });
 
@@ -349,23 +245,6 @@ describe('<ModelStatsDisplay />', () => {
             tool: 100,
           },
         },
-      },
-      tools: {
-        totalCalls: 0,
-        totalSuccess: 0,
-        totalFail: 0,
-        totalDurationMs: 0,
-        totalDecisions: {
-          accept: 0,
-          reject: 0,
-          modify: 0,
-          [ToolCallDecision.AUTO_ACCEPT]: 0,
-        },
-        byName: {},
-      },
-      files: {
-        totalLinesAdded: 0,
-        totalLinesRemoved: 0,
       },
     });
 

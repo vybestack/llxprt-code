@@ -249,6 +249,10 @@ class IntervalUnion {
     return this.intervals.length;
   }
 
+  get latestEnd(): number {
+    return this.intervals[this.intervals.length - 1]?.end ?? 0;
+  }
+
   getMerged(): readonly Interval[] {
     return this.intervals;
   }
@@ -374,12 +378,12 @@ export class SessionMetricsAggregator {
     }
     this.seenAttemptIds.add(record.attemptId);
 
-    if (this.sessionStartMs === null) {
-      if (record.timestampMs > 0) {
+    if (Number.isFinite(record.timestampMs) && record.timestampMs >= 0) {
+      if (this.sessionStartMs === null) {
         this.sessionStartMs = record.timestampMs;
+      } else {
+        this.sessionStartMs = Math.min(this.sessionStartMs, record.timestampMs);
       }
-    } else if (record.timestampMs > 0) {
-      this.sessionStartMs = Math.min(this.sessionStartMs, record.timestampMs);
     }
 
     const inputTokens = sanitizeFinite(record.inputTokens);
@@ -633,7 +637,11 @@ export class SessionMetricsAggregator {
     this.totalToolCalls++;
     this.totalToolTimeMs += duration;
 
-    if (startTimestampMs !== undefined && startTimestampMs > 0) {
+    if (
+      startTimestampMs !== undefined &&
+      Number.isFinite(startTimestampMs) &&
+      startTimestampMs >= 0
+    ) {
       if (this.sessionStartMs === null) {
         this.sessionStartMs = startTimestampMs;
       } else {
@@ -658,9 +666,13 @@ export class SessionMetricsAggregator {
 
   getSnapshot(): SessionMetricsSnapshot {
     const timing = this.computeTimingMetrics();
-    // Use the same monotonic clock as sessionStartMs so interval
-    // arithmetic is self-consistent.
-    const sessionCurrentMs = performance.now();
+    // Keep the current timestamp in the monotonic domain and never place it
+    // before an explicitly recorded completed interval.
+    const sessionCurrentMs = Math.max(
+      performance.now(),
+      this.apiIntervals.latestEnd,
+      this.toolIntervals.latestEnd,
+    );
     const agentActiveTimeMs = this.computeAgentActiveTimeMs(sessionCurrentMs);
 
     return {
