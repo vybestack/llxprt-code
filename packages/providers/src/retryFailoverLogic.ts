@@ -38,7 +38,7 @@ export function shouldAttemptFailover(
   state: FailoverState,
   failoverThreshold: number,
 ): boolean {
-  if (bucketFailoverHandler == null) {
+  if (bucketFailoverHandler === undefined) {
     return false;
   }
   if (is429 && state.consecutive429s > failoverThreshold) {
@@ -82,10 +82,20 @@ export async function attemptBucketFailover(
     signal,
   };
 
-  const failoverResult = await raceWithAbort(
-    bucketFailoverHandler.tryFailover(failoverContext),
-    signal,
-  );
+  let failoverResult: boolean;
+  try {
+    failoverResult = await raceWithAbort(
+      bucketFailoverHandler.tryFailover(failoverContext),
+      signal,
+    );
+  } catch (failoverError) {
+    if (signal?.aborted === true) throw failoverError;
+    logger.debug(
+      () =>
+        `Bucket failover handler rejected, treating as exhausted: ${failoverError}`,
+    );
+    return 'exhausted';
+  }
 
   if (failoverResult) {
     logger.debug(() => `Bucket failover successful, resetting retry state`);

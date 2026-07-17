@@ -56,25 +56,6 @@ export async function logToolCall(
 }
 
 /**
- * Safely resolve whether conversation logging is enabled. Any error from
- * the config callback is treated as logging-disabled (fail-open) so the
- * tool call or original provider error is never affected.
- */
-function resolveLoggingEnabledSafely(
-  config: unknown,
-  debug: DebugLogger,
-): boolean {
-  try {
-    const loggingConfig = resolveLoggingConfig(config);
-    return loggingConfig?.getConversationLoggingEnabled() === true;
-  } catch (err) {
-    // Fail-open: treat resolution errors as logging-disabled
-    debug.warn(() => `getConversationLoggingEnabled threw: ${String(err)}`);
-    return false;
-  }
-}
-
-/**
  * Invoke a server tool with conversation logging support.
  */
 export async function invokeServerToolWithLogging(
@@ -85,16 +66,27 @@ export async function invokeServerToolWithLogging(
   logCtx: ServerToolLogContext,
 ): Promise<unknown> {
   const startTime = Date.now();
-  // Resolve the logging flag once, fail-open on any error
-  const loggingEnabled = resolveLoggingEnabledSafely(config, logCtx.debug);
+  // Resolve logging config once and reuse for both the enabled-check and
+  // the actual logging calls. Any resolution error is treated as
+  // logging-disabled (fail-open).
+  let loggingConfig: ReturnType<typeof resolveLoggingConfig> | undefined;
+  let loggingEnabled = false;
+  try {
+    loggingConfig = resolveLoggingConfig(config);
+    loggingEnabled = loggingConfig?.getConversationLoggingEnabled() === true;
+  } catch (err) {
+    logCtx.debug.warn(
+      () => `getConversationLoggingEnabled threw: ${String(err)}`,
+    );
+  }
 
   try {
     const result = await provider.invokeServerTool(toolName, params, config);
 
-    if (loggingEnabled) {
+    if (loggingEnabled && loggingConfig) {
       try {
         await logToolCall(
-          resolveLoggingConfig(config),
+          loggingConfig,
           toolName,
           params,
           result,
@@ -111,10 +103,10 @@ export async function invokeServerToolWithLogging(
     }
     return result;
   } catch (error) {
-    if (loggingEnabled) {
+    if (loggingEnabled && loggingConfig) {
       try {
         await logToolCall(
-          resolveLoggingConfig(config),
+          loggingConfig,
           toolName,
           params,
           null,

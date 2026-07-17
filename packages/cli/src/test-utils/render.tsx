@@ -193,6 +193,8 @@ export function renderHook<T, P = undefined>(
   hook: (props: P) => T,
   options?: RenderHookOptions<P>,
 ): RenderHookResult<T> {
+  // Render-history array. Tests read `result.all.length` for render-count
+  // assertions and index into `result.all[i]` for intermediate values.
   const all: T[] = [];
   const result = { current: undefined as T, all };
 

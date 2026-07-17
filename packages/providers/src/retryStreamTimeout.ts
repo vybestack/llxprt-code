@@ -66,12 +66,13 @@ export async function* yieldStreamUnprotected(
   attemptController: AbortController,
   logger: { debug: (fn: () => string) => void },
 ): AsyncGenerator<IContent, boolean> {
+  const iterator = stream[Symbol.asyncIterator]();
   let chunksYielded = false;
   let completed = false;
   let failed = false;
   let failure: unknown;
   try {
-    for await (const chunk of stream) {
+    for await (const chunk of iterator) {
       chunksYielded = true;
       yield chunk;
     }
@@ -91,7 +92,7 @@ export async function* yieldStreamUnprotected(
   } finally {
     if (!completed) {
       attemptController.abort();
-      await closeIteratorBeforeContinuing(stream, failure, failed);
+      await closeIteratorBeforeContinuing(iterator, failure, failed);
     }
   }
 }
@@ -108,7 +109,9 @@ export async function raceFirstChunkWithTimeout<T>(
   try {
     const timeoutPromise = delay(timeoutMs, timeoutController.signal).then(
       () => {
-        throw new Error('Stream timeout: first chunk not received');
+        throw new Error(
+          `Stream timeout: first chunk not received after ${timeoutMs}ms`,
+        );
       },
     );
     return await Promise.race([nextPromise, timeoutPromise]);

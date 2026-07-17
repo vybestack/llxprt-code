@@ -612,7 +612,7 @@ export class RetryOrchestrator implements IProvider {
     },
     failoverThreshold: number,
   ): boolean {
-    if (bucketFailoverHandler == null) {
+    if (bucketFailoverHandler === undefined) {
       return false;
     }
     if (is429 && state.consecutive429s > failoverThreshold) {
@@ -894,7 +894,9 @@ async function raceFirstChunkWithTimeout<T>(
   try {
     const timeoutPromise = delay(timeoutMs, timeoutController.signal).then(
       () => {
-        throw new Error('Stream timeout: first chunk not received');
+        throw new Error(
+          `Stream timeout: first chunk not received after ${timeoutMs}ms`,
+        );
       },
     );
     return await Promise.race([nextPromise, timeoutPromise]);

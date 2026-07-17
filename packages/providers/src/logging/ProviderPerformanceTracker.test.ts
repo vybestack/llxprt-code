@@ -139,7 +139,6 @@ describe('ProviderPerformanceTracker', () => {
 
   it('should calculate error rate correctly with multiple errors', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
-    vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
 
     tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
     tracker.recordError(500, 'Error 1');

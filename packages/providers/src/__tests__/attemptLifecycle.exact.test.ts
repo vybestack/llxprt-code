@@ -463,12 +463,13 @@ describe('Focused lifecycle review findings', () => {
       const result = await stream.next();
       expect(result.done).toBe(false);
       await stream.return?.(undefined);
-      await new Promise((r) => setTimeout(r, 10));
-      const snap = uiTelemetryService.getSessionSnapshot();
-      // 1 request. The abort emits an ApiErrorEvent with error_type='consumer_abort',
-      // so totalApiErrors is 1 (abort counts as a terminal error event).
-      expect(snap.totalApiRequests).toBe(1);
-      expect(snap.totalApiErrors).toBe(1);
+      await vi.waitFor(() => {
+        const snap = uiTelemetryService.getSessionSnapshot();
+        // 1 request. The abort emits an ApiErrorEvent with error_type='consumer_abort',
+        // so totalApiErrors is 1 (abort counts as a terminal error event).
+        expect(snap.totalApiRequests).toBe(1);
+        expect(snap.totalApiErrors).toBe(1);
+      });
     });
   });
 });

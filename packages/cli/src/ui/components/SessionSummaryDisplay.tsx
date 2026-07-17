@@ -57,7 +57,7 @@ export const SessionSummaryDisplay: React.FC<SessionSummaryDisplayProps> = (
           )}
           {completeTokensPerMinute !== undefined && (
             <Text color={theme.text.primary}>
-              Complete TPM:{' '}
+              Completed TPM:{' '}
               {Number.isFinite(completeTokensPerMinute)
                 ? completeTokensPerMinute.toFixed(2)
                 : '—'}

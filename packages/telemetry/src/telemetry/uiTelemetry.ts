@@ -340,7 +340,25 @@ export class UiTelemetryService extends EventEmitter {
     if (event.provider_owned !== true) {
       return false;
     }
+    return this.recordApiEvent(event, event.error !== undefined);
+  }
 
+  private processApiError(event: ApiErrorEvent): boolean {
+    if (event.provider_owned !== true) {
+      return false;
+    }
+    return this.recordApiEvent(event, true);
+  }
+
+  /**
+   * Shared projection for API response and error events. Centralizes the
+   * normalization, attempt ID resolution, and aggregator call so both
+   * paths emit identical telemetry shapes.
+   */
+  private recordApiEvent(
+    event: ApiResponseEvent | ApiErrorEvent,
+    isError: boolean,
+  ): boolean {
     const durationMs = norm(event.duration_ms);
     const inputTokens = norm(event.input_token_count);
     const outputTokens = norm(event.output_token_count);
@@ -348,13 +366,13 @@ export class UiTelemetryService extends EventEmitter {
     const thoughtsTokens = norm(event.thoughts_token_count);
     const toolTokens = norm(event.tool_token_count);
     const ttft = event.time_to_first_token_ms ?? null;
-
     const attemptId = event.attempt_id ?? event.prompt_id;
+
     const isNew = this.#aggregator.recordApiAttempt({
       attemptId,
       model: event.model,
       provider: event.provider ?? 'unknown',
-      isError: event.error !== undefined,
+      isError,
       hasUsage: event.usage_metadata_present === true,
       inputTokens,
       outputTokens,
@@ -375,52 +393,7 @@ export class UiTelemetryService extends EventEmitter {
       return false;
     }
 
-    // Project model metrics from the aggregator's canonical breakdown
-    // rather than maintaining a partial manual mirror. This ensures
-    // totalErrors and error-attempt token totals are included consistently.
     this.projectModelMetricsFromAggregator();
-
-    this.syncTimingFromAggregator();
-    return true;
-  }
-
-  private processApiError(event: ApiErrorEvent): boolean {
-    if (event.provider_owned !== true) {
-      return false;
-    }
-
-    const durationMs = norm(event.duration_ms);
-    const ttft = event.time_to_first_token_ms ?? null;
-    const cachedTokens = norm(event.cached_content_token_count);
-    const attemptId = event.attempt_id ?? event.prompt_id;
-
-    const isNew = this.#aggregator.recordApiAttempt({
-      attemptId,
-      model: event.model,
-      provider: event.provider ?? 'unknown',
-      isError: true,
-      hasUsage: event.usage_metadata_present === true,
-      inputTokens: norm(event.input_token_count),
-      outputTokens: norm(event.output_token_count),
-      cachedTokens,
-      thoughtsTokens: norm(event.thoughts_token_count),
-      toolTokens: norm(event.tool_token_count),
-      durationMs,
-      timeToFirstTokenMs: ttft,
-      cacheReads:
-        event.cache_read_input_tokens ??
-        (cachedTokens > 0 ? cachedTokens : undefined),
-      cacheWrites: event.cache_creation_input_tokens ?? undefined,
-      timestampMs: event.start_ms ?? performance.now() - durationMs,
-    });
-
-    if (!isNew) {
-      return false;
-    }
-
-    // Project model metrics from the aggregator's canonical breakdown
-    this.projectModelMetricsFromAggregator();
-
     this.syncTimingFromAggregator();
     return true;
   }

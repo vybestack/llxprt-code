@@ -13,9 +13,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { UiTelemetryService } from './uiTelemetry.js';
 
 let attemptCounter = 0;
-import { UiTelemetryService } from './uiTelemetry.js';
 
 function makeToolCallEvent(opts: {
   name?: string;
@@ -119,6 +119,7 @@ describe('Canonical consumer behavior: tool calls through real event path', () =
   let svc: UiTelemetryService;
 
   beforeEach(() => {
+    attemptCounter = 0;
     svc = new UiTelemetryService();
   });
 

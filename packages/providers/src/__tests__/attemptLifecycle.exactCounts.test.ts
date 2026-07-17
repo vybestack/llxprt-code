@@ -96,10 +96,11 @@ describe('#10 exact counts for all scenarios', () => {
     );
     await stream.next();
     await stream.return?.(undefined);
-    await new Promise((r) => setTimeout(r, 10));
-    const snap = uiTelemetryService.getSessionSnapshot();
-    expect(snap.totalApiRequests).toBe(1);
-    expect(snap.totalApiErrors).toBe(1);
+    await vi.waitFor(() => {
+      const snap = uiTelemetryService.getSessionSnapshot();
+      expect(snap.totalApiRequests).toBe(1);
+      expect(snap.totalApiErrors).toBe(1);
+    });
   });
 
   it('retry success emits exactly 2 requests (1 error + 1 success)', async () => {

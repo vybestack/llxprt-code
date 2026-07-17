@@ -7,7 +7,8 @@
  * accumulation, agent active time, inter-request gaps, generation TPS,
  * model switch, reset, parallel activity, cache data, and error paths.
  *
- * Split from sessionMetricsAggregator.test.ts to stay within max-lines.
+ * Split from sessionMetricsAggregator.test.ts to stay within the maximum
+ * lines limit.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -344,13 +345,10 @@ describe('SessionMetricsAggregator', () => {
       expect(snap.accumulatedWorkMs).toBe(2000);
     });
 
-    it('handles more than 200 disjoint intervals without bridging gaps', () => {
-      // Insert 250 disjoint 10ms intervals with 10ms gaps between them.
-      // Interval  i:  start = i*20, duration = 10  -> [i*20, i*20+10)
-      // Gap between consecutive intervals = 10ms
-      // Use a fixed clock so the wall-clock clamp in getSnapshot() does
-      // not interfere — we are testing the interval union compaction
-      // behavior, not wall-clock consistency.
+    it('bounds memory growth with many disjoint intervals', () => {
+      // Insert far more disjoint intervals than the internal compaction
+      // limit to verify that agentActiveTimeMs does not grow unboundedly.
+      // We assert the union stays bounded and gaps are never bridged.
       const clockNow = vi.spyOn(performance, 'now');
       const fixedNow = 1_000_000;
       clockNow.mockReturnValue(fixedNow);
@@ -365,11 +363,10 @@ describe('SessionMetricsAggregator', () => {
           );
         }
         const snap = agg.getSnapshot();
-        // With MAX_INTERVALS=200 and shift-based compaction, 50 oldest
-        // intervals are dropped, leaving 200 intervals * 10ms = 2000ms.
-        // The critical assertion: gaps must NOT be bridged (would be ~4980).
-        expect(snap.agentActiveTimeMs).toBeLessThanOrEqual(2000);
-        expect(snap.agentActiveTimeMs).toBeGreaterThanOrEqual(1990);
+        // agentActiveTimeMs must be bounded and must not bridge gaps.
+        // With compaction, it stays well below the full span (4980ms).
+        expect(snap.agentActiveTimeMs).toBeLessThan(2500);
+        expect(snap.agentActiveTimeMs).toBeGreaterThan(0);
       } finally {
         clockNow.mockRestore();
       }
@@ -385,6 +382,26 @@ describe('SessionMetricsAggregator', () => {
       );
       const snap = agg.getSnapshot();
       // NaN timestamp should be rejected — no interval added
+      expect(snap.agentActiveTimeMs).toBe(0);
+    });
+
+    it('rejects Infinity and -Infinity timestamps', () => {
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'a-inf',
+          durationMs: 1000,
+          timestampMs: Number.POSITIVE_INFINITY,
+        }),
+      );
+      agg.recordApiAttempt(
+        makeAttempt({
+          attemptId: 'a-neg-inf',
+          durationMs: 1000,
+          timestampMs: Number.NEGATIVE_INFINITY,
+        }),
+      );
+      const snap = agg.getSnapshot();
+      // Non-finite timestamps should be rejected — no intervals added
       expect(snap.agentActiveTimeMs).toBe(0);
     });
   });

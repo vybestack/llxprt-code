@@ -31,9 +31,7 @@ export function setupRedactor(
 ): ConversationDataRedactor | null {
   const invocation = normalizedOptions.invocation;
   if (ctx.injectedRedactor) {
-    ctx.debug.log(
-      () => `After redactor setup: hasRedactor=${!!ctx.injectedRedactor}`,
-    );
+    ctx.debug.log(() => `After redactor setup: hasRedactor=true`);
     return ctx.injectedRedactor;
   }
 
@@ -78,11 +76,14 @@ export async function logRequestIfEnabled(
   redactor: ConversationDataRedactor | null,
   ctx: RequestSetupContext,
 ): Promise<void> {
+  ctx.debug.log(
+    () =>
+      `Before logRequest: contents length = ${normalizedOptions.contents.length}`,
+  );
+  // logRequestEntry is already fail-open (catches its own errors and warns).
+  // Any unexpected error here is also treated as non-fatal so request
+  // reliability is never compromised by conversation logging.
   try {
-    ctx.debug.log(
-      () =>
-        `Before logRequest: contents length = ${normalizedOptions.contents.length}`,
-    );
     await logRequestEntry(
       activeConfig,
       normalizedOptions.contents,
@@ -98,15 +99,14 @@ export async function logRequestIfEnabled(
         debug: ctx.debug,
       },
     );
-    ctx.debug.log(
-      () =>
-        `After logRequest: contents length = ${normalizedOptions.contents.length}`,
-    );
   } catch (error) {
-    ctx.debug.error(
+    ctx.debug.warn(
       () =>
-        `logRequest failed: ${error instanceof Error ? error.message : String(error)}`,
+        `logRequest failed (fail-open): ${error instanceof Error ? error.message : String(error)}`,
     );
-    throw error;
   }
+  ctx.debug.log(
+    () =>
+      `After logRequest: contents length = ${normalizedOptions.contents.length}`,
+  );
 }

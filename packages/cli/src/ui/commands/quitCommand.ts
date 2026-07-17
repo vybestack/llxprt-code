@@ -19,9 +19,8 @@ export const quitCommand: SlashCommand = {
     const { sessionStartTime } = context.session.stats;
     const wallDuration = now - sessionStartTime.getTime();
 
-    // Capture a cloned immutable final session snapshot so the quit
-    // summary renders canonical operational metrics even after the
-    // service stops receiving events.
+    // getSessionSnapshot() returns a fresh plain object from internal
+    // aggregator state on each call, so this is already a snapshot copy.
     const finalSnapshot = uiTelemetryService.getSessionSnapshot();
     const totalTokens =
       finalSnapshot.totalInputTokens +

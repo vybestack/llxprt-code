@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
+const logger = new DebugLogger('llxprt:provider:safe-default-model');
+
 /**
  * Structural type representing a provider-like object whose
  * `getDefaultModel` may or may not be present at runtime.
@@ -29,13 +33,20 @@ interface ProviderWithOptionalDefaultModel {
  * implementation lacking the method or throwing unexpectedly. Using this
  * helper avoids a `TypeError: getDefaultModel is not a function` or
  * propagated provider error at the model-resolution boundary.
+ *
+ * When the method throws, the error is logged at debug level so
+ * misconfiguration is diagnosable without crashing the caller.
  */
 export function safeGetDefaultModel(
   provider: ProviderWithOptionalDefaultModel,
 ): string {
   try {
     return provider.getDefaultModel?.() ?? '';
-  } catch {
+  } catch (err) {
+    logger.debug(
+      () =>
+        `getDefaultModel threw, returning empty string: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return '';
   }
 }

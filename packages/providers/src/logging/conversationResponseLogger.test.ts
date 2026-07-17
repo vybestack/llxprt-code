@@ -10,6 +10,7 @@ import {
   logRequestEntry,
 } from './conversationResponseLogger.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 vi.mock('./telemetryEmitter.js', () => ({
   writeConversationLog: vi.fn().mockResolvedValue(undefined),
@@ -185,8 +186,10 @@ describe('logRequestEntry', () => {
 
   it('logs a conversation request entry', async () => {
     const debug = createDebug();
-    const content = [{ role: 'user', parts: [{ text: 'hello' }] }];
-    await logRequestEntry(mockConfig, content as never, undefined, 'prompt-1', {
+    const content: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+    ];
+    await logRequestEntry(mockConfig, content, undefined, 'prompt-1', {
       providerName: 'test-provider',
       conversationId: 'conv-1',
       turnNumber: 1,

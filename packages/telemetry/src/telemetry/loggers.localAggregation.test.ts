@@ -217,6 +217,7 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
 
 describe('Reset clears canonical state', () => {
   beforeEach(() => {
+    uiTelemetryService.reset();
     vi.restoreAllMocks();
     vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
   });

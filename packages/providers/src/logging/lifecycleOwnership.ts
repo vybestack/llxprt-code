@@ -19,14 +19,13 @@ import { RetryOrchestrator } from '../RetryOrchestrator.js';
  * per-retry-attempt lifecycle.
  */
 export function isWrapperLifecycleOwner(wrapped: IProvider): boolean {
-  if (wrapped.transportAttemptOwnership === 'provider') {
-    return false;
-  }
-  if (wrapped instanceof RetryOrchestrator) {
-    return false;
-  }
+  // Track visited providers to guard against cycles in the wrapper chain
+  // (e.g. a misconfigured provider pointing back to an ancestor).
+  const visited = new Set<IProvider>();
   let candidate: IProvider | undefined = wrapped;
   while (candidate) {
+    if (visited.has(candidate)) return false;
+    visited.add(candidate);
     if (candidate.transportAttemptOwnership === 'provider') return false;
     if (candidate instanceof RetryOrchestrator) return false;
     const unwrapped = candidate as IProvider & {

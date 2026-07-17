@@ -394,12 +394,13 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       expect(result.done).toBe(false);
       // Abort by calling return on the iterator
       await stream.return?.(undefined);
-      // Allow microtasks to flush
-      await new Promise((r) => setTimeout(r, 10));
-      const snap = uiTelemetryService.getSessionSnapshot();
-      // At least 1 request recorded (either success from normal completion
-      // or the recorder processed the terminal event)
-      expect(snap.totalApiRequests).toBeGreaterThanOrEqual(1);
+      // Deterministically wait for the telemetry pipeline to flush
+      await vi.waitFor(() => {
+        const snap = uiTelemetryService.getSessionSnapshot();
+        // At least 1 request recorded (either success from normal completion
+        // or the recorder processed the terminal event)
+        expect(snap.totalApiRequests).toBeGreaterThanOrEqual(1);
+      });
     });
   });
 

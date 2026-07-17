@@ -243,19 +243,24 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     if (this.attemptOrder.length <= AttemptRecorder.MAX_RETAINED_ATTEMPTS) {
       return;
     }
+    // Remove terminal attempts from anywhere in the queue until we are
+    // within the retention limit. Non-terminal (in-flight) attempts are
+    // always kept. This prevents unbounded growth in concurrent scenarios
+    // where a long-running attempt sits at the front of attemptOrder.
+    let removed = 0;
     const pruneCount =
       this.attemptOrder.length - AttemptRecorder.MAX_RETAINED_ATTEMPTS;
-    for (let i = 0; i < pruneCount && this.attemptOrder.length > 0; i++) {
-      const id = this.attemptOrder[0];
+    for (
+      let i = this.attemptOrder.length - 1;
+      i >= 0 && removed < pruneCount;
+      i--
+    ) {
+      const id = this.attemptOrder[i];
       const attempt = this.attempts.get(id);
-      // Only prune terminal attempts. If the head is non-terminal
-      // (still in progress), stop pruning to keep attemptOrder and
-      // attempts consistent.
       if (attempt?.hasEmittedTerminal === true) {
         this.attempts.delete(id);
-        this.attemptOrder.shift();
-      } else {
-        break;
+        this.attemptOrder.splice(i, 1);
+        removed++;
       }
     }
   }
@@ -401,7 +406,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
         modelName,
         attempt.attemptId,
         durationMs,
-        info.finishReasons ?? attempt.finishReasons,
+        this.resolveFinishReasons(info, attempt),
         true,
         undefined,
         {

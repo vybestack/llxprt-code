@@ -103,6 +103,8 @@ describe('invokeServerToolWithLogging', () => {
       invokeServerToolWithLogging(provider, 'tool', {}, config, ctx),
     ).rejects.toBe(providerError);
     // The provider error should be re-thrown, not swallowed
+    // Verify the fail-open warning path was exercised
+    expect(warnFn).toHaveBeenCalled();
   });
 
   it('fail-open: does not swallow the provider result when logging is disabled', async () => {
