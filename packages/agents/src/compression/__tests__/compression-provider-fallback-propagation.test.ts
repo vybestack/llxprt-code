@@ -279,7 +279,6 @@ describe('Finding 1: provider fallback failure propagation through real Compress
 
 describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (Issue #2588)', () => {
   let historyService: HistoryService;
-  let runtimeContext: AgentRuntimeContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -298,7 +297,7 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
   function buildEnforcerHarness(
     overrides: Partial<ProviderContentEnforcementDeps> = {},
   ): EnforcerHarness {
-    runtimeContext = buildRuntimeContext(historyService, {
+    const runtimeContext = buildRuntimeContext(historyService, {
       contextLimit: 200_000,
       compressionThreshold: 0.8,
     });
