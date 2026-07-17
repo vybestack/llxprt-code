@@ -195,9 +195,10 @@ describe('Finding 1: provider fallback failure propagation through real Compress
    * When the fallback strategy succeeds, the normal happy path should work.
    *
    * The projections are scripted so that the real fallback stage is provably
-   * reached: initial, post-density, post-first-compression, and post-retry
-   * projections are all over-limit, and only the post-truncation projection
-   * fits. This ensures the test exercises the actual fallback path rather
+   * reached: initial, post-density, and post-first-compression projections are
+   * all over-limit, and only the post-truncation projection fits. The effective
+   * first compression intentionally bypasses retry. This ensures the test
+   * exercises the actual fallback path rather
    * than returning early from an earlier stage. The returned contents must
    * contain the truncated summary and preserve the pending message.
    */
