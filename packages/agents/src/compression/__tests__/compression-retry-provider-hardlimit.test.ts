@@ -346,6 +346,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       // Only ONE compression attempt (no redundant retry on FAILED)
       expect(compressionCallCount).toBe(1);
+      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
       expect(thrownError!.message).toContain(
@@ -389,6 +390,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       // Only ONE compression attempt (no redundant retry on thrown error)
       expect(compressionCallCount).toBe(1);
+      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
       expect(thrownError!.message).toContain(
@@ -443,6 +445,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       // Two compression attempts (first succeeded, retry failed)
       expect(compressionCallCount).toBe(2);
+      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
 
       expect(thrownError).toBeInstanceOf(Error);
       // Compression failure diagnostics surfaced
@@ -919,6 +922,10 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
 
       // Enforcement MUST reject rather than silently accept lost history.
       expect(thrownError).toBeInstanceOf(Error);
+      expect(thrownError!.message).toContain(
+        'Truncation fallback failed during hard-limit enforcement',
+      );
+      expect(thrownError!.message).toContain('history persistence layer down');
     });
   });
 });
