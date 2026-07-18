@@ -109,6 +109,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
       prompt_id: 'prompt-1',
       tool_type: 'native',
       agent_id: 'primary',
+      call_id: 'tool-call-1',
     } as ToolCallEvent;
     logToolCall(mockConfig, toolEvent);
 

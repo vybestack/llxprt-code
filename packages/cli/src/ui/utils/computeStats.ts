@@ -24,11 +24,38 @@ export function calculateAverageLatency(metrics: ModelMetrics): number {
   return metrics.api.totalLatencyMs / metrics.api.totalRequests;
 }
 
-export function calculateCacheHitRate(metrics: ModelMetrics): number {
-  if (metrics.tokens.prompt === 0) {
+/**
+ * Computes the cached-token ratio: the percentage of prompt tokens that
+ * were served from cache. This is a TOKEN ratio (cached/prompt), not a
+ * request hit rate.
+ *
+ * The result is always a finite value in [0, 100]:
+ * - Returns 0 when prompt tokens is 0 or invalid.
+ * - Clamps negative cached tokens to 0.
+ * - Clamps the ratio to a maximum of 100 (cached > prompt yields 100).
+ */
+export function calculateCachedTokenRatio(metrics: ModelMetrics): number {
+  return computeCachedTokenRatio(metrics.tokens.cached, metrics.tokens.prompt);
+}
+
+/**
+ * Centralized cached-token ratio helper. Returns a finite nonnegative
+ * percentage in [0, 100]. NaN/Infinity/negative inputs are treated as 0.
+ * Used by both CacheStatsDisplay and ModelStatsDisplay.
+ */
+export function computeCachedTokenRatio(
+  cachedTokens: number,
+  promptTokens: number,
+): number {
+  if (!Number.isFinite(cachedTokens) || !Number.isFinite(promptTokens)) {
     return 0;
   }
-  return (metrics.tokens.cached / metrics.tokens.prompt) * 100;
+  if (promptTokens <= 0) {
+    return 0;
+  }
+  const clampedCached = Math.max(0, cachedTokens);
+  const ratio = (clampedCached / promptTokens) * 100;
+  return Math.min(100, Math.max(0, ratio));
 }
 
 export const computeSessionStats = (

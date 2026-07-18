@@ -51,8 +51,8 @@ describe('SessionMetricsAggregator', () => {
 
   describe('tool time accumulation', () => {
     it('accumulates tool durations', () => {
-      agg.recordToolActivity('tool1', 500, true);
-      agg.recordToolActivity('tool2', 300, false);
+      agg.recordToolActivity('tool1', 500, true, 'call_a');
+      agg.recordToolActivity('tool2', 300, false, 'call_b');
       const snap = agg.getSnapshot();
       expect(snap.totalToolTimeMs).toBe(800);
       expect(snap.totalToolCalls).toBe(2);
@@ -345,10 +345,10 @@ describe('SessionMetricsAggregator', () => {
       expect(snap.accumulatedWorkMs).toBe(2000);
     });
 
-    it('bounds memory growth with many disjoint intervals', () => {
-      // Insert far more disjoint intervals than the internal compaction
-      // limit to verify that agentActiveTimeMs does not grow unboundedly.
-      // We assert the union stays bounded and gaps are never bridged.
+    it('exact union across many disjoint intervals (no compaction)', () => {
+      // Insert far more disjoint intervals than any internal limit.
+      // The union must remain exact — every interval contributes its
+      // duration, gaps are never bridged, and no interval is evicted.
       const clockNow = vi.spyOn(performance, 'now');
       const fixedNow = 1_000_000;
       clockNow.mockReturnValue(fixedNow);
@@ -363,10 +363,8 @@ describe('SessionMetricsAggregator', () => {
           );
         }
         const snap = agg.getSnapshot();
-        // agentActiveTimeMs must be bounded and must not bridge gaps.
-        // With compaction, it stays well below the full span (4980ms).
-        expect(snap.agentActiveTimeMs).toBeLessThan(2500);
-        expect(snap.agentActiveTimeMs).toBeGreaterThan(0);
+        // Exact union: 250 intervals of 10ms each, 10ms gaps excluded.
+        expect(snap.agentActiveTimeMs).toBe(250 * 10);
       } finally {
         clockNow.mockRestore();
       }
@@ -593,6 +591,148 @@ describe('SessionMetricsAggregator', () => {
       );
       const snap = agg.getSnapshot();
       expect(snap.totalCacheWrites).toBe(0);
+    });
+  });
+
+  describe('exact interval union (no lossy compaction)', () => {
+    it('preserves exact union across >200 disjoint intervals', () => {
+      // Each attempt occupies a non-overlapping interval of 10ms.
+      // Total active = totalAttempts * stepMs regardless of count —
+      // no compaction, no eviction.
+      const stepMs = 10;
+      const gapMs = 5;
+      const totalAttempts = 210;
+      let cursor = 0;
+      for (let i = 0; i < totalAttempts; i++) {
+        agg.recordApiAttempt(
+          makeAttempt({
+            attemptId: `compact-${i}`,
+            timestampMs: cursor,
+            durationMs: stepMs,
+          }),
+        );
+        cursor += stepMs + gapMs;
+      }
+
+      const snap = agg.getSnapshot();
+      expect(snap.agentActiveTimeMs).toBe(totalAttempts * stepMs);
+    });
+
+    it('preserves exact union with explicit gaps', () => {
+      const stepMs = 100;
+      const gapMs = 50;
+      const totalAttempts = 205;
+      let cursor = 0;
+      for (let i = 0; i < totalAttempts; i++) {
+        agg.recordApiAttempt(
+          makeAttempt({
+            attemptId: `gap-${i}`,
+            timestampMs: cursor,
+            durationMs: stepMs,
+          }),
+        );
+        cursor += stepMs + gapMs;
+      }
+
+      const snap = agg.getSnapshot();
+      expect(snap.agentActiveTimeMs).toBe(totalAttempts * stepMs);
+    });
+
+    it('201 disjoint intervals then late overlapping interval gives exact union including cross API/tool overlap', () => {
+      // Regression: after more than 200 disjoint API intervals, a
+      // late-arriving interval that overlaps an earlier one must be
+      // merged exactly — not double-counted, not lost to compaction,
+      // and not bridging any gaps.
+      const stepMs = 10;
+      const gapMs = 10;
+      const totalDisjoint = 201;
+      let cursor = 0;
+      for (let i = 0; i < totalDisjoint; i++) {
+        agg.recordApiAttempt(
+          makeAttempt({
+            attemptId: `disjoint-${i}`,
+            timestampMs: cursor,
+            durationMs: stepMs,
+          }),
+        );
+        cursor += stepMs + gapMs;
+      }
+
+      const beforeOverlap = agg.getSnapshot();
+      const expectedDisjoint = totalDisjoint * stepMs;
+      expect(beforeOverlap.agentActiveTimeMs).toBe(expectedDisjoint);
+
+      // Now add a late tool interval that overlaps the very first API
+      // interval [0, 10). Tool: [5, 15) overlaps [0,10) and the gap,
+      // and reaches into the second interval [20,30)? No — it only
+      // reaches [5,15), overlapping [0,10) and the gap [10,20).
+      // The union of [0,10) + [5,15) = [0,15) = 15ms (5ms gained over
+      // the first 10ms, 5ms of the gap bridged into the first interval).
+      // Since the first interval was already 10ms, the net gain is 5ms.
+      agg.recordToolActivity(
+        'late-tool',
+        10, // duration
+        true,
+        'late-tool-call',
+        5, // startTimestampMs → [5, 15)
+      );
+
+      const afterOverlap = agg.getSnapshot();
+      // The late interval overlaps the first API interval, adding 5ms
+      // of previously-gap time to the union (gap [10,15) is now active).
+      expect(afterOverlap.agentActiveTimeMs).toBe(expectedDisjoint + 5);
+
+      // Cross API/tool overlap: a tool interval fully inside an API
+      // interval must not add any time.
+      agg.recordToolActivity(
+        'inner-tool',
+        5,
+        true,
+        'inner-tool-call',
+        2, // [2,7) fully inside [0,15) (merged first interval)
+      );
+      const afterInner = agg.getSnapshot();
+      expect(afterInner.agentActiveTimeMs).toBe(expectedDisjoint + 5);
+    });
+  });
+
+  describe('tool dedup only applies producer-provided callId (finding #5)', () => {
+    it('deduplicates the same callId on reprocessing', () => {
+      const accepted1 = agg.recordToolActivity('tool', 100, true, 'call-1');
+      const accepted2 = agg.recordToolActivity('tool', 100, true, 'call-1');
+      expect(accepted1).toBe(true);
+      expect(accepted2).toBe(false);
+      const snap = agg.getSnapshot();
+      expect(snap.totalToolCalls).toBe(1);
+    });
+
+    it('rejects identity-less tool events (no callId) — finding #3', () => {
+      // Finding #3: identity-less records must not be accepted as
+      // distinct. Without a stable callId there is no way to prevent
+      // double-counting on replay, so the boundary rejects them.
+      const accepted1 = agg.recordToolActivity('tool', 100, true);
+      const accepted2 = agg.recordToolActivity('tool', 100, true);
+      expect(accepted1).toBe(false);
+      expect(accepted2).toBe(false);
+      const snap = agg.getSnapshot();
+      expect(snap.totalToolCalls).toBe(0);
+    });
+
+    it('rejects tool events with empty/whitespace-only callId — finding #3', () => {
+      const accepted1 = agg.recordToolActivity('tool', 100, true, '');
+      const accepted2 = agg.recordToolActivity('tool', 100, true, '   ');
+      expect(accepted1).toBe(false);
+      expect(accepted2).toBe(false);
+      const snap = agg.getSnapshot();
+      expect(snap.totalToolCalls).toBe(0);
+    });
+
+    it('rejects the same tool name repeatedly when callId is missing — finding #3', () => {
+      for (let i = 0; i < 5; i++) {
+        agg.recordToolActivity('repeated-tool', 50, true);
+      }
+      const snap = agg.getSnapshot();
+      expect(snap.totalToolCalls).toBe(0);
     });
   });
 });

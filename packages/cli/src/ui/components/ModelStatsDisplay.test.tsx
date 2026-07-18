@@ -8,7 +8,6 @@ import { render } from '../../test-utils/render.js';
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import type { SessionMetrics } from '../contexts/SessionContext.js';
 import {
   withTokenTracking,
   type TestMetricsInput,
@@ -25,11 +24,8 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
 
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 
-const withMetrics = (partial: TestMetricsInput): SessionMetrics =>
-  withTokenTracking(partial);
-
 const renderWithMockedStats = (metrics: TestMetricsInput) => {
-  const fullMetrics = withMetrics(metrics);
+  const fullMetrics = withTokenTracking(metrics);
   useSessionStatsMock.mockReturnValue({
     stats: {
       sessionId: 'test-session',

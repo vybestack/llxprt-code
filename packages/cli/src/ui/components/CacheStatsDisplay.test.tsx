@@ -90,6 +90,7 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     uiTelemetryService.reset();
+    promptIdCounter = 0;
   });
 
   it('should show "no cache data" when no provider-owned events with cache data', () => {
@@ -107,7 +108,7 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     const { lastFrame } = renderCacheStats();
     const output = lastFrame();
     expect(output).toContain('Cache Reads');
-    expect(output).toContain('Cache Hit Rate');
+    expect(output).toContain('Cached Token Ratio');
     expect(output).toMatch(/2[,\s]?000/);
   });
 
@@ -181,7 +182,7 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     expect(output).toMatch(/0/);
   });
 
-  it('should clamp cache hit rate to 100% when cached tokens exceed input tokens', () => {
+  it('should clamp cached token ratio to 100% when cached tokens exceed input tokens', () => {
     // cachedTokens (2000) > promptTokens (1000) — a 200% raw ratio that
     // should be clamped to the maximum of 100%.
     emitCacheResponse({
@@ -193,8 +194,8 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     const { lastFrame } = renderCacheStats();
     const output = lastFrame();
 
-    expect(output).toContain('Cache Hit Rate');
-    // The clamped hit rate is exactly 100.0%, not the raw 200.0%.
+    expect(output).toContain('Cached Token Ratio');
+    // The clamped ratio is exactly 100.0%, not the raw 200.0%.
     expect(output).toContain('100.0%');
     expect(output).not.toContain('200.0%');
   });

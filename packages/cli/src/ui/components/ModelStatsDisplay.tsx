@@ -10,7 +10,7 @@ import { theme } from '../semantic-colors.js';
 import { formatDuration } from '../utils/formatters.js';
 import {
   calculateAverageLatency,
-  calculateCacheHitRate,
+  calculateCachedTokenRatio,
   calculateErrorRate,
 } from '../utils/computeStats.js';
 import {
@@ -105,10 +105,11 @@ function buildOptionalTokenRows(
         activeModels,
         'Cache Reads',
         (m) => {
-          const cacheHitRate = calculateCacheHitRate(m);
+          const cachedTokenRatio = calculateCachedTokenRatio(m);
           return (
             <Text color={theme.text.secondary}>
-              {m.tokens.cached.toLocaleString()} ({cacheHitRate.toFixed(1)}%)
+              {m.tokens.cached.toLocaleString()} ({cachedTokenRatio.toFixed(1)}
+              %)
             </Text>
           );
         },

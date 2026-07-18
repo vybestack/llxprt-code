@@ -168,35 +168,6 @@ function sanitizeFinite(value: number): number {
 }
 
 /**
- * Compute the union duration of two already-merged interval lists.
- * Both inputs are individually sorted and non-overlapping, so this is a
- * simple merge of two sorted lists.
- */
-function computeUnionDuration(
-  a: readonly Interval[],
-  b: readonly Interval[],
-): number {
-  if (a.length === 0) {
-    return b.reduce((sum, iv) => sum + (iv.end - iv.start), 0);
-  }
-  if (b.length === 0) {
-    return a.reduce((sum, iv) => sum + (iv.end - iv.start), 0);
-  }
-  const all = [...a, ...b].sort((x, y) => x.start - y.start);
-  const merged: Interval[] = [{ ...all[0] }];
-  for (let i = 1; i < all.length; i++) {
-    const last = merged[merged.length - 1];
-    const current = all[i];
-    if (current.start <= last.end) {
-      last.end = Math.max(last.end, current.end);
-    } else {
-      merged.push({ ...current });
-    }
-  }
-  return merged.reduce((sum, iv) => sum + (iv.end - iv.start), 0);
-}
-
-/**
  * Unbounded deduplication set for session-lifetime exactly-once tracking.
  * IDs are retained until reset() so replayed older attempts are not
  * double-counted.
@@ -217,16 +188,14 @@ class DedupSet {
   }
 }
 
-/** Maximum disjoint intervals before incremental compaction triggers. */
-const MAX_INTERVALS = 200;
-
 /**
  * Incrementally maintained, sorted, non-overlapping interval list.
  *
- * Each insertion is O(n) worst-case (binary-search position + neighbor merge)
- * — never a full O(n log n) re-sort. When the interval count exceeds
- * {@link MAX_INTERVALS}, the pair with the smallest gap is merged, bounding
- * memory in long sessions while keeping the union duration exact.
+ * Each insertion is O(n) worst-case (binary-search position + neighbor
+ * merge) — never a full O(n log n) re-sort. The union is kept exact for
+ * the entire session lifetime: no intervals are evicted or merged across
+ * gaps, so a late-arriving out-of-order interval that overlaps an earlier
+ * one is always applied correctly. Gaps are never bridged.
  */
 class IntervalUnion {
   private intervals: Interval[] = [];
@@ -237,7 +206,6 @@ class IntervalUnion {
     if (!Number.isFinite(start) || !Number.isFinite(end)) return;
     if (end <= start) return;
     this.insertSorted({ start, end });
-    this.compactIfNeeded();
     this.recomputeDuration();
   }
 
@@ -294,18 +262,6 @@ class IntervalUnion {
     }
   }
 
-  private compactIfNeeded(): void {
-    // Never merge intervals separated by a positive gap — that would
-    // count idle time as active. When the interval count exceeds
-    // MAX_INTERVALS, we simply stop accepting more (the most recent
-    // insertion is already merged if overlapping/adjacent). This keeps
-    // the union duration exact for all retained intervals.
-    if (this.intervals.length <= MAX_INTERVALS) return;
-    // Drop the oldest interval to bound memory. This loses a small
-    // amount of active time in extreme cases but never bridges gaps.
-    this.intervals.shift();
-  }
-
   private recomputeDuration(): void {
     let total = 0;
     for (const iv of this.intervals) {
@@ -318,11 +274,7 @@ class IntervalUnion {
 export class SessionMetricsAggregator {
   private readonly seenAttemptIds = new DedupSet();
   private readonly seenToolCallIds = new DedupSet();
-  private readonly apiIntervals = new IntervalUnion();
-  private readonly toolIntervals = new IntervalUnion();
-
-  /** Counter for synthetic dedup keys when callId is missing */
-  private toolSyntheticCounter = 0;
+  private readonly activeIntervals = new IntervalUnion();
 
   private totalApiRequests = 0;
   private totalApiErrors = 0;
@@ -449,9 +401,9 @@ export class SessionMetricsAggregator {
       record.hasUsage,
     );
 
-    // Track API interval for union calculation
+    // Track API interval in the shared activity union.
     if (durationMs > 0) {
-      this.apiIntervals.add(
+      this.activeIntervals.add(
         record.timestampMs,
         record.timestampMs + durationMs,
       );
@@ -626,12 +578,18 @@ export class SessionMetricsAggregator {
     startTimestampMs?: number,
     status?: string,
   ): boolean {
-    // Missing callId must not bypass exactly-once dedup. Generate a
-    // stable synthetic key from toolName + sequential counter so every
-    // tool call is tracked exactly once within the session.
-    const dedupKey = callId ?? `${toolName}#${this.toolSyntheticCounter++}`;
-    if (this.seenToolCallIds.has(dedupKey)) return false;
-    this.seenToolCallIds.add(dedupKey);
+    // Finding #3: canonical completed tool events require a stable
+    // producer-provided callId for exact dedup. Identity-less records
+    // (no callId or empty/whitespace callId) are rejected — they cannot
+    // be deduplicated, so accepting them would risk double-counting on
+    // replay. Never synthesize random/sequential IDs.
+    const validCallId =
+      callId !== undefined && callId.trim() !== '' ? callId : undefined;
+    if (validCallId === undefined) {
+      return false;
+    }
+    if (this.seenToolCallIds.has(validCallId)) return false;
+    this.seenToolCallIds.add(validCallId);
 
     const duration = sanitizeFinite(durationMs);
     this.totalToolCalls++;
@@ -658,7 +616,7 @@ export class SessionMetricsAggregator {
     }
 
     if (duration > 0 && startTimestampMs !== undefined) {
-      this.toolIntervals.add(startTimestampMs, startTimestampMs + duration);
+      this.activeIntervals.add(startTimestampMs, startTimestampMs + duration);
     }
 
     return true;
@@ -670,8 +628,7 @@ export class SessionMetricsAggregator {
     // before an explicitly recorded completed interval.
     const sessionCurrentMs = Math.max(
       performance.now(),
-      this.apiIntervals.latestEnd,
-      this.toolIntervals.latestEnd,
+      this.activeIntervals.latestEnd,
     );
     const agentActiveTimeMs = this.computeAgentActiveTimeMs(sessionCurrentMs);
 
@@ -784,12 +741,7 @@ export class SessionMetricsAggregator {
   }
 
   private computeAgentActiveTimeMs(sessionCurrentMs: number): number {
-    const apiMerged = this.apiIntervals.getMerged();
-    const toolMerged = this.toolIntervals.getMerged();
-    const rawAgentActiveTimeMs =
-      apiMerged.length > 0 || toolMerged.length > 0
-        ? computeUnionDuration(apiMerged, toolMerged)
-        : 0;
+    const rawAgentActiveTimeMs = this.activeIntervals.duration;
     // When sessionStartMs is null (no positive timestamps recorded), we
     // cannot compute a meaningful wall-clock clamp. Return the raw union
     // duration to avoid artificially zeroing out activity time.
@@ -807,9 +759,7 @@ export class SessionMetricsAggregator {
   reset(): void {
     this.seenAttemptIds.clear();
     this.seenToolCallIds.clear();
-    this.apiIntervals.clear();
-    this.toolIntervals.clear();
-    this.toolSyntheticCounter = 0;
+    this.activeIntervals.clear();
     this.totalApiRequests = 0;
     this.totalApiErrors = 0;
     this.totalInputTokens = 0;

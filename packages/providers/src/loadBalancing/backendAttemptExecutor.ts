@@ -51,38 +51,59 @@ export interface BackendAttemptParams {
   readonly startTime: number;
   readonly chunksYielded: { value: boolean };
   readonly lifecycleObserver: AttemptLifecycleObserver | undefined;
-  readonly attemptCtx: BackendAttemptContext | null;
+  /** Factory that starts the backend attempt lifecycle. Called only
+   * after setup checks pass, immediately before the actual delegate
+   * generateChatCompletion invocation — so setup failures (missing
+   * provider, exhausted transport budget) do NOT emit phantom lifecycle
+   * start events. Returns the context needed for the terminal record. */
+  readonly startBackendAttempt: () => BackendAttemptContext | null;
   readonly deps: BackendAttemptDeps;
 }
 
 /**
- * Prepare the delegate attempt and timeout-wrapped iterator for a single
- * backend request.
+ * Validate that the backend is ready for an attempt. May throw on setup
+ * failure (missing provider or exhausted transport budget). Does NOT
+ * emit lifecycle events or invoke the delegate — callers can safely
+ * failover when this throws without leaving a phantom lifecycle record.
+ *
+ * Returns the resolved options and delegate provider so the caller can
+ * start the lifecycle and invoke the delegate immediately after.
  */
-function prepareBackendAttempt(
+function resolveBackendDelegate(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   options: GenerateChatOptions,
-  settings: FailoverSettings,
-  lifecycleObserver: AttemptLifecycleObserver | undefined,
-  attemptCtx: BackendAttemptContext | null,
   deps: BackendAttemptDeps,
-): { attempt: DelegateAttempt; iterator: AsyncGenerator<IContent> } {
+): {
+  resolvedOptions: GenerateChatOptions;
+  delegateProvider: NonNullable<
+    ReturnType<ProviderManager['getProviderByName']>
+  >;
+} {
   const resolvedOptions = deps.buildResolvedOptions(subProfile, options);
   const delegateProvider = deps.providerManager.getProviderByName(
     subProfile.providerName,
   );
   if (!delegateProvider) {
-    notifyBackendResult(
-      lifecycleObserver,
-      attemptCtx,
-      subProfile,
-      'error',
-      `Provider "${subProfile.providerName}" not found`,
-    );
     throw new Error(`Provider "${subProfile.providerName}" not found`);
   }
   requireTransportAttempt(resolvedOptions);
+  return { resolvedOptions, delegateProvider };
+}
 
+/**
+ * Invoke the delegate provider and wrap the resulting iterator with
+ * timeout handling. This is the point where a real transport attempt
+ * begins — lifecycle start must have already been emitted.
+ */
+function startDelegateIterator(
+  delegateProvider: NonNullable<
+    ReturnType<ProviderManager['getProviderByName']>
+  >,
+  resolvedOptions: GenerateChatOptions,
+  settings: FailoverSettings,
+  subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+  deps: BackendAttemptDeps,
+): { attempt: DelegateAttempt; iterator: AsyncGenerator<IContent> } {
   const attempt = createDelegateAttempt(resolvedOptions);
   const rawIterator = delegateProvider.generateChatCompletion(attempt.options);
   const iterator = wrapWithTimeout(
@@ -116,30 +137,34 @@ export async function* executeBackendAttempt(
     startTime,
     chunksYielded,
     lifecycleObserver,
-    attemptCtx,
+    startBackendAttempt,
     deps,
   } = params;
 
-  deps.logger.debug(
-    () =>
-      `[LB:failover] Trying backend: ${subProfile.name} (start time: ${startTime})`,
-  );
-
   deps.markActiveSelection(subProfile.name);
+  const chunks: IContent[] = [];
+  let attemptCtx: BackendAttemptContext | null = null;
+  let terminalEmitted = false;
 
-  const { attempt, iterator } = prepareBackendAttempt(
+  const { resolvedOptions, delegateProvider } = resolveBackendDelegate(
     subProfile,
     options,
-    settings,
-    lifecycleObserver,
-    attemptCtx,
     deps,
   );
+  attemptCtx = startBackendAttempt();
 
-  const chunks: IContent[] = [];
-  let terminalEmitted = false;
   try {
-    for await (const chunk of cleanupDelegateAttempt(attempt, iterator)) {
+    const prepared = startDelegateIterator(
+      delegateProvider,
+      resolvedOptions,
+      settings,
+      subProfile,
+      deps,
+    );
+    for await (const chunk of cleanupDelegateAttempt(
+      prepared.attempt,
+      prepared.iterator,
+    )) {
       chunksYielded.value = true;
       chunks.push(chunk);
       yield chunk;
@@ -173,8 +198,6 @@ export async function* executeBackendAttempt(
     terminalEmitted = true;
     throw error;
   } finally {
-    // Early iterator close (consumer return without error) must
-    // finalize as aborted exactly once.
     if (!terminalEmitted) {
       notifyBackendResult(
         lifecycleObserver,

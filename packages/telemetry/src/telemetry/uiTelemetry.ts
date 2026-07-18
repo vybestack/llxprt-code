@@ -430,9 +430,15 @@ export class UiTelemetryService extends EventEmitter {
   private processToolCall(event: ToolCallEvent): boolean {
     const { tools, files } = this.#metrics;
     const callId = event.call_id;
+
+    // Finding #3: identity-less tool events (no call_id) must not be
+    // accepted as distinct. Without a stable producer-provided identity,
+    // replays would double-count. Reject them at the service boundary.
+    if (callId === undefined || callId === '') {
+      return false;
+    }
+
     const isCancelled = event.status === 'cancelled';
-    // Explicit start/end timestamps take precedence over duration_ms
-    // per the event contract.
     const durationMs =
       event.start_ms !== undefined && event.end_ms !== undefined
         ? norm(event.end_ms - event.start_ms)
@@ -453,14 +459,9 @@ export class UiTelemetryService extends EventEmitter {
 
     tools.totalCalls++;
     tools.totalDurationMs += durationMs;
-
-    if (isCancelled) {
-      tools.totalCancelled++;
-    } else if (event.success) {
-      tools.totalSuccess++;
-    } else {
-      tools.totalFail++;
-    }
+    if (isCancelled) tools.totalCancelled++;
+    else if (event.success) tools.totalSuccess++;
+    else tools.totalFail++;
 
     if (!(event.function_name in tools.byName)) {
       tools.byName[event.function_name] = {
@@ -481,14 +482,22 @@ export class UiTelemetryService extends EventEmitter {
     const toolStats = tools.byName[event.function_name];
     toolStats.count++;
     toolStats.durationMs += durationMs;
-    if (isCancelled) {
-      toolStats.cancelled++;
-    } else if (event.success) {
-      toolStats.success++;
-    } else {
-      toolStats.fail++;
-    }
+    if (isCancelled) toolStats.cancelled++;
+    else if (event.success) toolStats.success++;
+    else toolStats.fail++;
 
+    this.recordToolDecision(event, tools, toolStats);
+    this.recordFileLineCounts(event, files);
+
+    this.syncTimingFromAggregator();
+    return true;
+  }
+
+  private recordToolDecision(
+    event: ToolCallEvent,
+    tools: SessionMetrics['tools'],
+    toolStats: ToolCallStats,
+  ): void {
     const decision = event.decision as unknown;
     if (decision !== undefined && decision !== '') {
       const toolDecision = event.decision;
@@ -497,24 +506,25 @@ export class UiTelemetryService extends EventEmitter {
         toolStats.decisions[toolDecision]++;
       }
     }
+  }
 
-    if (event.metadata) {
-      if (
-        event.metadata['ai_added_lines'] !== undefined &&
-        typeof event.metadata['ai_added_lines'] === 'number'
-      ) {
-        files.totalLinesAdded += event.metadata['ai_added_lines'];
-      }
-      if (
-        event.metadata['ai_removed_lines'] !== undefined &&
-        typeof event.metadata['ai_removed_lines'] === 'number'
-      ) {
-        files.totalLinesRemoved += event.metadata['ai_removed_lines'];
-      }
+  private recordFileLineCounts(
+    event: ToolCallEvent,
+    files: SessionMetrics['files'],
+  ): void {
+    if (!event.metadata) return;
+    if (
+      event.metadata['ai_added_lines'] !== undefined &&
+      typeof event.metadata['ai_added_lines'] === 'number'
+    ) {
+      files.totalLinesAdded += event.metadata['ai_added_lines'];
     }
-
-    this.syncTimingFromAggregator();
-    return true;
+    if (
+      event.metadata['ai_removed_lines'] !== undefined &&
+      typeof event.metadata['ai_removed_lines'] === 'number'
+    ) {
+      files.totalLinesRemoved += event.metadata['ai_removed_lines'];
+    }
   }
 }
 

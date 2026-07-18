@@ -62,9 +62,11 @@ type TestMetricsInput = {
 
 export type { TestMetricsInput };
 
-// Deep-clone the nested default objects so that tests that mutate spread
-// copies cannot corrupt the shared module-level singletons. Each invocation
-// of withTokenTracking / defaultZeroMetrics must see pristine nested state.
+// Clone the nested default objects (one level deep) so that tests that
+// mutate spread copies cannot corrupt the shared module-level singletons.
+// Each invocation of withTokenTracking / defaultZeroMetrics must see
+// pristine nested state. Only nested defaults are cloned — deeply nested
+// values within them are not recursively cloned.
 const cloneTokenTracking = () => ({
   ...defaultTokenTracking,
   sessionTokenUsage: { ...defaultTokenTracking.sessionTokenUsage },

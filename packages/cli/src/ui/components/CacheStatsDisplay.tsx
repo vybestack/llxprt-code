@@ -15,6 +15,7 @@ import { Box, Text } from 'ink';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { theme } from '../semantic-colors.js';
+import { computeCachedTokenRatio } from '../utils/computeStats.js';
 
 const METRIC_COL_WIDTH = 35;
 const VALUE_COL_WIDTH = 20;
@@ -65,11 +66,8 @@ const CacheStatsHeader: React.FC = () => (
 );
 
 export const CacheStatsDisplay: React.FC = () => {
-  // Subscribe to telemetry updates so the display re-renders on new events
   useSessionStats();
-
   const snap = uiTelemetryService.getSessionSnapshot();
-
   if (!snap.hasReliableCacheReads && !snap.hasReliableCacheWrites) {
     return (
       <NoStatsBox message="No cache data available. Cache statistics are available for providers that support prompt caching (e.g. Anthropic, OpenAI, Groq, Deepseek, Fireworks, OpenRouter, Qwen)." />
@@ -80,15 +78,10 @@ export const CacheStatsDisplay: React.FC = () => {
   const cacheWrites = snap.totalCacheWrites;
   const requestsWithReads = snap.requestsWithCacheReads;
   const requestsWithWrites = snap.requestsWithCacheWrites;
-
-  // Compute hit rate from the canonical input/cached token totals.
-  // Clamp to 100 in case inconsistent event metadata reports more cached
-  // tokens than total input tokens — a hit rate above 100% is nonsensical.
-  const hitRate =
-    snap.totalInputTokens > 0
-      ? Math.min(100, (snap.totalCachedTokens / snap.totalInputTokens) * 100)
-      : 0;
-
+  const cachedTokenRatio = computeCachedTokenRatio(
+    snap.totalCachedTokens,
+    snap.totalInputTokens,
+  );
   return (
     <Box
       borderStyle="round"
@@ -101,11 +94,7 @@ export const CacheStatsDisplay: React.FC = () => {
       {snap.hasReliableCacheReads && (
         <StatRow
           title="Cache Reads (tokens)"
-          value={
-            <Text color={theme.status.success}>
-              {cacheReads.toLocaleString()}
-            </Text>
-          }
+          value={cacheReads.toLocaleString()}
         />
       )}
       {snap.hasReliableCacheWrites && cacheWrites !== null && (
@@ -120,12 +109,14 @@ export const CacheStatsDisplay: React.FC = () => {
       )}
       {snap.hasReliableCacheReads && (
         <StatRow
-          title="Cache Hit Rate"
+          title="Cached Token Ratio"
           value={
             <Text
-              color={hitRate > 0 ? theme.status.success : theme.text.primary}
+              color={
+                cachedTokenRatio > 0 ? theme.status.success : theme.text.primary
+              }
             >
-              {hitRate.toFixed(1)}%
+              {cachedTokenRatio.toFixed(1)}%
             </Text>
           }
         />

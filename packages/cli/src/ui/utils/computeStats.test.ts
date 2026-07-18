@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateAverageLatency,
-  calculateCacheHitRate,
+  calculateCachedTokenRatio,
   calculateErrorRate,
   computeSessionStats,
 } from './computeStats.js';
@@ -84,7 +84,7 @@ describe('calculateAverageLatency', () => {
   });
 });
 
-describe('calculateCacheHitRate', () => {
+describe('calculateCachedTokenRatio', () => {
   it('should return 0 if prompt tokens is 0', () => {
     const metrics: ModelMetrics = {
       api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
@@ -98,10 +98,10 @@ describe('calculateCacheHitRate', () => {
         tool: 0,
       },
     };
-    expect(calculateCacheHitRate(metrics)).toBe(0);
+    expect(calculateCachedTokenRatio(metrics)).toBe(0);
   });
 
-  it('should calculate the cache hit rate correctly', () => {
+  it('should calculate the cached token ratio correctly', () => {
     const metrics: ModelMetrics = {
       api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
       tokens: {
@@ -114,7 +114,55 @@ describe('calculateCacheHitRate', () => {
         tool: 0,
       },
     };
-    expect(calculateCacheHitRate(metrics)).toBe(25);
+    expect(calculateCachedTokenRatio(metrics)).toBe(25);
+  });
+
+  it('should clamp to 100 when cached exceeds prompt (cached > prompt)', () => {
+    const metrics: ModelMetrics = {
+      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      tokens: {
+        input: 1000,
+        prompt: 1000,
+        candidates: 0,
+        total: 0,
+        cached: 2000,
+        thoughts: 0,
+        tool: 0,
+      },
+    };
+    expect(calculateCachedTokenRatio(metrics)).toBe(100);
+  });
+
+  it('should clamp to 0 for invalid (NaN/Infinity) token values', () => {
+    const metrics: ModelMetrics = {
+      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      tokens: {
+        input: Number.NaN,
+        prompt: Number.POSITIVE_INFINITY,
+        candidates: 0,
+        total: 0,
+        cached: Number.NaN,
+        thoughts: 0,
+        tool: 0,
+      },
+    };
+    expect(calculateCachedTokenRatio(metrics)).toBe(0);
+  });
+
+  it('should clamp negative cached tokens to 0', () => {
+    const metrics: ModelMetrics = {
+      api: { totalRequests: 0, totalErrors: 0, totalLatencyMs: 0 },
+      tokens: {
+        input: 1000,
+        prompt: 1000,
+        candidates: 0,
+        total: 0,
+        cached: -500,
+        thoughts: 0,
+        tool: 0,
+      },
+    };
+    expect(calculateCachedTokenRatio(metrics)).toBe(0);
   });
 });
 

@@ -26,18 +26,15 @@ export async function resolveAuthTokenFromOptions(
   // Handle RuntimeAuthTokenProvider object with provide method — check
   // this BEFORE the plain-function branch so callable objects that also
   // expose `provide` are routed correctly.
-  if (
-    authToken &&
-    typeof authToken === 'object' &&
-    'provide' in authToken &&
-    typeof (authToken as { provide?: unknown }).provide === 'function'
-  ) {
+  const canHaveProvide =
+    typeof authToken === 'object' || typeof authToken === 'function';
+  const provide =
+    authToken && canHaveProvide && 'provide' in authToken
+      ? (authToken as { provide?: unknown }).provide
+      : undefined;
+  if (typeof provide === 'function') {
     try {
-      const result = await (
-        authToken as {
-          provide: () => Promise<string | undefined> | string | undefined;
-        }
-      ).provide();
+      const result = await provide.call(authToken);
       return typeof result === 'string' ? result : '';
     } catch (err) {
       tokenResolverLogger.debug(

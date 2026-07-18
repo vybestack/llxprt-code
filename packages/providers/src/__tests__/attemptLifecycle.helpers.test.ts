@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -14,6 +14,28 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+/**
+ * Creates a minimal RuntimeSettingsState stub that returns the given config
+ * from getConfig() and no-ops all other SettingsService methods. This is
+ * used by test stacks that exercise the LoggingProviderWrapper without
+ * needing a full SettingsService instance.
+ */
+export function createTestSettingsService(
+  _config: Config,
+): RuntimeSettingsState {
+  return {
+    get: () => undefined,
+    set: () => {},
+    getProviderSettings: () => ({}),
+    setProviderSetting: () => {},
+    getAllGlobalSettings: () => ({}),
+    clear: () => {},
+    getSettings: () => Promise.resolve({}),
+    updateSettings: () => Promise.resolve(),
+  };
+}
 
 export function createConfig(loggingEnabled = false): Config {
   return {
@@ -51,11 +73,30 @@ export function makeOptions(
   return {
     contents,
     invocation: {
-      settingsService: { getConfig: () => config } as never,
+      settingsService: createTestSettingsService(config),
       config,
     },
     resolved: { model: 'test-model' },
   };
+}
+
+/**
+ * Creates options with an already-aborted signal in the runtime metadata
+ * where the abort signal is read.
+ */
+export function makeAbortedOptions(
+  config: Config,
+  contents: IContent[],
+): GenerateChatOptions {
+  const controller = new AbortController();
+  controller.abort();
+  const options = makeOptions(config, contents);
+  // The abort signal is read from metadata in the retry/load-balancer paths
+  options.metadata = {
+    ...(options.metadata ?? {}),
+    abortSignal: controller.signal,
+  };
+  return options;
 }
 
 export async function consumeStream(
@@ -81,7 +122,7 @@ export function buildStack(
   const wrapper = new LoggingProviderWrapper(retry, config);
   wrapper.setRuntimeContextResolver(() => ({
     runtimeId: 'test-exact',
-    settingsService: { getConfig: () => config } as never,
+    settingsService: createTestSettingsService(config),
     config,
     metadata: {},
   }));
@@ -344,8 +385,6 @@ export const SUCCESS_CHUNKS: IContent[] = [
     metadata: { usage: USAGE_BASIC },
   } as IContent,
 ];
-
-import { describe, it, expect } from 'vitest';
 
 describe('attemptLifecycle test helpers', () => {
   it('exports valid provider stubs and constants', () => {

@@ -62,6 +62,11 @@ describe('safeGetDefaultModel regression', () => {
       expect(safeGetDefaultModel(provider)).toBe('');
     });
 
+    it('returns empty string when getDefaultModel is non-callable', () => {
+      const provider = { getDefaultModel: 'gpt-4' };
+      expect(safeGetDefaultModel(provider)).toBe('');
+    });
+
     it('returns empty string when getDefaultModel returns undefined', () => {
       const provider = { getDefaultModel: () => undefined };
       expect(safeGetDefaultModel(provider)).toBe('');

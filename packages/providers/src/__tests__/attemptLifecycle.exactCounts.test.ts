@@ -196,3 +196,73 @@ describe('#10 relative TTFT / last token / generation', () => {
     expect(metrics.tokensPerSecond).toBeCloseTo(178.57, 0);
   });
 });
+
+describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
+    uiTelemetryService.reset();
+  });
+
+  it('sync throw records a finite non-negative monotonic elapsed duration', async () => {
+    const config = createConfig(false);
+    const wrapper = new LoggingProviderWrapper(new SyncThrowProvider(), config);
+    wrapper.setRuntimeContextResolver(() => ({
+      runtimeId: 'test',
+      settingsService: { getConfig: () => config } as never,
+      config,
+      metadata: {},
+    }));
+    await expect(
+      consumeStream(
+        wrapper.generateChatCompletion(makeOptions(config, makeContent())),
+      ),
+    ).rejects.toThrow('Synchronous throw');
+    const snap = uiTelemetryService.getSessionSnapshot();
+    // The monotonic elapsed must be finite and non-negative (Date.now
+    // wall-clock changes would break this with the old Date.now approach).
+    expect(Number.isFinite(snap.accumulatedApiTimeMs)).toBe(true);
+    expect(snap.accumulatedApiTimeMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('sync throw elapsed uses performance.now, not Date.now (wall-clock shift)', async () => {
+    // Simulate a wall-clock adjustment between request start and the
+    // sync throw. performance.now is monotonic so the elapsed must be
+    // small and positive; Date.now would yield a negative or huge value.
+    let perfNow = 1000;
+    const perfSpy = vi
+      .spyOn(performance, 'now')
+      .mockImplementation(() => perfNow);
+
+    const config = createConfig(false);
+    // Provider that advances the mocked performance.now by 5ms before
+    // throwing synchronously, simulating real elapsed work.
+    const provider = new SyncThrowProvider();
+    const wrapper = new LoggingProviderWrapper(provider, config);
+    wrapper.setRuntimeContextResolver(() => ({
+      runtimeId: 'test',
+      settingsService: { getConfig: () => config } as never,
+      config,
+      metadata: {},
+    }));
+
+    // Patch the provider to advance performance.now before throwing
+    const origGenerate = provider.generateChatCompletion.bind(provider);
+    provider.generateChatCompletion = function* () {
+      perfNow += 5;
+      yield* origGenerate();
+    };
+
+    await expect(
+      consumeStream(
+        wrapper.generateChatCompletion(makeOptions(config, makeContent())),
+      ),
+    ).rejects.toThrow('Synchronous throw');
+
+    const snap = uiTelemetryService.getSessionSnapshot();
+    // The recorded elapsed is the monotonic delta (5ms), finite and
+    // non-negative — NOT affected by any Date.now wall-clock change.
+    expect(snap.accumulatedApiTimeMs).toBe(5);
+    perfSpy.mockRestore();
+  });
+});

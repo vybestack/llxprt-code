@@ -44,6 +44,7 @@ import { requireTransportAttempt } from './loadBalancing/delegateAttempt.js';
 import { executeBackendAttempt } from './loadBalancing/backendAttemptExecutor.js';
 import {
   observeDelegateFailure,
+  recordBackendFailure,
   shouldSkipBackend,
   validateNotAllUnhealthy,
 } from './loadBalancing/backendRuntime.js';
@@ -773,6 +774,14 @@ export class LoadBalancingProvider implements IProvider {
             numProfiles,
           );
         }
+        if (!requestStarted) {
+          recordBackendFailure(errors, subProfile.name, error);
+          return this.failoverState.advanceFrom(
+            requestOwner,
+            currentIndex,
+            numProfiles,
+          );
+        }
         const handled = this.handleFailoverError(
           error,
           subProfile,
@@ -788,7 +797,7 @@ export class LoadBalancingProvider implements IProvider {
           hasTransportAttemptRemaining(options),
         );
         if (handled === 'immediate-throw') throw error;
-        if (handled === 'break' || !requestStarted) break;
+        if (handled === 'break') break;
         if (settings.retryDelayMs > 0) {
           await delay(settings.retryDelayMs, getRequestSignal(options));
         }
@@ -825,11 +834,13 @@ export class LoadBalancingProvider implements IProvider {
     chunksYielded: { value: boolean },
     requestLocalAttemptIndex: number,
   ): AsyncGenerator<IContent> {
-    const { lifecycleObserver, attemptCtx } = this.startBackendAttempt(
-      options,
-      subProfile,
-      requestLocalAttemptIndex,
-    );
+    // Capture the lifecycle observer once so the start factory can emit
+    // onAttemptStart at the right time (after setup passes).
+    const lifecycleObserver = getAttemptLifecycleObserver(options.metadata);
+    // Global counter only provides ID uniqueness; the attemptIndex is
+    // request-local so concurrent and later requests get correct indexes.
+    const idSequence = this.lbAttemptCounter++;
+
     yield* executeBackendAttempt({
       subProfile,
       options,
@@ -837,7 +848,15 @@ export class LoadBalancingProvider implements IProvider {
       startTime,
       chunksYielded,
       lifecycleObserver,
-      attemptCtx,
+      startBackendAttempt: () =>
+        notifyBackendStart(
+          lifecycleObserver,
+          this.config.profileName,
+          subProfile,
+          requestLocalAttemptIndex,
+          idSequence,
+          this.logger,
+        ),
       deps: {
         logger: this.logger,
         circuitBreaker: this.circuitBreaker,

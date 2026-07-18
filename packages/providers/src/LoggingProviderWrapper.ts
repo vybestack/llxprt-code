@@ -231,11 +231,6 @@ export class LoggingProviderWrapper implements IProvider {
     this.setupRedactorAndLogging(normalizedOptions, activeConfig);
     const promptId = this.generatePromptId();
     this.turnNumber++;
-    this.debug.log(
-      () =>
-        `After promptId generation: promptId=${promptId}, turnNumber=${this.turnNumber}`,
-    );
-
     const conversationLoggingEnabled =
       this.checkConversationLoggingEnabled(activeConfig);
 
@@ -245,22 +240,14 @@ export class LoggingProviderWrapper implements IProvider {
 
     this.logApiRequestTelemetry(activeConfig, normalizedOptions, promptId);
 
-    this.debug.log(
-      () =>
-        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents.length}`,
-    );
     const resolvedModelName =
       normalizedOptions.resolved?.model ?? this.getDefaultModel();
 
-    // Determine lifecycle ownership BEFORE creating the recorder.
-    // Finding #1/#3: If the wrapped transport owns its own attempts
-    // (e.g. LoadBalancingProvider) or if there's a RetryOrchestrator in
-    // the chain, the wrapper does NOT own lifecycle. Only a direct
-    // (no-retry, no-transport-owned) provider makes the wrapper the owner.
+    // Inner retry/load-balancer transports own their attempts; a direct
+    // provider leaves lifecycle ownership to this wrapper.
     const wrapperOwned = this.isWrapperLifecycleOwner();
 
-    // Create attempt recorder and install it in metadata so the
-    // RetryOrchestrator or provider-owned transport can invoke it per raw attempt.
+    // Install the recorder so an inner lifecycle owner can invoke it.
     const recorder = new AttemptRecorder({
       providerName: this.wrapped.name,
       defaultModelName: this.getDefaultModel(),
@@ -276,21 +263,29 @@ export class LoggingProviderWrapper implements IProvider {
       },
     };
 
-    // Finding #2: For the wrapper-owned path (direct/no-retry), start the
-    // attempt BEFORE invoking the provider. A synchronous throw from
-    // generateChatCompletion still has an active attempt to finalize.
+    // Start direct attempts before invocation so synchronous failures finalize.
     if (wrapperOwned) {
       recorder.ensureAttemptStarted();
     }
 
     let stream: AsyncIterableIterator<IContent>;
+    // performance.now() is monotonic and unaffected by wall-clock
+    // adjustments (NTP, DST), making elapsed-time measurement correct
+    // even across a system clock change.
+    const requestStartTime = performance.now();
     try {
       stream = this.wrapped.generateChatCompletion(optionsWithLifecycle);
     } catch (syncError) {
       // Synchronous throw from the provider — record performance, finalize
       // as error, and re-throw. Stream errors also call recordError, so this
       // closes the observability gap for synchronous failures.
-      this.performanceTracker.recordError(0, String(syncError), null, 0);
+      const elapsedMs = performance.now() - requestStartTime;
+      this.performanceTracker.recordError(
+        elapsedMs,
+        String(syncError),
+        null,
+        0,
+      );
       recorder.finalizeAttempt(
         'error',
         resolvedModelName,

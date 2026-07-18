@@ -9,7 +9,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { ToolCallDecision } from '@vybestack/llxprt-code-core/telemetry/index.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import type { SessionMetrics } from '../contexts/SessionContext.js';
 import {
   withTokenTracking,
   type TestMetricsInput,
@@ -26,15 +25,12 @@ vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
 
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 
-const withMetrics = (partial: TestMetricsInput): SessionMetrics =>
-  withTokenTracking(partial);
-
 const renderWithMockedStats = (metrics: TestMetricsInput) => {
   useSessionStatsMock.mockReturnValue({
     stats: {
       sessionId: 'test-session',
       sessionStartTime: new Date(),
-      metrics: withMetrics(metrics),
+      metrics: withTokenTracking(metrics),
       lastPromptTokenCount: 0,
       historyTokenCount: 0,
       promptCount: 5,

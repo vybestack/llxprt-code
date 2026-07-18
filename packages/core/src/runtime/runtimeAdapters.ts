@@ -98,9 +98,14 @@ export function createTelemetryAdapterFromConfig(
           : undefined);
       // Stable prompt identity matches logApiRequest's correlation key.
       const promptId = event.promptId ?? event.runtimeId ?? 'runtime';
-      // Caller-provided attempt identity; fall back to a unique per-event
-      // ID so distinct prompt-less attempts are never deduped together.
-      const attemptId = event.attemptId ?? randomUUID();
+      // Trim whitespace so padded IDs normalize to their core value.
+      // Empty/whitespace-only attemptId is treated as missing so the
+      // aggregator cannot dedupe unrelated attempts under a blank key.
+      const trimmedAttemptId = event.attemptId?.trim();
+      const attemptId =
+        trimmedAttemptId !== undefined && trimmedAttemptId !== ''
+          ? trimmedAttemptId
+          : randomUUID();
       const legacy = new LegacyApiResponseEvent(
         event.model,
         event.durationMs,
@@ -117,9 +122,14 @@ export function createTelemetryAdapterFromConfig(
     logApiError: (event) => {
       // Stable prompt identity matches logApiRequest's correlation key.
       const promptId = event.promptId ?? event.runtimeId ?? 'runtime';
-      // Caller-provided attempt identity; fall back to a unique per-event
-      // ID so distinct prompt-less attempts are never deduped together.
-      const attemptId = event.attemptId ?? randomUUID();
+      // Trim whitespace so padded IDs normalize to their core value.
+      // Empty/whitespace-only attemptId is treated as missing so the
+      // aggregator cannot dedupe unrelated attempts under a blank key.
+      const trimmedAttemptId = event.attemptId?.trim();
+      const attemptId =
+        trimmedAttemptId !== undefined && trimmedAttemptId !== ''
+          ? trimmedAttemptId
+          : randomUUID();
       const legacy = new LegacyApiErrorEvent(
         event.model,
         event.error,

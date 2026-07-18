@@ -157,6 +157,31 @@ describe('Canonical consumer behavior: tool calls through real event path', () =
     expect(snap.totalToolTimeMs).toBe(100);
   });
 
+  it('never counts an identity-less (missing call_id) tool event twice (finding #3)', () => {
+    // Identity-less events have no call_id. They must NOT be counted as
+    // distinct on replay — the same event replayed through the service
+    // boundary must never double-count. Since there is no stable ID to
+    // deduplicate by, the service drops identity-less events entirely.
+    svc.addEvent(makeToolCallEvent({ callId: undefined, duration: 100 }));
+    svc.addEvent(makeToolCallEvent({ callId: undefined, duration: 100 }));
+
+    const snap = svc.getSessionSnapshot();
+    // Identity-less events are not counted at all — not even once.
+    expect(snap.totalToolCalls).toBe(0);
+    expect(snap.totalToolTimeMs).toBe(0);
+  });
+
+  it('mixing identity-less and identified tool events does not affect identified counts (finding #3)', () => {
+    svc.addEvent(makeToolCallEvent({ callId: 'c1', duration: 100 }));
+    svc.addEvent(makeToolCallEvent({ callId: undefined, duration: 999 }));
+    svc.addEvent(makeToolCallEvent({ callId: 'c2', duration: 200 }));
+
+    const snap = svc.getSessionSnapshot();
+    // Only identified events are counted
+    expect(snap.totalToolCalls).toBe(2);
+    expect(snap.totalToolTimeMs).toBe(300);
+  });
+
   it('accumulates tool durations across calls', () => {
     svc.addEvent(makeToolCallEvent({ callId: 'c1', duration: 100 }));
     svc.addEvent(makeToolCallEvent({ callId: 'c2', duration: 200 }));
