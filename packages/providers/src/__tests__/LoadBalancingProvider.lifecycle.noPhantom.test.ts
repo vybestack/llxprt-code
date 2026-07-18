@@ -35,12 +35,18 @@ import { ATTEMPT_LIFECYCLE_KEY } from '../logging/attemptLifecycle.js';
 class LifecycleCapture implements AttemptLifecycleObserver {
   readonly starts: AttemptStartInfo[] = [];
   readonly ends: AttemptEndInfo[] = [];
+  readonly events: Array<
+    | { type: 'start'; info: AttemptStartInfo }
+    | { type: 'end'; info: AttemptEndInfo }
+  > = [];
 
   onAttemptStart(info: AttemptStartInfo): void {
     this.starts.push(info);
+    this.events.push({ type: 'start', info });
   }
   onAttemptEnd(info: AttemptEndInfo): void {
     this.ends.push(info);
+    this.events.push({ type: 'end', info });
   }
 }
 
@@ -230,13 +236,13 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
       void _chunk;
     }
 
-    // Each end's attemptId must match a preceding start's attemptId
-    for (const end of capture.ends) {
-      const matchingStart = capture.starts.find(
-        (s) => s.attemptId === end.attemptId,
-      );
-      expect(matchingStart).toBeDefined();
-    }
-    expect(capture.starts).toHaveLength(capture.ends.length);
+    expect(capture.events).toHaveLength(2);
+    expect(capture.events.map(({ type }) => type)).toStrictEqual([
+      'start',
+      'end',
+    ]);
+    expect(capture.events[0].info.attemptId).toBe(
+      capture.events[1].info.attemptId,
+    );
   });
 });

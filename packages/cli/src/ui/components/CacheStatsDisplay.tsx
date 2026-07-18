@@ -100,11 +100,7 @@ export const CacheStatsDisplay: React.FC = () => {
       {snap.hasReliableCacheWrites && cacheWrites !== null && (
         <StatRow
           title="Cache Writes (tokens)"
-          value={
-            <Text color={theme.text.primary}>
-              {cacheWrites.toLocaleString()}
-            </Text>
-          }
+          value={cacheWrites.toLocaleString()}
         />
       )}
       {snap.hasReliableCacheReads && (

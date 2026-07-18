@@ -109,7 +109,7 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     const output = lastFrame();
     expect(output).toContain('Cache Reads');
     expect(output).toContain('Cached Token Ratio');
-    expect(output).toMatch(/2[,\s]?000/);
+    expect(output).toContain('2,000');
   });
 
   it('should display cache writes from canonical snapshot', () => {
@@ -122,7 +122,7 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     const { lastFrame } = renderCacheStats();
     const output = lastFrame();
     expect(output).toContain('Cache Writes');
-    expect(output).toMatch(/300/);
+    expect(output).toContain('300');
   });
 
   it('should show the actual count of requests with cache reads and writes', () => {
@@ -179,7 +179,7 @@ describe('<CacheStatsDisplay /> (canonical snapshot)', () => {
     const { lastFrame } = renderCacheStats();
     const output = lastFrame();
     expect(output).toContain('Cache Writes');
-    expect(output).toMatch(/0/);
+    expect(output).toMatch(/Cache Writes \(tokens\)\s+0\b/);
   });
 
   it('should clamp cached token ratio to 100% when cached tokens exceed input tokens', () => {
