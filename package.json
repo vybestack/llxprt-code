@@ -62,6 +62,8 @@
     "auth:docker": "echo 'For ghcr.io, use: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin'",
     "auth": "npm run auth:npm && npm run auth:docker",
     "generate": "bun scripts/generate-git-commit-info.ts && bun scripts/generate_prompt_manifest.ts",
+    "generate:cli-launcher": "bun scripts/generate-cli-launcher.ts",
+    "check:cli-launcher": "bun scripts/generate-cli-launcher.ts --check",
     "predocs:settings": "npm run build --workspace @vybestack/llxprt-code-settings && npm run build --workspace @vybestack/llxprt-code-core",
     "schema:settings": "bun ./scripts/generate-settings-schema.ts",
     "docs:settings": "bun ./scripts/generate-settings-doc.ts",

@@ -29,6 +29,7 @@
     "scripts/copy_files.ts",
     "scripts/deflake.ts",
     "scripts/dev-env.ts",
+    "scripts/generate-cli-launcher.ts",
     "scripts/generate-git-commit-info.ts",
     "scripts/generate-keybindings-doc.ts",
     "scripts/generate-settings-doc.ts",

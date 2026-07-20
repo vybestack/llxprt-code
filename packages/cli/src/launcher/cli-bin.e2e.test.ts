@@ -5,11 +5,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, writeFile, rm, access } from 'node:fs/promises';
-import { accessSync, constants } from 'node:fs';
+import { mkdtemp, writeFile, readFile, rm, access } from 'node:fs/promises';
+import { accessSync, constants, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
+import { z } from 'zod';
+
+const childReportSchema = z.object({
+  execPath: z.string(),
+  argv: z.array(z.string()),
+});
+type ChildReport = z.infer<typeof childReportSchema>;
+
+const SUBPROCESS_TIMEOUT_MS = 15_000;
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -22,7 +31,10 @@ async function pathExists(targetPath: string): Promise<boolean> {
 
 function resolveExecutableFromPath(command: string): string | null {
   const lookup = process.platform === 'win32' ? 'where' : 'which';
-  const result = spawnSync(lookup, [command], { encoding: 'utf8' });
+  const result = spawnSync(lookup, [command], {
+    encoding: 'utf8',
+    timeout: SUBPROCESS_TIMEOUT_MS,
+  });
   if (result.status !== 0) {
     return null;
   }
@@ -43,6 +55,16 @@ async function resolveTestBunPath(workspaceBunPath: string): Promise<string> {
 }
 
 const cliPackageRoot = resolve(__dirname, '..', '..');
+const repositoryRoot = resolve(cliPackageRoot, '..', '..');
+const localBunCmd = resolve(repositoryRoot, 'node_modules', '.bin', 'bun.cmd');
+const localBunExe = resolve(repositoryRoot, 'node_modules', '.bin', 'bun.exe');
+const directBunExe = resolve(
+  repositoryRoot,
+  'node_modules',
+  'bun',
+  'bin',
+  'bun.exe',
+);
 const credentialSocketEnv = 'LLXPRT_CREDENTIAL_SOCKET';
 
 interface SubprocessResult {
@@ -50,6 +72,10 @@ interface SubprocessResult {
   readonly signal: NodeJS.Signals | null;
   readonly stdout: string;
   readonly stderr: string;
+}
+
+interface DefaultResolverResult extends SubprocessResult {
+  readonly selectedExecutable: string | null;
 }
 
 // Grace window to wait for a killed subprocess to emit 'close' before forcing
@@ -60,7 +86,7 @@ function runSubprocess(
   command: string,
   args: readonly string[],
   env: NodeJS.ProcessEnv,
-  timeoutMs = 15_000,
+  timeoutMs = SUBPROCESS_TIMEOUT_MS,
 ): Promise<SubprocessResult> {
   return new Promise((resolveSubprocess, reject) => {
     // Spawn in its own process group (detached) so the timeout handler can kill
@@ -299,13 +325,250 @@ async function runLauncherChild(
     expect(result.stderr).not.toMatch(/^(Uncaught .+|Error: .+)/m);
     return parsed as { socket: string | null; storageType: string };
   } finally {
-    // Cleanup must never mask the real assertion failure with a transient
-    // rm error (EBUSY/EPERM on Windows while subprocess handles release).
-    // The `temp-*` gitignore rule guarantees an orphan never pollutes the
-    // working tree even if this removal is skipped.
-    await rm(tempDir, { force: true, recursive: true }).catch(() => {});
+    await cleanupTempDirectory(tempDir);
   }
 }
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+interface CleanupOperations {
+  readonly remove: (directory: string) => Promise<void>;
+  readonly reportFailure: (message: string) => void;
+}
+
+const defaultCleanupOperations: CleanupOperations = {
+  remove: async (directory) => rm(directory, { force: true, recursive: true }),
+  reportFailure: (message) => process.stderr.write(message),
+};
+
+async function cleanupTempDirectory(
+  directory: string,
+  operations: CleanupOperations = defaultCleanupOperations,
+): Promise<void> {
+  try {
+    await operations.remove(directory);
+  } catch (error) {
+    try {
+      operations.reportFailure(
+        `Failed to remove test directory ${directory} (${describeError(error)}).\n`,
+      );
+    } catch (reportingError) {
+      void reportingError;
+    }
+  }
+}
+
+async function runDefaultResolverLauncher(
+  args: readonly string[],
+  resolveBunToCmd = false,
+): Promise<DefaultResolverResult> {
+  const binPath = resolve(cliPackageRoot, 'bin', 'llxprt.cjs');
+  const tempDir = await mkdtemp(join(tmpdir(), 'llxprt-e2e-argv-'));
+  const childEntry = join(tempDir, 'child.ts');
+  const launcherWrapper = join(tempDir, 'launcher-wrapper.cjs');
+  const selectedExecutableReport = join(tempDir, 'selected-executable.txt');
+
+  try {
+    await writeFile(
+      childEntry,
+      [
+        'process.stdout.write(',
+        '  JSON.stringify({ execPath: process.execPath, argv: process.argv.slice(2) }) + "\\n",',
+        '  () => process.exit(0),',
+        ');',
+      ].join('\n'),
+    );
+    await writeFile(
+      launcherWrapper,
+      [
+        `'use strict';`,
+        `const { spawn } = require('node:child_process');`,
+        `const { writeFileSync } = require('node:fs');`,
+        `const { runCliBin } = require(process.env.LLXPRT_E2E_BIN_PATH);`,
+        `const options = {`,
+        `  resolveEntry: () => process.env.LLXPRT_E2E_CHILD_ENTRY,`,
+        `  spawn: (command, args, spawnOptions) => {`,
+        `    writeFileSync(process.env.LLXPRT_E2E_SELECTED_EXECUTABLE, command);`,
+        `    return spawn(command, args, spawnOptions);`,
+        `  },`,
+        `  exit: (code) => process.exit(code ?? 0),`,
+        `};`,
+        `if (process.env.LLXPRT_E2E_BUN_PATH) {`,
+        `  options.resolveBun = () => process.env.LLXPRT_E2E_BUN_PATH;`,
+        `}`,
+        `runCliBin(options).catch((error) => {`,
+        `  process.stderr.write(String(error instanceof Error ? error.stack : error));`,
+        `  process.exit(1);`,
+        `});`,
+      ].join('\n'),
+    );
+
+    const env = {
+      ...process.env,
+      LLXPRT_E2E_BIN_PATH: binPath,
+      LLXPRT_E2E_CHILD_ENTRY: childEntry,
+      LLXPRT_E2E_SELECTED_EXECUTABLE: selectedExecutableReport,
+    };
+    delete env['LLXPRT_BUN_RELAUNCHED'];
+    if (resolveBunToCmd) {
+      env['LLXPRT_E2E_BUN_PATH'] = localBunCmd;
+    } else {
+      delete env['LLXPRT_E2E_BUN_PATH'];
+    }
+
+    const result = await runSubprocess(
+      process.execPath,
+      [launcherWrapper, ...args],
+      env,
+    );
+    const selectedExecutable = (await pathExists(selectedExecutableReport))
+      ? await readFile(selectedExecutableReport, 'utf8')
+      : null;
+    return { ...result, selectedExecutable };
+  } finally {
+    await cleanupTempDirectory(tempDir);
+  }
+}
+
+function parseChildReport(result: SubprocessResult): ChildReport {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout.trim());
+  } catch (error) {
+    throw new Error(
+      `Failed to parse child stdout as JSON: ${String(error)}\n` +
+        `stdout: ${result.stdout}\nstderr: ${result.stderr}`,
+      { cause: error },
+    );
+  }
+  try {
+    return childReportSchema.parse(parsed);
+  } catch (error) {
+    throw new Error(
+      `Failed to validate child report: ${String(error)}\n` +
+        `stdout: ${result.stdout}\nstderr: ${result.stderr}`,
+      { cause: error },
+    );
+  }
+}
+
+describe('cleanupTempDirectory', () => {
+  it('reports removal failures without rejecting', async () => {
+    const removalError = new Error('directory busy');
+    const reported: string[] = [];
+
+    await expect(
+      cleanupTempDirectory('temporary-directory', {
+        remove: async () => {
+          throw removalError;
+        },
+        reportFailure: (message) => reported.push(message),
+      }),
+    ).resolves.toBeUndefined();
+    expect(reported).toStrictEqual([
+      'Failed to remove test directory temporary-directory (directory busy).\n',
+    ]);
+  });
+});
+
+describe('parseChildReport', () => {
+  it('includes child output when stdout is not valid JSON', () => {
+    const result: SubprocessResult = {
+      code: 1,
+      signal: null,
+      stdout: 'not-json',
+      stderr: 'child failed',
+    };
+
+    expect(() => parseChildReport(result)).toThrowError(
+      /Failed to parse child stdout as JSON[\s\S]*stdout: not-json[\s\S]*stderr: child failed/,
+    );
+  });
+
+  it('includes child output when valid JSON does not match the report schema', () => {
+    const result: SubprocessResult = {
+      code: 1,
+      signal: null,
+      stdout: '{"execPath":42,"argv":[]}',
+      stderr: 'invalid child report',
+    };
+
+    expect(() => parseChildReport(result)).toThrowError(
+      /Failed to validate child report[\s\S]*stdout: {"execPath":42,"argv":\[\]}[\s\S]*stderr: invalid child report/,
+    );
+  });
+});
+
+describe('cli bin Windows native Bun resolution', () => {
+  it.runIf(process.platform === 'win32')(
+    'selects the direct native executable when .bin contains only a command shim',
+    async () => {
+      expect(() => accessSync(localBunCmd, constants.X_OK)).not.toThrow();
+      expect(existsSync(localBunExe)).toBe(false);
+      expect(() => accessSync(directBunExe, constants.X_OK)).not.toThrow();
+
+      const result = await runDefaultResolverLauncher([]);
+
+      expect(result.code).toBe(0);
+      const child = parseChildReport(result);
+      expect(result.selectedExecutable?.toLowerCase()).toBe(
+        directBunExe.toLowerCase(),
+      );
+      expect(child.execPath.toLowerCase()).toBe(directBunExe.toLowerCase());
+      expect(result.stderr).not.toContain('DEP0190');
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'preserves a multiword prompt as one child argument',
+    async () => {
+      const result = await runDefaultResolverLauncher([
+        '--prompt',
+        'hello world',
+      ]);
+
+      expect(result.code).toBe(0);
+      const child = parseChildReport(result);
+      expect(child.argv).toStrictEqual(['--prompt', 'hello world']);
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'preserves Windows shell metacharacters without a shell',
+    async () => {
+      const result = await runDefaultResolverLauncher([
+        '--prompt',
+        'hello & whoami',
+      ]);
+
+      expect(result.code).toBe(0);
+      const child = parseChildReport(result);
+      expect(child.argv).toStrictEqual(['--prompt', 'hello & whoami']);
+      expect(result.stderr).not.toContain(
+        'Cannot safely forward arguments containing Windows command-shell metacharacters',
+      );
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'rejects unsafe metacharacters for a bun.cmd-only fallback',
+    async () => {
+      const result = await runDefaultResolverLauncher(
+        ['--prompt', 'hello & whoami'],
+        true,
+      );
+
+      expect(result.code).toBe(43);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain(
+        'Cannot safely forward arguments containing Windows command-shell metacharacters',
+      );
+      expect(result.stderr).toContain('bun.exe is on PATH');
+    },
+  );
+});
 
 describe('cli bin end-to-end credential routing', () => {
   it.each([

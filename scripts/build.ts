@@ -31,6 +31,8 @@ if (!existsSync(join(root, 'node_modules'))) {
   execSync('npm install', { stdio: 'inherit', cwd: root });
 }
 
+execSync('npm run check:cli-launcher', { stdio: 'inherit', cwd: root });
+
 // build all workspaces/packages
 execSync('npm run generate', { stdio: 'inherit', cwd: root });
 execSync('npm run build --workspaces', { stdio: 'inherit', cwd: root });

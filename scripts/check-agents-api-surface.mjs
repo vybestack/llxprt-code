@@ -35,6 +35,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -164,10 +165,9 @@ function describeTscSpawnError(err) {
   }
   if (err.code === 'ENOENT') {
     if (err.stderr) console.error(err.stderr);
-    const npxName = process.platform === 'win32' ? 'npx.cmd' : 'npx';
     return (
-      `Failed to spawn tsc (ENOENT): '${npxName}' not found. ` +
-      'Ensure Node.js/npx is installed and on PATH.'
+      `Failed to spawn TypeScript with Node at '${process.execPath}' (ENOENT). ` +
+      'Ensure the current Node.js executable still exists and is runnable.'
     );
   }
   if (err.signal === 'SIGTERM' && err.status == null) {
@@ -190,10 +190,22 @@ function describeTscSpawnError(err) {
   return null;
 }
 
-function runTscBuild(tempConfigPath) {
-  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+function resolveTypeScriptCli() {
   try {
-    execFileSync(npxCmd, ['tsc', '-p', tempConfigPath], {
+    return createRequire(import.meta.url).resolve('typescript/bin/tsc');
+  } catch (err) {
+    const detail = err instanceof Error ? `: ${err.message}` : '';
+    throw new Error(
+      'Could not resolve the repository TypeScript CLI. Run "npm install" to install the local typescript dependency' +
+        detail,
+    );
+  }
+}
+
+function runTscBuild(tempConfigPath) {
+  const typeScriptCli = resolveTypeScriptCli();
+  try {
+    execFileSync(process.execPath, [typeScriptCli, '-p', tempConfigPath], {
       stdio: 'pipe',
       cwd: REPO_ROOT,
       encoding: 'utf8',
