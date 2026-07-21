@@ -345,7 +345,12 @@ function assertReleaseTarballAssets(releaseTarball) {
       `Failed to list release tarball (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
     );
   }
-  const files = new Set(result.stdout.split('\n'));
+  const files = new Set(
+    result.stdout
+      .split(/\r?\n/)
+      .map((entry) => entry.replace(/^\.\//, '').replace(/\\/g, '/'))
+      .filter(Boolean),
+  );
   const required = [
     'package/bin/llxprt',
     'package/scripts/install-native-launchers.cjs',
@@ -357,7 +362,7 @@ function assertReleaseTarballAssets(releaseTarball) {
   const missing = required.filter((p) => !files.has(p));
   if (missing.length > 0) {
     throw new Error(
-      `Release tarball missing required assets: ${missing.join(', ')}`,
+      `Release tarball missing required assets: ${missing.join(', ')}; listed entries: ${JSON.stringify([...files])}`,
     );
   }
 }
