@@ -453,11 +453,8 @@ export class Turn {
         return;
       }
       if (dispatch.action === 'process' && dispatch.chunk != null) {
-        // A semantic event rearms the inter-chunk guard (issue #2607 finding 2)
-        // so liveness-aware idle behavior is preserved across the whole stream.
-        if (idleMs > 0) {
-          watchdog.onSemanticEvent();
-        }
+        // Only a real model chunk advances the semantic-output watchdog.
+        watchdog.onSemanticEvent();
         onStreamProgress();
         cumulativeOutcome = this.mergeResponseOutcome(
           cumulativeOutcome,
@@ -768,17 +765,22 @@ export class Turn {
     }
 
     let acquiredIterator: AsyncIterator<StreamEvent> | undefined;
-    const firstEventPromise = (async () => {
-      const iterator = await this.openResponseStreamIterator(
-        req,
-        timeoutSignal,
-        onProviderError,
-        onStreamLiveness,
-      );
-      acquiredIterator = iterator;
+    const acquisitionPromise = this.openResponseStreamIterator(
+      req,
+      timeoutSignal,
+      onProviderError,
+      onStreamLiveness,
+    );
+    acquisitionPromise
+      .then((iterator) => {
+        acquiredIterator = iterator;
+        return iterator;
+      })
+      .catch(() => undefined);
+    const firstEventPromise = acquisitionPromise.then(async (iterator) => {
       const firstResult = await iterator.next();
       return { iterator, firstResult };
-    })();
+    });
     firstEventPromise.catch(() => {});
 
     try {
@@ -786,20 +788,18 @@ export class Turn {
         firstEventPromise,
         watchdog.timeoutPromise,
       ]);
-      // Disarm phase A (first-response) via the semantic event so phase B
-      // (inter-chunk) stays armed for the rest of the stream. Do NOT cancel —
-      // the whole-stream watchdog must remain active (issue #2607 finding 2).
-      watchdog.onSemanticEvent();
       return result;
     } catch (error) {
       watchdog.cancel();
-      await closeIteratorBounded(acquiredIterator, timeoutSignal);
-      firstEventPromise
-        .then(async (late) => {
-          if (late.iterator !== acquiredIterator) {
-            await closeIteratorBounded(late.iterator, timeoutSignal);
-          }
-        })
+      const iteratorAtCatch = acquiredIterator;
+      await closeIteratorBounded(iteratorAtCatch, timeoutSignal);
+      // Close a late-acquired iterator without waiting for its first next().
+      acquisitionPromise
+        .then((lateIterator) =>
+          lateIterator === iteratorAtCatch
+            ? undefined
+            : closeIteratorBounded(lateIterator, timeoutSignal),
+        )
         .catch(() => undefined);
       if (idleFlag.fire !== undefined) {
         throw new Error(
