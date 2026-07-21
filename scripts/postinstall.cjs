@@ -281,9 +281,15 @@ function installWindowsNativeLaunchers() {
       log: console.log,
     });
   } catch (error) {
+    // Normalize non-Error rejections (string, number, null) so the message
+    // extraction never throws and postinstall stays non-fatal as documented.
+    const msg =
+      error && typeof error.message === 'string'
+        ? error.message
+        : String(error);
     console.warn(
       'Warning: Windows native launcher generation failed (non-fatal):',
-      error.message,
+      msg,
     );
   }
 }

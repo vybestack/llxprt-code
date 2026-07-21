@@ -24,10 +24,17 @@
  *   a batch file. Delayed expansion (!VAR!) is off by default in batch files
  *   unless `setlocal enabledelayedexpansion` is used; the generated launcher
  *   does not enable it, so ! is not expanded. We double % and leave ! as-is.
+ *
+ * PowerShell resolution (root cause C, CI run 29850614559):
+ *   windows-latest ships PowerShell 7 (pwsh.exe) but NOT legacy `powershell`
+ *   on PATH. The PowerShell executable is resolved via resolvePwsh() (prefers
+ *   PWSH_PATH, then pwsh.exe via where.exe, then powershell.exe) so the
+ *   harness works on the actual runner image.
  */
 
 const { spawnSync } = require('node:child_process');
 const { CONSTRAINED_PATH } = require('./constants.cjs');
+const { resolvePwsh } = require('./pwsh-resolver.cjs');
 
 function probeArg(request) {
   return 'LLXPRT_PROBE=' + JSON.stringify(request);
@@ -123,8 +130,11 @@ function invokeCmd(cmdPath, args, opts) {
 
 function invokePwsh(ps1Path, args, opts) {
   const argString = args.map((a) => pwshQuote(a)).join(' ');
+  // Resolve PowerShell robustly: PWSH_PATH, then pwsh.exe, then powershell.exe.
+  // Hardcoding 'powershell' failed with ENOENT on windows-latest (run 29850614559).
+  const pwshExe = resolvePwsh();
   const r = spawnSync(
-    'powershell',
+    pwshExe,
     [
       '-NoProfile',
       '-NonInteractive',

@@ -23,7 +23,10 @@ const cliModulePath = join(
 );
 
 function loadCliInstaller(): ReturnType<typeof nodeRequire> {
-  return nodeRequire(cliModulePath);
+  const mod = nodeRequire(cliModulePath);
+  // Implementation-detail helpers are exposed under a private `_testing`
+  // namespace; merge them onto the top-level return for legacy `mod.X` access.
+  return { ...mod, ...mod._testing };
 }
 
 describe('installNativeLaunchers return shape consistency', () => {

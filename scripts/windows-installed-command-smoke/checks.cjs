@@ -23,6 +23,10 @@ const {
   OWNERSHIP_SENTINEL,
   VERSION_RE,
   LAUNCH_ERROR_EXIT,
+  EXPECTED_BUN_VERSION,
+  VERSION_TIMEOUT_MS,
+  NPM_EXEC_TIMEOUT_MS,
+  PROBE_TIMEOUT_MS,
 } = require('./constants.cjs');
 const {
   probeArg,
@@ -37,7 +41,10 @@ const {
   killProcessTree,
   spawn,
 } = require('./process-helpers.cjs');
+const { resolvePwsh } = require('./pwsh-resolver.cjs');
+const { assertBundledBunHealthy } = require('./bun-validation.cjs');
 const { npmInvocation } = require('../lib/npm-command.cjs');
+const { SPAWN_MAX_BUFFER } = require('./install-helpers.cjs');
 
 function buildProbeFixture(installedPackageRoot, tempBase, label, repoRoot) {
   const fixtureDir = join(tempBase, `probe-fixture-${label}`);
@@ -75,6 +82,12 @@ function buildProbeFixture(installedPackageRoot, tempBase, label, repoRoot) {
       `installer did not write both launchers for fixture ${label} (got ${JSON.stringify(result)})`,
     );
   }
+  // Verify the COPIED bundled bun.exe is a real Windows PE binary reporting
+  // the expected version BEFORE using the fixture. A timed-out install can
+  // leave a partial/non-PE binary (run 29850614559); this gate fails fast with
+  // an actionable diagnostic instead of cascading "exit 216 not compatible".
+  const fixtureBun = findBundledBun(fixturePkgRoot);
+  assertBundledBunHealthy(fixtureBun, EXPECTED_BUN_VERSION);
   return { fixtureDir, fixturePkgRoot };
 }
 
@@ -123,9 +136,17 @@ function checkVersionRuns(prefix) {
     const cmdPath = join(prefix, 'llxprt.cmd');
     const r = spawnSync('cmd', ['/c', cmdPath, '--version'], {
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: VERSION_TIMEOUT_MS,
       env: { ...process.env, PATH: CONSTRAINED_PATH },
     });
+    // Inspect error/signal before status: a spawn failure yields null status
+    // and must be reported as a harness error, not a misleading exit code.
+    if (r.error) {
+      throw new Error(`cmd --version spawn failed: ${r.error.message}`);
+    }
+    if (r.signal) {
+      throw new Error(`cmd --version terminated by signal ${r.signal}`);
+    }
     if (r.status !== 0) {
       throw new Error(`cmd --version exited ${r.status}: ${r.stderr}`);
     }
@@ -137,15 +158,24 @@ function checkVersionRuns(prefix) {
 
   runStep('ps1-version', () => {
     const ps1Path = join(prefix, 'llxprt.ps1');
+    // Resolve PowerShell robustly: PWSH_PATH -> pwsh.exe -> powershell.exe.
+    // Hardcoding 'powershell' failed with ENOENT on windows-latest (run 29850614559).
+    const pwshExe = resolvePwsh();
     const r = spawnSync(
-      'powershell',
+      pwshExe,
       ['-NoProfile', '-Command', `& '${ps1Path}' --version`],
       {
         encoding: 'utf8',
-        timeout: 30_000,
+        timeout: VERSION_TIMEOUT_MS,
         env: { ...process.env, PATH: CONSTRAINED_PATH },
       },
     );
+    if (r.error) {
+      throw new Error(`ps1 --version spawn failed: ${r.error.message}`);
+    }
+    if (r.signal) {
+      throw new Error(`ps1 --version terminated by signal ${r.signal}`);
+    }
     if (r.status !== 0) {
       throw new Error(`ps1 --version exited ${r.status}: ${r.stderr}`);
     }
@@ -170,7 +200,9 @@ function checkCmdArgFidelity(fixture) {
     const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
     assert(existsSync(cmdPath), `cmd launcher missing in fixture`);
     for (const marker of ARG_FIDELITY_MARKERS) {
-      const r = invokeCmd(cmdPath, [probeArg({ marker })]);
+      const r = invokeCmd(cmdPath, [probeArg({ marker })], {
+        timeout: PROBE_TIMEOUT_MS,
+      });
       if (r.status !== 0) {
         throw new Error(
           `cmd probe exited ${r.status} for marker ${JSON.stringify(marker)}: ${r.stderr}`,
@@ -202,7 +234,9 @@ function checkPwshArgFidelity(fixture) {
     const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
     assert(existsSync(ps1Path), `ps1 launcher missing in fixture`);
     for (const marker of ARG_FIDELITY_MARKERS) {
-      const r = invokePwsh(ps1Path, [probeArg({ marker })]);
+      const r = invokePwsh(ps1Path, [probeArg({ marker })], {
+        timeout: PROBE_TIMEOUT_MS,
+      });
       if (r.status !== 0) {
         throw new Error(
           `ps1 probe exited ${r.status} for marker ${JSON.stringify(marker)}: ${r.stderr}`,
@@ -338,7 +372,9 @@ function checkPwshExitPropagation(fixture) {
 function checkExecPathIsBundledBun(fixture) {
   runStep('cmd-execpath-is-bundled-bun', () => {
     const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
-    const r = invokeCmd(cmdPath, [probeArg({})]);
+    const r = invokeCmd(cmdPath, [probeArg({})], {
+      timeout: PROBE_TIMEOUT_MS,
+    });
     if (r.status !== 0) {
       throw new Error(`cmd execpath probe exited ${r.status}: ${r.stderr}`);
     }
@@ -352,7 +388,9 @@ function checkExecPathIsBundledBun(fixture) {
 
   runStep('pwsh-execpath-is-bundled-bun', () => {
     const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
-    const r = invokePwsh(ps1Path, [probeArg({})]);
+    const r = invokePwsh(ps1Path, [probeArg({})], {
+      timeout: PROBE_TIMEOUT_MS,
+    });
     if (r.status !== 0) {
       throw new Error(`ps1 execpath probe exited ${r.status}: ${r.stderr}`);
     }
@@ -365,7 +403,7 @@ function checkExecPathIsBundledBun(fixture) {
   });
 }
 
-function checkProcessTreeNoNode(fixture) {
+async function checkProcessTreeNoNode(fixture) {
   // CMD variant
   const cmdPromise = runStep(
     'cmd-process-tree-bun-present-node-absent',
@@ -402,8 +440,10 @@ function checkProcessTreeNoNode(fixture) {
     'pwsh-process-tree-bun-present-node-absent',
     async () => {
       const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
+      // Resolve PowerShell robustly (PWSH_PATH -> pwsh.exe -> powershell.exe).
+      const pwshExe = resolvePwsh();
       const child = spawn(
-        'powershell',
+        pwshExe,
         [
           '-NoProfile',
           '-NonInteractive',
@@ -543,7 +583,9 @@ function checkNpmExecEphemeral(tempDir, replicaTarball) {
       join(cleanDir, 'package.json'),
       JSON.stringify({ name: 'clean-consumer', version: '0.0.0' }, null, 2),
     );
-    const npmCache = join(tempDir, 'npm-exec-cache');
+    // No per-fixture --cache: inherit the warmed default npm cache (populated
+    // by `npm ci`). An isolated empty cache forced re-fetches and caused the
+    // ETIMEDOUT seen in CI run 29850614559.
     const { command, args } = npmInvocation([
       'exec',
       '--package',
@@ -555,16 +597,18 @@ function checkNpmExecEphemeral(tempDir, replicaTarball) {
     const r = spawnSync(command, args, {
       cwd: cleanDir,
       encoding: 'utf8',
-      timeout: 300_000,
-      maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, npm_config_cache: npmCache },
+      timeout: NPM_EXEC_TIMEOUT_MS,
+      maxBuffer: SPAWN_MAX_BUFFER,
     });
     if (r.error) {
       throw new Error(`npm exec spawn failed: ${r.error.message}`);
     }
+    if (r.signal) {
+      throw new Error(`npm exec terminated by signal ${r.signal}`);
+    }
     if (r.status !== 0) {
       throw new Error(
-        `npm exec --version failed (exit ${r.status}, signal=${r.signal ?? 'none'}): ${r.stderr || r.stdout}`,
+        `npm exec --version failed (exit ${r.status}): ${r.stderr || r.stdout}`,
       );
     }
     assert(

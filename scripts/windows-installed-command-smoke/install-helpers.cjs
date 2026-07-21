@@ -4,43 +4,76 @@
  * npm install helpers for the Windows smoke: global install, local install,
  * and local cmd version verification. These are separated from the behavioral
  * checks so the install lifecycle can be reused independently.
+ *
+ * Cache policy (root cause A, CI run 29850614559):
+ *   Previous versions passed `--cache <empty temp dir>` to each install,
+ *   creating a per-fixture ISOLATED EMPTY cache. That forced every install to
+ *   re-fetch from the registry, blowing through the synchronous 180s timeout
+ *   and producing ETIMEDOUT cascades. The workflow already warms the standard
+ *   npm cache via `npm ci`. We now OMIT `--cache` so installs inherit the
+ *   warmed default cache, making them fast and reliable.
+ *
+ * Fail-fast (root cause G):
+ *   globalInstall and localInstall are REQUIRED setup steps. A failure must
+ *   abort dependent checks, not cascade into dozens of "launcher not found"
+ *   failures. They use runRequiredStep (rethrows) instead of runStep.
  */
 
 const { spawnSync } = require('node:child_process');
 const { existsSync, mkdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
-const { assert, runStep } = require('./assert.cjs');
-const { CONSTRAINED_PATH } = require('./constants.cjs');
+const { assert, runStep, runRequiredStep } = require('./assert.cjs');
+const {
+  CONSTRAINED_PATH,
+  INSTALL_TIMEOUT_MS,
+  VERSION_TIMEOUT_MS,
+  EXPECTED_BUN_VERSION,
+} = require('./constants.cjs');
 const { npmInvocation } = require('../lib/npm-command.cjs');
+const { assertBundledBunHealthy } = require('./bun-validation.cjs');
+
+// Shared maxBuffer for npm install/exec captures. npm/tar can emit verbose
+// output that exceeds Node's 1MB default; a single shared constant keeps this
+// consistent across globalInstall, localInstall, and the checks.cjs npm exec
+// helper.
+const SPAWN_MAX_BUFFER = 64 * 1024 * 1024;
+
+/**
+ * Builds the npm install argument list WITHOUT an explicit `--cache` flag so
+ * the install inherits the warmed default npm cache (the same one `npm ci`
+ * populated in the workflow). An empty isolated per-fixture cache forced
+ * re-fetches and caused the ETIMEDOUT cascades seen in CI run 29850614559.
+ */
+function buildInstallArgs(extraArgs) {
+  return ['install', ...extraArgs, '--loglevel', 'error'];
+}
 
 function globalInstall(tempDir, replicaTarball) {
   let prefix;
-  runStep('global-install', () => {
+  // REQUIRED: a global-install failure must abort the entire smoke, not
+  // cascade into 30 downstream "launcher not found" failures.
+  runRequiredStep('global-install', () => {
     prefix = join(tempDir, 'global-prefix');
     mkdirSync(prefix, { recursive: true });
-    const { command, args } = npmInvocation([
-      'install',
-      '--global',
-      '--prefix',
-      prefix,
-      '--cache',
-      join(tempDir, 'npm-cache'),
-      '--loglevel',
-      'error',
-      replicaTarball,
-    ]);
+    // No --cache: inherit the warmed default npm cache populated by `npm ci`.
+    const { command, args } = npmInvocation(
+      buildInstallArgs(['--global', '--prefix', prefix, replicaTarball]),
+    );
     const r = spawnSync(command, args, {
       encoding: 'utf8',
-      timeout: 180_000,
-      maxBuffer: 64 * 1024 * 1024,
+      timeout: INSTALL_TIMEOUT_MS,
+      maxBuffer: SPAWN_MAX_BUFFER,
     });
     if (r.error) {
       throw new Error(`npm global install spawn failed: ${r.error.message}`);
     }
+    if (r.signal) {
+      throw new Error(`npm global install terminated by signal ${r.signal}`);
+    }
     if (r.status !== 0) {
       throw new Error(
-        `npm global install failed (exit ${r.status}, signal=${r.signal ?? 'none'}): ${r.stderr || r.stdout}`,
+        `npm global install failed (exit ${r.status}): ${r.stderr || r.stdout}`,
       );
     }
   });
@@ -49,33 +82,32 @@ function globalInstall(tempDir, replicaTarball) {
 
 function localInstall(tempDir, replicaTarball) {
   let consumerDir;
-  runStep('local-install', () => {
+  // REQUIRED: a local-install failure is a setup failure for
+  // local-cmd-version; it must not silently continue.
+  runRequiredStep('local-install', () => {
     consumerDir = join(tempDir, 'consumer');
     mkdirSync(consumerDir, { recursive: true });
     writeFileSync(
       join(consumerDir, 'package.json'),
       JSON.stringify({ name: 'consumer', version: '0.0.0' }, null, 2),
     );
-    const { command, args } = npmInvocation([
-      'install',
-      '--cache',
-      join(tempDir, 'npm-cache-local'),
-      '--loglevel',
-      'error',
-      replicaTarball,
-    ]);
+    // No --cache: inherit the warmed default npm cache.
+    const { command, args } = npmInvocation(buildInstallArgs([replicaTarball]));
     const r = spawnSync(command, args, {
       cwd: consumerDir,
       encoding: 'utf8',
-      timeout: 180_000,
-      maxBuffer: 64 * 1024 * 1024,
+      timeout: INSTALL_TIMEOUT_MS,
+      maxBuffer: SPAWN_MAX_BUFFER,
     });
     if (r.error) {
       throw new Error(`npm local install spawn failed: ${r.error.message}`);
     }
+    if (r.signal) {
+      throw new Error(`npm local install terminated by signal ${r.signal}`);
+    }
     if (r.status !== 0) {
       throw new Error(
-        `npm local install failed (exit ${r.status}, signal=${r.signal ?? 'none'}): ${r.stderr || r.stdout}`,
+        `npm local install failed (exit ${r.status}): ${r.stderr || r.stdout}`,
       );
     }
   });
@@ -88,9 +120,17 @@ function checkLocalCmdVersion(consumerDir) {
     assert(existsSync(cmdPath), `local cmd launcher not found: ${cmdPath}`);
     const r = spawnSync('cmd', ['/c', cmdPath, '--version'], {
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: VERSION_TIMEOUT_MS,
       env: { ...process.env, PATH: CONSTRAINED_PATH },
     });
+    // Check r.error before r.status: if cmd.exe cannot be spawned, status is
+    // null and stderr is undefined, producing a misleading message otherwise.
+    if (r.error) {
+      throw new Error(`local cmd --version spawn failed: ${r.error.message}`);
+    }
+    if (r.signal) {
+      throw new Error(`local cmd --version terminated by signal ${r.signal}`);
+    }
     if (r.status !== 0) {
       throw new Error(`local cmd --version exited ${r.status}: ${r.stderr}`);
     }
@@ -104,8 +144,22 @@ function checkPackageLocalBun(
 ) {
   runStep('package-local-bun-exists', () => {
     const packageRoot = findInstalledPackageRoot(prefix);
+    if (!packageRoot || typeof packageRoot !== 'string') {
+      throw new Error(
+        `findInstalledPackageRoot returned an invalid path: ${JSON.stringify(packageRoot)}`,
+      );
+    }
     const bunExe = findBundledBun(packageRoot);
+    if (!bunExe || typeof bunExe !== 'string') {
+      throw new Error(
+        `findBundledBun returned an invalid path: ${JSON.stringify(bunExe)}`,
+      );
+    }
     assert(existsSync(bunExe), `package-local bun.exe not found: ${bunExe}`);
+    // Verify the globally-installed bun.exe is a real Windows PE binary
+    // reporting the exact expected version (root cause J). This catches a
+    // partial/timed-out install that left a non-Windows or wrong-version binary.
+    assertBundledBunHealthy(bunExe, EXPECTED_BUN_VERSION);
   });
 }
 
@@ -114,4 +168,6 @@ module.exports = {
   localInstall,
   checkLocalCmdVersion,
   checkPackageLocalBun,
+  SPAWN_MAX_BUFFER,
+  buildInstallArgs,
 };

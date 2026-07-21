@@ -5,7 +5,7 @@
  * global prefix, locate the bundled bun.exe, and build a TEMP probe fixture.
  */
 
-const { existsSync } = require('node:fs');
+const { existsSync, rmSync, cpSync } = require('node:fs');
 const { join } = require('node:path');
 
 function findInstalledPackageRoot(prefix) {
@@ -50,12 +50,31 @@ function samePath(a, b) {
 }
 
 function copyTree(src, dest) {
-  const { cpSync } = require('node:fs');
-  const path = require('node:path');
-  cpSync(src, dest, {
-    recursive: true,
-    filter: (s) => !s.includes('node_modules' + path.sep + '.bin'),
-  });
+  // Validate src exists before copying so a missing source produces a clear
+  // error rather than a partial-copy failure from cpSync.
+  if (!existsSync(src)) {
+    throw new Error(`copyTree: source does not exist: ${src}`);
+  }
+  try {
+    cpSync(src, dest, {
+      recursive: true,
+      // Separator-neutral .bin exclusion: cpSync may pass paths with either
+      // forward or backslash separators on Windows, so normalize before
+      // checking.
+      filter: (s) => {
+        const normalized = s.replace(/\\/g, '/');
+        return !normalized.includes('node_modules/.bin');
+      },
+    });
+  } catch (e) {
+    // Clean up any partial copy so a failed run does not leave a corrupt dest.
+    try {
+      rmSync(dest, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+    throw new Error(`copyTree: failed to copy ${src} -> ${dest}: ${e.message}`);
+  }
 }
 
 module.exports = {

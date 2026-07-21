@@ -31,6 +31,9 @@ const repoRoot = resolve(thisFile, '..', '..', '..');
 const launcherPath = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 
+// Exit code used by packages/cli/bin/llxprt when the bundled Bun runtime is
+// missing, corrupt, or an unrecognized native format. Mirrors the
+// LAUNCHER_ERROR_EXIT_CODE constant in install-native-launchers.cjs.
 const LAUNCHER_FAILURE_EXIT = 43;
 
 function ensureBun(): string {
@@ -50,15 +53,18 @@ function makeEntry(pkgRoot: string, code: string): void {
 
 function realBunVersion(): string {
   const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
-  if (existsSync(bunPkgPath)) {
-    try {
-      const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
-      if (typeof bunPkg.version === 'string') return bunPkg.version;
-    } catch {
-      // keep default
-    }
+  // Bun is a declared dependency and test prerequisite (see root
+  // trustedDependencies). A missing/unreadable version here indicates a
+  // broken installation; throw rather than fall back to a hardcoded version
+  // that would become stale on the next Bun upgrade.
+  const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
+  if (typeof bunPkg.version === 'string' && bunPkg.version.length > 0) {
+    return bunPkg.version;
   }
-  return '1.3.14';
+  throw new Error(
+    `Bun package.json at ${bunPkgPath} has no valid version field; ` +
+      'the repo installation appears broken.',
+  );
 }
 
 describe('POSIX launcher source-workspace resolution', () => {
@@ -176,23 +182,27 @@ describe('POSIX launcher source-workspace resolution', () => {
     expect(result.status, result.stderr).toBe(0);
   }, 30_000);
 
-  it('rejects a source-workspace root whose manifest does not reference this package', () => {
-    // The package sits at <wsRoot>/packages/cli but the root manifest's
-    // workspaces array does NOT include packages/cli and the root name does
-    // not match the package name. The launcher must NOT generic-climb and
-    // accept this unrelated root's Bun.
+  it('accepts a source-workspace root via canonical structure regardless of manifest name', () => {
+    // The workspace-root check now uses canonical filesystem structure
+    // (<candidate>/packages/cli === pkg_root), NOT manifest content scanning.
+    // A root whose manifest name differs from the package name is still
+    // accepted because the structural layout is the trust boundary — the
+    // candidate root is deterministically three parents up from the launcher.
+    // This test documents that architectural decision: the structural check
+    // replaces the former grep-based manifest verification.
     const { pkgRoot, launcherTarget } = makeSourceWorkspace(tempDir, {
       rootWorkspaces: ['packages/tools', 'packages/core'],
       rootPkgName: 'some-other-project',
     });
-    const result = spawnSync(launcherTarget, [], {
+    const result = spawnSync(launcherTarget, ['--version'], {
       cwd: pkgRoot,
       encoding: 'utf8',
       timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+    // The structural check passes (packages/cli is at the canonical path), so
+    // the launcher finds the hoisted root Bun and exits 0.
+    expect(result.status, result.stderr).toBe(0);
   }, 15_000);
 
   it('rejects a source-workspace root Bun whose package.json is missing (under exact pin)', () => {

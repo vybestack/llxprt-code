@@ -81,6 +81,9 @@ _llxprt_bun_validates() {
     return 1
   fi
   _llxprt_found_ver=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_bun_pkg" 2>/dev/null | head -n1)
+  # sed may succeed with exit 0 but print nothing (malformed JSON, binary
+  # garbage, or a non-version manifest). Treat an empty extraction as a
+  # rejection under exact-pin semantics — do NOT accept.
   if [ -z "$_llxprt_found_ver" ]; then
     # Version field missing/unreadable: reject under an exact pin.
     return 1
@@ -115,35 +118,31 @@ _llxprt_find_enclosing_nm() {
 }
 
 # Verify a candidate repository root is the genuine llxprt-code workspace root
-# for this package: its package.json must declare workspaces that include this
-# package's directory (e.g. "packages/cli") OR carry this package's name. This
-# prevents generic ancestor climbing — only a verified workspace root whose
-# manifest references this package is accepted. Sets _llxprt_ws_root on success.
+# for this package using canonical filesystem structure validation — NOT regex
+# or grep scanning of arbitrary root JSON. Since the candidate root is derived
+# deterministically as exactly three directories above this launcher
+# (packages/cli/bin/llxprt → packages/cli/bin → packages/cli → root), the
+# canonical layout is verified structurally:
+#   1. The candidate's package.json exists.
+#   2. The canonical package path <candidate>/packages/cli equals our pkg_root.
+# No JSON content scanning is performed, so a crafted manifest cannot produce a
+# false positive and no unescaped variable regex is needed. Sets
+# _llxprt_ws_root on success.
 _llxprt_verify_workspace_root() {
   _llxprt_candidate_root=$1
   _llxprt_root_manifest=$_llxprt_candidate_root/package.json
   if [ ! -f "$_llxprt_root_manifest" ]; then
     return 1
   fi
-  # The package directory relative to the candidate root (e.g. packages/cli).
-  _llxprt_pkg_rel=$(dirname -- "$_llxprt_pkg_root")
-  _llxprt_pkg_leaf=$(basename -- "$_llxprt_pkg_root")
-  _llxprt_pkg_base=$(basename -- "$_llxprt_pkg_rel")
-  # Accept if the root workspaces array references this package directory
-  # (packages/cli) or the root package name matches this package's name.
-  if grep -q "\"workspaces\"" -- "$_llxprt_root_manifest" 2>/dev/null && \
-     grep -q "\"$_llxprt_pkg_base/$_llxprt_pkg_leaf\"\|\"$_llxprt_pkg_leaf\"" -- "$_llxprt_root_manifest" 2>/dev/null; then
-    _llxprt_ws_root=$_llxprt_candidate_root
-    return 0
+  # Canonical structural check: the package root must be exactly
+  # <candidate>/packages/cli. This confirms the launcher sits at the canonical
+  # source-workspace path without scanning any manifest content.
+  _llxprt_canonical_pkg=$_llxprt_candidate_root/packages/cli
+  if [ "$_llxprt_pkg_root" != "$_llxprt_canonical_pkg" ]; then
+    return 1
   fi
-  if [ -n "$_llxprt_pkg_name" ]; then
-    _llxprt_root_name=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_root_manifest" 2>/dev/null | head -n1)
-    if [ "$_llxprt_root_name" = "$_llxprt_pkg_name" ]; then
-      _llxprt_ws_root=$_llxprt_candidate_root
-      return 0
-    fi
-  fi
-  return 1
+  _llxprt_ws_root=$_llxprt_candidate_root
+  return 0
 }
 
 # Resolve the bundled Bun runtime. Resolution is strictly bounded so an
@@ -216,7 +215,32 @@ fi
 # parsing the binary header (e.g. ELF e_machine or Mach-O cputype) and
 # comparing against `uname -m`, which adds significant complexity for marginal
 # gain; the format check covers the primary corruption vector.
-_llxprt_magic=$(od -An -tx1 -N4 -- "$_llxprt_bun" 2>/dev/null | tr -d ' \n')
+
+# `od` is a POSIX-standard utility; verify it is available before relying on
+# it. A missing or failing `od` is treated as a launcher runtime failure (exit
+# 43) with a clear diagnostic rather than silently skipping the format check.
+if ! command -v od >/dev/null 2>&1; then
+  printf '%s\n' 'LLxprt Code: required tool "od" was not found on PATH.' >&2
+  printf '%s\n' 'The launcher needs od to validate the bundled Bun binary format.' >&2
+  printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+  printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+  exit 43
+fi
+
+# Capture od's combined stdout+stderr into a single read so we can detect a
+# read failure (non-existent/unreadable file) separately from a successful
+# read of an unrecognized format.
+_llxprt_od_out=$(od -An -tx1 -N4 -- "$_llxprt_bun" 2>&1) || {
+  # od itself failed (read error, I/O error). Treat as a launcher runtime
+  # failure with a clear diagnostic.
+  printf '%s\n' 'LLxprt Code: could not read bundled Bun binary to validate its format.' >&2
+  printf '%s\n' "od reported: $_llxprt_od_out" >&2
+  printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
+  printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+  printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+  exit 43
+}
+_llxprt_magic=$(printf '%s' "$_llxprt_od_out" | tr -d ' \n')
 
 _llxprt_kernel=$(uname -s 2>/dev/null || printf '%s' '')
 case "$_llxprt_kernel" in
@@ -227,7 +251,7 @@ case "$_llxprt_kernel" in
       4d5a*) ;;
       *)
         printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
-        printf '%s\n' 'The bundled bun.exe may be corrupt or the wrong platform.' >&2
+        printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
         printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
         printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
         exit 43
@@ -240,7 +264,7 @@ case "$_llxprt_kernel" in
       feedface|feedfacf|cefaedfe|cffaedfe|cafebabe|bebafeca) ;;
       *)
         printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
-        printf '%s\n' 'The bundled bun.exe may be corrupt or the wrong platform.' >&2
+        printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
         printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
         printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
         exit 43
@@ -253,7 +277,7 @@ case "$_llxprt_kernel" in
       7f454c46) ;;
       *)
         printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
-        printf '%s\n' 'The bundled bun.exe may be corrupt or the wrong platform.' >&2
+        printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
         printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
         printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
         exit 43

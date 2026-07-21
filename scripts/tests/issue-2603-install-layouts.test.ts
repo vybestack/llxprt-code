@@ -57,9 +57,16 @@ function readCliManifest(): CliManifest {
 const CLI_MANIFEST = readCliManifest();
 // pnpm encodes the scope separator as + in the virtual-store directory name.
 const PNPM_PACKAGE_DIR = `${CLI_MANIFEST.name.replace(/^@/, '').replace(/\//g, '+')}@${CLI_MANIFEST.version}`;
+// Derive the package scope and unscoped name from the manifest so these paths
+// stay correct if the package name or scope ever changes.
+const [CLI_SCOPE, ...CLI_NAME_PARTS] = CLI_MANIFEST.name.split('/');
+const CLI_NAME = CLI_NAME_PARTS.join('/') || CLI_MANIFEST.name;
 
 function loadCliInstaller(): ReturnType<typeof nodeRequire> {
-  return nodeRequire(cliModulePath);
+  const mod = nodeRequire(cliModulePath);
+  // Implementation-detail helpers are exposed under a private `_testing`
+  // namespace; merge them onto the top-level return for legacy `mod.X` access.
+  return { ...mod, ...mod._testing };
 }
 
 describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
@@ -76,8 +83,8 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
       '.pnpm',
       PNPM_PACKAGE_DIR,
       'node_modules',
-      '@vybestack',
-      'llxprt-code',
+      CLI_SCOPE,
+      CLI_NAME,
     );
     const consumerDotBin = join(consumerRoot, 'node_modules', '.bin');
     const virtualStoreNodeModules = join(
@@ -391,12 +398,7 @@ describe('Bun install layout support boundary', () => {
     const mod = loadCliInstaller();
     const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bun-layout-'));
     try {
-      const packageRoot = join(
-        tempDir,
-        'node_modules',
-        '@vybestack',
-        'llxprt-code',
-      );
+      const packageRoot = join(tempDir, 'node_modules', CLI_SCOPE, CLI_NAME);
       mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
         recursive: true,
       });
@@ -418,12 +420,7 @@ describe('Bun install layout support boundary', () => {
     const mod = loadCliInstaller();
     const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bun-initcwd-'));
     try {
-      const packageRoot = join(
-        tempDir,
-        'node_modules',
-        '@vybestack',
-        'llxprt-code',
-      );
+      const packageRoot = join(tempDir, 'node_modules', CLI_SCOPE, CLI_NAME);
       mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
         recursive: true,
       });

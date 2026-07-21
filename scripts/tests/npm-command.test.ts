@@ -106,15 +106,47 @@ describe('npmInvocation Windows', () => {
   });
 
   it('never produces a shell string with spaces or metacharacters', () => {
-    const inv = npmInvocation(['pack'], {
+    // Hostile argv: spaces, Unicode, and Windows shell metacharacters. A
+    // concatenating (shell-string) implementation would fail these assertions.
+    const args = [
+      'exec',
+      '--',
+      'name with spaces',
+      'Δ',
+      'a&b',
+      'x|y',
+      'per%cent',
+      'bang!',
+      'semi;colon',
+      'lt<gt',
+      'paren(thesis)',
+      'caret^hat',
+      'quote"s',
+    ];
+    const inv = npmInvocation(args, {
       platform: 'win32',
       execPath: 'C:\\node\\node.exe',
       env: { npm_execpath: 'C:\\npm\\bin\\npm-cli.js' },
       existsSync: (p) => p === 'C:\\npm\\bin\\npm-cli.js',
     });
-    expect(inv.command).toBe(inv.command.trim());
-    // args preserve boundaries (no shell concatenation)
-    expect(inv.args.length).toBeGreaterThan(0);
+    expect(inv.command).toBe('C:\\node\\node.exe');
+    // The first arg is the resolved npm-cli.js; the remaining args must be
+    // preserved exactly as boundaries — no shell concatenation.
+    expect(inv.args).toStrictEqual(['C:\\npm\\bin\\npm-cli.js', ...args]);
+  });
+
+  it('default Windows args structure is [npm-cli.js, ...userArgs] with no shell flag', () => {
+    // Default (no env injection) must still resolve via the node-dir fallback
+    // and produce a node command with npm-cli.js as args[0].
+    const inv = npmInvocation(['pack'], {
+      platform: 'win32',
+      execPath: 'C:\\node\\node.exe',
+      env: {},
+      existsSync: () => true,
+    });
+    expect(inv.command).toBe('C:\\node\\node.exe');
+    expect(inv.args[0]).toMatch(/npm-cli\.js$/);
+    expect(inv.args.slice(1)).toStrictEqual(['pack']);
   });
 });
 

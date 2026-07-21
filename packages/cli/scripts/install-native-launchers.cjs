@@ -121,10 +121,29 @@ function canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType) {
   if (!fs.existsSync(filePath)) {
     return true;
   }
-  if (hasOwnershipSentinel(filePath)) {
+  // Read the file once and reuse the content for both the ownership sentinel
+  // check and the shim-target boundary check, avoiding a duplicate read.
+  const content = readFileSafe(filePath);
+  if (content.includes(OWNERSHIP_SENTINEL)) {
     return true;
   }
-  return pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType);
+  if (!content) {
+    return false;
+  }
+  const candidates =
+    shimType === 'ps1'
+      ? extractPs1ShimTargets(content)
+      : extractCmdShimTargets(content);
+  if (candidates.length === 0) {
+    return false;
+  }
+  for (const candidate of candidates) {
+    const resolved = resolveShimCandidate(binLinkDir, candidate);
+    if (isWithinPackageRootWin(resolved, packageRoot)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function relativePath(fromDir, toPath) {
@@ -228,7 +247,20 @@ function writeOwnedLauncher(
   if (!canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType)) {
     return false;
   }
-  fs.writeFileSync(filePath, content, 'utf8');
+  // Wrap the write so a read-only directory, full disk, or other I/O error is
+  // reported as skipped/nonfatal rather than crashing postinstall and leaving
+  // the package in a partially installed state.
+  try {
+    fs.writeFileSync(filePath, content, 'utf8');
+  } catch (e) {
+    if (log) {
+      log(
+        `[postinstall] Could not write launcher ${filePath} (non-fatal): ` +
+          `${e.message}`,
+      );
+    }
+    return false;
+  }
   try {
     fs.chmodSync(filePath, 0o755);
   } catch (e) {
@@ -423,26 +455,41 @@ function installNativeLaunchers(options) {
   return { written, skipped, error: null };
 }
 
+// This module is a postinstall entry point invoked by scripts/postinstall.cjs.
+// It has no package export surface — it is never imported by the CLI runtime.
+// The public API for the postinstall caller is installNativeLaunchers.
+//
+// Implementation-detail helpers (hasOwnershipSentinel, pointsToOurPackage,
+// extractXxxShimTargets, etc.) are grouped under a private `_testing` namespace
+// to keep the public surface narrow while remaining accessible to the
+// behavioral unit tests in scripts/tests/.
 module.exports = {
+  // Public API (postinstall entry point).
   installNativeLaunchers,
-  generateCmdLauncher,
-  generatePs1Launcher,
-  hasOwnershipSentinel,
-  pointsToOurPackage,
-  canOverwriteLauncher,
-  findBinLinkDirs,
-  nearestNodeModulesBin,
-  resolveBunExe,
-  resolveEntry,
-  isWithinPackageRoot,
-  isWithinPackageRootWin,
-  extractCmdShimTargets,
-  extractPs1ShimTargets,
-  resolveShimCandidate,
-  relativePath,
-  relativePathPosix,
   OWNERSHIP_SENTINEL,
   LAUNCHER_ERROR_EXIT_CODE,
+  // Private test-only internals. These are NOT part of any package's public
+  // API and may change without notice; they are exposed solely so the
+  // behavioral tests can assert contracts directly.
+  _testing: {
+    generateCmdLauncher,
+    generatePs1Launcher,
+    hasOwnershipSentinel,
+    pointsToOurPackage,
+    canOverwriteLauncher,
+    findBinLinkDirs,
+    nearestNodeModulesBin,
+    resolveBunExe,
+    resolveEntry,
+    isWithinPackageRoot,
+    isWithinPackageRootWin,
+    extractCmdShimTargets,
+    extractPs1ShimTargets,
+    resolveShimCandidate,
+    relativePath,
+    relativePathPosix,
+    writeOwnedLauncher,
+  },
 };
 
 if (require.main === module) {

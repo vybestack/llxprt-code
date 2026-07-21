@@ -150,6 +150,26 @@ function runSmokeAsync(): SmokeHandle {
     };
   });
 
+  // POSIX process-group kill: attempt kill(-pid) and ignore ESRCH (group
+  // already exited). Falls back to child.kill for other errors. Extracted to
+  // keep dispose() under the nested-control-flow limit.
+  function killPosixGroup(proc: ChildProcess): void {
+    if (!proc.pid) return;
+    try {
+      process.kill(-proc.pid, 'SIGKILL');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException)?.code;
+      // ESRCH = no such process/group; expected when everything already exited.
+      if (code !== 'ESRCH') {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          // best effort; child may have exited concurrently
+        }
+      }
+    }
+  }
+
   function dispose(): void {
     if (disposed) return;
     disposed = true;
@@ -159,18 +179,18 @@ function runSmokeAsync(): SmokeHandle {
     }
     // Kill the entire process tree so grandchildren (npm, tar, bun spawned
     // inside the smoke script) are reaped and do not leak as orphans.
-    // On POSIX: kill the process group (negative PID). On Windows: taskkill
-    // /T /F kills the entire descendant tree. Falls back to child.kill().
-    if (child && child.exitCode === null && child.signalCode === null) {
+    // We attempt the group kill REGARDLESS of whether the direct child is
+    // still alive: if the direct child exited but descendants survived, the
+    // process group is still addressable via kill(-pid).
+    if (child && child.pid) {
       try {
-        if (process.platform === 'win32' && child.pid) {
+        if (process.platform === 'win32') {
           spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
             stdio: 'ignore',
             timeout: 10_000,
           });
-        } else if (child.pid) {
-          // Negative PID kills the entire process group.
-          process.kill(-child.pid, 'SIGKILL');
+        } else {
+          killPosixGroup(child);
         }
       } catch {
         try {

@@ -48,7 +48,7 @@ function readCliManifest(repoRoot) {
   const version = cliPkg.version || '0.0.0';
   const name = cliPkg.name || '@vybestack/llxprt-code';
   const tarballName = `${name.replace(/^@/, '').replace(/\//g, '-')}-${version}.tgz`;
-  return { version, tarballName };
+  return { name, version, tarballName };
 }
 
 /**
@@ -436,10 +436,13 @@ function rewriteOnePkgDeps(pkgPath, tarballMap) {
 }
 
 function packCli(workCopy, cacheDir) {
+  // Derive the package name from the CLI manifest instead of hardcoding it,
+  // so this stays correct if the package name/scope ever changes.
+  const { name: cliName } = readCliManifest(workCopy);
   const { command, args } = npmInvocation([
     'pack',
     '-w',
-    '@vybestack/llxprt-code',
+    cliName,
     '--pack-destination',
     cacheDir,
   ]);

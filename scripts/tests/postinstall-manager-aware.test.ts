@@ -453,16 +453,25 @@ describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
 });
 
 describe('installWindowsNativeLaunchers error handling (nonfatal contract)', () => {
+  // Extracted helper: reads the real postinstall source and slices the
+  // installWindowsNativeLaunchers function body for static contract assertions.
+  // On macOS this function is platform-gated and never runs; the tests verify
+  // the source-level contract (try/catch wrapping, no process.exit) that
+  // guarantees nonfatal behavior on Windows.
+  function extractLauncherFnBody(): string {
+    const source = readFileSync(realPostinstall, 'utf8');
+    const fnStart = source.indexOf('function installWindowsNativeLaunchers');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnEnd = source.indexOf('\n}', fnStart) + 2;
+    return source.slice(fnStart, fnEnd);
+  }
+
   it('wraps the installer require and invocation in try/catch (nonfatal)', () => {
     // On macOS, installWindowsNativeLaunchers is platform-gated and never
     // runs. The contract is that an unexpected require failure or installer
     // exception is caught and logged as a warning, never aborting postinstall.
     // Verify the source has the protective try/catch around the require+invoke.
-    const source = readFileSync(realPostinstall, 'utf8');
-    const fnStart = source.indexOf('function installWindowsNativeLaunchers');
-    expect(fnStart).toBeGreaterThan(-1);
-    const fnEnd = source.indexOf('\n}', fnStart) + 2;
-    const fnBody = source.slice(fnStart, fnEnd);
+    const fnBody = extractLauncherFnBody();
     expect(fnBody).toContain('try {');
     expect(fnBody).toContain('require(cliInstaller)');
     expect(fnBody).toContain('installNativeLaunchers');
@@ -481,10 +490,12 @@ describe('installWindowsNativeLaunchers error handling (nonfatal contract)', () 
     // crash. We cannot change process.platform, but we CAN verify that the
     // function's error path does not propagate by checking the source never
     // calls process.exit(1) from installWindowsNativeLaunchers.
-    const source = readFileSync(realPostinstall, 'utf8');
-    const fnStart = source.indexOf('function installWindowsNativeLaunchers');
-    const fnEnd = source.indexOf('\n}', fnStart) + 2;
-    const fnBody = source.slice(fnStart, fnEnd);
+    //
+    // This is a static source contract assertion, not a behavioral test: it
+    // verifies the nonfatal-by-construction invariant that the function never
+    // escalates an installer error to a process.exit. A full behavioral test
+    // runs on the hosted Windows smoke (windows-installed-command-smoke.cjs).
+    const fnBody = extractLauncherFnBody();
     // The function must never call process.exit — errors are logged and swallowed.
     expect(fnBody).not.toMatch(/process\.exit\(\d+\)/);
   });

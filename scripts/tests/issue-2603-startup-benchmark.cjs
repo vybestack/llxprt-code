@@ -3,10 +3,20 @@
 /**
  * Startup benchmark for issue #2603.
  *
- * Compares the direct POSIX launcher (packages/cli/bin/llxprt) against a
- * simulated "old Node relay" baseline (node spawning Bun on the same entry).
- * Outputs median, iterations, and ratio. There is NO pass/fail threshold —
- * this is a measurement tool, not a gate, to avoid flaky timing assertions.
+ * Compares the direct native launcher against a simulated "old Node relay"
+ * baseline (node spawning Bun on the same entry). Outputs median, iterations,
+ * and ratio. There is NO pass/fail threshold — this is a measurement tool,
+ * not a gate, to avoid flaky timing assertions.
+ *
+ * Platform behavior:
+ *   POSIX: the source launcher (packages/cli/bin/llxprt) is a POSIX shell
+ *     script that exec's bun.exe directly. It is benchmarked as-is.
+ *   Windows: the source launcher is a POSIX shell script that cannot be spawned
+ *     directly by Node. Instead, the benchmark resolves the REAL installed
+ *     .cmd launcher (produced by install-native-launchers / npm cmd-shim) via
+ *     the release-pack smoke replica, and invokes it through `cmd /c`. This
+ *     measures the actual Windows production path. The Node-relay baseline
+ *     spawns node -> bun.exe on both platforms so the comparison is fair.
  *
  * Usage: node scripts/tests/issue-2603-startup-benchmark.cjs [repoRoot] [iterations]
  *
@@ -14,10 +24,11 @@
  */
 
 const { spawnSync } = require('node:child_process');
-const { existsSync } = require('node:fs');
-const { join, resolve } = require('node:path');
+const { existsSync, appendFileSync, mkdirSync } = require('node:fs');
+const { join, resolve, dirname } = require('node:path');
 
 const repoRoot = resolve(process.argv[2] || process.cwd());
+const isWindows = process.platform === 'win32';
 
 /**
  * Validates that the iterations argument is a finite positive integer.
@@ -36,19 +47,35 @@ function parseIterations(raw) {
 }
 
 const iterations = parseIterations(process.argv[3] || '15');
-const launcher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
+const posixLauncher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
+// POSIX alternate: some installers place bun at node_modules/.bun/bin/bun.
+const repoBunPosix = join(repoRoot, 'node_modules', '.bun', 'bin', 'bun');
 const entry = join(repoRoot, 'packages', 'cli', 'index.ts');
 
 /**
  * Cross-platform Bun discovery. The bun npm package installs bun at
  * node_modules/bun/bin/bun.exe on all platforms (Windows, macOS, Linux) —
  * the .exe suffix is part of the filename regardless of OS. On POSIX,
- * .bun/bin/bun is also checked as a fallback for alternate installers.
+ * node_modules/.bun/bin/bun is also checked as a fallback for alternate
+ * installers before falling back to a global lookup.
  */
 function resolveBun() {
-  if (existsSync(repoBun)) return repoBun;
-  const tool = process.platform === 'win32' ? 'where' : 'which';
+  // SMOKE HANDOFF: reuse the exact bun.exe the smoke validated (PE + version).
+  const envBun = process.env.LLXPRT_BENCH_BUN;
+  if (envBun && existsSync(envBun)) {
+    validateExecutable(envBun);
+    return envBun;
+  }
+  if (existsSync(repoBun)) {
+    validateExecutable(repoBun);
+    return repoBun;
+  }
+  if (!isWindows && existsSync(repoBunPosix)) {
+    validateExecutable(repoBunPosix);
+    return repoBunPosix;
+  }
+  const tool = isWindows ? 'where' : 'which';
   const r = spawnSync(tool, ['bun'], { encoding: 'utf8' });
   if (r.error) {
     throw new Error(
@@ -62,24 +89,122 @@ function resolveBun() {
         'Ensure Bun is installed and on PATH.',
     );
   }
-  const found = r.stdout.trim().split('\n')[0];
+  const found = r.stdout.trim().split(/\r?\n/)[0];
   if (!found) {
     throw new Error(`'${tool} bun' produced no output.`);
   }
+  validateExecutable(found);
   return found;
 }
 
-function timeDirectLauncher() {
+/**
+ * Validates that a resolved Bun path is actually executable (exists and has
+ * execute permission on POSIX). A non-executable file would produce a confusing
+ * spawn failure.
+ */
+function validateExecutable(bunPath) {
+  if (!existsSync(bunPath)) {
+    throw new Error(`Resolved bun path does not exist: ${bunPath}`);
+  }
+  if (!isWindows) {
+    try {
+      const { accessSync, constants } = require('node:fs');
+      accessSync(bunPath, constants.X_OK);
+    } catch {
+      throw new Error(`Resolved bun path is not executable: ${bunPath}`);
+    }
+  }
+}
+
+/**
+ * On Windows, resolves the real installed .cmd launcher. Two modes:
+ *   - SMOKE HANDOFF (preferred): when LLXPRT_BENCH_LAUNCHER is set (by the
+ *     smoke orchestrator), use it directly. This avoids repacking/reinstalling
+ *     — the smoke already proved the install, so the benchmark reuses it.
+ *   - STANDALONE: when run directly by the workflow, pack+install a replica
+ *     from the release-pack helper. This is the fallback for when the
+ *     benchmark runs as a separate workflow step.
+ * Returns {command, args} for spawnSync. On POSIX, returns the source launcher
+ * path for direct exec.
+ */
+function resolveDirectLauncherInvocation() {
+  if (!isWindows) {
+    return { command: posixLauncher, baseArgs: [] };
+  }
+  // SMOKE HANDOFF: reuse the installed launcher the smoke already built.
+  const envLauncher = process.env.LLXPRT_BENCH_LAUNCHER;
+  if (envLauncher && existsSync(envLauncher)) {
+    return { command: 'cmd', baseArgs: ['/c', envLauncher] };
+  }
+  // STANDALONE: use the real installed .cmd launcher from the smoke replica.
+  // The release-pack helper produces a release-like tarball whose postinstall
+  // generates llxprt.cmd. We resolve it from the smoke replica's global prefix.
+  const releasePackHelper = join(
+    repoRoot,
+    'scripts',
+    'tests',
+    'issue-2603-release-pack.cjs',
+  );
+  const { packReleaseLikeCli } = require(releasePackHelper);
+  const { replicaTarball } = packReleaseLikeCli(repoRoot);
+
+  // Install into a temp prefix to get the generated .cmd launcher.
+  const { mkdtempSync } = require('node:fs');
+  const { tmpdir } = require('node:os');
+  const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bench-'));
+  const prefix = join(tempDir, 'prefix');
+  mkdirSync(prefix, { recursive: true });
+
+  const { npmInvocation } = require('../lib/npm-command.cjs');
+  const { command: npmCmd, args: npmArgs } = npmInvocation([
+    'install',
+    '--global',
+    '--prefix',
+    prefix,
+    '--cache',
+    join(tempDir, 'cache'),
+    '--loglevel',
+    'error',
+    replicaTarball,
+  ]);
+  const installResult = spawnSync(npmCmd, npmArgs, {
+    encoding: 'utf8',
+    timeout: 180_000,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (installResult.error) {
+    throw new Error(
+      `benchmark replica install spawn failed: ${installResult.error.message}`,
+    );
+  }
+  if (installResult.status !== 0) {
+    throw new Error(
+      `benchmark replica install failed (exit ${installResult.status}): ${installResult.stderr}`,
+    );
+  }
+
+  const cmdLauncher = join(prefix, 'llxprt.cmd');
+  if (!existsSync(cmdLauncher)) {
+    throw new Error(`Installed .cmd launcher not found at ${cmdLauncher}`);
+  }
+  return { command: 'cmd', baseArgs: ['/c', cmdLauncher] };
+}
+
+function timeDirectLauncher(launcherInvocation) {
   // The production launcher: resolves package-local Bun and execs the entry.
   // Use stdio 'inherit' to match the relay baseline so the comparison
   // measures startup overhead, not I/O plumbing differences.
-  const r = spawnSync(launcher, ['--version'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    timeout: 30_000,
-    stdio: 'inherit',
-    env: { ...process.env },
-  });
+  const r = spawnSync(
+    launcherInvocation.command,
+    [...launcherInvocation.baseArgs, '--version'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: 30_000,
+      stdio: 'inherit',
+      env: { ...process.env },
+    },
+  );
   if (r.error) {
     throw new Error(`direct launcher spawn failed: ${r.error.message}`);
   }
@@ -101,6 +226,7 @@ function timeNodeRelayBaseline(bunExe) {
   // on the entry. We pass bun/entry as argv to the relay script rather than
   // interpolating them into the generated source, so there is no string
   // injection surface (the values are never reparsed as code).
+  // stdio 'inherit' matches the direct launcher for a fair comparison.
   const relayScript = `
     const { spawnSync } = require('child_process');
     const bunExe = process.argv[1];
@@ -123,13 +249,12 @@ function timeNodeRelayBaseline(bunExe) {
     cwd: repoRoot,
     encoding: 'utf8',
     timeout: 30_000,
+    stdio: 'inherit',
     env: { ...process.env },
   });
   if (r.error) {
     throw new Error(`node relay spawn failed: ${r.error.message}`);
   }
-  // Never coerce a null/signal/timeout status to 0. A null status means the
-  // relay child was killed by a signal or timed out; surface it as a failure.
   if (r.status === null) {
     throw new Error(
       `node relay did not exit normally (signal=${r.signal ?? 'none'}): ${r.stderr}`,
@@ -144,21 +269,31 @@ function timeNodeRelayBaseline(bunExe) {
 function measure(fn, label) {
   const samples = [];
   // Warmup run (not counted) to stabilize FS cache.
-  try {
-    fn();
-  } catch (e) {
-    console.error(`Warmup failed for ${label}: ${e.message}`);
-    return null;
-  }
+  const warmupStatus = (() => {
+    try {
+      return fn();
+    } catch (e) {
+      console.error(`Warmup failed for ${label}: ${e.message}`);
+      return null;
+    }
+  })();
+  if (warmupStatus === null) return null;
   for (let i = 0; i < iterations; i++) {
     const t0 = process.hrtime.bigint();
+    let status;
     try {
-      fn();
+      status = fn();
     } catch (e) {
       console.error(`${label} iteration ${i} failed: ${e.message}`);
       return null;
     }
     const t1 = process.hrtime.bigint();
+    // A nonzero status is a meaningful failure: don't silently include it as
+    // a valid sample. Surface it so the benchmark result is trustworthy.
+    if (status !== 0) {
+      console.error(`${label} iteration ${i} exited ${status}, not 0`);
+      return null;
+    }
     samples.push(Number(t1 - t0) / 1e6); // ms
   }
   samples.sort((a, b) => a - b);
@@ -169,19 +304,32 @@ function measure(fn, label) {
 }
 
 function main() {
-  if (!existsSync(launcher)) {
-    console.error(`Launcher not found: ${launcher}`);
+  // POSIX: validate the source launcher exists. Windows: the real launcher is
+  // resolved from the installed replica at benchmark time.
+  if (!isWindows && !existsSync(posixLauncher)) {
+    console.error(`Launcher not found: ${posixLauncher}`);
     process.exit(1);
   }
   const bunExe = resolveBun();
 
   console.log(`Startup benchmark (issue #2603)`);
+  console.log(`  platform:  ${process.platform}`);
   console.log(`  iterations: ${iterations}`);
-  console.log(`  launcher:   ${launcher}`);
+  if (!isWindows) {
+    console.log(`  launcher:   ${posixLauncher}`);
+  } else {
+    console.log(
+      `  launcher:   ${process.env.LLXPRT_BENCH_LAUNCHER ? '(smoke handoff)' : '(installed .cmd from replica)'}`,
+    );
+  }
   console.log(`  bun:        ${bunExe}`);
   console.log('');
 
-  const direct = measure(timeDirectLauncher, 'direct-launcher');
+  const launcherInvocation = resolveDirectLauncherInvocation();
+  const direct = measure(
+    () => timeDirectLauncher(launcherInvocation),
+    'direct-launcher',
+  );
   const relay = measure(() => timeNodeRelayBaseline(bunExe), 'node-relay');
 
   function fmt(r) {
@@ -202,7 +350,13 @@ function main() {
 
   // Output a GitHub Actions step-summary table if available.
   if (process.env.GITHUB_STEP_SUMMARY) {
-    const fs = require('fs');
+    const summaryDir = dirname(process.env.GITHUB_STEP_SUMMARY);
+    // Ensure the summary parent directory exists before appending.
+    try {
+      mkdirSync(summaryDir, { recursive: true });
+    } catch {
+      // best-effort; appendFileSync may still succeed if the dir exists.
+    }
     const lines = [
       '### Startup Benchmark (issue #2603)',
       '',
@@ -224,8 +378,20 @@ function main() {
         `| ratio (relay/direct) | ${(relay.median / direct.median).toFixed(2)}x | - | - |`,
       );
     }
-    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
   }
 }
 
-main();
+// Export the pure resolver helpers so unit tests can validate the env-handoff
+// behavior (LLXPRT_BENCH_LAUNCHER / LLXPRT_BENCH_BUN) without spawning the
+// full benchmark. Only run main() when invoked directly as a script.
+module.exports = {
+  resolveBun,
+  resolveDirectLauncherInvocation,
+  parseIterations,
+  validateExecutable,
+};
+
+if (require.main === module) {
+  main();
+}

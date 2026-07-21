@@ -448,7 +448,14 @@ export class TestRig {
       env: childEnv,
     };
 
-    const executable = command === 'bun' ? 'bun' : command;
+    // When command is 'bun', use process.execPath (the exact Bun executable
+    // when running under Bun) rather than the literal 'bun', which may not be
+    // on PATH or may resolve to a different version. This mirrors how the
+    // 'node' case uses the exact Node executable.
+    const executable =
+      command === 'bun' && typeof process.versions.bun === 'string'
+        ? process.execPath
+        : command;
     const ptyProcess = pty.spawn(executable, commandArgs, ptyOptions);
 
     const run = new InteractiveRun(ptyProcess, this._diagnostics);

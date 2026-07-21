@@ -39,14 +39,21 @@ const { npmInvocation } = require('../lib/npm-command.cjs');
 
 /**
  * Platform-aware PATH that proves the launcher needs NO global Bun or Node.
- * On POSIX, only /usr/bin and /bin are present. On Windows, System32 is
- * included so cmd.exe remains reachable for the .cmd wrapper (the launcher
- * invokes bun.exe directly, not via cmd), but no global Bun/Node paths.
+ * On POSIX, only /usr/bin and /bin are present (intentionally excludes
+ * /usr/local/bin so a globally installed bun cannot be accidentally resolved).
+ * On Windows, SystemRoot-derived paths are used (via process.env.SystemRoot,
+ * NOT a hardcoded C:\Windows, so non-English/non-default Windows installations
+ * work correctly) so cmd.exe remains reachable for the .cmd wrapper; no global
+ * Bun/Node paths are included.
  */
 function constrainedPath() {
-  return process.platform === 'win32'
-    ? 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem'
-    : '/usr/bin:/bin';
+  if (process.platform === 'win32') {
+    const root = process.env.SystemRoot || 'C:\\Windows';
+    return [join(root, 'System32'), root, join(root, 'System32', 'Wbem')].join(
+      ';',
+    );
+  }
+  return '/usr/bin:/bin';
 }
 
 /**
@@ -86,6 +93,18 @@ function resolveBinInvocation(binPath) {
 }
 
 const repoRoot = resolve(process.argv[2] || process.cwd());
+// Validate repoRoot early so an invalid path produces a clear error instead of
+// a confusing failure deep inside packReleaseLikeCli.
+if (!existsSync(join(repoRoot, 'package.json'))) {
+  console.error(`Invalid repo root (no package.json found): ${repoRoot}`);
+  process.exit(1);
+}
+if (!existsSync(join(repoRoot, 'packages', 'cli', 'package.json'))) {
+  console.error(
+    `Invalid repo root (no packages/cli/package.json found): ${repoRoot}`,
+  );
+  process.exit(1);
+}
 const nodeRequire = createRequire(__filename);
 const releasePackHelperPath = join(
   repoRoot,

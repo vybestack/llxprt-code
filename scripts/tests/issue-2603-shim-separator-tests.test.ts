@@ -20,12 +20,38 @@ const cliModulePath = join(
   'install-native-launchers.cjs',
 );
 
-function loadCliInstaller(): ReturnType<typeof nodeRequire> {
+/**
+ * Known shape of the installer module's test-only internals.
+ * createRequire returns an untyped CommonJS require, so the return is cast to
+ * this known shape rather than relying on the implicit `any`.
+ */
+interface CliInstallerInternals {
+  extractPs1ShimTargets: (content: string) => string[];
+  extractCmdShimTargets: (content: string) => string[];
+}
+function loadCliInstaller(): CliInstallerInternals {
   delete nodeRequire.cache[cliModulePath];
-  return nodeRequire(cliModulePath);
+  const mod = nodeRequire(cliModulePath) as CliInstallerInternals & {
+    _testing?: Partial<CliInstallerInternals>;
+  };
+  // Implementation-detail helpers are exposed under a private `_testing`
+  // namespace; merge them onto the top-level return for legacy `mod.X` access.
+  return { ...mod, ...(mod._testing || {}) } as CliInstallerInternals;
 }
 
 describe('shim target extraction accepts both path separators', () => {
+  // Parameterized helper to reduce boilerplate: load module, call extractor,
+  // assert the expected target is present.
+  function assertExtract(
+    extractor: 'extractPs1ShimTargets' | 'extractCmdShimTargets',
+    content: string,
+    expectedTarget: string,
+  ): void {
+    const mod = loadCliInstaller();
+    const targets = mod[extractor](content);
+    expect(targets).toContain(expectedTarget);
+  }
+
   it('extractPs1ShimTargets accepts forward-slash $basedir paths', () => {
     const mod = loadCliInstaller();
     const content = [
@@ -43,35 +69,32 @@ describe('shim target extraction accepts both path separators', () => {
   });
 
   it('extractPs1ShimTargets accepts backslash $basedir paths (Windows)', () => {
-    const mod = loadCliInstaller();
-    const content = [
-      '$target = "$basedir\\..\\lib\\node_modules\\@vybestack\\llxprt-code\\bin\\llxprt"',
-    ].join('\n');
-    const targets = mod.extractPs1ShimTargets(content);
-    expect(targets).toContain(
+    assertExtract(
+      'extractPs1ShimTargets',
+      [
+        '$target = "$basedir\\..\\lib\\node_modules\\@vybestack\\llxprt-code\\bin\\llxprt"',
+      ].join('\n'),
       '..\\lib\\node_modules\\@vybestack\\llxprt-code\\bin\\llxprt',
     );
   });
 
   it('extractCmdShimTargets accepts backslash %dp0% paths', () => {
-    const mod = loadCliInstaller();
-    const content = [
-      '@echo off',
-      '"/bin/sh.exe" "%dp0%\\..\\lib\\node_modules\\@vybestack\\llxprt-code\\bin\\llxprt" %*',
-    ].join('\n');
-    const targets = mod.extractCmdShimTargets(content);
-    expect(targets).toContain(
+    assertExtract(
+      'extractCmdShimTargets',
+      [
+        '@echo off',
+        '"/bin/sh.exe" "%dp0%\\..\\lib\\node_modules\\@vybestack\\llxprt-code\\bin\\llxprt" %*',
+      ].join('\n'),
       '..\\lib\\node_modules\\@vybestack\\llxprt-code\\bin\\llxprt',
     );
   });
 
   it('extractCmdShimTargets accepts forward-slash %dp0% paths (robustness)', () => {
-    const mod = loadCliInstaller();
-    const content = [
-      '"%dp0%/../lib/node_modules/@vybestack/llxprt-code/bin/llxprt" %*',
-    ].join('\n');
-    const targets = mod.extractCmdShimTargets(content);
-    expect(targets).toContain(
+    assertExtract(
+      'extractCmdShimTargets',
+      ['"%dp0%/../lib/node_modules/@vybestack/llxprt-code/bin/llxprt" %*'].join(
+        '\n',
+      ),
       '../lib/node_modules/@vybestack/llxprt-code/bin/llxprt',
     );
   });

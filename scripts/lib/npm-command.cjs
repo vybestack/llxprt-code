@@ -85,9 +85,22 @@ function resolveNpmCliJs(options) {
   const probed = [];
   // npm_execpath is set when running under npm. It points to the CLI JS entry
   // (e.g. /path/to/node_modules/npm/bin/npm-cli.js). Only trust it when it is a
-  // real .js path that exists — some environments set it to a .cmd wrapper.
+  // real .js file whose basename is npm-cli.js that exists — pnpm and Yarn
+  // also set npm_execpath to their own CLI during lifecycle scripts, so a
+  // generic .js+exists check could resolve the wrong package manager.
+  //
+  // We check basename on BOTH separators (/ and \) so Windows-style paths
+  // (backslashes) are handled correctly even when this code runs on POSIX
+  // (e.g. during cross-platform unit tests).
   if (env.npm_execpath && env.npm_execpath.endsWith('.js')) {
-    if (existsSyncOptional(options, env.npm_execpath)) {
+    const normalizedBase = env.npm_execpath
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop();
+    if (
+      normalizedBase === 'npm-cli.js' &&
+      existsSyncOptional(options, env.npm_execpath)
+    ) {
       return env.npm_execpath;
     }
     probed.push(env.npm_execpath);
@@ -107,6 +120,36 @@ function resolveNpmCliJs(options) {
     return fallback;
   }
   probed.push(fallback);
+
+  // Fallback 2: npm prefix locations for nvm-windows, Volta, and global npm
+  // installs where npm is NOT alongside node.exe. These are derived from
+  // well-known environment variables (NPM_CONFIG_PREFIX, APPDATA) without
+  // spawning a shell or npm.cmd.
+  const prefixCandidates = [];
+  if (env.NPM_CONFIG_PREFIX) {
+    prefixCandidates.push(
+      path.join(
+        env.NPM_CONFIG_PREFIX,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      ),
+    );
+  }
+  if (env.APPDATA) {
+    // nvm-windows / global npm roaming install location.
+    prefixCandidates.push(
+      path.join(env.APPDATA, 'npm', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    );
+  }
+  for (const candidate of prefixCandidates) {
+    if (existsSyncOptional(options, candidate)) {
+      return candidate;
+    }
+    probed.push(candidate);
+  }
+
   throw new NpmCliNotFoundError(
     `npm-cli.js could not be resolved on Windows (probed: ${probed.join(', ')}). ` +
       'Ensure Node was installed via setup-node or an official installer that ships npm alongside node.exe.',

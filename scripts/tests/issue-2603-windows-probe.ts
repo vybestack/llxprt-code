@@ -70,7 +70,8 @@ async function emitAndFlush(payload: Record<string, unknown>): Promise<void> {
 
 /**
  * Resolves once the stdout stream has flushed its buffered writes. On streams
- * without a draining event (already drained), resolves immediately.
+ * without a draining event (already drained), resolves immediately. Handles
+ * stream errors (broken pipe, stream destroyed) so the promise never hangs.
  */
 function drainStdout(): Promise<void> {
   return new Promise((resolve) => {
@@ -78,7 +79,22 @@ function drainStdout(): Promise<void> {
       resolve();
       return;
     }
-    process.stdout.write('', () => resolve());
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      process.stdout.removeListener('error', onError);
+      resolve();
+    };
+    const onError = (): void => {
+      if (settled) return;
+      settled = true;
+      // A broken pipe / destroyed stream means the parent is gone; resolve so
+      // we never hang waiting for a flush that can never complete.
+      resolve();
+    };
+    process.stdout.once('error', onError);
+    process.stdout.write('', finish);
   });
 }
 

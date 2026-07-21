@@ -11,6 +11,7 @@ on:
       - 'scripts/postinstall.cjs'
       - 'scripts/tests/issue-2603-release-pack.cjs'
       - 'scripts/tests/issue-2603-windows-probe.ts'
+      - 'scripts/tests/issue-2603-startup-benchmark.cjs'
       - 'scripts/windows-installed-command-smoke.cjs'
       - 'scripts/windows-installed-command-smoke/**'
       - '.github/workflows/windows-installed-command.yml'
@@ -26,6 +27,7 @@ on:
       - 'scripts/postinstall.cjs'
       - 'scripts/tests/issue-2603-release-pack.cjs'
       - 'scripts/tests/issue-2603-windows-probe.ts'
+      - 'scripts/tests/issue-2603-startup-benchmark.cjs'
       - 'scripts/windows-installed-command-smoke.cjs'
       - 'scripts/windows-installed-command-smoke/**'
       - '.github/workflows/windows-installed-command.yml'
@@ -40,7 +42,11 @@ concurrency:
 jobs:
   windows-installed-command:
     runs-on: 'windows-latest'
-    timeout-minutes: 30
+    # 60 min (root cause D): the smoke does real global/local/npm-exec
+    # installs plus a benchmark. 30 min was too tight when multiple installs
+    # ran back-to-back. All install timeouts are env-configurable and stay
+    # well under this job budget.
+    timeout-minutes: 60
     permissions:
       contents: 'read'
     steps:
@@ -59,13 +65,36 @@ jobs:
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76'
         with:
           bun-version-file: '.bun-version'
-          no-cache: true
+
+      # Publish the absolute path to PowerShell 7 (pwsh.exe) so the smoke
+      # resolves it robustly under a constrained PATH. windows-latest ships
+      # pwsh but NOT legacy `powershell` on PATH, which previously caused
+      # every PowerShell-gated step to fail with ENOENT (run 29850614559).
+      - name: 'Export PowerShell 7 path'
+        shell: 'pwsh'
+        run: |
+          "PWSH_PATH=$(Get-Command pwsh).Source" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: 'Install dependencies (npm ci)'
         run: 'npm ci'
 
-      - name: 'Run Windows installed-command behavioral smoke'
+      # The smoke runs the behavioral checks AND the startup benchmark (as a
+      # child process using the already-installed launcher + platform bun), so
+      # no separate benchmark step is needed. The benchmark is invoked with
+      # LLXPRT_BENCH_LAUNCHER/LLXPRT_BENCH_BUN so it never repacks or
+      # reinstalls — it reuses the install the smoke already proved.
+      - name: 'Run Windows installed-command behavioral smoke + benchmark'
         run: 'node scripts/windows-installed-command-smoke.cjs'
 
-      - name: 'Run startup benchmark (measurement only, no threshold)'
-        run: 'node scripts/tests/issue-2603-startup-benchmark.cjs . 15'
+      # Upload the small diagnostic JSON written on failure (root cause I).
+      # Hosted runner temp vanishes post-job, so this small artifact (no
+      # node_modules) is how failures are debugged offline. Kept tiny.
+      - name: 'Upload diagnostic artifact on failure'
+        if: ${{ failure() }}
+        uses: 'actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882'
+        with:
+          name: 'llxprt-win-smoke-diagnostic'
+          path: |
+            ${{ runner.temp }}/llxprt-win-smoke-diagnostic-*.json
+          if-no-files-found: 'ignore'
+          retention-days: 7

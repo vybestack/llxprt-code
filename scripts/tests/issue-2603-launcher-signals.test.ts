@@ -25,6 +25,15 @@ const repoRoot = resolve(thisFile, '..', '..', '..');
 const launcherPath = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 
+// Constrained PATH used to prove the launcher needs no global Bun/Node — only
+// /bin/sh (POSIX shell) and core utilities are expected. This intentionally
+// excludes /usr/local/bin so the test cannot accidentally resolve a globally
+// installed bun. This is POSIX-only; Windows has no /usr/bin:/bin.
+const CONSTRAINED_POSIX_PATH = '/usr/bin:/bin';
+
+// Bun is a declared root dependency and test prerequisite: the launcher exec's
+// it directly. A missing Bun means the repo install is broken — skipping would
+// hide that, so we throw rather than mark tests as skipped.
 function ensureBun(): string {
   if (existsSync(repoBun)) {
     return repoBun;
@@ -66,130 +75,99 @@ function makeLayout(
   return { pkgRoot, launcherTarget };
 }
 
-describe('POSIX launcher signal behavior', () => {
-  let tempDir: string;
+// POSIX-only: signal semantics (SIGINT/SIGTERM process replacement via exec)
+// require the POSIX launcher. Windows has no POSIX signals and the launcher
+// path is a .cmd/.ps1, not this POSIX shell script. Skip explicitly on Windows.
+describe.skipIf(process.platform === 'win32')(
+  'POSIX launcher signal behavior',
+  () => {
+    let tempDir: string;
 
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-sig-'));
-  });
-
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  function makeLongRunning(tempDir: string): {
-    pkgRoot: string;
-    launcherTarget: string;
-    pidFile: string;
-  } {
-    const pidFile = join(tempDir, 'child-pid.txt');
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-      entryCode: [
-        'const fs = require("fs");',
-        `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
-        'process.stdin.resume();',
-        // Pause stdin on exit so a clean shutdown does not leave it flowing.
-        'process.on("exit", () => { try { process.stdin.pause(); } catch {} });',
-      ].join('\n'),
-    });
-    return { pkgRoot, launcherTarget, pidFile };
-  }
-
-  it('SIGINT reaches the child directly via exec (process replacement)', () => {
-    const { pkgRoot, launcherTarget, pidFile } = makeLongRunning(tempDir);
-    const child = spawn(launcherTarget, [], {
-      cwd: pkgRoot,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    beforeEach(() => {
+      tempDir = mkdtempSync(join(tmpdir(), 'llxprt-sig-'));
     });
 
-    let exited = false;
-    let exitSignal: NodeJS.Signals | null = null;
-    child.on('exit', (_code, signal) => {
-      exited = true;
-      exitSignal = signal;
+    afterEach(() => {
+      rmSync(tempDir, { recursive: true, force: true });
     });
 
-    let waited = 0;
-    const wait = setInterval(() => {
-      if (existsSync(pidFile) || waited > 50) {
-        clearInterval(wait);
-        if (existsSync(pidFile)) {
-          const childPid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
-          try {
-            process.kill(childPid, 'SIGINT');
-          } catch {
-            child.kill('SIGINT');
-          }
-        } else {
-          child.kill('SIGINT');
-        }
-      }
-      waited++;
-    }, 100);
-
-    setTimeout(() => {
-      clearInterval(wait);
-      if (!exited) {
-        child.kill('SIGKILL');
-      }
-    }, 15_000).unref();
-
-    return new Promise<void>((resolve) => {
-      child.on('exit', () => {
-        expect(exited).toBe(true);
-        expect(exitSignal).toBe('SIGINT');
-        resolve();
+    function makeLongRunning(dir: string): {
+      pkgRoot: string;
+      launcherTarget: string;
+      pidFile: string;
+    } {
+      const pidFile = join(dir, 'child-pid.txt');
+      const { pkgRoot, launcherTarget } = makeLayout(dir, {
+        entryCode: [
+          'const fs = require("fs");',
+          `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+          'process.stdin.resume();',
+          // Pause stdin on exit so a clean shutdown does not leave it flowing.
+          'process.on("exit", () => { try { process.stdin.pause(); } catch {} });',
+        ].join('\n'),
       });
-    });
-  }, 20_000);
+      return { pkgRoot, launcherTarget, pidFile };
+    }
 
-  it('SIGTERM reaches the child directly via exec (process replacement)', () => {
-    const { pkgRoot, launcherTarget, pidFile } = makeLongRunning(tempDir);
-    const child = spawn(launcherTarget, [], {
-      cwd: pkgRoot,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
+    // Parameterized signal test: both SIGINT and SIGTERM must reach the child
+    // process directly via the launcher's exec (process replacement). The POSIX
+    // launcher uses `exec "$bun" "$entry" "$@"`, so the child replaces the shell
+    // and signals are delivered to the actual Bun process, not a parent shell.
+    function testSignalDelivery(signal: NodeJS.Signals): void {
+      it(`${signal} reaches the child directly via exec (process replacement)`, () => {
+        const { pkgRoot, launcherTarget, pidFile } = makeLongRunning(tempDir);
+        const child = spawn(launcherTarget, [], {
+          cwd: pkgRoot,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, PATH: CONSTRAINED_POSIX_PATH },
+        });
 
-    let exited = false;
-    let exitSignal: NodeJS.Signals | null = null;
-    child.on('exit', (_code, signal) => {
-      exited = true;
-      exitSignal = signal;
-    });
+        let exited = false;
+        let exitSignal: NodeJS.Signals | null = null;
+        child.on('exit', (_code, sig) => {
+          exited = true;
+          exitSignal = sig;
+        });
 
-    let waited = 0;
-    const wait = setInterval(() => {
-      if (existsSync(pidFile) || waited > 50) {
-        clearInterval(wait);
-        if (existsSync(pidFile)) {
-          const childPid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
-          try {
-            process.kill(childPid, 'SIGTERM');
-          } catch {
-            child.kill('SIGTERM');
+        let waited = 0;
+        const wait = setInterval(() => {
+          if (existsSync(pidFile) || waited > 50) {
+            clearInterval(wait);
+            if (existsSync(pidFile)) {
+              const childPid = parseInt(
+                readFileSync(pidFile, 'utf8').trim(),
+                10,
+              );
+              try {
+                process.kill(childPid, signal);
+              } catch {
+                child.kill(signal);
+              }
+            } else {
+              child.kill(signal);
+            }
           }
-        } else {
-          child.kill('SIGTERM');
-        }
-      }
-      waited++;
-    }, 100);
+          waited++;
+        }, 100);
 
-    setTimeout(() => {
-      clearInterval(wait);
-      if (!exited) {
-        child.kill('SIGKILL');
-      }
-    }, 15_000).unref();
+        setTimeout(() => {
+          clearInterval(wait);
+          if (!exited) {
+            child.kill('SIGKILL');
+          }
+        }, 15_000).unref();
 
-    return new Promise<void>((resolve) => {
-      child.on('exit', () => {
-        expect(exited).toBe(true);
-        expect(exitSignal).toBe('SIGTERM');
-        resolve();
-      });
-    });
-  }, 20_000);
-});
+        return new Promise<void>((resolve) => {
+          child.on('exit', () => {
+            expect(exited).toBe(true);
+            expect(exitSignal).toBe(signal);
+            resolve();
+          });
+        });
+      }, 20_000);
+    }
+
+    testSignalDelivery('SIGINT');
+    testSignalDelivery('SIGTERM');
+  },
+);

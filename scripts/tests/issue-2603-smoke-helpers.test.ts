@@ -121,6 +121,23 @@ describe('pwshQuote', () => {
   it('single-quotes and doubles internal single quotes', () => {
     expect(launcherInvocation.pwshQuote("a'b")).toBe("'a''b'");
   });
+
+  it('wraps strings with spaces in single quotes', () => {
+    expect(launcherInvocation.pwshQuote('hello world')).toBe("'hello world'");
+  });
+
+  it('wraps strings with PowerShell metacharacters in single quotes', () => {
+    expect(launcherInvocation.pwshQuote('a;b')).toBe("'a;b'");
+    expect(launcherInvocation.pwshQuote('a|b')).toBe("'a|b'");
+    expect(launcherInvocation.pwshQuote('a&b')).toBe("'a&b'");
+    expect(launcherInvocation.pwshQuote('$var')).toBe("'$var'");
+  });
+
+  it('handles combined spaces, metacharacters, and single quotes', () => {
+    expect(launcherInvocation.pwshQuote("it's a $test; done")).toBe(
+      "'it''s a $test; done'",
+    );
+  });
 });
 
 describe('assertValidPid', () => {

@@ -23,8 +23,10 @@ const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 
 /**
  * The exit code the launcher uses for all launch-failure modes (missing Bun,
- * corrupt Bun, missing entry point). Centralized so a change to the launcher's
- * failure code only requires updating one place.
+ * corrupt Bun, wrong platform/unrecognized format, missing entry point).
+ * Centralized so a change to the launcher's failure code only requires updating
+ * one place. Mirrors the LAUNCHER_ERROR_EXIT_CODE constant in
+ * packages/cli/scripts/install-native-launchers.cjs.
  */
 const LAUNCHER_FAILURE_EXIT = 43;
 
@@ -41,6 +43,10 @@ function launcherMagicBlockAfter(marker: string): string {
   return source.slice(magicStart, magicEsac);
 }
 
+// Bun is a declared root dependency (see trustedDependencies in the root
+// package.json) and a test prerequisite: the launcher exec's it directly. A
+// missing Bun means the repo install is broken — skipping would hide that, so
+// we throw rather than mark tests as skipped.
 function ensureBun(): string {
   if (existsSync(repoBun)) {
     return repoBun;
@@ -54,20 +60,21 @@ function ensureBun(): string {
 
 /**
  * Returns the real Bun version from the repo's bun package.json so tests can
- * write matching pins. Falls back to a sentinel if unavailable. Shared at
- * module scope so multiple describe blocks reuse it without duplication.
+ * write matching pins. Bun is a declared dependency and test prerequisite; a
+ * missing/unreadable version indicates a broken installation, so we throw
+ * rather than fall back to a hardcoded version that would become stale on the
+ * next Bun upgrade.
  */
 function realBunVersion(): string {
   const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
-  if (existsSync(bunPkgPath)) {
-    try {
-      const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
-      if (typeof bunPkg.version === 'string') return bunPkg.version;
-    } catch {
-      // keep default
-    }
+  const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
+  if (typeof bunPkg.version === 'string' && bunPkg.version.length > 0) {
+    return bunPkg.version;
   }
-  return '1.3.14';
+  throw new Error(
+    `Bun package.json at ${bunPkgPath} has no valid version field; ` +
+      'the repo installation appears broken.',
+  );
 }
 
 function makeEntry(pkgRoot: string, code: string): void {
@@ -500,31 +507,34 @@ describe('POSIX launcher execution behavior', () => {
     expect(launcherMagicBlockAfter('Linux and other ELF')).not.toMatch(/4d5a/);
   });
 
-  it('rejects a PE/COFF Bun binary on Darwin (platform-gated magic)', () => {
-    // On macOS (Darwin), a PE/COFF binary cannot execute and must be rejected
-    // with exit 43. This test only runs on Darwin; on Linux it would test ELF
-    // rejection of PE (also correct), but the assertion is Darwin-specific.
-    if (process.platform !== 'darwin') return;
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-      withBun: false,
-    });
-    const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-    mkdirSync(bunDir, { recursive: true });
-    const peBun = join(bunDir, 'bun.exe');
-    // PE/COFF magic: MZ (4d5a) followed by arbitrary bytes.
-    writeFileSync(peBun, Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x01, 0x02]));
-    chmodSync(peBun, 0o755);
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 15_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(
-      /npm install|bun\.sh|unusable|not a valid|corrupt/i,
-    );
-  }, 15_000);
+  it.skipIf(process.platform !== 'darwin')(
+    'rejects a PE/COFF Bun binary on Darwin (platform-gated magic)',
+    () => {
+      // On macOS (Darwin), a PE/COFF binary cannot execute and must be rejected
+      // with exit 43. This test only runs on Darwin; on Linux it would test ELF
+      // rejection of PE (also correct), but the assertion is Darwin-specific.
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+        withBun: false,
+      });
+      const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
+      mkdirSync(bunDir, { recursive: true });
+      const peBun = join(bunDir, 'bun.exe');
+      // PE/COFF magic: MZ (4d5a) followed by arbitrary bytes.
+      writeFileSync(peBun, Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x01, 0x02]));
+      chmodSync(peBun, 0o755);
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(
+        /npm install|bun\.sh|unusable|not a valid|corrupt/i,
+      );
+    },
+    15_000,
+  );
 
   it('magic case-statement accepts the correct native format per platform', () => {
     // Unit-level contract: accepted magics must appear in the correct
@@ -800,26 +810,29 @@ describe('POSIX launcher version-pin and platform validation', () => {
     expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
   }, 15_000);
 
-  it('rejects an ELF Bun on Darwin (platform-gated format)', () => {
-    if (process.platform !== 'darwin') return;
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
-      withBun: false,
-    });
-    const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-    mkdirSync(bunDir, { recursive: true });
-    const elfBun = join(bunDir, 'bun.exe');
-    // ELF magic: 7f454c46
-    writeFileSync(elfBun, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]));
-    chmodSync(elfBun, 0o755);
-    const result = spawnSync(launcherTarget, [], {
-      cwd: pkgRoot,
-      encoding: 'utf8',
-      timeout: 15_000,
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-    expect(result.stderr).toMatch(
-      /npm install|bun\.sh|unusable|not a valid|corrupt/i,
-    );
-  }, 15_000);
+  it.skipIf(process.platform !== 'darwin')(
+    'rejects an ELF Bun on Darwin (platform-gated format)',
+    () => {
+      const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+        withBun: false,
+      });
+      const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
+      mkdirSync(bunDir, { recursive: true });
+      const elfBun = join(bunDir, 'bun.exe');
+      // ELF magic: 7f454c46
+      writeFileSync(elfBun, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]));
+      chmodSync(elfBun, 0o755);
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(
+        /npm install|bun\.sh|unusable|not a valid|corrupt/i,
+      );
+    },
+    15_000,
+  );
 });

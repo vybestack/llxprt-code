@@ -39,7 +39,11 @@ function loadCliInstaller(): ReturnType<typeof nodeRequire> {
   // aside from its exported functions, but deleting the cache entry prevents
   // any future module-level mutation from causing stale behavior.
   delete nodeRequire.cache[cliModulePath];
-  return nodeRequire(cliModulePath);
+  const mod = nodeRequire(cliModulePath);
+  // The module exposes implementation-detail helpers under a private
+  // `_testing` namespace; merge them onto the top-level return so existing
+  // `mod.X` references continue to work.
+  return { ...mod, ...mod._testing };
 }
 
 /**
@@ -155,7 +159,9 @@ describe('CLI workspace tarball contents (actual release artifact)', () => {
     const tarball = packCliWorkspace();
     expect(existsSync(tarball)).toBe(true);
     const { stdout } = spawnTarList(tarball);
-    const files = stdout.split('\n');
+    // Use /\r?\n/ (not '\n') so Windows tar (bsdtar) CRLF output parses the
+    // same as POSIX tar output.
+    const files = stdout.split(/\r?\n/);
     expect(files).toContain('package/bin/llxprt');
     expect(files).toContain('package/index.ts');
     expect(files).toContain('package/package.json');
@@ -164,14 +170,14 @@ describe('CLI workspace tarball contents (actual release artifact)', () => {
   it('includes the installer script', () => {
     const tarball = packCliWorkspace();
     const { stdout } = spawnTarList(tarball);
-    const files = stdout.split('\n');
+    const files = stdout.split(/\r?\n/);
     expect(files).toContain('package/scripts/install-native-launchers.cjs');
   }, 120_000);
 
   it('does NOT include the old Node launcher (llxprt.cjs)', () => {
     const tarball = packCliWorkspace();
     const { stdout } = spawnTarList(tarball);
-    const files = stdout.split('\n');
+    const files = stdout.split(/\r?\n/);
     expect(files.some((f) => f.endsWith('.cjs') && f.includes('bin/'))).toBe(
       false,
     );
@@ -431,6 +437,10 @@ describe('install-native-launchers module (CLI workspace)', () => {
       }
     });
 
+    // cmd-shim ALWAYS emits .cmd AND .ps1 on ALL platforms (no process.platform
+    // gate in cmd-shim source — it unconditionally writes to + '.ps1'). These
+    // ps1 tests are valid on POSIX CI, not just Windows. Verified by reading
+    // the cmd-shim source (line ~234: writeFile(to + '.ps1', pwsh, 'utf8')).
     it('recognizes a real npm ps1 shim ($basedir pattern) pointing to our package', () => {
       const mod = loadCliInstaller();
       const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-ps1-shim-'));

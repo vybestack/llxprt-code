@@ -16,23 +16,40 @@
  * The harness:
  *   1. Packs a release-like CLI replica tarball via the shared release-pack
  *      helper (same one POSIX tests use).
- *   2. Installs the replica globally and locally.
+ *   2. Installs the replica globally and locally (REQUIRED setup: a failure
+ *      aborts dependent checks via runRequiredStep — no cascade).
  *   3. Creates a TEMP installed-package fixture whose index.ts is replaced
- *      with an instrumented probe.
+ *      with an instrumented probe. The copied bun.exe is validated (PE magic +
+ *      exact version) BEFORE the fixture is used.
  *   4. Invokes both launchers through the real cmd and PowerShell, asserting
  *      args, stdio, exit codes, execPath, and the process tree.
  *   5. Tests missing-Bun and corrupt-Bun error contracts.
  *   6. Tests actual ephemeral `npm exec --package <tarball> -- llxprt`.
- *   7. Tests package-local bun.exe presence.
+ *   7. Tests package-local bun.exe presence and PE/version integrity.
+ *   8. After all behavioral checks pass, runs the startup benchmark as a
+ *      child process using the INSTALLED launcher + platform bun (no separate
+ *      reinstall/repack) before cleanup, so the workflow needs only one step.
+ *
+ * Benchmark handoff (root cause E):
+ *   On success, before cleanup, this process writes the installed paths
+ *   (launcher, packageRoot, bun.exe) to a stable diagnostic JSON under
+ *   RUNNER_TEMP and invokes the benchmark child with LLXPRT_BENCH_LAUNCHER /
+ *   LLXPRT_BENCH_BUN env vars so it does not repack/reinstall.
+ *
+ * Diagnostics on failure (root cause I):
+ *   On failure a small diagnostic JSON (no node_modules) is written next to
+ *   the temp dir so the workflow can upload it as an artifact. The large temp
+ *   fixture itself lives in the hosted runner temp which vanishes post-job.
  *
  * This is a Node script so the test driver does not depend on a pre-installed
  * Bun. The release-pack helper invokes Bun for bind-release-deps, so Bun must
  * be set up in the workflow before this runs.
  */
 
-const { existsSync, mkdtempSync, rmSync } = require('node:fs');
+const { existsSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
+const { spawnSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 
 const isWindows = process.platform === 'win32';
@@ -70,10 +87,97 @@ function safeCleanup(tempDir) {
   }
 }
 
+/**
+ * Writes a small diagnostic JSON (no node_modules) capturing the smoke result
+ * and key paths. GitHub hosted runner temp vanishes after the job, so this
+ * small artifact is what the workflow can upload via `actions/upload-artifact`
+ * on failure for offline debugging. Kept tiny on purpose (no giant dirs).
+ */
+function writeDiagnostic(status, details) {
+  const diagDir = process.env.RUNNER_TEMP || tmpdir();
+  const diagPath = join(
+    diagDir,
+    `llxprt-win-smoke-diagnostic-${process.pid}.json`,
+  );
+  try {
+    const { failed, failures } = getState();
+    writeFileSync(
+      diagPath,
+      JSON.stringify(
+        {
+          status,
+          pid: process.pid,
+          platform: process.platform,
+          timestamp: new Date().toISOString(),
+          failed,
+          failures,
+          ...details,
+        },
+        null,
+        2,
+      ),
+    );
+    process.stdout.write(`diagnostic=${diagPath}\n`);
+  } catch (e) {
+    console.error(`Warning: could not write diagnostic JSON: ${e.message}`);
+  }
+}
+
+/**
+ * Runs the startup benchmark as a CHILD process, pointing it at the already
+ * installed launcher and platform bun via env vars so it does NOT repack or
+ * reinstall (root cause E). Invoked before cleanup so the fixture is still
+ * present. Failures here are reported but do NOT fail the smoke (the benchmark
+ * is a measurement tool with no threshold gate).
+ *
+ * @param {string} cmdLauncher - absolute path to the installed llxprt.cmd
+ * @param {string} bunExe - absolute path to the platform bun.exe
+ */
+function runBenchmarkChild(cmdLauncher, bunExe) {
+  const benchScript = join(
+    repoRoot,
+    'scripts',
+    'tests',
+    'issue-2603-startup-benchmark.cjs',
+  );
+  if (!existsSync(benchScript)) {
+    console.error(`benchmark step skipped: script not found at ${benchScript}`);
+    return;
+  }
+  process.stdout.write('[benchmark] starting...\n');
+  const r = spawnSync(process.execPath, [benchScript, repoRoot, '15'], {
+    encoding: 'utf8',
+    timeout: 300_000,
+    maxBuffer: 64 * 1024 * 1024,
+    env: {
+      ...process.env,
+      LLXPRT_BENCH_LAUNCHER: cmdLauncher,
+      LLXPRT_BENCH_BUN: bunExe,
+    },
+  });
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  if (r.error) {
+    console.error(`[benchmark] spawn failed: ${r.error.message}`);
+    return;
+  }
+  if (r.signal) {
+    console.error(`[benchmark] terminated by signal ${r.signal}`);
+    return;
+  }
+  if (r.status !== 0) {
+    console.error(`[benchmark] exited ${r.status} (non-fatal)`);
+    return;
+  }
+  process.stdout.write('[benchmark] OK\n');
+}
+
 function runSmoke() {
   resetState();
   let tempDir;
   let succeeded = false;
+  let cmdLauncher;
+  let bunExe;
   return (async () => {
     try {
       const { packReleaseLikeCli } = nodeRequire(releasePackHelperPath);
@@ -92,6 +196,8 @@ function runSmoke() {
       checks.checkVersionRuns(prefix);
 
       const installedPackageRoot = findInstalledPackageRoot(prefix);
+      bunExe = findBundledBun(installedPackageRoot);
+      cmdLauncher = join(prefix, 'llxprt.cmd');
 
       const probeFixture = checks.buildProbeFixture(
         installedPackageRoot,
@@ -121,15 +227,32 @@ function runSmoke() {
     } catch (err) {
       fail(`unexpected error: ${err.stack || err.message}`);
     } finally {
-      // Preserve the temp fixture on failure for debugging (print its path so
-      // CI logs show where to inspect). Clean up on success to avoid CI disk
-      // pressure.
+      // Run the benchmark using the installed launcher + bun BEFORE cleanup
+      // so it never needs to repack/reinstall (root cause E). Only when the
+      // behavioral smoke succeeded and we have a healthy installed launcher.
+      if (succeeded && cmdLauncher && existsSync(cmdLauncher) && bunExe) {
+        runBenchmarkChild(cmdLauncher, bunExe);
+      }
       if (succeeded) {
+        writeDiagnostic('success', {
+          cmdLauncher,
+          bunExe,
+          tempDir,
+        });
         safeCleanup(tempDir);
-      } else if (tempDir) {
-        console.error(
-          `\nTemp fixture preserved for debugging at:\n  ${tempDir}\n`,
-        );
+      } else {
+        writeDiagnostic('failure', {
+          tempDir: tempDir || null,
+          cmdLauncher: cmdLauncher || null,
+          bunExe: bunExe || null,
+        });
+        if (tempDir) {
+          console.error(
+            `\nTemp fixture preserved for debugging at:\n  ${tempDir}\n` +
+              `(Hosted runner temp vanishes post-job; the diagnostic JSON ` +
+              `above should be uploaded as an artifact by the workflow.)\n`,
+          );
+        }
       }
     }
   })();
@@ -157,6 +280,19 @@ runSmoke()
     reportAndExit();
   })
   .catch((err) => {
-    fail(`runSmoke rejected unexpectedly: ${err.stack || err.message}`);
+    // Normalize non-Error rejections so the message extraction never throws.
+    let detail;
+    if (err && typeof err === 'object' && typeof err.stack === 'string') {
+      detail = err.stack;
+    } else if (
+      err &&
+      typeof err === 'object' &&
+      typeof err.message === 'string'
+    ) {
+      detail = err.message;
+    } else {
+      detail = String(err);
+    }
+    fail(`runSmoke rejected unexpectedly: ${detail}`);
     reportAndExit();
   });

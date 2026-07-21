@@ -4,9 +4,13 @@
  * Process-tree inspection and cross-platform sleep helpers for the Windows
  * smoke. These use PowerShell/CIM to enumerate descendants via a visited-set
  * BFS that does not silently truncate.
+ *
+ * The PowerShell executable is resolved via resolvePwsh() (root cause C) so
+ * the harness works on windows-latest where only pwsh.exe is present.
  */
 
 const { spawnSync, spawn } = require('node:child_process');
+const { resolvePwsh } = require('./pwsh-resolver.cjs');
 
 /**
  * Validates that a value is a positive integer PID suitable for interpolation
@@ -186,7 +190,9 @@ function inspectProcessTreeSync(rootPid) {
     `}`,
     `Get-Descendants ${rootPid} | Select-Object ProcessId,Name | ConvertTo-Json -Compress`,
   ].join('\n');
-  const ps = spawnSync('powershell', ['-NoProfile', '-Command', script], {
+  // Resolve PowerShell robustly (PWSH_PATH -> pwsh.exe -> powershell.exe).
+  const pwshExe = resolvePwsh();
+  const ps = spawnSync(pwshExe, ['-NoProfile', '-Command', script], {
     encoding: 'utf8',
     timeout: 15_000,
   });
@@ -195,9 +201,14 @@ function inspectProcessTreeSync(rootPid) {
       `inspectProcessTreeSync: PowerShell spawn failed: ${ps.error.message}`,
     );
   }
+  if (ps.signal) {
+    throw new Error(
+      `inspectProcessTreeSync: PowerShell terminated by signal ${ps.signal}`,
+    );
+  }
   if (ps.status !== 0) {
     throw new Error(
-      `inspectProcessTreeSync: PowerShell exited ${ps.status} (signal=${ps.signal ?? 'none'}): ${ps.stderr || ps.stdout}`,
+      `inspectProcessTreeSync: PowerShell exited ${ps.status}: ${ps.stderr || ps.stdout}`,
     );
   }
   const descendants = [];
