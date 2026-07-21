@@ -611,21 +611,20 @@ describe('nightly failure notifier repository targeting', () => {
   });
 
   it('rejects an unscoped outer invocation containing a scoped command substitution', () => {
-    expect(() =>
-      assertRepositoryTargeting(
-        ['gh issue list "$(gh issue list --repo "${GH_REPO}")"'],
-        'gh issue list',
-      ),
-    ).toThrow('gh issue list must target GH_REPO: gh issue list');
+    const command = 'gh issue list "$(gh issue list --repo "${GH_REPO}")"';
+
+    expect(() => assertRepositoryTargeting([command], 'gh issue list')).toThrow(
+      `gh issue list must target GH_REPO: ${command}`,
+    );
   });
 
   it('rejects a repo option embedded in a quoted search value', () => {
-    expect(() =>
-      assertRepositoryTargeting(
-        ['gh issue list --search \'open --repo "${GH_REPO}" issues\''],
-        'gh issue list',
-      ),
-    ).toThrow('gh issue list must target GH_REPO: gh issue list');
+    const command =
+      'gh issue list --search \'open --repo "${GH_REPO}" issues\'';
+
+    expect(() => assertRepositoryTargeting([command], 'gh issue list')).toThrow(
+      `gh issue list must target GH_REPO: ${command}`,
+    );
   });
 
   it('discovers and rejects an unscoped assignment-prefixed invocation', () => {
