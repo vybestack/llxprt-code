@@ -193,6 +193,45 @@ describe('CLI launcher generation', () => {
     );
   });
 
+  it('rejects direct Node invocation when import.meta.main is unavailable', () => {
+    const tempDir = mkdtempSync(
+      join(dirname(generatorPath), '.cli-launcher-no-import-meta-main-'),
+    );
+    const copiedGenerator = join(tempDir, basename(generatorPath));
+
+    try {
+      const source = readFileSync(generatorPath, 'utf8');
+      const sourceWithoutImportMetaMain = source.replace(
+        /import\.meta\.main/g,
+        'undefined',
+      );
+      expect(sourceWithoutImportMetaMain).not.toBe(source);
+      writeFileSync(copiedGenerator, sourceWithoutImportMetaMain);
+
+      const result = spawnSync(
+        process.execPath,
+        [copiedGenerator, '--source='],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          timeout: SPAWN_TIMEOUT_MS,
+        },
+      );
+      const diagnostics = spawnDiagnostics(result);
+
+      expect(result.error, diagnostics).toBeUndefined();
+      expect(result.status, diagnostics).not.toBe(0);
+      expect(result.stderr, diagnostics).toContain(
+        'CLI launcher generation requires the Bun runtime',
+      );
+      expect(result.stderr, diagnostics).not.toContain(
+        '--source requires a path',
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it(
     'uses a quoted BUN_PATH candidate without falling back to the repository Bun',
     () => {

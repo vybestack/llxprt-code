@@ -245,6 +245,17 @@ async function main(): Promise<void> {
   await writeLauncher(options.output, generated);
 }
 
-if (import.meta.main) {
+function normalizeEntryPath(path: string): string {
+  const normalized = resolve(path);
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+const isDirectEntry =
+  import.meta.main ??
+  (process.argv[1] !== undefined &&
+    normalizeEntryPath(fileURLToPath(import.meta.url)) ===
+      normalizeEntryPath(process.argv[1]));
+
+if (isDirectEntry) {
   await main();
 }
