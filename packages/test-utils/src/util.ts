@@ -114,15 +114,18 @@ export function printDebugInfo(
   rig.dumpDiagnostic('printDebugInfo', dump);
   return allTools;
 }
+
 function formatExpectedContent(content: string | RegExp): string {
   return content instanceof RegExp ? content.toString() : content;
 }
 
-type ExpectedContent = string | Array<string | RegExp>;
+type ExpectedContent = string | RegExp | Array<string | RegExp>;
 
 /**
- * Validate model output and warn about unexpected content. Returns whether all
- * expected content was present.
+ * Legacy advisory validator: warn (and return false) when expected content is
+ * missing, but do not fail the test. Throws only when there is no output at
+ * all. Reserve for content that is not a hard requirement; behavioral evals
+ * should encode their own deterministic assertions.
  */
 export function validateModelOutput(
   result: string,
@@ -142,7 +145,7 @@ export function validateModelOutput(
     : [expectedContent];
   const missingContent = contents.filter((content) => {
     if (content instanceof RegExp) {
-      return !content.test(result);
+      return !matchesOnce(content, result);
     }
     return !result.toLowerCase().includes(content.toLowerCase());
   });
@@ -154,7 +157,7 @@ export function validateModelOutput(
       'This is not ideal but not a test failure.\n' +
       'The tool was called successfully, which is the main requirement.\n' +
       `Expected content: ${String(expectedContent)}\n` +
-      `Actual output: ${result}`;
+      `Actual output length: ${result.length}`;
     logVerbose(warning);
     return false;
   }
@@ -163,4 +166,19 @@ export function validateModelOutput(
     logVerbose(`${testName}: Model output validated successfully.`);
   }
   return true;
+}
+
+/**
+ * Test a regex against a string statelessly. RegExp.test() advances lastIndex
+ * on /g and /y regexes, so callers reusing the same pattern object must not
+ * see that mutation.
+ */
+function matchesOnce(pattern: RegExp, input: string): boolean {
+  const savedLastIndex = pattern.lastIndex;
+  try {
+    pattern.lastIndex = 0;
+    return pattern.test(input);
+  } finally {
+    pattern.lastIndex = savedLastIndex;
+  }
 }

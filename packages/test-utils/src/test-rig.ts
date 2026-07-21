@@ -84,6 +84,16 @@ interface RunMethodOptions {
 }
 
 /**
+ * Options accepted by {@link TestRig.setup}. Exported so eval/integration
+ * authors can type their own case objects against the real setup parameter
+ * rather than loosening to `Record<string, any>`.
+ */
+export interface TestRigSetupOptions {
+  settings?: Record<string, unknown>;
+  fakeResponsesPath?: string;
+}
+
+/**
  * Test harness for integration/e2e CLI tests. Manages test directories,
  * spawns the CLI, parses telemetry, and provides polling helpers.
  */
@@ -108,13 +118,7 @@ export class TestRig {
     this._diagnostics.dump(label, content);
   }
 
-  setup(
-    testName: string,
-    options: {
-      settings?: Record<string, unknown>;
-      fakeResponsesPath?: string;
-    } = {},
-  ) {
+  setup(testName: string, options: TestRigSetupOptions = {}) {
     this.testName = testName;
     const sanitizedName = sanitizeTestName(testName);
     const testDir = join(

@@ -46,7 +46,7 @@ function restoreStorageEnv(): void {
   savedStorageEnv = undefined;
 }
 
-export async function setup() {
+export async function setup(): Promise<void> {
   if (savedStorageEnv !== undefined || evalsStorageRoot !== '') {
     throw new Error('Eval global setup is already active');
   }
@@ -134,7 +134,7 @@ export async function setup() {
   }
 }
 
-export async function teardown() {
+export async function teardown(): Promise<void> {
   const cleanupErrors: unknown[] = [];
   const currentRunDir = runDir;
   const storageRoot = evalsStorageRoot;
