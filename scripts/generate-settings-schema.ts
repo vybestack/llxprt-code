@@ -139,7 +139,7 @@ function buildSchemaObject(schema: SettingsSchemaType): JsonSchema {
   return root;
 }
 
-function buildSettingSchema(
+export function buildSettingSchema(
   definition: SettingDefinition,
   pathSegments: string[],
   defs: Map<string, JsonSchema>,
@@ -150,13 +150,30 @@ function buildSettingSchema(
     markdownDescription: buildMarkdownDescription(definition),
   };
 
-  if (definition.default !== undefined) {
-    base.default = definition.default as JsonValue;
+  const effectiveDefault = resolveDocumentedDefault(definition);
+  if (effectiveDefault !== undefined) {
+    base.default = effectiveDefault as JsonValue;
   }
 
   const schemaShape = resolveSchemaShape(definition, pathSegments, defs);
 
   return { ...base, ...schemaShape };
+}
+
+/**
+ * Resolves the default value emitted into the generated JSON schema.
+ *
+ * Generators advertise the documented/schema contract, which may intentionally
+ * differ from the runtime merge default. `documentedDefault` takes precedence
+ * so a setting like `streamFirstResponseTimeoutMs` can advertise a public
+ * default (300000) while keeping its runtime `default: undefined` so
+ * settingsMerge does not materialize an unconfigured ephemeral. When
+ * `documentedDefault` is absent, the runtime `default` is used.
+ */
+export function resolveDocumentedDefault(
+  definition: SettingDefinition,
+): unknown {
+  return definition.documentedDefault ?? definition.default;
 }
 
 function resolveSchemaShape(
@@ -343,7 +360,9 @@ function isSettingDefinition(
   return 'label' in source;
 }
 
-function buildMarkdownDescription(definition: SettingDefinition): string {
+export function buildMarkdownDescription(
+  definition: SettingDefinition,
+): string {
   const lines: string[] = [];
 
   if (definition.description?.trim()) {
@@ -358,8 +377,9 @@ function buildMarkdownDescription(definition: SettingDefinition): string {
     `- Requires restart: \`${definition.requiresRestart ? 'yes' : 'no'}\``,
   );
 
-  if (definition.default !== undefined) {
-    lines.push(`- Default: \`${formatDefaultValue(definition.default)}\``);
+  const effectiveDefault = resolveDocumentedDefault(definition);
+  if (effectiveDefault !== undefined) {
+    lines.push(`- Default: \`${formatDefaultValue(effectiveDefault)}\``);
   }
 
   return lines.join('\n');

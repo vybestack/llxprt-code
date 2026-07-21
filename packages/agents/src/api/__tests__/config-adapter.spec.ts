@@ -25,6 +25,11 @@ import {
   toConfigParameters,
   AdapterError,
 } from '@vybestack/llxprt-code-agents';
+import { applyRuntimeEphemerals } from '../agentConfig.adapter.js';
+
+const STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY = 'streamIdleTimeoutMs';
+const STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY =
+  'streamFirstResponseTimeoutMs';
 
 /** Reads a ConfigParameters field by name without leaking a cast into asserts. */
 function read(params: Readonly<Record<string, unknown>>, key: string): unknown {
@@ -474,5 +479,106 @@ describe('toConfigParameters adapter @plan:PLAN-20260617-COREAPI.P14 @requiremen
         expect(config.coreTools).toStrictEqual(inputSnapshot);
       }),
     );
+  });
+});
+
+/**
+ * Records ephemeral writes so behavioral tests can assert the exact
+ * (camelCase key → value) tuples applied to the runtime Config, without a
+ * real Config or mock theater.
+ */
+interface EphemeralSink {
+  readonly entries: ReadonlyArray<readonly [string, unknown]>;
+  setEphemeralSetting(key: string, value: unknown): void;
+}
+
+function createEphemeralSink(): EphemeralSink {
+  const entries: Array<readonly [string, unknown]> = [];
+  return {
+    entries,
+    setEphemeralSetting(key: string, value: unknown): void {
+      entries.push([key, value]);
+    },
+  };
+}
+
+describe('applyRuntimeEphemerals (typed stream timeouts) @issue:2607', () => {
+  it('sets streamIdleTimeoutMs under its camelCase key when provided', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: 12_000,
+      streamFirstResponseTimeoutMs: undefined,
+    });
+    expect(sink.entries).toStrictEqual([
+      [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY, 12_000],
+    ]);
+  });
+
+  it('sets streamFirstResponseTimeoutMs under its camelCase key when provided', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: undefined,
+      streamFirstResponseTimeoutMs: 300_000,
+    });
+    expect(sink.entries).toStrictEqual([
+      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, 300_000],
+    ]);
+  });
+
+  it('applies both timeout fields when both are provided', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: 5_000,
+      streamFirstResponseTimeoutMs: 300_000,
+    });
+    expect(sink.entries).toStrictEqual([
+      [STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY, 5_000],
+      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, 300_000],
+    ]);
+  });
+
+  it('writes nothing when both timeout fields are undefined', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: undefined,
+      streamFirstResponseTimeoutMs: undefined,
+    });
+    expect(sink.entries).toStrictEqual([]);
+  });
+
+  it('preserves 0 (disabled) for streamFirstResponseTimeoutMs — does not drop falsy value', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: undefined,
+      streamFirstResponseTimeoutMs: 0,
+    });
+    expect(sink.entries).toStrictEqual([
+      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, 0],
+    ]);
+  });
+
+  it('preserves negative values (also disable the watchdog) verbatim', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: undefined,
+      streamFirstResponseTimeoutMs: -1,
+    });
+    expect(sink.entries).toStrictEqual([
+      [STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY, -1],
+    ]);
+  });
+
+  it('an explicit 300000 is distinguishable from absent (always written, not defaulted)', () => {
+    const sink = createEphemeralSink();
+    applyRuntimeEphemerals(sink, {
+      streamIdleTimeoutMs: undefined,
+      streamFirstResponseTimeoutMs: 300_000,
+    });
+    // A single explicit write at 300000; absent would have written nothing.
+    expect(sink.entries).toHaveLength(1);
+    expect(sink.entries[0]?.[0]).toBe(
+      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+    );
+    expect(sink.entries[0]?.[1]).toBe(300_000);
   });
 });

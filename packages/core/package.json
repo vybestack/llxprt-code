@@ -471,6 +471,10 @@
       "bun": "./src/utils/streamIdleTimeout.ts",
       "import": "./dist/src/utils/streamIdleTimeout.js"
     },
+    "./utils/streamWatchdog.js": {
+      "bun": "./src/utils/streamWatchdog.ts",
+      "import": "./dist/src/utils/streamWatchdog.js"
+    },
     "./utils/terminalSerializer.js": {
       "bun": "./src/utils/terminalSerializer.ts",
       "import": "./dist/src/utils/terminalSerializer.js"

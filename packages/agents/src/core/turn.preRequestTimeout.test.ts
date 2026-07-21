@@ -362,7 +362,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
           value: {
             error: {
               message:
-                'Stream idle timeout: no response received within the allowed time.',
+                'First-response timeout: no response received within the allowed time (threshold 20ms) from stream-first-response-timeout-ms.',
               status: undefined,
             },
           },

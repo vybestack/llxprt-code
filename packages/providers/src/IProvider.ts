@@ -22,6 +22,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -54,6 +55,13 @@ export interface GenerateChatOptions {
   runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
   onProviderError?: (error: StructuredError) => void;
+  /**
+   * Optional provider-neutral transport-liveness listener (issue #2607).
+   * Providers that observe raw lifecycle evidence (e.g. an OpenAI Responses
+   * `response.created` SSE event) invoke this to signal the connection is
+   * alive even before any semantic IContent is produced.
+   */
+  onStreamLiveness?: (event: StreamLivenessEvent) => void;
   metadata?: Record<string, unknown>;
   resolved?: {
     model?: string;

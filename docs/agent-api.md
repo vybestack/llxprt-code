@@ -121,23 +121,24 @@ returns a ready-to-use `Agent`. It is `async` — always `await` it.
 
 ### Commonly used optional fields
 
-| Field                 | Type                                | Description                                                         |
-| --------------------- | ----------------------------------- | ------------------------------------------------------------------- |
-| `modelParams`         | `Readonly<Record<string, unknown>>` | Provider/model knobs (temperature, etc.).                           |
-| `auth`                | `AgentAuth`                         | Credentials — see [Authentication](#authentication-and-precedence). |
-| `tools`               | `readonly string[]`                 | Allow-list of tool names to enable.                                 |
-| `excludeTools`        | `readonly string[]`                 | Tools to exclude.                                                   |
-| `mcpServers`          | `Record<string, MCPServerConfig>`   | MCP servers to wire at startup.                                     |
-| `approvalMode`        | `ApprovalMode`                      | Tool-confirmation policy.                                           |
-| `systemPrompt`        | `string`                            | System instruction.                                                 |
-| `workingDir`          | `string`                            | Workspace root for file tools.                                      |
-| `sessionId`           | `string`                            | Stable runtime id (defaults to a generated one).                    |
-| `sandbox`             | `SandboxConfig`                     | Sandbox configuration (see below).                                  |
-| `hooks`               | `AgentHooks`                        | Lifecycle hooks keyed by event name.                                |
-| `streamIdleTimeoutMs` | `number`                            | Idle-timeout for a stream turn.                                     |
-| `onApproval`          | `ApprovalHandler`                   | Callback invoked for tool confirmations.                            |
-| `onOAuthPrompt`       | `OAuthPromptHandler`                | Callback invoked when an OAuth flow needs the user.                 |
-| `editorCallbacks`     | `EditorCallbacks`                   | Hooks for opening/closing an external editor.                       |
+| Field                          | Type                                | Description                                                                                                                                                      |
+| ------------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelParams`                  | `Readonly<Record<string, unknown>>` | Provider/model knobs (temperature, etc.).                                                                                                                        |
+| `auth`                         | `AgentAuth`                         | Credentials — see [Authentication](#authentication-and-precedence).                                                                                              |
+| `tools`                        | `readonly string[]`                 | Allow-list of tool names to enable.                                                                                                                              |
+| `excludeTools`                 | `readonly string[]`                 | Tools to exclude.                                                                                                                                                |
+| `mcpServers`                   | `Record<string, MCPServerConfig>`   | MCP servers to wire at startup.                                                                                                                                  |
+| `approvalMode`                 | `ApprovalMode`                      | Tool-confirmation policy.                                                                                                                                        |
+| `systemPrompt`                 | `string`                            | System instruction.                                                                                                                                              |
+| `workingDir`                   | `string`                            | Workspace root for file tools.                                                                                                                                   |
+| `sessionId`                    | `string`                            | Stable runtime id (defaults to a generated one).                                                                                                                 |
+| `sandbox`                      | `SandboxConfig`                     | Sandbox configuration (see below).                                                                                                                               |
+| `hooks`                        | `AgentHooks`                        | Lifecycle hooks keyed by event name.                                                                                                                             |
+| `streamIdleTimeoutMs`          | `number`                            | Idle-timeout for a stream turn.                                                                                                                                  |
+| `streamFirstResponseTimeoutMs` | `number`                            | First-response (time-to-first-content) watchdog in ms. Default `300000`; `0`/negative disables. A provider liveness signal (e.g. `response.created`) disarms it. |
+| `onApproval`                   | `ApprovalHandler`                   | Callback invoked for tool confirmations.                                                                                                                         |
+| `onOAuthPrompt`                | `OAuthPromptHandler`                | Callback invoked when an OAuth flow needs the user.                                                                                                              |
+| `editorCallbacks`              | `EditorCallbacks`                   | Hooks for opening/closing an external editor.                                                                                                                    |
 
 `AgentConfig` carries many more long-tail fields (telemetry, compression,
 recording, file filtering, policy, extensions, skills, IDE mode, etc.). See the
