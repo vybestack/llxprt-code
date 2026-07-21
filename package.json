@@ -112,6 +112,9 @@
     "release:version": "bun scripts/version.ts",
     "telemetry": "bun scripts/telemetry.ts",
     "check:lockfile": "bun scripts/check-lockfile.ts",
+    "test:issue-2603-smoke": "node scripts/tests/issue-2603-release-install-smoke.cjs",
+    "test:issue-2603-benchmark": "node scripts/tests/issue-2603-startup-benchmark.cjs",
+    "test:windows-installed-smoke": "node scripts/windows-installed-command-smoke.cjs",
     "clean": "bun scripts/clean.ts"
   },
   "overrides": {
@@ -147,7 +150,7 @@
     "typescript": "5.8.3"
   },
   "bin": {
-    "llxprt": "packages/cli/bin/llxprt.cjs"
+    "llxprt": "packages/cli/bin/llxprt"
   },
   "files": [
     "packages/cli/bin/",

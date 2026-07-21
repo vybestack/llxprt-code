@@ -1,0 +1,71 @@
+name: 'Windows Installed Command (issue #2603)'
+
+on:
+  pull_request:
+    paths:
+      - 'packages/cli/bin/**'
+      - 'packages/cli/package.json'
+      - 'packages/cli/scripts/install-native-launchers.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/postinstall.cjs'
+      - 'scripts/tests/issue-2603-release-pack.cjs'
+      - 'scripts/tests/issue-2603-windows-probe.ts'
+      - 'scripts/windows-installed-command-smoke.cjs'
+      - 'scripts/windows-installed-command-smoke/**'
+      - '.github/workflows/windows-installed-command.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'packages/cli/bin/**'
+      - 'packages/cli/package.json'
+      - 'packages/cli/scripts/install-native-launchers.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/postinstall.cjs'
+      - 'scripts/tests/issue-2603-release-pack.cjs'
+      - 'scripts/tests/issue-2603-windows-probe.ts'
+      - 'scripts/windows-installed-command-smoke.cjs'
+      - 'scripts/windows-installed-command-smoke/**'
+      - '.github/workflows/windows-installed-command.yml'
+  workflow_dispatch:
+
+# Cancel superseded runs of this workflow for the same ref so that repeated
+# pushes to a PR do not queue redundant Windows install smokes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installed-command:
+    runs-on: 'windows-latest'
+    timeout-minutes: 30
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8'
+        with:
+          fetch-depth: 1
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e'
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76'
+        with:
+          bun-version-file: '.bun-version'
+          no-cache: true
+
+      - name: 'Install dependencies (npm ci)'
+        run: 'npm ci'
+
+      - name: 'Run Windows installed-command behavioral smoke'
+        run: 'node scripts/windows-installed-command-smoke.cjs'
+
+      - name: 'Run startup benchmark (measurement only, no threshold)'
+        run: 'node scripts/tests/issue-2603-startup-benchmark.cjs . 15'

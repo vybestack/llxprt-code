@@ -1,0 +1,84 @@
+#!/bin/sh
+set -u
+
+_llxprt_self=$0
+while [ -L "$_llxprt_self" ]; do
+  _llxprt_dir=$(dirname -- "$_llxprt_self")
+  _llxprt_target=$(readlink -- "$_llxprt_self" 2>/dev/null || printf '%s\n' "$_llxprt_self")
+  case "$_llxprt_target" in
+    /*) _llxprt_self=$_llxprt_target ;;
+    *)  _llxprt_self=$_llxprt_dir/$_llxprt_target ;;
+  esac
+done
+_llxprt_script_dir=$(cd -- "$(dirname -- "$_llxprt_self")" 2>/dev/null && pwd) || \
+  _llxprt_script_dir=$(dirname -- "$_llxprt_self")
+
+_llxprt_search=$_llxprt_script_dir
+_llxprt_bun=""
+while true; do
+  if [ -x "$_llxprt_search/node_modules/bun/bin/bun.exe" ]; then
+    _llxprt_bun=$_llxprt_search/node_modules/bun/bin/bun.exe
+    break
+  fi
+  if [ -x "$_llxprt_search/node_modules/.bin/bun" ]; then
+    _llxprt_bun=$_llxprt_search/node_modules/.bin/bun
+    break
+  fi
+  if [ -x "$_llxprt_search/node_modules/.bin/bun.exe" ]; then
+    _llxprt_bun=$_llxprt_search/node_modules/.bin/bun.exe
+    break
+  fi
+  _llxprt_parent=$(dirname -- "$_llxprt_search")
+  if [ "$_llxprt_parent" = "$_llxprt_search" ]; then
+    break
+  fi
+  _llxprt_search=$_llxprt_parent
+done
+
+if [ -z "$_llxprt_bun" ]; then
+  printf '%s\n' 'LLxprt Code: bundled Bun runtime was not found.' >&2
+  printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+  printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+  exit 43
+fi
+
+# Validate the Bun executable's native binary magic before exec. A bare exec
+# on a corrupt/text file triggers the shell's ENOEXEC fallback, which silently
+# interprets the file as a shell script — masking the corruption. Reading the
+# first 4 bytes via `od` (a single tiny process that opens the file directly,
+# no dd pipe) lets us reject non-native binaries with an actionable exit 43
+# without spawning Bun. Accepted magics: ELF (7f454c46), Mach-O
+# (feedface/feedfacf/cefaedfe/cffaedfe/fat cafebabe/bebafeca), and PE/COFF
+# (4d5a, "MZ") for POSIX shells that can execute Windows PE via the OS or an
+# emulation layer such as MSYS/Git Bash.
+_llxprt_magic=$(od -An -tx1 -N4 -- "$_llxprt_bun" 2>/dev/null | tr -d ' \n')
+case "$_llxprt_magic" in
+  4d5a*|7f454c46|feedface|feedfacf|cefaedfe|cffaedfe|cafebabe|bebafeca) ;;
+  *)
+    printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
+    printf '%s\n' 'The bundled bun.exe may be corrupt or the wrong architecture.' >&2
+    printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+    printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+    exit 43
+    ;;
+esac
+
+_llxprt_entry=""
+for _llxprt_candidate in \
+  "$_llxprt_script_dir/index.ts" \
+  "$_llxprt_script_dir/../index.ts" \
+  "$_llxprt_script_dir/../../index.ts" \
+  "$_llxprt_script_dir/../../../index.ts"; do
+  if [ -f "$_llxprt_candidate" ]; then
+    _llxprt_entry=$_llxprt_candidate
+    break
+  fi
+done
+
+if [ -z "$_llxprt_entry" ]; then
+  printf '%s\n' 'LLxprt Code: TypeScript entry point (index.ts) was not found.' >&2
+  printf '%s\n' 'Your installation may be corrupt; reinstall @vybestack/llxprt-code.' >&2
+  exit 43
+fi
+
+exec "$_llxprt_bun" "$_llxprt_entry" "$@"

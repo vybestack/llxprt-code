@@ -117,8 +117,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
-        run: 'node ./packages/cli/bin/llxprt.cjs --version'
+      - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
+        run: './packages/cli/bin/llxprt --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

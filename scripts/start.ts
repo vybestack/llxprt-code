@@ -190,9 +190,14 @@ if (experimentalUi) {
     process.exit(code ?? 1);
   });
 } else {
-  // Standard CLI path: checked-in Node launcher re-execs Bun on TypeScript source.
-  nodeArgs.push('./packages/cli/bin/llxprt.cjs');
-  nodeArgs.push(...args);
+  // Standard CLI dev path: launch Bun directly on the TypeScript entry point.
+  // The dev script (`npm run start`) is a development convenience; the
+  // installed command (issue #2603) uses packages/cli/bin/llxprt, a POSIX sh
+  // launcher that resolves the package-bundled Bun and execs the entry. Here
+  // we do the equivalent for dev mode — spawn Bun directly on the source.
+  // nodeArgs may carry --inspect-brk flags (Bun-compatible) that must precede
+  // the entry path.
+  const bunArgs = [...nodeArgs, './packages/cli/index.ts', ...args];
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -205,10 +210,10 @@ if (experimentalUi) {
     env.LLXPRT_DEBUG_SESSION_ID = `${process.pid}`;
   }
 
-  const child = spawn('node', nodeArgs, { stdio: 'inherit', env });
+  const child = spawn('bun', bunArgs, { stdio: 'inherit', env });
 
   child.on('error', (error) => {
-    console.error(`Failed to spawn node: ${messageOf(error)}`);
+    console.error(`Failed to spawn bun: ${messageOf(error)}`);
     process.exit(1);
   });
   child.on('close', (code) => {

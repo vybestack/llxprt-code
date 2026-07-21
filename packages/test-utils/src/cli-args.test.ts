@@ -92,7 +92,7 @@ describe('cli-args helpers', () => {
     setEnv('LLXPRT_TEST_PROFILE', ' profile-name ');
 
     expect(
-      getCommandAndArgs('/packages/cli/bin/llxprt.cjs', ['--flag']),
+      getCommandAndArgs('/packages/cli/index.ts', ['--flag']),
     ).toStrictEqual({
       command: 'llxprt',
       initialArgs: ['--flag'],

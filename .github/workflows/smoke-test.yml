@@ -55,9 +55,9 @@ jobs:
       - name: 'Install Dependencies'
         run: 'npm ci'
       # No build step: the checked-in launcher resolves packages/cli/index.ts
-      # and re-execs it with Bun; no dist/ output is consumed.
-      - name: 'Smoke test CLI entry (Node -> launcher -> Bun)'
-        run: 'node ./packages/cli/bin/llxprt.cjs --version'
+      # and execs it with the bundled Bun; no dist/ output is consumed.
+      - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
+        run: './packages/cli/bin/llxprt --version'
       - name: 'Create Issue on Failure'
         if: '${{ failure() && github.event.inputs.dry-run == false }}'
         env:

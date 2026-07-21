@@ -277,7 +277,7 @@ Cache metrics only appear when the provider supports and reports them. OAuth use
 
 ## Building from Source
 
-The CLI's run path starts with the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves [Bun](https://bun.sh) and executes the TypeScript entrypoint (`packages/cli/index.ts`) directly. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run.
+The CLI's installed command uses platform-native launchers (`packages/cli/bin/llxprt`) that resolve the package-bundled [Bun](https://bun.sh) and execute the TypeScript entrypoint (`packages/cli/index.ts`) directly — no Node process is started on the installed path. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run.
 
 To build from source:
 

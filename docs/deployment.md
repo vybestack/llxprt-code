@@ -121,11 +121,13 @@ These packages are used when performing the standard installation and when runni
 
 **Build and packaging processes**
 
-LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's run path starts with the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves Bun and executes the TypeScript (`.ts`) entry point directly. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run. This applies to both distribution channels:
+LLxprt Code runs on the [Bun](https://bun.sh) runtime. The CLI's installed command (`llxprt`) uses platform-native launchers that resolve the package-bundled Bun and execute the TypeScript (`.ts`) entry point directly, without starting Node. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run. This applies to both distribution channels:
 
-- **NPM publication:** The published NPM package exposes `packages/cli/bin/llxprt.cjs` as the `llxprt` binary. That launcher resolves Bun and executes the `.ts` source entrypoint directly. `tsc --noEmit` is used for type-checking during development.
+- **NPM publication:** The published NPM package exposes `packages/cli/bin/llxprt` as the `llxprt` binary. On POSIX, a valid `#!/bin/sh` shebang makes it directly execve-compatible; the launcher resolves the package-local Bun and execs the `.ts` source entrypoint. On Windows, the CLI workspace `postinstall` (`packages/cli/scripts/install-native-launchers.cjs`) replaces npm's cmd-shim with a native `.cmd` / `.ps1` launcher that invokes the same package-local Bun. `tsc --noEmit` is used for type-checking during development.
 
-- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the postinstall bootstrap ensures dependencies are available, and the checked-in launcher executes the `.ts` source through Bun.
+The CLI's own runtime entry (`index.ts`) is never compiled to `dist/` — Bun executes the TypeScript source directly. The release pipeline still runs `npm run build:packages` to compile the internal workspace dependency packages (tools, storage, auth, etc.) whose `main`/`types` point at `dist/`, but the CLI package itself does not consume or ship a `dist/` artifact for its own runtime.
+
+- **GitHub `npx` execution:** When running the latest version of LLxprt Code directly from GitHub, the postinstall bootstrap ensures dependencies are available, and the native launcher executes the `.ts` source through Bun.
 
 Testing uses [vitest](https://vitest.dev), which is retained as the test runner.
 

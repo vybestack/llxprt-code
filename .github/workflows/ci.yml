@@ -528,13 +528,13 @@ jobs:
           bun scripts/bun-native-modules-smoke.mjs
 
   #
-  # Node consumer smoke (issue 2243, S6)
+  # Node consumer smoke (issue 2243, S6 / issue 2603)
   #
-  # Guards npm install/invocation compatibility while keeping the application
-  # runtime on Bun/TypeScript source: install with npm, then run the checked-in
-  # Node bin launcher, which re-execs Bun against packages/cli/index.ts. Wired
-  # into the `lint` aggregator so the expensive test matrix waits for this fast
-  # install+smoke check first.
+  # Guards npm install/invocation compatibility: install with npm, then run the
+  # installed bin directly. The bin is a POSIX sh launcher (issue #2603) that
+  # execs the package-local Bun against packages/cli/index.ts — no Node process
+  # is started on the installed command path. Wired into the `lint` aggregator
+  # so the expensive test matrix waits for this fast install+smoke check first.
   node_consumer_smoke:
     name: 'Node Consumer Smoke'
     runs-on: 'ubuntu-latest'
@@ -545,8 +545,8 @@ jobs:
     # This job runs npm ci (executing third-party install scripts) and only
     # needs to read the repo, so scope permissions to contents:read and drop
     # credential persistence (matches bun_native_modules_smoke hardening). It
-    # validates the published npm entry path by running the checked-in Node
-    # launcher after install; the launcher starts Bun on TypeScript source.
+    # validates the published npm entry path by running the installed launcher
+    # directly after install; the launcher execs Bun on TypeScript source.
     permissions:
       contents: 'read'
     steps:
@@ -581,8 +581,8 @@ jobs:
           npm init -y
           npm install "$RUNNER_TEMP/llxprt-pack"/*.tgz
 
-      - name: 'Smoke test installed CLI entry (Node launcher -> Bun -> TypeScript)'
-        run: 'node "$RUNNER_TEMP/llxprt-consumer/node_modules/.bin/llxprt" --version'
+      - name: 'Smoke test installed CLI entry (launcher -> Bun, no Node in chain)'
+        run: '"$RUNNER_TEMP/llxprt-consumer/node_modules/.bin/llxprt" --version'
 
   #
   # Bun-backed test orchestration smoke (issue #2463)
@@ -787,8 +787,8 @@ jobs:
           CI: true
         run: npm run test:scripts
 
-      - name: 'Smoke test CLI entry (Node launcher -> Bun -> TypeScript)'
-        run: 'node ./packages/cli/bin/llxprt.cjs --version'
+      - name: 'Smoke test CLI entry (launcher -> Bun -> TypeScript, no Node)'
+        run: './packages/cli/bin/llxprt --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'

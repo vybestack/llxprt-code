@@ -837,7 +837,11 @@ export default tseslint.config(
   },
   // Settings for CommonJS scripts
   {
-    files: ['./scripts/**/*.cjs', './packages/cli/bin/**/*.cjs'],
+    files: [
+      './scripts/**/*.cjs',
+      './packages/cli/bin/**/*.cjs',
+      './packages/cli/scripts/**/*.cjs',
+    ],
     languageOptions: {
       globals: {
         ...globals.node,

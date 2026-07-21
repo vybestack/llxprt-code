@@ -104,8 +104,8 @@ jobs:
           set -euo pipefail
           node --version
           tmux -V
-          test -x packages/cli/bin/llxprt.cjs
-          node packages/cli/bin/llxprt.cjs --help >/tmp/llxprt-cli-help.txt
+          test -x packages/cli/bin/llxprt
+          ./packages/cli/bin/llxprt --help >/tmp/llxprt-cli-help.txt
           head -n 5 /tmp/llxprt-cli-help.txt
 
       - name: 'Run interactive UI tests'

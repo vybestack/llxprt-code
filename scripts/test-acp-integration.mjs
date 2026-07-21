@@ -9,7 +9,7 @@ import { spawn } from 'child_process';
 const args = process.argv.slice(2);
 const profileName = args[0] || process.env.LLXPRT_PROFILE;
 
-const llxprtArgs = ['packages/cli/bin/llxprt.cjs', '--experimental-acp'];
+const llxprtArgs = ['packages/cli/index.ts', '--experimental-acp'];
 if (profileName && !process.env.LLXPRT_PROFILE) {
   llxprtArgs.splice(1, 0, '--profile-load', profileName);
 }
@@ -22,7 +22,7 @@ if (profileName) {
 const env = { ...process.env, DEBUG: 'llxprt:*' };
 console.log('Spawning with args:', llxprtArgs);
 console.log('DEBUG env set to:', env.DEBUG);
-const llxprt = spawn('node', llxprtArgs, {
+const llxprt = spawn('bun', llxprtArgs, {
   stdio: ['pipe', 'pipe', 'pipe'],
   cwd: process.cwd(),
   env,

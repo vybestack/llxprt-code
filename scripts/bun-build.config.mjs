@@ -9,8 +9,9 @@
  * Replaces the retired `esbuild.config.js`.
  *
  * The CLI run path no longer requires a bundle or compiled JavaScript entry —
- * the published bin is a checked-in Node launcher that re-execs Bun against the
- * TypeScript source. This script produces only the self-contained
+ * the published bin is a checked-in POSIX sh launcher (`packages/cli/bin/llxprt`)
+ * that resolves the package-local Bun and execs the TypeScript source directly.
+ * This script produces only the self-contained
  * `packages/a2a-server/dist/a2a-server.mjs` artifact.
  */
 

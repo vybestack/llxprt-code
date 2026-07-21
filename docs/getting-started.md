@@ -23,23 +23,22 @@ npx @vybestack/llxprt-code
 
 ### Bun Runtime and Install Fallback
 
-LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, an internal launcher resolves Bun and re-execs the CLI under it. The launcher executes the TypeScript (`.ts`) entry point directly — the CLI's run path does not require a pre-compiled `dist/` artifact.
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, a platform-native launcher resolves the package-local Bun and execs the CLI under it. The launcher executes the TypeScript (`.ts`) entry point directly — the CLI's run path does not require a pre-compiled `dist/` artifact. No Node process is started on the installed command path, and Bun does not need to be on your `PATH`.
 
 **Bun resolution order (production launcher):**
 
-1. `node_modules/.bin/bun` (the bundled Bun, climbing ancestor directories)
-2. `node_modules/bun/bin/bun.exe` (direct dependency fallback)
-3. `bun` found on `PATH` (via `which`/`where`)
+1. `node_modules/bun/bin/bun.exe` (the package's pinned `bun` dependency, climbing ancestor directories)
+2. `node_modules/.bin/bun` / `node_modules/.bin/bun.exe` (the bundled Bun bin link)
 
-If no Bun runtime is found, the launcher prints an error with instructions:
+The launcher resolves only the package-local Bun — it never falls back to a global `bun` on `PATH`, so a separately installed Bun is not required. If no package-local Bun is found, the launcher prints an error with instructions:
 
-> Bun runtime was not found. Install it with "npm install" (it is bundled as the "bun" dependency) or install Bun directly from https://bun.sh and ensure it is on your PATH.
+> LLxprt Code: bundled Bun runtime was not found. Reinstall the package with "npm install @vybestack/llxprt-code" to restore the bundled Bun dependency, or visit https://bun.sh
 
 To resolve this:
 
 - **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
 - **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
-- **All users:** Install Bun directly from [https://bun.sh](https://bun.sh) and ensure it is on your `PATH`.
+- **All users:** If the bundled Bun dependency cannot be restored, reinstalling the package is the supported path. A separately installed global Bun is not used by the launcher.
 
 ## Choose Your Path
 

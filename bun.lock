@@ -245,7 +245,7 @@
       "name": "@vybestack/llxprt-code",
       "version": "0.10.0",
       "bin": {
-        "llxprt": "bin/llxprt.cjs",
+        "llxprt": "bin/llxprt",
       },
       "dependencies": {
         "@agentclientprotocol/sdk": "^0.14.1",

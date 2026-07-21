@@ -1,0 +1,438 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  mkdtempSync,
+} from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
+
+const thisFile = fileURLToPath(import.meta.url);
+const repoRoot = resolve(thisFile, '..', '..', '..');
+const nodeRequire = createRequire(import.meta.url);
+const cliModulePath = join(
+  repoRoot,
+  'packages',
+  'cli',
+  'scripts',
+  'install-native-launchers.cjs',
+);
+
+/**
+ * Derive the pnpm virtual-store fixture version from the published CLI manifest
+ * rather than hardcoding it. The pnpm store directory name encodes
+ * `<scope>+<name>@<version>`, so it must track packages/cli/package.json.
+ */
+function readCliVersion(): string {
+  const cliPkg = JSON.parse(
+    readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
+  ) as { version?: string };
+  if (typeof cliPkg.version !== 'string' || cliPkg.version.length === 0) {
+    throw new Error('packages/cli/package.json is missing a version');
+  }
+  return cliPkg.version;
+}
+
+const CLI_VERSION = readCliVersion();
+const PNPM_PACKAGE_DIR = `@vybestack+llxprt-code@${CLI_VERSION}`;
+
+function loadCliInstaller(): ReturnType<typeof nodeRequire> {
+  return nodeRequire(cliModulePath);
+}
+
+describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
+  function setupPnpmVirtualStore(tempDir: string): {
+    packageRoot: string;
+    consumerRoot: string;
+    consumerDotBin: string;
+    virtualStoreNodeModules: string;
+  } {
+    const consumerRoot = join(tempDir, 'consumer');
+    const packageRoot = join(
+      consumerRoot,
+      'node_modules',
+      '.pnpm',
+      PNPM_PACKAGE_DIR,
+      'node_modules',
+      '@vybestack',
+      'llxprt-code',
+    );
+    const consumerDotBin = join(consumerRoot, 'node_modules', '.bin');
+    const virtualStoreNodeModules = join(
+      consumerRoot,
+      'node_modules',
+      '.pnpm',
+      PNPM_PACKAGE_DIR,
+      'node_modules',
+    );
+    mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      'fake',
+    );
+    writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+    mkdirSync(consumerDotBin, { recursive: true });
+    return {
+      packageRoot,
+      consumerRoot,
+      consumerDotBin,
+      virtualStoreNodeModules,
+    };
+  }
+
+  it('writes launchers to consumer-visible node_modules/.bin, not virtual-store .bin', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-vs-'));
+    try {
+      const { packageRoot, consumerRoot, consumerDotBin } =
+        setupPnpmVirtualStore(tempDir);
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      expect(result.written.length).toBeGreaterThanOrEqual(2);
+      expect(existsSync(join(consumerDotBin, 'llxprt.cmd'))).toBe(true);
+      expect(existsSync(join(consumerDotBin, 'llxprt.ps1'))).toBe(true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not write launchers into the virtual-store node_modules/.bin', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-novs-'));
+    try {
+      const { packageRoot, consumerRoot, virtualStoreNodeModules } =
+        setupPnpmVirtualStore(tempDir);
+      mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      const virtualDotBin = join(virtualStoreNodeModules, '.bin');
+      expect(existsSync(join(virtualDotBin, 'llxprt.cmd'))).toBe(false);
+      expect(existsSync(join(virtualDotBin, 'llxprt.ps1'))).toBe(false);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses INIT_CWD to find consumer .bin when nearestNodeModulesBin resolves into virtual store', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-initcwd-'));
+    try {
+      const { packageRoot, consumerRoot, consumerDotBin } =
+        setupPnpmVirtualStore(tempDir);
+      const nearest = mod.nearestNodeModulesBin(packageRoot);
+      expect(nearest).toBe(
+        join(
+          tempDir,
+          'consumer',
+          'node_modules',
+          '.pnpm',
+          PNPM_PACKAGE_DIR,
+          'node_modules',
+          '.bin',
+        ),
+      );
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      const writtenToConsumer = result.written.filter((p: string) =>
+        p.startsWith(consumerDotBin),
+      );
+      expect(writtenToConsumer.length).toBe(2);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ownership validation rejects a foreign-package cmd shim in consumer .bin', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-foreign-'));
+    try {
+      const { packageRoot, consumerRoot, consumerDotBin } =
+        setupPnpmVirtualStore(tempDir);
+      const foreignCmd = join(consumerDotBin, 'llxprt.cmd');
+      writeFileSync(foreignCmd, '@echo off\necho someone else');
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      expect(result.skipped).toContain(foreignCmd);
+      expect(readFileSync(foreignCmd, 'utf8')).toContain('someone else');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ownership validation accepts our own sentinel in consumer .bin', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-sentinel-'));
+    try {
+      const { packageRoot, consumerRoot, consumerDotBin } =
+        setupPnpmVirtualStore(tempDir);
+      const ourCmd = join(consumerDotBin, 'llxprt.cmd');
+      writeFileSync(ourCmd, `REM ${mod.OWNERSHIP_SENTINEL}\n@echo off`);
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      expect(result.written).toContain(ourCmd);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ownership validation rejects a foreign-package ps1 shim in consumer .bin', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-ps1-foreign-'));
+    try {
+      const { packageRoot, consumerRoot, consumerDotBin } =
+        setupPnpmVirtualStore(tempDir);
+      const foreignPs1 = join(consumerDotBin, 'llxprt.ps1');
+      writeFileSync(
+        foreignPs1,
+        '#!/usr/bin/env pwsh\nWrite-Host "someone else"\n',
+      );
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      expect(result.skipped).toContain(foreignPs1);
+      expect(readFileSync(foreignPs1, 'utf8')).toContain('someone else');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('ownership validation accepts our own sentinel ps1 in consumer .bin', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pnpm-ps1-sentinel-'));
+    try {
+      const { packageRoot, consumerRoot, consumerDotBin } =
+        setupPnpmVirtualStore(tempDir);
+      const ourPs1 = join(consumerDotBin, 'llxprt.ps1');
+      writeFileSync(
+        ourPs1,
+        `# ${mod.OWNERSHIP_SENTINEL}\n#!/usr/bin/env pwsh\n`,
+      );
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: consumerRoot },
+        log: () => {},
+      });
+      expect(result.written).toContain(ourPs1);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('installNativeLaunchers graceful error contract', () => {
+  function setupPackageRoot(tempDir: string): string {
+    const packageRoot = join(tempDir, 'pkg');
+    mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      'fake',
+    );
+    writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+    mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+    return packageRoot;
+  }
+
+  it('returns the exact result contract on POSIX no-op', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-contract-posix-'));
+    try {
+      const packageRoot = setupPackageRoot(tempDir);
+      const result = mod.installNativeLaunchers({
+        platform: 'darwin',
+        packageRoot,
+        log: () => {},
+      });
+      expect(result).toStrictEqual({ written: [], skipped: [], error: null });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns the exact result contract on a successful win32 install', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-contract-ok-'));
+    try {
+      const packageRoot = setupPackageRoot(tempDir);
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: tempDir },
+        log: () => {},
+      });
+      expect(Object.keys(result).sort()).toStrictEqual(
+        ['error', 'skipped', 'written'].sort(),
+      );
+      expect(result.error).toBeNull();
+      expect(result.written.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns bun-not-found error with empty written/skipped when Bun is absent', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-contract-nobun-'));
+    try {
+      const packageRoot = join(tempDir, 'pkg');
+      // No node_modules/bun/bin/bun.exe created.
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: tempDir },
+        log: () => {},
+      });
+      expect(result).toStrictEqual({
+        written: [],
+        skipped: [],
+        error: 'bun-not-found',
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns entry-not-found error with empty written/skipped when entry is absent', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-contract-noentry-'));
+    try {
+      const packageRoot = join(tempDir, 'pkg');
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'fake',
+      );
+      // No index.ts created.
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: tempDir },
+        log: () => {},
+      });
+      expect(result).toStrictEqual({
+        written: [],
+        skipped: [],
+        error: 'entry-not-found',
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Bun install layout support boundary', () => {
+  it('CLI package.json declares a postinstall that Bun will run', () => {
+    const cliPkg = JSON.parse(
+      readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    expect(cliPkg.scripts.postinstall).toMatch(/install-native-launchers/);
+  });
+
+  it('root trustedDependencies includes bun so Bun runs its lifecycle', () => {
+    const rootPkg = JSON.parse(
+      readFileSync(join(repoRoot, 'package.json'), 'utf8'),
+    ) as { trustedDependencies?: string[] };
+    expect(rootPkg.trustedDependencies).toContain('bun');
+  });
+
+  it('Bun hoisted-layout bin resolution: bun.exe is resolvable from package root', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bun-layout-'));
+    try {
+      const packageRoot = join(
+        tempDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'fake',
+      );
+      writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+      mkdirSync(join(tempDir, 'node_modules', '.bin'), { recursive: true });
+      const bunExe = mod.resolveBunExe(packageRoot);
+      expect(bunExe).toBeTruthy();
+      expect(bunExe).toContain('bun.exe');
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('installer writes to consumer .bin for Bun hoisted layout via INIT_CWD', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bun-initcwd-'));
+    try {
+      const packageRoot = join(
+        tempDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'fake',
+      );
+      writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+      const dotBin = join(tempDir, 'node_modules', '.bin');
+      mkdirSync(dotBin, { recursive: true });
+      mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: { INIT_CWD: tempDir },
+        log: () => {},
+      });
+      expect(existsSync(join(dotBin, 'llxprt.cmd'))).toBe(true);
+      expect(existsSync(join(dotBin, 'llxprt.ps1'))).toBe(true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
