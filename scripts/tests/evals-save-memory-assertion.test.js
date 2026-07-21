@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 
@@ -19,36 +19,37 @@ const ROOT = resolve(import.meta.dirname, '../..');
  * surrounding prose — must be rejected.
  */
 describe('saveMemoryFactEquals predicate (deterministic exact-value)', () => {
-  async function loadHelper() {
+  /** @type {(token: string) => (args: string) => boolean} */
+  let saveMemoryFactEquals;
+
+  beforeAll(async () => {
     const url = pathToFileURL(join(ROOT, 'evals/test-helper.ts')).href;
     const mod = await import(url);
     expect(
       typeof mod.saveMemoryFactEquals,
       'evals/test-helper.ts must export saveMemoryFactEquals',
     ).toBe('function');
-    return /** @type {(token: string) => (args: string) => boolean} */ (
-      mod.saveMemoryFactEquals
-    );
-  }
+    saveMemoryFactEquals = mod.saveMemoryFactEquals;
+  });
 
-  it('accepts the canonical fact exactly', async () => {
-    const predicate = await loadHelper();
+  it('accepts the canonical fact exactly', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'My favorite color is blue' }))).toBe(
       true,
     );
   });
 
-  it('is case-insensitive', async () => {
-    const predicate = await loadHelper();
+  it('is case-insensitive', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'MY FAVORITE COLOR IS BLUE' }))).toBe(
       true,
     );
   });
 
-  it('ignores outer and extra internal whitespace', async () => {
-    const predicate = await loadHelper();
+  it('ignores outer and extra internal whitespace', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(
       match(
@@ -57,66 +58,66 @@ describe('saveMemoryFactEquals predicate (deterministic exact-value)', () => {
     ).toBe(true);
   });
 
-  it('rejects a paraphrase ("I like blue best")', async () => {
-    const predicate = await loadHelper();
+  it('rejects a paraphrase ("I like blue best")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'I like blue best' }))).toBe(false);
   });
 
-  it('rejects least favorite ("my least favorite color is blue")', async () => {
-    const predicate = await loadHelper();
+  it('rejects least favorite ("my least favorite color is blue")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(
       match(JSON.stringify({ fact: 'my least favorite color is blue' })),
     ).toBe(false);
   });
 
-  it('rejects "blueberry" (a different token, not blue)', async () => {
-    const predicate = await loadHelper();
+  it('rejects "blueberry" (a different token, not blue)', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(
       match(JSON.stringify({ fact: 'my favorite color is blueberry' })),
     ).toBe(false);
   });
 
-  it('rejects unrelated mention of blue ("the sky is blue")', async () => {
-    const predicate = await loadHelper();
+  it('rejects unrelated mention of blue ("the sky is blue")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'the sky is blue' }))).toBe(false);
   });
 
-  it('rejects a temporal correction ("my favorite color used to be blue")', async () => {
-    const predicate = await loadHelper();
+  it('rejects a temporal correction ("my favorite color used to be blue")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(
       match(JSON.stringify({ fact: 'my favorite color used to be blue' })),
     ).toBe(false);
   });
 
-  it('rejects negation ("my favorite color is not blue")', async () => {
-    const predicate = await loadHelper();
+  it('rejects negation ("my favorite color is not blue")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(
       match(JSON.stringify({ fact: 'my favorite color is not blue' })),
     ).toBe(false);
   });
 
-  it('rejects red-not-blue ("red is not blue")', async () => {
-    const predicate = await loadHelper();
+  it('rejects red-not-blue ("red is not blue")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'red is not blue' }))).toBe(false);
   });
 
-  it('rejects the wrong color ("my favorite color is red")', async () => {
-    const predicate = await loadHelper();
+  it('rejects the wrong color ("my favorite color is red")', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'my favorite color is red' }))).toBe(
       false,
     );
   });
 
-  it('rejects surrounding prose on the fact', async () => {
-    const predicate = await loadHelper();
+  it('rejects surrounding prose on the fact', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(
       match(
@@ -125,56 +126,56 @@ describe('saveMemoryFactEquals predicate (deterministic exact-value)', () => {
     ).toBe(false);
   });
 
-  it('rejects a fact that omits the token', async () => {
-    const predicate = await loadHelper();
+  it('rejects a fact that omits the token', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 'I like green' }))).toBe(false);
   });
 
-  it('rejects args missing the fact field entirely', async () => {
-    const predicate = await loadHelper();
+  it('rejects args missing the fact field entirely', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ scope: 'project' }))).toBe(false);
   });
 
-  it('rejects a non-string fact', async () => {
-    const predicate = await loadHelper();
+  it('rejects a non-string fact', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(JSON.stringify({ fact: 42 }))).toBe(false);
   });
 
-  it('rejects malformed JSON args without throwing', async () => {
-    const predicate = await loadHelper();
+  it('rejects malformed JSON args without throwing', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match('{not valid json')).toBe(false);
   });
 
-  it('rejects a JSON array without throwing', async () => {
-    const predicate = await loadHelper();
+  it('rejects a JSON array without throwing', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match('["fact", "blue"]')).toBe(false);
   });
 
-  it('rejects JSON null without throwing', async () => {
-    const predicate = await loadHelper();
+  it('rejects JSON null without throwing', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match('null')).toBe(false);
   });
 
-  it('rejects a JSON primitive without throwing', async () => {
-    const predicate = await loadHelper();
+  it('rejects a JSON primitive without throwing', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match('42')).toBe(false);
   });
 
-  it('rejects a JSON string without throwing', async () => {
-    const predicate = await loadHelper();
+  it('rejects a JSON string without throwing', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match('"blue"')).toBe(false);
   });
 
-  it('rejects a non-object args argument without throwing', async () => {
-    const predicate = await loadHelper();
+  it('rejects a non-object args argument without throwing', () => {
+    const predicate = saveMemoryFactEquals;
     const match = predicate('blue');
     expect(match(/** @type {unknown} */ (null))).toBe(false);
     expect(match(/** @type {unknown} */ (undefined))).toBe(false);
@@ -190,77 +191,78 @@ describe('saveMemoryFactEquals predicate (deterministic exact-value)', () => {
  * rejected.
  */
 describe('assertFavoriteColorBlueOutput predicate (deterministic exact-value)', () => {
-  async function loadHelper() {
+  /** @type {(output: string) => void} */
+  let assertFavoriteColorBlueOutput;
+
+  beforeAll(async () => {
     const url = pathToFileURL(join(ROOT, 'evals/test-helper.ts')).href;
     const mod = await import(url);
     expect(
       typeof mod.assertFavoriteColorBlueOutput,
       'evals/test-helper.ts must export assertFavoriteColorBlueOutput',
     ).toBe('function');
-    return /** @type {(output: string) => void} */ (
-      mod.assertFavoriteColorBlueOutput
-    );
-  }
+    assertFavoriteColorBlueOutput = mod.assertFavoriteColorBlueOutput;
+  });
 
-  it('accepts the canonical "$blue$" output', async () => {
-    const assert = await loadHelper();
+  it('accepts the canonical "$blue$" output', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('$blue$')).not.toThrow();
   });
 
-  it('accepts case-insensitive "$BLUE$" output', async () => {
-    const assert = await loadHelper();
+  it('accepts case-insensitive "$BLUE$" output', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('$BLUE$')).not.toThrow();
   });
 
-  it('accepts the answer with harmless outer whitespace', async () => {
-    const assert = await loadHelper();
+  it('accepts the answer with harmless outer whitespace', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('   $blue$   ')).not.toThrow();
   });
 
-  it('rejects "red" (wrong color, even dollar-wrapped)', async () => {
-    const assert = await loadHelper();
+  it('rejects "red" (wrong color, even dollar-wrapped)', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('$red$')).toThrow(/exact answer/i);
   });
 
-  it('rejects "blue" without dollar delimiters', async () => {
-    const assert = await loadHelper();
+  it('rejects "blue" without dollar delimiters', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('blue')).toThrow(/exact answer/i);
   });
 
-  it('rejects "blueberry" wrapped in dollars', async () => {
-    const assert = await loadHelper();
+  it('rejects "blueberry" wrapped in dollars', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('$blueberry$')).toThrow(/exact answer/i);
   });
 
-  it('rejects the dollar-wrapped form embedded in a sentence', async () => {
-    const assert = await loadHelper();
+  it('rejects the dollar-wrapped form embedded in a sentence', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('Your favorite color is $blue$ obviously.')).toThrow(
       /exact answer/i,
     );
   });
 
-  it('rejects multiple answers', async () => {
-    const assert = await loadHelper();
+  it('rejects multiple answers', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('$blue$ $red$')).toThrow(/exact answer/i);
   });
 
-  it('rejects surrounding prose', async () => {
-    const assert = await loadHelper();
+  it('rejects surrounding prose', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('The answer is $blue$.')).toThrow(/exact answer/i);
   });
 
-  it('rejects empty output', async () => {
-    const assert = await loadHelper();
+  it('rejects empty output', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('')).toThrow(/some output/i);
   });
 
-  it('rejects whitespace-only output', async () => {
-    const assert = await loadHelper();
+  it('rejects whitespace-only output', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert('   \n\t  ')).toThrow(/some output/i);
   });
 
-  it('rejects non-string input without throwing a TypeError', async () => {
-    const assert = await loadHelper();
+  it('rejects non-string input without throwing a TypeError', () => {
+    const assert = assertFavoriteColorBlueOutput;
     expect(() => assert(/** @type {unknown} */ (null))).toThrow(/some output/i);
     expect(() => assert(/** @type {unknown} */ (undefined))).toThrow(
       /some output/i,

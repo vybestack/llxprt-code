@@ -10,7 +10,9 @@ on:
         default: '[1, 2, 3]'
     secrets:
       provider-api-key:
-        description: 'The resolved provider API key, passed by the caller under the fixed input name provider-api-key (callers resolve secrets[vars.KEY_VAR_NAME] themselves)'
+        description: >-
+          The resolved provider API key, passed by the caller under the fixed
+          input name provider-api-key (callers resolve the configured secret).
         required: true
 
 permissions:
@@ -112,8 +114,12 @@ jobs:
           mkdir -p eval-artifact
           cp -a evals/logs/. eval-artifact/ 2>/dev/null || true
           if [ ! -f evals/logs/report.json ]; then
-            echo 'evals/logs/report.json was not produced. The JSON reporter output path is misconfigured or the eval run failed before reporting.' > eval-artifact/REPORT_MISSING.txt
-            echo "::error::evals/logs/report.json was not produced; the JSON reporter output path is misconfigured or the eval run failed before reporting."
+            printf '%s\n' \
+              'evals/logs/report.json was not produced.' \
+              'The JSON reporter output path is misconfigured or the eval run failed before reporting.' \
+              > eval-artifact/REPORT_MISSING.txt
+            echo "::error::evals/logs/report.json was not produced;" \
+              "the JSON reporter path is misconfigured or the eval run failed before reporting."
             echo "report_present=false" >> "$GITHUB_OUTPUT"
           else
             echo "report.json present ($(wc -c < evals/logs/report.json) bytes)"

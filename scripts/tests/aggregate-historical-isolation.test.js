@@ -17,19 +17,10 @@ import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.js';
  * erase ALL historical trend data.
  */
 describe('aggregate_evals: per-run exception isolation in historical fetch', () => {
-  it('continues processing subsequent runs when one run throws', async () => {
+  it('omits a run whose downloader throws while retaining a valid run', async () => {
     const mod = await loadHistoricalModule();
-
-    // Run A throws during download (simulates an unexpected exception, not a
-    // clean omitted result). Run B is valid and must still be included.
     const runA = { databaseId: 5000, createdAt: '2026-07-19T02:00:00Z' };
     const runB = { databaseId: 5001, createdAt: '2026-07-18T02:00:00Z' };
-
-    // The paginator calls listRunsPage which returns the runs; fetchHistoricalData
-    // iterates them and calls processHistoricalRun for each. We inject a
-    // listRunsPage that returns both runs, and rely on processHistoricalRun's
-    // download callback: run A's callback THROWS, run B's callback writes a
-    // valid artifact tree.
     const downloadThrowing = () => {
       throw new Error('unexpected filesystem explosion');
     };
@@ -40,30 +31,6 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
       return { status: 0, stdout: '', stderr: '' };
     };
 
-    // fetchHistoricalData accepts an injectable listRunsPage. We return both
-    // runs in-window. But processHistoricalRun uses its OWN default downloader.
-    // To inject per-run download behavior, we must call processHistoricalRun
-    // directly OR refactor. Since the finding is about the LOOP isolation, we
-    // test fetchHistoricalData by making one run's download THROW.
-    //
-    // However fetchHistoricalData does NOT accept a downloadRun override. We
-    // verify the isolation at the loop level by exercising processHistoricalRun
-    // directly and confirming the loop behavior via fetchHistoricalData with a
-    // throwing listRunsPage scenario is NOT the same (that would abort before
-    // any run is processed).
-    //
-    // The real contract: processHistoricalRun must never throw (it catches
-    // internally), OR fetchHistoricalData must catch per-run exceptions. We
-    // test that fetchHistoricalData catches a throw from processHistoricalRun.
-
-    // Simulate: listRunsPage returns two runs. We cannot inject
-    // processHistoricalRun's downloader into fetchHistoricalData directly.
-    // Instead, verify the contract at the loop level: a run that causes
-    // processHistoricalRun to throw must not abort the loop.
-    //
-    // Since processHistoricalRun currently catches its own errors, the risk is
-    // an UNCAUGHT throw (e.g. from the download callback escaping the try). We
-    // verify processHistoricalRun catches a throwing downloader:
     const resultA = mod.processHistoricalRun(runA, downloadThrowing);
     expect(resultA.omitted).toBe(true);
 
