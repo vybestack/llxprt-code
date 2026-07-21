@@ -46,7 +46,8 @@ const releasePackHelperPath = join(
 );
 
 const smokeDir = join(repoRoot, 'scripts', 'windows-installed-command-smoke');
-const { getState, resetState } = nodeRequire(join(smokeDir, 'assert.cjs'));
+const assertModule = nodeRequire(join(smokeDir, 'assert.cjs'));
+const { getState, resetState, assert, fail } = assertModule;
 const { findInstalledPackageRoot, findBundledBun } = nodeRequire(
   join(smokeDir, 'package-layout.cjs'),
 );
@@ -72,55 +73,66 @@ function safeCleanup(tempDir) {
 function runSmoke() {
   resetState();
   let tempDir;
-  try {
-    const { packReleaseLikeCli } = nodeRequire(releasePackHelperPath);
-    const { replicaTarball } = packReleaseLikeCli(repoRoot);
+  let succeeded = false;
+  return (async () => {
+    try {
+      const { packReleaseLikeCli } = nodeRequire(releasePackHelperPath);
+      const { replicaTarball } = packReleaseLikeCli(repoRoot);
 
-    const { assert } = nodeRequire(join(smokeDir, 'assert.cjs'));
-    assert(
-      existsSync(replicaTarball),
-      `replica tarball not found: ${replicaTarball}`,
-    );
-    process.stdout.write(`replica=${replicaTarball}\n`);
+      assert(
+        existsSync(replicaTarball),
+        `replica tarball not found: ${replicaTarball}`,
+      );
+      process.stdout.write(`replica=${replicaTarball}\n`);
 
-    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-win-smoke-'));
-    const prefix = globalInstall(tempDir, replicaTarball);
+      tempDir = mkdtempSync(join(tmpdir(), 'llxprt-win-smoke-'));
+      const prefix = globalInstall(tempDir, replicaTarball);
 
-    checks.checkLauncherSentinels(prefix);
-    checks.checkVersionRuns(prefix);
+      checks.checkLauncherSentinels(prefix);
+      checks.checkVersionRuns(prefix);
 
-    const installedPackageRoot = findInstalledPackageRoot(prefix);
+      const installedPackageRoot = findInstalledPackageRoot(prefix);
 
-    const probeFixture = checks.buildProbeFixture(
-      installedPackageRoot,
-      tempDir,
-      'main',
-      repoRoot,
-    );
+      const probeFixture = checks.buildProbeFixture(
+        installedPackageRoot,
+        tempDir,
+        'main',
+        repoRoot,
+      );
 
-    checks.checkCmdArgFidelity(probeFixture);
-    checks.checkPwshArgFidelity(probeFixture);
-    checks.checkInjectionGuard(probeFixture, tempDir);
-    checks.checkStdioForwarding(probeFixture);
-    checks.checkCmdExitCodePreservation(probeFixture);
-    checks.checkPwshExitPropagation(probeFixture);
-    checks.checkExecPathIsBundledBun(probeFixture);
-    checks.checkProcessTreeNoNode(probeFixture);
+      checks.checkCmdArgFidelity(probeFixture);
+      checks.checkPwshArgFidelity(probeFixture);
+      checks.checkInjectionGuard(probeFixture, tempDir);
+      checks.checkStdioForwarding(probeFixture);
+      checks.checkCmdExitCodePreservation(probeFixture);
+      checks.checkPwshExitPropagation(probeFixture);
+      checks.checkExecPathIsBundledBun(probeFixture);
+      await checks.checkProcessTreeNoNode(probeFixture);
 
-    checks.checkMissingBun({ installedPackageRoot }, tempDir, repoRoot);
-    checks.checkCorruptBun({ installedPackageRoot }, tempDir, repoRoot);
+      checks.checkMissingBun({ installedPackageRoot }, tempDir, repoRoot);
+      checks.checkCorruptBun({ installedPackageRoot }, tempDir, repoRoot);
 
-    checks.checkNpmExecEphemeral(tempDir, replicaTarball);
+      checks.checkNpmExecEphemeral(tempDir, replicaTarball);
 
-    const consumerDir = localInstall(tempDir, replicaTarball);
-    checkLocalCmdVersion(consumerDir);
-    checkPackageLocalBun(prefix, findInstalledPackageRoot, findBundledBun);
-  } catch (err) {
-    const { fail } = nodeRequire(join(smokeDir, 'assert.cjs'));
-    fail(`unexpected error: ${err.stack || err.message}`);
-  } finally {
-    safeCleanup(tempDir);
-  }
+      const consumerDir = localInstall(tempDir, replicaTarball);
+      checkLocalCmdVersion(consumerDir);
+      checkPackageLocalBun(prefix, findInstalledPackageRoot, findBundledBun);
+      succeeded = true;
+    } catch (err) {
+      fail(`unexpected error: ${err.stack || err.message}`);
+    } finally {
+      // Preserve the temp fixture on failure for debugging (print its path so
+      // CI logs show where to inspect). Clean up on success to avoid CI disk
+      // pressure.
+      if (succeeded) {
+        safeCleanup(tempDir);
+      } else if (tempDir) {
+        console.error(
+          `\nTemp fixture preserved for debugging at:\n  ${tempDir}\n`,
+        );
+      }
+    }
+  })();
 }
 
 function reportAndExit() {
@@ -140,5 +152,11 @@ if (!isWindows) {
   process.exit(0);
 }
 
-runSmoke();
-reportAndExit();
+runSmoke()
+  .then(() => {
+    reportAndExit();
+  })
+  .catch((err) => {
+    fail(`runSmoke rejected unexpectedly: ${err.stack || err.message}`);
+    reportAndExit();
+  });

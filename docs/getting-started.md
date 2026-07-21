@@ -27,10 +27,11 @@ LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxpr
 
 **Bun resolution order (production launcher):**
 
-1. `node_modules/bun/bin/bun.exe` (the package's pinned `bun` dependency, climbing ancestor directories)
-2. `node_modules/.bin/bun` / `node_modules/.bin/bun.exe` (the bundled Bun bin link)
+1. Package-local: `<package>/node_modules/bun/bin/bun.exe` (the package's pinned `bun` dependency)
+2. Hoisted (installed packages only): the enclosing `node_modules/bun/bin/bun.exe` (npm/Bun hoisting), stopping at the enclosing `node_modules` boundary — never climbing into consumer ancestors
+3. Workspace root (source workspace only): when the package is not under a `node_modules` and the repository root is a verified llxprt-code workspace, that verified root's `node_modules/bun/bin/bun.exe`
 
-The launcher resolves only the package-local Bun — it never falls back to a global `bun` on `PATH`, so a separately installed Bun is not required. If no package-local Bun is found, the launcher prints an error with instructions:
+The launcher never scans `.bin` symlinks and never falls back to a global `bun` on `PATH`, so a separately installed Bun is not required. When an exact Bun pin is declared, a candidate whose version is missing or mismatched is rejected. If no package-local Bun is found, the launcher prints an error with instructions:
 
 > LLxprt Code: bundled Bun runtime was not found. Reinstall the package with "npm install @vybestack/llxprt-code" to restore the bundled Bun dependency, or visit https://bun.sh
 

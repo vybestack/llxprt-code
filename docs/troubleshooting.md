@@ -222,13 +222,14 @@ The `is-in-ci` package detects `CI`, `CONTINUOUS_INTEGRATION`, or any `CI_*` env
 
 ## Exit Codes
 
-| Exit Code | Error Type                 | Description                              |
-| --------- | -------------------------- | ---------------------------------------- |
-| 41        | `FatalAuthenticationError` | Authentication failed                    |
-| 42        | `FatalInputError`          | Invalid input (non-interactive mode)     |
-| 44        | `FatalSandboxError`        | Sandbox setup failed                     |
-| 52        | `FatalConfigError`         | Invalid settings.json                    |
-| 53        | `FatalTurnLimitedError`    | Max turns reached (non-interactive mode) |
+| Exit Code | Error Type                 | Description                                                                                                                        |
+| --------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 41        | `FatalAuthenticationError` | Authentication failed                                                                                                              |
+| 42        | `FatalInputError`          | Invalid input (non-interactive mode)                                                                                               |
+| 43        | Launcher runtime failure   | Bundled Bun runtime missing, corrupt, wrong architecture, or unusable — reinstall `@vybestack/llxprt-code` or visit https://bun.sh |
+| 44        | `FatalSandboxError`        | Sandbox setup failed                                                                                                               |
+| 52        | `FatalConfigError`         | Invalid settings.json                                                                                                              |
+| 53        | `FatalTurnLimitedError`    | Max turns reached (non-interactive mode)                                                                                           |
 
 ## Sandbox Issues
 

@@ -17,6 +17,14 @@ import { createRequire } from 'node:module';
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const nodeRequire = createRequire(import.meta.url);
+const npmInvocation = nodeRequire('../lib/npm-command.cjs').npmInvocation as (
+  args?: readonly string[],
+  options?: {
+    platform?: string;
+    execPath?: string;
+    env?: Record<string, string | undefined>;
+  },
+) => { command: string; args: string[] };
 const cliModulePath = join(
   repoRoot,
   'packages',
@@ -56,19 +64,6 @@ const sharedCacheDir = join(
 );
 let cachedTarball: string | null = null;
 
-/**
- * Cross-platform npm discovery. On Windows `which` does not exist, so use
- * `where`. Prefer process.execPath / npm_execpath when available to avoid
- * spawning an extra process. Returns the npm binary path.
- */
-function resolveNpm(): string {
-  const npmExecPath = process.env.npm_execpath;
-  if (npmExecPath) {
-    return process.execPath;
-  }
-  return 'npm';
-}
-
 function findTarballName(packOutput: string): string {
   const lines = packOutput.split(/\r?\n/);
   const tgzLines = lines.filter((l) => l.trim().endsWith('.tgz'));
@@ -85,25 +80,14 @@ function packCliWorkspace(): string {
     return cachedTarball;
   }
   mkdirSync(sharedCacheDir, { recursive: true });
-  const npmBin = resolveNpm();
-  const npmArgs =
-    npmBin === process.execPath
-      ? [
-          process.env.npm_execpath!,
-          'pack',
-          '-w',
-          '@vybestack/llxprt-code',
-          '--pack-destination',
-          sharedCacheDir,
-        ]
-      : [
-          'pack',
-          '-w',
-          '@vybestack/llxprt-code',
-          '--pack-destination',
-          sharedCacheDir,
-        ];
-  const result = spawnSync(npmBin, npmArgs, {
+  const { command, args } = npmInvocation([
+    'pack',
+    '-w',
+    '@vybestack/llxprt-code',
+    '--pack-destination',
+    sharedCacheDir,
+  ]);
+  const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
@@ -294,14 +278,17 @@ describe('install-native-launchers module (CLI workspace)', () => {
           nodeRequire.resolve(candidate);
           return candidate;
         } catch {
-          // try next
+          /* try next */
         }
       }
-      const npmRoot = spawnSync('npm', ['root', '-g'], {
+      const { command: npmCmd, args: npmArgs } = npmInvocation(['root', '-g']);
+      const npmRoot = spawnSync(npmCmd, npmArgs, {
         encoding: 'utf8',
         timeout: 10_000,
       });
-      if (npmRoot.status === 0) {
+      if (npmRoot.error) {
+        // spawn error; fall through to alternative discovery.
+      } else if (npmRoot.status === 0) {
         const globalRoot = npmRoot.stdout.trim();
         const candidate = join(globalRoot, 'npm', 'node_modules', 'cmd-shim');
         try {
@@ -325,7 +312,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
         if (npmCli.error) {
           // spawn error (e.g. tool not installed); fall through to throw.
         } else if (npmCli.status === 0) {
-          const lines = npmCli.stdout.trim().split(String.fromCharCode(10));
+          const lines = npmCli.stdout.trim().split('\n');
           const npmBin = dirname(lines[0]!);
           npmDir = dirname(npmBin);
         }
@@ -376,8 +363,15 @@ describe('install-native-launchers module (CLI workspace)', () => {
         ],
         { encoding: 'utf8', timeout: 15_000 },
       );
+      if (result.error) {
+        throw new Error(
+          `cmd-shim generation spawn failed: ${result.error.message}`,
+        );
+      }
       if (result.status !== 0) {
-        throw new Error(`cmd-shim generation failed: ${result.stderr}`);
+        throw new Error(
+          `cmd-shim generation failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr}`,
+        );
       }
       return join(binLinkDir, 'llxprt.cmd');
     }

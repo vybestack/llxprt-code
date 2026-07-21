@@ -274,11 +274,18 @@ function installWindowsNativeLaunchers() {
   if (!fs.existsSync(cliInstaller)) {
     return;
   }
-  const { installNativeLaunchers } = require(cliInstaller);
-  installNativeLaunchers({
-    packageRoot: path.join(repoRoot, 'packages', 'cli'),
-    log: console.log,
-  });
+  try {
+    const { installNativeLaunchers } = require(cliInstaller);
+    installNativeLaunchers({
+      packageRoot: path.join(repoRoot, 'packages', 'cli'),
+      log: console.log,
+    });
+  } catch (error) {
+    console.warn(
+      'Warning: Windows native launcher generation failed (non-fatal):',
+      error.message,
+    );
+  }
 }
 
 // Under Bun, only the npm-specific actions below are skipped: Bun does not

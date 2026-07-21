@@ -142,4 +142,12 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+void main().catch((err: unknown) => {
+  // Ensure an unexpected rejection exits non-zero with a diagnostic so the
+  // parent process sees a clear failure rather than an unhandled rejection.
+  process.stderr.write(
+    `LLXPRT_PROBE_FATAL: ${err instanceof Error ? err.message : String(err)}
+`,
+  );
+  process.exit(1);
+});

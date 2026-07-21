@@ -32,10 +32,12 @@ const {
 } = require('./launcher-invocation.cjs');
 const { findBundledBun, samePath, copyTree } = require('./package-layout.cjs');
 const {
-  sleepMs,
   inspectProcessTreeSync,
+  waitForReady,
+  killProcessTree,
   spawn,
 } = require('./process-helpers.cjs');
+const { npmInvocation } = require('../lib/npm-command.cjs');
 
 function buildProbeFixture(installedPackageRoot, tempBase, label, repoRoot) {
   const fixtureDir = join(tempBase, `probe-fixture-${label}`);
@@ -219,26 +221,48 @@ function checkPwshArgFidelity(fixture) {
         parsed.marker === marker,
         `marker ${JSON.stringify(marker)} round-trip mismatch: got ${JSON.stringify(parsed.marker)}`,
       );
+      assert(
+        typeof payload.bunVersion === 'string' && payload.bunVersion.length > 0,
+        `marker ${JSON.stringify(marker)}: did not run under Bun (bunVersion missing)`,
+      );
     }
   });
 }
 
 function checkInjectionGuard(fixture, tempDir) {
-  runStep('injection-guard', () => {
+  runStep('cmd-injection-guard', () => {
     const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
     const injectionFile = join(tempDir, 'injected-sentinel.txt');
     const r = invokeCmd(cmdPath, [probeArg({ injectionPath: injectionFile })]);
     if (r.status !== 0) {
-      throw new Error(`injection probe exited ${r.status}: ${r.stderr}`);
+      throw new Error(`cmd injection probe exited ${r.status}: ${r.stderr}`);
     }
     const payload = parseProbeOutput(r.stdout);
     assert(
       payload.injectionCreated === false,
-      `injection sentinel was created at ${injectionFile} — launcher leaked shell metacharacters`,
+      `cmd injection sentinel was created at ${injectionFile} — launcher leaked shell metacharacters`,
     );
     assert(
       !existsSync(injectionFile),
-      `injection sentinel file exists at ${injectionFile}`,
+      `cmd injection sentinel file exists at ${injectionFile}`,
+    );
+  });
+
+  runStep('pwsh-injection-guard', () => {
+    const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
+    const injectionFile = join(tempDir, 'injected-sentinel-ps1.txt');
+    const r = invokePwsh(ps1Path, [probeArg({ injectionPath: injectionFile })]);
+    if (r.status !== 0) {
+      throw new Error(`ps1 injection probe exited ${r.status}: ${r.stderr}`);
+    }
+    const payload = parseProbeOutput(r.stdout);
+    assert(
+      payload.injectionCreated === false,
+      `ps1 injection sentinel was created at ${injectionFile} — launcher leaked shell metacharacters`,
+    );
+    assert(
+      !existsSync(injectionFile),
+      `ps1 injection sentinel file exists at ${injectionFile}`,
     );
   });
 }
@@ -312,73 +336,105 @@ function checkPwshExitPropagation(fixture) {
 }
 
 function checkExecPathIsBundledBun(fixture) {
-  runStep('execpath-is-bundled-bun', () => {
+  runStep('cmd-execpath-is-bundled-bun', () => {
     const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
     const r = invokeCmd(cmdPath, [probeArg({})]);
     if (r.status !== 0) {
-      throw new Error(`execpath probe exited ${r.status}: ${r.stderr}`);
+      throw new Error(`cmd execpath probe exited ${r.status}: ${r.stderr}`);
     }
     const payload = parseProbeOutput(r.stdout);
     const expectedBun = findBundledBun(fixture.fixturePkgRoot);
     assert(
       samePath(payload.execPath, expectedBun),
-      `execPath ${payload.execPath} is not the package-local bundled bun.exe (${expectedBun})`,
+      `cmd execPath ${payload.execPath} is not the package-local bundled bun.exe (${expectedBun})`,
+    );
+  });
+
+  runStep('pwsh-execpath-is-bundled-bun', () => {
+    const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
+    const r = invokePwsh(ps1Path, [probeArg({})]);
+    if (r.status !== 0) {
+      throw new Error(`ps1 execpath probe exited ${r.status}: ${r.stderr}`);
+    }
+    const payload = parseProbeOutput(r.stdout);
+    const expectedBun = findBundledBun(fixture.fixturePkgRoot);
+    assert(
+      samePath(payload.execPath, expectedBun),
+      `ps1 execPath ${payload.execPath} is not the package-local bundled bun.exe (${expectedBun})`,
     );
   });
 }
 
 function checkProcessTreeNoNode(fixture) {
-  runStep('process-tree-bun-present-node-absent', () => {
-    const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
-    const child = spawn('cmd', ['/c', cmdPath, probeArg({ long: true })], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PATH: CONSTRAINED_PATH },
-      windowsHide: true,
-    });
-    let stdout = '';
-    let exitedEarly = false;
-    child.stdout.on('data', (c) => {
-      stdout += c.toString();
-    });
-    child.on('exit', () => {
-      exitedEarly = true;
-    });
+  // CMD variant
+  const cmdPromise = runStep(
+    'cmd-process-tree-bun-present-node-absent',
+    async () => {
+      const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
+      const child = spawn('cmd', ['/c', cmdPath, probeArg({ long: true })], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, PATH: CONSTRAINED_PATH },
+        windowsHide: true,
+      });
+      try {
+        // Async readiness polling yields to the event loop so stdout event
+        // handlers fire between checks.
+        await waitForReady(child, '__LLXPRT_PROBE_LONG_RUNNING__', 12_000);
+        const treeInfo = inspectProcessTreeSync(child.pid);
+        assert(
+          treeInfo.bunPresent,
+          `cmd bun.exe not found in launcher child tree. descendants=${JSON.stringify(treeInfo.descendants)}`,
+        );
+        assert(
+          !treeInfo.nodePresent,
+          `cmd node.exe found in launcher child tree (must be absent). descendants=${JSON.stringify(treeInfo.descendants)}`,
+        );
+      } finally {
+        // Terminate the entire process tree (taskkill /T /F on Windows), not
+        // just the direct child, so bun.exe descendants are reaped.
+        killProcessTree(child);
+      }
+    },
+  );
 
-    const readyDeadline = Date.now() + 12_000;
-    while (
-      Date.now() < readyDeadline &&
-      !stdout.includes('__LLXPRT_PROBE_LONG_RUNNING__') &&
-      !exitedEarly
-    ) {
-      sleepMs(100);
-    }
-    if (exitedEarly) {
-      throw new Error(
-        `launcher child exited before tree inspection (stdout=${JSON.stringify(stdout)})`,
+  // PowerShell variant
+  const pwshPromise = runStep(
+    'pwsh-process-tree-bun-present-node-absent',
+    async () => {
+      const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
+      const child = spawn(
+        'powershell',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-File',
+          ps1Path,
+          probeArg({ long: true }),
+        ],
+        {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, PATH: CONSTRAINED_PATH },
+          windowsHide: true,
+        },
       );
-    }
-    if (!stdout.includes('__LLXPRT_PROBE_LONG_RUNNING__')) {
-      throw new Error(
-        `probe did not report long-running within timeout (stdout=${JSON.stringify(stdout)})`,
-      );
-    }
+      try {
+        await waitForReady(child, '__LLXPRT_PROBE_LONG_RUNNING__', 12_000);
+        const treeInfo = inspectProcessTreeSync(child.pid);
+        assert(
+          treeInfo.bunPresent,
+          `ps1 bun.exe not found in launcher child tree. descendants=${JSON.stringify(treeInfo.descendants)}`,
+        );
+        assert(
+          !treeInfo.nodePresent,
+          `ps1 node.exe found in launcher child tree (must be absent). descendants=${JSON.stringify(treeInfo.descendants)}`,
+        );
+      } finally {
+        killProcessTree(child);
+      }
+    },
+  );
 
-    const treeInfo = inspectProcessTreeSync(child.pid);
-    try {
-      child.kill();
-    } catch {
-      // best effort
-    }
-
-    assert(
-      treeInfo.bunPresent,
-      `bun.exe not found in launcher child tree. descendants=${JSON.stringify(treeInfo.descendants)}`,
-    );
-    assert(
-      !treeInfo.nodePresent,
-      `node.exe found in launcher child tree (must be absent). descendants=${JSON.stringify(treeInfo.descendants)}`,
-    );
-  });
+  return Promise.all([cmdPromise, pwshPromise]);
 }
 
 function checkMissingBun(fixtureBase, tempDir, repoRoot) {
@@ -488,20 +544,27 @@ function checkNpmExecEphemeral(tempDir, replicaTarball) {
       JSON.stringify({ name: 'clean-consumer', version: '0.0.0' }, null, 2),
     );
     const npmCache = join(tempDir, 'npm-exec-cache');
-    const r = spawnSync(
-      'npm',
-      ['exec', '--package', replicaTarball, '--', 'llxprt', '--version'],
-      {
-        cwd: cleanDir,
-        encoding: 'utf8',
-        timeout: 300_000,
-        maxBuffer: 64 * 1024 * 1024,
-        env: { ...process.env, npm_config_cache: npmCache },
-      },
-    );
+    const { command, args } = npmInvocation([
+      'exec',
+      '--package',
+      replicaTarball,
+      '--',
+      'llxprt',
+      '--version',
+    ]);
+    const r = spawnSync(command, args, {
+      cwd: cleanDir,
+      encoding: 'utf8',
+      timeout: 300_000,
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, npm_config_cache: npmCache },
+    });
+    if (r.error) {
+      throw new Error(`npm exec spawn failed: ${r.error.message}`);
+    }
     if (r.status !== 0) {
       throw new Error(
-        `npm exec --version exited ${r.status}: ${r.stderr || r.stdout}`,
+        `npm exec --version failed (exit ${r.status}, signal=${r.signal ?? 'none'}): ${r.stderr || r.stdout}`,
       );
     }
     assert(

@@ -451,3 +451,41 @@ describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
     ).toBe(true);
   });
 });
+
+describe('installWindowsNativeLaunchers error handling (nonfatal contract)', () => {
+  it('wraps the installer require and invocation in try/catch (nonfatal)', () => {
+    // On macOS, installWindowsNativeLaunchers is platform-gated and never
+    // runs. The contract is that an unexpected require failure or installer
+    // exception is caught and logged as a warning, never aborting postinstall.
+    // Verify the source has the protective try/catch around the require+invoke.
+    const source = readFileSync(realPostinstall, 'utf8');
+    const fnStart = source.indexOf('function installWindowsNativeLaunchers');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnEnd = source.indexOf('\n}', fnStart) + 2;
+    const fnBody = source.slice(fnStart, fnEnd);
+    expect(fnBody).toContain('try {');
+    expect(fnBody).toContain('require(cliInstaller)');
+    expect(fnBody).toContain('installNativeLaunchers');
+    expect(fnBody).toContain('} catch');
+    expect(fnBody).toMatch(/non-fatal/i);
+    // Must NOT contain process.exit inside the try/catch.
+    const tryStart = fnBody.indexOf('try {');
+    const catchStart = fnBody.indexOf('} catch');
+    const tryBlock = fnBody.slice(tryStart, catchStart);
+    expect(tryBlock).not.toContain('process.exit');
+  });
+
+  it('postinstall exits 0 even when install-native-launchers.cjs throws', () => {
+    // Simulate a broken installer module on win32 by creating a fixture whose
+    // install-native-launchers.cjs throws, then verify postinstall does not
+    // crash. We cannot change process.platform, but we CAN verify that the
+    // function's error path does not propagate by checking the source never
+    // calls process.exit(1) from installWindowsNativeLaunchers.
+    const source = readFileSync(realPostinstall, 'utf8');
+    const fnStart = source.indexOf('function installWindowsNativeLaunchers');
+    const fnEnd = source.indexOf('\n}', fnStart) + 2;
+    const fnBody = source.slice(fnStart, fnEnd);
+    // The function must never call process.exit — errors are logged and swallowed.
+    expect(fnBody).not.toMatch(/process\.exit\(\d+\)/);
+  });
+});

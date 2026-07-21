@@ -30,22 +30,33 @@ const cliModulePath = join(
 );
 
 /**
- * Derive the pnpm virtual-store fixture version from the published CLI manifest
- * rather than hardcoding it. The pnpm store directory name encodes
- * `<scope>+<name>@<version>`, so it must track packages/cli/package.json.
+ * Reads the CLI package manifest to derive the pnpm virtual-store directory
+ * name, which encodes `<scope>+<name>@<version>`. Both name and version are
+ * derived dynamically so this test tracks the actual published manifest.
  */
-function readCliVersion(): string {
-  const cliPkg = JSON.parse(
-    readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
-  ) as { version?: string };
-  if (typeof cliPkg.version !== 'string' || cliPkg.version.length === 0) {
-    throw new Error('packages/cli/package.json is missing a version');
-  }
-  return cliPkg.version;
+interface CliManifest {
+  name: string;
+  version: string;
 }
 
-const CLI_VERSION = readCliVersion();
-const PNPM_PACKAGE_DIR = `@vybestack+llxprt-code@${CLI_VERSION}`;
+function readCliManifest(): CliManifest {
+  const cliPkg = JSON.parse(
+    readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
+  ) as { name?: string; version?: string };
+  if (
+    typeof cliPkg.name !== 'string' ||
+    cliPkg.name.length === 0 ||
+    typeof cliPkg.version !== 'string' ||
+    cliPkg.version.length === 0
+  ) {
+    throw new Error('packages/cli/package.json is missing name or version');
+  }
+  return { name: cliPkg.name, version: cliPkg.version };
+}
+
+const CLI_MANIFEST = readCliManifest();
+// pnpm encodes the scope separator as + in the virtual-store directory name.
+const PNPM_PACKAGE_DIR = `${CLI_MANIFEST.name.replace(/^@/, '').replace(/\//g, '+')}@${CLI_MANIFEST.version}`;
 
 function loadCliInstaller(): ReturnType<typeof nodeRequire> {
   return nodeRequire(cliModulePath);

@@ -23,10 +23,25 @@ function assert(condition, msg) {
 function runStep(label, fn) {
   process.stdout.write(`[${label}] starting...\n`);
   try {
-    fn();
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      // Async step: return the promise so the caller can await it. On success
+      // print OK; on rejection, accumulate the failure (do not re-throw so
+      // parallel steps do not unhandled-reject).
+      return result.then(
+        () => {
+          process.stdout.write(`[${label}] OK\n`);
+        },
+        (err) => {
+          fail(`${label}: ${err.message}`);
+        },
+      );
+    }
     process.stdout.write(`[${label}] OK\n`);
+    return undefined;
   } catch (err) {
     fail(`${label}: ${err.message}`);
+    return undefined;
   }
 }
 

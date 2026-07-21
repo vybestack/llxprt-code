@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { spawnSync, spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   statSync,
@@ -21,6 +21,26 @@ const repoRoot = resolve(thisFile, '..', '..', '..');
 const launcherPath = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 
+/**
+ * The exit code the launcher uses for all launch-failure modes (missing Bun,
+ * corrupt Bun, missing entry point). Centralized so a change to the launcher's
+ * failure code only requires updating one place.
+ */
+const LAUNCHER_FAILURE_EXIT = 43;
+
+/**
+ * Extracts the inner `case "$_llxprt_magic"` block that follows a kernel
+ * marker (e.g. 'Darwin)') in the launcher source, so platform-gated magic
+ * acceptance can be asserted per-branch.
+ */
+function launcherMagicBlockAfter(marker: string): string {
+  const source = readFileSync(launcherPath, 'utf8');
+  const start = source.indexOf(marker);
+  const magicStart = source.indexOf('case "$_llxprt_magic"', start);
+  const magicEsac = source.indexOf('esac', magicStart);
+  return source.slice(magicStart, magicEsac);
+}
+
 function ensureBun(): string {
   if (existsSync(repoBun)) {
     return repoBun;
@@ -30,6 +50,24 @@ function ensureBun(): string {
     return whichResult.stdout.trim();
   }
   throw new Error('Bun not found for test setup');
+}
+
+/**
+ * Returns the real Bun version from the repo's bun package.json so tests can
+ * write matching pins. Falls back to a sentinel if unavailable. Shared at
+ * module scope so multiple describe blocks reuse it without duplication.
+ */
+function realBunVersion(): string {
+  const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
+  if (existsSync(bunPkgPath)) {
+    try {
+      const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
+      if (typeof bunPkg.version === 'string') return bunPkg.version;
+    } catch {
+      // keep default
+    }
+  }
+  return '1.3.14';
 }
 
 function makeEntry(pkgRoot: string, code: string): void {
@@ -201,31 +239,17 @@ describe('POSIX launcher execution behavior', () => {
   }, 30_000);
 
   it('invokes Bun exactly once (no pre-probe)', () => {
-    const bunPath = ensureBun();
-    const pkgRoot = join(tempDir, 'pkg');
-    const binDir = join(pkgRoot, 'bin');
-    mkdirSync(binDir, { recursive: true });
-    const launcherTarget = join(binDir, 'llxprt');
-    copyFileSync(launcherPath, launcherTarget);
-    chmodSync(launcherTarget, 0o755);
-
-    const counterDir = join(pkgRoot, 'counter');
+    const counterDir = join(tempDir, 'counter');
     mkdirSync(counterDir, { recursive: true });
     const counterFile = join(counterDir, 'invocations.txt');
-    makeEntry(
-      pkgRoot,
-      `const fs = require('fs');
-       const path = require('path');
-       const counter = path.join(${JSON.stringify(counterDir)}, 'invocations.txt');
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `const fs = require('fs');
+       const counter = ${JSON.stringify(counterFile)};
        let count = 0;
        try { count = parseInt(fs.readFileSync(counter, 'utf8').trim(), 10) || 0; } catch {}
        fs.writeFileSync(counter, String(count + 1));
        console.log(count + 1);`,
-    );
-
-    const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-    mkdirSync(bunDir, { recursive: true });
-    copyFileSync(bunPath, join(bunDir, 'bun.exe'));
+    });
 
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
@@ -300,9 +324,123 @@ describe('POSIX launcher execution behavior', () => {
       timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status).toBe(43);
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/npm install|bun\.sh/i);
   }, 15_000);
+
+  it('does not accept an unrelated Bun from a consumer ancestor directory', () => {
+    // Simulates: consumer-project/node_modules/@vybestack/llxprt-code/bin/llxprt
+    // The launcher must NOT climb past the enclosing node_modules to find
+    // consumer-project/node_modules/bun (a consumer's own Bun dependency).
+    // Here the package has NO package-local or hoisted Bun, but a "consumer"
+    // ancestor directory has its own node_modules/bun — which must be rejected.
+    const consumerDir = join(tempDir, 'consumer-project');
+    const pkgRoot = join(
+      consumerDir,
+      'node_modules',
+      '@vybestack',
+      'llxprt-code',
+    );
+    const binDir = join(pkgRoot, 'bin');
+    mkdirSync(binDir, { recursive: true });
+    const launcherTarget = join(binDir, 'llxprt');
+    copyFileSync(launcherPath, launcherTarget);
+    chmodSync(launcherTarget, 0o755);
+    makeEntry(pkgRoot, 'process.exit(0);');
+
+    // Consumer's OWN bun dependency (unrelated ancestor Bun).
+    const consumerBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+    mkdirSync(consumerBunDir, { recursive: true });
+    copyFileSync(ensureBun(), join(consumerBunDir, 'bun.exe'));
+
+    // The package has a package.json with a bun pin so the launcher WILL try
+    // to validate versions. The consumer's bun has a DIFFERENT version.
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      JSON.stringify(
+        { name: '@vybestack/llxprt-code', dependencies: { bun: '1.3.14' } },
+        null,
+        2,
+      ),
+    );
+    // The consumer's bun package.json has a different version.
+    writeFileSync(
+      join(consumerDir, 'node_modules', 'bun', 'package.json'),
+      JSON.stringify({ name: 'bun', version: '9.9.9' }, null, 2),
+    );
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+  }, 15_000);
+
+  it('accepts a hoisted Bun within the enclosing node_modules', () => {
+    // Simulates npm hoisting: the package is at
+    // consumer/node_modules/@vybestack/llxprt-code/bin/llxprt and the Bun
+    // dependency is hoisted to consumer/node_modules/bun/bin/bun.exe.
+    // The enclosing node_modules is consumer/node_modules; the search must
+    // find the hoisted Bun and NOT climb to consumer/ or above.
+    const consumerDir = join(tempDir, 'consumer-hoisted');
+    const pkgRoot = join(
+      consumerDir,
+      'node_modules',
+      '@vybestack',
+      'llxprt-code',
+    );
+    const binDir = join(pkgRoot, 'bin');
+    mkdirSync(binDir, { recursive: true });
+    const launcherTarget = join(binDir, 'llxprt');
+    copyFileSync(launcherPath, launcherTarget);
+    chmodSync(launcherTarget, 0o755);
+    makeEntry(pkgRoot, 'process.exit(0);');
+
+    // Hoisted Bun at the enclosing node_modules level.
+    const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+    mkdirSync(hoistedBunDir, { recursive: true });
+    const bunPath = ensureBun();
+    copyFileSync(bunPath, join(hoistedBunDir, 'bun.exe'));
+
+    // Write a matching bun package.json version. Read the real version from
+    // the repo's bun package if available; otherwise skip version pin.
+    const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
+    let bunVersion = '1.3.14';
+    if (existsSync(bunPkgPath)) {
+      try {
+        const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
+        if (typeof bunPkg.version === 'string') bunVersion = bunPkg.version;
+      } catch {
+        // keep default
+      }
+    }
+    writeFileSync(
+      join(consumerDir, 'node_modules', 'bun', 'package.json'),
+      JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
+    );
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@vybestack/llxprt-code',
+          dependencies: { bun: bunVersion },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expect(result.status, result.stderr).toBe(0);
+  }, 30_000);
 
   it('exits 43 when Bun is a corrupt text file (not a native binary)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
@@ -319,7 +457,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status).toBe(43);
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(
       /npm install|bun\.sh|unusable|not a valid|corrupt/i,
     );
@@ -345,39 +483,75 @@ describe('POSIX launcher execution behavior', () => {
       timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status).toBe(43);
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(
       /npm install|bun\.sh|unusable|not a valid|corrupt/i,
     );
   }, 15_000);
 
-  it('accepts a PE/COFF (MZ, 4d5a) Bun magic as a native binary', () => {
+  it('accepts a PE/COFF (MZ, 4d5a) Bun magic only on Windows POSIX (MSYS/Git Bash)', () => {
     // POSIX shells that can execute Windows PE (Git Bash/MSYS) need the magic
     // check to accept MZ so a real bun.exe is not rejected. We cannot exec a
     // PE on this POSIX host, so we assert at the unit level: the launcher's
-    // magic case-statement must accept the 4d5a prefix.
-    const source = readFileSync(launcherPath, 'utf8');
-    // The case pattern must include a 4d5a branch (with trailing * because MZ
-    // is a 2-byte magic and the remaining 2 bytes of the 4-byte read vary).
-    expect(source).toMatch(/4d5a\*/);
+    // magic case-statement must accept the 4d5a prefix ONLY in the
+    // MINGW/MSYS/CYGWIN branch, and must NOT accept it in Darwin or Linux.
+    expect(launcherMagicBlockAfter('MINGW*|MSYS*|CYGWIN*')).toMatch(/4d5a\*/);
+    expect(launcherMagicBlockAfter('Darwin)')).not.toMatch(/4d5a/);
+    expect(launcherMagicBlockAfter('Linux and other ELF')).not.toMatch(/4d5a/);
   });
 
-  it('magic case-statement accepts ELF, Mach-O, and PE/COFF prefixes', () => {
-    // Unit-level contract: all accepted magics must appear in the case list.
-    const source = readFileSync(launcherPath, 'utf8');
-    const caseStart = source.indexOf('case "$_llxprt_magic"');
-    // Find the esac that closes the magic case (the first esac AFTER the
-    // magic case start), not an earlier esac from the symlink loop.
-    const caseEnd = source.indexOf('esac', caseStart);
-    const caseBlock = source.slice(caseStart, caseEnd);
-    expect(caseBlock).toContain('7f454c46'); // ELF
-    expect(caseBlock).toContain('feedface'); // Mach-O 32 BE
-    expect(caseBlock).toContain('feedfacf'); // Mach-O 64 BE
-    expect(caseBlock).toContain('cefaedfe'); // Mach-O 32 LE
-    expect(caseBlock).toContain('cffaedfe'); // Mach-O 64 LE
-    expect(caseBlock).toContain('cafebabe'); // Mach-O fat BE
-    expect(caseBlock).toContain('bebafeca'); // Mach-O fat LE
-    expect(caseBlock).toContain('4d5a'); // PE/COFF MZ
+  it('rejects a PE/COFF Bun binary on Darwin (platform-gated magic)', () => {
+    // On macOS (Darwin), a PE/COFF binary cannot execute and must be rejected
+    // with exit 43. This test only runs on Darwin; on Linux it would test ELF
+    // rejection of PE (also correct), but the assertion is Darwin-specific.
+    if (process.platform !== 'darwin') return;
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      withBun: false,
+    });
+    const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
+    mkdirSync(bunDir, { recursive: true });
+    const peBun = join(bunDir, 'bun.exe');
+    // PE/COFF magic: MZ (4d5a) followed by arbitrary bytes.
+    writeFileSync(peBun, Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x01, 0x02]));
+    chmodSync(peBun, 0o755);
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toMatch(
+      /npm install|bun\.sh|unusable|not a valid|corrupt/i,
+    );
+  }, 15_000);
+
+  it('magic case-statement accepts the correct native format per platform', () => {
+    // Unit-level contract: accepted magics must appear in the correct
+    // platform-gated branches.
+    // MINGW/MSYS/CYGWIN branch: PE/COFF only (Windows runs PE natively;
+    // ELF and Mach-O indicate a corrupt or wrong-platform install).
+    const mingwBlock = launcherMagicBlockAfter('MINGW*|MSYS*|CYGWIN*');
+    expect(mingwBlock).toContain('4d5a'); // PE/COFF
+    expect(mingwBlock).not.toContain('7f454c46'); // no ELF on Windows
+    expect(mingwBlock).not.toContain('feedface'); // no Mach-O on Windows
+
+    // Darwin branch: Mach-O only.
+    const darwinBlock = launcherMagicBlockAfter('Darwin)');
+    expect(darwinBlock).toContain('feedface');
+    expect(darwinBlock).toContain('feedfacf');
+    expect(darwinBlock).toContain('cefaedfe');
+    expect(darwinBlock).toContain('cffaedfe');
+    expect(darwinBlock).toContain('cafebabe');
+    expect(darwinBlock).toContain('bebafeca');
+    expect(darwinBlock).not.toContain('7f454c46'); // no ELF on Darwin
+    expect(darwinBlock).not.toContain('4d5a'); // no PE on Darwin
+
+    // Default (Linux) branch: ELF only.
+    const defaultBlock = launcherMagicBlockAfter('Linux and other ELF');
+    expect(defaultBlock).toContain('7f454c46'); // ELF
+    expect(defaultBlock).not.toContain('feedface'); // no Mach-O on Linux
+    expect(defaultBlock).not.toContain('4d5a'); // no PE on Linux
   });
 
   it('rejects a PE/COFF-looking file whose payload is not executable (od proof)', () => {
@@ -415,33 +589,20 @@ describe('POSIX launcher execution behavior', () => {
       timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status).toBe(43);
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
   }, 15_000);
 
   it('launches a valid Mach-O Bun exactly once (no double-start)', () => {
     // The real Bun binary IS a valid Mach-O/ELF. This confirms the magic
     // check ACCEPTS a real native binary and execs it (the counter proves
     // exactly one invocation, not a pre-probe + exec).
-    const bunPath = ensureBun();
-    const pkgRoot = join(tempDir, 'pkg');
-    const binDir = join(pkgRoot, 'bin');
-    mkdirSync(binDir, { recursive: true });
-    const launcherTarget = join(binDir, 'llxprt');
-    copyFileSync(launcherPath, launcherTarget);
-    chmodSync(launcherTarget, 0o755);
-
-    const counterFile = join(pkgRoot, 'invocations.txt');
-    makeEntry(
-      pkgRoot,
-      `const fs = require('fs');
+    const counterFile = join(tempDir, 'invocations.txt');
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      entryCode: `const fs = require('fs');
        let count = 0;
        try { count = parseInt(fs.readFileSync(${JSON.stringify(counterFile)}, 'utf8').trim(), 10) || 0; } catch {}
        fs.writeFileSync(${JSON.stringify(counterFile)}, String(count + 1));`,
-    );
-
-    const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
-    mkdirSync(bunDir, { recursive: true });
-    copyFileSync(bunPath, join(bunDir, 'bun.exe'));
+    });
 
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
@@ -475,7 +636,7 @@ describe('POSIX launcher execution behavior', () => {
       timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-    expect(result.status).toBe(43);
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/entry point|index\.ts|corrupt/i);
   }, 15_000);
 
@@ -509,142 +670,156 @@ describe('POSIX launcher execution behavior', () => {
   }, 30_000);
 });
 
-describe('POSIX launcher signal behavior', () => {
+describe('POSIX launcher version-pin and platform validation', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-sig-'));
+    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-pin-'));
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  function makeLongRunning(tempDir: string): {
-    pkgRoot: string;
-    launcherTarget: string;
-    pidFile: string;
-  } {
-    const pkgRoot = join(tempDir, 'pkg');
+  it('rejects a hoisted Bun whose version does not match the package pin', () => {
+    // The package declares bun pin "9.9.9" but the hoisted Bun has a different
+    // version. The launcher must reject this version mismatch.
+    const consumerDir = join(tempDir, 'consumer-pin-mismatch');
+    const pkgRoot = join(
+      consumerDir,
+      'node_modules',
+      '@vybestack',
+      'llxprt-code',
+    );
     const binDir = join(pkgRoot, 'bin');
     mkdirSync(binDir, { recursive: true });
     const launcherTarget = join(binDir, 'llxprt');
     copyFileSync(launcherPath, launcherTarget);
     chmodSync(launcherTarget, 0o755);
+    makeEntry(pkgRoot, 'process.exit(0);');
 
-    const pidFile = join(pkgRoot, 'child-pid.txt');
-    makeEntry(
-      pkgRoot,
-      [
-        'const fs = require("fs");',
-        'const path = require("path");',
-        `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
-        'process.stdin.resume();',
-      ].join('\n'),
+    // Hoisted Bun with a DIFFERENT version than the pin.
+    const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+    mkdirSync(hoistedBunDir, { recursive: true });
+    copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
+    writeFileSync(
+      join(consumerDir, 'node_modules', 'bun', 'package.json'),
+      JSON.stringify({ name: 'bun', version: '1.0.0' }, null, 2),
+    );
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      JSON.stringify(
+        { name: '@vybestack/llxprt-code', dependencies: { bun: '9.9.9' } },
+        null,
+        2,
+      ),
     );
 
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+  }, 15_000);
+
+  it('accepts a hoisted Bun whose version matches the package pin', () => {
+    const bunVersion = realBunVersion();
+    const consumerDir = join(tempDir, 'consumer-pin-match');
+    const pkgRoot = join(
+      consumerDir,
+      'node_modules',
+      '@vybestack',
+      'llxprt-code',
+    );
+    const binDir = join(pkgRoot, 'bin');
+    mkdirSync(binDir, { recursive: true });
+    const launcherTarget = join(binDir, 'llxprt');
+    copyFileSync(launcherPath, launcherTarget);
+    chmodSync(launcherTarget, 0o755);
+    makeEntry(pkgRoot, 'process.exit(0);');
+
+    // Hoisted Bun with a MATCHING version.
+    const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+    mkdirSync(hoistedBunDir, { recursive: true });
+    copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
+    writeFileSync(
+      join(consumerDir, 'node_modules', 'bun', 'package.json'),
+      JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
+    );
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@vybestack/llxprt-code',
+          dependencies: { bun: bunVersion },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expect(result.status, result.stderr).toBe(0);
+  }, 30_000);
+
+  it('does not scan beyond the enclosing node_modules for Bun', () => {
+    // The package is nested two levels deep inside node_modules. The enclosing
+    // node_modules has NO bun. An ancestor project dir (OUTSIDE the enclosing
+    // node_modules) has bun — but the launcher must NOT climb past the
+    // enclosing node_modules to find it.
+    const grandparentDir = join(tempDir, 'grandparent');
+    const consumerNm = join(grandparentDir, 'node_modules');
+    const pkgRoot = join(consumerNm, '@vybestack', 'llxprt-code');
+    const binDir = join(pkgRoot, 'bin');
+    mkdirSync(binDir, { recursive: true });
+    const launcherTarget = join(binDir, 'llxprt');
+    copyFileSync(launcherPath, launcherTarget);
+    chmodSync(launcherTarget, 0o755);
+    makeEntry(pkgRoot, 'process.exit(0);');
+
+    // Ancestor bun OUTSIDE the enclosing node_modules — must be rejected.
+    const ancestorBunDir = join(tempDir, 'node_modules', 'bun', 'bin');
+    mkdirSync(ancestorBunDir, { recursive: true });
+    copyFileSync(ensureBun(), join(ancestorBunDir, 'bun.exe'));
+
+    const result = spawnSync(launcherTarget, [], {
+      cwd: pkgRoot,
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    });
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+  }, 15_000);
+
+  it('rejects an ELF Bun on Darwin (platform-gated format)', () => {
+    if (process.platform !== 'darwin') return;
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      withBun: false,
+    });
     const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
     mkdirSync(bunDir, { recursive: true });
-    copyFileSync(ensureBun(), join(bunDir, 'bun.exe'));
-
-    return { pkgRoot, launcherTarget, pidFile };
-  }
-
-  it('SIGINT reaches the child directly via exec (process replacement)', () => {
-    const { pkgRoot, launcherTarget, pidFile } = makeLongRunning(tempDir);
-    const child = spawn(launcherTarget, [], {
+    const elfBun = join(bunDir, 'bun.exe');
+    // ELF magic: 7f454c46
+    writeFileSync(elfBun, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]));
+    chmodSync(elfBun, 0o755);
+    const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      timeout: 15_000,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
-
-    let exited = false;
-    let exitSignal: NodeJS.Signals | null = null;
-    child.on('exit', (_code, signal) => {
-      exited = true;
-      exitSignal = signal;
-    });
-
-    let waited = 0;
-    const wait = setInterval(() => {
-      if (existsSync(pidFile) || waited > 50) {
-        clearInterval(wait);
-        if (existsSync(pidFile)) {
-          const childPid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
-          try {
-            process.kill(childPid, 'SIGINT');
-          } catch {
-            child.kill('SIGINT');
-          }
-        } else {
-          child.kill('SIGINT');
-        }
-      }
-      waited++;
-    }, 100);
-
-    setTimeout(() => {
-      clearInterval(wait);
-      if (!exited) {
-        child.kill('SIGKILL');
-      }
-    }, 15_000).unref();
-
-    return new Promise<void>((resolve) => {
-      child.on('exit', () => {
-        expect(exited).toBe(true);
-        expect(exitSignal).toBe('SIGINT');
-        resolve();
-      });
-    });
-  }, 20_000);
-
-  it('SIGTERM reaches the child directly via exec (process replacement)', () => {
-    const { pkgRoot, launcherTarget, pidFile } = makeLongRunning(tempDir);
-    const child = spawn(launcherTarget, [], {
-      cwd: pkgRoot,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PATH: '/usr/bin:/bin' },
-    });
-
-    let exited = false;
-    let exitSignal: NodeJS.Signals | null = null;
-    child.on('exit', (_code, signal) => {
-      exited = true;
-      exitSignal = signal;
-    });
-
-    let waited = 0;
-    const wait = setInterval(() => {
-      if (existsSync(pidFile) || waited > 50) {
-        clearInterval(wait);
-        if (existsSync(pidFile)) {
-          const childPid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
-          try {
-            process.kill(childPid, 'SIGTERM');
-          } catch {
-            child.kill('SIGTERM');
-          }
-        } else {
-          child.kill('SIGTERM');
-        }
-      }
-      waited++;
-    }, 100);
-
-    setTimeout(() => {
-      clearInterval(wait);
-      if (!exited) {
-        child.kill('SIGKILL');
-      }
-    }, 15_000).unref();
-
-    return new Promise<void>((resolve) => {
-      child.on('exit', () => {
-        expect(exited).toBe(true);
-        expect(exitSignal).toBe('SIGTERM');
-        resolve();
-      });
-    });
-  }, 20_000);
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toMatch(
+      /npm install|bun\.sh|unusable|not a valid|corrupt/i,
+    );
+  }, 15_000);
 });

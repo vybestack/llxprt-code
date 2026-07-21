@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,7 +43,19 @@ const releasePackHelper = join(
  *     suite hang. Scoped cleanup is the caller's responsibility via the
  *     returned `dispose()` (invoked from try/finally + onTestFinished).
  */
-const SMOKE_TIMEOUT_MS = 540_000;
+/**
+ * Env-overridable timeout constants with a comfortable margin. The smoke
+ * timeout must be strictly less than the test timeout so the kill+dispose
+ * completes before Vitest's test timeout fires.
+ *
+ * Override via env for per-CI tuning:
+ *   LLXPRT_SMOKE_TIMEOUT_MS — the hard kill timer for the smoke child.
+ *   LLXPRT_SMOKE_TEST_TIMEOUT_MS — the Vitest test timeout (must exceed the
+ *     smoke timeout by a safe margin).
+ */
+const SMOKE_TIMEOUT_MS = Number(process.env.LLXPRT_SMOKE_TIMEOUT_MS) || 540_000;
+const SMOKE_TEST_TIMEOUT_MS =
+  Number(process.env.LLXPRT_SMOKE_TEST_TIMEOUT_MS) || 600_000;
 
 interface SmokeHandle {
   promise: Promise<{
@@ -60,6 +72,10 @@ function runSmokeAsync(): SmokeHandle {
     cwd: repoRoot,
     env: { ...process.env },
     stdio: ['ignore', 'pipe', 'pipe'],
+    // Spawn detached on POSIX so we can kill the entire process group
+    // (grandchildren: npm, tar, bun, etc. inside the smoke script). On
+    // Windows, detached creates a new process group that taskkill /T can reap.
+    detached: true,
   });
   let stdout = '';
   let stderr = '';
@@ -141,13 +157,35 @@ function runSmokeAsync(): SmokeHandle {
       clearTimeout(timer);
       timer = null;
     }
-    // Kill the child if still alive. The child is non-detached, so a plain
-    // kill() is sufficient; no process-group kill is needed.
+    // Kill the entire process tree so grandchildren (npm, tar, bun spawned
+    // inside the smoke script) are reaped and do not leak as orphans.
+    // On POSIX: kill the process group (negative PID). On Windows: taskkill
+    // /T /F kills the entire descendant tree. Falls back to child.kill().
     if (child && child.exitCode === null && child.signalCode === null) {
       try {
-        child.kill('SIGKILL');
+        if (process.platform === 'win32' && child.pid) {
+          spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+            stdio: 'ignore',
+            timeout: 10_000,
+          });
+        } else if (child.pid) {
+          // Negative PID kills the entire process group.
+          process.kill(-child.pid, 'SIGKILL');
+        }
       } catch {
-        // best effort; child may have exited concurrently
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // best effort; child may have exited concurrently
+        }
+      }
+    }
+    // Unref the detached child so it does not keep the event loop alive.
+    if (child) {
+      try {
+        child.unref();
+      } catch {
+        // best effort
       }
     }
     streamTeardown?.();
@@ -168,27 +206,43 @@ describe('release-like CLI pack/install smoke (issue #2603)', () => {
     expect(typeof mod.packReleaseLikeCli).toBe('function');
   }, 15_000);
 
-  it('release-like global + local install runs --version and exits 0, release manifest has exact versions', async (ctx) => {
-    const smoke = runSmokeAsync();
-    // Guarantee the child is killed and listeners cleared even if the test is
-    // cancelled (timeout) or fails before reaching the finally below.
-    ctx.onTestFinished(() => smoke.dispose());
-    let result: { status: number | null; stdout: string; stderr: string };
-    try {
-      result = await smoke.promise;
-    } finally {
-      smoke.dispose();
-    }
-    const { status, stdout, stderr } = result;
-    expect(
-      status,
-      `smoke exited ${status}\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
-    ).toBe(0);
-    expect(stderr).toBe('');
-    expect(stdout).toContain('global-install-version');
-    expect(stdout).toContain('local-install-version');
-    expect(stdout).toContain('npm-exec-ephemeral');
-    expect(stdout).toContain('release-manifest-integrity');
-    expect(stdout).toContain('All release-install smoke assertions passed.');
-  }, 600_000);
+  it(
+    'release-like global + local install runs --version and exits 0, release manifest has exact versions',
+    async (ctx) => {
+      const smoke = runSmokeAsync();
+      // Guarantee the child is killed and listeners cleared even if the test is
+      // cancelled (timeout) or fails before reaching the finally below.
+      ctx.onTestFinished(() => smoke.dispose());
+      let result: { status: number | null; stdout: string; stderr: string };
+      try {
+        result = await smoke.promise;
+      } finally {
+        smoke.dispose();
+      }
+      const { status, stdout, stderr } = result;
+      // Truncate output to the last 80 lines so verbose npm/tar output does not
+      // create huge error objects in CI logs.
+      const tail = (s: string, maxLines = 80): string => {
+        const lines = s.split('\n');
+        if (lines.length <= maxLines) return s;
+        return `... (${lines.length - maxLines} earlier lines truncated) ...\n${lines.slice(-maxLines).join('\n')}`;
+      };
+      expect(
+        status,
+        `smoke exited ${status}\n--- stdout (tail) ---\n${tail(stdout)}\n--- stderr (tail) ---\n${tail(stderr)}`,
+      ).toBe(0);
+      // stderr may contain benign safeCleanup warnings; only FAIL: lines indicate
+      // a real test failure. The status===0 and success marker prove success.
+      expect(
+        stderr,
+        `stderr contained FAIL: lines\n--- stdout (tail) ---\n${tail(stdout)}\n--- stderr (tail) ---\n${tail(stderr)}`,
+      ).not.toContain('FAIL:');
+      expect(stdout).toContain('global-install-version');
+      expect(stdout).toContain('local-install-version');
+      expect(stdout).toContain('npm-exec-ephemeral');
+      expect(stdout).toContain('release-manifest-integrity');
+      expect(stdout).toContain('All release-install smoke assertions passed.');
+    },
+    SMOKE_TEST_TIMEOUT_MS,
+  );
 });

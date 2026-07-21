@@ -108,8 +108,11 @@ LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxpr
 
 **Bun resolution (production launcher):**
 
-1. `node_modules/bun/bin/bun.exe` (the package's pinned Bun dependency, climbing ancestor directories)
-2. `node_modules/.bin/bun` (the `.bin` shim, climbing ancestor directories)
+1. Package-local: `<package>/node_modules/bun/bin/bun.exe` (the package's pinned Bun dependency)
+2. Hoisted (installed packages only): the enclosing `node_modules/bun/bin/bun.exe` (npm/Bun hoisting), stopping at the enclosing `node_modules` boundary — never climbing into consumer ancestors
+3. Workspace root (source workspace only): when the package is not under a `node_modules` and the repository root is a verified llxprt-code workspace (its manifest references this package), that verified root's `node_modules/bun/bin/bun.exe`
+
+The launcher never scans `.bin` symlinks and never falls back to a global `bun` on `PATH`. When the package's `package.json` declares an exact Bun pin (e.g. `1.3.14`), a candidate whose `package.json`/version is missing or mismatched is rejected.
 
 If no package-local Bun runtime is found, the launcher prints an actionable error (exit code 43):
 

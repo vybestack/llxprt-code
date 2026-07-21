@@ -39,10 +39,12 @@ function isWithinPackageRoot(resolvedPath, packageRoot) {
 // Only the package target must authorize overwriting; the interpreter
 // reference must be ignored. Return every "%dp0%\<rel>" candidate so the
 // caller can test each against the package boundary.
+// cmd-shim uses backslashes on Windows, but accept forward slashes too for
+// robustness against alternate shim generators.
 function extractCmdShimTargets(content) {
   const targets = [];
   const seen = new Set();
-  const re = /"%dp0%\\([^"]+)"/g;
+  const re = /"%dp0%[/\\]([^"]+)"/g;
   let m;
   while ((m = re.exec(content)) !== null) {
     if (!seen.has(m[1])) {
@@ -54,13 +56,15 @@ function extractCmdShimTargets(content) {
 }
 
 // npm cmd-shim ps1 files reference the interpreter ("$basedir//bin/sh$exe")
-// and the real package target ("$basedir/../path/to/bin/llxprt"). Return every
-// "$basedir/<rel>" candidate so the caller can test each against the package
-// boundary.
+// and the real package target ("$basedir/../path/to/bin/llxprt"). npm
+// cmd-shim emits forward slashes on all platforms, but some environments or
+// future versions may emit backslashes on Windows. Accept both separators
+// so the ownership check is robust. Return every "$basedir/<rel>" candidate
+// so the caller can test each against the package boundary.
 function extractPs1ShimTargets(content) {
   const targets = [];
   const seen = new Set();
-  const re = /"\$basedir\/([^"]+)"/g;
+  const re = /"\$basedir[/\\]([^"]+)"/g;
   let m;
   while ((m = re.exec(content)) !== null) {
     if (!seen.has(m[1])) {

@@ -35,6 +35,7 @@ const {
 } = require('node:fs');
 const { join } = require('node:path');
 const { tmpdir } = require('node:os');
+const { npmInvocation } = require('../lib/npm-command.cjs');
 
 /**
  * Derive the cache dir, filename, and version from the CLI manifest so the
@@ -364,16 +365,19 @@ function assertReleaseTarballAssets(releaseTarball) {
 function packAllInternal(internalPkgs, workCopy, cacheDir) {
   const tarballMap = new Map();
   for (const { name } of internalPkgs) {
-    const packResult = spawnSync(
-      'npm',
-      ['pack', '-w', name, '--pack-destination', cacheDir],
-      {
-        cwd: workCopy,
-        encoding: 'utf8',
-        timeout: 120_000,
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
+    const { command, args } = npmInvocation([
+      'pack',
+      '-w',
+      name,
+      '--pack-destination',
+      cacheDir,
+    ]);
+    const packResult = spawnSync(command, args, {
+      cwd: workCopy,
+      encoding: 'utf8',
+      timeout: 120_000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
     if (packResult.error) {
       throw new Error(
         `npm pack -w ${name} spawn failed: ${packResult.error.message}`,
@@ -427,16 +431,19 @@ function rewriteOnePkgDeps(pkgPath, tarballMap) {
 }
 
 function packCli(workCopy, cacheDir) {
-  const cliPackResult = spawnSync(
-    'npm',
-    ['pack', '-w', '@vybestack/llxprt-code', '--pack-destination', cacheDir],
-    {
-      cwd: workCopy,
-      encoding: 'utf8',
-      timeout: 120_000,
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+  const { command, args } = npmInvocation([
+    'pack',
+    '-w',
+    '@vybestack/llxprt-code',
+    '--pack-destination',
+    cacheDir,
+  ]);
+  const cliPackResult = spawnSync(command, args, {
+    cwd: workCopy,
+    encoding: 'utf8',
+    timeout: 120_000,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (cliPackResult.error) {
     throw new Error(
       `npm pack CLI spawn failed: ${cliPackResult.error.message}`,

@@ -12,33 +12,36 @@ const { join } = require('node:path');
 
 const { assert, runStep } = require('./assert.cjs');
 const { CONSTRAINED_PATH } = require('./constants.cjs');
+const { npmInvocation } = require('../lib/npm-command.cjs');
 
 function globalInstall(tempDir, replicaTarball) {
   let prefix;
   runStep('global-install', () => {
     prefix = join(tempDir, 'global-prefix');
     mkdirSync(prefix, { recursive: true });
-    const r = spawnSync(
-      'npm',
-      [
-        'install',
-        '--global',
-        '--prefix',
-        prefix,
-        '--cache',
-        join(tempDir, 'npm-cache'),
-        '--loglevel',
-        'error',
-        replicaTarball,
-      ],
-      {
-        encoding: 'utf8',
-        timeout: 180_000,
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
+    const { command, args } = npmInvocation([
+      'install',
+      '--global',
+      '--prefix',
+      prefix,
+      '--cache',
+      join(tempDir, 'npm-cache'),
+      '--loglevel',
+      'error',
+      replicaTarball,
+    ]);
+    const r = spawnSync(command, args, {
+      encoding: 'utf8',
+      timeout: 180_000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (r.error) {
+      throw new Error(`npm global install spawn failed: ${r.error.message}`);
+    }
     if (r.status !== 0) {
-      throw new Error(`npm global install failed: ${r.stderr || r.stdout}`);
+      throw new Error(
+        `npm global install failed (exit ${r.status}, signal=${r.signal ?? 'none'}): ${r.stderr || r.stdout}`,
+      );
     }
   });
   return prefix;
@@ -53,25 +56,27 @@ function localInstall(tempDir, replicaTarball) {
       join(consumerDir, 'package.json'),
       JSON.stringify({ name: 'consumer', version: '0.0.0' }, null, 2),
     );
-    const r = spawnSync(
-      'npm',
-      [
-        'install',
-        '--cache',
-        join(tempDir, 'npm-cache-local'),
-        '--loglevel',
-        'error',
-        replicaTarball,
-      ],
-      {
-        cwd: consumerDir,
-        encoding: 'utf8',
-        timeout: 180_000,
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
+    const { command, args } = npmInvocation([
+      'install',
+      '--cache',
+      join(tempDir, 'npm-cache-local'),
+      '--loglevel',
+      'error',
+      replicaTarball,
+    ]);
+    const r = spawnSync(command, args, {
+      cwd: consumerDir,
+      encoding: 'utf8',
+      timeout: 180_000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (r.error) {
+      throw new Error(`npm local install spawn failed: ${r.error.message}`);
+    }
     if (r.status !== 0) {
-      throw new Error(`npm local install failed: ${r.stderr || r.stdout}`);
+      throw new Error(
+        `npm local install failed (exit ${r.status}, signal=${r.signal ?? 'none'}): ${r.stderr || r.stdout}`,
+      );
     }
   });
   return consumerDir;

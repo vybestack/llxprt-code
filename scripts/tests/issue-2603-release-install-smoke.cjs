@@ -35,6 +35,55 @@ const {
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
 const { createRequire } = require('node:module');
+const { npmInvocation } = require('../lib/npm-command.cjs');
+
+/**
+ * Platform-aware PATH that proves the launcher needs NO global Bun or Node.
+ * On POSIX, only /usr/bin and /bin are present. On Windows, System32 is
+ * included so cmd.exe remains reachable for the .cmd wrapper (the launcher
+ * invokes bun.exe directly, not via cmd), but no global Bun/Node paths.
+ */
+function constrainedPath() {
+  return process.platform === 'win32'
+    ? 'C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\Wbem'
+    : '/usr/bin:/bin';
+}
+
+/**
+ * Resolves the installed bin path for a global npm install.
+ * On Windows, the wrapper is at <prefix>/llxprt.cmd (npm writes the .cmd at
+ * the prefix root for global installs). On POSIX, it is at <prefix>/bin/llxprt.
+ */
+function resolveGlobalBin(prefix) {
+  if (process.platform === 'win32') {
+    return join(prefix, 'llxprt.cmd');
+  }
+  return join(prefix, 'bin', 'llxprt');
+}
+
+/**
+ * Resolves the installed bin path for a local (non-global) npm install.
+ * On Windows, the wrapper is at <consumer>/node_modules/.bin/llxprt.cmd.
+ * On POSIX, it is at <consumer>/node_modules/.bin/llxprt.
+ */
+function resolveLocalBin(consumerDir) {
+  const base = join(consumerDir, 'node_modules', '.bin', 'llxprt');
+  return process.platform === 'win32' ? base + '.cmd' : base;
+}
+
+/**
+ * Returns {command, baseArgs} for invoking a resolved bin path. The caller
+ * appends additional args (e.g. --version) to baseArgs. On Windows, .cmd
+ * files cannot be spawned directly (EINVAL/ENOENT), so cmd.exe /c is used
+ * with the wrapper path as the first argument — argv boundaries are preserved
+ * (no shell string). On POSIX, the shebanged launcher is exec'd directly.
+ */
+function resolveBinInvocation(binPath) {
+  if (process.platform === 'win32') {
+    return { command: 'cmd', baseArgs: ['/c', binPath] };
+  }
+  return { command: binPath, baseArgs: [] };
+}
 
 const repoRoot = resolve(process.argv[2] || process.cwd());
 const nodeRequire = createRequire(__filename);
@@ -161,25 +210,22 @@ function main() {
     runStep('global-install-version', () => {
       const prefix = join(tempDir, 'global-prefix');
       mkdirSync(prefix, { recursive: true });
-      const installResult = spawnSync(
-        'npm',
-        [
-          'install',
-          '--global',
-          '--prefix',
-          prefix,
-          '--cache',
-          join(tempDir, 'npm-cache'),
-          '--loglevel',
-          'error',
-          replicaTarball,
-        ],
-        {
-          encoding: 'utf8',
-          timeout: 180_000,
-          maxBuffer: 64 * 1024 * 1024,
-        },
-      );
+      const { command, args } = npmInvocation([
+        'install',
+        '--global',
+        '--prefix',
+        prefix,
+        '--cache',
+        join(tempDir, 'npm-cache'),
+        '--loglevel',
+        'error',
+        replicaTarball,
+      ]);
+      const installResult = spawnSync(command, args, {
+        encoding: 'utf8',
+        timeout: 180_000,
+        maxBuffer: 64 * 1024 * 1024,
+      });
       if (installResult.error) {
         throw new Error(
           `global npm install spawn failed: ${installResult.error.message}`,
@@ -190,13 +236,23 @@ function main() {
           `global npm install failed (exit ${installResult.status}, signal=${installResult.signal ?? 'none'}): ${installResult.stderr || installResult.stdout}`,
         );
       }
-      const binLink = join(prefix, 'bin', 'llxprt');
+      const binLink = resolveGlobalBin(prefix);
       assert(existsSync(binLink), `global bin link not found: ${binLink}`);
-      const result = spawnSync(binLink, ['--version'], {
-        encoding: 'utf8',
-        timeout: 30_000,
-        env: { ...process.env, PATH: '/usr/bin:/bin' },
-      });
+      const binInv = resolveBinInvocation(binLink);
+      const result = spawnSync(
+        binInv.command,
+        [...binInv.baseArgs, '--version'],
+        {
+          encoding: 'utf8',
+          timeout: 30_000,
+          // The launcher resolves its own package-local Bun, so it must NOT
+          // need a global Bun or Node on PATH. The constrained PATH proves
+          // this invariant: if the launcher accidentally relied on a global
+          // Bun/Node, it would fail here. On Windows, cmd.exe (in System32)
+          // must remain reachable for the .cmd wrapper.
+          env: { ...process.env, PATH: constrainedPath() },
+        },
+      );
       if (result.error) {
         throw new Error(
           `global --version spawn failed: ${result.error.message}`,
@@ -221,23 +277,20 @@ function main() {
         join(consumerDir, 'package.json'),
         JSON.stringify({ name: 'consumer', version: '0.0.0' }, null, 2),
       );
-      const installResult = spawnSync(
-        'npm',
-        [
-          'install',
-          '--cache',
-          join(tempDir, 'npm-cache-local'),
-          '--loglevel',
-          'error',
-          replicaTarball,
-        ],
-        {
-          cwd: consumerDir,
-          encoding: 'utf8',
-          timeout: 180_000,
-          maxBuffer: 64 * 1024 * 1024,
-        },
-      );
+      const { command, args } = npmInvocation([
+        'install',
+        '--cache',
+        join(tempDir, 'npm-cache-local'),
+        '--loglevel',
+        'error',
+        replicaTarball,
+      ]);
+      const installResult = spawnSync(command, args, {
+        cwd: consumerDir,
+        encoding: 'utf8',
+        timeout: 180_000,
+        maxBuffer: 64 * 1024 * 1024,
+      });
       if (installResult.error) {
         throw new Error(
           `local npm install spawn failed: ${installResult.error.message}`,
@@ -248,14 +301,20 @@ function main() {
           `local npm install failed (exit ${installResult.status}, signal=${installResult.signal ?? 'none'}): ${installResult.stderr || installResult.stdout}`,
         );
       }
-      const binLink = join(consumerDir, 'node_modules', '.bin', 'llxprt');
+      const binLink = resolveLocalBin(consumerDir);
       assert(existsSync(binLink), `local bin link not found: ${binLink}`);
-      const result = spawnSync(binLink, ['--version'], {
-        encoding: 'utf8',
-        timeout: 30_000,
-        cwd: consumerDir,
-        env: { ...process.env, PATH: '/usr/bin:/bin' },
-      });
+      const binInv = resolveBinInvocation(binLink);
+      const result = spawnSync(
+        binInv.command,
+        [...binInv.baseArgs, '--version'],
+        {
+          encoding: 'utf8',
+          timeout: 30_000,
+          cwd: consumerDir,
+          // Constrained PATH proves the launcher needs no global Bun/Node.
+          env: { ...process.env, PATH: constrainedPath() },
+        },
+      );
       if (result.error) {
         throw new Error(
           `local --version spawn failed: ${result.error.message}`,
@@ -288,17 +347,21 @@ function main() {
         JSON.stringify({ name: 'clean-consumer', version: '0.0.0' }, null, 2),
       );
       const npmCache = join(tempDir, 'npm-exec-cache');
-      const result = spawnSync(
-        'npm',
-        ['exec', '--package', replicaTarball, '--', 'llxprt', '--version'],
-        {
-          cwd: cleanDir,
-          encoding: 'utf8',
-          timeout: 300_000,
-          maxBuffer: 64 * 1024 * 1024,
-          env: { ...process.env, npm_config_cache: npmCache },
-        },
-      );
+      const { command, args } = npmInvocation([
+        'exec',
+        '--package',
+        replicaTarball,
+        '--',
+        'llxprt',
+        '--version',
+      ]);
+      const result = spawnSync(command, args, {
+        cwd: cleanDir,
+        encoding: 'utf8',
+        timeout: 300_000,
+        maxBuffer: 64 * 1024 * 1024,
+        env: { ...process.env, npm_config_cache: npmCache },
+      });
       if (result.error) {
         throw new Error(`npm exec spawn failed: ${result.error.message}`);
       }

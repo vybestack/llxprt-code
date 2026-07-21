@@ -141,10 +141,7 @@ describe('installNativeLaunchers logging', () => {
       const dotBin = join(tempDir, 'node_modules', '.bin');
       mkdirSync(dotBin, { recursive: true });
       const foreignCmd = join(dotBin, 'llxprt.cmd');
-      writeFileSync(
-        foreignCmd,
-        '@echo off' + String.fromCharCode(10) + 'echo someone else',
-      );
+      writeFileSync(foreignCmd, '@echo off\necho someone else');
       const messages: string[] = [];
       mod.installNativeLaunchers({
         platform: 'win32',
@@ -153,7 +150,7 @@ describe('installNativeLaunchers logging', () => {
         log: (msg: string) => messages.push(msg),
       });
       const skipMsg = messages.find((m) => m.includes(foreignCmd));
-      expect(skipMsg, messages.join(String.fromCharCode(10))).toBeDefined();
+      expect(skipMsg, messages.join('\n')).toBeDefined();
       expect(skipMsg).toMatch(/Skipped foreign/i);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -194,7 +191,7 @@ describe('installNativeLaunchers logging', () => {
       const wroteMsg = messages.find((m) =>
         /Wrote \d+ native launcher/.test(m),
       );
-      expect(wroteMsg, messages.join(String.fromCharCode(10))).toBeDefined();
+      expect(wroteMsg, messages.join('\n')).toBeDefined();
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

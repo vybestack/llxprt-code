@@ -41,9 +41,10 @@ const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 const entry = join(repoRoot, 'packages', 'cli', 'index.ts');
 
 /**
- * Cross-platform Bun discovery. On Windows, `which` does not exist; use `where`
- * instead. On POSIX, `which` is used. In both cases a spawn error (ENOENT for
- * the discovery tool itself) is surfaced as a clear diagnostic.
+ * Cross-platform Bun discovery. The bun npm package installs bun at
+ * node_modules/bun/bin/bun.exe on all platforms (Windows, macOS, Linux) —
+ * the .exe suffix is part of the filename regardless of OS. On POSIX,
+ * .bun/bin/bun is also checked as a fallback for alternate installers.
  */
 function resolveBun() {
   if (existsSync(repoBun)) return repoBun;
@@ -61,7 +62,7 @@ function resolveBun() {
         'Ensure Bun is installed and on PATH.',
     );
   }
-  const found = r.stdout.trim().split(String.fromCharCode(10))[0];
+  const found = r.stdout.trim().split('\n')[0];
   if (!found) {
     throw new Error(`'${tool} bun' produced no output.`);
   }
@@ -70,10 +71,13 @@ function resolveBun() {
 
 function timeDirectLauncher() {
   // The production launcher: resolves package-local Bun and execs the entry.
+  // Use stdio 'inherit' to match the relay baseline so the comparison
+  // measures startup overhead, not I/O plumbing differences.
   const r = spawnSync(launcher, ['--version'], {
     cwd: repoRoot,
     encoding: 'utf8',
     timeout: 30_000,
+    stdio: 'inherit',
     env: { ...process.env },
   });
   if (r.error) {
