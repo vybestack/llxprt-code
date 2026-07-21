@@ -169,6 +169,30 @@ function expectGeneratedBytesExcludePath(bytes: string, path: string): void {
 }
 
 describe('CLI launcher generation', () => {
+  it('rejects direct Node invocation before parsing generator options', () => {
+    const result = spawnSync(process.execPath, [generatorPath, '--source='], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: SPAWN_TIMEOUT_MS,
+    });
+    const diagnostics = spawnDiagnostics(result);
+
+    expect(result.error, diagnostics).toBeUndefined();
+    expect(result.status, diagnostics).not.toBe(0);
+    expect(result.stderr, diagnostics).toContain(
+      'CLI launcher generation requires the Bun runtime',
+    );
+    expect(result.stderr, diagnostics).toContain(
+      '`npm run generate:cli-launcher`',
+    );
+    expect(result.stderr, diagnostics).not.toContain(
+      '--source requires a path',
+    );
+    expect(result.stderr, diagnostics).not.toContain(
+      'Failed to build CLI launcher',
+    );
+  });
+
   it(
     'uses a quoted BUN_PATH candidate without falling back to the repository Bun',
     () => {
@@ -308,11 +332,19 @@ describe('CLI launcher generation', () => {
   );
 
   it.each([
-    ['--source=ignored', '--source=', '--source requires a path'],
-    ['--output=ignored', '--output=', '--output requires a path'],
+    {
+      earlierOption: '--source=ignored',
+      finalOption: '--source=',
+      diagnostic: '--source requires a path',
+    },
+    {
+      earlierOption: '--output=ignored',
+      finalOption: '--output=',
+      diagnostic: '--output requires a path',
+    },
   ])(
-    'rejects a final empty equals-separated %s path',
-    (earlierOption, finalOption, diagnostic) => {
+    'rejects the final empty equals-separated option $finalOption',
+    ({ earlierOption, finalOption, diagnostic }) => {
       const result = runGenerator(['--check', earlierOption, finalOption]);
       const diagnostics = spawnDiagnostics(result);
 

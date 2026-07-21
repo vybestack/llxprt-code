@@ -222,6 +222,12 @@ async function writeLauncher(
 }
 
 async function main(): Promise<void> {
+  if (typeof Bun === 'undefined') {
+    throw new Error(
+      'CLI launcher generation requires the Bun runtime. Run `npm run generate:cli-launcher` instead of invoking this script with Node.',
+    );
+  }
+
   const options = parseOptions(process.argv.slice(2));
   const generated = await buildLauncher(options.source, options.output);
 
