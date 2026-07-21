@@ -409,7 +409,7 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
   },
   {
     key: 'stream-first-response-timeout-ms',
-    // Mirrors stream-idle-timeout-ms: the alias keeps the camelCase form a
+    // Mirrors stream-idle-timeout-ms: the alias keeps the camelCase form as a
     // recognized CLI setting so it is not leaked into API request bodies
     // (modelParams). @issue #2607
     aliases: ['streamFirstResponseTimeoutMs'],

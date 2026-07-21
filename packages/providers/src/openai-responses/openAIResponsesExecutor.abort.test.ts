@@ -131,10 +131,7 @@ async function drain(
   return messages;
 }
 
-/**
- * Safe predicate checking that a thrown value is an Error whose `name` matches
- * the expected value, without relying on `instanceof` cross-realm pitfalls.
- */
+/** Checks that a thrown Error has the expected name. */
 function isNamedError(value: unknown, expectedName: string): boolean {
   return value instanceof Error && value.name === expectedName;
 }

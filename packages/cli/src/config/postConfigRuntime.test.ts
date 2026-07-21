@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
   LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
   LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
   resolveStreamFirstResponseTimeoutMs,
@@ -415,7 +416,9 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
     expect(
       config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
     ).toBeUndefined();
-    expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(300_000);
+    expect(resolveStreamFirstResponseTimeoutMs(config)).toBe(
+      DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
+    );
     expect(resolveStreamFirstResponseTimeoutMsSource(config).source).toBe(
       'default',
     );
@@ -425,11 +428,11 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
     const config = createCapturingConfig();
 
     applyStreamFirstResponseTimeoutSettings(config, {
-      streamFirstResponseTimeoutMs: 300_000,
+      streamFirstResponseTimeoutMs: DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     });
 
     expect(config.getEphemeralSetting('streamFirstResponseTimeoutMs')).toBe(
-      300_000,
+      DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     );
     expect(resolveStreamFirstResponseTimeoutMsSource(config).source).toBe(
       'streamFirstResponseTimeoutMs',
@@ -482,11 +485,12 @@ describe('applyStreamFirstResponseTimeoutSettings — default-source provenance 
   it('preserves an explicit canonical value equal to the built-in fallback', () => {
     const config = createCapturingConfig();
     applyStreamFirstResponseTimeoutSettings(config, {
-      'stream-first-response-timeout-ms': 300_000,
+      'stream-first-response-timeout-ms':
+        DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     });
 
     expect(config.getEphemeralSetting('stream-first-response-timeout-ms')).toBe(
-      300_000,
+      DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
     );
     expect(resolveStreamFirstResponseTimeoutMsSource(config).source).toBe(
       'stream-first-response-timeout-ms',

@@ -11,10 +11,10 @@
  * (streamFirstResponseTimeoutMs, streamIdleTimeoutMs) are wired into runtime
  * Config ephemerals through the public createAgent path.
  *
- * These tests build a REAL public Agent over a REAL FakeProvider and assert on
- * PUBLIC runtime behavior via the Agent's Config — they do NOT assert on private
- * adapter implementation calls. The camelCase typed API keys are used so
- * diagnostics report the actual source field the caller set.
+ * These integration tests build a real public Agent over a FakeProvider, then
+ * inspect its internal Config to verify the typed-to-runtime wiring without
+ * asserting on adapter implementation calls. The camelCase typed API keys are
+ * used so diagnostics report the actual source field the caller set.
  */
 
 import { describe, it, expect } from 'vitest';

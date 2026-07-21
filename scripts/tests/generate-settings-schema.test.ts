@@ -20,7 +20,7 @@ import {
   buildMarkdownDescription,
   resolveDocumentedDefault,
 } from '../generate-settings-schema.js';
-import type { SettingDefinition } from '../packages/cli/src/config/settingsSchema.js';
+import type { SettingDefinition } from '../../packages/cli/src/config/settingsSchema.js';
 
 function numberSetting(
   overrides: Partial<SettingDefinition> = {},

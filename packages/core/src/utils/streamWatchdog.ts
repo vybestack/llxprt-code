@@ -78,7 +78,7 @@ interface WatchdogState {
 }
 
 function createState(
-  firstResponseTimer: AbortController,
+  firstResponseTimer: AbortController | undefined,
   opts: StreamWatchdogOptions,
 ): WatchdogState {
   let phaseBTimer: AbortController | undefined;
@@ -133,7 +133,7 @@ function createState(
     if (livenessDisarmed) return;
     livenessDisarmed = true;
     phaseAArmed = false;
-    firstResponseTimer.abort();
+    firstResponseTimer?.abort();
   };
 
   const cancel = (): void => {
@@ -141,7 +141,7 @@ function createState(
     settled = true;
     phaseAArmed = false;
     phaseBArmed = false;
-    firstResponseTimer.abort();
+    firstResponseTimer?.abort();
     phaseBTimer?.abort();
   };
 
@@ -165,10 +165,11 @@ export function createStreamWatchdog(
     return createDisabledWatchdog();
   }
 
-  const phaseATimer = new AbortController();
+  const phaseATimer =
+    opts.firstResponseMs > 0 ? new AbortController() : undefined;
   const state = createState(phaseATimer, opts);
 
-  if (opts.firstResponseMs > 0) {
+  if (phaseATimer !== undefined) {
     delay(opts.firstResponseMs, phaseATimer.signal).then(
       () =>
         state.fireGuard(

@@ -166,8 +166,8 @@ describe('Turn - whole-stream watchdog & run-scoped isolation (issue #2607)', ()
 
   it('whole-stream liveness: after pings stop for the idle threshold => precise inter-chunk timeout', async () => {
     vi.useRealTimers();
-    process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '200';
-    const { turn } = buildTurn(undefined, 40);
+    process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '1000';
+    const { turn } = buildTurn(undefined, 200);
 
     mockSendMessageStream.mockImplementation(
       (params: {

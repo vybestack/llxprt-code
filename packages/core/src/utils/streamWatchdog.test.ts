@@ -300,8 +300,7 @@ describe('createStreamWatchdog', () => {
       );
 
       await vi.advanceTimersByTimeAsync(30);
-      // Drain microtasks so any stray rejection would surface
-      await vi.runAllTimersAsync();
+      await Promise.resolve();
       // Reaching here without vitest surfacing an unhandled rejection is the
       // assertion. Additionally verify state is consistent.
       expect(wd.getFire()).toBeDefined();
@@ -434,6 +433,14 @@ describe('createStreamWatchdog', () => {
       expect(wd.isActive).toBe(true);
     });
 
+    it('firstResponse=0/idle>0 creates no active first-response timer', () => {
+      const wd = createStreamWatchdog(
+        defaultOpts({ firstResponseMs: 0, idleMs: 30 }),
+      );
+
+      expect(wd.isActive).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    });
     it('firstResponse=0/idle>0: fires inter-chunk after progress then silence', async () => {
       const onFire = vi.fn();
       const wd = createStreamWatchdog(

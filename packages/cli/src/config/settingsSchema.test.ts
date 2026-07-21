@@ -104,6 +104,7 @@ describe('SettingsSchema', () => {
         'allowPtyThemeOverride',
         'ptyScrollbackLimit',
         'streamIdleTimeoutMs',
+        'streamFirstResponseTimeoutMs',
       ];
 
       expectedSettings.forEach((setting) => {

@@ -57,6 +57,10 @@ describe('safeJsonStringify', () => {
     const parsed = JSON.parse(result) as Record<string, unknown>;
     expect(Object.keys(parsed)).toStrictEqual(['a', 'b']);
   });
+
+  it('serializes BigInt values as JSON strings', () => {
+    expect(safeJsonStringify(1n)).toBe('"1"');
+  });
 });
 
 describe('isAbortSignalActive', () => {
