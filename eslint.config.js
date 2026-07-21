@@ -681,7 +681,7 @@ export default tseslint.config(
       // --- General code quality ---
       curly: ['error', 'multi-line'],
       eqeqeq: ['error', 'always', { null: 'ignore' }],
-      'no-console': 'off', // evals legitimately log to stdout
+      'no-console': 'off', // eslint-policy-allow-off: evals legitimately log to stdout
       'no-var': 'error',
       'object-shorthand': 'error',
       'prefer-arrow-callback': 'error',
