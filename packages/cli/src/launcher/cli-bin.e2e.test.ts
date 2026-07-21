@@ -19,6 +19,7 @@ const childReportSchema = z.object({
 type ChildReport = z.infer<typeof childReportSchema>;
 
 const SUBPROCESS_TIMEOUT_MS = 15_000;
+const UNSAFE_CMD_ARGUMENT_EXIT_CODE = 43;
 
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
@@ -560,7 +561,7 @@ describe('cli bin Windows native Bun resolution', () => {
         true,
       );
 
-      expect(result.code).toBe(43);
+      expect(result.code).toBe(UNSAFE_CMD_ARGUMENT_EXIT_CODE);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain(
         'Cannot safely forward arguments containing Windows command-shell metacharacters',

@@ -273,6 +273,54 @@ describe('CLI launcher generation', () => {
   );
 
   it(
+    'uses the final repeated equals-separated source and output paths',
+    () => {
+      const tempDir = mkdtempSync(
+        join(tmpdir(), 'cli-launcher-equals-source-'),
+      );
+      const source = copyEquivalentLauncherSource(join(tempDir, 'source'));
+      const output = join(tempDir, 'output', 'llxprt.cjs');
+      const sourceMarker = 'LLXPRT_EQUALS_SOURCE_OPTION';
+
+      try {
+        writeFileSync(
+          source,
+          readFileSync(source, 'utf8').replace(
+            'LLXPRT_BUN_RELAUNCHED',
+            sourceMarker,
+          ),
+        );
+        const result = runGenerator([
+          '--source=',
+          `--source=${source}`,
+          '--output=',
+          `--output=${output}`,
+        ]);
+
+        expectSpawnSuccess(result);
+        expect(readFileSync(output, 'utf8')).toContain(sourceMarker);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+    SPAWN_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    ['--source=ignored', '--source=', '--source requires a path'],
+    ['--output=ignored', '--output=', '--output requires a path'],
+  ])(
+    'rejects a final empty equals-separated %s path',
+    (earlierOption, finalOption, diagnostic) => {
+      const result = runGenerator(['--check', earlierOption, finalOption]);
+      const diagnostics = spawnDiagnostics(result);
+
+      expect(result.status, diagnostics).not.toBe(0);
+      expect(result.stderr, diagnostics).toContain(diagnostic);
+    },
+  );
+
+  it(
     'identifies the target path when the generated launcher cannot be written',
     () => {
       const tempDir = mkdtempSync(join(tmpdir(), 'cli-launcher-write-error-'));

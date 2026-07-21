@@ -44,14 +44,16 @@ function binCandidatesForPlatform(platform: string): readonly string[] {
  * Direct dependency executable names under node_modules/bun/bin.
  *
  * The published "bun" npm package maps its "bun" bin entry to "bin/bun.exe"
- * on every platform (see node_modules/bun/package.json), so the real native
- * executable is always named bun.exe. On Windows we additionally tolerate a
- * bun.cmd wrapper for robustness, though the canonical path is bun.exe.
+ * on every platform (see node_modules/bun/package.json), making bun.exe the
+ * canonical candidate and the first one probed. POSIX additionally accepts
+ * bare bun as a compatibility fallback for layouts that retain the platform
+ * package's original executable name. Windows likewise tolerates bun.cmd as a
+ * wrapper fallback.
  */
 function directDependencyCandidatesForPlatform(
   platform: string,
 ): readonly string[] {
-  return platform === 'win32' ? ['bun.exe', 'bun.cmd'] : ['bun.exe'];
+  return platform === 'win32' ? ['bun.exe', 'bun.cmd'] : ['bun.exe', 'bun'];
 }
 
 /**
@@ -79,12 +81,15 @@ async function resolveFromNodeModules(
   const depCandidates = directDependencyCandidatesForPlatform(platform);
 
   for (const dir of ancestorDirs(moduleDir)) {
+    // Prefer the package-manager .bin entry before direct-package fallbacks.
     for (const candidate of binCandidates) {
       const candidatePath = join(dir, 'node_modules', '.bin', candidate);
       if (await pathChecker(candidatePath)) {
         return candidatePath;
       }
     }
+    // Some pnpm or partial layouts retain the direct package executable but
+    // omit its .bin entry.
     for (const candidate of depCandidates) {
       const candidatePath = join(dir, 'node_modules', 'bun', 'bin', candidate);
       if (await pathChecker(candidatePath)) {
@@ -242,6 +247,7 @@ type PathCommandResult =
 
 function spawnPathCommand(tool: string, args: string[]): ChildProcess | null {
   try {
+    // Execute the lookup tool directly so a shell cannot reinterpret arguments.
     return spawn(tool, args, {
       stdio: ['ignore', 'pipe', 'ignore'],
       ...(process.platform === 'win32' ? { windowsHide: true } : {}),

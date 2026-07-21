@@ -92,6 +92,16 @@ function optionValue(
   args: readonly string[],
   name: string,
 ): string | undefined {
+  const equalsPrefix = `${name}=`;
+  const equalsArgument = args.findLast((arg) => arg.startsWith(equalsPrefix));
+  if (equalsArgument !== undefined) {
+    const value = equalsArgument.slice(equalsPrefix.length);
+    if (value.length === 0) {
+      throw new Error(`${name} requires a path`);
+    }
+    return resolve(repoRoot, value);
+  }
+
   const index = args.indexOf(name);
   if (index === -1) {
     return undefined;

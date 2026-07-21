@@ -429,6 +429,44 @@ describe('resolveBunPath', () => {
       );
     });
 
+    it('POSIX: accepts a bare direct dependency executable when bun.exe is absent', async () => {
+      const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun');
+      const pathChecker = vi.fn(async (target: string) => target === native);
+
+      const result = await resolveBunPath({
+        platform: 'linux',
+        moduleDir: virtualModuleDir,
+        pathChecker,
+        pathCommand: vi.fn(async () => null),
+      });
+
+      expect(result).toBe(native);
+    });
+
+    it('POSIX: prefers direct bun.exe over bare bun and PATH', async () => {
+      const executable = join(
+        virtualRoot,
+        'node_modules',
+        'bun',
+        'bin',
+        'bun.exe',
+      );
+      const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun');
+      const pathChecker = vi.fn(
+        async (target: string) => target === executable || target === native,
+      );
+      const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
+
+      const result = await resolveBunPath({
+        platform: 'linux',
+        moduleDir: virtualModuleDir,
+        pathChecker,
+        pathCommand,
+      });
+
+      expect(result).toBe(executable);
+    });
+
     it('POSIX: .bin still wins over direct dependency and PATH', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>

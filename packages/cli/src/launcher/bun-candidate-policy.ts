@@ -17,6 +17,8 @@ export interface WindowsBunCandidate {
   readonly kind: WindowsBunCandidateKind;
 }
 
+// Package-local native executables are deterministic and preserve argv without
+// a shell. PATH-native Bun follows, while command wrappers remain a last resort.
 const WINDOWS_BUN_CANDIDATE_PRIORITY: Readonly<
   Record<WindowsBunCandidateKind, number>
 > = {

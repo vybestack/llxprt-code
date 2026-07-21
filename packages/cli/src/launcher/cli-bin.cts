@@ -27,7 +27,7 @@ const SIGHUP_SELF_EXIT_DELAY_MS = 5_000;
 const ORPHAN_CHECK_INTERVAL_MS = 10_000;
 const SIGHUP_EXIT_CODE = 129;
 const SIGNAL_EXIT_CODES: Readonly<Partial<Record<NodeJS.Signals, number>>> = {
-  SIGHUP: 129,
+  SIGHUP: SIGHUP_EXIT_CODE,
   SIGINT: 130,
   SIGQUIT: 131,
   SIGILL: 132,
@@ -148,6 +148,8 @@ function bunNames(): readonly string[] {
 }
 
 function directBunNames(): readonly string[] {
+  // The npm package installs bun.exe, while the bare name supports layouts
+  // that retain the platform package's original POSIX executable name.
   return ['bun.exe', 'bun'];
 }
 
@@ -180,6 +182,7 @@ function pathLookupTool(): string {
 }
 
 function pathCandidates(): readonly string[] {
+  // Execute where.exe/which directly so a shell cannot reinterpret arguments.
   const result = spawnSync(pathLookupTool(), ['bun'], {
     encoding: 'utf8',
     windowsHide: true,
