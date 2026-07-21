@@ -232,6 +232,176 @@ function inspectProcessTreeSync(rootPid) {
   return { bunPresent, nodePresent, descendants };
 }
 
+/**
+ * Maximum number of ancestry hops to walk from the probe PID back to the
+ * spawned launcher root before declaring an explicit failure. Bounds the
+ * traversal so a pathological cycle is rejected rather than looping forever.
+ * Accounts for intermediary processes (cmd/pwsh launchers, conhost) but
+ * stops at the launcher root — it does NOT walk beyond the root because the
+ * test harness itself is a Node process.
+ */
+const MAX_ANCESTRY_HOPS = 32;
+
+/**
+ * Pure validation of a bounded ancestry chain. Does not perform any I/O; it
+ * inspects an in-memory snapshot of the chain walked from the probe PID
+ * toward the root and asserts the required invariants.
+ *
+ * Invariants enforced:
+ *   - rootReached: the chain must terminate at (include) the root PID.
+ *   - bunExpected: the chain must include at least one Bun process name.
+ *   - nodeRejected: the chain must NOT include any node.exe process (the
+ *     launcher must hand off directly to bundled bun.exe, never node).
+ *
+ * Each entry is { pid, ppid, name }. The first entry is the probe PID (the
+ * Bun process that reported the payload); subsequent entries are its
+ * ancestors walked toward root, up to and including rootPid.
+ *
+ * @param {Array<{pid: number, ppid: number, name: string}>} chain - ancestry
+ *   chain entries, oldest ancestor last (rootPid is the last entry when
+ *   rootReached is true).
+ * @param {number} rootPid - the PID the launcher was spawned with.
+ * @returns {{ ok: true, chain: Array<{pid: number, ppid: number, name: string}> }}
+ * @throws {Error} with a descriptive message when any invariant fails.
+ */
+function validateProcessLineage(chain, rootPid) {
+  if (!Array.isArray(chain) || chain.length === 0) {
+    throw new Error('validateProcessLineage: empty chain');
+  }
+  const rootEntry = chain[chain.length - 1];
+  const rootReached = rootEntry.pid === rootPid;
+  const names = chain.map((e) => String(e.name || '').toLowerCase());
+  const bunPresent = names.some((n) => n === 'bun.exe' || n === 'bun');
+  const nodePresent = names.some((n) => n === 'node.exe' || n === 'node');
+  if (!rootReached) {
+    throw new Error(
+      `lineage root not reached: last ancestor pid=${rootEntry.pid} (name=${rootEntry.name}), expected root pid=${rootPid}`,
+    );
+  }
+  if (!bunPresent) {
+    throw new Error(
+      `lineage missing bundled bun: no bun.exe/bun in chain ${JSON.stringify(chain)}`,
+    );
+  }
+  if (nodePresent) {
+    throw new Error(
+      `lineage contains node.exe (must be absent): ${JSON.stringify(chain)}`,
+    );
+  }
+  return { ok: true, chain };
+}
+
+/**
+ * Synchronously queries a single process snapshot by PID from CIM via
+ * PowerShell, returning { pid, ppid, name } or null when the PID is no
+ * longer alive. Used as the primitive for the bounded ancestry walk.
+ *
+ * @param {number} pid
+ * @param {{ resolvePwsh?: () => string, spawnSync?: typeof import('node:child_process').spawnSync, timeout?: number }} [options]
+ * @returns {{pid: number, ppid: number, name: string} | null}
+ */
+function queryProcessEntry(pid, options) {
+  const _spawnSync =
+    options && typeof options.spawnSync === 'function'
+      ? options.spawnSync
+      : spawnSync;
+  const _resolvePwsh =
+    options && typeof options.resolvePwsh === 'function'
+      ? options.resolvePwsh
+      : resolvePwsh;
+  const timeout = options && options.timeout ? options.timeout : 15_000;
+  assertValidPid(pid);
+  const script =
+    `try { ` +
+    `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" -ErrorAction Stop; ` +
+    `if ($p) { ` +
+    `@{ pid = $p.ProcessId; ppid = $p.ParentProcessId; name = $p.Name } | ConvertTo-Json -Compress ` +
+    `} else { '' } ` +
+    `} catch { '' }`;
+  const r = _spawnSync(_resolvePwsh(), ['-NoProfile', '-Command', script], {
+    encoding: 'utf8',
+    timeout,
+    windowsHide: true,
+  });
+  if (r.error || r.signal || r.status !== 0) {
+    return null;
+  }
+  const raw = (r.stdout || '').trim();
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    const entryPid = Number(obj.pid);
+    const entryPpid = Number(obj.ppid);
+    const name = String(obj.name || '');
+    if (!Number.isInteger(entryPid) || !Number.isInteger(entryPpid)) {
+      return null;
+    }
+    return { pid: entryPid, ppid: entryPpid, name };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Walks the process ancestry from the probe-reported PID upward toward the
+ * spawned launcher root (rootPid), building a bounded chain. Stops when the
+ * root PID is reached or when MAX_ANCESTRY_HOPS is exceeded (explicit
+ * failure). Does NOT walk beyond the root because the test harness is a Node
+ * process.
+ *
+ * Uses single-PID CIM queries so the walk is deterministic: each hop queries
+ * one process rather than racing a descendants snapshot that can miss a
+ * process that has just exited.
+ *
+ * @param {number} probePid - PID reported by the probe payload (the Bun
+ *   process that ran index.ts).
+ * @param {number} rootPid - PID of the spawned launcher root (child.pid).
+ * @param {{ queryProcessEntry?: typeof queryProcessEntry }} [options]
+ * @returns {Array<{pid: number, ppid: number, name: string}>}
+ * @throws {Error} when a query fails before reaching root or the hop budget
+ *   is exhausted without reaching root.
+ */
+function walkProcessLineage(probePid, rootPid, options) {
+  const query =
+    options && typeof options.queryProcessEntry === 'function'
+      ? options.queryProcessEntry
+      : queryProcessEntry;
+  assertValidPid(probePid);
+  assertValidPid(rootPid);
+  const chain = [];
+  let current = probePid;
+  let hops = 0;
+  const visited = new Set();
+  while (hops <= MAX_ANCESTRY_HOPS) {
+    if (visited.has(current)) {
+      throw new Error(
+        `walkProcessLineage: cycle detected at pid=${current} before reaching root=${rootPid}`,
+      );
+    }
+    visited.add(current);
+    const entry = query(current);
+    if (!entry) {
+      throw new Error(
+        `walkProcessLineage: could not query pid=${current} (hop ${hops}) before reaching root=${rootPid}`,
+      );
+    }
+    chain.push(entry);
+    if (entry.pid === rootPid) {
+      return chain;
+    }
+    current = entry.ppid;
+    if (!Number.isInteger(current) || current <= 0) {
+      throw new Error(
+        `walkProcessLineage: invalid ppid=${current} at pid=${entry.pid} before reaching root=${rootPid}`,
+      );
+    }
+    hops++;
+  }
+  throw new Error(
+    `walkProcessLineage: exceeded ${MAX_ANCESTRY_HOPS} hops without reaching root=${rootPid}`,
+  );
+}
+
 module.exports = {
   waitForReady,
   killProcessTree,
@@ -239,4 +409,8 @@ module.exports = {
   spawn,
   assertValidPid,
   MAX_LEVELS,
+  validateProcessLineage,
+  walkProcessLineage,
+  queryProcessEntry,
+  MAX_ANCESTRY_HOPS,
 };

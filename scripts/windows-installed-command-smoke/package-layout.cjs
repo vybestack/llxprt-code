@@ -5,7 +5,7 @@
  * global prefix, locate the bundled bun.exe, and build a TEMP probe fixture.
  */
 
-const { existsSync, rmSync, cpSync } = require('node:fs');
+const { existsSync, rmSync, cpSync, realpathSync } = require('node:fs');
 const { join } = require('node:path');
 
 function findInstalledPackageRoot(prefix) {
@@ -38,9 +38,38 @@ function findBundledBun(packageRoot) {
   throw new Error(`bundled bun.exe not found under ${packageRoot}`);
 }
 
-function samePath(a, b) {
+/**
+ * Compares two filesystem paths for equality after canonicalization.
+ *
+ * Canonicalization uses realpathSync.native to resolve 8.3 short paths,
+ * symlinks, and junctions to their canonical long form. If the path does not
+ * exist (or realpath fails), the original path is preserved so that
+ * missing-path comparisons remain useful for diagnostics.
+ *
+ * After realpath, backslashes are normalized to forward slashes, trailing
+ * slashes are stripped, and the comparison is case-insensitive (Windows
+ * filesystem semantics).
+ *
+ * @param {string} a - first path.
+ * @param {string} b - second path.
+ * @param {{ realpathSync?: (p: string) => string }} [options] - injection
+ *   seam for deterministic testing. When omitted, the native realpathSync is
+ *   used, which requires paths to exist on the host filesystem.
+ * @returns {boolean} true if both paths canonicalize to the same value.
+ */
+function samePath(a, b, options) {
+  const realpath =
+    options && typeof options.realpathSync === 'function'
+      ? options.realpathSync
+      : realpathSync.native;
   const norm = (p) => {
-    let s = String(p).replace(/\\/g, '/');
+    let resolved = String(p);
+    try {
+      resolved = realpath(resolved);
+    } catch {
+      // Preserve the original path so missing-path comparisons remain useful.
+    }
+    let s = resolved.replace(/\\/g, '/');
     while (s.endsWith('/')) {
       s = s.slice(0, -1);
     }

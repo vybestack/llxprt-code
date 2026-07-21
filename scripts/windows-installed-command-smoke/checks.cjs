@@ -33,13 +33,15 @@ const {
   parseProbeOutput,
   invokeCmd,
   invokePwsh,
+  spawnCmdLongRunning,
 } = require('./launcher-invocation.cjs');
 const { findBundledBun, samePath, copyTree } = require('./package-layout.cjs');
 const {
-  inspectProcessTreeSync,
   waitForReady,
   killProcessTree,
   spawn,
+  walkProcessLineage,
+  validateProcessLineage,
 } = require('./process-helpers.cjs');
 const { resolvePwsh } = require('./pwsh-resolver.cjs');
 const { assertBundledBunHealthy } = require('./bun-validation.cjs');
@@ -427,24 +429,32 @@ async function checkProcessTreeNoNode(fixture) {
     'cmd-process-tree-bun-present-node-absent',
     async () => {
       const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
-      const child = spawn('cmd', ['/c', cmdPath, probeArg({ long: true })], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, PATH: CONSTRAINED_PATH },
-        windowsHide: true,
+      // Reuse the same cmd.exe /d /s /c direct invocation as invokeCmd so the
+      // long-running probe exercises the identical direct cmd spawn path
+      // (windowsVerbatimArguments + cmdInvocationArgs).
+      const child = spawnCmdLongRunning(cmdPath, [probeArg({ long: true })], {
+        env: { PATH: CONSTRAINED_PATH },
       });
       try {
         // Async readiness polling yields to the event loop so stdout event
         // handlers fire between checks.
-        await waitForReady(child, '__LLXPRT_PROBE_LONG_RUNNING__', 12_000);
-        const treeInfo = inspectProcessTreeSync(child.pid);
-        assert(
-          treeInfo.bunPresent,
-          `cmd bun.exe not found in launcher child tree. descendants=${JSON.stringify(treeInfo.descendants)}`,
+        const readyOut = await waitForReady(
+          child,
+          '__LLXPRT_PROBE_LONG_RUNNING__',
+          12_000,
         );
+        // The probe payload precedes the readiness marker. Parse it to obtain
+        // the Bun process's own pid/ppid so we can walk a deterministic
+        // ancestry chain rather than racing a descendants snapshot.
+        const payload = parseProbeOutput(readyOut);
+        const probePid = payload.pid;
         assert(
-          !treeInfo.nodePresent,
-          `cmd node.exe found in launcher child tree (must be absent). descendants=${JSON.stringify(treeInfo.descendants)}`,
+          Number.isInteger(probePid),
+          `cmd probe payload missing integer pid: ${JSON.stringify(payload)}`,
         );
+        const chain = walkProcessLineage(probePid, child.pid);
+        const result = validateProcessLineage(chain, child.pid);
+        assert(result.ok, `cmd lineage validation failed unexpectedly`);
       } finally {
         // Terminate the entire process tree (taskkill /T /F on Windows), not
         // just the direct child, so bun.exe descendants are reaped.
@@ -476,16 +486,20 @@ async function checkProcessTreeNoNode(fixture) {
         },
       );
       try {
-        await waitForReady(child, '__LLXPRT_PROBE_LONG_RUNNING__', 12_000);
-        const treeInfo = inspectProcessTreeSync(child.pid);
-        assert(
-          treeInfo.bunPresent,
-          `ps1 bun.exe not found in launcher child tree. descendants=${JSON.stringify(treeInfo.descendants)}`,
+        const readyOut = await waitForReady(
+          child,
+          '__LLXPRT_PROBE_LONG_RUNNING__',
+          12_000,
         );
+        const payload = parseProbeOutput(readyOut);
+        const probePid = payload.pid;
         assert(
-          !treeInfo.nodePresent,
-          `ps1 node.exe found in launcher child tree (must be absent). descendants=${JSON.stringify(treeInfo.descendants)}`,
+          Number.isInteger(probePid),
+          `ps1 probe payload missing integer pid: ${JSON.stringify(payload)}`,
         );
+        const chain = walkProcessLineage(probePid, child.pid);
+        const result = validateProcessLineage(chain, child.pid);
+        assert(result.ok, `ps1 lineage validation failed unexpectedly`);
       } finally {
         killProcessTree(child);
       }

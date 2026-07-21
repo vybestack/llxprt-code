@@ -32,7 +32,7 @@
  *   harness works on the actual runner image.
  */
 
-const { spawnSync } = require('node:child_process');
+const { spawnSync, spawn } = require('node:child_process');
 const { CONSTRAINED_PATH } = require('./constants.cjs');
 const { resolvePwsh } = require('./pwsh-resolver.cjs');
 
@@ -130,25 +130,20 @@ function powershellInvocationScript(launcherPath, args) {
   ].join('; ');
 }
 
+function cmdInvocationArgs(cmdPath, args) {
+  const command = [cmdQuote(cmdPath), ...args.map(cmdQuote)].join(' ');
+  return ['/d', '/s', '/c', `"${command}"`];
+}
+
 function invokeCmd(cmdPath, args, opts) {
-  const pwshExe = resolvePwsh();
-  const script = powershellInvocationScript(cmdPath, args);
-  const r = spawnSync(
-    pwshExe,
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-EncodedCommand',
-      powershellEncodedCommand(script),
-    ],
-    {
-      encoding: 'utf8',
-      timeout: opts?.timeout ?? 30_000,
-      input: opts?.input,
-      env: { ...process.env, PATH: CONSTRAINED_PATH, ...(opts?.env || {}) },
-      windowsHide: true,
-    },
-  );
+  const r = spawnSync('cmd.exe', cmdInvocationArgs(cmdPath, args), {
+    encoding: 'utf8',
+    timeout: opts?.timeout ?? 30_000,
+    input: opts?.input,
+    env: { ...process.env, PATH: CONSTRAINED_PATH, ...(opts?.env || {}) },
+    windowsHide: true,
+    windowsVerbatimArguments: true,
+  });
   return validateSpawnResult(`invokeCmd(${cmdPath})`, r);
 }
 
@@ -174,12 +169,35 @@ function invokePwsh(ps1Path, args, opts) {
   return validateSpawnResult(`invokePwsh(${ps1Path})`, r);
 }
 
+/**
+ * Spawns the CMD launcher as a long-running child process using the same
+ * cmd.exe /d /s /c invocation and Windows verbatim quoting as invokeCmd, so
+ * long-running probes (process-tree inspection) exercise the identical direct
+ * cmd spawn path rather than the racy descendants snapshot. Returns the
+ * ChildProcess for readiness polling and tree kill.
+ *
+ * @param {string} cmdPath - absolute path to the .cmd launcher.
+ * @param {string[]} args - arguments (e.g. probeArg).
+ * @param {{ env?: Record<string, string> }} [opts]
+ * @returns {import('node:child_process').ChildProcess}
+ */
+function spawnCmdLongRunning(cmdPath, args, opts) {
+  return spawn('cmd.exe', cmdInvocationArgs(cmdPath, args), {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, PATH: CONSTRAINED_PATH, ...(opts?.env || {}) },
+    windowsHide: true,
+    windowsVerbatimArguments: true,
+  });
+}
+
 module.exports = {
   probeArg,
   parseProbeOutput,
   invokeCmd,
   invokePwsh,
+  cmdInvocationArgs,
   cmdQuote,
   pwshQuote,
   validateSpawnResult,
+  spawnCmdLongRunning,
 };

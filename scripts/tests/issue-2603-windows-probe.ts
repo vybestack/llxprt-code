@@ -108,6 +108,11 @@ async function main(): Promise<void> {
     execPath: process.execPath,
     bunVersion:
       typeof process.versions.bun === 'string' ? process.versions.bun : '',
+    // Report the Bun process's own PID and its parent PID so the harness can
+    // walk a bounded ancestry chain back to the spawned launcher root instead
+    // of relying on a racy descendants-only snapshot.
+    pid: typeof process.pid === 'number' ? process.pid : null,
+    ppid: typeof process.ppid === 'number' ? process.ppid : null,
   };
 
   // Preserve malformed raw diagnostics so the caller can see the unparseable
