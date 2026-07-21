@@ -20,10 +20,7 @@ import {
 } from '../packages/storage/src/testing/isolateStorageRoots.js';
 const { join, dirname } = path;
 
-// Handle the case where import.meta.url might be undefined in CI
-const __dirname = import.meta?.url
-  ? dirname(fileURLToPath(import.meta.url))
-  : path.resolve(process.cwd(), 'evals');
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const rootDir = join(__dirname, '..');
 const evalsDir = join(rootDir, '.evals');
@@ -96,7 +93,10 @@ export async function setup(): Promise<void> {
     // Ensure IDE detection doesn't trigger during tests
     delete process.env['TERM_PROGRAM'];
 
-    if (process.env['KEEP_OUTPUT']) {
+    if (
+      process.env['KEEP_OUTPUT'] !== undefined &&
+      process.env['KEEP_OUTPUT'] !== ''
+    ) {
       console.log(`Keeping output for eval run in: ${runDir}`);
     }
     process.env['VERBOSE'] = process.env['VERBOSE'] ?? 'false';

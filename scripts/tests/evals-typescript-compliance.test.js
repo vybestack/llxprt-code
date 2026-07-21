@@ -42,10 +42,9 @@ async function loadEvalsEslintBlock() {
 }
 
 /**
- * Resolve the global ignores from the actual ESLint config object. Flat config
- * allows a top-level `ignores` property (an object with an `ignores` string
- * array) and/or per-block ignores. Returns every ignore glob declared anywhere
- * in the config so callers can assert none matches evals/**.
+ * Resolve every `ignores` array from the actual ESLint flat-config blocks.
+ * Returns every declared ignore glob so callers can assert none matches
+ * evals/**.
  */
 async function loadEslintIgnores() {
   const url = new URL('../../eslint.config.js', import.meta.url);
@@ -163,7 +162,7 @@ describe('evals: TypeScript static compliance configuration', () => {
     ).toBe(true);
   });
 
-  it('enables type-aware promise/async ESLint rules for evals', async () => {
+  it('enables type-aware correctness ESLint rules for evals', async () => {
     const block = await loadEvalsEslintBlock();
     const rules = block.rules ?? {};
     // The evals block must enable the type-aware async/promise rules so that
@@ -176,6 +175,9 @@ describe('evals: TypeScript static compliance configuration', () => {
       true,
     );
     expect(isRuleError(rules['@typescript-eslint/await-thenable'])).toBe(true);
+    expect(
+      isRuleError(rules['@typescript-eslint/strict-boolean-expressions']),
+    ).toBe(true);
     // return-await uses the 'in-try-catch' option.
     const returnAwait = rules['@typescript-eslint/return-await'];
     expect(Array.isArray(returnAwait) && returnAwait[0] === 'error').toBe(true);

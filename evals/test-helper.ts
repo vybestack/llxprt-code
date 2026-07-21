@@ -31,7 +31,11 @@ export function evalTest(policy: EvalPolicy, evalCase: EvalCase): void {
     }
   };
 
-  if (policy === 'USUALLY_PASSES' && !process.env.RUN_EVALS) {
+  const runEvals = process.env.RUN_EVALS;
+  if (
+    policy === 'USUALLY_PASSES' &&
+    (runEvals === undefined || runEvals === '')
+  ) {
     it.skip(evalCase.name, fn);
   } else {
     it(evalCase.name, fn);

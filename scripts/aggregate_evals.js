@@ -161,7 +161,6 @@ export function aggregateReports(reports, parseReport = parseCurrentReport) {
     stats,
     errors,
     usableAssertions,
-    reports,
   };
 }
 

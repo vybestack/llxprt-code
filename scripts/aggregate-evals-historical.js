@@ -59,6 +59,8 @@ const GH_RUN_LIST_PAGE_SIZE = 100;
 // cannot loop indefinitely. 100 pages * 100 per page = 10,000 runs, far beyond
 // any plausible 7-day window.
 const GH_RUN_LIST_MAX_PAGES = 100;
+const GH_LIST_TIMEOUT_MS = 60 * 1000;
+const GH_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
@@ -69,7 +71,10 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * @type {RunSync}
  */
 function spawnSyncBound(cmd, args) {
-  const result = spawnSync(cmd, args, { encoding: 'utf-8' });
+  const result = spawnSync(cmd, args, {
+    encoding: 'utf-8',
+    timeout: GH_LIST_TIMEOUT_MS,
+  });
   return {
     status: typeof result.status === 'number' ? result.status : 1,
     stdout: typeof result.stdout === 'string' ? result.stdout : '',
@@ -415,6 +420,7 @@ function parseRunListEnvelope(stdout) {
   const src = /** @type {Record<string, unknown>} */ (parsed);
   const runs = src['workflow_runs'];
   if (!Array.isArray(runs)) {
+    console.error('Warning: workflow run envelope has no workflow_runs array');
     return empty;
   }
   /** @type {Array<{databaseId: number, createdAt: string, conclusion: string|null, headSha: string}>} */
@@ -560,6 +566,7 @@ function downloadRunWithGh(runId, dir) {
     ['run', 'download', String(runId), '-D', dir],
     {
       encoding: 'utf-8',
+      timeout: GH_DOWNLOAD_TIMEOUT_MS,
     },
   );
   return {
@@ -696,6 +703,11 @@ function processHistoricalRunBody(
   // Find all report.json files, then validate they map EXACTLY to the
   // expected attempts (no missing/duplicate/unexpected).
   const reports = findReports(tempDir);
+  if (reports.length === 0) {
+    const reason = 'no reports found in downloaded artifacts';
+    console.error(`Warning: Omitting historical run ${runId}: ${reason}`);
+    return { ...empty, reason };
+  }
   const cardinalityErrors = validateCardinality(reports, expectedAttempts);
   if (cardinalityErrors.length > 0) {
     const reason = `cardinality: ${cardinalityErrors.join('; ')}`;
@@ -734,8 +746,9 @@ function processHistoricalRunBody(
  * validates, and parses each in-window run via {@link processHistoricalRun}; a
  * run that is incomplete or malformed is OMITTED in its entirety with a warning.
  *
- * @param {(page: number) => Array<object>} [listRunsPage] - injectable run
- *   lister (defaults to the `gh` CLI); used by tests to prove pagination
+ * @param {(page: number) => (Array<object>|{runs: Array<object>, rawCount: number, totalCount: number})} [listRunsPage] -
+ *   injectable run lister (defaults to the `gh` CLI); used by tests to prove
+ *   pagination. The bare-array form is retained for test/custom-lister compatibility.
  * @param {(run: {databaseId: number|string}) => HistoricalRunResult} [processRun] -
  *   injectable per-run processor (defaults to {@link processHistoricalRun}).
  *   Tests inject a processor that throws for one run to prove loop-level

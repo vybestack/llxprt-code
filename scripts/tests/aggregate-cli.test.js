@@ -270,7 +270,7 @@ describe('aggregate_evals: AGGREGATE_EXPECTED_ATTEMPTS env failures', () => {
   it('falls back to default [1,2,3] when env value is an empty string', () => {
     // An empty AGGREGATE_EXPECTED_ATTEMPTS is the documented "not provided"
     // behavior: it must NOT fail closed (unlike a malformed-but-nonempty
-    // value), but silently fall back to the default [1,2,3].
+    // value), and must silently fall back to the default [1,2,3].
     useTempArtifactsDir((dir) => {
       writeAttempt(dir, 1);
       writeAttempt(dir, 2);

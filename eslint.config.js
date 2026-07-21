@@ -625,11 +625,8 @@ export default tseslint.config(
   // these rules catch real bugs (unhandled rejections, async functions passed
   // as non-async callbacks).
   //
-  // Deliberately NOT applied to evals (documented rationale):
-  //  - strict-boolean-expressions: the eval tsconfig is a standalone noEmit
-  //    project without the full app graph; this rule produces spurious
-  //    cross-package type errors. The other type-aware rules are stable.
-  //  - max-lines-per-function: eval case wiring uses large setup blocks.
+  // max-lines-per-function is deliberately not applied: eval case wiring uses
+  // large setup blocks. Type-aware correctness rules are applied below.
   {
     files: ['evals/**/*.{ts,tsx}'],
     languageOptions: {
@@ -677,6 +674,18 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': ['error'],
       '@typescript-eslint/no-misused-promises': ['error'],
       '@typescript-eslint/return-await': ['error', 'in-try-catch'],
+      '@typescript-eslint/strict-boolean-expressions': [
+        'error',
+        {
+          allowString: false,
+          allowNumber: false,
+          allowNullableObject: false,
+          allowNullableBoolean: false,
+          allowNullableString: false,
+          allowNullableNumber: false,
+          allowAny: false,
+        },
+      ],
 
       // --- General code quality ---
       curly: ['error', 'multi-line'],

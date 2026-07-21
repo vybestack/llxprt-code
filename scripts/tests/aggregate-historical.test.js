@@ -528,15 +528,25 @@ describe('aggregate_evals: listRunsPageWithGh parses the real workflow_runs enve
     expect(result.totalCount).toBe(0);
   });
 
-  it('returns an empty result when the envelope has no workflow_runs', async () => {
+  it('returns an empty result and warns when the envelope has no workflow_runs', async () => {
     const mod = await loadHistoricalModule();
+    const warnings = [];
+    const originalError = console.error;
+    console.error = (message) => warnings.push(String(message));
     const fakeRunner = () => ({
       status: 0,
       stdout: JSON.stringify({ total_count: 0 }),
       stderr: '',
     });
-    const result = mod.listRunsPageWithGh(1, { runSync: fakeRunner });
-    expect(result.runs).toEqual([]);
+    try {
+      const result = mod.listRunsPageWithGh(1, { runSync: fakeRunner });
+      expect(result.runs).toEqual([]);
+      expect(warnings).toContain(
+        'Warning: workflow run envelope has no workflow_runs array',
+      );
+    } finally {
+      console.error = originalError;
+    }
   });
 
   it('returns an empty result when stdout is empty', async () => {
