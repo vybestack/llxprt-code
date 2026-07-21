@@ -337,6 +337,15 @@ describe('createStreamWatchdog', () => {
       wd.cancel();
       expect(wd.isActive).toBe(false);
     });
+
+    it('ignores liveness after cancellation', () => {
+      const wd = createStreamWatchdog(
+        defaultOpts({ firstResponseMs: 100, idleMs: 30 }),
+      );
+      wd.cancel();
+      wd.onLiveness(livenessPing());
+      expect(wd.isActive).toBe(false);
+    });
   });
 
   describe('whole-stream liveness-aware idle (issue #2607 finding 2)', () => {

@@ -106,10 +106,7 @@ function failsafe(ms: number): { promise: Promise<never>; cancel: () => void } {
 type TurnStreamIterator = AsyncIterator<StreamEvent>;
 
 /** A stream whose first .next() never resolves (acquisition resolves fine). */
-function createStreamWithStalledFirstNext(): AsyncGenerator<{
-  type: StreamEventType;
-  value: ModelStreamChunk;
-}> {
+function createStreamWithStalledFirstNext(): AsyncGenerator<StreamEvent> {
   return (async function* () {
     await new Promise<void>(() => {});
     yield { type: StreamEventType.CHUNK, value: mockChunk({ text: 'never' }) };
@@ -560,10 +557,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   it('invokes iterator return promptly when first next never settles', async () => {
     const { turn } = buildTurn(20);
     let returnCalls = 0;
-    const iterator: AsyncIterator<{
-      type: StreamEventType;
-      value: ModelStreamChunk;
-    }> = {
+    const iterator: TurnStreamIterator = {
       next: () => new Promise(() => {}),
       async return() {
         returnCalls++;
@@ -686,10 +680,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       status: 504,
       category: 'network',
     });
-    const throwingIterator: AsyncIterator<{
-      type: StreamEventType;
-      value: ModelStreamChunk;
-    }> = {
+    const throwingIterator: TurnStreamIterator = {
       async next(): Promise<never> {
         throw firstNextFailure;
       },

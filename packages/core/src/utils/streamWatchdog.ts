@@ -130,7 +130,7 @@ function createState(
   };
 
   const disarmFirstResponse = (): void => {
-    if (livenessDisarmed) return;
+    if (settled || livenessDisarmed) return;
     livenessDisarmed = true;
     phaseAArmed = false;
     firstResponseTimer?.abort();
