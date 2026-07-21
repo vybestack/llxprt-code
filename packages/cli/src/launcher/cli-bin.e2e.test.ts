@@ -5,7 +5,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, writeFile, readFile, rm, access } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  writeFile,
+  readFile,
+  rm,
+  access,
+} from 'node:fs/promises';
 import { accessSync, constants, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -361,9 +368,25 @@ async function cleanupTempDirectory(
   }
 }
 
+interface BunCmdFixture {
+  readonly bunPath: string;
+  readonly tempDir: string;
+}
+
+async function createBunCmdFixture(
+  shimDirectoryName = 'bun shim',
+): Promise<BunCmdFixture> {
+  const tempDir = await mkdtemp(join(tmpdir(), 'llxprt e2e cmd '));
+  const shimDirectory = join(tempDir, shimDirectoryName);
+  const bunPath = join(shimDirectory, 'bun.cmd');
+  await mkdir(shimDirectory, { recursive: true });
+  await writeFile(bunPath, `@ECHO off\r\n@"${directBunExe}" %*\r\n`);
+  return { bunPath, tempDir };
+}
+
 async function runDefaultResolverLauncher(
   args: readonly string[],
-  resolveBunToCmd = false,
+  bunPath?: string,
 ): Promise<DefaultResolverResult> {
   const binPath = resolve(cliPackageRoot, 'bin', 'llxprt.cjs');
   const tempDir = await mkdtemp(join(tmpdir(), 'llxprt-e2e-argv-'));
@@ -413,8 +436,8 @@ async function runDefaultResolverLauncher(
       LLXPRT_E2E_SELECTED_EXECUTABLE: selectedExecutableReport,
     };
     delete env['LLXPRT_BUN_RELAUNCHED'];
-    if (resolveBunToCmd) {
-      env['LLXPRT_E2E_BUN_PATH'] = localBunCmd;
+    if (bunPath !== undefined) {
+      env['LLXPRT_E2E_BUN_PATH'] = bunPath;
     } else {
       delete env['LLXPRT_E2E_BUN_PATH'];
     }
@@ -537,6 +560,67 @@ describe('cli bin Windows native Bun resolution', () => {
   );
 
   it.runIf(process.platform === 'win32')(
+    'preserves a multiword prompt through a bun.cmd-only fallback',
+    async () => {
+      const result = await runDefaultResolverLauncher(
+        ['--prompt', 'hello cmd world'],
+        localBunCmd,
+      );
+
+      expect(result.code).toBe(0);
+      const child = parseChildReport(result);
+      expect(child.argv).toStrictEqual(['--prompt', 'hello cmd world']);
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'preserves a trailing backslash before another argument through a bun.cmd path containing spaces',
+    async () => {
+      expect(() => accessSync(directBunExe, constants.X_OK)).not.toThrow();
+      const fixture = await createBunCmdFixture();
+
+      try {
+        const trailingBackslash = 'C:\\allowed path\\';
+        const result = await runDefaultResolverLauncher(
+          ['--prompt', trailingBackslash, 'following argument'],
+          fixture.bunPath,
+        );
+
+        expect(result.code).toBe(0);
+        const child = parseChildReport(result);
+        expect(child.argv).toStrictEqual([
+          '--prompt',
+          trailingBackslash,
+          'following argument',
+        ]);
+        expect(result.stderr).not.toContain('DEP0190');
+      } finally {
+        await cleanupTempDirectory(fixture.tempDir);
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'rejects a bun.cmd path containing command-shell metacharacters',
+    async () => {
+      expect(() => accessSync(directBunExe, constants.X_OK)).not.toThrow();
+      const fixture = await createBunCmdFixture('bun & injected');
+
+      try {
+        const result = await runDefaultResolverLauncher([], fixture.bunPath);
+
+        expect(result.code).toBe(UNSAFE_CMD_ARGUMENT_EXIT_CODE);
+        expect(result.stdout).toBe('');
+        expect(result.stderr).toContain(
+          'Cannot safely launch the bundled bun.cmd shim from a path containing Windows command-shell metacharacters',
+        );
+      } finally {
+        await cleanupTempDirectory(fixture.tempDir);
+      }
+    },
+  );
+
+  it.runIf(process.platform === 'win32')(
     'preserves Windows shell metacharacters without a shell',
     async () => {
       const result = await runDefaultResolverLauncher([
@@ -558,7 +642,7 @@ describe('cli bin Windows native Bun resolution', () => {
     async () => {
       const result = await runDefaultResolverLauncher(
         ['--prompt', 'hello & whoami'],
-        true,
+        localBunCmd,
       );
 
       expect(result.code).toBe(UNSAFE_CMD_ARGUMENT_EXIT_CODE);

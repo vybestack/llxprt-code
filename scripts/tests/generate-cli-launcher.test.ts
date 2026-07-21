@@ -13,6 +13,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -543,8 +544,16 @@ describe('CLI launcher generation', () => {
           },
         );
         expectSpawnSuccess(result);
-        expect(result.stdout.trim().split(/\r?\n/)).toStrictEqual([
-          localBun,
+        const [observedBun, ...observedOutput] = result.stdout
+          .trim()
+          .split(/\r?\n/);
+        if (observedBun === undefined) {
+          throw new Error(
+            'relocated launcher did not report its Bun executable',
+          );
+        }
+        expect(realpathSync(observedBun)).toBe(realpathSync(localBun));
+        expect(observedOutput).toStrictEqual([
           'relocated-sibling-entry',
           '--prompt',
           'package local',

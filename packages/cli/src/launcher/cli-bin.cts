@@ -69,9 +69,13 @@ interface ChildExitInfo {
   readonly signal: NodeJS.Signals | null;
 }
 
-type SpawnArgsResult =
-  | { readonly args: readonly string[] }
-  | { readonly error: string };
+interface SpawnInvocation {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly windowsVerbatimArguments?: true;
+}
+
+type SpawnInvocationResult = SpawnInvocation | { readonly error: string };
 
 function ancestors(startDir: string): readonly string[] {
   const dirs = [];
@@ -319,15 +323,48 @@ function resolveEntryOrFail(
   return entry;
 }
 
-function buildSpawnArgs(bunPath: string, entry: string): SpawnArgsResult {
+function windowsCommandProcessor(): string {
+  const systemRoot = process.env['SystemRoot'];
+  return systemRoot !== undefined && win32.isAbsolute(systemRoot)
+    ? win32.join(systemRoot, 'System32', 'cmd.exe')
+    : 'cmd.exe';
+}
+
+function quoteWindowsCommandArgument(arg: string): string {
+  const escapedTrailingBackslashes = arg.replace(/\\+$/, (backslashes) =>
+    backslashes.repeat(2),
+  );
+  return `"${escapedTrailingBackslashes}"`;
+}
+
+function buildSpawnInvocation(
+  bunPath: string,
+  entry: string,
+): SpawnInvocationResult {
   const args = [entry, ...process.argv.slice(2)];
-  if (isWindowsCmdShim(bunPath) && args.some(hasWindowsCmdMetaCharacter)) {
+  if (!isWindowsCmdShim(bunPath)) {
+    return { command: bunPath, args };
+  }
+  if (hasWindowsCmdMetaCharacter(bunPath)) {
+    return {
+      error:
+        'Cannot safely launch the bundled bun.cmd shim from a path containing Windows command-shell metacharacters. Install Bun directly so bun.exe is on PATH, or move the installation to a path without shell metacharacters.',
+    };
+  }
+  if (args.some(hasWindowsCmdMetaCharacter)) {
     return {
       error:
         'Cannot safely forward arguments containing Windows command-shell metacharacters through the bundled bun.cmd shim. Install Bun directly so bun.exe is on PATH, or remove shell metacharacters from the CLI arguments.',
     };
   }
-  return { args };
+  const commandLine = [bunPath, ...args]
+    .map(quoteWindowsCommandArgument)
+    .join(' ');
+  return {
+    command: windowsCommandProcessor(),
+    args: ['/d', '/s', '/c', `"${commandLine}"`],
+    windowsVerbatimArguments: true,
+  };
 }
 
 function createChildEnv(): NodeJS.ProcessEnv {
@@ -348,7 +385,7 @@ async function runCliBin(options: RunCliBinOptions = {}): Promise<void> {
     return;
   }
 
-  const built = buildSpawnArgs(bunPath, entry);
+  const built = buildSpawnInvocation(bunPath, entry);
   if ('error' in built) {
     fatalExit(exit, built.error);
     return;
@@ -356,10 +393,10 @@ async function runCliBin(options: RunCliBinOptions = {}): Promise<void> {
 
   let child;
   try {
-    child = spawnFn(bunPath, built.args, {
+    child = spawnFn(built.command, built.args, {
       stdio: 'inherit',
       env: createChildEnv(),
-      shell: isWindowsCmdShim(bunPath),
+      windowsVerbatimArguments: built.windowsVerbatimArguments,
     });
   } catch (error) {
     fatalExit(exit, bunLaunchErrorMessage(bunPath, error));

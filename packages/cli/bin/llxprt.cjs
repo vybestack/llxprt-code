@@ -313,15 +313,44 @@ function resolveEntryOrFail(exit, resolveEntryFn) {
   }
   return entry;
 }
-function buildSpawnArgs(bunPath, entry) {
+function windowsCommandProcessor() {
+  const systemRoot = process.env["SystemRoot"];
+  return systemRoot !== undefined &&
+    import_node_path2.win32.isAbsolute(systemRoot)
+    ? import_node_path2.win32.join(systemRoot, "System32", "cmd.exe")
+    : "cmd.exe";
+}
+function quoteWindowsCommandArgument(arg) {
+  const escapedTrailingBackslashes = arg.replace(/\\+$/, (backslashes) =>
+    backslashes.repeat(2),
+  );
+  return `"${escapedTrailingBackslashes}"`;
+}
+function buildSpawnInvocation(bunPath, entry) {
   const args = [entry, ...process.argv.slice(2)];
-  if (isWindowsCmdShim(bunPath) && args.some(hasWindowsCmdMetaCharacter)) {
+  if (!isWindowsCmdShim(bunPath)) {
+    return { command: bunPath, args };
+  }
+  if (hasWindowsCmdMetaCharacter(bunPath)) {
+    return {
+      error:
+        "Cannot safely launch the bundled bun.cmd shim from a path containing Windows command-shell metacharacters. Install Bun directly so bun.exe is on PATH, or move the installation to a path without shell metacharacters.",
+    };
+  }
+  if (args.some(hasWindowsCmdMetaCharacter)) {
     return {
       error:
         "Cannot safely forward arguments containing Windows command-shell metacharacters through the bundled bun.cmd shim. Install Bun directly so bun.exe is on PATH, or remove shell metacharacters from the CLI arguments.",
     };
   }
-  return { args };
+  const commandLine = [bunPath, ...args]
+    .map(quoteWindowsCommandArgument)
+    .join(" ");
+  return {
+    command: windowsCommandProcessor(),
+    args: ["/d", "/s", "/c", `"${commandLine}"`],
+    windowsVerbatimArguments: true,
+  };
 }
 function createChildEnv() {
   return { ...process.env, [BUN_RELAUNCH_ENV]: "true" };
@@ -337,17 +366,17 @@ async function runCliBin(options = {}) {
   if (entry === null) {
     return;
   }
-  const built = buildSpawnArgs(bunPath, entry);
+  const built = buildSpawnInvocation(bunPath, entry);
   if ("error" in built) {
     fatalExit(exit, built.error);
     return;
   }
   let child;
   try {
-    child = spawnFn(bunPath, built.args, {
+    child = spawnFn(built.command, built.args, {
       stdio: "inherit",
       env: createChildEnv(),
-      shell: isWindowsCmdShim(bunPath),
+      windowsVerbatimArguments: built.windowsVerbatimArguments,
     });
   } catch (error) {
     fatalExit(exit, bunLaunchErrorMessage(bunPath, error));
