@@ -25,10 +25,8 @@ _llxprt_script_dir=$(cd -- "$(dirname -- "$_llxprt_self")" 2>/dev/null && pwd) |
 # partial install cannot silently fall through to an unrelated Bun.
 _llxprt_pkg_json=$_llxprt_script_dir/../package.json
 _llxprt_bun_pin=""
-_llxprt_pkg_name=""
 if [ -f "$_llxprt_pkg_json" ]; then
   _llxprt_bun_pin=$(sed -n 's/.*"bun"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_pkg_json" 2>/dev/null | head -n1)
-  _llxprt_pkg_name=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_pkg_json" 2>/dev/null | head -n1)
 fi
 
 # Derive the candidate bun package.json path from a bun binary path. The binary

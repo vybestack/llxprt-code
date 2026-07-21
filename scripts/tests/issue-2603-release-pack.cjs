@@ -78,12 +78,6 @@ function processCacheDir(repoRoot) {
   );
 }
 
-const releaseCacheDir = processCacheDir(
-  // Compute lazily at module load using the CWD-derived repoRoot. Callers pass
-  // the real repoRoot into packReleaseLikeCli, which re-derives as needed.
-  process.cwd(),
-);
-
 const NON_NPM_RELEASE_PACKAGES = new Set([
   '@vybestack/llxprt-code-test-utils',
   '@vybestack/llxprt-code-a2a-server',
@@ -468,7 +462,6 @@ function packCli(workCopy, cacheDir) {
 
 module.exports = {
   packReleaseLikeCli,
-  releaseCacheDir,
   readCliManifest,
   findTarballName,
   shouldCopyRepoEntry,

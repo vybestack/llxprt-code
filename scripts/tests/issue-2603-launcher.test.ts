@@ -412,18 +412,7 @@ describe('POSIX launcher execution behavior', () => {
     const bunPath = ensureBun();
     copyFileSync(bunPath, join(hoistedBunDir, 'bun.exe'));
 
-    // Write a matching bun package.json version. Read the real version from
-    // the repo's bun package if available; otherwise skip version pin.
-    const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
-    let bunVersion = '1.3.14';
-    if (existsSync(bunPkgPath)) {
-      try {
-        const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
-        if (typeof bunPkg.version === 'string') bunVersion = bunPkg.version;
-      } catch {
-        // keep default
-      }
-    }
+    const bunVersion = realBunVersion();
     writeFileSync(
       join(consumerDir, 'node_modules', 'bun', 'package.json'),
       JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
