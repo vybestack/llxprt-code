@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2250
 set -u
 
 _llxprt_self=$0
