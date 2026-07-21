@@ -394,7 +394,8 @@ function arrayAssignment(line) {
   const scanned = scanShellContext(line, prefix[0].length, true);
   const closingParenthesis = scanned.index - 1;
   const isComplete =
-    line[closingParenthesis] === ')' && line.slice(scanned.index).trim() === '';
+    line[closingParenthesis] === ')' &&
+    /^(?:[ \t]*|[ \t]+#[^\r\n]*)$/.test(line.slice(scanned.index));
   const arrayCommand = scanned.commands.find(
     (command) =>
       command.start === prefix[0].length && command.end === closingParenthesis,
@@ -668,6 +669,31 @@ describe('nightly failure notifier repository targeting', () => {
         'CREATE_ARGS=(--repo "${GH_REPO}" --title "${ISSUE_TITLE}" --body-file "${BODY_FILE}")',
       ]),
     ).not.toThrow();
+  });
+
+  it('accepts a comment after a CREATE_ARGS assignment', () => {
+    expect(() =>
+      assertCreateArgsRepositoryTargeting([
+        'CREATE_ARGS=(--repo "${GH_REPO}") # valid comment',
+      ]),
+    ).not.toThrow();
+  });
+
+  it('accepts a comment after a CREATE_ARGS append', () => {
+    expect(() =>
+      assertCreateArgsRepositoryTargeting([
+        'CREATE_ARGS=(--title title)',
+        'CREATE_ARGS+=(--repo "${GH_REPO}") # valid comment',
+      ]),
+    ).not.toThrow();
+  });
+
+  it('rejects non-comment content after a CREATE_ARGS assignment', () => {
+    const assignment = 'CREATE_ARGS=(--repo "${GH_REPO}") unexpected';
+
+    expect(() => assertCreateArgsRepositoryTargeting([assignment])).toThrow(
+      `CREATE_ARGS must target GH_REPO: ${assignment}`,
+    );
   });
 
   it.each([
