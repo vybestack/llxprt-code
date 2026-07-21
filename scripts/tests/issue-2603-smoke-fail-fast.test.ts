@@ -143,6 +143,7 @@ describe('pwsh resolver (root cause C)', () => {
         platform?: string;
         env?: NodeJS.ProcessEnv;
         spawnSync?: unknown;
+        existsSync?: (path: string) => boolean;
       }) => string;
       whereResolve: (
         command: string,
@@ -158,6 +159,7 @@ describe('pwsh resolver (root cause C)', () => {
     const result = m.resolvePwsh({
       platform: 'win32',
       env: { PWSH_PATH: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' },
+      existsSync: () => true,
       spawnSync: () => ({ error: new Error('should not be called') }),
     });
     expect(result).toBe('C:\\Program Files\\PowerShell\\7\\pwsh.exe');
@@ -168,12 +170,32 @@ describe('pwsh resolver (root cause C)', () => {
     const result = m.resolvePwsh({
       platform: 'win32',
       env: { PWSH_PATH: 'C:\\explicit\\pwsh.exe' },
+      existsSync: () => true,
       spawnSync: () => ({
         status: 0,
         stdout: 'C:\\other\\pwsh.exe\r\n',
       }),
     });
     expect(result).toBe('C:\\explicit\\pwsh.exe');
+  });
+
+  it('ignores a malformed PWSH_PATH and falls back to where.exe', () => {
+    const m = pwshModule();
+    const result = m.resolvePwsh({
+      platform: 'win32',
+      env: { PWSH_PATH: 'pwsh.exe.Source' },
+      existsSync: () => false,
+      spawnSync: (cmd: string, args: string[]) => {
+        if (cmd === 'where.exe' && args[0] === 'pwsh.exe') {
+          return {
+            status: 0,
+            stdout: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe\r\n',
+          };
+        }
+        return { status: 1, stdout: '' };
+      },
+    });
+    expect(result).toBe('C:\\Program Files\\PowerShell\\7\\pwsh.exe');
   });
 
   it('resolves pwsh.exe via where.exe when PWSH_PATH is unset', () => {

@@ -133,7 +133,7 @@ function writeDiagnostic(status, details) {
  * @param {string} cmdLauncher - absolute path to the installed llxprt.cmd
  * @param {string} bunExe - absolute path to the platform bun.exe
  */
-function runBenchmarkChild(cmdLauncher, bunExe) {
+function runBenchmarkChild(cmdLauncher, bunExe, entry) {
   const benchScript = join(
     repoRoot,
     'scripts',
@@ -153,6 +153,7 @@ function runBenchmarkChild(cmdLauncher, bunExe) {
       ...process.env,
       LLXPRT_BENCH_LAUNCHER: cmdLauncher,
       LLXPRT_BENCH_BUN: bunExe,
+      LLXPRT_BENCH_ENTRY: entry,
     },
   });
   if (r.stdout) process.stdout.write(r.stdout);
@@ -172,12 +173,32 @@ function runBenchmarkChild(cmdLauncher, bunExe) {
   process.stdout.write('[benchmark] OK\n');
 }
 
+function runInstalledBenchmark({
+  succeeded,
+  cmdLauncher,
+  bunExe,
+  installedPackageRoot,
+}) {
+  if (!succeeded || !cmdLauncher || !bunExe || !installedPackageRoot) {
+    return;
+  }
+  if (!existsSync(cmdLauncher)) {
+    return;
+  }
+  runBenchmarkChild(
+    cmdLauncher,
+    bunExe,
+    join(installedPackageRoot, 'index.ts'),
+  );
+}
+
 function runSmoke() {
   resetState();
   let tempDir;
   let succeeded = false;
   let cmdLauncher;
   let bunExe;
+  let installedPackageRoot;
   return (async () => {
     try {
       const { packReleaseLikeCli } = nodeRequire(releasePackHelperPath);
@@ -195,7 +216,7 @@ function runSmoke() {
       checks.checkLauncherSentinels(prefix);
       checks.checkVersionRuns(prefix);
 
-      const installedPackageRoot = findInstalledPackageRoot(prefix);
+      installedPackageRoot = findInstalledPackageRoot(prefix);
       bunExe = findBundledBun(installedPackageRoot);
       cmdLauncher = join(prefix, 'llxprt.cmd');
 
@@ -227,12 +248,12 @@ function runSmoke() {
     } catch (err) {
       fail(`unexpected error: ${err.stack || err.message}`);
     } finally {
-      // Run the benchmark using the installed launcher + bun BEFORE cleanup
-      // so it never needs to repack/reinstall (root cause E). Only when the
-      // behavioral smoke succeeded and we have a healthy installed launcher.
-      if (succeeded && cmdLauncher && existsSync(cmdLauncher) && bunExe) {
-        runBenchmarkChild(cmdLauncher, bunExe);
-      }
+      runInstalledBenchmark({
+        succeeded,
+        cmdLauncher,
+        bunExe,
+        installedPackageRoot,
+      });
       if (succeeded) {
         writeDiagnostic('success', {
           cmdLauncher,

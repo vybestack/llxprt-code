@@ -9,6 +9,10 @@
  */
 
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+  STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentConfig } from './config-types.js';
 import { CONFIG_FIELD_CLASSIFICATION } from './config-classification.js';
 
@@ -60,8 +64,9 @@ interface SimpleMapping {
  * @pseudocode config-adapter.md steps 61-71: typed-field → ConfigParameters map.
  * Each entry maps an AgentConfig field to its ConfigParameters target. Only
  * fields whose target genuinely exists on ConfigParameters are present.
- * modelParams and streamIdleTimeoutMs drive runtime behavior (not a
- * ConfigParameters field), so they are absent.
+ * streamIdleTimeoutMs and streamFirstResponseTimeoutMs drive runtime behavior
+ * via Config ephemerals (not ConfigParameters fields); see
+ * {@link applyRuntimeEphemerals}.
  */
 const SIMPLE_MAPPINGS: readonly SimpleMapping[] = [
   { configField: 'fileFiltering', paramField: 'fileFiltering', kind: 'clone' },
@@ -312,4 +317,47 @@ export function toConfigParameters(
 
   // @pseudocode config-adapter.md step 100: return frozen params
   return Object.freeze(params);
+}
+
+/**
+ * Minimal Config surface needed to push ephemerals after construction.
+ * Kept structural so the function is testable without a full Config.
+ */
+type EphemeralCapableConfig = {
+  setEphemeralSetting(key: string, value: unknown): void;
+};
+
+/**
+ * Applies the typed stream-timeout AgentConfig fields onto the runtime Config
+ * as ephemerals. These fields drive runtime behavior (the idle/first-response
+ * watchdogs) but are NOT ConfigParameters fields, so they cannot flow through
+ * {@link toConfigParameters}. They must be pushed after Config construction.
+ *
+ * The camelCase typed API keys are used directly so diagnostics report the
+ * actual source field the caller set (not a hyphenated alias). This mirrors
+ * the CLI's `postConfigRuntime.applyStreamIdleTimeoutSettings` /
+ * `applyStreamFirstResponseTimeoutSettings`, which use the same camelCase keys.
+ *
+ * @param config the runtime Config (or structural equivalent for tests).
+ * @param agentConfig the validated typed AgentConfig.
+ */
+export function applyRuntimeEphemerals(
+  config: EphemeralCapableConfig,
+  agentConfig: Pick<
+    AgentConfig,
+    'streamIdleTimeoutMs' | 'streamFirstResponseTimeoutMs'
+  >,
+): void {
+  if (agentConfig.streamIdleTimeoutMs !== undefined) {
+    config.setEphemeralSetting(
+      STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+      agentConfig.streamIdleTimeoutMs,
+    );
+  }
+  if (agentConfig.streamFirstResponseTimeoutMs !== undefined) {
+    config.setEphemeralSetting(
+      STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+      agentConfig.streamFirstResponseTimeoutMs,
+    );
+  }
 }

@@ -274,40 +274,15 @@ jobs:
 
   behavioral_evals:
     name: 'Behavioral Evals (Nightly)'
-    runs-on: 'ubuntu-latest'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-
-      - name: 'Set up Node.js'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
-        with:
-          node-version: '24.x'
-          cache: 'npm'
-
-      - name: 'Setup Bun'
-        # `npm run build` invokes bun scripts/build.ts and requires the Bun
-        # runtime on PATH.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: 'Install dependencies'
-        run: 'npm ci'
-
-      - name: 'Build project'
-        run: 'npm run build'
-
-      - name: 'Run behavioral evals'
-        env:
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          LLXPRT_AUTH_TYPE: 'provider'
-          LLXPRT_FORCE_FILE_STORAGE: 'true'
-          RUN_EVALS: '1'
-        run: 'npm run test:all_evals'
+    uses: './.github/workflows/_evals-run.yml'
+    permissions:
+      contents: 'read'
+    secrets:
+      provider-api-key: ${{ secrets[vars.KEY_VAR_NAME] }}
+    with:
+      # The broad nightly only needs a single behavioral signal; the dedicated
+      # evals-nightly.yml gathers the 3-sample statistical matrix.
+      run-attempts: '[1]'
 
   windows_bun_native_smoke:
     name: 'Windows Bun native-modules smoke (Nightly)'

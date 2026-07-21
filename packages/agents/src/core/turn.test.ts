@@ -86,6 +86,7 @@ describe('Turn', () => {
           config: {
             abortSignal: expect.any(AbortSignal),
             onProviderError: expect.any(Function),
+            onStreamLiveness: expect.any(Function),
           },
         },
         'prompt-id-1',

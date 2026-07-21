@@ -9,58 +9,31 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: 'evals-nightly-${{ github.ref }}'
+  cancel-in-progress: false
+
 jobs:
   evals:
-    name: Run Evals (Attempt ${{ matrix.run_attempt }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        run_attempt: [1, 2, 3]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # ratchet:actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Setup Bun
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Create logs directory
-        run: mkdir -p evals/logs
-
-      - name: Run all evals
-        env:
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          RUN_EVALS: '1'
-        run: npm run test:all_evals
-
-      - name: Upload eval logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
-        with:
-          name: eval-logs-${{ matrix.run_attempt }}
-          path: evals/logs
-          retention-days: 7
+    name: Run Evals
+    uses: ./.github/workflows/_evals-run.yml
+    secrets:
+      provider-api-key: ${{ secrets[vars.KEY_VAR_NAME] }}
 
   aggregate-results:
     name: Aggregate Results
     needs: [evals]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # ratchet:actions/setup-node@v6

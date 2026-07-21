@@ -38,6 +38,7 @@ import {
   type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
@@ -46,6 +47,7 @@ import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   toOpenAIResponsesWireEffort,
@@ -110,8 +112,9 @@ export async function* executeOpenAIResponsesRequest(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  const metadata = (options as { metadata?: Record<string, unknown> }).metadata;
-  const abortSignal = metadata?.['abortSignal'] as AbortSignal | undefined;
+  // Prefer the normalized invocation.signal (via getRequestSignal) while
+  // preserving the legacy metadata.abortSignal fallback (issue #2607 Finding 3).
+  const abortSignal = getRequestSignal(options);
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
     options.contents,
   );
@@ -696,10 +699,14 @@ async function* streamResponses(
   );
   yield* fetchStreamWithRetries(
     {
-      ...params,
       responsesURL: `${params.baseURL}/responses`,
       headers,
       bodyBlob,
+      abortSignal: params.abortSignal,
+      includeThinkingInResponse: params.includeThinkingInResponse,
+      maxStreamingAttempts: params.maxStreamingAttempts,
+      streamRetryInitialDelayMs: params.streamRetryInitialDelayMs,
+      onStreamLiveness: params.normalizedOptions.onStreamLiveness,
     },
     deps,
   );
@@ -713,6 +720,7 @@ interface FetchStreamParams {
   includeThinkingInResponse: boolean;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
+  onStreamLiveness?: StreamLivenessListener;
 }
 
 async function* fetchStreamWithRetries(
@@ -736,6 +744,7 @@ async function* fetchStreamWithRetries(
           maxStreamingAttempts: params.maxStreamingAttempts,
           currentDelay,
         },
+        params.abortSignal,
         deps,
       );
     }
@@ -764,6 +773,7 @@ async function* parseSuccessfulResponse(
     bodyBlob: Blob;
     abortSignal?: AbortSignal;
     includeThinkingInResponse: boolean;
+    onStreamLiveness?: StreamLivenessListener;
   },
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
@@ -775,6 +785,7 @@ async function* parseSuccessfulResponse(
 
   const streamOptions: ParseResponsesStreamOptions = {
     includeThinkingInResponse: params.includeThinkingInResponse,
+    onStreamLiveness: params.onStreamLiveness,
   };
   for await (const message of parseResponsesStream(
     response.body,
@@ -802,6 +813,7 @@ async function handleStreamRetry(
     maxStreamingAttempts: number;
     currentDelay: number;
   },
+  abortSignal: AbortSignal | undefined,
   deps: ResponsesExecutorDeps,
 ): Promise<number> {
   if (error instanceof Error && error.name === 'AbortError') {
@@ -822,7 +834,9 @@ async function handleStreamRetry(
       `Stream retry attempt ${state.streamingAttempt}/${state.maxStreamingAttempts}: Transient error detected, delay ${state.currentDelay}ms before retry. Error: ${String(error)}`,
   );
   const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
-  await delay(Math.max(0, state.currentDelay + jitter));
+  // Pass the abort signal so an abort during backoff rejects promptly with an
+  // AbortError instead of waiting out the full delay (issue #2607 Finding 3).
+  await delay(Math.max(0, state.currentDelay + jitter), abortSignal);
   return Math.min(30000, state.currentDelay * 2);
 }
 

@@ -100,7 +100,7 @@
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "format:check": "prettier --check .",
     "format:all": "./scripts/format-all.sh",
-    "typecheck": "npm run typecheck --workspaces --if-present && tsc --project tsconfig.scripts.json",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --project tsconfig.scripts.json && tsc --project evals/tsconfig.json",
     "check": "npm run lint:all",
     "gate:agents-neutral": "npx tsx scripts/agents-neutral-gate.ts --enforce-imports && npx tsx scripts/agents-neutral-test-gate.ts",
     "gate:agents-neutral:count": "npx tsx scripts/agents-neutral-gate.ts --count",

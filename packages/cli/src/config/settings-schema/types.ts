@@ -111,6 +111,20 @@ export interface SettingDefinition {
    * (e.g. multipleOf 1 restricts to integers).
    */
   multipleOf?: number;
+  /**
+   * Documented/schema default shown to users in generated JSON schema and docs
+   * when it differs from the runtime merge default (`default`).
+   *
+   * Use this when a setting's advertised public default must NOT be materialized
+   * by settingsMerge — for example, a watchdog whose runtime default is
+   * `undefined` (disabled at the settings layer) but whose documented contract
+   * is a concrete value applied later by runtime logic (e.g. ephemeral
+   * resolution with a built-in fallback). Generators prefer `documentedDefault`
+   * over `default` for the emitted `default`/markdown; settingsMerge continues
+   * to use only `default`, so the runtime value stays `undefined` unless a user
+   * sets it explicitly.
+   */
+  documentedDefault?: SettingsValue;
 }
 
 export interface SettingsSchema {

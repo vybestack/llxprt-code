@@ -26,12 +26,14 @@
  */
 
 const { spawnSync } = require('node:child_process');
+const { existsSync } = require('node:fs');
 
 /**
  * @typedef {{
  *   platform?: string;
  *   env?: NodeJS.ProcessEnv;
  *   spawnSync?: typeof import('node:child_process').spawnSync;
+ *   existsSync?: typeof import('node:fs').existsSync;
  * }} ResolverOptions
  */
 
@@ -78,9 +80,9 @@ function resolvePwsh(options) {
     return 'pwsh';
   }
   const env = (options && options.env) || process.env;
+  const exists = (options && options.existsSync) || existsSync;
 
-  // 1. Explicit env override — highest trust.
-  if (env.PWSH_PATH) {
+  if (env.PWSH_PATH && exists(env.PWSH_PATH)) {
     return env.PWSH_PATH;
   }
 

@@ -43,7 +43,10 @@ import type {
 import type { AgentAuth } from './config-types.js';
 import type { Agent } from './agent.js';
 import { AgentConfigSchema } from './config-schema.js';
-import { toConfigParameters } from './agentConfig.adapter.js';
+import {
+  toConfigParameters,
+  applyRuntimeEphemerals,
+} from './agentConfig.adapter.js';
 import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
 import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -118,6 +121,10 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
     parsed,
     forceConfirmations,
   );
+  // Apply typed stream-timeout AgentConfig fields as runtime Config ephemerals.
+  // These drive the idle/first-response watchdogs but are not ConfigParameters
+  // fields, so they are pushed after Config construction (issue #2607 Finding 2).
+  applyRuntimeEphemerals(config, parsed);
   const settingsService = config.getSettingsService();
 
   // @pseudocode createAgent.md steps 41-58

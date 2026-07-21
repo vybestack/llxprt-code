@@ -15,6 +15,7 @@ import type {
 import type { ToolGroupArray } from './streamRequestHelpers.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 
 /**
  * Neutral generation config carried by ChatSession. Extends the neutral
@@ -27,6 +28,13 @@ import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 export interface ChatSessionConfig extends ModelGenerationSettings {
   abortSignal?: AbortSignal;
   onProviderError?: (error: StructuredError) => void;
+  /**
+   * Optional provider-neutral transport-liveness listener (issue #2607).
+   * Threaded down to the provider stream parser so a raw lifecycle SSE event
+   * (e.g. response.created) can satisfy the first-response watchdog without
+   * requiring visible semantic content.
+   */
+  onStreamLiveness?: (event: StreamLivenessEvent) => void;
   providerRequestContext?: Record<string, unknown>;
   tools?: ToolGroupArray;
   toolConfig?: unknown;

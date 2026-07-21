@@ -37,7 +37,10 @@ const { CONSTRAINED_PATH } = require('./constants.cjs');
 const { resolvePwsh } = require('./pwsh-resolver.cjs');
 
 function probeArg(request) {
-  return 'LLXPRT_PROBE=' + JSON.stringify(request);
+  return (
+    'LLXPRT_PROBE_B64=' +
+    Buffer.from(JSON.stringify(request), 'utf8').toString('base64url')
+  );
 }
 
 /**
@@ -109,37 +112,56 @@ function pwshQuote(s) {
   return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
-function invokeCmd(cmdPath, args, opts) {
-  // Build the full command line: cmdPath followed by quoted args.
-  // cmd.exe /c receives each as a separate argv element (CreateProcess
-  // boundaries are preserved — no shell string concatenation on our side).
-  // The cmdQuote wrapping protects against cmd.exe's own re-parsing.
-  const quotedArgs = args.map((a) => cmdQuote(a));
-  const r = spawnSync('cmd', ['/c', cmdPath, ...quotedArgs], {
-    encoding: 'utf8',
-    timeout: opts?.timeout ?? 30_000,
-    input: opts?.input,
-    env: { ...process.env, PATH: CONSTRAINED_PATH, ...(opts?.env || {}) },
-    windowsHide: true,
-  });
-  // A spawn failure (cmd.exe not found, etc.) is a harness error, not a
-  // child exit code. validateSpawnResult throws so callers never confuse a
-  // launch problem with a legitimate nonzero status.
-  return validateSpawnResult(`invokeCmd(${cmdPath})`, r);
+function powershellEncodedCommand(script) {
+  return Buffer.from(script, 'utf16le').toString('base64');
 }
 
-function invokePwsh(ps1Path, args, opts) {
-  const argString = args.map((a) => pwshQuote(a)).join(' ');
-  // Resolve PowerShell robustly: PWSH_PATH, then pwsh.exe, then powershell.exe.
-  // Hardcoding 'powershell' failed with ENOENT on windows-latest (run 29850614559).
+function powershellInvocationScript(launcherPath, args) {
+  const launcher = Buffer.from(launcherPath, 'utf8').toString('base64');
+  const launcherArgs = Buffer.from(JSON.stringify(args), 'utf8').toString(
+    'base64',
+  );
+  return [
+    `$launcher = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${launcher}'))`,
+    `$argsJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${launcherArgs}'))`,
+    '$launcherArgs = @($argsJson | ConvertFrom-Json)',
+    '& $launcher @launcherArgs',
+    'exit $LASTEXITCODE',
+  ].join('; ');
+}
+
+function invokeCmd(cmdPath, args, opts) {
   const pwshExe = resolvePwsh();
+  const script = powershellInvocationScript(cmdPath, args);
   const r = spawnSync(
     pwshExe,
     [
       '-NoProfile',
       '-NonInteractive',
-      '-Command',
-      `& '${ps1Path.replace(/'/g, "''")}' ${argString}`,
+      '-EncodedCommand',
+      powershellEncodedCommand(script),
+    ],
+    {
+      encoding: 'utf8',
+      timeout: opts?.timeout ?? 30_000,
+      input: opts?.input,
+      env: { ...process.env, PATH: CONSTRAINED_PATH, ...(opts?.env || {}) },
+      windowsHide: true,
+    },
+  );
+  return validateSpawnResult(`invokeCmd(${cmdPath})`, r);
+}
+
+function invokePwsh(ps1Path, args, opts) {
+  const pwshExe = resolvePwsh();
+  const script = powershellInvocationScript(ps1Path, args);
+  const r = spawnSync(
+    pwshExe,
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-EncodedCommand',
+      powershellEncodedCommand(script),
     ],
     {
       encoding: 'utf8',

@@ -63,7 +63,6 @@ export default tseslint.config(
       'packages/opentui/**',
       'packages/ui/**',
       'packages/lsp/**',
-      'evals/**',
     ],
   },
   {
@@ -608,6 +607,94 @@ export default tseslint.config(
     files: ['scripts/tests/**/*.{ts,tsx,js,mjs,cjs}'],
     rules: {
       'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282 test parity
+    },
+  },
+  // ============================================================================
+  // Issue #2605: Apply strict code-quality lint rules to eval TypeScript
+  // ============================================================================
+  // The eval suite (evals/**/*.ts) is real source executed by the nightly
+  // workflow via the runtime loader. It was previously in the global ignores,
+  // so type regressions and `any` usage went undetected. This block extends
+  // the same TypeScript quality guardrails that protect packages/*/src to the
+  // eval tree, with project-aware type checking via evals/tsconfig.json.
+  //
+  // Type-aware rules (no-floating-promises, no-misused-promises,
+  // await-thenable, return-await) ARE enabled because the eval tsconfig
+  // provides the type program (`project: 'evals/tsconfig.json'`). The eval
+  // source is async-heavy (evalTest runs model calls and tool assertions), so
+  // these rules catch real bugs (unhandled rejections, async functions passed
+  // as non-async callbacks).
+  //
+  // max-lines-per-function is deliberately not applied: eval case wiring uses
+  // large setup blocks. Type-aware correctness rules are applied below.
+  {
+    files: ['evals/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: false,
+        project: 'evals/tsconfig.json',
+        tsconfigRootDir: projectRoot,
+      },
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      // --- TypeScript quality ---
+      '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
+      '@typescript-eslint/consistent-type-assertions': [
+        'error',
+        { assertionStyle: 'as' },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports' },
+      ],
+      '@typescript-eslint/explicit-function-return-type': [
+        'error',
+        { allowExpressions: true },
+      ],
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-inferrable-types': [
+        'error',
+        { ignoreParameters: true, ignoreProperties: true },
+      ],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+
+      // --- Type-aware async/promise rules (require project tsconfig) ---
+      '@typescript-eslint/await-thenable': ['error'],
+      '@typescript-eslint/no-floating-promises': ['error'],
+      '@typescript-eslint/no-misused-promises': ['error'],
+      '@typescript-eslint/return-await': ['error', 'in-try-catch'],
+      '@typescript-eslint/strict-boolean-expressions': [
+        'error',
+        {
+          allowString: false,
+          allowNumber: false,
+          allowNullableObject: false,
+          allowNullableBoolean: false,
+          allowNullableString: false,
+          allowNullableNumber: false,
+          allowAny: false,
+        },
+      ],
+
+      // --- General code quality ---
+      curly: ['error', 'multi-line'],
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
+      'no-console': 'off', // eslint-policy-allow-off: evals legitimately log to stdout
+      'no-var': 'error',
+      'object-shorthand': 'error',
+      'prefer-arrow-callback': 'error',
+      'prefer-const': ['error', { destructuring: 'all' }],
     },
   },
   // Issue #2282: eslint-guard.test.js is the exhaustive test suite for the

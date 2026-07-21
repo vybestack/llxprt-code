@@ -154,6 +154,13 @@
       "default": 0,
       "type": "number"
     },
+    "streamFirstResponseTimeoutMs": {
+      "title": "Stream First-Response Timeout (ms)",
+      "description": "First-response (time-to-first-content) watchdog in milliseconds. Enabled by default (300000 = 5 minutes). A provider liveness signal (e.g. response.created) disarms it even before semantic content arrives. Set to 0 or a negative number to disable.",
+      "markdownDescription": "First-response (time-to-first-content) watchdog in milliseconds. Enabled by default (300000 = 5 minutes). A provider liveness signal (e.g. response.created) disarms it even before semantic content arrives. Set to 0 or a negative number to disable.\n\n- Category: `Streaming`\n- Requires restart: `no`\n- Default: `300000`",
+      "default": 300000,
+      "type": "number"
+    },
     "useExternalAuth": {
       "title": "Use External Auth",
       "description": "Whether to use an external authentication flow.",

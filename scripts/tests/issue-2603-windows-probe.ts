@@ -10,19 +10,18 @@
  * bun.exe executes.
  *
  * Request protocol (passed as regular args, forwarded by %*):
- *   LLXPRT_PROBE=<json>  where <json> is { stdin?, stderr?, exit?, long?, injectionPath? }.
- * The JSON is matched as a single argv token so quoting/Unicode/fidelity is
- * preserved verbatim.
+ *   LLXPRT_PROBE_B64=<base64url-json>
+ * Encoding keeps the control payload independent from shell quoting while
+ * separate probe arguments exercise exact argv fidelity.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 interface ProbeRequest {
   stdin?: boolean;
   stderr?: string;
   exit?: number;
   long?: boolean;
-  injectionPath?: string;
 }
 
 function parseRequest(): {
@@ -34,8 +33,11 @@ function parseRequest(): {
   let raw = '';
   let malformed = false;
   for (const arg of process.argv.slice(2)) {
-    if (arg.startsWith('LLXPRT_PROBE=')) {
-      raw = arg.slice('LLXPRT_PROBE='.length);
+    if (arg.startsWith('LLXPRT_PROBE_B64=')) {
+      raw = Buffer.from(
+        arg.slice('LLXPRT_PROBE_B64='.length),
+        'base64url',
+      ).toString('utf8');
       try {
         const parsed = JSON.parse(raw) as ProbeRequest;
         Object.assign(request, parsed);
@@ -119,15 +121,6 @@ async function main(): Promise<void> {
 
   if (request.stderr !== undefined) {
     process.stderr.write(request.stderr);
-  }
-
-  if (request.injectionPath) {
-    try {
-      writeFileSync(request.injectionPath, 'INJECTED');
-      payload.injectionCreated = true;
-    } catch {
-      payload.injectionCreated = false;
-    }
   }
 
   if (request.long) {

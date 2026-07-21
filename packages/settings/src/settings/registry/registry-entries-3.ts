@@ -407,4 +407,26 @@ export const REGISTRY_ENTRIES_PART_3: readonly SettingSpec[] = [
       };
     },
   },
+  {
+    key: 'stream-first-response-timeout-ms',
+    // Mirrors stream-idle-timeout-ms: the alias keeps the camelCase form as a
+    // recognized CLI setting so it is not leaked into API request bodies
+    // (modelParams). @issue #2607
+    aliases: ['streamFirstResponseTimeoutMs'],
+    category: 'cli-behavior',
+    description:
+      'First-response (time-to-first-content) watchdog in milliseconds. Enabled by default (300000 = 5 minutes). Set to 0 or a negative number to disable; a provider liveness signal (e.g. response.created) disarms it even before semantic content arrives.',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'stream-first-response-timeout-ms must be a finite number (use 0 or negative to disable)',
+      };
+    },
+  },
 ];

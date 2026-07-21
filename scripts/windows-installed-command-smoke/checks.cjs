@@ -210,13 +210,21 @@ function checkCmdArgFidelity(fixture) {
       }
       const payload = parseProbeOutput(r.stdout);
       const forwardedArg = payload.argv.find((a) =>
-        a.startsWith('LLXPRT_PROBE='),
+        a.startsWith('LLXPRT_PROBE_B64='),
       );
       assert(
         forwardedArg !== undefined,
-        `marker ${JSON.stringify(marker)}: LLXPRT_PROBE= not present in argv`,
+        `marker ${JSON.stringify(marker)}: LLXPRT_PROBE_B64= not present in argv`,
       );
-      const parsed = JSON.parse(forwardedArg.slice('LLXPRT_PROBE='.length));
+      if (forwardedArg === undefined) {
+        continue;
+      }
+      const parsed = JSON.parse(
+        Buffer.from(
+          forwardedArg.slice('LLXPRT_PROBE_B64='.length),
+          'base64url',
+        ).toString('utf8'),
+      );
       assert(
         parsed.marker === marker,
         `marker ${JSON.stringify(marker)} round-trip mismatch: got ${JSON.stringify(parsed.marker)}`,
@@ -244,13 +252,21 @@ function checkPwshArgFidelity(fixture) {
       }
       const payload = parseProbeOutput(r.stdout);
       const forwardedArg = payload.argv.find((a) =>
-        a.startsWith('LLXPRT_PROBE='),
+        a.startsWith('LLXPRT_PROBE_B64='),
       );
       assert(
         forwardedArg !== undefined,
-        `marker ${JSON.stringify(marker)}: LLXPRT_PROBE= not present in argv`,
+        `marker ${JSON.stringify(marker)}: LLXPRT_PROBE_B64= not present in argv`,
       );
-      const parsed = JSON.parse(forwardedArg.slice('LLXPRT_PROBE='.length));
+      if (forwardedArg === undefined) {
+        continue;
+      }
+      const parsed = JSON.parse(
+        Buffer.from(
+          forwardedArg.slice('LLXPRT_PROBE_B64='.length),
+          'base64url',
+        ).toString('utf8'),
+      );
       assert(
         parsed.marker === marker,
         `marker ${JSON.stringify(marker)} round-trip mismatch: got ${JSON.stringify(parsed.marker)}`,
@@ -267,14 +283,15 @@ function checkInjectionGuard(fixture, tempDir) {
   runStep('cmd-injection-guard', () => {
     const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
     const injectionFile = join(tempDir, 'injected-sentinel.txt');
-    const r = invokeCmd(cmdPath, [probeArg({ injectionPath: injectionFile })]);
+    const hostileArg = `& echo INJECTED > "${injectionFile}"`;
+    const r = invokeCmd(cmdPath, [probeArg({}), hostileArg]);
     if (r.status !== 0) {
       throw new Error(`cmd injection probe exited ${r.status}: ${r.stderr}`);
     }
     const payload = parseProbeOutput(r.stdout);
     assert(
-      payload.injectionCreated === false,
-      `cmd injection sentinel was created at ${injectionFile} — launcher leaked shell metacharacters`,
+      payload.argv.includes(hostileArg),
+      'cmd hostile argument was not preserved',
     );
     assert(
       !existsSync(injectionFile),
@@ -285,14 +302,15 @@ function checkInjectionGuard(fixture, tempDir) {
   runStep('pwsh-injection-guard', () => {
     const ps1Path = join(fixture.fixtureDir, 'llxprt.ps1');
     const injectionFile = join(tempDir, 'injected-sentinel-ps1.txt');
-    const r = invokePwsh(ps1Path, [probeArg({ injectionPath: injectionFile })]);
+    const hostileArg = `& echo INJECTED > "${injectionFile}"`;
+    const r = invokePwsh(ps1Path, [probeArg({}), hostileArg]);
     if (r.status !== 0) {
       throw new Error(`ps1 injection probe exited ${r.status}: ${r.stderr}`);
     }
     const payload = parseProbeOutput(r.stdout);
     assert(
-      payload.injectionCreated === false,
-      `ps1 injection sentinel was created at ${injectionFile} — launcher leaked shell metacharacters`,
+      payload.argv.includes(hostileArg),
+      'ps1 hostile argument was not preserved',
     );
     assert(
       !existsSync(injectionFile),

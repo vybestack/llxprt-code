@@ -131,6 +131,10 @@ export interface EphemeralSettings {
   'compression.density.recencyPruning'?: boolean;
   'compression.density.recencyRetention'?: number;
   'compression.density.compressHeadroom'?: number;
+  'stream-first-response-timeout-ms'?: number;
+  streamFirstResponseTimeoutMs?: number;
+  'stream-idle-timeout-ms'?: number;
+  streamIdleTimeoutMs?: number;
 }
 
 /**

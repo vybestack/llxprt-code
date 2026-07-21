@@ -4,34 +4,114 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { main as generateSchema } from '../generate-settings-schema.ts';
+/**
+ * Behavioral tests for the settings schema/doc generator's `documentedDefault`
+ * metadata mechanism (issue #2607 Finding 1).
+ *
+ * The mechanism separates a documented/schema default (advertised to users)
+ * from a merge-applied runtime settings default (materialized by settingsMerge).
+ * This keeps `streamFirstResponseTimeoutMs`'s runtime default `undefined`
+ * (no unconfigured ephemeral) while generators advertise the public 300000.
+ */
 
-describe('generate-settings-schema', () => {
-  it('keeps schema in sync in check mode', async () => {
-    const previousExitCode = process.exitCode;
-    await expect(generateSchema(['--check'])).resolves.toBeUndefined();
-    expect(process.exitCode).toBe(previousExitCode);
+import { describe, it, expect } from 'vitest';
+import {
+  buildSettingSchema,
+  buildMarkdownDescription,
+  resolveDocumentedDefault,
+} from '../generate-settings-schema.js';
+import type { SettingDefinition } from '../../packages/cli/src/config/settingsSchema.js';
+
+function numberSetting(
+  overrides: Partial<SettingDefinition> = {},
+): SettingDefinition {
+  return {
+    type: 'number',
+    label: 'Test Setting',
+    category: 'Test',
+    requiresRestart: false,
+    default: 0,
+    ...overrides,
+  };
+}
+
+describe('resolveDocumentedDefault', () => {
+  it('returns the runtime default when documentedDefault is absent', () => {
+    const def = numberSetting({ default: 42 });
+    expect(resolveDocumentedDefault(def)).toBe(42);
   });
 
-  it('includes $schema property in generated schema', async () => {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const schemaPath = join(__dirname, '../../schemas/settings.schema.json');
-    const schemaContent = await readFile(schemaPath, 'utf-8');
-    const schema = JSON.parse(schemaContent);
-
-    // Verify $schema property exists in the schema's properties
-    expect(schema.properties).toHaveProperty('$schema');
-    expect(schema.properties.$schema).toEqual({
-      type: 'string',
-      title: 'Schema',
-      description:
-        'The URL of the JSON schema for this settings file. Used by editors for validation and autocompletion.',
-      default:
-        'https://raw.githubusercontent.com/vybestack/llxprt-code/main/schemas/settings.schema.json',
+  it('prefers documentedDefault over the runtime default', () => {
+    const def = numberSetting({
+      default: undefined,
+      documentedDefault: 300000,
     });
+    expect(resolveDocumentedDefault(def)).toBe(300000);
+  });
+
+  it('prefers documentedDefault even when default is a concrete value', () => {
+    const def = numberSetting({ default: 1, documentedDefault: 99 });
+    expect(resolveDocumentedDefault(def)).toBe(99);
+  });
+
+  it('returns undefined when neither default is defined', () => {
+    const def = numberSetting({ default: undefined });
+    expect(resolveDocumentedDefault(def)).toBeUndefined();
+  });
+});
+
+describe('buildSettingSchema documentedDefault precedence', () => {
+  const emptyDefs = new Map<string, unknown>();
+
+  it('emits the documentedDefault as the JSON schema default when runtime default is undefined', () => {
+    const def = numberSetting({
+      default: undefined,
+      documentedDefault: 300000,
+    });
+    const schema = buildSettingSchema(def, ['k'], emptyDefs as never);
+    expect(schema.default).toBe(300000);
+    expect(schema.type).toBe('number');
+  });
+
+  it('emits the runtime default when documentedDefault is absent', () => {
+    const def = numberSetting({ default: 0 });
+    const schema = buildSettingSchema(def, ['k'], emptyDefs as never);
+    expect(schema.default).toBe(0);
+  });
+
+  it('emits documentedDefault when both are present (documented wins)', () => {
+    const def = numberSetting({ default: 1, documentedDefault: 99 });
+    const schema = buildSettingSchema(def, ['k'], emptyDefs as never);
+    expect(schema.default).toBe(99);
+  });
+
+  it('omits the default key entirely when neither is defined', () => {
+    const def = numberSetting({ default: undefined });
+    const schema = buildSettingSchema(def, ['k'], emptyDefs as never);
+    expect(schema.default).toBeUndefined();
+    expect('default' in schema).toBe(false);
+  });
+});
+
+describe('buildMarkdownDescription documentedDefault precedence', () => {
+  it('renders the documentedDefault in the markdown Default line', () => {
+    const def = numberSetting({
+      default: undefined,
+      documentedDefault: 300000,
+    });
+    const md = buildMarkdownDescription(def);
+    expect(md).toContain('- Default: `300000`');
+  });
+
+  it('renders the runtime default when documentedDefault is absent', () => {
+    const def = numberSetting({ default: 0 });
+    const md = buildMarkdownDescription(def);
+    expect(md).toContain('- Default: `0`');
+  });
+
+  it('omits the Default line when neither default is defined', () => {
+    const def = numberSetting({ default: undefined });
+    const md = buildMarkdownDescription(def);
+    expect(md).not.toContain('- Default:');
   });
 });

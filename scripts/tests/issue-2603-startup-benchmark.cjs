@@ -51,7 +51,9 @@ const posixLauncher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 // POSIX alternate: some installers place bun at node_modules/.bun/bin/bun.
 const repoBunPosix = join(repoRoot, 'node_modules', '.bun', 'bin', 'bun');
-const entry = join(repoRoot, 'packages', 'cli', 'index.ts');
+const entry = process.env.LLXPRT_BENCH_ENTRY
+  ? resolve(process.env.LLXPRT_BENCH_ENTRY)
+  : join(repoRoot, 'packages', 'cli', 'index.ts');
 
 /**
  * Cross-platform Bun discovery. The bun npm package installs bun at
@@ -311,6 +313,10 @@ function main() {
     process.exit(1);
   }
   const bunExe = resolveBun();
+  if (!existsSync(entry)) {
+    console.error(`Benchmark entry not found: ${entry}`);
+    process.exit(1);
+  }
 
   console.log(`Startup benchmark (issue #2603)`);
   console.log(`  platform:  ${process.platform}`);
@@ -323,6 +329,7 @@ function main() {
     );
   }
   console.log(`  bun:        ${bunExe}`);
+  console.log(`  entry:      ${entry}`);
   console.log('');
 
   const launcherInvocation = resolveDirectLauncherInvocation();

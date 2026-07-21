@@ -5,51 +5,117 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { join, resolve, win32 } from 'node:path';
 import { resolveBunPath, defaultPathCommand } from './bun-path-resolver.js';
 
+// These paths are virtual inputs for injected filesystem capabilities; no
+// on-disk fixture is required.
+const virtualRoot = resolve('virtual-bun-resolver-root');
+const virtualModuleDir = join(
+  virtualRoot,
+  'packages',
+  'cli',
+  'src',
+  'launcher',
+);
+
 describe('resolveBunPath', () => {
+  it('prefers a direct native Bun executable over a local bun.cmd wrapper on Windows', async () => {
+    const wrapper = join(virtualRoot, 'node_modules', '.bin', 'bun.cmd');
+    const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
+
+    const result = await resolveBunPath({
+      platform: 'win32',
+      moduleDir: virtualModuleDir,
+      pathChecker: async (target) => target === wrapper || target === native,
+      pathCommand: async () => null,
+    });
+
+    expect(result).toBe(native);
+  });
+
+  it('prefers a native PATH result over a local bun.cmd wrapper on Windows', async () => {
+    const wrapper = join(virtualRoot, 'node_modules', '.bin', 'bun.cmd');
+    const native = join(virtualRoot, 'path', 'bun.exe');
+
+    const result = await resolveBunPath({
+      platform: 'win32',
+      moduleDir: virtualModuleDir,
+      pathChecker: async (target) => target === wrapper || target === native,
+      pathCommand: async () => native,
+    });
+
+    expect(result).toBe(native);
+  });
+
+  it('remembers a bun.cmd wrapper when no native Windows candidate exists', async () => {
+    const wrapper = join(virtualRoot, 'node_modules', '.bin', 'bun.cmd');
+
+    const result = await resolveBunPath({
+      platform: 'win32',
+      moduleDir: virtualModuleDir,
+      pathChecker: async (target) => target === wrapper,
+      pathCommand: async () => null,
+    });
+
+    expect(result).toBe(wrapper);
+  });
   it('prefers node_modules/.bin/bun candidate over PATH lookup', async () => {
     const foundCandidates: string[] = [];
     const pathChecker = vi.fn(async (target: string) => {
       foundCandidates.push(target);
-      return target === '/repo/node_modules/.bin/bun';
+      return target === join(virtualRoot, 'node_modules', '.bin', 'bun');
     });
     const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
 
-    expect(result).toBe('/repo/node_modules/.bin/bun');
+    expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun'));
     expect(pathCommand).not.toHaveBeenCalled();
-    expect(foundCandidates).toContain('/repo/node_modules/.bin/bun');
+    expect(foundCandidates).toContain(
+      join(virtualRoot, 'node_modules', '.bin', 'bun'),
+    );
   });
 
   it('climbs ancestors probing node_modules/.bin/bun', async () => {
     const probes: string[] = [];
     const pathChecker = vi.fn(async (target: string) => {
       probes.push(target);
-      return target === '/repo/node_modules/.bin/bun';
+      return target === join(virtualRoot, 'node_modules', '.bin', 'bun');
     });
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand: vi.fn(async () => null),
     });
 
-    expect(result).toBe('/repo/node_modules/.bin/bun');
+    expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun'));
     expect(probes).toContain(
-      '/repo/packages/cli/src/launcher/node_modules/.bin/bun',
+      join(virtualModuleDir, 'node_modules', '.bin', 'bun'),
     );
-    expect(probes).toContain('/repo/packages/cli/src/node_modules/.bin/bun');
+    expect(probes).toContain(
+      join(
+        virtualRoot,
+        'packages',
+        'cli',
+        'src',
+        'node_modules',
+        '.bin',
+        'bun',
+      ),
+    );
     expect(
-      probes.indexOf('/repo/packages/cli/src/launcher/node_modules/.bin/bun'),
-    ).toBeLessThan(probes.indexOf('/repo/node_modules/.bin/bun'));
+      probes.indexOf(join(virtualModuleDir, 'node_modules', '.bin', 'bun')),
+    ).toBeLessThan(
+      probes.indexOf(join(virtualRoot, 'node_modules', '.bin', 'bun')),
+    );
   });
 
   it('uses PATH fallback via which on POSIX when node_modules/.bin misses', async () => {
@@ -64,7 +130,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'darwin',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -72,24 +138,49 @@ describe('resolveBunPath', () => {
     expect(result).toBe('/opt/homebrew/bin/bun');
   });
 
-  it('uses PATH fallback via where on Windows when node_modules/.bin misses', async () => {
+  it('uses PATH fallback via an absolute System32 where.exe on Windows when available', async () => {
     const pathChecker = vi.fn(
       async (target: string) => target === 'C:/Program Files/bun/bun.exe',
     );
+    const systemRoot = process.env['SystemRoot'];
+    const expectedTool =
+      systemRoot !== undefined && win32.isAbsolute(systemRoot)
+        ? win32.join(systemRoot, 'System32', 'where.exe')
+        : 'where.exe';
     const pathCommand = vi.fn(async (tool: string, args: string[]) => {
-      expect(tool).toBe('where');
+      expect(tool).toBe(expectedTool);
       expect(args).toStrictEqual(['bun']);
       return 'C:/Program Files/bun/bun.exe';
     });
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
 
     expect(result).toBe('C:/Program Files/bun/bun.exe');
+  });
+
+  it('ignores unsupported Windows PATH wrappers before executable validation', async () => {
+    const batchWrapper = 'C:\\tools\\bun.bat';
+    const commandWrapper = 'C:\\tools\\bun.cmd';
+    const pathChecker = vi.fn(
+      async (target: string) =>
+        target === batchWrapper || target === commandWrapper,
+    );
+
+    const result = await resolveBunPath({
+      platform: 'win32',
+      moduleDir: virtualModuleDir,
+      pathChecker,
+      pathCommand: async () => `${batchWrapper}\r\n${commandWrapper}\r\n`,
+    });
+
+    expect(result).toBe(commandWrapper);
+    expect(pathChecker).not.toHaveBeenCalledWith(batchWrapper);
+    expect(pathChecker).toHaveBeenCalledWith(commandWrapper);
   });
 
   it('strips surrounding quotes from Windows where results before validation', async () => {
@@ -101,7 +192,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -116,45 +207,46 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand: vi.fn(async () => `${mismatchedPath}\r\n`),
     });
 
     expect(result).toBeNull();
-    expect(pathChecker).toHaveBeenCalledWith(mismatchedPath);
+    expect(pathChecker).not.toHaveBeenCalledWith(mismatchedPath);
   });
 
   it('finds bun.exe under node_modules/.bin on Windows', async () => {
     const pathChecker = vi.fn(
-      async (target: string) => target === 'C:/repo/node_modules/.bin/bun.exe',
+      async (target: string) =>
+        target === join(virtualRoot, 'node_modules', '.bin', 'bun.exe'),
     );
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand: vi.fn(async () => null),
     });
 
-    expect(result).toBe('C:/repo/node_modules/.bin/bun.exe');
+    expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun.exe'));
   });
 
   it('probes Windows candidate names bun.exe and bun.cmd', async () => {
     const probes: string[] = [];
     const pathChecker = vi.fn(async (target: string) => {
       probes.push(target);
-      return target === 'C:/repo/node_modules/.bin/bun.cmd';
+      return target === join(virtualRoot, 'node_modules', '.bin', 'bun.cmd');
     });
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand: vi.fn(async () => null),
     });
 
-    expect(result).toBe('C:/repo/node_modules/.bin/bun.cmd');
+    expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'));
     expect(probes.some((p) => p.endsWith('bun.exe'))).toBe(true);
     expect(probes.some((p) => p.endsWith('bun.cmd'))).toBe(true);
   });
@@ -163,17 +255,17 @@ describe('resolveBunPath', () => {
     const probes: string[] = [];
     const pathChecker = vi.fn(async (target: string) => {
       probes.push(target);
-      return target === '/repo/node_modules/.bin/bun';
+      return target === join(virtualRoot, 'node_modules', '.bin', 'bun');
     });
 
     await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand: vi.fn(async () => null),
     });
 
-    expect(probes.some((p) => p.endsWith('.bin/bun'))).toBe(true);
+    expect(probes.some((p) => p.endsWith(join('.bin', 'bun')))).toBe(true);
   });
 
   it('returns null when both node_modules/.bin and PATH miss', async () => {
@@ -182,7 +274,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -198,7 +290,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -229,7 +321,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -243,7 +335,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -258,7 +350,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -277,7 +369,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -293,7 +385,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'linux',
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -310,7 +402,7 @@ describe('resolveBunPath', () => {
 
     const result = await resolveBunPath({
       platform: 'win32',
-      moduleDir: 'C:/repo/packages/cli/src/launcher',
+      moduleDir: virtualModuleDir,
       pathChecker,
       pathCommand,
     });
@@ -322,156 +414,208 @@ describe('resolveBunPath', () => {
     it('POSIX: finds direct dependency executable when .bin is absent', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === '/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
 
       const result = await resolveBunPath({
         platform: 'linux',
-        moduleDir: '/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('/repo/node_modules/bun/bin/bun.exe');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
     });
 
-    it('POSIX: .bin still wins over direct dependency and PATH', async () => {
+    it('POSIX: accepts a bare direct dependency executable when bun.exe is absent', async () => {
+      const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun');
+      const pathChecker = vi.fn(async (target: string) => target === native);
+
+      const result = await resolveBunPath({
+        platform: 'linux',
+        moduleDir: virtualModuleDir,
+        pathChecker,
+        pathCommand: vi.fn(async () => null),
+      });
+
+      expect(result).toBe(native);
+    });
+
+    it('POSIX: prefers direct bun.exe over bare bun and PATH', async () => {
+      const executable = join(
+        virtualRoot,
+        'node_modules',
+        'bun',
+        'bin',
+        'bun.exe',
+      );
+      const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun');
       const pathChecker = vi.fn(
-        async (target: string) =>
-          target === '/repo/node_modules/.bin/bun' ||
-          target === '/repo/node_modules/bun/bin/bun.exe',
+        async (target: string) => target === executable || target === native,
       );
       const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
 
       const result = await resolveBunPath({
         platform: 'linux',
-        moduleDir: '/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand,
       });
 
-      expect(result).toBe('/repo/node_modules/.bin/bun');
+      expect(result).toBe(executable);
+    });
+
+    it('POSIX: .bin still wins over direct dependency and PATH', async () => {
+      const pathChecker = vi.fn(
+        async (target: string) =>
+          target === join(virtualRoot, 'node_modules', '.bin', 'bun') ||
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
+      const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
+
+      const result = await resolveBunPath({
+        platform: 'linux',
+        moduleDir: virtualModuleDir,
+        pathChecker,
+        pathCommand,
+      });
+
+      expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun'));
       expect(pathCommand).not.toHaveBeenCalled();
     });
 
     it('POSIX: direct dependency wins over PATH when .bin is absent', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === '/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
       const pathCommand = vi.fn(async () => '/usr/local/bin/bun');
 
       const result = await resolveBunPath({
         platform: 'darwin',
-        moduleDir: '/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand,
       });
 
-      expect(result).toBe('/repo/node_modules/bun/bin/bun.exe');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
       expect(pathCommand).not.toHaveBeenCalled();
     });
 
     it('Windows: finds direct dependency .exe when .bin is absent', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('C:/repo/node_modules/bun/bin/bun.exe');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
     });
 
     it('Windows: finds direct dependency bun.cmd when bun.exe is absent', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/bun/bin/bun.cmd',
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.cmd'),
       );
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('C:/repo/node_modules/bun/bin/bun.cmd');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.cmd'),
+      );
     });
 
     it('Windows: .bin bun.exe wins over direct dependency executable', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/.bin/bun.exe' ||
-          target === 'C:/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', '.bin', 'bun.exe') ||
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('C:/repo/node_modules/.bin/bun.exe');
+      expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun.exe'));
     });
 
-    it('Windows: .bin bun.cmd wins over direct dependency when only .cmd exists', async () => {
+    it('Windows: direct native Bun wins over a .bin bun.cmd wrapper', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/.bin/bun.cmd' ||
-          target === 'C:/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', '.bin', 'bun.cmd') ||
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('C:/repo/node_modules/.bin/bun.cmd');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
     });
 
     it('Windows: direct dependency wins over PATH when .bin is absent', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
       const pathCommand = vi.fn(async () => 'C:/bun/bun.exe');
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand,
       });
 
-      expect(result).toBe('C:/repo/node_modules/bun/bin/bun.exe');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
       expect(pathCommand).not.toHaveBeenCalled();
     });
 
     it('climbs ancestors probing direct dependency executable', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === '/repo/node_modules/bun/bin/bun.exe',
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
 
       const result = await resolveBunPath({
         platform: 'linux',
-        moduleDir: '/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('/repo/node_modules/bun/bin/bun.exe');
+      expect(result).toBe(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
       expect(pathChecker).toHaveBeenCalledWith(
-        '/repo/node_modules/bun/bin/bun.exe',
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
       );
     });
 
@@ -479,18 +623,24 @@ describe('resolveBunPath', () => {
       const probes: string[] = [];
       const pathChecker = vi.fn(async (target: string) => {
         probes.push(target);
-        return target === '/repo/node_modules/bun/bin/bun.exe';
+        return (
+          target === join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe')
+        );
       });
 
       await resolveBunPath({
         platform: 'linux',
-        moduleDir: '/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      const binIdx = probes.indexOf('/repo/node_modules/.bin/bun');
-      const depIdx = probes.indexOf('/repo/node_modules/bun/bin/bun.exe');
+      const binIdx = probes.indexOf(
+        join(virtualRoot, 'node_modules', '.bin', 'bun'),
+      );
+      const depIdx = probes.indexOf(
+        join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      );
       expect(binIdx).toBeGreaterThan(-1);
       expect(depIdx).toBeGreaterThan(-1);
       expect(binIdx).toBeLessThan(depIdx);
@@ -504,7 +654,7 @@ describe('resolveBunPath', () => {
 
       const result = await resolveBunPath({
         platform: 'linux',
-        moduleDir: '/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand,
       });
@@ -517,30 +667,40 @@ describe('resolveBunPath', () => {
     it('prefers bun.exe over bun.cmd when both exist in the same .bin dir', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/.bin/bun.exe' ||
-          target === 'C:/repo/node_modules/.bin/bun.cmd',
+          target === join(virtualRoot, 'node_modules', '.bin', 'bun.exe') ||
+          target === join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'),
       );
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('C:/repo/node_modules/.bin/bun.exe');
+      expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun.exe'));
     });
 
     it('does not probe bun.cmd in the same dir if bun.exe already resolved', async () => {
       const probes: string[] = [];
       const pathChecker = vi.fn(async (target: string) => {
         probes.push(target);
-        return target === 'C:/repo/packages/cli/node_modules/.bin/bun.exe';
+        return (
+          target ===
+          join(
+            virtualRoot,
+            'packages',
+            'cli',
+            'node_modules',
+            '.bin',
+            'bun.exe',
+          )
+        );
       });
 
       await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
@@ -549,7 +709,16 @@ describe('resolveBunPath', () => {
       // must never be probed.
       expect(
         probes.filter(
-          (p) => p === 'C:/repo/packages/cli/node_modules/.bin/bun.cmd',
+          (p) =>
+            p ===
+            join(
+              virtualRoot,
+              'packages',
+              'cli',
+              'node_modules',
+              '.bin',
+              'bun.cmd',
+            ),
         ),
       ).toHaveLength(0);
     });
@@ -557,17 +726,17 @@ describe('resolveBunPath', () => {
     it('falls back to bun.cmd only when bun.exe is absent in the same .bin dir', async () => {
       const pathChecker = vi.fn(
         async (target: string) =>
-          target === 'C:/repo/node_modules/.bin/bun.cmd',
+          target === join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'),
       );
 
       const result = await resolveBunPath({
         platform: 'win32',
-        moduleDir: 'C:/repo/packages/cli/src/launcher',
+        moduleDir: virtualModuleDir,
         pathChecker,
         pathCommand: vi.fn(async () => null),
       });
 
-      expect(result).toBe('C:/repo/node_modules/.bin/bun.cmd');
+      expect(result).toBe(join(virtualRoot, 'node_modules', '.bin', 'bun.cmd'));
     });
   });
 });

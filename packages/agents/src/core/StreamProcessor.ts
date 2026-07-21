@@ -449,6 +449,7 @@ export class StreamProcessor {
         config: runtimeContext.config,
         runtime: runtimeContext,
         onProviderError: params.config?.onProviderError,
+        onStreamLiveness: params.config?.onStreamLiveness,
         settings:
           runtimeContext.settingsService as GenerateChatOptions['settings'],
         metadata: {
