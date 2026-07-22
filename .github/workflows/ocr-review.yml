@@ -1367,6 +1367,7 @@ jobs:
                   --json number,title \
                   --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number]"
               )"; then
+                echo "::warning::Failed to list duplicate tracking issues for convergence; duplicates may accumulate."
                 return 0
               fi
               local dup_count

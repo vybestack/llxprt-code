@@ -87,6 +87,9 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       'all OCR per-file reviews failed; likely LLM provider/config/auth failure',
       'OCR review command failed',
     ]);
+    // The ordering assertions verify the first-match-wins priority of the
+    // classifier: if branches are reordered, a message matching multiple
+    // patterns (e.g. "429" and "timeout") would be classified differently.
     const http429Index = reviewRun.indexOf('HTTP 429 rate limit');
     const http529Index = reviewRun.indexOf('HTTP 529 provider overloaded');
     const authIndex = reviewRun.indexOf(
@@ -173,6 +176,7 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       'gh issue list',
       'gh issue comment "${KEEP_ISSUE}"',
       'gh issue close "${dup}"',
+      'Failed to list duplicate tracking issues for convergence; duplicates may accumulate.',
     ]);
   });
 
