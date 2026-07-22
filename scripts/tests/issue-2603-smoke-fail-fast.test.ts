@@ -307,6 +307,55 @@ describe('install helpers cache args (root cause A)', () => {
     expect(args.some((a) => /npm-cache/i.test(a))).toBe(false);
   });
 
+  it('produces exact install args with cache-first, no-weakening flags', () => {
+    // Root cause K (PR 2610): three consecutive global installs hit the exact
+    // configured timeout ceiling despite a warmed cache, proving the install
+    // is blocked on avoidable registry/audit activity (not compute). The args
+    // must include cache-first flags and must NOT weaken lifecycle execution.
+    const m = installModule();
+    const args = m.buildInstallArgs([
+      '--global',
+      '--prefix',
+      'C:\\prefix',
+      'replica.tgz',
+    ]);
+    expect(args).toStrictEqual([
+      'install',
+      '--global',
+      '--prefix',
+      'C:\\prefix',
+      'replica.tgz',
+      '--no-audit',
+      '--no-fund',
+      '--prefer-offline',
+      '--loglevel',
+      'error',
+    ]);
+  });
+
+  it('suppresses avoidable registry/audit activity via cache-first flags', () => {
+    const m = installModule();
+    const args = m.buildInstallArgs(['pkg.tgz']);
+    // --no-audit: skip the blocking vulnerability audit HTTP round-trip.
+    expect(args).toContain('--no-audit');
+    // --no-fund: skip the blocking funding metadata HTTP round-trip.
+    expect(args).toContain('--no-fund');
+    // --prefer-offline: serve from the warmed cache, fall back to registry.
+    expect(args).toContain('--prefer-offline');
+    // Strict --offline must NOT be used: it hard-fails on any cache miss.
+    expect(args).not.toContain('--offline');
+  });
+
+  it('does NOT weaken lifecycle or install-integrity guarantees', () => {
+    const m = installModule();
+    const args = m.buildInstallArgs(['pkg.tgz']);
+    // --ignore-scripts would skip the postinstall that installs native
+    // launchers — the entire point of the smoke.
+    expect(args).not.toContain('--ignore-scripts');
+    // --force would clobber install-integrity protections.
+    expect(args).not.toContain('--force');
+  });
+
   it('includes the user args and loglevel', () => {
     const m = installModule();
     const args = m.buildInstallArgs(['pkg.tgz']);

@@ -45,6 +45,31 @@ const SPAWN_MAX_BUFFER = 64 * 1024 * 1024;
  * populated in the workflow). An empty isolated per-fixture cache forced
  * re-fetches and caused the ETIMEDOUT cascades seen in CI run 29850614559.
  *
+ * Cache-first flags (root cause K, PR 2610 three exact-ceiling timeouts):
+ *   The prior successful head completed the global install in 342_875 ms; the
+ *   smoke then timed out three consecutive times at the exact configured
+ *   ceiling (twice at 480_000 ms, once at 600_000 ms) with the same replica
+ *   fingerprint. An identical-fingerprint install regressing from ~343s to a
+ *   full timeout proves the install is blocked on avoidable network activity,
+ *   not compute. npm's defaults run a blocking audit (vulnerability check)
+ *   and a funding-metadata round-trip to the registry on every install, and
+ *   re-fetch packument metadata even when the warmed cache holds a copy. The
+ *   flags below eliminate that avoidable registry/audit work while preserving
+ *   real install behavior and lifecycle scripts:
+ *
+ *     --no-audit       skip the blocking vulnerability audit HTTP call
+ *     --no-fund        skip the blocking funding metadata HTTP call
+ *     --prefer-offline serve from the warmed cache, fall back to the registry
+ *
+ *   --prefer-offline (NOT --offline) is deliberately used so a cache miss or
+ *   stale metadata entry transparently falls back to the registry rather than
+ *   hard-failing the install. The finite 600_000 ms timeout in constants.cjs
+ *   is RETAINED so a genuine hang still aborts in minutes.
+ *
+ *   No weakening flags are used: --ignore-scripts (would skip the postinstall
+ *   that installs native launchers, defeating the smoke) and --force (would
+ *   clobber install-integrity guarantees) must NEVER appear.
+ *
  * @param {string[]} extraArgs - install arguments to prepend (e.g. global
  *   prefix flags and the tarball path).
  * @returns {string[]} the full argument list for npm install.
@@ -56,7 +81,17 @@ function buildInstallArgs(extraArgs) {
       `buildInstallArgs: extraArgs must be an array (got ${typeof extraArgs})`,
     );
   }
-  return ['install', ...extraArgs, '--loglevel', 'error'];
+  return [
+    'install',
+    ...extraArgs,
+    // Skip blocking registry audit/funding round-trips and prefer the warmed
+    // cache with registry fallback. See root cause K in the JSDoc above.
+    '--no-audit',
+    '--no-fund',
+    '--prefer-offline',
+    '--loglevel',
+    'error',
+  ];
 }
 
 function globalInstall(tempDir, replicaTarball) {

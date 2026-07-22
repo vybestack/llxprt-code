@@ -310,7 +310,49 @@ describe('probeArg nativeExit payload contract', () => {
     it('accepts an empty array', () => {
       const m = installHelpersModule();
       const args = m.buildInstallArgs([]);
-      expect(args).toStrictEqual(['install', '--loglevel', 'error']);
+      expect(args).toStrictEqual([
+        'install',
+        '--no-audit',
+        '--no-fund',
+        '--prefer-offline',
+        '--loglevel',
+        'error',
+      ]);
+    });
+
+    it('emits cache-first flags that suppress avoidable registry activity', () => {
+      // Root cause K (PR 2610, three exact-ceiling global-install timeouts):
+      // npm's defaults (audit=true, fund=true, prefer-offline=false) cause
+      // every smoke install to make blocking registry/audit HTTP round-trips
+      // even when the warmed cache holds a copy. The prior successful head
+      // completed in 342_875 ms; three consecutive runs then hit the exact
+      // configured ceiling, proving the install is blocked on avoidable
+      // network activity, not compute. These flags make installs
+      // deterministic and cache-first while preserving registry fallback.
+      const m = installHelpersModule();
+      const args = m.buildInstallArgs(['pkg.tgz']);
+      expect(args).toContain('--no-audit');
+      expect(args).toContain('--no-fund');
+      expect(args).toContain('--prefer-offline');
+    });
+
+    it('does NOT emit strict --offline (registry fallback preserved)', () => {
+      // --offline would hard-fail on any cache miss (e.g. metadata stall or a
+      // cold entry), making installs brittle. --prefer-offline prefers cached
+      // copies but transparently falls back to the registry when needed.
+      const m = installHelpersModule();
+      const args = m.buildInstallArgs(['pkg.tgz']);
+      expect(args).not.toContain('--offline');
+    });
+
+    it('does NOT weaken lifecycle/script execution', () => {
+      // --ignore-scripts would skip the postinstall that installs native
+      // launchers, defeating the entire smoke. --force would clobber
+      // install-integrity guarantees. Neither must ever appear.
+      const m = installHelpersModule();
+      const args = m.buildInstallArgs(['pkg.tgz']);
+      expect(args).not.toContain('--ignore-scripts');
+      expect(args).not.toContain('--force');
     });
   });
 });
