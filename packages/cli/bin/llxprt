@@ -78,6 +78,7 @@ _llxprt_is_exact_pin() {
   _llxprt_pin=$1
   case "$_llxprt_pin" in
     *[!0-9.]*) return 1 ;; # contains non-numeric/non-dot chars: a range/tag
+    *) ;;
   esac
   # Must have exactly two dots (three numeric groups). Strip leading digits
   # from each group to ensure each group is purely numeric.
@@ -87,6 +88,7 @@ _llxprt_is_exact_pin() {
     _llxprt_part=${_llxprt_rest%%.*}
     case "$_llxprt_part" in
       ''|*[!0-9]*) return 1 ;;
+      *) ;;
     esac
     _llxprt_group=$((_llxprt_group + 1))
     case "$_llxprt_rest" in
