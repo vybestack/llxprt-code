@@ -11,6 +11,7 @@ import {
   rmSync,
   writeFileSync,
   readFileSync,
+  chmodSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -241,6 +242,60 @@ describe('installNativeLaunchers logging', () => {
       );
       expect(wroteMsg, messages.join('\n')).toBeDefined();
     } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('installNativeLaunchers EACCES graceful handling', () => {
+  it('does not crash when a foreign shim is unreadable (EACCES)', () => {
+    // A foreign shim that exists but is unreadable (EACCES) must be treated
+    // as non-overwritable rather than crashing postinstall. The installer
+    // must skip it gracefully and return it in the skipped list.
+    if (process.platform === 'win32') {
+      // chmod 0 does not reliably prevent reads on Windows; skip on win32.
+      return;
+    }
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-eacces-'));
+    try {
+      const packageRoot = join(
+        tempDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'fake',
+      );
+      writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+      const dotBin = join(tempDir, 'node_modules', '.bin');
+      mkdirSync(dotBin, { recursive: true });
+      const unreadableCmd = join(dotBin, 'llxprt.cmd');
+      // Write a foreign shim (no sentinel, no package target reference).
+      writeFileSync(unreadableCmd, '@echo off\necho foreign shim');
+      // Remove read permission so reading throws EACCES.
+      chmodSync(unreadableCmd, 0o000);
+      // The install must not throw; the unreadable file must be skipped.
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: {},
+        log: () => {},
+      });
+      expect(result.error).toBeNull();
+      expect(result.skipped).toContain(unreadableCmd);
+    } finally {
+      // Restore permission before cleanup so rmSync can remove the file.
+      try {
+        chmodSync(join(tempDir, 'node_modules', '.bin', 'llxprt.cmd'), 0o644);
+      } catch {
+        // ignore
+      }
       rmSync(tempDir, { recursive: true, force: true });
     }
   });

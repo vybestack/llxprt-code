@@ -61,6 +61,21 @@ const PNPM_PACKAGE_DIR = `${CLI_MANIFEST.name.replace(/^@/, '').replace(/\//g, '
 // stay correct if the package name or scope ever changes.
 const [CLI_SCOPE, ...CLI_NAME_PARTS] = CLI_MANIFEST.name.split('/');
 const CLI_NAME = CLI_NAME_PARTS.join('/') || CLI_MANIFEST.name;
+// The bin name is derived from the CLI manifest's bin field so assertions
+// adapt automatically if the bin name ever changes from 'llxprt'.
+const CLI_BIN_NAME = (() => {
+  try {
+    const binPkg = JSON.parse(
+      readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
+    ) as { bin?: Record<string, string> };
+    const binEntries = Object.values(binPkg.bin ?? {});
+    return binEntries.length > 0
+      ? binEntries[0].replace(/^bin\//, '')
+      : 'llxprt';
+  } catch {
+    return 'llxprt';
+  }
+})();
 
 function loadCliInstaller(): ReturnType<typeof nodeRequire> {
   const mod = nodeRequire(cliModulePath);
@@ -124,8 +139,12 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
         log: () => {},
       });
       expect(result.written.length).toBeGreaterThanOrEqual(2);
-      expect(existsSync(join(consumerDotBin, 'llxprt.cmd'))).toBe(true);
-      expect(existsSync(join(consumerDotBin, 'llxprt.ps1'))).toBe(true);
+      expect(existsSync(join(consumerDotBin, `${CLI_BIN_NAME}.cmd`))).toBe(
+        true,
+      );
+      expect(existsSync(join(consumerDotBin, `${CLI_BIN_NAME}.ps1`))).toBe(
+        true,
+      );
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -144,8 +163,12 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
         log: () => {},
       });
       const virtualDotBin = join(virtualStoreNodeModules, '.bin');
-      expect(existsSync(join(virtualDotBin, 'llxprt.cmd'))).toBe(false);
-      expect(existsSync(join(virtualDotBin, 'llxprt.ps1'))).toBe(false);
+      expect(existsSync(join(virtualDotBin, `${CLI_BIN_NAME}.cmd`))).toBe(
+        false,
+      );
+      expect(existsSync(join(virtualDotBin, `${CLI_BIN_NAME}.ps1`))).toBe(
+        false,
+      );
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -190,7 +213,7 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
     try {
       const { packageRoot, consumerRoot, consumerDotBin } =
         setupPnpmVirtualStore(tempDir);
-      const foreignCmd = join(consumerDotBin, 'llxprt.cmd');
+      const foreignCmd = join(consumerDotBin, `${CLI_BIN_NAME}.cmd`);
       writeFileSync(foreignCmd, '@echo off\necho someone else');
       const result = mod.installNativeLaunchers({
         platform: 'win32',
@@ -211,7 +234,7 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
     try {
       const { packageRoot, consumerRoot, consumerDotBin } =
         setupPnpmVirtualStore(tempDir);
-      const ourCmd = join(consumerDotBin, 'llxprt.cmd');
+      const ourCmd = join(consumerDotBin, `${CLI_BIN_NAME}.cmd`);
       writeFileSync(ourCmd, `REM ${mod.OWNERSHIP_SENTINEL}\n@echo off`);
       const result = mod.installNativeLaunchers({
         platform: 'win32',
@@ -231,7 +254,7 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
     try {
       const { packageRoot, consumerRoot, consumerDotBin } =
         setupPnpmVirtualStore(tempDir);
-      const foreignPs1 = join(consumerDotBin, 'llxprt.ps1');
+      const foreignPs1 = join(consumerDotBin, `${CLI_BIN_NAME}.ps1`);
       writeFileSync(
         foreignPs1,
         '#!/usr/bin/env pwsh\nWrite-Host "someone else"\n',
@@ -255,7 +278,7 @@ describe('pnpm virtual-store layout (consumer-visible .bin)', () => {
     try {
       const { packageRoot, consumerRoot, consumerDotBin } =
         setupPnpmVirtualStore(tempDir);
-      const ourPs1 = join(consumerDotBin, 'llxprt.ps1');
+      const ourPs1 = join(consumerDotBin, `${CLI_BIN_NAME}.ps1`);
       writeFileSync(
         ourPs1,
         `# ${mod.OWNERSHIP_SENTINEL}\n#!/usr/bin/env pwsh\n`,
@@ -437,8 +460,41 @@ describe('Bun install layout support boundary', () => {
         env: { INIT_CWD: tempDir },
         log: () => {},
       });
-      expect(existsSync(join(dotBin, 'llxprt.cmd'))).toBe(true);
-      expect(existsSync(join(dotBin, 'llxprt.ps1'))).toBe(true);
+      expect(existsSync(join(dotBin, `${CLI_BIN_NAME}.cmd`))).toBe(true);
+      expect(existsSync(join(dotBin, `${CLI_BIN_NAME}.ps1`))).toBe(true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolveBunExe prefers package-local Bun over a hoisted ancestor', () => {
+    // Since bun is a direct dependency, the package-local
+    // node_modules/bun/bin/bun.exe must be preferred over a hoisted copy in a
+    // parent node_modules. This prevents the launcher from referencing an
+    // external hoisted path that could disappear.
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bun-local-pref-'));
+    try {
+      const packageRoot = join(tempDir, 'node_modules', CLI_SCOPE, CLI_NAME);
+      // Package-local Bun.
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'local-bun',
+      );
+      // Hoisted ancestor Bun that would shadow if walk-up ran first.
+      mkdirSync(join(tempDir, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(tempDir, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'hoisted-bun',
+      );
+      const resolved = mod.resolveBunExe(packageRoot);
+      expect(resolved).toBeTruthy();
+      expect(readFileSync(resolved, 'utf8')).toBe('local-bun');
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

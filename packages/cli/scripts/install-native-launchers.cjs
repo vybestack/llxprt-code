@@ -156,9 +156,21 @@ function canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType) {
   }
   // Read the file once and reuse the content for both the ownership sentinel
   // check and the shim-target boundary check, avoiding a duplicate read.
-  // readFileSafe throws on EACCES/EISDIR so a protected shim is NOT silently
-  // treated as an empty/zero-byte file.
-  const content = readFileSafe(filePath);
+  // A foreign shim that exists but is unreadable (EACCES, EISDIR, EIO) must
+  // be treated as non-overwritable rather than crashing postinstall. The
+  // presence of an unreadable file at the launcher path signals a protected
+  // or unexpected state that should not be silently clobbered.
+  let content;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch (e) {
+    if (e && e.code === 'ENOENT') {
+      // Removed between isRegularFile and readFileSync: treat as missing.
+      return true;
+    }
+    // EACCES, EISDIR, EIO, etc: do NOT overwrite an unreadable foreign shim.
+    return false;
+  }
   if (content.includes(OWNERSHIP_SENTINEL)) {
     return true;
   }
@@ -278,6 +290,36 @@ function writeOwnedLauncher(
   if (!canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType)) {
     return false;
   }
+  // Re-validate the ownership sentinel immediately before the write to close
+  // the TOCTOU window between canOverwriteLauncher and writeFileSync. If a
+  // concurrent process replaced the file with a foreign shim after the initial
+  // check, the sentinel re-check catches it and refuses the overwrite.
+  if (fs.existsSync(filePath) && isRegularFile(filePath)) {
+    let currentContent;
+    try {
+      currentContent = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      // Unreadable file (EACCES/EIO): refuse to overwrite.
+      return false;
+    }
+    if (
+      currentContent.length > 0 &&
+      !currentContent.includes(OWNERSHIP_SENTINEL)
+    ) {
+      // The file changed between the first check and now and is not our
+      // sentinel or empty. It may now be a foreign shim; refuse to clobber.
+      if (
+        !shimTargetWithinPackage(
+          currentContent,
+          binLinkDir,
+          packageRoot,
+          shimType,
+        )
+      ) {
+        return false;
+      }
+    }
+  }
   // Wrap the write so a read-only directory, full disk, or other I/O error is
   // reported as skipped/nonfatal rather than crashing postinstall and leaving
   // the package in a partially installed state.
@@ -308,21 +350,29 @@ function writeOwnedLauncher(
 }
 
 function resolveBunExe(packageRoot) {
+  // Prefer the package-local Bun first. Since bun is a direct dependency in
+  // packages/cli/package.json, the local node_modules/bun is the authoritative
+  // install and should not be bypassed in favor of a hoisted copy that could
+  // disappear when the hoisted dependency is removed.
+  const localBunExe = path.join(
+    packageRoot,
+    'node_modules',
+    'bun',
+    'bin',
+    'bun.exe',
+  );
+  if (isRegularFile(localBunExe)) {
+    return localBunExe;
+  }
+  // Fall back to Node module resolution, which may find a hoisted Bun under a
+  // package manager that deduplicates to the enclosing node_modules.
   const pkgRequire = createRequire(path.join(packageRoot, 'package.json'));
   let bunPkgJsonPath;
   try {
     bunPkgJsonPath = pkgRequire.resolve('bun/package.json');
   } catch {
-    const directBunExe = path.join(
-      packageRoot,
-      'node_modules',
-      'bun',
-      'bin',
-      'bun.exe',
-    );
-    if (isRegularFile(directBunExe)) {
-      return directBunExe;
-    }
+    // Last resort: walk up parent directories. This covers edge-case layouts
+    // where neither the local install nor Node resolution find the binary.
     let dir = packageRoot;
     while (dir !== path.dirname(dir)) {
       const candidate = path.join(dir, 'node_modules', 'bun', 'bin', 'bun.exe');

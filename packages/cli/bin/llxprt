@@ -224,11 +224,11 @@ _llxprt_verify_workspace_root() {
   fi
   # Canonical structural check: the package root must be exactly
   # <candidate>/packages/cli. This confirms the launcher sits at the canonical
-  # source-workspace path without scanning any manifest content. Canonicalize
-  # _llxprt_pkg_root to an absolute path before comparing, because the fallback
-  # assignment (when the initial cd && pwd failed) may have left it relative,
-  # which would cause the string comparison to always mismatch.
-  _llxprt_canonical_pkg=$_llxprt_candidate_root/packages/cli
+  # source-workspace path without scanning any manifest content. Both sides of
+  # the comparison are canonicalized via cd && pwd so symlinked components,
+  # redundant separators, or ./.. segments cannot cause a false mismatch.
+  _llxprt_canonical_pkg=$(cd -- "$_llxprt_candidate_root/packages/cli" 2>/dev/null && pwd) || \
+    _llxprt_canonical_pkg="$_llxprt_candidate_root/packages/cli"
   _llxprt_pkg_root_abs=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || \
     _llxprt_pkg_root_abs="$_llxprt_pkg_root"
   if [ "$_llxprt_pkg_root_abs" != "$_llxprt_canonical_pkg" ]; then

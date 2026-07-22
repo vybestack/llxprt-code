@@ -151,13 +151,23 @@ function spawnTarListVerbose(tarball, member, timeoutMs, cwd) {
 function spawnTarExtract(tarball, extractDir, timeoutMs, cwd) {
   requireNonEmptyPath('tarball', tarball);
   requireNonEmptyPath('extractDir', extractDir);
-  // Pre-validate extractDir exists and is a directory so a missing or
-  // non-directory path produces a clear diagnostic instead of a generic tar
-  // "Cannot chdir" / "Not a directory" error.
-  if (!existsSync(extractDir)) {
-    throw new Error(`tar extract destination does not exist: ${extractDir}`);
+  // Pre-validate extractDir is a directory so a missing or non-directory path
+  // produces a clear diagnostic instead of a generic tar error. Use a single
+  // statSync wrapped in try/catch to avoid the TOCTOU gap between existsSync
+  // and statSync, and to catch permission-denied or removed-between-calls
+  // errors with the module's diagnostic style rather than a raw stack trace.
+  let stat;
+  try {
+    stat = statSync(extractDir);
+  } catch (e) {
+    if (e && e.code === 'ENOENT') {
+      throw new Error(`tar extract destination does not exist: ${extractDir}`);
+    }
+    throw new Error(
+      `tar extract destination is not accessible: ${extractDir} (${e.message})`,
+    );
   }
-  if (!statSync(extractDir).isDirectory()) {
+  if (!stat.isDirectory()) {
     throw new Error(
       `tar extract destination is not a directory: ${extractDir}`,
     );
@@ -194,9 +204,24 @@ function spawnTarExtract(tarball, extractDir, timeoutMs, cwd) {
 function findTarballName(packOutput, cacheDir) {
   const lines = packOutput.split(/\r?\n/);
   let tarName = '';
+  // A valid npm pack tarball name has the shape <name>-<version>.tgz where
+  // name is a non-empty npm package name and version is a non-empty semver-ish
+  // string. Validate without a regex to avoid any backtracking risk: split on
+  // the last dash before .tgz and check both halves are non-empty.
+  function looksLikeTarballName(s) {
+    if (!s.endsWith('.tgz')) {
+      return false;
+    }
+    const base = s.slice(0, -4);
+    const dashIdx = base.lastIndexOf('-');
+    if (dashIdx <= 0) {
+      return false;
+    }
+    return dashIdx < base.length - 1;
+  }
   for (let i = lines.length - 1; i >= 0; i--) {
     const trimmed = lines[i].trim();
-    if (trimmed.endsWith('.tgz')) {
+    if (trimmed.endsWith('.tgz') && looksLikeTarballName(trimmed)) {
       tarName = trimmed;
       break;
     }

@@ -121,6 +121,33 @@ describe('findTarballName', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('rejects a stray warning line ending in .tgz that is not a tarball name', () => {
+    // A line like "npm notice created something.tgz" ends in .tgz but does
+    // not have the name-version.tgz shape of a real tarball. The shape check
+    // must prevent it from being returned as a false positive.
+    const output =
+      'npm notice created something.tgz\n' +
+      'npm notice more output\n' +
+      'vybestack-llxprt-code-0.10.0.tgz\n';
+    expect(tarCommand.findTarballName(output)).toBe(
+      'vybestack-llxprt-code-0.10.0.tgz',
+    );
+  });
+
+  it('rejects a trailing bare .tgz with no package name prefix', () => {
+    // A line that is just ".tgz" or "  .tgz" must not match.
+    expect(() => tarCommand.findTarballName('some warning\n.tgz\n')).toThrow(
+      /did not contain a \.tgz line/,
+    );
+  });
+
+  it('accepts scoped package tarball names', () => {
+    const output = '@vybestack-llxprt-code-0.10.0.tgz\n';
+    expect(tarCommand.findTarballName(output)).toBe(
+      '@vybestack-llxprt-code-0.10.0.tgz',
+    );
+  });
 });
 
 describe('TAR_TIMEOUT_MS', () => {
@@ -186,6 +213,35 @@ describe('spawnTarExtract', () => {
       tarCommand.spawnTarExtract(tarPath, extractDir);
       expect(existsSync(join(extractDir, 'payload', 'extracted.txt'))).toBe(
         true,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws a clear diagnostic when extract destination does not exist', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tar-extract-noexist-'));
+    try {
+      const tarPath = join(dir, 'dummy-1.0.0.tgz');
+      writeFileSync(tarPath, 'dummy');
+      const missingDir = join(dir, 'does-not-exist');
+      expect(() => tarCommand.spawnTarExtract(tarPath, missingDir)).toThrow(
+        /does not exist/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws a clear diagnostic when extract destination is a file not a directory', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tar-extract-filedest-'));
+    try {
+      const tarPath = join(dir, 'dummy-1.0.0.tgz');
+      writeFileSync(tarPath, 'dummy');
+      const fileDest = join(dir, 'not-a-dir');
+      writeFileSync(fileDest, 'I am a file');
+      expect(() => tarCommand.spawnTarExtract(tarPath, fileDest)).toThrow(
+        /not a directory/,
       );
     } finally {
       rmSync(dir, { recursive: true, force: true });
