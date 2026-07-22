@@ -151,7 +151,7 @@ function resolveDirectLauncherInvocation() {
   const { replicaTarball } = packReleaseLikeCli(repoRoot);
 
   // Install into a temp prefix to get the generated .cmd launcher.
-  const { mkdtempSync } = require('node:fs');
+  const { mkdtempSync, rmSync } = require('node:fs');
   const { tmpdir } = require('node:os');
   const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-bench-'));
   const prefix = join(tempDir, 'prefix');
@@ -189,6 +189,18 @@ function resolveDirectLauncherInvocation() {
   if (!existsSync(cmdLauncher)) {
     throw new Error(`Installed .cmd launcher not found at ${cmdLauncher}`);
   }
+  // The .cmd launcher lives inside tempDir, so cleanup must wait until the
+  // process exits. Register an exit handler to remove the temp install dir
+  // so a standalone benchmark run does not leak it.
+  const tempDirRef = tempDir;
+  const cleanup = () => {
+    try {
+      rmSync(tempDirRef, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+  };
+  process.on('exit', cleanup);
   return { command: 'cmd', baseArgs: ['/c', cmdLauncher] };
 }
 
@@ -299,7 +311,14 @@ function measure(fn, label) {
     samples.push(Number(t1 - t0) / 1e6); // ms
   }
   samples.sort((a, b) => a - b);
-  const median = samples[Math.floor(samples.length / 2)];
+  // True median: for odd-length arrays, the middle element; for even-length,
+  // the average of the two middle elements. The default iteration count is 15
+  // (odd), so this only changes behavior for a user-specified even count.
+  const mid = Math.floor(samples.length / 2);
+  const median =
+    samples.length % 2 === 1
+      ? samples[mid]
+      : (samples[mid - 1] + samples[mid]) / 2;
   const min = samples[0];
   const max = samples[samples.length - 1];
   return { median, min, max, samples };

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -25,6 +25,15 @@ const npmInvocation = nodeRequire('../lib/npm-command.cjs').npmInvocation as (
     env?: Record<string, string | undefined>;
   },
 ) => { command: string; args: string[] };
+const tarCommand = nodeRequire('../lib/tar-command.cjs') as {
+  spawnTarList: (tarball: string, timeoutMs?: number) => { stdout: string };
+  spawnTarListVerbose: (
+    tarball: string,
+    member: string,
+    timeoutMs?: number,
+  ) => { stdout: string };
+  findTarballName: (packOutput: string, cacheDir?: string) => string;
+};
 const cliModulePath = join(
   repoRoot,
   'packages',
@@ -68,15 +77,18 @@ const sharedCacheDir = join(
 );
 let cachedTarball: string | null = null;
 
-function findTarballName(packOutput: string): string {
-  const lines = packOutput.split(/\r?\n/);
-  const tgzLines = lines.filter((l) => l.trim().endsWith('.tgz'));
-  if (tgzLines.length === 0) {
-    throw new Error(
-      `npm pack output did not contain a .tgz line:\n${packOutput}`,
-    );
+// Clean up the per-process cache dir after all tests complete to prevent
+// accumulation of stale tarball caches across repeated test runs.
+afterAll(() => {
+  try {
+    rmSync(sharedCacheDir, { recursive: true, force: true });
+  } catch {
+    // best-effort cleanup; a failure here does not affect test results.
   }
-  return tgzLines[tgzLines.length - 1].trim();
+});
+
+function findTarballName(packOutput: string): string {
+  return tarCommand.findTarballName(packOutput);
 }
 
 function packCliWorkspace(): string {
@@ -111,47 +123,17 @@ function packCliWorkspace(): string {
 }
 
 /**
- * Spawns tar with spawn-error diagnostics. GitHub Windows runners ship
- * bsdtar; a spawn failure (ENOENT) produces a clear diagnostic rather than an
- * opaque null status.
+ * Delegates to the shared tar-command helper for tar listing.
  */
 function spawnTarList(tarball: string): { stdout: string } {
-  const result = spawnSync('tar', ['-tzf', tarball], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (result.error) {
-    throw new Error(
-      `Failed to spawn tar (is it on PATH? GitHub Windows has bsdtar): ${result.error.message}`,
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `tar list failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
-    );
-  }
-  return { stdout: result.stdout };
+  return tarCommand.spawnTarList(tarball);
 }
 
 function spawnTarListVerbose(
   tarball: string,
   member: string,
 ): { stdout: string } {
-  const result = spawnSync('tar', ['-tzvf', tarball, member], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (result.error) {
-    throw new Error(
-      `Failed to spawn tar (is it on PATH? GitHub Windows has bsdtar): ${result.error.message}`,
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `tar list-verbose failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
-    );
-  }
-  return { stdout: result.stdout };
+  return tarCommand.spawnTarListVerbose(tarball, member);
 }
 
 describe('CLI workspace tarball contents (actual release artifact)', () => {
@@ -194,7 +176,10 @@ describe('CLI workspace tarball contents (actual release artifact)', () => {
   it('ships bin/llxprt with executable mode in the tarball', () => {
     const tarball = packCliWorkspace();
     const { stdout } = spawnTarListVerbose(tarball, 'package/bin/llxprt');
-    expect(stdout).toMatch(/^[^ ]*x/);
+    // Match the POSIX permission string (e.g. -rwxr-xr-x). Both GNU tar and
+    // bsdtar emit this format in verbose mode. Check for 'x' in the owner
+    // position (character index 3 or 4 depending on type prefix).
+    expect(stdout).toMatch(/^.{0,1}[-bcCdDlMnpPs?]rwx/);
   }, 120_000);
 });
 
@@ -221,7 +206,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
     it('exits with code 43 on missing Bun', () => {
       const mod = loadCliInstaller();
       const cmd = mod.generateCmdLauncher('bun.exe', 'index.ts');
-      expect(cmd).toContain('exit /b 43');
+      expect(cmd).toContain('exit /b ' + mod.LAUNCHER_ERROR_EXIT_CODE);
       expect(cmd).toMatch(/npm install|bun\.sh/i);
     });
 
@@ -256,7 +241,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
     it('exits with code 43 on missing Bun', () => {
       const mod = loadCliInstaller();
       const ps1 = mod.generatePs1Launcher('bun.exe', 'index.ts');
-      expect(ps1).toContain('exit 43');
+      expect(ps1).toContain('exit ' + mod.LAUNCHER_ERROR_EXIT_CODE);
     });
 
     it('does not set LLXPRT_BUN_RELAUNCHED', () => {

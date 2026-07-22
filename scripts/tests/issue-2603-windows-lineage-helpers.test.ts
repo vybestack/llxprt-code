@@ -221,22 +221,41 @@ describe('samePath', () => {
     ).toBe(true);
   });
 
-  it('falls back to the original path when realpath throws (missing path)', () => {
+  it('falls back to the original path when realpath throws ENOENT (missing path)', () => {
     const throwing = (): string => {
-      throw new Error('ENOENT');
+      const err: NodeJS.ErrnoException = new Error(
+        'ENOENT: no such file or directory',
+      );
+      err.code = 'ENOENT';
+      throw err;
     };
-    // Both paths throw, so the originals are compared. Different originals → false.
+    // Both paths throw ENOENT, so the originals are compared. Different originals → false.
     expect(
       packageLayout.samePath('C:\\missing\\a.exe', 'C:\\missing\\b.exe', {
         realpathSync: throwing,
       }),
     ).toBe(false);
-    // Same originals → true even though realpath throws.
+    // Same originals → true even though realpath throws ENOENT.
     expect(
       packageLayout.samePath('C:\\missing\\a.exe', 'C:\\missing\\a.exe', {
         realpathSync: throwing,
       }),
     ).toBe(true);
+  });
+
+  it('propagates unexpected realpath errors (not ENOENT)', () => {
+    const throwing = (): string => {
+      const err: NodeJS.ErrnoException = new Error('EACCES: permission denied');
+      err.code = 'EACCES';
+      throw err;
+    };
+    // An EACCES error is NOT silently swallowed; it propagates so the caller
+    // sees an unexpected filesystem condition.
+    expect(() =>
+      packageLayout.samePath('C:\\secure\\a.exe', 'C:\\secure\\b.exe', {
+        realpathSync: throwing,
+      }),
+    ).toThrow(/samePath: realpath failed/);
   });
 
   it('uses the native realpathSync when no options are provided', () => {

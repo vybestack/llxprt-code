@@ -109,6 +109,14 @@ describe('cmdQuote', () => {
     expect(launcherInvocation.cmdQuote('a b&c|d')).toBe('"a b&c|d"');
   });
 
+  it('preserves a single caret (^) without doubling it', () => {
+    // The caret (^) is a cmd.exe escape metacharacter, but inside the quoted
+    // /c argument doubling it (^^) can turn one literal caret into two. The
+    // hosted Windows hostile-argv test passed at commit b6bdf4e1a with caret
+    // preserved, so cmdQuote must NOT double carets.
+    expect(launcherInvocation.cmdQuote('a^b')).toBe('"a^b"');
+  });
+
   it('handles an empty string', () => {
     expect(launcherInvocation.cmdQuote('')).toBe('""');
   });

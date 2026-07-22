@@ -77,6 +77,8 @@ function runStep(label, fn) {
     const msg =
       err && typeof err.message === 'string' ? err.message : String(err);
     fail(`${label}: ${msg}`);
+    process.stdout.write(`[${label}] FAIL
+`);
     return undefined;
   }
 }

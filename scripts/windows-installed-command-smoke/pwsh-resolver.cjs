@@ -26,7 +26,7 @@
  */
 
 const { spawnSync } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, statSync } = require('node:fs');
 
 /**
  * @typedef {{
@@ -34,6 +34,7 @@ const { existsSync } = require('node:fs');
  *   env?: NodeJS.ProcessEnv;
  *   spawnSync?: typeof import('node:child_process').spawnSync;
  *   existsSync?: typeof import('node:fs').existsSync;
+ *   statSync?: typeof import('node:fs').statSync;
  * }} ResolverOptions
  */
 
@@ -60,7 +61,11 @@ function whereResolve(command, options) {
     return null;
   }
   const first = String(r.stdout).trim().split(/\r?\n/)[0];
-  return first || null;
+  if (!first) return null;
+  // where.exe may return a path enclosed in double quotes on some Windows
+  // builds; strip surrounding quotes so the result is a usable bare path.
+  const unquoted = first.replace(/^"(.*)"$/, '$1');
+  return unquoted || null;
 }
 
 /**
@@ -81,9 +86,22 @@ function resolvePwsh(options) {
   }
   const env = (options && options.env) || process.env;
   const exists = (options && options.existsSync) || existsSync;
+  const stat =
+    options && typeof options.statSync === 'function'
+      ? options.statSync
+      : statSync;
 
+  // PWSH_PATH must point to a real FILE (the pwsh executable), not a
+  // directory. existsSync alone is true for directories, so also verify the
+  // path is a regular file.
   if (env.PWSH_PATH && exists(env.PWSH_PATH)) {
-    return env.PWSH_PATH;
+    try {
+      if (stat(env.PWSH_PATH).isFile()) {
+        return env.PWSH_PATH;
+      }
+    } catch {
+      // stat failed; fall through to the next resolution strategy.
+    }
   }
 
   // 2. pwsh.exe (PowerShell 7+) — present on windows-latest.

@@ -36,6 +36,7 @@ const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
 const { createRequire } = require('node:module');
 const { npmInvocation } = require('../lib/npm-command.cjs');
+const { spawnTarExtract } = require('../lib/tar-command.cjs');
 
 /**
  * Platform-aware PATH that proves the launcher needs NO global Bun or Node.
@@ -143,6 +144,18 @@ function assertExactVersions(deps) {
   }
 }
 
+/**
+ * Assert the release manifest has no non-exact deps in ANY dependency field:
+ * dependencies, optionalDependencies, and peerDependencies. A release artifact
+ * with a file:/workspace:/link: spec in any of these fields would fail in an
+ * isolated install, so all three are validated.
+ */
+function assertReleaseManifestAllFields(pkgJson) {
+  assertExactVersions(pkgJson.dependencies);
+  assertExactVersions(pkgJson.optionalDependencies);
+  assertExactVersions(pkgJson.peerDependencies);
+}
+
 function runStep(label, fn) {
   process.stdout.write(`[${label}] starting...\n`);
   try {
@@ -169,26 +182,11 @@ function safeCleanup(tempDir) {
 }
 
 /**
- * Spawns tar extract with spawn-error diagnostics. GitHub Windows runners
- * ship bsdtar, but a spawn failure (ENOENT) must produce a clear diagnostic
- * rather than an opaque null status.
+ * Spawns tar extract with spawn-error diagnostics via the shared tar-command
+ * helper.
  */
-function spawnTarExtract(tarball, extractDir) {
-  const result = spawnSync('tar', ['-xzf', tarball, '-C', extractDir], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (result.error) {
-    throw new Error(
-      `Failed to spawn tar (is it on PATH? GitHub Windows has bsdtar): ${result.error.message}`,
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `tar extract failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr}`,
-    );
-  }
-  return result;
+function spawnTarExtractLocal(tarball, extractDir) {
+  return spawnTarExtract(tarball, extractDir);
 }
 
 function main() {
@@ -215,11 +213,11 @@ function main() {
     runStep('release-manifest-integrity', () => {
       const extractDir = mkdtempSync(join(tmpdir(), 'llxprt-tarball-check-'));
       try {
-        spawnTarExtract(releaseTarball, extractDir);
+        spawnTarExtractLocal(releaseTarball, extractDir);
         const pkgJson = JSON.parse(
           readFileSync(join(extractDir, 'package', 'package.json'), 'utf8'),
         );
-        assertExactVersions(pkgJson.dependencies);
+        assertReleaseManifestAllFields(pkgJson);
       } finally {
         safeCleanup(extractDir);
       }
@@ -283,7 +281,9 @@ function main() {
         );
       }
       assert(
-        /^\d+\.\d+\.\d+/.test(result.stdout.trim()),
+        /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+          result.stdout.trim(),
+        ),
         `global --version output unexpected: ${result.stdout}`,
       );
     });
@@ -345,7 +345,9 @@ function main() {
         );
       }
       assert(
-        /^\d+\.\d+\.\d+/.test(result.stdout.trim()),
+        /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+          result.stdout.trim(),
+        ),
         `local --version output unexpected: ${result.stdout}`,
       );
     });
@@ -390,7 +392,9 @@ function main() {
         );
       }
       assert(
-        /^\d+\.\d+\.\d+/.test(result.stdout.trim()),
+        /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+          result.stdout.trim(),
+        ),
         `npm exec --version unexpected output: ${result.stdout}`,
       );
       // The clean dir must NOT have been polluted with a local install —

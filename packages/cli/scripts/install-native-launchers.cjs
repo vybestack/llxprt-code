@@ -90,11 +90,14 @@ function isWithinPackageRootWin(resolvedPath, packageRoot) {
   return rel === '' || (!rel.startsWith('..') && !path.win32.isAbsolute(rel));
 }
 
-function pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType) {
-  const content = readFileSafe(filePath);
-  if (!content) {
-    return false;
-  }
+// Shared core: extract shim target candidates from content and return true if
+// ANY candidate resolves within the exact packageRoot boundary. The interpreter
+// reference (e.g. /bin/sh) resolves outside the package and is correctly
+// ignored; the package target resolves inside and authorizes. Uses path.win32
+// for both resolution and boundary check so Windows wrapper semantics
+// (backslash separators) are applied consistently even when the postinstall
+// unit test runs on POSIX.
+function shimTargetWithinPackage(content, binLinkDir, packageRoot, shimType) {
   const candidates =
     shimType === 'ps1'
       ? extractPs1ShimTargets(content)
@@ -102,12 +105,6 @@ function pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType) {
   if (candidates.length === 0) {
     return false;
   }
-  // Authorize if ANY candidate resolves within the exact packageRoot boundary.
-  // The interpreter reference (e.g. /bin/sh) resolves outside the package and
-  // is correctly ignored; the package target resolves inside and authorizes.
-  // Use path.win32 for both resolution and boundary check so Windows wrapper
-  // semantics (backslash separators) are applied consistently even when the
-  // postinstall unit test runs on POSIX.
   for (const candidate of candidates) {
     const resolved = resolveShimCandidate(binLinkDir, candidate);
     if (isWithinPackageRootWin(resolved, packageRoot)) {
@@ -115,6 +112,14 @@ function pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType) {
     }
   }
   return false;
+}
+
+function pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType) {
+  const content = readFileSafe(filePath);
+  if (!content) {
+    return false;
+  }
+  return shimTargetWithinPackage(content, binLinkDir, packageRoot, shimType);
 }
 
 function canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType) {
@@ -130,20 +135,7 @@ function canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType) {
   if (!content) {
     return false;
   }
-  const candidates =
-    shimType === 'ps1'
-      ? extractPs1ShimTargets(content)
-      : extractCmdShimTargets(content);
-  if (candidates.length === 0) {
-    return false;
-  }
-  for (const candidate of candidates) {
-    const resolved = resolveShimCandidate(binLinkDir, candidate);
-    if (isWithinPackageRootWin(resolved, packageRoot)) {
-      return true;
-    }
-  }
-  return false;
+  return shimTargetWithinPackage(content, binLinkDir, packageRoot, shimType);
 }
 
 function relativePath(fromDir, toPath) {
@@ -155,7 +147,12 @@ function relativePathPosix(fromDir, toPath) {
 }
 
 function escapeForCmdQuote(value) {
-  return value.replace(/"/g, '""');
+  // Double internal double quotes (cmd's quoting rule) and double percent
+  // signs so a literal % survives cmd.exe's batch parser. Inside a batch file,
+  // %VAR% expands environment variables and %% is a literal %. The generated
+  // launcher forwards args via %*, not %1..%9, so positional expansion does not
+  // apply; doubling % ensures a literal percent is preserved verbatim.
+  return value.replace(/"/g, '""').replace(/%/g, '%%');
 }
 
 // cmd cannot distinguish a CreateProcess launch failure (corrupt binary,
@@ -358,6 +355,13 @@ function findBinLinkDirs(packageRoot, env) {
   const isGlobal = env.npm_config_global === 'true';
 
   if (isGlobal) {
+    // npm supports npm_config_bin_root to override the global bin directory
+    // (default: the prefix root). When set, global shims go there rather than
+    // the prefix root, so honor it to avoid writing to the wrong directory.
+    const binRoot = env.npm_config_bin_root;
+    if (binRoot) {
+      add(binRoot);
+    }
     const prefix = env.npm_config_prefix;
     if (prefix) {
       add(prefix);
@@ -477,6 +481,7 @@ module.exports = {
     hasOwnershipSentinel,
     pointsToOurPackage,
     canOverwriteLauncher,
+    shimTargetWithinPackage,
     findBinLinkDirs,
     nearestNodeModulesBin,
     resolveBunExe,

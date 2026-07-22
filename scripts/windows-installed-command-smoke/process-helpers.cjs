@@ -116,6 +116,7 @@ function killProcessTree(child) {
       const r = spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
         stdio: 'ignore',
         timeout: 10_000,
+        windowsHide: true,
       });
       if (r.error || r.status !== 0) {
         // taskkill failed; fall back to child.kill.
@@ -195,6 +196,7 @@ function inspectProcessTreeSync(rootPid) {
   const ps = spawnSync(pwshExe, ['-NoProfile', '-Command', script], {
     encoding: 'utf8',
     timeout: 15_000,
+    windowsHide: true,
   });
   if (ps.error) {
     throw new Error(

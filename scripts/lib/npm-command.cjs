@@ -97,8 +97,16 @@ function resolveNpmCliJs(options) {
       .replace(/\\/g, '/')
       .split('/')
       .pop();
+    // Require an absolute path so a relative npm_execpath (which would be
+    // CWD-dependent) is never trusted. Check both POSIX (/ prefix) and
+    // Windows (drive-letter:\) forms so cross-platform unit tests that
+    // simulate Windows paths on a POSIX host work correctly.
+    const isAbs =
+      path.isAbsolute(env.npm_execpath) ||
+      /^[A-Za-z]:[\\/]/.test(env.npm_execpath);
     if (
       normalizedBase === 'npm-cli.js' &&
+      isAbs &&
       existsSyncOptional(options, env.npm_execpath)
     ) {
       return env.npm_execpath;

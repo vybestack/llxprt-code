@@ -96,6 +96,12 @@ function validateSpawnResult(label, r) {
  * (inside a batch file, %VAR% expands variables and %% is a literal %).
  * Delayed expansion (!VAR!) is off by default in batch files; the generated
  * launcher does not enable it, so ! is left as-is.
+ *
+ * The caret (^) is intentionally NOT doubled. The hosted Windows hostile-argv
+ * test passed at commit b6bdf4e1a with caret preserved. Inside the quoted /c
+ * argument, doubling caret can change one literal caret into two. cmd.exe's
+ * caret-escaping semantics differ between interactive and batch-file contexts;
+ * the proven path is to leave caret as-is within the double-quoted argument.
  */
 function cmdQuote(s) {
   let escaped = String(s).replace(/"/g, '""');

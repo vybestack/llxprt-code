@@ -5,10 +5,32 @@ set -u
 # Resolve the real location of this script, following symlinks using only
 # portable POSIX constructs (readlink without -f, case-based join). This works
 # on stock macOS BSD and Linux without GNU coreutils.
+#
+# A bounded iteration count guards against pathological symlink cycles. In
+# practice npm .bin links are single-hop, but a crafted or corrupt chain is
+# rejected after MAX_SYMLINK_HOPS rather than looping indefinitely.
 _llxprt_self=$0
+_llxprt_hops=0
+MAX_SYMLINK_HOPS=40
 while [ -L "$_llxprt_self" ]; do
+  _llxprt_hops=$((_llxprt_hops + 1))
+  if [ "$_llxprt_hops" -gt "$MAX_SYMLINK_HOPS" ]; then
+    printf '%s\n' 'LLxprt Code: symlink resolution exceeded maximum hops (possible cycle).' >&2
+    printf '%s\n' "The symlink chain at $_llxprt_self may be cyclic or corrupt." >&2
+    printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+    exit 43
+  fi
   _llxprt_dir=$(dirname -- "$_llxprt_self")
-  _llxprt_target=$(readlink -- "$_llxprt_self" 2>/dev/null || printf '%s\n' "$_llxprt_self")
+  # On readlink failure (permission denied, dangling link, I/O error), emit an
+  # actionable error and exit 43 immediately rather than preserving the same
+  # symlink (which would spin MAX_SYMLINK_HOPS iterations). The hop bound
+  # above still guards against cycles where readlink succeeds.
+  if ! _llxprt_target=$(readlink -- "$_llxprt_self" 2>/dev/null); then
+    printf '%s\n' 'LLxprt Code: could not resolve symlink (readlink failed).' >&2
+    printf '%s\n' "The symlink at $_llxprt_self is broken, cyclic, or unreadable." >&2
+    printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+    exit 43
+  fi
   case "$_llxprt_target" in
     /*) _llxprt_self=$_llxprt_target ;;
     *)  _llxprt_self=$_llxprt_dir/$_llxprt_target ;;
@@ -26,7 +48,7 @@ _llxprt_script_dir=$(cd -- "$(dirname -- "$_llxprt_self")" 2>/dev/null && pwd) |
 _llxprt_pkg_json=$_llxprt_script_dir/../package.json
 _llxprt_bun_pin=""
 if [ -f "$_llxprt_pkg_json" ]; then
-  _llxprt_bun_pin=$(sed -n 's/.*"bun"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_pkg_json" 2>/dev/null | head -n1)
+  _llxprt_bun_pin=$(sed -n 's/^[[:space:]]*"bun"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_pkg_json" 2>/dev/null | head -n1)
 fi
 
 # Derive the candidate bun package.json path from a bun binary path. The binary
@@ -48,6 +70,33 @@ _llxprt_derive_bun_pkg() {
   esac
 }
 
+# Check whether $_llxprt_bun_pin is an exact X.Y.Z version (with optional
+# prerelease suffix). Returns 0 for an exact pin, 1 for a range/non-exact spec.
+# This is stricter than a bare digit-leading glob: "1.x" and "1.3.14 - 2.0.0"
+# start with a digit but are NOT exact versions and must not be treated as pins.
+_llxprt_is_exact_pin() {
+  _llxprt_pin=$1
+  case "$_llxprt_pin" in
+    *[!0-9.]*) return 1 ;; # contains non-numeric/non-dot chars: a range/tag
+  esac
+  # Must have exactly two dots (three numeric groups). Strip leading digits
+  # from each group to ensure each group is purely numeric.
+  _llxprt_rest=$_llxprt_pin
+  _llxprt_group=0
+  while [ -n "$_llxprt_rest" ]; do
+    _llxprt_part=${_llxprt_rest%%.*}
+    case "$_llxprt_part" in
+      ''|*[!0-9]*) return 1 ;;
+    esac
+    _llxprt_group=$((_llxprt_group + 1))
+    case "$_llxprt_rest" in
+      *.*) _llxprt_rest=${_llxprt_rest#*.} ;;
+      *) break ;;
+    esac
+  done
+  [ "$_llxprt_group" -eq 3 ]
+}
+
 # Check whether a discovered Bun binary's version matches the dependency pin.
 #
 # When no exact pin is known (empty _llxprt_bun_pin or a range like "^1.3.14"),
@@ -61,14 +110,10 @@ _llxprt_derive_bun_pkg() {
 _llxprt_bun_validates() {
   _llxprt_candidate=$1
   # No exact pin: accept (boundary check is the primary defense). A range
-  # pin (e.g. "^1.3.14") is not exact, so we cannot compare equality.
-  if [ -z "$_llxprt_bun_pin" ]; then
+  # pin (e.g. "^1.3.14" or "1.x") is not exact, so we cannot compare equality.
+  if [ -z "$_llxprt_bun_pin" ] || ! _llxprt_is_exact_pin "$_llxprt_bun_pin"; then
     return 0
   fi
-  case "$_llxprt_bun_pin" in
-    [0-9]*) ;; # exact version like "1.3.14"
-    *) return 0 ;; # range like "^1.3.14" or "*": not exact, accept
-  esac
   if ! _llxprt_derive_bun_pkg "$_llxprt_candidate"; then
     # Cannot derive package.json for this layout; reject under an exact pin.
     return 1
@@ -78,7 +123,7 @@ _llxprt_bun_validates() {
     # accept, so a partial install cannot bypass version verification.
     return 1
   fi
-  _llxprt_found_ver=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_bun_pkg" 2>/dev/null | head -n1)
+  _llxprt_found_ver=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_bun_pkg" 2>/dev/null | head -n1)
   # sed may succeed with exit 0 but print nothing (malformed JSON, binary
   # garbage, or a non-version manifest). Treat an empty extraction as a
   # rejection under exact-pin semantics — do NOT accept.
@@ -284,20 +329,11 @@ case "$_llxprt_kernel" in
     ;;
 esac
 
-_llxprt_entry=""
-for _llxprt_candidate in \
-  "$_llxprt_script_dir/index.ts" \
-  "$_llxprt_script_dir/../index.ts" \
-  "$_llxprt_script_dir/../../index.ts" \
-  "$_llxprt_script_dir/../../../index.ts"; do
-  if [ -f "$_llxprt_candidate" ]; then
-    _llxprt_entry=$_llxprt_candidate
-    break
-  fi
-done
+_llxprt_entry="$_llxprt_pkg_root/index.ts"
 
-if [ -z "$_llxprt_entry" ]; then
+if [ ! -f "$_llxprt_entry" ]; then
   printf '%s\n' 'LLxprt Code: TypeScript entry point (index.ts) was not found.' >&2
+  printf '%s\n' "Expected: $_llxprt_entry" >&2
   printf '%s\n' 'Your installation may be corrupt; reinstall @vybestack/llxprt-code.' >&2
   exit 43
 fi

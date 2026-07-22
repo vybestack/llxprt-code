@@ -194,6 +194,18 @@ describe('resolveNpmCliJs existence verification', () => {
     ).toBe('/path/to/npm-cli.js');
   });
 
+  it('rejects a relative npm_execpath (must be absolute)', () => {
+    // A relative npm_execpath could be hijacked by a CWD-dependent path; the
+    // resolver must require an absolute path so the resolved CLI is stable.
+    const result = resolveNpmCliJs({
+      env: { npm_execpath: 'relative/npm-cli.js' },
+      existsSync: () => true,
+    });
+    expect(result).not.toBe('relative/npm-cli.js');
+    // Falls through to the node-dir fallback.
+    expect(result).toMatch(/node_modules[/]npm[/]bin[/]npm-cli\.js$/);
+  });
+
   it('ignores npm_execpath when it is not a .js path (e.g. a .cmd wrapper) and falls back', () => {
     // A .cmd npm_execpath must be ignored; the resolver falls through to the
     // node-dir fallback instead of trusting a non-JS path.

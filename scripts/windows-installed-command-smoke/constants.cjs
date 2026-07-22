@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 
 /**
  * Shared constants for the Windows installed-command smoke harness.
@@ -17,16 +18,72 @@ const CONSTRAINED_PATH = [
 ].join(';');
 const OWNERSHIP_SENTINEL =
   'LLXPRT_NATIVE_LAUNCHER owned by @vybestack/llxprt-code';
-const VERSION_RE = /^\d+\.\d+\.\d+/;
+// Anchored semver prefix: X.Y.Z with an optional prerelease suffix. The
+// previous unanchored form accepted trailing garbage (e.g. 1.3.14-canary.9),
+// weakening the install-integrity guard. The end anchor rejects such suffixes
+// unless they form a valid prerelease.
+const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+// Strict exact semver: X.Y.Z with optional prerelease, anchored at both ends.
+// Used by resolveExpectedBunVersion to validate the manifest bun spec is a
+// COMPLETE exact version — not a range (^, ~, >=) or a non-exact digit-leading
+// spec (1.x, 1.3.14 - 2.0.0). Range prefixes must NOT be stripped.
+const EXACT_SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const LAUNCH_ERROR_EXIT = 43;
 
 /**
- * The exact Bun version expected to be bundled, as declared by the CLI
- * manifest ("bun" field in packages/cli/package.json). The smoke asserts the
- * installed bun.exe reports this version so a partial/incorrect install (e.g.
- * a non-Windows bun binary from a timed-out install) is caught explicitly.
+ * Resolves the bundled Bun version from the CLI manifest so the smoke stays
+ * in sync with the actual declared dependency. A hardcoded constant drifts
+ * silently when the manifest is bumped. repoRoot is resolved relative to this
+ * module (scripts/windows-installed-command-smoke/ -> repo root is two levels
+ * up). The manifest must declare an EXACT semver pin (e.g. "1.3.14"); a range
+ * spec (^, ~, >=, *) is rejected and the function returns undefined so the
+ * health check fails loudly (a version mismatch against undefined) rather than
+ * masking the misconfiguration. Range prefixes are NOT stripped: pretending a
+ * range is exact would weaken the install-integrity guard.
+ *
+ * @param {{ cliPkgPath?: string, readFileSync?: (p: string) => string }} [options]
+ *   Injection seam for deterministic testing.
+ * @returns {string | undefined} the exact version, or undefined if the manifest
+ *   is missing/unreadable or the bun spec is not a complete exact semver.
  */
-const EXPECTED_BUN_VERSION = '1.3.14';
+function resolveExpectedBunVersion(options) {
+  const moduleDir = __dirname;
+  // __dirname is scripts/windows-installed-command-smoke; two levels up is
+  // the repo root, then packages/cli/package.json.
+  const cliPkgPath =
+    (options && options.cliPkgPath) ||
+    path.join(moduleDir, '..', '..', 'packages', 'cli', 'package.json');
+  const readFile =
+    (options && options.readFileSync) || ((p) => fs.readFileSync(p, 'utf8'));
+  let cliPkg;
+  try {
+    cliPkg = JSON.parse(readFile(cliPkgPath));
+  } catch {
+    // Missing/unreadable manifest: return undefined so the health check fails
+    // loudly. Do NOT mask this as a default version.
+    return undefined;
+  }
+  const bunSpec = cliPkg && cliPkg.dependencies && cliPkg.dependencies.bun;
+  if (typeof bunSpec !== 'string' || bunSpec.length === 0) {
+    return undefined;
+  }
+  // The manifest must declare an EXACT version (strict X.Y.Z). A range prefix
+  // (^, ~, >=, >, *) or a non-exact digit-leading spec (1.x, 1.3.14 - 2.0.0)
+  // is NOT exact and must not be treated as one. Return undefined so the smoke
+  // fails loudly rather than silently comparing against a stripped base.
+  if (EXACT_SEMVER_RE.test(bunSpec)) {
+    return bunSpec;
+  }
+  return undefined;
+}
+
+/**
+ * The exact Bun version expected to be bundled, derived from the CLI manifest
+ * ("bun" field in packages/cli/package.json). The smoke asserts the installed
+ * bun.exe reports this version so a partial/incorrect install (e.g. a
+ * non-Windows bun binary from a timed-out install) is caught explicitly.
+ */
+const EXPECTED_BUN_VERSION = resolveExpectedBunVersion();
 
 /**
  * Installer/operation timeouts. All are env-configurable so a slow runner can
@@ -65,8 +122,10 @@ module.exports = {
   CONSTRAINED_PATH,
   OWNERSHIP_SENTINEL,
   VERSION_RE,
+  EXACT_SEMVER_RE,
   LAUNCH_ERROR_EXIT,
   EXPECTED_BUN_VERSION,
+  resolveExpectedBunVersion,
   INSTALL_TIMEOUT_MS,
   NPM_EXEC_TIMEOUT_MS,
   PROBE_TIMEOUT_MS,

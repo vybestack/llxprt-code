@@ -6,9 +6,17 @@
 
 import { describe, it, expect } from 'vitest';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -265,4 +273,89 @@ describe('release-like CLI pack/install smoke (issue #2603)', () => {
     },
     SMOKE_TEST_TIMEOUT_MS,
   );
+});
+
+describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
+  const nodeRequire = createRequire(import.meta.url);
+
+  it('rewrites dependencies, devDependencies, and optionalDependencies to file: tarballs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rewrite-deps-'));
+    try {
+      const pkgPath = join(dir, 'package.json');
+      writeFileSync(
+        pkgPath,
+        JSON.stringify(
+          {
+            name: 'test-pkg',
+            dependencies: { '@vybestack/llxprt-code-core': '^1.0.0' },
+            devDependencies: { '@vybestack/llxprt-code-agents': '^1.0.0' },
+            optionalDependencies: { '@vybestack/llxprt-code-policy': '^1.0.0' },
+          },
+          null,
+          2,
+        ),
+      );
+      const tarballMap = new Map([
+        ['@vybestack/llxprt-code-core', '/cache/core-1.0.0.tgz'],
+        ['@vybestack/llxprt-code-agents', '/cache/agents-1.0.0.tgz'],
+        ['@vybestack/llxprt-code-policy', '/cache/policy-1.0.0.tgz'],
+      ]);
+      const mod = nodeRequire(releasePackHelper) as {
+        rewriteOnePkgDeps: (p: string, m: Map<string, string>) => void;
+      };
+      mod.rewriteOnePkgDeps(pkgPath, tarballMap);
+      const result = JSON.parse(readFileSync(pkgPath, 'utf8'));
+      expect(result.dependencies['@vybestack/llxprt-code-core']).toBe(
+        'file:/cache/core-1.0.0.tgz',
+      );
+      expect(result.devDependencies['@vybestack/llxprt-code-agents']).toBe(
+        'file:/cache/agents-1.0.0.tgz',
+      );
+      expect(result.optionalDependencies['@vybestack/llxprt-code-policy']).toBe(
+        'file:/cache/policy-1.0.0.tgz',
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT rewrite peerDependencies (peers are consumer-provided)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rewrite-peers-'));
+    try {
+      const pkgPath = join(dir, 'package.json');
+      const originalPeerSpec = '^1.0.0';
+      writeFileSync(
+        pkgPath,
+        JSON.stringify(
+          {
+            name: 'test-pkg',
+            dependencies: { '@vybestack/llxprt-code-core': '^1.0.0' },
+            peerDependencies: {
+              '@vybestack/llxprt-code-core': originalPeerSpec,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      const tarballMap = new Map([
+        ['@vybestack/llxprt-code-core', '/cache/core-1.0.0.tgz'],
+      ]);
+      const mod = nodeRequire(releasePackHelper) as {
+        rewriteOnePkgDeps: (p: string, m: Map<string, string>) => void;
+      };
+      mod.rewriteOnePkgDeps(pkgPath, tarballMap);
+      const result = JSON.parse(readFileSync(pkgPath, 'utf8'));
+      // dependencies ARE rewritten.
+      expect(result.dependencies['@vybestack/llxprt-code-core']).toBe(
+        'file:/cache/core-1.0.0.tgz',
+      );
+      // peerDependencies are NOT rewritten — the original spec is preserved.
+      expect(result.peerDependencies['@vybestack/llxprt-code-core']).toBe(
+        originalPeerSpec,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

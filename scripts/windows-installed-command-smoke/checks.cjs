@@ -136,19 +136,11 @@ function checkLauncherSentinels(prefix) {
 function checkVersionRuns(prefix) {
   runStep('cmd-version', () => {
     const cmdPath = join(prefix, 'llxprt.cmd');
-    const r = spawnSync('cmd', ['/c', cmdPath, '--version'], {
-      encoding: 'utf8',
+    // Use the shared invokeCmd helper for consistent spawn-error diagnostics,
+    // quoting, and constrained-PATH configuration across all cmd invocations.
+    const r = invokeCmd(cmdPath, ['--version'], {
       timeout: VERSION_TIMEOUT_MS,
-      env: { ...process.env, PATH: CONSTRAINED_PATH },
     });
-    // Inspect error/signal before status: a spawn failure yields null status
-    // and must be reported as a harness error, not a misleading exit code.
-    if (r.error) {
-      throw new Error(`cmd --version spawn failed: ${r.error.message}`);
-    }
-    if (r.signal) {
-      throw new Error(`cmd --version terminated by signal ${r.signal}`);
-    }
     if (r.status !== 0) {
       throw new Error(`cmd --version exited ${r.status}: ${r.stderr}`);
     }
@@ -160,24 +152,11 @@ function checkVersionRuns(prefix) {
 
   runStep('ps1-version', () => {
     const ps1Path = join(prefix, 'llxprt.ps1');
-    // Resolve PowerShell robustly: PWSH_PATH -> pwsh.exe -> powershell.exe.
-    // Hardcoding 'powershell' failed with ENOENT on windows-latest (run 29850614559).
-    const pwshExe = resolvePwsh();
-    const r = spawnSync(
-      pwshExe,
-      ['-NoProfile', '-Command', `& '${ps1Path}' --version`],
-      {
-        encoding: 'utf8',
-        timeout: VERSION_TIMEOUT_MS,
-        env: { ...process.env, PATH: CONSTRAINED_PATH },
-      },
-    );
-    if (r.error) {
-      throw new Error(`ps1 --version spawn failed: ${r.error.message}`);
-    }
-    if (r.signal) {
-      throw new Error(`ps1 --version terminated by signal ${r.signal}`);
-    }
+    // Use the shared invokePwsh helper for consistent PowerShell invocation,
+    // encoding, and spawn-error diagnostics.
+    const r = invokePwsh(ps1Path, ['--version'], {
+      timeout: VERSION_TIMEOUT_MS,
+    });
     if (r.status !== 0) {
       throw new Error(`ps1 --version exited ${r.status}: ${r.stderr}`);
     }

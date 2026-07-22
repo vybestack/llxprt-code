@@ -25,13 +25,13 @@ const { join } = require('node:path');
 
 const { assert, runStep, runRequiredStep } = require('./assert.cjs');
 const {
-  CONSTRAINED_PATH,
   INSTALL_TIMEOUT_MS,
   VERSION_TIMEOUT_MS,
   EXPECTED_BUN_VERSION,
 } = require('./constants.cjs');
 const { npmInvocation } = require('../lib/npm-command.cjs');
 const { assertBundledBunHealthy } = require('./bun-validation.cjs');
+const { invokeCmd } = require('./launcher-invocation.cjs');
 
 // Shared maxBuffer for npm install/exec captures. npm/tar can emit verbose
 // output that exceeds Node's 1MB default; a single shared constant keeps this
@@ -118,21 +118,21 @@ function checkLocalCmdVersion(consumerDir) {
   runStep('local-cmd-version', () => {
     const cmdPath = join(consumerDir, 'node_modules', '.bin', 'llxprt.cmd');
     assert(existsSync(cmdPath), `local cmd launcher not found: ${cmdPath}`);
-    const r = spawnSync('cmd', ['/c', cmdPath, '--version'], {
-      encoding: 'utf8',
+    // Use the shared invokeCmd helper which applies the proven cmd.exe /d /s /c
+    // + windowsVerbatimArguments construction with proper quoting (cmdQuote).
+    // The previous quote-only approach did not use the /d /s /c verbatim
+    // quoting and could split paths with spaces. invokeCmd also provides
+    // consistent spawn-error diagnostics via validateSpawnResult.
+    const r = invokeCmd(cmdPath, ['--version'], {
       timeout: VERSION_TIMEOUT_MS,
-      env: { ...process.env, PATH: CONSTRAINED_PATH },
     });
-    // Check r.error before r.status: if cmd.exe cannot be spawned, status is
-    // null and stderr is undefined, producing a misleading message otherwise.
-    if (r.error) {
-      throw new Error(`local cmd --version spawn failed: ${r.error.message}`);
-    }
-    if (r.signal) {
-      throw new Error(`local cmd --version terminated by signal ${r.signal}`);
-    }
+    // validateSpawnResult (inside invokeCmd) already covers r.error and
+    // r.signal. A nonzero exit status is a legitimate child exit that the
+    // caller interprets here.
     if (r.status !== 0) {
-      throw new Error(`local cmd --version exited ${r.status}: ${r.stderr}`);
+      throw new Error(
+        `local cmd --version exited ${r.status}: ${r.stderr || r.stdout}`,
+      );
     }
   });
 }

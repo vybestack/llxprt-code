@@ -24,7 +24,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { writeFileSync, mkdtempSync, rmSync, chmodSync } from 'node:fs';
+import {
+  writeFileSync,
+  readFileSync,
+  mkdtempSync,
+  rmSync,
+  chmodSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const thisFile = fileURLToPath(import.meta.url);
@@ -144,6 +150,7 @@ describe('pwsh resolver (root cause C)', () => {
         env?: NodeJS.ProcessEnv;
         spawnSync?: unknown;
         existsSync?: (path: string) => boolean;
+        statSync?: (path: string) => { isFile: () => boolean };
       }) => string;
       whereResolve: (
         command: string,
@@ -160,6 +167,7 @@ describe('pwsh resolver (root cause C)', () => {
       platform: 'win32',
       env: { PWSH_PATH: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' },
       existsSync: () => true,
+      statSync: () => ({ isFile: () => true }),
       spawnSync: () => ({ error: new Error('should not be called') }),
     });
     expect(result).toBe('C:\\Program Files\\PowerShell\\7\\pwsh.exe');
@@ -171,6 +179,7 @@ describe('pwsh resolver (root cause C)', () => {
       platform: 'win32',
       env: { PWSH_PATH: 'C:\\explicit\\pwsh.exe' },
       existsSync: () => true,
+      statSync: () => ({ isFile: () => true }),
       spawnSync: () => ({
         status: 0,
         stdout: 'C:\\other\\pwsh.exe\r\n',
@@ -282,6 +291,7 @@ describe('install helpers cache args (root cause A)', () => {
   const installModule = () =>
     nodeRequire(join(smokeDir, 'install-helpers.cjs')) as {
       buildInstallArgs: (extraArgs: string[]) => string[];
+      checkLocalCmdVersion: (consumerDir: string) => void;
     };
 
   it('does NOT include an isolated --cache flag (uses warmed default)', () => {
@@ -304,6 +314,20 @@ describe('install helpers cache args (root cause A)', () => {
     expect(args).toContain('pkg.tgz');
     expect(args).toContain('--loglevel');
     expect(args[args.indexOf('--loglevel') + 1]).toBe('error');
+  });
+
+  it('checkLocalCmdVersion uses the shared invokeCmd (not raw spawnSync cmd /c)', () => {
+    // The install-helpers module must require invokeCmd from
+    // launcher-invocation.cjs so checkLocalCmdVersion uses the proven
+    // /d /s /c + windowsVerbatimArguments construction. We verify the module
+    // source imports invokeCmd rather than using a raw spawnSync('cmd', ...)
+    // with quote-only arguments.
+    const src = readFileSync(join(smokeDir, 'install-helpers.cjs'), 'utf8');
+    expect(src).toMatch(/require\(['"].*launcher-invocation\.cjs['"]\)/);
+    expect(src).toMatch(/invokeCmd/);
+    // The raw spawnSync('cmd', ['/c', ...]) pattern must NOT be present for
+    // the version check (it lacks /d /s /c and windowsVerbatimArguments).
+    expect(src).not.toMatch(/spawnSync\(['"]cmd['"],\s*\['\/c'/);
   });
 });
 
@@ -453,11 +477,109 @@ describe('constants: expected bun version + configurable timeouts', () => {
       NPM_EXEC_TIMEOUT_MS: number;
       PROBE_TIMEOUT_MS: number;
       VERSION_TIMEOUT_MS: number;
+      resolveExpectedBunVersion: (options?: {
+        cliPkgPath?: string;
+        readFileSync?: (p: string) => string;
+      }) => string | undefined;
     };
 
-  it('EXPECTED_BUN_VERSION matches the CLI manifest (1.3.14)', () => {
+  it('EXPECTED_BUN_VERSION is derived from the CLI manifest bun dependency', () => {
     const m = constantsModule();
-    expect(m.EXPECTED_BUN_VERSION).toBe('1.3.14');
+    // Read the source of truth (the CLI manifest) directly so this test
+    // fails if the constant drifts from the declared dependency.
+    const cliPkgPath = join(repoRoot, 'packages', 'cli', 'package.json');
+    const cliPkg = JSON.parse(readFileSync(cliPkgPath, 'utf8'));
+    const declaredBun = String(cliPkg.dependencies.bun);
+    // The manifest must declare an EXACT version (no range prefix). The
+    // resolver returns the exact spec verbatim; it does NOT strip range
+    // prefixes and pretend a range is exact.
+    expect(declaredBun).toMatch(/^\d+\.\d+\.\d+/);
+    expect(m.EXPECTED_BUN_VERSION).toBe(declaredBun);
+  });
+
+  it('EXPECTED_BUN_VERSION is an exact semver (no range prefix stripped)', () => {
+    // The CLI manifest intentionally pins exact Bun. resolveExpectedBunVersion
+    // must return the exact manifest spec only — it must NOT strip range
+    // prefixes (^, ~, >=) and pretend a range is exact. If the manifest ever
+    // declares a range, EXPECTED_BUN_VERSION must be undefined (fail loudly)
+    // rather than returning a stripped base version.
+    const m = constantsModule();
+    if (m.EXPECTED_BUN_VERSION !== undefined) {
+      // Must be a complete exact semver X.Y.Z (no range prefix).
+      expect(m.EXPECTED_BUN_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    }
+  });
+
+  it('resolveExpectedBunVersion returns the exact spec for an exact pin', () => {
+    const m = constantsModule();
+    const fakeRead = (): string =>
+      JSON.stringify({ dependencies: { bun: '1.3.14' } });
+    expect(
+      m.resolveExpectedBunVersion({
+        cliPkgPath: 'fake',
+        readFileSync: fakeRead,
+      }),
+    ).toBe('1.3.14');
+  });
+
+  it('resolveExpectedBunVersion returns undefined for a caret range (^1.3.14)', () => {
+    const m = constantsModule();
+    const fakeRead = (): string =>
+      JSON.stringify({ dependencies: { bun: '^1.3.14' } });
+    expect(
+      m.resolveExpectedBunVersion({
+        cliPkgPath: 'fake',
+        readFileSync: fakeRead,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('resolveExpectedBunVersion returns undefined for a tilde range (~1.3.14)', () => {
+    const m = constantsModule();
+    const fakeRead = (): string =>
+      JSON.stringify({ dependencies: { bun: '~1.3.14' } });
+    expect(
+      m.resolveExpectedBunVersion({
+        cliPkgPath: 'fake',
+        readFileSync: fakeRead,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('resolveExpectedBunVersion returns undefined for a digit-leading range (1.x)', () => {
+    const m = constantsModule();
+    const fakeRead = (): string =>
+      JSON.stringify({ dependencies: { bun: '1.x' } });
+    expect(
+      m.resolveExpectedBunVersion({
+        cliPkgPath: 'fake',
+        readFileSync: fakeRead,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('resolveExpectedBunVersion returns undefined when manifest is unreadable', () => {
+    const m = constantsModule();
+    const fakeRead = (): string => {
+      throw new Error('ENOENT');
+    };
+    expect(
+      m.resolveExpectedBunVersion({
+        cliPkgPath: 'fake',
+        readFileSync: fakeRead,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('resolveExpectedBunVersion returns undefined when bun field is missing', () => {
+    const m = constantsModule();
+    const fakeRead = (): string => JSON.stringify({ dependencies: {} });
+    expect(
+      m.resolveExpectedBunVersion({
+        cliPkgPath: 'fake',
+        readFileSync: fakeRead,
+      }),
+    ).toBeUndefined();
   });
 
   it('all timeouts are positive and env-configurable', () => {

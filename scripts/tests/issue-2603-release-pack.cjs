@@ -36,6 +36,10 @@ const {
 const { join } = require('node:path');
 const { tmpdir } = require('node:os');
 const { npmInvocation } = require('../lib/npm-command.cjs');
+const {
+  spawnTarList,
+  findTarballName: sharedFindTarballName,
+} = require('../lib/tar-command.cjs');
 
 /**
  * Derive the cache dir, filename, and version from the CLI manifest so the
@@ -54,19 +58,35 @@ function readCliManifest(repoRoot) {
 /**
  * Process-specific cache directory (PID + source fingerprint) avoids concurrent
  * test processes corrupting a shared cache. The fingerprint is derived from the
- * CLI manifest path + mtime so a source change invalidates the cache. The dir
- * is cleaned when practical (same-process reuse is fine if both artifacts exist
- * and the fingerprint is stable).
+ * CLI manifest content (SHA-256) so a source change invalidates the cache
+ * deterministically regardless of checkout mtime (which varies across clones,
+ * CI reruns, and git operations like checkout/reset). The dir is cleaned when
+ * practical (same-process reuse is fine if both artifacts exist and the
+ * fingerprint is stable).
  */
 function sourceFingerprint(repoRoot) {
-  const cliPkgPath = join(repoRoot, 'packages', 'cli', 'package.json');
-  let mtime = 0;
-  try {
-    mtime = require('node:fs').statSync(cliPkgPath).mtimeMs;
-  } catch {
-    // stat failure is non-fatal; fingerprint just lacks the mtime component.
+  const crypto = require('node:crypto');
+  const fs = require('node:fs');
+  const { join } = require('node:path');
+  const hasher = crypto.createHash('sha256');
+  // Hash the CLI manifest content (the primary source of truth for what gets
+  // packed). Additional key files can be added here as the packing scope grows.
+  const fingerprintFiles = [
+    join(repoRoot, 'packages', 'cli', 'package.json'),
+    join(repoRoot, 'package.json'),
+  ];
+  for (const f of fingerprintFiles) {
+    try {
+      const data = fs.readFileSync(f);
+      hasher.update(f).update(data);
+    } catch {
+      // A missing/unreadable fingerprint file is non-fatal; it simply does
+      // not contribute to the hash. The manifest is always present for a
+      // valid repo, so a missing file indicates a broken checkout that will
+      // fail later with a clearer error.
+    }
   }
-  return `${mtime}`.replace(/[^0-9]/g, '0');
+  return hasher.digest('hex').slice(0, 16);
 }
 
 function processCacheDir(repoRoot) {
@@ -88,27 +108,11 @@ let cachedReleaseTarball = null;
 let cachedReplicaTarball = null;
 
 /**
- * Locate the .tgz filename in npm pack output. npm pack prints the tarball
- * filename (ending in .tgz) on its own line, but the output may include
- * warnings/progress lines. Find the .tgz line and validate the file exists
- * rather than assuming the last line is the tarball name.
+ * Locate the .tgz filename in npm pack output. Delegates to the shared
+ * tar-command helper so spawn/validation logic is centralized.
  */
 function findTarballName(packOutput, cacheDir) {
-  const lines = packOutput.split(/\r?\n/);
-  const tgzLines = lines.filter((l) => l.trim().endsWith('.tgz'));
-  if (tgzLines.length === 0) {
-    throw new Error(
-      `npm pack output did not contain a .tgz line:\n${packOutput}`,
-    );
-  }
-  const tarName = tgzLines[tgzLines.length - 1].trim();
-  const tarPath = join(cacheDir, tarName);
-  if (!existsSync(tarPath)) {
-    throw new Error(
-      `npm pack reported tarball ${tarName} but it does not exist at ${tarPath}`,
-    );
-  }
-  return tarName;
+  return sharedFindTarballName(packOutput, cacheDir);
 }
 
 function packReleaseLikeCli(repoRoot) {
@@ -229,7 +233,7 @@ function runPreparePackage(workCopy) {
   }
   if (result.status !== 0) {
     throw new Error(
-      `prepare:package failed (exit ${result.status}, timeout=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
+      `prepare:package failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
     );
   }
 }
@@ -248,7 +252,7 @@ function runBindReleaseDeps(workCopy) {
   }
   if (bindResult.status !== 0) {
     throw new Error(
-      `bind-release-deps failed (exit ${bindResult.status}, timeout=${bindResult.signal ?? 'none'}): ${bindResult.stderr || bindResult.stdout}`,
+      `bind-release-deps failed (exit ${bindResult.status}, signal=${bindResult.signal ?? 'none'}): ${bindResult.stderr || bindResult.stdout}`,
     );
   }
 }
@@ -325,22 +329,9 @@ function assertReleaseBoundManifest(workCopy, internalPkgs) {
  * installer script, TypeScript entry, README, and LICENSE.
  */
 function assertReleaseTarballAssets(releaseTarball) {
-  const result = spawnSync('tar', ['-tzf', releaseTarball], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (result.error) {
-    throw new Error(
-      `Failed to spawn tar to list release tarball: ${result.error.message}`,
-    );
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `Failed to list release tarball (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
-    );
-  }
+  const { stdout } = spawnTarList(releaseTarball);
   const files = new Set(
-    result.stdout
+    stdout
       .split(/\r?\n/)
       .map((entry) => entry.replace(/^\.\//, '').replace(/\\/g, '/'))
       .filter(Boolean),
@@ -410,10 +401,15 @@ function rewriteAllDepsToTarballs(workCopy, internalPkgs, tarballMap) {
 function rewriteOnePkgDeps(pkgPath, tarballMap) {
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   let changed = false;
+  // peerDependencies are intentionally NOT rewritten: peers are
+  // consumer-provided and must not be repointed at absolute file tarballs.
+  // Rewriting peers would force consumers to install an absolute local
+  // tarball path as a peer, breaking the peer contract. Only regular deps,
+  // devDeps, and optionalDeps are repointed for the offline install replica.
   for (const depField of [
     'dependencies',
     'devDependencies',
-    'peerDependencies',
+    'optionalDependencies',
   ]) {
     const deps = pkg[depField];
     if (!deps) continue;
@@ -465,4 +461,5 @@ module.exports = {
   readCliManifest,
   findTarballName,
   shouldCopyRepoEntry,
+  rewriteOnePkgDeps,
 };

@@ -18,6 +18,7 @@
  */
 
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 
 /**
  * DOS MZ header magic ("MZ").
@@ -43,10 +44,9 @@ const ELFANEW_OFFSET = 0x3c;
 function readHeader(filePath, maxBytes = 4096) {
   let fd;
   try {
-    // Use readFileSync with a smaller read by opening, reading a slice, then
-    // closing. Node's readFileSync reads the whole file; for a multi-MB binary
-    // we only need the first 4KB. Use fs.openSync/readSync for efficiency.
-    const fs = require('node:fs');
+    // Read only the first maxBytes of the file rather than the whole file
+    // (which may be tens of MB). openSync + readSync + closeSync reads a
+    // bounded slice efficiently.
     fd = fs.openSync(filePath, 'r');
     const buf = Buffer.alloc(maxBytes);
     const bytesRead = fs.readSync(fd, buf, 0, maxBytes, 0);
@@ -58,7 +58,7 @@ function readHeader(filePath, maxBytes = 4096) {
   } finally {
     if (fd !== undefined) {
       try {
-        require('node:fs').closeSync(fd);
+        fs.closeSync(fd);
       } catch {
         // best effort
       }
@@ -72,22 +72,28 @@ function readHeader(filePath, maxBytes = 4096) {
  * that the file is a Windows PE-family binary (not, e.g., a partial download
  * or a POSIX shell script).
  *
+ * A file that cannot be read (ENOENT, EACCES, EISDIR, etc.) is distinguished
+ * from a non-PE file: readHeader rethrows on I/O error, and that exception
+ * propagates so the caller sees an actionable failure rather than a false
+ * "not a PE" result that conflates unreadable with wrong-format. Callers that
+ * only care about the boolean verdict can catch the exception.
+ *
  * @param {string} filePath
  * @param {{ readHeader?: (p: string, n?: number) => Buffer }} [options]
  * @returns {boolean}
+ * @throws {Error} when the header cannot be read (propagated from readHeader).
  */
 function isWindowsPe(filePath, options) {
   const reader = (options && options.readHeader) || readHeader;
-  let header;
-  try {
-    header = reader(filePath);
-  } catch {
-    return false;
-  }
+  // Do NOT catch readHeader errors: an unreadable file must surface as a
+  // distinct failure, not be conflated with "not a PE binary".
+  const header = reader(filePath);
   if (header.length < ELFANEW_OFFSET + 4) return false;
   if (header.subarray(0, 2).compare(MZ_MAGIC) !== 0) return false;
   const peOffset = header.readUInt32LE(ELFANEW_OFFSET);
-  if (peOffset <= 0 || peOffset + PE_SIGNATURE.length > header.length) {
+  // readUInt32LE returns an unsigned 32-bit integer, so a negative value is
+  // impossible; the check is equivalently peOffset === 0.
+  if (peOffset === 0 || peOffset + PE_SIGNATURE.length > header.length) {
     return false;
   }
   return (
@@ -131,7 +137,10 @@ function bunVersion(bunExePath, options) {
       `bun-validation: '${bunExePath} --version' exited ${r.status}: ${(r.stderr || '').trim()}`,
     );
   }
-  return String(r.stdout).trim();
+  // Trim stdout; if stdout is empty, fall back to stderr. Some toolchain
+  // wrappers or redirects can emit the version on stderr instead of stdout.
+  const out = String(r.stdout || '').trim();
+  return out.length > 0 ? out : String(r.stderr || '').trim();
 }
 
 /**
@@ -147,7 +156,15 @@ function bunVersion(bunExePath, options) {
  */
 function assertBundledBunHealthy(bunExePath, expectedVersion, options) {
   const reasons = [];
-  if (!isWindowsPe(bunExePath, options)) {
+  let peOk = true;
+  try {
+    peOk = isWindowsPe(bunExePath, options);
+  } catch (e) {
+    // An unreadable/unstatable file is a distinct failure from "not a PE".
+    peOk = false;
+    reasons.push(`could not read header: ${e.message}`);
+  }
+  if (!peOk) {
     reasons.push(`not a valid Windows PE binary (expected MZ+PE signature)`);
   }
   // Even if the PE check failed, attempt --version to produce the concrete
