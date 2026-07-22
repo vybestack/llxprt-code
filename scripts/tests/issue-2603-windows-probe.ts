@@ -16,6 +16,9 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const nativeRequire = createRequire(import.meta.url);
 
 interface ProbeRequest {
   stdin?: boolean;
@@ -98,8 +101,7 @@ function nativeExitWithStatus(status: number): never {
   // loader. ExitProcess only exists in kernel32.dll on Windows, so this branch
   // is unreachable off win32. bun:ffi has no ESM export; require is the only
   // way to load it under Bun.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { dlopen } = require('bun:ffi') as {
+  const { dlopen } = nativeRequire('bun:ffi') as {
     dlopen: <Fns extends Record<string, unknown>>(
       name: string,
       symbols: Fns,
