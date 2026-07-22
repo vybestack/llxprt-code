@@ -48,6 +48,10 @@ const CLI_PKG_NAME = JSON.parse(
   readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
 ).name as string;
 
+// Derive the evil-sibling package name from the real package name so these
+// tests stay in sync automatically if the package is renamed or re-scoped.
+const EVIL_PKG_NAME = `${CLI_PKG_NAME}-evil`;
+
 function loadCliInstaller(): ReturnType<typeof nodeRequire> {
   // Always require a fresh module instance so a previous test's cached state
   // (e.g. resolved paths) cannot leak across runs. The module is stateless
@@ -388,7 +392,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'lib',
           'node_modules',
           '@vybestack',
-          'llxprt-code',
+          CLI_PKG_NAME,
         );
         const binTarget = join(packageRoot, 'bin', 'llxprt');
         const binLinkDir = join(tempDir, 'bin-link');
@@ -401,7 +405,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
       }
     });
 
-    it('rejects an npm cmd-shim pointing to a sibling package (llxprt-code-evil)', () => {
+    it('rejects an npm cmd-shim pointing to a sibling package (evil)', () => {
       const mod = loadCliInstaller();
       const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-evil-'));
       try {
@@ -411,7 +415,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'lib',
           'node_modules',
           '@vybestack',
-          'llxprt-code-evil',
+          EVIL_PKG_NAME,
         );
         const binTarget = join(evilRoot, 'bin', 'llxprt');
         const binLinkDir = join(tempDir, 'bin-link');
@@ -421,7 +425,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'lib',
           'node_modules',
           '@vybestack',
-          'llxprt-code',
+          CLI_PKG_NAME,
         );
         mkdirSync(ourPackageRoot, { recursive: true });
         const shimPath = generateRealCmdShim(binLinkDir, binTarget);
@@ -447,7 +451,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'lib',
           'node_modules',
           '@vybestack',
-          'llxprt-code',
+          CLI_PKG_NAME,
         );
         const binTarget = join(packageRoot, 'bin', 'llxprt');
         const binLinkDir = join(tempDir, 'bin-link');
@@ -471,7 +475,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'lib',
           'node_modules',
           '@vybestack',
-          'llxprt-code-evil',
+          EVIL_PKG_NAME,
         );
         const binTarget = join(evilRoot, 'bin', 'llxprt');
         const binLinkDir = join(tempDir, 'bin-link');
@@ -481,7 +485,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'lib',
           'node_modules',
           '@vybestack',
-          'llxprt-code',
+          CLI_PKG_NAME,
         );
         mkdirSync(ourPackageRoot, { recursive: true });
         generateRealCmdShim(binLinkDir, binTarget);

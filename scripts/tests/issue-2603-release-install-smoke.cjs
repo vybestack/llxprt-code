@@ -34,7 +34,6 @@ const {
 } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { tmpdir } = require('node:os');
-const { createRequire } = require('node:module');
 const { npmInvocation } = require('../lib/npm-command.cjs');
 const { spawnTarExtract } = require('../lib/tar-command.cjs');
 
@@ -106,7 +105,6 @@ if (!existsSync(join(repoRoot, 'packages', 'cli', 'package.json'))) {
   );
   process.exit(1);
 }
-const nodeRequire = createRequire(__filename);
 const releasePackHelperPath = join(
   repoRoot,
   'scripts',
@@ -130,14 +128,11 @@ function assert(condition, msg) {
   return condition;
 }
 
-// Canonical source: scripts/utils/release-packages.ts (NON_NPM_RELEASE_PACKAGES).
-// This is duplicated because .cjs scripts cannot import .ts modules without a
-// build step. If the canonical set changes, update this too.
-const NON_NPM_RELEASE_PACKAGES = new Set([
-  '@vybestack/llxprt-code-test-utils',
-  '@vybestack/llxprt-code-a2a-server',
-  'llxprt-code-vscode-ide-companion',
-]);
+// Shared list of non-NPM release packages, imported from a single .cjs source
+// so the test stays in sync with release-pack.cjs without manual duplication.
+const {
+  NON_NPM_RELEASE_PACKAGES,
+} = require('../lib/non-npm-release-packages.cjs');
 
 function assertExactVersions(deps) {
   if (!deps) return;
@@ -223,7 +218,7 @@ function main() {
   let tempDir;
   _cleanupTempDir = null;
   try {
-    const { packReleaseLikeCli } = nodeRequire(releasePackHelperPath);
+    const { packReleaseLikeCli } = require(releasePackHelperPath);
     const { releaseTarball, replicaTarball } = packReleaseLikeCli(repoRoot);
 
     assert(

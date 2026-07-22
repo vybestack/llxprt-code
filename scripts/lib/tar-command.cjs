@@ -13,7 +13,7 @@
  */
 
 const { spawnSync } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, statSync } = require('node:fs');
 const { join } = require('node:path');
 
 /**
@@ -40,7 +40,10 @@ const TAR_MAX_BUFFER = 64 * 1024 * 1024;
 function tarSpawnOptions(timeoutMs, cwd) {
   const opts = {
     encoding: 'utf8',
-    timeout: timeoutMs || TAR_TIMEOUT_MS,
+    // Use nullish coalescing so an explicit timeoutMs of 0 (meaning
+    // "no timeout" in Node's spawnSync) is honored instead of falling
+    // back to the default.
+    timeout: timeoutMs ?? TAR_TIMEOUT_MS,
     maxBuffer: TAR_MAX_BUFFER,
     // Suppress transient console windows on Windows CI runners, consistent
     // with the project-wide convention used in
@@ -54,6 +57,25 @@ function tarSpawnOptions(timeoutMs, cwd) {
 }
 
 /**
+ * Throws a clear diagnostic when a required path argument is missing or empty.
+ * Without this, Node's spawnSync coerces undefined to the string 'undefined',
+ * producing confusing tar errors like "tar: undefined: Cannot open".
+ *
+ * @param {string} name - the parameter name for the error message.
+ * @param {unknown} value - the value to validate.
+ * @returns {string} the validated non-empty string.
+ * @throws {Error} when value is not a non-empty string.
+ */
+function requireNonEmptyPath(name, value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(
+      `tar spawn helper requires a non-empty ${name}, got: ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
+}
+
+/**
  * Spawns tar to list the contents of a tarball (-tzf). Throws on spawn error,
  * signal termination, or non-zero exit with stderr context.
  *
@@ -64,6 +86,7 @@ function tarSpawnOptions(timeoutMs, cwd) {
  * @throws {Error} on spawn failure, signal, or non-zero exit.
  */
 function spawnTarList(tarball, timeoutMs, cwd) {
+  requireNonEmptyPath('tarball', tarball);
   const result = spawnSync(
     'tar',
     ['-tzf', tarball],
@@ -94,6 +117,8 @@ function spawnTarList(tarball, timeoutMs, cwd) {
  * @throws {Error} on spawn failure, signal, or non-zero exit.
  */
 function spawnTarListVerbose(tarball, member, timeoutMs, cwd) {
+  requireNonEmptyPath('tarball', tarball);
+  requireNonEmptyPath('member', member);
   const result = spawnSync(
     'tar',
     ['-tzvf', tarball, member],
@@ -124,6 +149,19 @@ function spawnTarListVerbose(tarball, member, timeoutMs, cwd) {
  * @throws {Error} on spawn failure, signal, or non-zero exit.
  */
 function spawnTarExtract(tarball, extractDir, timeoutMs, cwd) {
+  requireNonEmptyPath('tarball', tarball);
+  requireNonEmptyPath('extractDir', extractDir);
+  // Pre-validate extractDir exists and is a directory so a missing or
+  // non-directory path produces a clear diagnostic instead of a generic tar
+  // "Cannot chdir" / "Not a directory" error.
+  if (!existsSync(extractDir)) {
+    throw new Error(`tar extract destination does not exist: ${extractDir}`);
+  }
+  if (!statSync(extractDir).isDirectory()) {
+    throw new Error(
+      `tar extract destination is not a directory: ${extractDir}`,
+    );
+  }
   const result = spawnSync(
     'tar',
     ['-xzf', tarball, '-C', extractDir],
@@ -164,8 +202,11 @@ function findTarballName(packOutput, cacheDir) {
     }
   }
   if (!tarName) {
+    // Truncate to the last 10 lines so large npm pack outputs with many
+    // warnings do not produce unwieldy error messages.
+    const tail = lines.slice(-10).join('\n');
     throw new Error(
-      `npm pack output did not contain a .tgz line:\n${packOutput}`,
+      `npm pack output did not contain a .tgz line (showing last 10 lines):\n${tail}`,
     );
   }
   if (cacheDir != null) {
@@ -184,5 +225,6 @@ module.exports = {
   spawnTarListVerbose,
   spawnTarExtract,
   findTarballName,
+  requireNonEmptyPath,
   TAR_TIMEOUT_MS,
 };

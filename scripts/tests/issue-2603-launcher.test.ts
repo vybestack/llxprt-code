@@ -30,6 +30,15 @@ const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
  */
 const LAUNCHER_FAILURE_EXIT = 43;
 
+/**
+ * The bundled Bun binary filename. The launcher resolves and exec's
+ * node_modules/bun/bin/<BUN_BINARY_NAME> on all platforms; on Windows the
+ * launcher runs through the .cmd/.ps1 wrapper but the binary itself is still
+ * named bun.exe. This constant makes the platform-independent binary name
+ * explicit so a rename here stays in sync with the launcher.
+ */
+const BUN_BINARY_NAME = 'bun.exe';
+
 const SHELL_PROBE_TIMEOUT_MS = 10_000;
 const SHORT_LAUNCH_TIMEOUT_MS = 15_000;
 const STANDARD_LAUNCH_TIMEOUT_MS = 30_000;
@@ -57,11 +66,11 @@ function ensureBun(): string {
   }
   // Use POSIX-standard 'command -v' instead of non-standard 'which' for
   // better portability on minimal container images.
-  const whichResult = spawnSync('sh', ['-c', 'command -v bun'], {
+  const commandVResult = spawnSync('sh', ['-c', 'command -v bun'], {
     encoding: 'utf8',
   });
-  if (whichResult.status === 0 && whichResult.stdout.trim()) {
-    return whichResult.stdout.trim();
+  if (commandVResult.status === 0 && commandVResult.stdout.trim()) {
+    return commandVResult.stdout.trim();
   }
   throw new Error('Bun not found for test setup');
 }
@@ -116,7 +125,7 @@ function makeLayout(
     const bunPath = ensureBun();
     const bunDir = join(pkgRoot, 'node_modules', 'bun', 'bin');
     mkdirSync(bunDir, { recursive: true });
-    copyFileSync(bunPath, join(bunDir, 'bun.exe'));
+    copyFileSync(bunPath, join(bunDir, BUN_BINARY_NAME));
   }
 
   return { pkgRoot, launcherTarget };

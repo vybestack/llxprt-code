@@ -103,14 +103,12 @@ function processCacheDir(repoRoot) {
   );
 }
 
-// Canonical source: scripts/utils/release-packages.ts (NON_NPM_RELEASE_PACKAGES).
-// This is duplicated because .cjs scripts cannot import .ts modules without a
-// build step. If the canonical set changes, update this too.
-const NON_NPM_RELEASE_PACKAGES = new Set([
-  '@vybestack/llxprt-code-test-utils',
-  '@vybestack/llxprt-code-a2a-server',
-  'llxprt-code-vscode-ide-companion',
-]);
+// Shared list of non-NPM release packages, imported from a single .cjs source
+// so release-pack.cjs and release-install-smoke.cjs stay in sync without
+// manual duplication.
+const {
+  NON_NPM_RELEASE_PACKAGES,
+} = require('../lib/non-npm-release-packages.cjs');
 
 let cachedReleaseTarball = null;
 let cachedReplicaTarball = null;

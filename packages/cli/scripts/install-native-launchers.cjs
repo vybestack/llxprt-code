@@ -389,9 +389,11 @@ function findBinLinkDirs(packageRoot, env) {
   const isGlobal = env.npm_config_global === 'true';
 
   if (isGlobal) {
-    // npm supports npm_config_bin_root to override the global bin directory
-    // (default: the prefix root). When set, global shims go there rather than
-    // the prefix root, so honor it to avoid writing to the wrong directory.
+    // Yarn and pnpm support overriding the global bin directory via
+    // npm_config_bin_root (Yarn) / --global-bin-dir (pnpm). npm itself does
+    // NOT define bin_root — for npm the global bin IS the prefix root. We
+    // honor the env var anyway so non-npm package managers that set it are
+    // handled, then fall back to npm_config_prefix for standard npm installs.
     const binRoot = env.npm_config_bin_root;
     if (binRoot) {
       add(binRoot);

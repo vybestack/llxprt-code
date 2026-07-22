@@ -168,7 +168,12 @@ function resolveNpmCliJs(options) {
 
   throw new NpmCliNotFoundError(
     `npm-cli.js could not be resolved on Windows (probed: ${probed.join(', ')}). ` +
-      'Ensure Node was installed via setup-node or an official installer that ships npm alongside node.exe.',
+      'Ensure npm is installed and accessible. This code checks the node.exe ' +
+      'directory (setup-node / official installers), NPM_CONFIG_PREFIX, and ' +
+      'APPDATA locations (nvm-windows, Volta, global installs). If none apply, ' +
+      'install Node via setup-node or an official installer that ships npm ' +
+      'alongside node.exe, or verify that NPM_CONFIG_PREFIX / APPDATA point to ' +
+      'a valid npm installation.',
     { probed },
   );
 }
