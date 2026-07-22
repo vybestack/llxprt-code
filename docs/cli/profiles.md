@@ -165,7 +165,7 @@ Profiles work with any OpenAI-compatible or Anthropic-compatible endpoint. Here'
 {
   "version": 1,
   "provider": "openai",
-  "model": "hf:moonshotai/Kimi-K2.7-Code",
+  "model": "hf:moonshotai/Kimi-K3",
   "modelParams": {
     "temperature": 1
   },

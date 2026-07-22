@@ -361,8 +361,10 @@ export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
  *
  * - Tool blocks: Anthropic's strict tool_use / tool_result pairing validation
  *   would reject orphaned tool blocks (from interrupted loops).
- * - Media blocks: Providers like Kimi don't support certain media types (e.g.,
- *   PDF "file" parts) and would return 400 errors.
+ * - Media blocks: Some providers (or specific model/endpoint variants) don't
+ *   support certain media types (e.g., PDF "file" parts) and would return 400
+ *   errors. Note this is endpoint-specific, not a blanket limit — e.g. newer
+ *   Kimi models like K3 have native multimodal vision.
  *
  * Messages whose speaker is 'tool' are re-tagged as 'human' since they
  * no longer carry structural tool_result blocks. Messages with media blocks

@@ -30,7 +30,7 @@ Get started immediately with powerful LLM options:
 /provider codex
 /model gpt-5.5
 
-# Kimi subscription (K2.7 Code, thinking always on)
+# Kimi subscription (Kimi K3, 1M context, native vision, thinking always on)
 /provider kimi
 /key **************
 /model kimi-for-coding
@@ -43,7 +43,7 @@ Get started immediately with powerful LLM options:
 - **Load Balancer Profiles**: Balance requests across providers or accounts with automatic failover
 - **Free & Low-Cost Tiers**: Start with a Google account (Gemini) or a Qwen account — see [authentication](./docs/cli/authentication.md) for current tier availability
 - **Provider Flexibility**: Switch between any Anthropic, Gemini, OpenAI, Kimi, or OpenAI-compatible provider
-- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K2.7 Code, MiniMax M3, and Qwen 3 Coder Next
+- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K3, MiniMax M3, and Qwen 3 Coder Next
 - **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
 - **Privacy First**: No telemetry by default, local processing available
 - **Subagent Flexibility**: Create agents with different models, providers, or settings
@@ -141,7 +141,7 @@ llxprt
 - **Multi-Account Failover** - Configure multiple OAuth buckets that failover automatically on rate limits
 - **Load Balancer Profiles** - Balance across providers/accounts with roundrobin or failover policies
 - **Extensive Provider Support** - Anthropic, Gemini, OpenAI, Kimi, and any OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
-- **Top Open Models** - GLM 5.2, Kimi K2.7 Code, MiniMax M3, Qwen 3 Coder Next
+- **Top Open Models** - GLM 5.2, Kimi K3, MiniMax M3, Qwen 3 Coder Next
 - **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
 - **Profile System** - Save provider configurations and model settings
 - **Advanced Subagents** - Isolated AI assistants with different models/providers
@@ -176,19 +176,28 @@ llxprt "Generate unit tests for payment module" > tests/payment.test.js
 
 LLxprt Code works seamlessly with the best open-weight models. The specs below are illustrative vendor capabilities, not necessarily the built-in provider defaults — see the [Provider Quick Reference](./docs/providers/quick-reference.md) for the model IDs and context limits LLxprt ships with.
 
-### Kimi K2.7 Code
+### Kimi K3
 
-- **Context Window**: 262,144 tokens (256K)
-- **Architecture**: Trillion-parameter MoE (32B active)
-- **Strengths**: Long-horizon agentic coding, multi-step tool orchestration, ~30% fewer reasoning tokens than K2.6
-- **Special**: Thinking mode is always on (no non-thinking mode; in Kimi Code, disabling thinking falls back to K2.6)
+- **Context Window**: 1,000,000 tokens (1M)
+- **Architecture**: Frontier MoE with always-on thinking
+- **Strengths**: Long-horizon agentic coding, multi-step tool orchestration, native vision (images and video)
+- **Special**: Thinking mode is always on and cannot be disabled; `reasoning.effort` accepts `low` / `high` / `max` (default `max`)
+- **Vision**: Native, but requires base64 or `ms://<file-id>` inputs (no public image URLs)
 
 ```bash
+# Subscription-served model (Kimi Code subscription)
 /provider kimi
 /model kimi-for-coding
+
+# Or pay-per-token on the Moonshot API (model id: kimi-k3)
+/provider kimi
+/baseurl https://api.moonshot.ai/v1
+/keyfile ~/.moonshot_key
+/model kimi-k3
+
 # Or via Synthetic/Chutes:
 /provider synthetic
-/model hf:moonshotai/Kimi-K2.7-Code
+/model hf:moonshotai/Kimi-K3
 ```
 
 ### GLM 5.2

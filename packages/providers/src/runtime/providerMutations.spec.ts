@@ -15,6 +15,7 @@ import {
   normalizeProviderBaseUrl,
 } from './providerMutations.js';
 import type { ModelDefaultRule } from '../composition/index.js';
+import { loadProviderAliasEntries } from '../composition/providerAliases.js';
 
 describe('providerMutations', () => {
   describe('computeModelDefaults', () => {
@@ -109,4 +110,31 @@ describe('providerMutations', () => {
   // Note: extractProviderBaseUrl tests would require mocking provider objects
   // and are better suited for integration tests or more complex unit test setups.
   // For Phase 3, we're focusing on the most critical pure functions.
+
+  describe('builtin kimi alias modelDefaults (K3 override)', () => {
+    const kimiRules = (): ModelDefaultRule[] => {
+      const entry = loadProviderAliasEntries().find((e) => e.alias === 'kimi');
+      return entry?.config.modelDefaults ?? [];
+    };
+
+    it('applies inherited broad-rule keys plus K3-specific overrides for kimi-k3', () => {
+      const result = computeModelDefaults('kimi-k3', kimiRules());
+      // K3-specific overrides (later rule wins).
+      expect(result['reasoning.effort']).toBe('max');
+      expect(result.max_tokens).toBe(131072);
+      expect(result['context-limit']).toBe(1000000);
+      // Inherited reasoning flags from the broad kimi.* rule.
+      expect(result['reasoning.enabled']).toBe(true);
+      expect(result['reasoning.includeInResponse']).toBe(true);
+      expect(result['reasoning.includeInContext']).toBe(true);
+      expect(result['reasoning.stripFromContext']).toBe('none');
+    });
+
+    it('keeps K2.x geometry for kimi-for-coding (default model unchanged)', () => {
+      const result = computeModelDefaults('kimi-for-coding', kimiRules());
+      expect(result['reasoning.effort']).toBe('medium');
+      expect(result.max_tokens).toBe(32768);
+      expect(result['context-limit']).toBe(262144);
+    });
+  });
 });

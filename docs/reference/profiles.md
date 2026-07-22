@@ -210,7 +210,7 @@ When a profile loads, values are resolved in this order (last wins):
 This means CLI flags always win, so you can do one-off overrides without modifying the saved profile:
 
 ```bash
-llxprt --profile-load kimi-k2 --key-name synthetic-alt --set context-limit=100000
+llxprt --profile-load kimi-k3 --key-name synthetic-alt --set context-limit=100000
 ```
 
 ## File Location
@@ -219,7 +219,7 @@ Profiles are stored in `~/.llxprt/profiles/`. The filename (minus `.json`) is th
 
 ```
 ~/.llxprt/profiles/
-├── kimi-k2.json
+├── kimi-k3.json
 ├── opus-thinking.json
 ├── codex-high.json
 └── my-lb-setup.json
