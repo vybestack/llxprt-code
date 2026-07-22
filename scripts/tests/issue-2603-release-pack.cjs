@@ -106,6 +106,8 @@ const NON_NPM_RELEASE_PACKAGES = new Set([
 
 let cachedReleaseTarball = null;
 let cachedReplicaTarball = null;
+let cachedRepoRoot = null;
+let cachedFingerprint = null;
 
 /**
  * Locate the .tgz filename in npm pack output. Delegates to the shared
@@ -115,15 +117,25 @@ function findTarballName(packOutput, cacheDir) {
   return sharedFindTarballName(packOutput, cacheDir);
 }
 
+/**
+ * Returns true when both cached artifacts still exist and the cache key
+ * (repoRoot + source fingerprint) matches the current request. Kept as a
+ * separate function to avoid exceeding the conditional-operator complexity
+ * limit inside packReleaseLikeCli.
+ */
+function cacheIsValid(repoRoot, fp) {
+  if (!cachedReleaseTarball || !existsSync(cachedReleaseTarball)) return false;
+  if (!cachedReplicaTarball || !existsSync(cachedReplicaTarball)) return false;
+  if (cachedRepoRoot !== repoRoot) return false;
+  return cachedFingerprint === fp;
+}
+
 function packReleaseLikeCli(repoRoot) {
-  // Cache hit only when BOTH artifacts exist. A single artifact (e.g. release
-  // packed but replica failed) must not be served as a complete result.
-  if (
-    cachedReleaseTarball &&
-    existsSync(cachedReleaseTarball) &&
-    cachedReplicaTarball &&
-    existsSync(cachedReplicaTarball)
-  ) {
+  // Cache hit only when BOTH artifacts exist AND the repoRoot + source
+  // fingerprint match the previous call. A stale cache from a different
+  // repoRoot or changed source files must not be served.
+  const fp = sourceFingerprint(repoRoot);
+  if (cacheIsValid(repoRoot, fp)) {
     return {
       releaseTarball: cachedReleaseTarball,
       replicaTarball: cachedReplicaTarball,
@@ -172,10 +184,18 @@ function packReleaseLikeCli(repoRoot) {
     packAllInternal(internalPkgs, workCopy, cacheDir);
     const stagedReplicaTarball = packCli(workCopy, cacheDir);
 
+    // Validate the replica tarball assets as well, so a missing file
+    // (launcher, installer, entry, README, LICENSE) fails here with a clear
+    // message instead of producing obscure downstream install errors.
+    assertReleaseTarballAssets(stagedReplicaTarball);
+
     // Publish to module-level cache only after both artifacts exist and
-    // validation passed.
+    // validation passed. Key by repoRoot + fingerprint so a different source
+    // tree or changed files invalidate the cache.
     cachedReleaseTarball = stagedReleaseTarball;
     cachedReplicaTarball = stagedReplicaTarball;
+    cachedRepoRoot = repoRoot;
+    cachedFingerprint = fp;
 
     return {
       releaseTarball: cachedReleaseTarball,

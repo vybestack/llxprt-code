@@ -130,6 +130,12 @@ function assert(condition, msg) {
   return condition;
 }
 
+const NON_NPM_RELEASE_PACKAGES = new Set([
+  '@vybestack/llxprt-code-test-utils',
+  '@vybestack/llxprt-code-a2a-server',
+  'llxprt-code-vscode-ide-companion',
+]);
+
 function assertExactVersions(deps) {
   if (!deps) return;
   for (const [name, spec] of Object.entries(deps)) {
@@ -139,6 +145,12 @@ function assertExactVersions(deps) {
         spec.startsWith('workspace:') ||
         spec.startsWith('link:'))
     ) {
+      // Non-NPM internal packages (test-utils, a2a-server, vscode-companion)
+      // are intentionally left as file: refs by bind-release-deps because
+      // they are never published to the registry. They are resolved by the
+      // real release pipeline at publish time, so a file: spec here is not a
+      // release-integrity violation.
+      if (NON_NPM_RELEASE_PACKAGES.has(name)) continue;
       throw new Error(`release manifest has non-exact dep ${name}="${spec}"`);
     }
   }
@@ -146,12 +158,13 @@ function assertExactVersions(deps) {
 
 /**
  * Assert the release manifest has no non-exact deps in ANY dependency field:
- * dependencies, optionalDependencies, and peerDependencies. A release artifact
- * with a file:/workspace:/link: spec in any of these fields would fail in an
- * isolated install, so all three are validated.
+ * dependencies, devDependencies, optionalDependencies, and peerDependencies. A
+ * release artifact with a file:/workspace:/link: spec in any of these fields
+ * would fail in an isolated install, so all four are validated.
  */
 function assertReleaseManifestAllFields(pkgJson) {
   assertExactVersions(pkgJson.dependencies);
+  assertExactVersions(pkgJson.devDependencies);
   assertExactVersions(pkgJson.optionalDependencies);
   assertExactVersions(pkgJson.peerDependencies);
 }

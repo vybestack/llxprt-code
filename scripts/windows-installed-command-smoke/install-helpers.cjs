@@ -44,8 +44,18 @@ const SPAWN_MAX_BUFFER = 64 * 1024 * 1024;
  * the install inherits the warmed default npm cache (the same one `npm ci`
  * populated in the workflow). An empty isolated per-fixture cache forced
  * re-fetches and caused the ETIMEDOUT cascades seen in CI run 29850614559.
+ *
+ * @param {string[]} extraArgs - install arguments to prepend (e.g. global
+ *   prefix flags and the tarball path).
+ * @returns {string[]} the full argument list for npm install.
+ * @throws {TypeError} when extraArgs is not an array.
  */
 function buildInstallArgs(extraArgs) {
+  if (!Array.isArray(extraArgs)) {
+    throw new TypeError(
+      `buildInstallArgs: extraArgs must be an array (got ${typeof extraArgs})`,
+    );
+  }
   return ['install', ...extraArgs, '--loglevel', 'error'];
 }
 

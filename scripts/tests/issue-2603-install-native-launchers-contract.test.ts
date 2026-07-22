@@ -5,7 +5,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -155,6 +161,45 @@ describe('installNativeLaunchers logging', () => {
       const skipMsg = messages.find((m) => m.includes(foreignCmd));
       expect(skipMsg, messages.join('\n')).toBeDefined();
       expect(skipMsg).toMatch(/Skipped foreign/i);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('repairs a zero-byte existing launcher (truncated install recovery)', () => {
+    const mod = loadCliInstaller();
+    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-zero-byte-'));
+    try {
+      const packageRoot = join(
+        tempDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'fake',
+      );
+      writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+      const dotBin = join(tempDir, 'node_modules', '.bin');
+      mkdirSync(dotBin, { recursive: true });
+      // A zero-byte file cannot be a valid foreign shim (no sentinel, no
+      // target reference). The installer must repair it.
+      const zeroByteCmd = join(dotBin, 'llxprt.cmd');
+      writeFileSync(zeroByteCmd, '');
+      const result = mod.installNativeLaunchers({
+        platform: 'win32',
+        packageRoot,
+        env: {},
+        log: () => {},
+      });
+      expect(result.written).toContain(zeroByteCmd);
+      const content = readFileSync(zeroByteCmd, 'utf8');
+      expect(content).toContain(mod.OWNERSHIP_SENTINEL);
+      expect(content.length).toBeGreaterThan(0);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

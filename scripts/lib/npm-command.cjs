@@ -174,6 +174,8 @@ function resolveNpmCliJs(options) {
  * @param {readonly string[]} [args] - npm arguments (e.g. ['pack', '-w']).
  * @param {InvocationOptions} [options]
  * @returns {Invocation}
+ * @throws {NpmCliNotFoundError} on Windows when npm-cli.js cannot be resolved
+ *   (propagated from resolveNpmCliJs).
  */
 function npmInvocation(args, options) {
   const platform = (options && options.platform) || process.platform;
@@ -197,6 +199,8 @@ function npmInvocation(args, options) {
  * @param {readonly string[]} [args] - arguments after `npm exec`.
  * @param {InvocationOptions} [options]
  * @returns {Invocation}
+ * @throws {NpmCliNotFoundError} on Windows when npm-cli.js cannot be resolved
+ *   (propagated from resolveNpmCliJs via npmInvocation).
  */
 function npxInvocation(args, options) {
   const cliArgs = args ? Array.from(args) : [];

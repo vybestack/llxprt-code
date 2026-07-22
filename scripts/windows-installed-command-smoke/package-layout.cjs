@@ -93,12 +93,23 @@ function copyTree(src, dest) {
   try {
     cpSync(src, dest, {
       recursive: true,
-      // Separator-neutral .bin exclusion: cpSync may pass paths with either
-      // forward or backslash separators on Windows, so normalize before
-      // checking.
+      // Exclude only the exact node_modules/.bin directory. Substring matching
+      // would also exclude node_modules/.binaries or node_modules/.bin-test.
+      // Normalize separators, then split on / and check that the final two
+      // segments are node_modules and .bin.
       filter: (s) => {
         const normalized = s.replace(/\\/g, '/');
-        return !normalized.includes('node_modules/.bin');
+        const segments = normalized.split('/');
+        if (segments.length >= 2) {
+          const segCount = segments.length;
+          if (
+            segments[segCount - 1] === '.bin' &&
+            segments[segCount - 2] === 'node_modules'
+          ) {
+            return false;
+          }
+        }
+        return true;
       },
     });
   } catch (e) {

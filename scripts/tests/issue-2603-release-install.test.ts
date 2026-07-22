@@ -208,8 +208,21 @@ function runSmokeAsync(): SmokeHandle {
         }
       }
     }
-    // Unref the detached child so it does not keep the event loop alive.
+    // Explicitly destroy the child's stdio streams so their file descriptors
+    // do not keep the Vitest worker event loop alive. child.unref() alone does
+    // not close the underlying pipe FDs; destroying the streams ensures
+    // prompt worker exit after the test settles.
     if (child) {
+      try {
+        child.stdout?.destroy();
+      } catch {
+        // best effort; stream may already be destroyed
+      }
+      try {
+        child.stderr?.destroy();
+      } catch {
+        // best effort; stream may already be destroyed
+      }
       try {
         child.unref();
       } catch {
@@ -278,6 +291,22 @@ describe('release-like CLI pack/install smoke (issue #2603)', () => {
 describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
   const nodeRequire = createRequire(import.meta.url);
 
+  // Runtime guard: verify the dynamically required helper export exists before
+  // calling it, so a refactor that removes or renames rewriteOnePkgDeps
+  // produces a clear assertion failure instead of a cryptic TypeError.
+  function loadReleasePackHelper(): {
+    rewriteOnePkgDeps: (p: string, m: Map<string, string>) => void;
+  } {
+    const mod = nodeRequire(releasePackHelper) as Record<string, unknown>;
+    expect(
+      typeof mod.rewriteOnePkgDeps,
+      'release-pack helper must export rewriteOnePkgDeps as a function',
+    ).toBe('function');
+    return mod as {
+      rewriteOnePkgDeps: (p: string, m: Map<string, string>) => void;
+    };
+  }
+
   it('rewrites dependencies, devDependencies, and optionalDependencies to file: tarballs', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rewrite-deps-'));
     try {
@@ -300,9 +329,7 @@ describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
         ['@vybestack/llxprt-code-agents', '/cache/agents-1.0.0.tgz'],
         ['@vybestack/llxprt-code-policy', '/cache/policy-1.0.0.tgz'],
       ]);
-      const mod = nodeRequire(releasePackHelper) as {
-        rewriteOnePkgDeps: (p: string, m: Map<string, string>) => void;
-      };
+      const mod = loadReleasePackHelper();
       mod.rewriteOnePkgDeps(pkgPath, tarballMap);
       const result = JSON.parse(readFileSync(pkgPath, 'utf8'));
       expect(result.dependencies['@vybestack/llxprt-code-core']).toBe(
@@ -341,9 +368,7 @@ describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
       const tarballMap = new Map([
         ['@vybestack/llxprt-code-core', '/cache/core-1.0.0.tgz'],
       ]);
-      const mod = nodeRequire(releasePackHelper) as {
-        rewriteOnePkgDeps: (p: string, m: Map<string, string>) => void;
-      };
+      const mod = loadReleasePackHelper();
       mod.rewriteOnePkgDeps(pkgPath, tarballMap);
       const result = JSON.parse(readFileSync(pkgPath, 'utf8'));
       // dependencies ARE rewritten.

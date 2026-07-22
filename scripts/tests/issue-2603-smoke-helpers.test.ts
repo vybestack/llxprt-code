@@ -238,4 +238,79 @@ describe('probeArg nativeExit payload contract', () => {
     const decoded = decodeProbeArg(arg);
     expect(decoded.exit).toBe(193);
   });
+
+  describe('parseProbeOutput sentinel extraction', () => {
+    const launcherInvocationWithParse = nodeRequire(
+      join(
+        repoRoot,
+        'scripts',
+        'windows-installed-command-smoke',
+        'launcher-invocation.cjs',
+      ),
+    ) as {
+      parseProbeOutput: (stdout: string) => Record<string, unknown>;
+      PROBE_SENTINEL: string;
+    };
+
+    it('extracts JSON from a dedicated sentinel line', () => {
+      const payload = { argv: ['test'], exit: 0 };
+      const stdout = `some log line\n${launcherInvocationWithParse.PROBE_SENTINEL}${JSON.stringify(payload)}\nmore output\n`;
+      const result = launcherInvocationWithParse.parseProbeOutput(stdout);
+      expect(result).toEqual(payload);
+    });
+
+    it('falls back to brace-matching when no sentinel is present', () => {
+      const payload = { argv: ['test'], exit: 0 };
+      const stdout = `log line\n${JSON.stringify(payload)}\n`;
+      const result = launcherInvocationWithParse.parseProbeOutput(stdout);
+      expect(result).toEqual(payload);
+    });
+
+    it('throws when stdout has no JSON object', () => {
+      expect(() =>
+        launcherInvocationWithParse.parseProbeOutput('no json here'),
+      ).toThrow(/no JSON object/);
+    });
+
+    it('throws with context when sentinel line has invalid JSON', () => {
+      const stdout = `${launcherInvocationWithParse.PROBE_SENTINEL}{invalid}\n`;
+      expect(() =>
+        launcherInvocationWithParse.parseProbeOutput(stdout),
+      ).toThrow(/sentinel line/);
+    });
+  });
+
+  describe('buildInstallArgs input guard', () => {
+    const installHelpersModule = () =>
+      nodeRequire(
+        join(
+          repoRoot,
+          'scripts',
+          'windows-installed-command-smoke',
+          'install-helpers.cjs',
+        ),
+      ) as {
+        buildInstallArgs: (extraArgs: string[]) => string[];
+      };
+
+    it('throws TypeError when extraArgs is undefined', () => {
+      const m = installHelpersModule();
+      expect(() =>
+        m.buildInstallArgs(undefined as unknown as string[]),
+      ).toThrow(/must be an array/);
+    });
+
+    it('throws TypeError when extraArgs is a string', () => {
+      const m = installHelpersModule();
+      expect(() =>
+        m.buildInstallArgs('not-an-array' as unknown as string[]),
+      ).toThrow(/must be an array/);
+    });
+
+    it('accepts an empty array', () => {
+      const m = installHelpersModule();
+      const args = m.buildInstallArgs([]);
+      expect(args).toStrictEqual(['install', '--loglevel', 'error']);
+    });
+  });
 });

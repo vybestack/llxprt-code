@@ -13,6 +13,8 @@
  */
 
 const { spawnSync } = require('node:child_process');
+const { existsSync } = require('node:fs');
+const { join } = require('node:path');
 
 /**
  * Default timeout for tar operations (listing, extracting).
@@ -96,7 +98,7 @@ function spawnTarExtract(tarball, extractDir, timeoutMs) {
   }
   if (result.status !== 0) {
     throw new Error(
-      `tar extract failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr}`,
+      `tar extract failed (exit ${result.status}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}`,
     );
   }
   return { stdout: result.stdout, stderr: result.stderr };
@@ -104,9 +106,8 @@ function spawnTarExtract(tarball, extractDir, timeoutMs) {
 
 /**
  * Locate the .tgz filename in npm pack output. npm pack prints the tarball
- * filename (ending in .tgz) on its own line, but the output may include
- * warnings/progress lines. Find the .tgz line and optionally validate the
- * file exists.
+ * filename (ending in .tgz) as the final non-empty line. Earlier warnings or
+ * progress lines ending in .tgz are ignored by scanning from the end.
  *
  * @param {string} packOutput - raw npm pack stdout.
  * @param {string} [cacheDir] - optional dir to validate the tarball exists in.
@@ -116,16 +117,20 @@ function spawnTarExtract(tarball, extractDir, timeoutMs) {
  */
 function findTarballName(packOutput, cacheDir) {
   const lines = packOutput.split(/\r?\n/);
-  const tgzLines = lines.filter((l) => l.trim().endsWith('.tgz'));
-  if (tgzLines.length === 0) {
+  let tarName = '';
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    if (trimmed.endsWith('.tgz')) {
+      tarName = trimmed;
+      break;
+    }
+  }
+  if (!tarName) {
     throw new Error(
       `npm pack output did not contain a .tgz line:\n${packOutput}`,
     );
   }
-  const tarName = tgzLines[tgzLines.length - 1].trim();
   if (cacheDir) {
-    const { existsSync } = require('node:fs');
-    const { join } = require('node:path');
     const tarPath = join(cacheDir, tarName);
     if (!existsSync(tarPath)) {
       throw new Error(

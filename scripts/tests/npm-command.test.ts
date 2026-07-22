@@ -293,4 +293,94 @@ describe('resolveNpmCliJs existence verification', () => {
     });
     expect(result).toBe(fallback);
   });
+
+  describe('resolveNpmCliJs rejects pnpm/yarn npm_execpath (security)', () => {
+    // pnpm and Yarn also set npm_execpath during lifecycle scripts. The resolver
+    // must only trust npm-cli.js (basename check) so the wrong package manager
+    // CLI is never spawned.
+    it('rejects a pnpm npm_execpath and falls through to the node-dir fallback', () => {
+      const result = resolveNpmCliJs({
+        env: { npm_execpath: 'C:\\pnpm\\pnpm-cli.js' },
+        execPath: 'C:\\node\\node.exe',
+        existsSync: () => true,
+      });
+      expect(result).not.toBe('C:\\pnpm\\pnpm-cli.js');
+      expect(result).toMatch(/node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/);
+    });
+
+    it('rejects a yarn npm_execpath and falls through to the node-dir fallback', () => {
+      const result = resolveNpmCliJs({
+        env: { npm_execpath: 'C:\\yarn\\yarn-cli.js' },
+        execPath: 'C:\\node\\node.exe',
+        existsSync: () => true,
+      });
+      expect(result).not.toBe('C:\\yarn\\yarn-cli.js');
+      expect(result).toMatch(/node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js$/);
+    });
+  });
+
+  describe('resolveNpmCliJs NPM_CONFIG_PREFIX fallback', () => {
+    it('resolves npm-cli.js from NPM_CONFIG_PREFIX when node-dir fallback is absent', () => {
+      // Simulate nvm-windows / Volta where npm is NOT alongside node.exe.
+      // path.join on POSIX uses forward slashes for the appended segments;
+      // the Windows prefix may contain backslashes. The existsSync stub matches
+      // the exact joined path.
+      const prefixPath = 'C:\\Users\\dev\\AppData\\Roaming\\npm';
+      const result = resolveNpmCliJs({
+        env: { NPM_CONFIG_PREFIX: prefixPath },
+        execPath: 'C:\\node\\node.exe',
+        existsSync: (p) => p.endsWith('npm-cli.js') && p.includes(prefixPath),
+      });
+      expect(result).toContain('npm-cli.js');
+      expect(result).toContain(prefixPath);
+    });
+
+    it('resolves from APPDATA when NPM_CONFIG_PREFIX is absent', () => {
+      // nvm-windows global npm roaming install location.
+      const appdataPath = 'C:\\Users\\dev\\AppData\\Roaming';
+      const result = resolveNpmCliJs({
+        env: { APPDATA: appdataPath },
+        execPath: 'C:\\node\\node.exe',
+        existsSync: (p) =>
+          p.endsWith('npm-cli.js') &&
+          p.includes(appdataPath) &&
+          p.includes('npm'),
+      });
+      expect(result).toContain('npm-cli.js');
+      expect(result).toContain(appdataPath);
+    });
+
+    it('throws NpmCliNotFoundError when neither prefix fallback exists', () => {
+      expect(() =>
+        resolveNpmCliJs({
+          env: {
+            NPM_CONFIG_PREFIX: 'C:\\prefix',
+            APPDATA: 'C:\\appdata',
+          },
+          execPath: 'C:\\node\\node.exe',
+          existsSync: () => false,
+        }),
+      ).toThrow(NpmCliNotFoundError);
+    });
+
+    it('includes prefix probed paths in the error details when all fail', () => {
+      try {
+        resolveNpmCliJs({
+          env: {
+            NPM_CONFIG_PREFIX: 'C:\\prefix',
+            APPDATA: 'C:\\appdata',
+          },
+          execPath: 'C:\\node\\node.exe',
+          existsSync: () => false,
+        });
+      } catch (e) {
+        const err = e as Error & { details?: { probed: string[] } };
+        expect(err.details).toBeDefined();
+        // probed should include the NPM_CONFIG_PREFIX and APPDATA candidates.
+        const probedStr = JSON.stringify(err.details?.probed);
+        expect(probedStr).toContain('C:\\\\prefix');
+        expect(probedStr).toContain('C:\\\\appdata');
+      }
+    });
+  });
 });

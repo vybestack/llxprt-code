@@ -44,11 +44,42 @@ function probeArg(request) {
 }
 
 /**
- * Parses the probe JSON payload from the launcher's stdout. Wraps JSON.parse
- * in a try/catch and re-throws with the raw stdout context so test failures
- * show the actual malformed content instead of an opaque SyntaxError.
+ * The dedicated probe line prefix emitted by the probe before its JSON
+ * payload. Using a sentinel makes extraction robust against log lines,
+ * warnings, or other output that may appear on stdout alongside the payload.
+ */
+const PROBE_SENTINEL = 'LLXPRT_PROBE:';
+
+/**
+ * Parses the probe JSON payload from the launcher's stdout.
+ *
+ * Extraction strategy: first attempt to find a line starting with the
+ * dedicated probe sentinel (PROBE_SENTINEL). If found, parse the remainder of
+ * that line as JSON. This is robust against interleaved log output. If no
+ * sentinel line is found, fall back to brace-matching extraction (first '{' to
+ * last '}') for backward compatibility with probe output that predates the
+ * sentinel. Both paths validate that the extracted slice is valid JSON.
+ *
+ * @param {string} stdout - the raw stdout from the launcher.
+ * @returns {Record<string, unknown>} the parsed probe payload.
+ * @throws {Error} when no JSON object can be extracted or parsing fails.
  */
 function parseProbeOutput(stdout) {
+  // Prefer the dedicated sentinel line for robust extraction.
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith(PROBE_SENTINEL)) {
+      const jsonText = trimmed.slice(PROBE_SENTINEL.length).trim();
+      try {
+        return JSON.parse(jsonText);
+      } catch (e) {
+        throw new Error(
+          `failed to parse probe JSON (sentinel line): ${e.message}\njsonText=${JSON.stringify(jsonText)}\nfullStdout=${JSON.stringify(stdout)}`,
+        );
+      }
+    }
+  }
+  // Fallback: brace-matching extraction for backward compatibility.
   const start = stdout.indexOf('{');
   const end = stdout.lastIndexOf('}');
   if (start === -1 || end === -1 || end < start) {
@@ -199,6 +230,7 @@ function spawnCmdLongRunning(cmdPath, args, opts) {
 module.exports = {
   probeArg,
   parseProbeOutput,
+  PROBE_SENTINEL,
   invokeCmd,
   invokePwsh,
   cmdInvocationArgs,

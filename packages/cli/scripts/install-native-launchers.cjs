@@ -132,8 +132,12 @@ function canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType) {
   if (content.includes(OWNERSHIP_SENTINEL)) {
     return true;
   }
-  if (!content) {
-    return false;
+  // A zero-byte file cannot be a valid foreign shim (it has no interpreter
+  // reference, no sentinel, and no target). Allowing overwrite here repairs
+  // a truncated launcher left by a failed install without risking a foreign
+  // shim.
+  if (content.length === 0) {
+    return true;
   }
   return shimTargetWithinPackage(content, binLinkDir, packageRoot, shimType);
 }

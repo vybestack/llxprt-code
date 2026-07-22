@@ -28,16 +28,26 @@ interface ProbeRequest {
   long?: boolean;
 }
 
+/**
+ * Interval for the keep-alive handle in the long-running probe mode. Extracted
+ * to a named constant so the value is documented and CI-specific tuning is
+ * straightforward.
+ */
+const KEEP_ALIVE_INTERVAL_MS = 60_000;
+
 function parseRequest(): {
   request: ProbeRequest;
   raw: string;
   malformed: boolean;
+  count: number;
 } {
   const request: ProbeRequest = {};
   let raw = '';
   let malformed = false;
+  let count = 0;
   for (const arg of process.argv.slice(2)) {
     if (arg.startsWith('LLXPRT_PROBE_B64=')) {
+      count++;
       raw = Buffer.from(
         arg.slice('LLXPRT_PROBE_B64='.length),
         'base64url',
@@ -53,7 +63,7 @@ function parseRequest(): {
       }
     }
   }
-  return { request, raw, malformed };
+  return { request, raw, malformed, count };
 }
 
 function readStdinSync(): string {
@@ -124,8 +134,16 @@ function nativeExitWithStatus(status: number): never {
  * captures the complete JSON before any process.exit. Without this, buffered
  * stdout on Windows pipes can be truncated when the process exits.
  */
+/**
+ * The dedicated probe line prefix emitted before the JSON payload. Using a
+ * sentinel makes extraction robust against interleaved log output or warnings
+ * that may appear on stdout alongside the payload.
+ */
+const PROBE_SENTINEL = 'LLXPRT_PROBE:';
+
 async function emitAndFlush(payload: Record<string, unknown>): Promise<void> {
-  process.stdout.write(JSON.stringify(payload));
+  process.stdout.write(`${PROBE_SENTINEL}${JSON.stringify(payload)}
+`);
   await drainStdout();
 }
 
@@ -160,7 +178,7 @@ function drainStdout(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { request, raw, malformed } = parseRequest();
+  const { request, raw, malformed, count } = parseRequest();
 
   const payload: Record<string, unknown> = {
     argv: process.argv,
@@ -180,6 +198,16 @@ async function main(): Promise<void> {
     payload.malformed = true;
     payload.raw = raw;
   }
+  // Distinguish a misconfigured invocation (zero or duplicate control
+  // payloads) from a genuine success. All callers send exactly one payload;
+  // any other count surfaces as a distinct diagnostic field so the parent
+  // process detects the misconfiguration instead of treating it as success.
+  if (count !== 1) {
+    payload.probeError =
+      count === 0
+        ? 'no LLXPRT_PROBE_B64 argument provided'
+        : `${count} LLXPRT_PROBE_B64 arguments provided (expected exactly 1)`;
+  }
 
   payload.stdin = request.stdin ? readStdinSync() : '';
 
@@ -198,7 +226,7 @@ async function main(): Promise<void> {
     // the process resident until the signal handler clears it and exits.
     const keepAlive = setInterval(() => {
       // no-op: the handle's existence, not its work, keeps the process alive
-    }, 60_000);
+    }, KEEP_ALIVE_INTERVAL_MS);
     // NOTE: do NOT unref() this interval — an unref'd handle does not keep the
     // process alive, which is exactly the bug we are fixing.
     const handler = (): void => {

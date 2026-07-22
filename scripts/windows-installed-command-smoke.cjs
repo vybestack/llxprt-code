@@ -192,6 +192,25 @@ function runInstalledBenchmark({
   );
 }
 
+/**
+ * Runs all behavioral checks (argv, stdio, exit codes, process tree, missing/
+ * corrupt Bun, npm exec) on the installed launcher fixture. Extracted from
+ * runSmoke to keep it under the max-lines-per-function lint limit.
+ */
+function runBehavioralChecks(ctx) {
+  const { probeFixture, tempDir, installedPackageRoot, replicaTarball } = ctx;
+  checks.checkCmdArgFidelity(probeFixture);
+  checks.checkPwshArgFidelity(probeFixture);
+  checks.checkInjectionGuard(probeFixture, tempDir);
+  checks.checkStdioForwarding(probeFixture);
+  checks.checkCmdExitCodePreservation(probeFixture);
+  checks.checkPwshExitPropagation(probeFixture);
+  checks.checkExecPathIsBundledBun(probeFixture);
+  checks.checkMissingBun({ installedPackageRoot }, tempDir, repoRoot);
+  checks.checkCorruptBun({ installedPackageRoot }, tempDir, repoRoot);
+  checks.checkNpmExecEphemeral(tempDir, replicaTarball);
+}
+
 function runSmoke() {
   resetState();
   let tempDir;
@@ -227,23 +246,28 @@ function runSmoke() {
         repoRoot,
       );
 
-      checks.checkCmdArgFidelity(probeFixture);
-      checks.checkPwshArgFidelity(probeFixture);
-      checks.checkInjectionGuard(probeFixture, tempDir);
-      checks.checkStdioForwarding(probeFixture);
-      checks.checkCmdExitCodePreservation(probeFixture);
-      checks.checkPwshExitPropagation(probeFixture);
-      checks.checkExecPathIsBundledBun(probeFixture);
+      runBehavioralChecks({
+        probeFixture,
+        tempDir,
+        installedPackageRoot,
+        replicaTarball,
+      });
       await checks.checkProcessTreeNoNode(probeFixture);
-
-      checks.checkMissingBun({ installedPackageRoot }, tempDir, repoRoot);
-      checks.checkCorruptBun({ installedPackageRoot }, tempDir, repoRoot);
-
-      checks.checkNpmExecEphemeral(tempDir, replicaTarball);
 
       const consumerDir = localInstall(tempDir, replicaTarball);
       checkLocalCmdVersion(consumerDir);
       checkPackageLocalBun(prefix, findInstalledPackageRoot, findBundledBun);
+      // Gate succeeded on the assertion state so a runStep failure (which
+      // records via fail() without throwing) is not masked as success.
+      // Without this guard, a local-cmd-version or package-local-bun failure
+      // would write a success diagnostic, run the benchmark, and delete the
+      // temp fixture that the failure diagnostic says to preserve.
+      const { failed } = getState();
+      if (failed) {
+        throw new Error(
+          'prerequisite checks failed (local-cmd-version or package-local-bun); aborting before success',
+        );
+      }
       succeeded = true;
     } catch (err) {
       fail(`unexpected error: ${err.stack || err.message}`);
