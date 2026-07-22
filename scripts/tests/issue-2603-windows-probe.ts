@@ -21,6 +21,7 @@ interface ProbeRequest {
   stdin?: boolean;
   stderr?: string;
   exit?: number;
+  nativeExit?: number;
   long?: boolean;
 }
 
@@ -58,6 +59,62 @@ function readStdinSync(): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Validates that a value is a finite uint32 integer, returning it as a
+ * number. Used for nativeExit so a malformed payload cannot drive FFI with
+ * an out-of-range status.
+ */
+function asUint32(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (!Number.isInteger(value)) return null;
+  if (value < 0 || value > 0xffffffff) return null;
+  return value;
+}
+
+/**
+ * Terminates the current process with the full uint32 exit status via the
+ * Windows ExitProcess API, loaded through Bun FFI against kernel32.dll.
+ *
+ * Bun's process.exit() truncates the exit code modulo 256 (it is modeled on
+ * the POSIX _exit contract), so a genuine 32-bit Windows process exit status
+ * like 9009 cannot be expressed through process.exit(). ExitProcess takes a
+ * UINT (uint32) and sets the process exit code directly, so the launcher/OS
+ * path is exercised with the exact value the host observes.
+ *
+ * Guarded to win32: on any other platform this throws, since ExitProcess only
+ * exists in kernel32.dll. The payload must be flushed before calling so the
+ * parent captures the complete JSON before the process terminates.
+ */
+function nativeExitWithStatus(status: number): never {
+  if (process.platform !== 'win32') {
+    throw new Error(
+      `nativeExitWithStatus: only supported on win32 (platform=${process.platform})`,
+    );
+  }
+  // Dynamic require keeps the non-Windows and non-native test paths free of
+  // bun:ffi so this module loads under Node/vitest on macOS without the FFI
+  // loader. ExitProcess only exists in kernel32.dll on Windows, so this branch
+  // is unreachable off win32. bun:ffi has no ESM export; require is the only
+  // way to load it under Bun.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { dlopen } = require('bun:ffi') as {
+    dlopen: <Fns extends Record<string, unknown>>(
+      name: string,
+      symbols: Fns,
+    ) => {
+      symbols: { ExitProcess: (status: number) => undefined };
+      close: () => void;
+    };
+  };
+  const lib = dlopen('kernel32.dll', {
+    ExitProcess: { args: ['u32'], returns: 'void' },
+  });
+  // ExitProcess does not return; this call terminates the process.
+  lib.symbols.ExitProcess(status >>> 0);
+  // Unreachable, but satisfies the `never` return type for the analyzer.
+  throw new Error('nativeExitWithStatus: ExitProcess did not terminate');
 }
 
 /**
@@ -132,13 +189,25 @@ async function main(): Promise<void> {
     await emitAndFlush(payload);
     process.stdout.write('\n__LLXPRT_PROBE_LONG_RUNNING__\n');
     await drainStdout();
+    // Keep the process alive with an actual active handle. An unresolved
+    // promise alone does not keep a JS runtime alive; Bun exits once there
+    // are no pending handles, which made the reported PID stale by the time
+    // the harness queried it. A long interval is an active handle that keeps
+    // the process resident until the signal handler clears it and exits.
+    const keepAlive = setInterval(() => {
+      // no-op: the handle's existence, not its work, keeps the process alive
+    }, 60_000);
+    // NOTE: do NOT unref() this interval — an unref'd handle does not keep the
+    // process alive, which is exactly the bug we are fixing.
     const handler = (): void => {
       // Drain before exiting so the parent captures the full payload. Without
       // this, process.exit can truncate buffered stdout on Windows pipes.
-      // Remove the listeners after settling so the process does not hold
-      // lingering handlers that would interfere with a clean exit.
+      // Remove the listeners and clear the keep-alive handle after settling so
+      // the process does not hold lingering handlers/active handles that would
+      // interfere with a clean exit.
       process.removeListener('SIGINT', handler);
       process.removeListener('SIGTERM', handler);
+      clearInterval(keepAlive);
       void drainStdout().then(() => process.exit(0));
     };
     process.on('SIGINT', handler);
@@ -150,6 +219,22 @@ async function main(): Promise<void> {
   }
 
   await emitAndFlush(payload);
+  // nativeExit routes exit codes that process.exit() cannot express (it
+  // truncates modulo 256) through the Windows ExitProcess API so the full
+  // uint32 status is observed by the host. For 9009 specifically, this tests
+  // the genuine 32-bit Windows process exit path. The payload is flushed
+  // before the native exit so the parent captures the complete JSON.
+  const nativeStatus = asUint32(request.nativeExit);
+  if (nativeStatus !== null) {
+    if (process.platform === 'win32') {
+      await drainStdout();
+      nativeExitWithStatus(nativeStatus);
+    }
+    // Non-Windows: fall back to process.exit with the truncated value so the
+    // request still terminates (hosted CI is the behavioral source of truth).
+    await drainStdout();
+    process.exit(nativeStatus & 0xff);
+  }
   if (typeof request.exit === 'number') {
     await drainStdout();
     process.exit(request.exit);

@@ -366,13 +366,24 @@ function checkStdioForwarding(fixture) {
 function checkCmdExitCodePreservation(fixture) {
   runStep('cmd-exit-codes-preserved', () => {
     const cmdPath = join(fixture.fixtureDir, 'llxprt.cmd');
-    for (const code of [0, 1, 5, 7, 42, 193, 9009]) {
+    // Codes in [0,255] are expressible through Bun's process.exit() and
+    // exercise the ordinary launcher/OS path. 9009 exceeds the 8-bit range:
+    // Bun's process.exit() truncates modulo 256, so 9009 is routed through
+    // nativeExit (Windows ExitProcess via FFI) to test the genuine 32-bit
+    // Windows process exit status the host observes. Both paths assert the
+    // exact code via the same r.status === code contract.
+    for (const code of [0, 1, 5, 7, 42, 193]) {
       const r = invokeCmd(cmdPath, [probeArg({ exit: code })]);
       assert(
         r.status === code,
         `cmd did not preserve exit ${code}: got ${r.status} (stderr=${JSON.stringify(r.stderr)})`,
       );
     }
+    const native = invokeCmd(cmdPath, [probeArg({ nativeExit: 9009 })]);
+    assert(
+      native.status === 9009,
+      `cmd did not preserve native exit 9009: got ${native.status} (stderr=${JSON.stringify(native.stderr)})`,
+    );
   });
 }
 

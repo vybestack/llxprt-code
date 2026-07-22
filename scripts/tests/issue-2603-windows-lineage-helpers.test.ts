@@ -73,6 +73,14 @@ const processHelpers = nodeRequire(
       ) => { pid: number; ppid: number; name: string } | null;
     },
   ) => Array<{ pid: number; ppid: number; name: string }>;
+  queryProcessEntry: (
+    pid: number,
+    options?: {
+      resolvePwsh?: () => string;
+      spawnSync?: unknown;
+      timeout?: number;
+    },
+  ) => { pid: number; ppid: number; name: string } | null;
   MAX_ANCESTRY_HOPS: number;
   assertValidPid: (pid: unknown) => void;
 };
@@ -434,6 +442,128 @@ describe('MAX_ANCESTRY_HOPS', () => {
   it('is a positive safety bound for ancestry walk depth', () => {
     expect(typeof processHelpers.MAX_ANCESTRY_HOPS).toBe('number');
     expect(processHelpers.MAX_ANCESTRY_HOPS).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A fake spawnSync that returns a configurable result. Used to exercise the
+ * real queryProcessEntry diagnostics (throw vs null) without spawning a real
+ * PowerShell process.
+ */
+type SpawnResult = {
+  error?: { message: string };
+  signal?: string | null;
+  status?: number | null;
+  stdout?: string;
+  stderr?: string;
+};
+
+describe('queryProcessEntry diagnostics (no silent null-collapse)', () => {
+  it('returns the parsed entry when CIM reports the process present', () => {
+    const fakeSpawn = (): SpawnResult => ({
+      status: 0,
+      signal: null,
+      stdout: '{"pid":5000,"ppid":5001,"name":"bun.exe"}',
+      stderr: '',
+    });
+    const entry = processHelpers.queryProcessEntry(5000, {
+      resolvePwsh: () => 'pwsh.exe',
+      spawnSync: fakeSpawn,
+    });
+    expect(entry).toEqual({ pid: 5000, ppid: 5001, name: 'bun.exe' });
+  });
+
+  it('returns null ONLY when CIM definitively reports the process absent', () => {
+    // status 0 + empty stdout = process is no longer alive (the one
+    // legitimate "not found" outcome for the ancestry walk).
+    const fakeSpawn = (): SpawnResult => ({
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    });
+    expect(
+      processHelpers.queryProcessEntry(5000, {
+        resolvePwsh: () => 'pwsh.exe',
+        spawnSync: fakeSpawn,
+      }),
+    ).toBeNull();
+  });
+
+  it('throws on spawn error (does not collapse to null)', () => {
+    const fakeSpawn = (): SpawnResult => ({
+      error: new Error('ENOENT'),
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    });
+    expect(() =>
+      processHelpers.queryProcessEntry(5000, {
+        resolvePwsh: () => 'pwsh.exe',
+        spawnSync: fakeSpawn,
+      }),
+    ).toThrow(/spawn failed for pid=5000: ENOENT/);
+  });
+
+  it('throws on signal termination with stderr context', () => {
+    const fakeSpawn = (): SpawnResult => ({
+      status: null,
+      signal: 'SIGTERM',
+      stdout: '',
+      stderr: 'killed',
+    });
+    expect(() =>
+      processHelpers.queryProcessEntry(5000, {
+        resolvePwsh: () => 'pwsh.exe',
+        spawnSync: fakeSpawn,
+      }),
+    ).toThrow(/terminated by signal SIGTERM for pid=5000/);
+  });
+
+  it('throws on non-zero PowerShell exit with stdout/stderr context', () => {
+    const fakeSpawn = (): SpawnResult => ({
+      status: 1,
+      signal: null,
+      stdout: 'partial',
+      stderr: 'pwsh error: bad filter',
+    });
+    expect(() =>
+      processHelpers.queryProcessEntry(5000, {
+        resolvePwsh: () => 'pwsh.exe',
+        spawnSync: fakeSpawn,
+      }),
+    ).toThrow(/PowerShell exited 1 for pid=5000/);
+  });
+
+  it('throws on unparseable JSON with the raw output', () => {
+    const fakeSpawn = (): SpawnResult => ({
+      status: 0,
+      signal: null,
+      stdout: 'this is not json',
+      stderr: '',
+    });
+    expect(() =>
+      processHelpers.queryProcessEntry(5000, {
+        resolvePwsh: () => 'pwsh.exe',
+        spawnSync: fakeSpawn,
+      }),
+    ).toThrow(/failed to parse JSON for pid=5000/);
+  });
+
+  it('throws on non-integer pid/ppid fields', () => {
+    const fakeSpawn = (): SpawnResult => ({
+      status: 0,
+      signal: null,
+      stdout: '{"pid":"oops","ppid":5001,"name":"bun.exe"}',
+      stderr: '',
+    });
+    expect(() =>
+      processHelpers.queryProcessEntry(5000, {
+        resolvePwsh: () => 'pwsh.exe',
+        spawnSync: fakeSpawn,
+      }),
+    ).toThrow(/non-integer pid\/ppid for pid=5000/);
   });
 });
 

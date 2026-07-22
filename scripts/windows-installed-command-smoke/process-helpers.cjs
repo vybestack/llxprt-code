@@ -296,9 +296,17 @@ function validateProcessLineage(chain, rootPid) {
  * PowerShell, returning { pid, ppid, name } or null when the PID is no
  * longer alive. Used as the primitive for the bounded ancestry walk.
  *
+ * Diagnostics: spawn failures, non-zero PowerShell exit, and unparseable JSON
+ * all throw explicit errors carrying stderr/raw context so the next CI run is
+ * actionable. null is returned ONLY when CIM definitively reports the process
+ * absent (empty stdout on a successful query) — i.e. the process is no longer
+ * alive, which is the one legitimate "not found" outcome for the ancestry walk.
+ *
  * @param {number} pid
  * @param {{ resolvePwsh?: () => string, spawnSync?: typeof import('node:child_process').spawnSync, timeout?: number }} [options]
  * @returns {{pid: number, ppid: number, name: string} | null}
+ * @throws {Error} on spawn error, signal termination, non-zero PowerShell
+ *   exit, or unparseable JSON output.
  */
 function queryProcessEntry(pid, options) {
   const _spawnSync =
@@ -317,29 +325,48 @@ function queryProcessEntry(pid, options) {
     `if ($p) { ` +
     `@{ pid = $p.ProcessId; ppid = $p.ParentProcessId; name = $p.Name } | ConvertTo-Json -Compress ` +
     `} else { '' } ` +
-    `} catch { '' }`;
+    `} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }`;
   const r = _spawnSync(_resolvePwsh(), ['-NoProfile', '-Command', script], {
     encoding: 'utf8',
     timeout,
     windowsHide: true,
   });
-  if (r.error || r.signal || r.status !== 0) {
-    return null;
+  if (r.error) {
+    throw new Error(
+      `queryProcessEntry: spawn failed for pid=${pid}: ${r.error.message}`,
+    );
+  }
+  if (r.signal) {
+    throw new Error(
+      `queryProcessEntry: PowerShell terminated by signal ${r.signal} for pid=${pid} (stderr=${JSON.stringify(r.stderr || '')})`,
+    );
+  }
+  if (r.status !== 0) {
+    throw new Error(
+      `queryProcessEntry: PowerShell exited ${r.status} for pid=${pid} (stderr=${JSON.stringify(r.stderr || '')}, stdout=${JSON.stringify(r.stdout || '')})`,
+    );
   }
   const raw = (r.stdout || '').trim();
+  // Empty output on a successful (status 0) query means CIM definitively
+  // reports the process absent — the one legitimate "not found" outcome.
   if (!raw) return null;
+  let obj;
   try {
-    const obj = JSON.parse(raw);
-    const entryPid = Number(obj.pid);
-    const entryPpid = Number(obj.ppid);
-    const name = String(obj.name || '');
-    if (!Number.isInteger(entryPid) || !Number.isInteger(entryPpid)) {
-      return null;
-    }
-    return { pid: entryPid, ppid: entryPpid, name };
-  } catch {
-    return null;
+    obj = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `queryProcessEntry: failed to parse JSON for pid=${pid}: ${e.message} (raw=${JSON.stringify(raw)}, stderr=${JSON.stringify(r.stderr || '')})`,
+    );
   }
+  const entryPid = Number(obj.pid);
+  const entryPpid = Number(obj.ppid);
+  const name = String(obj.name || '');
+  if (!Number.isInteger(entryPid) || !Number.isInteger(entryPpid)) {
+    throw new Error(
+      `queryProcessEntry: non-integer pid/ppid for pid=${pid}: entryPid=${JSON.stringify(obj.pid)}, entryPpid=${JSON.stringify(obj.ppid)} (raw=${JSON.stringify(raw)})`,
+    );
+  }
+  return { pid: entryPid, ppid: entryPpid, name };
 }
 
 /**

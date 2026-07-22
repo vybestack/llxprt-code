@@ -27,6 +27,7 @@ const launcherInvocation = nodeRequire(
     'launcher-invocation.cjs',
   ),
 ) as {
+  probeArg: (request: Record<string, unknown>) => string;
   validateSpawnResult: <T>(label: string, r: T) => T;
   cmdQuote: (s: string) => string;
   pwshQuote: (s: string) => string;
@@ -177,5 +178,56 @@ describe('MAX_LEVELS', () => {
   it('is a positive safety bound for BFS traversal depth', () => {
     expect(typeof processHelpers.MAX_LEVELS).toBe('number');
     expect(processHelpers.MAX_LEVELS).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Probe request/payload contract tests for the nativeExit mode. The probe
+ * request is base64url-encoded JSON; these verify the construction keeps the
+ * exit status exact so the hosted Windows behavioral check can rely on it.
+ * Source pattern alone is not sufficient — the round-trip must preserve the
+ * full uint32 value.
+ */
+describe('probeArg nativeExit payload contract', () => {
+  function decodeProbeArg(arg: string): Record<string, unknown> {
+    expect(arg.startsWith('LLXPRT_PROBE_B64=')).toBe(true);
+    const json = Buffer.from(
+      arg.slice('LLXPRT_PROBE_B64='.length),
+      'base64url',
+    ).toString('utf8');
+    return JSON.parse(json) as Record<string, unknown>;
+  }
+
+  it('keeps nativeExit 9009 exact through the base64url round-trip', () => {
+    const arg = launcherInvocation.probeArg({ nativeExit: 9009 });
+    const decoded = decodeProbeArg(arg);
+    expect(decoded.nativeExit).toBe(9009);
+    // Sanity: 9009 must NOT be truncated modulo 256 (which would be 49).
+    expect(decoded.nativeExit).not.toBe(9009 % 256);
+  });
+
+  it('keeps nativeExit 0 exact (valid uint32)', () => {
+    const arg = launcherInvocation.probeArg({ nativeExit: 0 });
+    const decoded = decodeProbeArg(arg);
+    expect(decoded.nativeExit).toBe(0);
+  });
+
+  it('keeps the max uint32 value exact', () => {
+    const arg = launcherInvocation.probeArg({ nativeExit: 0xffffffff });
+    const decoded = decodeProbeArg(arg);
+    expect(decoded.nativeExit).toBe(0xffffffff);
+  });
+
+  it('does not add nativeExit when only exit is requested', () => {
+    const arg = launcherInvocation.probeArg({ exit: 42 });
+    const decoded = decodeProbeArg(arg);
+    expect(decoded.exit).toBe(42);
+    expect(decoded.nativeExit).toBeUndefined();
+  });
+
+  it('keeps exit (ordinary process.exit path) exact for in-range codes', () => {
+    const arg = launcherInvocation.probeArg({ exit: 193 });
+    const decoded = decodeProbeArg(arg);
+    expect(decoded.exit).toBe(193);
   });
 });
