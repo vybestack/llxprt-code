@@ -35,6 +35,8 @@ const launcherPath = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 
 const LAUNCHER_FAILURE_EXIT = 43;
+const SHORT_LAUNCH_TIMEOUT_MS = 15_000;
+const STANDARD_LAUNCH_TIMEOUT_MS = 30_000;
 
 function assertNoSpawnError(
   result: { error?: NodeJS.ErrnoException | undefined; status: number | null },
@@ -226,4 +228,124 @@ describe('POSIX launcher range-pin acceptance', () => {
     assertNoSpawnError(result, 'accepts hoisted Bun with range pin 1.x');
     expect(result.status, result.stderr).toBe(0);
   }, 30_000);
+});
+describe('POSIX launcher prerelease semver pin', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'llxprt-prerel-'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it(
+    'accepts a hoisted Bun whose prerelease version matches the exact pin',
+    () => {
+      // A prerelease pin like "1.3.14-beta.1" IS an exact version and must be
+      // treated as such so the strict equality check is applied. The hoisted
+      // Bun's package.json reports the matching prerelease version.
+      const bunVersion = realBunVersion();
+      // Use the real Bun version with a synthetic prerelease suffix so the
+      // binary is valid but the pin is a prerelease string.
+      const prereleaseVersion = `${bunVersion}-beta.1`;
+      const consumerDir = join(tempDir, 'consumer-prerelease');
+      const pkgRoot = join(
+        consumerDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      const binDir = join(pkgRoot, 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const launcherTarget = join(binDir, 'llxprt');
+      copyFileSync(launcherPath, launcherTarget);
+      chmodSync(launcherTarget, 0o755);
+      makeEntry(pkgRoot, 'process.exit(0);');
+
+      const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+      mkdirSync(hoistedBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
+      writeFileSync(
+        join(consumerDir, 'node_modules', 'bun', 'package.json'),
+        JSON.stringify({ name: 'bun', version: prereleaseVersion }, null, 2),
+      );
+      writeFileSync(
+        join(pkgRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@vybestack/llxprt-code',
+            dependencies: { bun: prereleaseVersion },
+          },
+          null,
+          2,
+        ),
+      );
+
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: STANDARD_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      assertNoSpawnError(result, 'prerelease pin matches');
+      expect(result.status, result.stderr).toBe(0);
+    },
+    STANDARD_LAUNCH_TIMEOUT_MS,
+  );
+
+  it(
+    'rejects a hoisted Bun whose version does not match the prerelease pin',
+    () => {
+      // The package pins bun "1.3.14-beta.1" but the hoisted Bun reports a
+      // different version. The launcher must reject this mismatch because the
+      // prerelease pin is recognized as an exact pin.
+      const bunVersion = realBunVersion();
+      const consumerDir = join(tempDir, 'consumer-prerelease-mismatch');
+      const pkgRoot = join(
+        consumerDir,
+        'node_modules',
+        '@vybestack',
+        'llxprt-code',
+      );
+      const binDir = join(pkgRoot, 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const launcherTarget = join(binDir, 'llxprt');
+      copyFileSync(launcherPath, launcherTarget);
+      chmodSync(launcherTarget, 0o755);
+      makeEntry(pkgRoot, 'process.exit(0);');
+
+      const hoistedBunDir = join(consumerDir, 'node_modules', 'bun', 'bin');
+      mkdirSync(hoistedBunDir, { recursive: true });
+      copyFileSync(ensureBun(), join(hoistedBunDir, 'bun.exe'));
+      writeFileSync(
+        join(consumerDir, 'node_modules', 'bun', 'package.json'),
+        JSON.stringify({ name: 'bun', version: bunVersion }, null, 2),
+      );
+      writeFileSync(
+        join(pkgRoot, 'package.json'),
+        JSON.stringify(
+          {
+            name: '@vybestack/llxprt-code',
+            // Pin a prerelease version that does NOT match the installed Bun.
+            dependencies: { bun: '1.3.14-beta.1' },
+          },
+          null,
+          2,
+        ),
+      );
+
+      const result = spawnSync(launcherTarget, [], {
+        cwd: pkgRoot,
+        encoding: 'utf8',
+        timeout: SHORT_LAUNCH_TIMEOUT_MS,
+        env: { ...process.env, PATH: '/usr/bin:/bin' },
+      });
+      assertNoSpawnError(result, 'prerelease pin mismatch');
+      expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+      expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
+    },
+    SHORT_LAUNCH_TIMEOUT_MS,
+  );
 });

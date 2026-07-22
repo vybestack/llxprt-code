@@ -12,8 +12,15 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  mkdirSync,
+  existsSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -26,6 +33,23 @@ const tarCommand = nodeRequire(
   join(repoRoot, 'scripts', 'lib', 'tar-command.cjs'),
 ) as {
   findTarballName: (output: string, cacheDir?: string) => string;
+  spawnTarList: (
+    tarball: string,
+    timeoutMs?: number,
+    cwd?: string,
+  ) => { stdout: string; stderr: string };
+  spawnTarListVerbose: (
+    tarball: string,
+    member: string,
+    timeoutMs?: number,
+    cwd?: string,
+  ) => { stdout: string; stderr: string };
+  spawnTarExtract: (
+    tarball: string,
+    extractDir: string,
+    timeoutMs?: number,
+    cwd?: string,
+  ) => { stdout: string; stderr: string };
   TAR_TIMEOUT_MS: number;
 };
 
@@ -102,5 +126,69 @@ describe('findTarballName', () => {
 describe('TAR_TIMEOUT_MS', () => {
   it('is a positive number', () => {
     expect(tarCommand.TAR_TIMEOUT_MS).toBeGreaterThan(0);
+  });
+});
+
+describe('spawnTarList', () => {
+  it('lists the contents of a valid tarball', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tar-list-'));
+    try {
+      const tarName = 'test-pkg-1.0.0.tgz';
+      const tarPath = join(dir, tarName);
+      // Create a minimal valid gzip tarball containing a single file.
+      const innerDir = join(dir, 'payload');
+      mkdirSync(innerDir, { recursive: true });
+      writeFileSync(join(innerDir, 'hello.txt'), 'world');
+      spawnSync('tar', ['-czf', tarPath, '-C', dir, 'payload'], {
+        encoding: 'utf8',
+      });
+      const result = tarCommand.spawnTarList(tarPath);
+      expect(result.stdout).toContain('hello.txt');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('honors the cwd option for relative tarball paths', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tar-cwd-'));
+    try {
+      const tarName = 'cwd-pkg-1.0.0.tgz';
+      const tarPath = join(dir, tarName);
+      const innerDir = join(dir, 'payload');
+      mkdirSync(innerDir, { recursive: true });
+      writeFileSync(join(innerDir, 'marker.txt'), 'data');
+      spawnSync('tar', ['-czf', tarPath, '-C', dir, 'payload'], {
+        encoding: 'utf8',
+      });
+      // Pass a relative path and set cwd to the directory containing it.
+      const result = tarCommand.spawnTarList(tarName, undefined, dir);
+      expect(result.stdout).toContain('marker.txt');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('spawnTarExtract', () => {
+  it('extracts a tarball into the specified directory', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tar-extract-'));
+    try {
+      const tarName = 'extract-pkg-1.0.0.tgz';
+      const tarPath = join(dir, tarName);
+      const innerDir = join(dir, 'payload');
+      mkdirSync(innerDir, { recursive: true });
+      writeFileSync(join(innerDir, 'extracted.txt'), 'contents');
+      spawnSync('tar', ['-czf', tarPath, '-C', dir, 'payload'], {
+        encoding: 'utf8',
+      });
+      const extractDir = join(dir, 'out');
+      mkdirSync(extractDir, { recursive: true });
+      tarCommand.spawnTarExtract(tarPath, extractDir);
+      expect(existsSync(join(extractDir, 'payload', 'extracted.txt'))).toBe(
+        true,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

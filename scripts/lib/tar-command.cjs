@@ -31,20 +31,44 @@ const TAR_TIMEOUT_MS = 30_000;
 const TAR_MAX_BUFFER = 64 * 1024 * 1024;
 
 /**
+ * Builds the spawn options object shared by all tar spawn helpers.
+ *
+ * @param {number} timeoutMs - spawn timeout (falls back to TAR_TIMEOUT_MS).
+ * @param {string} [cwd] - optional working directory for the tar process.
+ * @returns {object} the spawnSync options.
+ */
+function tarSpawnOptions(timeoutMs, cwd) {
+  const opts = {
+    encoding: 'utf8',
+    timeout: timeoutMs || TAR_TIMEOUT_MS,
+    maxBuffer: TAR_MAX_BUFFER,
+    // Suppress transient console windows on Windows CI runners, consistent
+    // with the project-wide convention used in
+    // windows-installed-command-smoke/*.cjs.
+    windowsHide: true,
+  };
+  if (cwd != null) {
+    opts.cwd = cwd;
+  }
+  return opts;
+}
+
+/**
  * Spawns tar to list the contents of a tarball (-tzf). Throws on spawn error,
  * signal termination, or non-zero exit with stderr context.
  *
  * @param {string} tarball - path to the .tgz file.
  * @param {number} [timeoutMs] - optional spawn timeout (default 30s).
+ * @param {string} [cwd] - optional working directory for the tar process.
  * @returns {{ stdout: string, stderr: string }}
  * @throws {Error} on spawn failure, signal, or non-zero exit.
  */
-function spawnTarList(tarball, timeoutMs) {
-  const result = spawnSync('tar', ['-tzf', tarball], {
-    encoding: 'utf8',
-    timeout: timeoutMs || TAR_TIMEOUT_MS,
-    maxBuffer: TAR_MAX_BUFFER,
-  });
+function spawnTarList(tarball, timeoutMs, cwd) {
+  const result = spawnSync(
+    'tar',
+    ['-tzf', tarball],
+    tarSpawnOptions(timeoutMs, cwd),
+  );
   if (result.error) {
     throw new Error(
       `Failed to spawn tar (is tar on PATH?): ${result.error.message}`,
@@ -65,15 +89,16 @@ function spawnTarList(tarball, timeoutMs) {
  * @param {string} tarball - path to the .tgz file.
  * @param {string} member - the tar member path to inspect.
  * @param {number} [timeoutMs] - optional spawn timeout (default 30s).
+ * @param {string} [cwd] - optional working directory for the tar process.
  * @returns {{ stdout: string, stderr: string }}
  * @throws {Error} on spawn failure, signal, or non-zero exit.
  */
-function spawnTarListVerbose(tarball, member, timeoutMs) {
-  const result = spawnSync('tar', ['-tzvf', tarball, member], {
-    encoding: 'utf8',
-    timeout: timeoutMs || TAR_TIMEOUT_MS,
-    maxBuffer: TAR_MAX_BUFFER,
-  });
+function spawnTarListVerbose(tarball, member, timeoutMs, cwd) {
+  const result = spawnSync(
+    'tar',
+    ['-tzvf', tarball, member],
+    tarSpawnOptions(timeoutMs, cwd),
+  );
   if (result.error) {
     throw new Error(
       `Failed to spawn tar (is tar on PATH?): ${result.error.message}`,
@@ -94,15 +119,16 @@ function spawnTarListVerbose(tarball, member, timeoutMs) {
  * @param {string} tarball - path to the .tgz file.
  * @param {string} extractDir - directory to extract into.
  * @param {number} [timeoutMs] - optional spawn timeout (default 30s).
+ * @param {string} [cwd] - optional working directory for the tar process.
  * @returns {{ stdout: string, stderr: string }}
  * @throws {Error} on spawn failure, signal, or non-zero exit.
  */
-function spawnTarExtract(tarball, extractDir, timeoutMs) {
-  const result = spawnSync('tar', ['-xzf', tarball, '-C', extractDir], {
-    encoding: 'utf8',
-    timeout: timeoutMs || TAR_TIMEOUT_MS,
-    maxBuffer: TAR_MAX_BUFFER,
-  });
+function spawnTarExtract(tarball, extractDir, timeoutMs, cwd) {
+  const result = spawnSync(
+    'tar',
+    ['-xzf', tarball, '-C', extractDir],
+    tarSpawnOptions(timeoutMs, cwd),
+  );
   if (result.error) {
     throw new Error(
       `Failed to spawn tar (is tar on PATH?): ${result.error.message}`,

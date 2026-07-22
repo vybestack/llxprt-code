@@ -74,15 +74,36 @@ _llxprt_derive_bun_pkg() {
 # prerelease suffix). Returns 0 for an exact pin, 1 for a range/non-exact spec.
 # This is stricter than a bare digit-leading glob: "1.x" and "1.3.14 - 2.0.0"
 # start with a digit but are NOT exact versions and must not be treated as pins.
+# A prerelease pin like "1.3.14-beta.1" IS an exact version and must be
+# accepted so the strict version equality check is applied during Bun beta/rc
+# testing cycles. The prerelease suffix (dash followed by dot-separated
+# alphanumeric identifiers) is validated so ranges like "1.3.14-" or
+# "1.3.14-alpha.." are still rejected.
 _llxprt_is_exact_pin() {
   _llxprt_pin=$1
+  _llxprt_prerelease=""
+  _llxprt_has_prerelease=0
+  # Split on the first dash to separate the core version from any prerelease
+  # suffix (e.g. "1.3.14-beta.1" -> core="1.3.14", prerelease="beta.1").
+  # A range like "1.x" or "^1.3.14" contains no dash and is handled below by
+  # the core-only numeric check.
   case "$_llxprt_pin" in
-    *[!0-9.]*) return 1 ;; # contains non-numeric/non-dot chars: a range/tag
+    *-*)
+      _llxprt_core=${_llxprt_pin%%-*}
+      _llxprt_prerelease=${_llxprt_pin#*-}
+      _llxprt_has_prerelease=1
+      ;;
+    *)
+      _llxprt_core=$_llxprt_pin
+      ;;
+  esac
+  # The core (before any dash) must be purely numeric with dots.
+  case "$_llxprt_core" in
+    *[!0-9.]*) return 1 ;;
     *) ;;
   esac
-  # Must have exactly two dots (three numeric groups). Strip leading digits
-  # from each group to ensure each group is purely numeric.
-  _llxprt_rest=$_llxprt_pin
+  # Must have exactly two dots (three numeric groups) in the core.
+  _llxprt_rest=$_llxprt_core
   _llxprt_group=0
   while [ -n "$_llxprt_rest" ]; do
     _llxprt_part=${_llxprt_rest%%.*}
@@ -96,7 +117,29 @@ _llxprt_is_exact_pin() {
       *) break ;;
     esac
   done
-  [ "$_llxprt_group" -eq 3 ]
+  [ "$_llxprt_group" -eq 3 ] || return 1
+  # If a prerelease separator is present, validate its non-empty,
+  # dot-separated identifiers (which may contain hyphens per semver).
+  if [ "$_llxprt_has_prerelease" -eq 1 ]; then
+    [ -n "$_llxprt_prerelease" ] || return 1
+    case "$_llxprt_prerelease" in
+      .*|*.|*..*) return 1 ;;
+      *) ;;
+    esac
+    _llxprt_pre_rest=$_llxprt_prerelease
+    while [ -n "$_llxprt_pre_rest" ]; do
+      _llxprt_pre_part=${_llxprt_pre_rest%%.*}
+      case "$_llxprt_pre_part" in
+        ''|*[!A-Za-z0-9-]*) return 1 ;;
+        *) ;;
+      esac
+      case "$_llxprt_pre_rest" in
+        *.*) _llxprt_pre_rest=${_llxprt_pre_rest#*.} ;;
+        *) break ;;
+      esac
+    done
+  fi
+  return 0
 }
 
 # Check whether a discovered Bun binary's version matches the dependency pin.
