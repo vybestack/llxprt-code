@@ -986,7 +986,12 @@ jobs:
             }
 
             async function createOrUpdateMarkerComment(summary) {
-              const existing = await reconcileMarkerComment();
+              let existing = null;
+              try {
+                existing = await reconcileMarkerComment();
+              } catch (reconcileErr) {
+                core.warning(redactSecretDiagnostics(`Reconciliation failed before summary posting; attempting create: ${reconcileErr.message || reconcileErr}`));
+              }
               if (existing) {
                 await github.rest.issues.updateComment({
                   owner, repo, comment_id: existing.id, body: summary,
@@ -1100,7 +1105,9 @@ jobs:
               const originalContent = fs.readFileSync(fileName, 'utf8');
               fs.writeFileSync(fileName, REDACTED_PENDING);
               const redactedContent = redact(originalContent);
-              fs.writeFileSync(fileName, redactedContent);
+              const tempFile = `${fileName}.redacting`;
+              fs.writeFileSync(tempFile, redactedContent);
+              fs.renameSync(tempFile, fileName);
             } catch (error) {
               if (error && error.code !== 'ENOENT') {
                 replaceWithRedactionFailure(fileName, error);

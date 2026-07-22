@@ -112,16 +112,16 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     );
     expectContainsAll(redactRun, [
       'fs.writeFileSync(fileName, REDACTED_PENDING)',
-      'fs.writeFileSync(fileName, redactedContent)',
+      'const tempFile = `${fileName}.redacting`',
+      'fs.writeFileSync(tempFile, redactedContent)',
+      'fs.renameSync(tempFile, fileName)',
     ]);
     expect(redactRun).toContain('[REDACTED-PENDING]');
     const placeholderIndex = redactRun.indexOf(
       'fs.writeFileSync(fileName, REDACTED_PENDING)',
     );
-    const redactedIndex = redactRun.indexOf(
-      'fs.writeFileSync(fileName, redactedContent)',
-    );
-    expect(redactedIndex).toBeGreaterThan(placeholderIndex);
+    const renameIndex = redactRun.indexOf('fs.renameSync(tempFile, fileName)');
+    expect(renameIndex).toBeGreaterThan(placeholderIndex);
   });
 
   it('does not retry non-idempotent gh issue writes (Behavior 5)', () => {
@@ -147,7 +147,7 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       'createOrUpdateMarkerComment',
     );
     expectContainsAll(postFunctionSource, [
-      'const existing = await reconcileMarkerComment()',
+      'existing = await reconcileMarkerComment()',
       'github.rest.issues.updateComment({',
       'github.rest.issues.createComment({',
       'const reconciled = await reconcileMarkerComment()',
