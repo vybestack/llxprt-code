@@ -230,7 +230,7 @@ describe('.github/workflows/ocr-review.yml', () => {
 
     expectContainsAll(installRun, [
       'OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-      'npm install --prefix "$OCR_PREFIX" --ignore-scripts @alibaba-group/open-code-review@${OCR_VERSION}',
+      'npm install --prefix "$OCR_PREFIX" --ignore-scripts "@alibaba-group/open-code-review@${OCR_VERSION}"',
       'echo "70" > ocr-exit-code.txt',
       'OCR_BIN="${OCR_PREFIX}/node_modules/.bin"',
       'echo "$OCR_BIN" >> "$GITHUB_PATH"',

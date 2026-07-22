@@ -216,7 +216,7 @@ jobs:
             exit 0
           fi
           OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          if ! npm install --prefix "$OCR_PREFIX" --ignore-scripts @alibaba-group/open-code-review@${OCR_VERSION} 2>> ocr-stderr.log; then
+          if ! npm install --prefix "$OCR_PREFIX" --ignore-scripts "@alibaba-group/open-code-review@${OCR_VERSION}" 2>> ocr-stderr.log; then
             echo "::warning::OpenCodeReview installation failed."
             echo "70" > ocr-exit-code.txt
             mark_infrastructure_failure "install" "OpenCodeReview installation failed"

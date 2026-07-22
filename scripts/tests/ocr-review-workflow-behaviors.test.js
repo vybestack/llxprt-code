@@ -54,7 +54,7 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       stepNamed(codeReviewJob, 'Install OpenCodeReview'),
     );
     expect(installRun).toContain(
-      '@alibaba-group/open-code-review@${OCR_VERSION}',
+      '"@alibaba-group/open-code-review@${OCR_VERSION}"',
     );
     expect(installRun).not.toContain('1.6.1');
     expect(installRun).not.toContain('@alibaba-group/open-code-review@1.7.9');
