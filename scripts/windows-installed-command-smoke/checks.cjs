@@ -7,7 +7,7 @@
  * helper so a single summary is produced at the end.
  */
 
-const { spawnSync } = require('node:child_process');
+const { spawnSync, spawn } = require('node:child_process');
 const {
   existsSync,
   mkdirSync,
@@ -39,7 +39,6 @@ const { findBundledBun, samePath, copyTree } = require('./package-layout.cjs');
 const {
   waitForReady,
   killProcessTree,
-  spawn,
   walkProcessLineage,
   validateProcessLineage,
 } = require('./process-helpers.cjs');
@@ -425,6 +424,12 @@ async function checkProcessTreeNoNode(fixture) {
       const child = spawnCmdLongRunning(cmdPath, [probeArg({ long: true })], {
         env: { PATH: CONSTRAINED_PATH },
       });
+      // Attach an immediate 'error' handler so a spawn failure (ENOENT,
+      // EACCES) surfaces as an assertion failure rather than crashing the
+      // process with an unhandled 'error' event.
+      child.on('error', (err) => {
+        throw new Error(`cmd long-running spawn failed: ${err.message}`);
+      });
       try {
         // Async readiness polling yields to the event loop so stdout event
         // handlers fire between checks.
@@ -475,6 +480,12 @@ async function checkProcessTreeNoNode(fixture) {
           windowsHide: true,
         },
       );
+      // Attach an immediate 'error' handler so a spawn failure (ENOENT,
+      // EACCES) surfaces as an assertion failure rather than crashing the
+      // process with an unhandled 'error' event.
+      child.on('error', (err) => {
+        throw new Error(`pwsh long-running spawn failed: ${err.message}`);
+      });
       try {
         const readyOut = await waitForReady(
           child,
@@ -572,6 +583,14 @@ function checkCorruptBun(fixtureBase, tempDir, repoRoot) {
     assert(
       /could not be launched|corrupt|npm install|bun\.sh/i.test(r.stderr),
       `ps1 corrupt-bun diagnostic missing: ${JSON.stringify(r.stderr)}`,
+    );
+    // Symmetric with the cmd corrupt-bun honest contract: the ps1 launcher
+    // must NOT misdiagnose a corrupt binary as a missing Bun. The corrupt-bun
+    // catch block emits its own diagnostic (could not be launched), not the
+    // missing-bun diagnostic (bundled Bun runtime was not found).
+    assert(
+      !/LLxprt Code: bundled Bun runtime was not found/i.test(r.stderr),
+      `ps1 corrupt-bun must NOT emit the missing-bun diagnostic from its catch block (honest contract: corrupt binary must not be misdiagnosed as missing)`,
     );
   });
 

@@ -143,6 +143,11 @@ function cmdQuote(s) {
 /**
  * Quotes a single argument for PowerShell -Command invocation. Uses single
  * quotes (PowerShell's literal string) and doubles internal single quotes.
+ *
+ * NOTE: This function is NOT used by invokePwsh, which uses base64-encoded
+ * -EncodedCommand (avoiding all quoting concerns). It is exported for
+ * external quoting needs (e.g. constructing standalone PowerShell command
+ * strings outside the encoded-command path).
  */
 function pwshQuote(s) {
   if (/^[\w./:=@-]+$/.test(s)) return s;
@@ -213,18 +218,34 @@ function invokePwsh(ps1Path, args, opts) {
  * cmd spawn path rather than the racy descendants snapshot. Returns the
  * ChildProcess for readiness polling and tree kill.
  *
+ * @remarks The returned ChildProcess MUST be terminated by the caller (e.g.
+ *   via killProcessTree) when the test is complete. Failure to clean up will
+ *   leave orphaned launcher/bun processes. Callers should also attach an
+ *   'error' listener via child.on('error', ...) to handle immediate spawn
+ *   failures (ENOENT, EACCES); waitForReady attaches one asynchronously but
+ *   the caller should add a synchronous handler for race-free error handling.
+ *
  * @param {string} cmdPath - absolute path to the .cmd launcher.
  * @param {string[]} args - arguments (e.g. probeArg).
  * @param {{ env?: Record<string, string> }} [opts]
  * @returns {import('node:child_process').ChildProcess}
  */
 function spawnCmdLongRunning(cmdPath, args, opts) {
-  return spawn('cmd.exe', cmdInvocationArgs(cmdPath, args), {
+  const child = spawn('cmd.exe', cmdInvocationArgs(cmdPath, args), {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, PATH: CONSTRAINED_PATH, ...(opts?.env || {}) },
     windowsHide: true,
     windowsVerbatimArguments: true,
   });
+  // Attach a default 'error' handler so a spawn failure (ENOENT when
+  // cmd.exe is missing, EACCES) does not crash the process with an
+  // unhandled 'error' event. Callers that attach their own handler before
+  // the next tick will take precedence (Node allows multiple listeners).
+  child.on('error', () => {
+    // Swallow silently; callers should attach their own handler or the
+    // waitForReady timeout will reject the promise.
+  });
+  return child;
 }
 
 module.exports = {

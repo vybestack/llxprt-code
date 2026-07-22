@@ -756,7 +756,7 @@ runtimeDescribe(
         );
         expect(
           cliWithVersion.length,
-          `expected a bun invocation containing both the CLI entry and --version; got: ${bunArgs.join(String.fromCharCode(10))}`,
+          `expected a bun invocation containing both the CLI entry and --version; got: ${bunArgs.join(NEWLINE)}`,
         ).toBeGreaterThan(0);
       } finally {
         rmSync(binDir, { recursive: true, force: true });

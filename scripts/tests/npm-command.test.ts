@@ -236,7 +236,7 @@ describe('resolveNpmCliJs existence verification', () => {
     ).toThrow(NpmCliNotFoundError);
   });
 
-  it('throws NpmCliNotFoundError when npm_execpath missing and fallback missing', () => {
+  it('throws NpmCliNotFoundError when npm_execpath is set but invalid and fallback is missing', () => {
     let threw: Error | null = null;
     try {
       resolveNpmCliJs({
@@ -252,8 +252,10 @@ describe('resolveNpmCliJs existence verification', () => {
     expect((threw as Error).message).toMatch(
       /npm-cli\.js could not be resolved/,
     );
-    // The error must list BOTH probed paths so the failure is actionable.
+    // The error must list BOTH the invalid npm_execpath candidate AND the
+    // node-dir fallback path so the failure is actionable.
     expect((threw as Error).message).toContain('C:\\missing\\npm-cli.js');
+    expect((threw as Error).message).toMatch(/node_modules[\\/]npm/);
   });
 
   it('error includes the probed paths in details', () => {

@@ -134,7 +134,15 @@ function resolveNpmCliJs(options) {
   // well-known environment variables (NPM_CONFIG_PREFIX, APPDATA) without
   // spawning a shell or npm.cmd.
   const prefixCandidates = [];
-  if (env.NPM_CONFIG_PREFIX) {
+  // Validate NPM_CONFIG_PREFIX as an absolute path so a relative value does
+  // not silently resolve against process.cwd(). Check both POSIX (/) and
+  // Windows (drive-letter:\) forms so cross-platform unit tests that simulate
+  // Windows paths on a POSIX host work correctly.
+  if (
+    env.NPM_CONFIG_PREFIX &&
+    (path.isAbsolute(env.NPM_CONFIG_PREFIX) ||
+      /^[A-Za-z]:[\\/]/.test(env.NPM_CONFIG_PREFIX))
+  ) {
     prefixCandidates.push(
       path.join(
         env.NPM_CONFIG_PREFIX,

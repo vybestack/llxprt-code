@@ -130,6 +130,9 @@ function assert(condition, msg) {
   return condition;
 }
 
+// Canonical source: scripts/utils/release-packages.ts (NON_NPM_RELEASE_PACKAGES).
+// This is duplicated because .cjs scripts cannot import .ts modules without a
+// build step. If the canonical set changes, update this too.
 const NON_NPM_RELEASE_PACKAGES = new Set([
   '@vybestack/llxprt-code-test-utils',
   '@vybestack/llxprt-code-a2a-server',
@@ -202,8 +205,23 @@ function spawnTarExtractLocal(tarball, extractDir) {
   return spawnTarExtract(tarball, extractDir);
 }
 
+// Track tempDir at module scope so signal handlers can clean up even if main
+// has not yet reached the finally block.
+let _cleanupTempDir = null;
+
+function _signalCleanup() {
+  if (_cleanupTempDir) {
+    safeCleanup(_cleanupTempDir);
+  }
+  process.exit(130);
+}
+
+process.on('SIGINT', _signalCleanup);
+process.on('SIGTERM', _signalCleanup);
+
 function main() {
   let tempDir;
+  _cleanupTempDir = null;
   try {
     const { packReleaseLikeCli } = nodeRequire(releasePackHelperPath);
     const { releaseTarball, replicaTarball } = packReleaseLikeCli(repoRoot);
@@ -221,6 +239,7 @@ function main() {
     );
 
     tempDir = mkdtempSync(join(tmpdir(), 'llxprt-2603-smoke-'));
+    _cleanupTempDir = tempDir;
 
     // 1. Release artifact manifest integrity: exact versions, no file:/link:.
     runStep('release-manifest-integrity', () => {

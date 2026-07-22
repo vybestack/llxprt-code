@@ -26,7 +26,7 @@
  */
 
 const { spawnSync } = require('node:child_process');
-const { existsSync, statSync } = require('node:fs');
+const { statSync } = require('node:fs');
 
 /**
  * @typedef {{
@@ -85,22 +85,22 @@ function resolvePwsh(options) {
     return 'pwsh';
   }
   const env = (options && options.env) || process.env;
-  const exists = (options && options.existsSync) || existsSync;
   const stat =
     options && typeof options.statSync === 'function'
       ? options.statSync
       : statSync;
 
   // PWSH_PATH must point to a real FILE (the pwsh executable), not a
-  // directory. existsSync alone is true for directories, so also verify the
-  // path is a regular file.
-  if (env.PWSH_PATH && exists(env.PWSH_PATH)) {
+  // directory. Use a single statSync call (not existsSync + statSync) to
+  // avoid a TOCTOU race where the file is removed between the two calls.
+  if (env.PWSH_PATH) {
     try {
       if (stat(env.PWSH_PATH).isFile()) {
         return env.PWSH_PATH;
       }
     } catch {
-      // stat failed; fall through to the next resolution strategy.
+      // stat failed (file does not exist or is inaccessible); fall through
+      // to the next resolution strategy.
     }
   }
 

@@ -13,16 +13,36 @@ const OWNERSHIP_SENTINEL =
   'LLXPRT_NATIVE_LAUNCHER owned by @vybestack/llxprt-code';
 const LAUNCHER_ERROR_EXIT_CODE = 43;
 
+// Reads a file, returning '' for ENOENT (missing) only. Other errors
+// (EACCES, EISDIR, EIO) propagate so a protected or unreadable foreign shim
+// is NOT silently treated as an empty/zero-byte file. This prevents
+// canOverwriteLauncher from clobbering a protected shim whose ACLs prevent
+// reading.
 function readFileSafe(filePath) {
   try {
     return fs.readFileSync(filePath, 'utf8');
+  } catch (e) {
+    if (e && e.code === 'ENOENT') {
+      return '';
+    }
+    throw e;
+  }
+}
+
+// Returns true when filePath is a regular FILE (not a directory, device, or
+// other special type). Use this instead of bare existsSync so a directory
+// named bun.exe or index.ts (from a corrupt install) is not treated as the
+// expected file.
+function isRegularFile(filePath) {
+  try {
+    return fs.statSync(filePath).isFile();
   } catch {
-    return '';
+    return false;
   }
 }
 
 function hasOwnershipSentinel(filePath) {
-  if (!fs.existsSync(filePath)) {
+  if (!isRegularFile(filePath)) {
     return false;
   }
   return readFileSafe(filePath).includes(OWNERSHIP_SENTINEL);
@@ -116,6 +136,11 @@ function shimTargetWithinPackage(content, binLinkDir, packageRoot, shimType) {
 
 function pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType) {
   const content = readFileSafe(filePath);
+  // An empty file does NOT point to our package (it has no content). This is
+  // intentionally different from canOverwriteLauncher, which returns true for
+  // empty files to repair truncated launchers. The two functions answer
+  // different questions: pointsToOurPackage asks "does this file reference
+  // our package?" while canOverwriteLauncher asks "is it safe to replace?".
   if (!content) {
     return false;
   }
@@ -123,11 +148,16 @@ function pointsToOurPackage(filePath, binLinkDir, packageRoot, shimType) {
 }
 
 function canOverwriteLauncher(filePath, binLinkDir, packageRoot, shimType) {
-  if (!fs.existsSync(filePath)) {
-    return true;
+  if (!isRegularFile(filePath)) {
+    // If the path does not exist, overwrite is safe. If it is a directory
+    // or special file, refuse to overwrite (a directory named llxprt.cmd
+    // from a corrupt install should not be silently clobbered).
+    return !fs.existsSync(filePath);
   }
   // Read the file once and reuse the content for both the ownership sentinel
   // check and the shim-target boundary check, avoiding a duplicate read.
+  // readFileSafe throws on EACCES/EISDIR so a protected shim is NOT silently
+  // treated as an empty/zero-byte file.
   const content = readFileSafe(filePath);
   if (content.includes(OWNERSHIP_SENTINEL)) {
     return true;
@@ -290,13 +320,13 @@ function resolveBunExe(packageRoot) {
       'bin',
       'bun.exe',
     );
-    if (fs.existsSync(directBunExe)) {
+    if (isRegularFile(directBunExe)) {
       return directBunExe;
     }
     let dir = packageRoot;
     while (dir !== path.dirname(dir)) {
       const candidate = path.join(dir, 'node_modules', 'bun', 'bin', 'bun.exe');
-      if (fs.existsSync(candidate)) {
+      if (isRegularFile(candidate)) {
         return candidate;
       }
       dir = path.dirname(dir);
@@ -305,7 +335,7 @@ function resolveBunExe(packageRoot) {
   }
   const bunDir = path.dirname(bunPkgJsonPath);
   const bunExe = path.join(bunDir, 'bin', 'bun.exe');
-  if (fs.existsSync(bunExe)) {
+  if (isRegularFile(bunExe)) {
     return bunExe;
   }
   return null;
@@ -313,7 +343,7 @@ function resolveBunExe(packageRoot) {
 
 function resolveEntry(packageRoot) {
   const entry = path.join(packageRoot, 'index.ts');
-  if (fs.existsSync(entry)) {
+  if (isRegularFile(entry)) {
     return entry;
   }
   return null;

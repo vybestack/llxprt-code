@@ -51,8 +51,14 @@ function ensureBun(): string {
   if (existsSync(repoBun)) {
     return repoBun;
   }
-  const whichResult = spawnSync('which', ['bun'], { encoding: 'utf8' });
-  if (whichResult.status === 0) {
+  // Use POSIX-standard 'command -v' instead of non-standard 'which'.
+  const whichResult = spawnSync('sh', ['-c', 'command -v bun'], {
+    encoding: 'utf8',
+  });
+  if (whichResult.error) {
+    throw new Error(`Bun discovery spawn failed: ${whichResult.error.message}`);
+  }
+  if (whichResult.status === 0 && whichResult.stdout.trim()) {
     return whichResult.stdout.trim();
   }
   throw new Error('Bun not found for test setup');

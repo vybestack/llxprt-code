@@ -64,6 +64,7 @@ function runStep(label, fn) {
           const msg =
             err && typeof err.message === 'string' ? err.message : String(err);
           fail(`${label}: ${msg}`);
+          process.stdout.write(`[${label}] FAIL\n`);
         },
       );
     }
@@ -105,6 +106,14 @@ function runRequiredStep(label, fn) {
       err && typeof err.message === 'string' ? err.message : String(err);
     fail(`${label}: ${msg}`);
     process.stdout.write(`[${label}] FAIL\n`);
+    if (failures.length !== before) {
+      const recent = failures.slice(before).join('; ');
+      const assertionErr = new Error(
+        `required step "${label}" recorded failure(s): ${recent}`,
+      );
+      assertionErr.name = 'AssertionError';
+      throw Object.assign(assertionErr, { cause: err });
+    }
     throw err;
   }
   if (result && typeof result.then === 'function') {

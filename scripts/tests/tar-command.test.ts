@@ -19,6 +19,9 @@ const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const nodeRequire = createRequire(import.meta.url);
 
+// nodeRequire returns 'any' because tar-command.cjs is a CommonJS module
+// without type declarations (.d.ts). The type assertion provides the known
+// shape of the module's exports for compile-time safety.
 const tarCommand = nodeRequire(
   join(repoRoot, 'scripts', 'lib', 'tar-command.cjs'),
 ) as {

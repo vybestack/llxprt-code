@@ -278,7 +278,7 @@ describe('validateProcessLineage', () => {
     ];
     const result = processHelpers.validateProcessLineage(chain, 6000);
     expect(result.ok).toBe(true);
-    expect(result.chain).toBe(chain);
+    expect(result.chain).toEqual(chain);
   });
 
   it('throws when the chain does not reach the root', () => {

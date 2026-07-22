@@ -9,7 +9,7 @@
  * the harness works on windows-latest where only pwsh.exe is present.
  */
 
-const { spawnSync, spawn } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const { resolvePwsh } = require('./pwsh-resolver.cjs');
 
 /**
@@ -42,6 +42,10 @@ function waitForReady(child, readyMarker, timeoutMs) {
   return new Promise((resolve, reject) => {
     let stdout = '';
     let settled = false;
+    // Cap stdout accumulation to prevent unbounded memory growth from a
+    // misbehaving child process. The probe payload is small (a few KB);
+    // 1MB is a generous ceiling that accommodates interleaved log output.
+    const MAX_STDOUT_BYTES = 1024 * 1024;
 
     function done(ok, value) {
       if (settled) return;
@@ -56,6 +60,13 @@ function waitForReady(child, readyMarker, timeoutMs) {
 
     function onStdout(chunk) {
       stdout += chunk.toString();
+      if (stdout.length > MAX_STDOUT_BYTES) {
+        done(
+          false,
+          `probe stdout exceeded ${MAX_STDOUT_BYTES} bytes without ready marker (possible infinite output loop)`,
+        );
+        return;
+      }
       if (stdout.includes(readyMarker)) {
         done(true, stdout);
       }
@@ -80,6 +91,20 @@ function waitForReady(child, readyMarker, timeoutMs) {
     }
 
     const timer = setTimeout(onTimeout, timeoutMs);
+
+    // Check for already-exited children BEFORE attaching listeners so a
+    // child that exits synchronously between spawn() and the listener
+    // attachment does not cause the promise to hang until timeout.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      clearTimeout(timer);
+      reject(
+        new Error(
+          `launcher child already exited before tree inspection (code=${child.exitCode}, signal=${child.signalCode})`,
+        ),
+      );
+      return;
+    }
+
     const out = child.stdout;
     if (out) {
       out.on('data', onStdout);
@@ -435,7 +460,6 @@ module.exports = {
   waitForReady,
   killProcessTree,
   inspectProcessTreeSync,
-  spawn,
   assertValidPid,
   MAX_LEVELS,
   validateProcessLineage,

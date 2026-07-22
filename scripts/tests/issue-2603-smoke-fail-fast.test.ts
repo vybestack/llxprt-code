@@ -20,7 +20,7 @@
  * truth); they assert the pure-function/state contracts.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,10 +58,6 @@ const assertModule = () =>
   };
 
 describe('runRequiredStep fail-fast (root cause G)', () => {
-  beforeEach(() => {
-    assertModule(); // ensure module loads
-  });
-
   it('rethrows when the step function throws, so dependent checks abort', () => {
     const m = assertModule();
     m.resetState();
@@ -113,10 +109,6 @@ describe('runStep OK snapshot (root cause F)', () => {
   // accumulated failures, and a subsequent getState() reflects it. The OK
   // printing is gated on failures.length not increasing, which we verify
   // indirectly via the failure accumulation.
-
-  beforeEach(() => {
-    assertModule();
-  });
 
   it('accumulates failures from non-throwing assert() within a step', () => {
     const m = assertModule();
@@ -414,7 +406,7 @@ describe('bundled bun.exe PE validation (root cause B, J)', () => {
     buf[1] = 0x5a; // Z
     const peOffset = 0x80;
     buf.writeUInt32LE(peOffset, 0x3c);
-    buf.write('PE', peOffset, 'latin1'); // P E \0 \0
+    buf.write('PE', peOffset, 'latin1'); // writes 'PE'; trailing \0\0 are implicit from Buffer.alloc(size, 0)
     return buf;
   }
 

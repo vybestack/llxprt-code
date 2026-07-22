@@ -18,16 +18,23 @@ const CONSTRAINED_PATH = [
 ].join(';');
 const OWNERSHIP_SENTINEL =
   'LLXPRT_NATIVE_LAUNCHER owned by @vybestack/llxprt-code';
-// Anchored semver prefix: X.Y.Z with an optional prerelease suffix. The
-// previous unanchored form accepted trailing garbage (e.g. 1.3.14-canary.9),
-// weakening the install-integrity guard. The end anchor rejects such suffixes
-// unless they form a valid prerelease.
-const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 // Strict exact semver: X.Y.Z with optional prerelease, anchored at both ends.
 // Used by resolveExpectedBunVersion to validate the manifest bun spec is a
 // COMPLETE exact version — not a range (^, ~, >=) or a non-exact digit-leading
 // spec (1.x, 1.3.14 - 2.0.0). Range prefixes must NOT be stripped.
+//
+// VERSION_RE and EXACT_SEMVER_RE are intentionally the same pattern: both
+// enforce a strict start-to-end match. VERSION_RE is used by behavioral
+// checks (checks.cjs) to validate --version output, and EXACT_SEMVER_RE is
+// used by resolveExpectedBunVersion to validate the manifest spec. Both need
+// the same exact-match semantics, so they share the same source pattern.
 const EXACT_SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+const VERSION_RE = EXACT_SEMVER_RE;
+// Project-wide launcher-failure exit code convention: used consistently in
+// packages/cli/bin/llxprt, install-native-launchers.cjs, and all smoke/launcher
+// tests to signal a bundled-runtime launch failure (missing/corrupt Bun,
+// wrong platform, missing entry point). Changing this value requires updating
+// all referenced locations.
 const LAUNCH_ERROR_EXIT = 43;
 
 /**

@@ -70,10 +70,15 @@ function sourceFingerprint(repoRoot) {
   const { join } = require('node:path');
   const hasher = crypto.createHash('sha256');
   // Hash the CLI manifest content (the primary source of truth for what gets
-  // packed). Additional key files can be added here as the packing scope grows.
+  // packed) AND the packing scripts so a change to the packing logic
+  // invalidates the cache, preventing stale artifacts from being served.
   const fingerprintFiles = [
     join(repoRoot, 'packages', 'cli', 'package.json'),
     join(repoRoot, 'package.json'),
+    join(repoRoot, 'scripts', 'bind-release-deps.ts'),
+    join(repoRoot, 'scripts', 'prepare-package.ts'),
+    join(repoRoot, 'scripts', 'lib', 'npm-command.cjs'),
+    join(repoRoot, 'scripts', 'tests', 'issue-2603-release-pack.cjs'),
   ];
   for (const f of fingerprintFiles) {
     try {
@@ -98,6 +103,9 @@ function processCacheDir(repoRoot) {
   );
 }
 
+// Canonical source: scripts/utils/release-packages.ts (NON_NPM_RELEASE_PACKAGES).
+// This is duplicated because .cjs scripts cannot import .ts modules without a
+// build step. If the canonical set changes, update this too.
 const NON_NPM_RELEASE_PACKAGES = new Set([
   '@vybestack/llxprt-code-test-utils',
   '@vybestack/llxprt-code-a2a-server',
@@ -181,6 +189,11 @@ function packReleaseLikeCli(repoRoot) {
     const tarballMap = packAllInternal(internalPkgs, workCopy, cacheDir);
     rewriteAllDepsToTarballs(workCopy, internalPkgs, tarballMap);
     // Repack internal packages so their tarballs reflect the rewritten deps.
+    // The return value (tarballMap) is intentionally not captured: the
+    // rewritten tarballs overwrite the same name-version.tgz paths from the
+    // first pack, so the original tarballMap's paths remain valid. If npm
+    // pack naming ever changes to be non-deterministic, this would surface
+    // as a broken install downstream.
     packAllInternal(internalPkgs, workCopy, cacheDir);
     const stagedReplicaTarball = packCli(workCopy, cacheDir);
 
@@ -316,7 +329,11 @@ function assertReleaseBoundManifest(workCopy, internalPkgs) {
   const cliPkgPath = join(workCopy, 'packages/cli/package.json');
   const cliPkg = JSON.parse(readFileSync(cliPkgPath, 'utf8'));
   const violations = [];
-  for (const depField of ['dependencies', 'optionalDependencies']) {
+  for (const depField of [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+  ]) {
     const deps = cliPkg[depField];
     if (!deps) continue;
     for (const [depName, spec] of Object.entries(deps)) {

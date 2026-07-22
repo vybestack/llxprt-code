@@ -462,7 +462,25 @@ describe('installWindowsNativeLaunchers error handling (nonfatal contract)', () 
     const source = readFileSync(realPostinstall, 'utf8');
     const fnStart = source.indexOf('function installWindowsNativeLaunchers');
     expect(fnStart).toBeGreaterThan(-1);
-    const fnEnd = source.indexOf('\n}', fnStart) + 2;
+    // Track brace balance from the opening brace to find the matching closing
+    // brace, rather than relying on indexOf('\n}') which can truncate early
+    // if a nested block or inner function ends with } before the real end.
+    const openBrace = source.indexOf('{', fnStart);
+    expect(openBrace).toBeGreaterThan(-1);
+    let depth = 0;
+    let fnEnd = openBrace;
+    for (let i = openBrace; i < source.length; i++) {
+      if (source[i] === '{') {
+        depth++;
+      } else if (source[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          fnEnd = i + 1;
+          break;
+        }
+      }
+    }
+    expect(depth).toBe(0);
     return source.slice(fnStart, fnEnd);
   }
 

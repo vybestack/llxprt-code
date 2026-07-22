@@ -42,6 +42,12 @@ const cliModulePath = join(
   'install-native-launchers.cjs',
 );
 
+// Derive the CLI workspace package name from the manifest so this test
+// adapts if the package is ever renamed or moved to a different scope.
+const CLI_PKG_NAME = JSON.parse(
+  readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
+).name as string;
+
 function loadCliInstaller(): ReturnType<typeof nodeRequire> {
   // Always require a fresh module instance so a previous test's cached state
   // (e.g. resolved paths) cannot leak across runs. The module is stateless
@@ -99,7 +105,7 @@ function packCliWorkspace(): string {
   const { command, args } = npmInvocation([
     'pack',
     '-w',
-    '@vybestack/llxprt-code',
+    CLI_PKG_NAME,
     '--pack-destination',
     sharedCacheDir,
   ]);
@@ -261,7 +267,10 @@ describe('install-native-launchers module (CLI workspace)', () => {
     function resolveCmdShimPath(): string {
       const candidates = [
         '/opt/homebrew/lib/node_modules/npm/node_modules/cmd-shim',
-        join(process.env.HOME ?? '/root', '.nvm/versions/node', 'npm'),
+        join(
+          process.env.HOME ?? '/root',
+          '.nvm/versions/node/npm/node_modules/cmd-shim',
+        ),
         join(repoRoot, 'node_modules', 'cmd-shim'),
       ];
       for (const candidate of candidates) {
@@ -304,8 +313,10 @@ describe('install-native-launchers module (CLI workspace)', () => {
           // spawn error (e.g. tool not installed); fall through to throw.
         } else if (npmCli.status === 0) {
           const lines = npmCli.stdout.trim().split('\n');
-          const npmBin = dirname(lines[0]!);
-          npmDir = dirname(npmBin);
+          if (lines.length > 0 && lines[0]) {
+            const npmBin = dirname(lines[0]);
+            npmDir = dirname(npmBin);
+          }
         }
       }
       if (npmDir) {
@@ -512,6 +523,23 @@ describe('install-native-launchers module (CLI workspace)', () => {
   });
 
   describe('installNativeLaunchers platform gating', () => {
+    /**
+     * Creates a mock package layout with a fake bundled bun.exe and entry
+     * point. Used by multiple platform-gating tests to avoid duplicating the
+     * setup boilerplate (creating node_modules/bun/bin, writing bun.exe,
+     * writing index.ts).
+     */
+    function ensureMockBunPackage(packageRoot: string): void {
+      mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
+        'fake',
+      );
+      writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+    }
+
     it('is a no-op on POSIX', () => {
       const mod = loadCliInstaller();
       const result = mod.installNativeLaunchers({
@@ -535,14 +563,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'llxprt-code',
         );
         const prefix = join(tempDir);
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
 
         const result = mod.installNativeLaunchers({
           platform: 'win32',
@@ -572,14 +593,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'llxprt-code',
         );
         const initCwd = join(tempDir, 'consumer');
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
         const dotBin = join(initCwd, 'node_modules', '.bin');
         mkdirSync(dotBin, { recursive: true });
 
@@ -611,14 +625,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'llxprt-code',
         );
         const initCwd = join(tempDir, 'consumer');
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
         mkdirSync(join(initCwd, 'node_modules', '.bin'), { recursive: true });
 
         mod.installNativeLaunchers({
@@ -651,14 +658,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           '@vybestack',
           'llxprt-code',
         );
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
         const dotBin = join(tempDir, 'consumer', 'node_modules', '.bin');
         mkdirSync(dotBin, { recursive: true });
 
@@ -686,14 +686,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           '@vybestack',
           'llxprt-code',
         );
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
         const dotBin = join(tempDir, 'node_modules', '.bin');
         mkdirSync(dotBin, { recursive: true });
 
@@ -721,14 +714,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           '@vybestack',
           'llxprt-code',
         );
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
         const packageDotBin = join(
           tempDir,
           'npx-cache',
@@ -762,14 +748,7 @@ describe('install-native-launchers module (CLI workspace)', () => {
           'llxprt-code',
         );
         const initCwd = join(tempDir, 'consumer');
-        mkdirSync(join(packageRoot, 'node_modules', 'bun', 'bin'), {
-          recursive: true,
-        });
-        writeFileSync(
-          join(packageRoot, 'node_modules', 'bun', 'bin', 'bun.exe'),
-          'fake',
-        );
-        writeFileSync(join(packageRoot, 'index.ts'), '// entry');
+        ensureMockBunPackage(packageRoot);
         mkdirSync(join(initCwd, 'node_modules', '.bin'), { recursive: true });
 
         mod.installNativeLaunchers({

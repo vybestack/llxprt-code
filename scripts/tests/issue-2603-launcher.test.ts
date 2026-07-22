@@ -30,6 +30,10 @@ const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
  */
 const LAUNCHER_FAILURE_EXIT = 43;
 
+const SHELL_PROBE_TIMEOUT_MS = 10_000;
+const SHORT_LAUNCH_TIMEOUT_MS = 15_000;
+const STANDARD_LAUNCH_TIMEOUT_MS = 30_000;
+
 /**
  * Extracts the inner `case "$_llxprt_magic"` block that follows a kernel
  * marker (e.g. 'Darwin)') in the launcher source, so platform-gated magic
@@ -51,11 +55,22 @@ function ensureBun(): string {
   if (existsSync(repoBun)) {
     return repoBun;
   }
-  const whichResult = spawnSync('which', ['bun'], { encoding: 'utf8' });
-  if (whichResult.status === 0) {
+  // Use POSIX-standard 'command -v' instead of non-standard 'which' for
+  // better portability on minimal container images.
+  const whichResult = spawnSync('sh', ['-c', 'command -v bun'], {
+    encoding: 'utf8',
+  });
+  if (whichResult.status === 0 && whichResult.stdout.trim()) {
     return whichResult.stdout.trim();
   }
   throw new Error('Bun not found for test setup');
+}
+
+/** Guard: surfaces spawn failures (ENOENT, EACCES) before null status checks. */
+function expectNoSpawnError(result: { error?: Error }): void {
+  if (result.error) {
+    throw new Error(`spawn failed: ${result.error.message}`);
+  }
 }
 
 /**
@@ -109,14 +124,17 @@ function makeLayout(
 
 describe('POSIX launcher portability', () => {
   it('passes shellcheck with no warnings', () => {
-    const which = spawnSync('which', ['shellcheck'], { encoding: 'utf8' });
+    // Use POSIX-standard 'command -v' instead of non-standard 'which'.
+    const which = spawnSync('sh', ['-c', 'command -v shellcheck'], {
+      encoding: 'utf8',
+    });
     if (which.status !== 0) {
       console.warn('shellcheck not installed; skipping static analysis proof');
       return;
     }
     const result = spawnSync('shellcheck', [launcherPath], {
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
     });
     expect(
       result.status,
@@ -146,7 +164,7 @@ describe('POSIX launcher portability', () => {
       symlinkSync(target, link);
       const r = spawnSync('sh', ['-c', `readlink -- "${link}"`], {
         encoding: 'utf8',
-        timeout: 5_000,
+        timeout: SHELL_PROBE_TIMEOUT_MS,
       });
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout.trim()).toBe(target);
@@ -158,7 +176,7 @@ describe('POSIX launcher portability', () => {
   it('dirname -- handles dash-prefixed names on stock macOS (behavioral proof)', () => {
     const r = spawnSync('sh', ['-c', `dirname -- "-weird-name"`], {
       encoding: 'utf8',
-      timeout: 5_000,
+      timeout: SHELL_PROBE_TIMEOUT_MS,
     });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout.trim()).toBe('.');
@@ -172,7 +190,7 @@ describe('POSIX launcher portability', () => {
       const r = spawnSync(
         'sh',
         ['-c', `od -An -tx1 -N4 -- "${elfFile}" | tr -d ' \\n'`],
-        { encoding: 'utf8', timeout: 5_000 },
+        { encoding: 'utf8', timeout: SHELL_PROBE_TIMEOUT_MS },
       );
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout.trim()).toBe('7f454c46');
@@ -207,19 +225,17 @@ describe('POSIX launcher execution behavior', () => {
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
   });
-
   it('is directly execve-compatible (no shell fallback)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir);
     const result = spawnSync(launcherTarget, ['--test'], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(0);
-  }, 30_000);
-
+  });
   it('launches Bun (process.versions.bun is set)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: `console.log(typeof process.versions.bun === 'string' && process.versions.bun.length > 0);`,
@@ -227,24 +243,24 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe('true');
-  }, 30_000);
-
+  });
   it('uses package-local Bun even with constrained PATH', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir);
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(0);
-  }, 30_000);
-
+  });
   it('invokes Bun exactly once (no pre-probe)', () => {
     const counterDir = join(tempDir, 'counter');
     mkdirSync(counterDir, { recursive: true });
@@ -261,15 +277,14 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.trim()).toBe('1');
     expect(existsSync(counterFile)).toBe(true);
     expect(readFileSync(counterFile, 'utf8').trim()).toBe('1');
-  }, 30_000);
-
+  });
   it('forwards arguments including spaces, Unicode, and shell metacharacters', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: `console.log(JSON.stringify(process.argv.slice(2)));`,
@@ -284,13 +299,13 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, trickyArgs, {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(0);
     const parsed = JSON.parse(result.stdout.trim()) as string[];
     expect(parsed).toStrictEqual(trickyArgs);
-  }, 30_000);
-
+  });
   it('propagates a non-zero exit code from the child', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: 'process.exit(7);',
@@ -298,11 +313,11 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(7);
-  }, 30_000);
-
+  });
   it('propagates stdin/stdout/stderr', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: [
@@ -315,26 +330,28 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       input: 'hello',
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('OUT:hello');
     expect(result.stderr).toContain('ERR:hello');
-  }, 30_000);
-
+  });
   it('exits 43 when Bun is not found', () => {
-    const { pkgRoot, launcherTarget } = makeLayout(tempDir, { withBun: false });
+    const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
+      withBun: false,
+    });
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/npm install|bun\.sh/i);
-  }, 15_000);
-
+  });
   it('does not accept an unrelated Bun from a consumer ancestor directory', () => {
     // Simulates: consumer-project/node_modules/@vybestack/llxprt-code/bin/llxprt
     // The launcher must NOT climb past the enclosing node_modules to find
@@ -379,13 +396,13 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  }, 15_000);
-
+  });
   it('accepts a hoisted Bun within the enclosing node_modules', () => {
     // Simulates npm hoisting: the package is at
     // consumer/node_modules/@vybestack/llxprt-code/bin/llxprt and the Bun
@@ -432,12 +449,11 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
     expect(result.status, result.stderr).toBe(0);
-  }, 30_000);
-
+  });
   it('exits 43 when Bun is a corrupt text file (not a native binary)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       withBun: false,
@@ -450,15 +466,15 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(
       /npm install|bun\.sh|unusable|not a valid|corrupt/i,
     );
-  }, 15_000);
-
+  });
   it('exits 43 when Bun has wrong magic bytes (not ELF/Mach-O/PE)', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       withBun: false,
@@ -476,14 +492,15 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(
       /npm install|bun\.sh|unusable|not a valid|corrupt/i,
     );
-  }, 15_000);
+  });
 
   it('accepts a PE/COFF (MZ, 4d5a) Bun magic only on Windows POSIX (MSYS/Git Bash)', () => {
     // POSIX shells that can execute Windows PE (Git Bash/MSYS) need the magic
@@ -514,9 +531,10 @@ describe('POSIX launcher execution behavior', () => {
       const result = spawnSync(launcherTarget, [], {
         cwd: pkgRoot,
         encoding: 'utf8',
-        timeout: 15_000,
+        timeout: SHORT_LAUNCH_TIMEOUT_MS,
         env: { ...process.env, PATH: '/usr/bin:/bin' },
       });
+      expectNoSpawnError(result);
       expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
       expect(result.stderr).toMatch(
         /npm install|bun\.sh|unusable|not a valid|corrupt/i,
@@ -563,7 +581,7 @@ describe('POSIX launcher execution behavior', () => {
       const r = spawnSync(
         'sh',
         ['-c', `od -An -tx1 -N4 -- "${peFile}" | tr -d ' \\n'`],
-        { encoding: 'utf8', timeout: 5_000 },
+        { encoding: 'utf8', timeout: SHELL_PROBE_TIMEOUT_MS },
       );
       expect(r.status, r.stderr).toBe(0);
       expect(r.stdout.trim().startsWith('4d5a')).toBe(true);
@@ -571,7 +589,6 @@ describe('POSIX launcher execution behavior', () => {
       rmSync(tempDir2, { recursive: true, force: true });
     }
   });
-
   it('exits 43 when Bun exists but is not executable', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       withBun: false,
@@ -585,12 +602,12 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
-  }, 15_000);
-
+  });
   it('launches a valid Mach-O Bun exactly once (no double-start)', () => {
     // The real Bun binary IS a valid Mach-O/ELF. This confirms the magic
     // check ACCEPTS a real native binary and execs it (the counter proves
@@ -606,13 +623,12 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(counterFile, 'utf8').trim()).toBe('1');
-  }, 30_000);
-
+  });
   it('preserves a legitimate non-zero exit code from the entry', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: 'process.exit(42);',
@@ -620,11 +636,11 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(42);
-  }, 30_000);
-
+  });
   it('exits 43 when index.ts is not found', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       withIndex: false,
@@ -632,13 +648,13 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/entry point|index\.ts|corrupt/i);
-  }, 15_000);
-
+  });
   it('resolves symlinks so $0 works through npm .bin links', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir);
     const binLink = join(pkgRoot, 'node_modules', '.bin', 'llxprt');
@@ -648,12 +664,12 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(binLink, ['--version'], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(0);
-  }, 30_000);
-
+  });
   it('does not mutate the environment with LLXPRT_BUN_RELAUNCHED', () => {
     const { pkgRoot, launcherTarget } = makeLayout(tempDir, {
       entryCode: `console.log(process.env.LLXPRT_BUN_RELAUNCHED ?? 'unset');`,
@@ -661,12 +677,12 @@ describe('POSIX launcher execution behavior', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { PATH: '/usr/bin:/bin' },
     });
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.trim()).toBe('unset');
-  }, 30_000);
+  });
 });
 
 describe('POSIX launcher version-pin and platform validation', () => {
@@ -679,7 +695,6 @@ describe('POSIX launcher version-pin and platform validation', () => {
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
   });
-
   it('rejects a hoisted Bun whose version does not match the package pin', () => {
     // The package declares bun pin "9.9.9" but the hoisted Bun has a different
     // version. The launcher must reject this version mismatch.
@@ -717,13 +732,13 @@ describe('POSIX launcher version-pin and platform validation', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  }, 15_000);
-
+  });
   it('accepts a hoisted Bun whose version matches the package pin', () => {
     const bunVersion = realBunVersion();
     const consumerDir = join(tempDir, 'consumer-pin-match');
@@ -763,12 +778,11 @@ describe('POSIX launcher version-pin and platform validation', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 30_000,
+      timeout: STANDARD_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
     expect(result.status, result.stderr).toBe(0);
-  }, 30_000);
-
+  });
   it('does not scan beyond the enclosing node_modules for Bun', () => {
     // The package is nested two levels deep inside node_modules. The enclosing
     // node_modules has NO bun. An ancestor project dir (OUTSIDE the enclosing
@@ -792,12 +806,13 @@ describe('POSIX launcher version-pin and platform validation', () => {
     const result = spawnSync(launcherTarget, [], {
       cwd: pkgRoot,
       encoding: 'utf8',
-      timeout: 15_000,
+      timeout: SHORT_LAUNCH_TIMEOUT_MS,
       env: { ...process.env, PATH: '/usr/bin:/bin' },
     });
+    expectNoSpawnError(result);
     expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
     expect(result.stderr).toMatch(/bundled Bun runtime was not found/i);
-  }, 15_000);
+  });
 
   it.skipIf(process.platform !== 'darwin')(
     'rejects an ELF Bun on Darwin (platform-gated format)',
@@ -814,7 +829,7 @@ describe('POSIX launcher version-pin and platform validation', () => {
       const result = spawnSync(launcherTarget, [], {
         cwd: pkgRoot,
         encoding: 'utf8',
-        timeout: 15_000,
+        timeout: SHORT_LAUNCH_TIMEOUT_MS,
         env: { ...process.env, PATH: '/usr/bin:/bin' },
       });
       expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);

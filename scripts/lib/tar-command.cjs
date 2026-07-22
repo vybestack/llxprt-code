@@ -22,6 +22,15 @@ const { join } = require('node:path');
 const TAR_TIMEOUT_MS = 30_000;
 
 /**
+ * Shared maxBuffer for tar spawn captures. Large tar listings or verbose
+ * output can exceed Node's default 200KB stdio buffer, causing
+ * ERR_CHILD_PROCESS_STDIO_MAXBUFFER or silent truncation of error
+ * diagnostics. 64MB aligns with the project-wide convention used by the
+ * issue-2603 smoke harness (install-helpers.cjs SPAWN_MAX_BUFFER).
+ */
+const TAR_MAX_BUFFER = 64 * 1024 * 1024;
+
+/**
  * Spawns tar to list the contents of a tarball (-tzf). Throws on spawn error,
  * signal termination, or non-zero exit with stderr context.
  *
@@ -34,10 +43,11 @@ function spawnTarList(tarball, timeoutMs) {
   const result = spawnSync('tar', ['-tzf', tarball], {
     encoding: 'utf8',
     timeout: timeoutMs || TAR_TIMEOUT_MS,
+    maxBuffer: TAR_MAX_BUFFER,
   });
   if (result.error) {
     throw new Error(
-      `Failed to spawn tar (is it on PATH? GitHub Windows has bsdtar): ${result.error.message}`,
+      `Failed to spawn tar (is tar on PATH?): ${result.error.message}`,
     );
   }
   if (result.status !== 0) {
@@ -62,10 +72,11 @@ function spawnTarListVerbose(tarball, member, timeoutMs) {
   const result = spawnSync('tar', ['-tzvf', tarball, member], {
     encoding: 'utf8',
     timeout: timeoutMs || TAR_TIMEOUT_MS,
+    maxBuffer: TAR_MAX_BUFFER,
   });
   if (result.error) {
     throw new Error(
-      `Failed to spawn tar (is it on PATH? GitHub Windows has bsdtar): ${result.error.message}`,
+      `Failed to spawn tar (is tar on PATH?): ${result.error.message}`,
     );
   }
   if (result.status !== 0) {
@@ -90,10 +101,11 @@ function spawnTarExtract(tarball, extractDir, timeoutMs) {
   const result = spawnSync('tar', ['-xzf', tarball, '-C', extractDir], {
     encoding: 'utf8',
     timeout: timeoutMs || TAR_TIMEOUT_MS,
+    maxBuffer: TAR_MAX_BUFFER,
   });
   if (result.error) {
     throw new Error(
-      `Failed to spawn tar (is it on PATH? GitHub Windows has bsdtar): ${result.error.message}`,
+      `Failed to spawn tar (is tar on PATH?): ${result.error.message}`,
     );
   }
   if (result.status !== 0) {
@@ -130,7 +142,7 @@ function findTarballName(packOutput, cacheDir) {
       `npm pack output did not contain a .tgz line:\n${packOutput}`,
     );
   }
-  if (cacheDir) {
+  if (cacheDir != null) {
     const tarPath = join(cacheDir, tarName);
     if (!existsSync(tarPath)) {
       throw new Error(

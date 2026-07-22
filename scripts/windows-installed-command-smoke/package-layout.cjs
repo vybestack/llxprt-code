@@ -5,8 +5,14 @@
  * global prefix, locate the bundled bun.exe, and build a TEMP probe fixture.
  */
 
-const { existsSync, rmSync, cpSync, realpathSync } = require('node:fs');
-const { join } = require('node:path');
+const {
+  existsSync,
+  rmSync,
+  cpSync,
+  realpathSync,
+  statSync,
+} = require('node:fs');
+const { join, normalize } = require('node:path');
 
 function findInstalledPackageRoot(prefix) {
   const candidates = [
@@ -69,6 +75,7 @@ function samePath(a, b, options) {
       if (code !== 'ENOENT') {
         throw new Error(
           `samePath: realpath failed for ${JSON.stringify(p)}: ${e.message}`,
+          { cause: e },
         );
       }
     }
@@ -82,23 +89,38 @@ function samePath(a, b, options) {
 }
 
 function copyTree(src, dest) {
-  // Validate src exists before copying so a missing source produces a clear
-  // error rather than a partial-copy failure from cpSync.
-  if (!existsSync(src)) {
-    throw new Error(`copyTree: source does not exist: ${src}`);
+  // Normalize src/dest so trailing slashes and . / .. segments do not
+  // affect the copy or the filter logic.
+  const srcNorm = normalize(src);
+  const destNorm = normalize(dest);
+  // Validate src is an existing DIRECTORY before copying. A missing source
+  // or a non-directory source (e.g. a regular file) produces a clear error
+  // rather than a partial-copy or wrong-type failure from cpSync.
+  let srcStat;
+  try {
+    srcStat = statSync(srcNorm);
+  } catch (e) {
+    throw new Error(
+      `copyTree: source does not exist or is inaccessible: ${src}: ${e.message}`,
+      { cause: e },
+    );
+  }
+  if (!srcStat.isDirectory()) {
+    throw new Error(`copyTree: source is not a directory: ${src}`);
   }
   // Track whether dest pre-existed so we only remove it on failure if WE
   // created it. This avoids clobbering pre-existing dest data on a copy error.
-  const destPreExisted = existsSync(dest);
+  const destPreExisted = existsSync(destNorm);
   try {
-    cpSync(src, dest, {
+    cpSync(srcNorm, destNorm, {
       recursive: true,
       // Exclude only the exact node_modules/.bin directory. Substring matching
       // would also exclude node_modules/.binaries or node_modules/.bin-test.
-      // Normalize separators, then split on / and check that the final two
-      // segments are node_modules and .bin.
+      // Normalize separators and the path itself (handles . and .. segments),
+      // then split on / and check that the final two segments are
+      // node_modules and .bin.
       filter: (s) => {
-        const normalized = s.replace(/\\/g, '/');
+        const normalized = normalize(s.replace(/\\/g, '/'));
         const segments = normalized.split('/');
         if (segments.length >= 2) {
           const segCount = segments.length;
@@ -117,12 +139,15 @@ function copyTree(src, dest) {
     // data that we did not create.
     if (!destPreExisted) {
       try {
-        rmSync(dest, { recursive: true, force: true });
+        rmSync(destNorm, { recursive: true, force: true });
       } catch {
         // best-effort cleanup
       }
     }
-    throw new Error(`copyTree: failed to copy ${src} -> ${dest}: ${e.message}`);
+    throw new Error(
+      `copyTree: failed to copy ${src} -> ${dest}: ${e.message}`,
+      { cause: e },
+    );
   }
 }
 

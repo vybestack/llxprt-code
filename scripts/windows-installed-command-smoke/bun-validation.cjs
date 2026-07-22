@@ -53,7 +53,8 @@ function readHeader(filePath, maxBytes = 4096) {
     return buf.subarray(0, bytesRead);
   } catch (e) {
     throw new Error(
-      `bun-validation: could not read header of ${filePath}: ${e.message}`,
+      `bun-validation: could not read PE header of ${filePath}: ${e.message}`,
+      { cause: e },
     );
   } finally {
     if (fd !== undefined) {
@@ -115,7 +116,7 @@ function isWindowsPe(filePath, options) {
 function bunVersion(bunExePath, options) {
   const spawn = (options && options.spawnSync) || spawnSync;
   const env = (options && options.env) || process.env;
-  const timeoutMs = (options && options.timeoutMs) || 15_000;
+  const timeoutMs = (options && options.timeoutMs) ?? 15_000;
   const r = spawn(bunExePath, ['--version'], {
     encoding: 'utf8',
     timeout: timeoutMs,

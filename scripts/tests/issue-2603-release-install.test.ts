@@ -39,10 +39,11 @@ const releasePackHelper = join(
  * `spawnSync`) keeps the event loop responsive to Vitest's worker RPC.
  *
  * Cleanup design (no process-global listener leaks):
- *   - The child is spawned NON-detached, so it belongs to the Vitest worker's
- *     process group. If the worker is terminated (test cancellation, aggregate
- *     suite teardown, parent signal), the non-detached child is reaped
- *     automatically by the OS without any registered handlers here.
+ *   - The child IS spawned detached (detached: true) so the entire process
+ *     group can be killed via kill(-pid) on POSIX or taskkill /T on Windows,
+ *     reaping grandchildren (npm, tar, bun) safely. Despite detachment, the
+ *     dispose() function explicitly kills the group and destroys stdio
+ *     streams so no event-loop handles or orphan processes remain.
  *   - The only timers/listeners are attached to the `child` object itself
  *     (close/error events + a timeout timer), and are all removed in
  *     `dispose()` so no event-loop handles remain after the test settles.

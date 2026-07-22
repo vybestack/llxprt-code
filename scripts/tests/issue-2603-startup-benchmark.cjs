@@ -243,8 +243,11 @@ function timeNodeRelayBaseline(bunExe) {
   // stdio 'inherit' matches the direct launcher for a fair comparison.
   const relayScript = `
     const { spawnSync } = require('child_process');
-    const bunExe = process.argv[1];
-    const entry = process.argv[2];
+    // When Node runs 'node -e <script> <arg1> <arg2>', process.argv is:
+    //   [0] = node path, [1] = inline script source, [2] = arg1, [3] = arg2
+    // So bunExe is argv[2] and entry is argv[3], NOT argv[1]/[2].
+    const bunExe = process.argv[2];
+    const entry = process.argv[3];
     const r = spawnSync(bunExe, [entry, '--version'], {
       stdio: 'inherit',
       env: process.env,
@@ -404,7 +407,13 @@ function main() {
         `| ratio (relay/direct) | ${(relay.median / direct.median).toFixed(2)}x | - | - |`,
       );
     }
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+    // Best-effort step-summary write: a failure here (locked file, disk full,
+    // permissions) must not mask a successful benchmark run.
+    try {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+    } catch (e) {
+      console.warn(`Could not append to GITHUB_STEP_SUMMARY: ${e.message}`);
+    }
   }
 }
 

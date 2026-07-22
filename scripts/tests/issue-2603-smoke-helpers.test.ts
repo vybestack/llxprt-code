@@ -19,13 +19,16 @@ const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
 const nodeRequire = createRequire(import.meta.url);
 
-const launcherInvocation = nodeRequire(
-  join(
-    repoRoot,
-    'scripts',
-    'windows-installed-command-smoke',
-    'launcher-invocation.cjs',
-  ),
+/**
+ * Require a smoke-harness module by relative path, reducing repetition of the
+ * verbose join(repoRoot, 'scripts', ...) pattern.
+ */
+function requireSmoke(moduleRelpath: string): Record<string, unknown> {
+  return nodeRequire(join(repoRoot, ...moduleRelpath.split('/')));
+}
+
+const launcherInvocation = requireSmoke(
+  'scripts/windows-installed-command-smoke/launcher-invocation.cjs',
 ) as {
   probeArg: (request: Record<string, unknown>) => string;
   validateSpawnResult: <T>(label: string, r: T) => T;
@@ -33,13 +36,8 @@ const launcherInvocation = nodeRequire(
   pwshQuote: (s: string) => string;
 };
 
-const processHelpers = nodeRequire(
-  join(
-    repoRoot,
-    'scripts',
-    'windows-installed-command-smoke',
-    'process-helpers.cjs',
-  ),
+const processHelpers = requireSmoke(
+  'scripts/windows-installed-command-smoke/process-helpers.cjs',
 ) as {
   assertValidPid: (pid: unknown) => void;
   MAX_LEVELS: number;
@@ -183,9 +181,9 @@ describe('assertValidPid', () => {
 });
 
 describe('MAX_LEVELS', () => {
-  it('is a positive safety bound for BFS traversal depth', () => {
+  it('is the expected safety bound for BFS traversal depth', () => {
     expect(typeof processHelpers.MAX_LEVELS).toBe('number');
-    expect(processHelpers.MAX_LEVELS).toBeGreaterThan(0);
+    expect(processHelpers.MAX_LEVELS).toBe(200);
   });
 });
 
@@ -282,13 +280,8 @@ describe('probeArg nativeExit payload contract', () => {
 
   describe('buildInstallArgs input guard', () => {
     const installHelpersModule = () =>
-      nodeRequire(
-        join(
-          repoRoot,
-          'scripts',
-          'windows-installed-command-smoke',
-          'install-helpers.cjs',
-        ),
+      requireSmoke(
+        'scripts/windows-installed-command-smoke/install-helpers.cjs',
       ) as {
         buildInstallArgs: (extraArgs: string[]) => string[];
       };

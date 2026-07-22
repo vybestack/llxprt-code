@@ -21,6 +21,7 @@ import {
   copyFileSync,
   chmodSync,
   readFileSync,
+  statSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,12 +38,17 @@ const repoBun = join(repoRoot, 'node_modules', 'bun', 'bin', 'bun.exe');
 const LAUNCHER_FAILURE_EXIT = 43;
 
 function ensureBun(): string {
-  if (existsSync(repoBun)) {
+  if (existsSync(repoBun) && statSync(repoBun).isFile()) {
     return repoBun;
   }
   const whichResult = spawnSync('which', ['bun'], { encoding: 'utf8' });
   if (whichResult.status === 0) {
-    return whichResult.stdout.trim();
+    const bunPath = whichResult.stdout.trim();
+    // Validate the discovered path is an existing regular file so
+    // copyFileSync gets a clear diagnostic instead of a low-level OS error.
+    if (bunPath && existsSync(bunPath) && statSync(bunPath).isFile()) {
+      return bunPath;
+    }
   }
   throw new Error('Bun not found for test setup');
 }
@@ -51,14 +57,23 @@ function makeEntry(pkgRoot: string, code: string): void {
   writeFileSync(join(pkgRoot, 'index.ts'), `#!/usr/bin/env -S bun\n${code}\n`);
 }
 
+function isPackageJson(v: unknown): v is { version: string } {
+  return (
+    v !== null &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    typeof (v as Record<string, unknown>).version === 'string'
+  );
+}
+
 function realBunVersion(): string {
   const bunPkgPath = join(repoRoot, 'node_modules', 'bun', 'package.json');
   // Bun is a declared dependency and test prerequisite (see root
   // trustedDependencies). A missing/unreadable version here indicates a
   // broken installation; throw rather than fall back to a hardcoded version
   // that would become stale on the next Bun upgrade.
-  const bunPkg = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
-  if (typeof bunPkg.version === 'string' && bunPkg.version.length > 0) {
+  const bunPkg: unknown = JSON.parse(readFileSync(bunPkgPath, 'utf8'));
+  if (isPackageJson(bunPkg) && bunPkg.version.length > 0) {
     return bunPkg.version;
   }
   throw new Error(
