@@ -40,6 +40,15 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
 
+// Issue #2620: schema-based slash-command completion (e.g. /key load <name>)
+// previously fired an async completer on every keystroke. A short debounce
+// coalesces rapid keystrokes into a single completer invocation. The pending
+// timer lives in per-instance state (StateRefs.schemaCompletionTimer) so two
+// concurrent hook instances can't interfere with each other's timers; the
+// effect cleanup clears it so stale completions cannot land after the user
+// moves on.
+export const SCHEMA_COMPLETION_DEBOUNCE_MS = 100;
+
 type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
 
 type CompletionSetters = {
@@ -67,6 +76,9 @@ export type StateRefs = {
   previousInput: React.MutableRefObject<string>;
   completionStart: React.MutableRefObject<number>;
   completionEnd: React.MutableRefObject<number>;
+  schemaCompletionTimer: React.MutableRefObject<ReturnType<
+    typeof setTimeout
+  > | null>;
   slashCompletionContextRef: React.MutableRefObject<{
     isArgumentCompletion: boolean;
     leafCommand: SlashCommand | null;
@@ -287,6 +299,7 @@ function processSlash(
   seqRef: React.MutableRefObject<number>,
   ctx: CommandContext,
   setters: CompletionSetters,
+  refs: StateRefs,
 ): void {
   setters.setIsPerfectMatch(false);
   const trail = line.endsWith(' ');
@@ -300,7 +313,14 @@ function processSlash(
   const { leaf, level, partial, isArg, completionStart, completionEnd } =
     updateCtx(parsed, args, trail, cmdIdx, line, setters);
   if (isArg && leaf?.schema) {
-    handleSchemaArg(
+    // Debounce the async schema completer so rapid keystrokes coalesce into a
+    // single invocation. Each call replaces the pending timer held in
+    // per-instance state; the trailing edge fires after
+    // SCHEMA_COMPLETION_DEBOUNCE_MS of inactivity. The seq captured here is
+    // checked inside handleSchemaAsync, so superseded results (from earlier
+    // keystrokes whose timers were cleared before firing) are discarded. The
+    // effect cleanup also clears the timer.
+    const schemaArgs: Parameters<typeof handleSchemaArg> = [
       leaf,
       ctx,
       trail,
@@ -311,7 +331,15 @@ function processSlash(
       seq,
       seqRef,
       setters,
-    );
+    ];
+    if (refs.schemaCompletionTimer.current !== null) {
+      clearTimeout(refs.schemaCompletionTimer.current);
+      refs.schemaCompletionTimer.current = null;
+    }
+    refs.schemaCompletionTimer.current = setTimeout(() => {
+      refs.schemaCompletionTimer.current = null;
+      handleSchemaArg(...schemaArgs);
+    }, SCHEMA_COMPLETION_DEBOUNCE_MS);
     return;
   }
   const commandMap = handleCmdCompletion(level, partial, extCfg, setters);
@@ -521,8 +549,16 @@ export function handleCompletionEffect(
       refs.completionSequenceRef,
       ctx,
       setters,
+      refs,
     );
-    return undefined;
+    // Clear any pending debounced schema-completion timer so a stale result
+    // cannot land after the user has moved on to a different input.
+    return () => {
+      if (refs.schemaCompletionTimer.current !== null) {
+        clearTimeout(refs.schemaCompletionTimer.current);
+        refs.schemaCompletionTimer.current = null;
+      }
+    };
   }
   return handleAtEff(
     p.line,
