@@ -102,11 +102,17 @@ function readEnvMs(name, defaultMs) {
   return n;
 }
 
-// 8 minutes for a single npm install (global/local/exec). The warmed cache
-// makes this fast, but give headroom for cold-cache first-run + Bun postinstall.
+// 10 minutes for a single npm install (global/local). The warmed cache makes
+// this fast on a warm runner, but CI runner variance is significant: the prior
+// successful global install completed in 342_875 ms, yet the smoke then failed
+// twice at exactly the old 480_000 ms ceiling (ETIMEDOUT), proving 8 minutes
+// was too tight. 10 minutes gives ~1.75x headroom over the observed success
+// while preserving fail-fast (a genuine hang still aborts in minutes). The
+// aggregate ceiling — 2 installs + 1 npm exec (900_000) + benchmark (300_000)
+// — sums to 2_400_000 ms (40 min), well under the 60-minute job budget.
 const INSTALL_TIMEOUT_MS = readEnvMs(
   'LLXPRT_SMOKE_INSTALL_TIMEOUT_MS',
-  480_000,
+  600_000,
 );
 // 15 minutes for npm exec (npx) which can populate its own cache.
 const NPM_EXEC_TIMEOUT_MS = readEnvMs(

@@ -594,9 +594,29 @@ describe('constants: expected bun version + configurable timeouts', () => {
     }
   });
 
-  it('install timeout default is generous enough for a warmed-cache install', () => {
+  it('install timeout default has adequate headroom for Windows npm installs', () => {
+    // Evidence-based ceiling (PR 2610): the prior successful global install
+    // completed in 342_875 ms; the smoke then failed twice at exactly 480_000
+    // ms (the old default), confirming the ceiling was too tight for runner
+    // variance. The default must give meaningful headroom over the observed
+    // success while staying within the 60-minute aggregate job budget. Two
+    // installs use INSTALL_TIMEOUT_MS, one npm exec uses NPM_EXEC_TIMEOUT_MS,
+    // and the benchmark uses 300_000 ms — their ceilings must sum to well
+    // under 3_600_000 ms (60 min).
     const m = constantsModule();
-    expect(m.INSTALL_TIMEOUT_MS).toBeGreaterThanOrEqual(180_000);
+    const observedSuccessMs = 342_875;
+    // At least 1.5x the observed success (~514s) so normal runner variance
+    // does not hit the wall.
+    expect(m.INSTALL_TIMEOUT_MS).toBeGreaterThanOrEqual(
+      Math.ceil(observedSuccessMs * 1.5),
+    );
+    // Aggregate ceiling budget stays safely under the 60-minute job timeout.
+    const aggregateCeilingMs =
+      m.INSTALL_TIMEOUT_MS * 2 + m.NPM_EXEC_TIMEOUT_MS + 300_000;
+    expect(aggregateCeilingMs).toBeLessThan(3_600_000);
+    // Fail-fast preserved: each install still has a finite ceiling so a
+    // genuine hang aborts in minutes, not the full job budget.
+    expect(m.INSTALL_TIMEOUT_MS).toBeLessThan(3_600_000);
   });
 });
 
