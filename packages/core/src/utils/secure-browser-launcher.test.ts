@@ -51,6 +51,16 @@ describe('secure-browser-launcher', () => {
     });
   }
 
+  function requireWindowsDirectory(
+    windowsDirectory: string | undefined,
+  ): asserts windowsDirectory is string {
+    if (windowsDirectory === undefined) {
+      throw new Error(
+        'Windows integration test requires SystemRoot or windir to locate System32\\where.exe.',
+      );
+    }
+  }
+
   describe('URL validation', () => {
     it('should allow valid HTTP URLs', async () => {
       setPlatform('darwin');
@@ -140,15 +150,13 @@ describe('secure-browser-launcher', () => {
     it.runIf(process.platform === 'win32')(
       'executes the production PowerShell launch with where.exe and remains usable afterward',
       async () => {
+        const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
+        requireWindowsDirectory(windowsDirectory);
+        const harmlessTarget = join(windowsDirectory, 'System32', 'where.exe');
         const directory = await mkdtemp(
           join(tmpdir(), 'llxprt-browser-launch-'),
         );
         const sentinelPath = join(directory, 'parent-sentinel.txt');
-        const harmlessTarget = join(
-          process.env.SystemRoot ?? 'C:\\Windows',
-          'System32',
-          'where.exe',
-        );
         const { execFile: executeFile } =
           await vi.importActual<typeof import('node:child_process')>(
             'node:child_process',

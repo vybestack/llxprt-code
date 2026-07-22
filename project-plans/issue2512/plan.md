@@ -79,7 +79,7 @@ npm run test --workspace @vybestack/llxprt-code-core -- src/utils/secure-browser
 
 ## Safe real-process regression
 
-The Windows-only test calls the public `openBrowserSecurely` function. At the existing infrastructure mock boundary, it replaces only the `LLXPRT_BROWSER_URL` target with `%SystemRoot%\System32\where.exe`, then delegates the unchanged production executable, argument vector, and remaining options to native Node `child_process.execFile`.
+The Windows-only test calls the public `openBrowserSecurely` function. Before creating its temporary fixture, the test derives the installed Windows directory from `process.env.SystemRoot ?? process.env.windir` and fails with an actionable fixture error if neither variable is defined. It uses that directory only to locate the built-in `System32\where.exe` test target; this fixture resolution does not exercise or claim production fallback behavior. At the existing infrastructure mock boundary, it replaces only the `LLXPRT_BROWSER_URL` target, then delegates the unchanged production executable, argument vector, and remaining options to native Node `child_process.execFile`.
 
 The real `powershell.exe` therefore executes the production bind/remove/`Start-Process` source. `where.exe` is a short-lived built-in target and does not open a browser or authentication flow. After the helper returns, the test writes and reads a temporary sentinel, proving the parent test process remains operational. A ten-second test timeout bounds the test without introducing process-killing behavior.
 
