@@ -181,6 +181,7 @@ describe('secure-browser-launcher', () => {
         try {
           setPlatform('win32');
           await openBrowserSecurely('https://example.com/safe-integration');
+          expect(mockExecFile).toHaveBeenCalledTimes(1);
           await writeFile(sentinelPath, 'parent remains usable', 'utf8');
 
           await expect(readFile(sentinelPath, 'utf8')).resolves.toBe(

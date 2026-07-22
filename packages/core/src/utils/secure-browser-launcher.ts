@@ -10,6 +10,7 @@ import { platform } from 'node:os';
 import { URL } from 'node:url';
 
 const execFileAsync = promisify(execFile);
+const WINDOWS_BROWSER_URL_ENV_VAR = 'LLXPRT_BROWSER_URL';
 
 /**
  * Validates that a URL is safe to open in a browser.
@@ -73,10 +74,10 @@ function createBrowserLaunchPlan(
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          '$browserUrl = $env:LLXPRT_BROWSER_URL; Remove-Item Env:LLXPRT_BROWSER_URL; Start-Process -FilePath $browserUrl',
+          `$browserUrl = $env:${WINDOWS_BROWSER_URL_ENV_VAR}; Remove-Item Env:${WINDOWS_BROWSER_URL_ENV_VAR}; Start-Process -FilePath $browserUrl`,
         ],
         options: {
-          env: { ...env, LLXPRT_BROWSER_URL: url },
+          env: { ...env, [WINDOWS_BROWSER_URL_ENV_VAR]: url },
           shell: false,
           windowsHide: true,
         },
