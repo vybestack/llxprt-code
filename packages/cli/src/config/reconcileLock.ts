@@ -76,6 +76,24 @@ export function releaseReconcileLock(
   }
 }
 
+function closeAfterFailedInitialization(fd: number): unknown[] {
+  try {
+    fs.closeSync(fd);
+    return [];
+  } catch (error) {
+    return [error];
+  }
+}
+
+function unlinkAfterFailedInitialization(lockPath: string): unknown[] {
+  try {
+    fs.unlinkSync(lockPath);
+    return [];
+  } catch (error) {
+    return hasErrnoCode(error, 'ENOENT') ? [] : [error];
+  }
+}
+
 function tryCreateLock(lockPath: string): string | null {
   const token = crypto.randomUUID();
   const payload = JSON.stringify({
@@ -85,11 +103,25 @@ function tryCreateLock(lockPath: string): string | null {
   });
   try {
     const fd = fs.openSync(lockPath, 'wx', 0o600);
+    let closed = false;
     try {
       fs.writeSync(fd, payload, 0, 'utf8');
       fs.fsyncSync(fd);
-    } finally {
       fs.closeSync(fd);
+      closed = true;
+    } catch (writeError) {
+      const closeErrors = closed ? [] : closeAfterFailedInitialization(fd);
+      const cleanupErrors = [
+        ...closeErrors,
+        ...unlinkAfterFailedInitialization(lockPath),
+      ];
+      if (cleanupErrors.length === 0) {
+        throw writeError;
+      }
+      throw new AggregateError(
+        [writeError, ...cleanupErrors],
+        `Failed to initialize reconciliation lock at ${lockPath}`,
+      );
     }
     return token;
   } catch (error) {

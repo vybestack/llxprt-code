@@ -203,9 +203,11 @@ function resolveRealpathSync(dirPath: string): string {
     return fs.realpathSync(dirPath);
   } catch {
     // The directory does not exist yet. Create it so the sandbox profile
-    // grants writes to a real path, then resolve.
+    // grants writes to a real path, then resolve. Use a restrictive mode
+    // (0o700) so auto-created canonical roots — including DATA_DIR which
+    // can hold OAuth fallback files — are not world-readable.
     try {
-      fs.mkdirSync(dirPath, { recursive: true });
+      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
       return fs.realpathSync(dirPath);
     } catch {
       // Creation failed (permissions, etc.) — fall back to a lexical resolve

@@ -82,7 +82,9 @@ Dumps are OpenAI API compliant and can be replayed with curl. Since the dump inc
 ### Extract and Send Request
 
 ```bash
-# DUMPS=<cache>/dumps — LLxprt's dumps directory (see Application Directories)
+# DUMPS resolves the cache dumps directory using Storage's full fallback chain:
+# LLXPRT_CACHE_HOME -> LLXPRT_CONFIG_HOME -> platform default.
+DUMPS="${LLXPRT_CACHE_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.cache/llxprt-code}}/dumps"
 jq '.request.body' "$DUMPS/YOUR_DUMP.json" > /tmp/body.json
 
 curl -X POST "$(jq -r '.request.url' "$DUMPS/YOUR_DUMP.json")" \
@@ -218,9 +220,12 @@ See [Debug Logging](../debug-logging.md) for more information.
 - Consider redacting sensitive data before sharing dumps
 
 ```bash
-# Clean up old dumps (cache directory — see Application Directories)
-rm "${LLXPRT_CACHE_HOME:-$HOME/.cache/llxprt-code}/dumps/"*.json
+# Clean up old dumps (cache directory — see Application Directories).
+# The cache dir honors LLXPRT_CACHE_HOME, then LLXPRT_CONFIG_HOME, then the
+# platform default. This expression matches Storage's full fallback chain.
+CACHE_DIR="${LLXPRT_CACHE_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.cache/llxprt-code}}"
+rm -f "${CACHE_DIR}/dumps/"*.json
 
 # Or keep only recent dumps
-find "${LLXPRT_CACHE_HOME:-$HOME/.cache/llxprt-code}/dumps" -name "*.json" -mtime +7 -delete
+find "${CACHE_DIR}/dumps" -name "*.json" -mtime +7 -delete
 ```

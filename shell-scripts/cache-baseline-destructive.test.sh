@@ -23,11 +23,14 @@
 set -u
 
 # Ensure temp dirs created by this script are cleaned up on any exit path.
-_TMP_DIRS_TO_CLEANUP=""
+_STUB_DIR=""
+_CANON_ROOT=""
+_TMP_ABS=""
 # shellcheck disable=SC2329 # Invoked indirectly via the EXIT trap below.
 _cleanup_tmp_dirs() {
-    # shellcheck disable=SC2086 # Intentional word-splitting: space-separated dir list.
-    [ -n "${_TMP_DIRS_TO_CLEANUP}" ] && rm -rf ${_TMP_DIRS_TO_CLEANUP}
+    [ -z "${_STUB_DIR}" ] || rm -rf -- "${_STUB_DIR}"
+    [ -z "${_CANON_ROOT}" ] || rm -rf -- "${_CANON_ROOT}"
+    [ -z "${_TMP_ABS}" ] || rm -rf -- "${_TMP_ABS}"
 }
 trap '_cleanup_tmp_dirs' EXIT
 
@@ -37,6 +40,19 @@ failures=0
 
 # Use bash explicitly for the Bash-only target script.
 CACHE_SH="bash"
+
+# Stub out `bun` so cache-baseline-test.sh Step 2 never performs a real,
+# potentially network-dependent multi-subagent invocation. `command -v bun`
+# in the target script still succeeds, but the actual invocation fails fast,
+# keeping these tests deterministic.
+_STUB_DIR="$(mktemp -d -t llxprt-cb-stub-XXXXXX)"
+cat > "${_STUB_DIR}/bun" <<'EOF'
+#!/bin/sh
+echo "stub bun: real invocation skipped in test" >&2
+exit 1
+EOF
+chmod +x "${_STUB_DIR}/bun"
+export PATH="${_STUB_DIR}:${PATH}"
 
 assert() { # <label> <expected> <actual>
     _label="$1"; _exp="$2"; _act="$3"
@@ -74,8 +90,8 @@ fi
 # isolated temp dir, never clearing the caller-named canonical dir). This is
 # the critical safety contract promised in the header.
 echo "--- WITHOUT opt-in, a caller-named canonical dir is left untouched ---"
-CANON_DIR="$(mktemp -d -t llxprt-cb-canon-XXXXXX)/debug"
-_TMP_DIRS_TO_CLEANUP="${_TMP_DIRS_TO_CLEANUP} $(dirname "${CANON_DIR}")"
+_CANON_ROOT="$(mktemp -d -t llxprt-cb-canon-XXXXXX)"
+CANON_DIR="${_CANON_ROOT}/debug"
 mkdir -p "${CANON_DIR}"
 SENTINEL="${CANON_DIR}/sentinel-survives"
 echo "do-not-delete" > "${SENTINEL}"
@@ -90,16 +106,15 @@ fi
 # The canonical dir must still contain exactly the sentinel (not cleared).
 REMAINING="$(find "${CANON_DIR}" -type f | wc -l | tr -d ' ')"
 assert 'canonical dir retains sentinel (1 file)' '1' "${REMAINING}"
-rm -rf "$(dirname "${CANON_DIR}")"
+rm -rf -- "${_CANON_ROOT}"
+_CANON_ROOT=""
 
 # --- Test 2: opt-in guard accepts only absolute ---
 # When opt-in is set and DEBUG_DIR is absolute, the script proceeds past the
-# guard. To make this bun-independent (the script fails later on missing bun),
-# we re-run capturing stderr: a guard error contains "requires an absolute",
-# while any other failure (e.g. missing bun) means the guard PASSED.
+# guard. The bun stub fails immediately after the guard without a live call.
 echo "--- opt-in with absolute LLXPRT_DEBUG_DIR passes the guard ---"
-TMP_ABS="$(mktemp -d -t llxprt-cb-abs-XXXXXX)"
-_TMP_DIRS_TO_CLEANUP="${_TMP_DIRS_TO_CLEANUP} ${TMP_ABS}"
+_TMP_ABS="$(mktemp -d -t llxprt-cb-abs-XXXXXX)"
+TMP_ABS="${_TMP_ABS}"
 ERR_MSG="$(LLXPRT_CACHE_BASELINE_CLEAR_DEBUG=1 LLXPRT_DEBUG_DIR="${TMP_ABS}" \
     ${CACHE_SH} "${CACHE_SCRIPT}" 2>&1 >/dev/null)"
 case "${ERR_MSG}" in
@@ -110,7 +125,8 @@ case "${ERR_MSG}" in
         echo "PASS: absolute DEBUG_DIR passes the guard"
         ;;
 esac
-rm -rf "${TMP_ABS}"
+rm -rf -- "${_TMP_ABS}"
+_TMP_ABS=""
 
 # --- Test 3: without opt-in, no LLXPRT_DEBUG_DIR export leaks canonical ---
 # When opt-in is unset, the script exports an isolated temp LLXPRT_DEBUG_DIR.

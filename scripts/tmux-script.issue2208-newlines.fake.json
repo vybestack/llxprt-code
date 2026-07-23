@@ -33,17 +33,17 @@
     {
       "type": "expect",
       "scope": "scrollback",
-      "regex": "LLXPRT2208_ALPHA\\n\\s*\\n\\s*Alpha paragraph one\\."
+      "regex": "LLXPRT2208_ALPHA[ \\t█]*\\n[ \\t█]*\\n[ \\t]*Alpha paragraph one\\."
     },
     {
       "type": "expect",
       "scope": "scrollback",
-      "regex": "LLXPRT2208_BETA\\n\\s*\\n\\s*[-*] beta item one"
+      "regex": "LLXPRT2208_BETA[ \\t█]*\\n[ \\t█]*\\n[ \\t]*[-*] beta item one"
     },
     {
       "type": "expect",
       "scope": "scrollback",
-      "regex": "beta item two\\n\\s*\\n\\s*LLXPRT2208_DONE"
+      "regex": "beta item two[ \\t█]*\\n[ \\t█]*\\n[ \\t]*LLXPRT2208_DONE"
     },
     {
       "type": "expect",

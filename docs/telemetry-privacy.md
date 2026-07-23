@@ -281,14 +281,17 @@ To debug issues with LLxprt:
 The log files contain structured data that can be analyzed with standard JSON tools:
 
 ```bash
-# View today's conversation log (data directory — see Application Directories)
-cat "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/conversation-$(date +%Y-%m-%d).jsonl" | jq '.'
+# View today's conversation log (data directory — see Application Directories).
+# The data dir honors LLXPRT_DATA_HOME, then LLXPRT_CONFIG_HOME, then the
+# platform default. This expression matches Storage's full fallback chain.
+DATA_DIR="${LLXPRT_DATA_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.local/share/llxprt-code}}"
+cat "${DATA_DIR}/conversations/conversation-$(date +%Y-%m-%d).jsonl" | jq '.'
 
 # Filter for specific providers
-cat "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/conversation-"*.jsonl | jq 'select(.provider == "openai")'
+cat "${DATA_DIR}/conversations/conversation-"*.jsonl | jq 'select(.provider == "openai")'
 
 # Count conversations by provider
-cat "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/conversation-"*.jsonl | jq -r '.provider' | sort | uniq -c
+cat "${DATA_DIR}/conversations/conversation-"*.jsonl | jq -r '.provider' | sort | uniq -c
 ```
 
 ## Privacy Guarantees
@@ -364,7 +367,12 @@ A: Configure `maxLogSizeMB` and `maxLogFiles` in your settings to control file r
 A: Some patterns may not be caught by automatic redaction. Consider adding custom redaction patterns or disabling logging for sensitive workflows.
 
 **Q: How do I permanently delete all conversation logs?**
-A: Remove the entire conversation log directory: `rm -rf "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/"`
+A: Remove the entire conversation log directory. The data dir honors `LLXPRT_DATA_HOME`, then `LLXPRT_CONFIG_HOME`, then the platform default:
+
+```bash
+DATA_DIR="${LLXPRT_DATA_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.local/share/llxprt-code}}"
+rm -rf "${DATA_DIR}/conversations/"
+```
 
 ### Getting Help
 

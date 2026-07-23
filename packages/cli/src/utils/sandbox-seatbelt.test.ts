@@ -47,10 +47,14 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
   /**
    * Extracts every `(allow|deny) file-(read|write)*` grant block from a
    * profile's source text, returning an array of raw block strings.
+   *
+   * Each block terminates at a standalone `)` on its own line — NOT at the
+   * first inner `)` (subpath entries also close with `)`), so later
+   * entries such as a legacy HOME_DIR/.llxprt write grant are captured.
    */
   function extractGrantBlocks(content: string): string[] {
     const matches = content.match(
-      /\((?:allow|deny)\s+file-(?:read|write)\*[\s\S]*?\)\s*\n/g,
+      /\((?:allow|deny)\s+file-(?:read|write)\*[\s\S]*?\n\)\s*\n/g,
     );
     return matches ?? [];
   }
@@ -67,8 +71,10 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
         // The string-append pattern for .llxprt writes must never appear.
         // A file-read* grant for migration is allowed, but NOT a file-write*
         // grant containing HOME_DIR joined with .llxprt.
+        // The regex terminates at a standalone `)` line so the FULL
+        // file-write* block is captured, not just the first subpath entry.
         const writeGrantMatch = content.match(
-          /\(allow file-write\*[\s\S]*?\)\s*\n/g,
+          /\(allow file-write\*[\s\S]*?\n\)\s*\n/g,
         );
         const writeGrants = writeGrantMatch ? writeGrantMatch.join('\n') : '';
         expect(writeGrants).not.toContain(
@@ -94,6 +100,48 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
       });
     });
   }
+
+  it('extractGrantBlocks mutation guard: detects a reintroduced HOME_DIR/.llxprt write grant in a later subpath entry', () => {
+    // This mutation test proves the regex captures the FULL grant block,
+    // not just the first subpath entry. If the legacy HOME_DIR/.llxprt
+    // write grant were reintroduced as a later entry in a file-write* block
+    // (exactly where it used to live, next to .npm/.cache/.gitconfig), the
+    // regression guard must detect it.
+    const mutatedProfile = `(version 1)
+(deny default)
+(allow file-write*
+    (subpath (param "TARGET_DIR"))
+    (subpath (param "CONFIG_DIR"))
+    (subpath (param "DATA_DIR"))
+    (subpath (string-append (param "HOME_DIR") "/.npm"))
+    (subpath (string-append (param "HOME_DIR") "/.cache"))
+    (subpath (string-append (param "HOME_DIR") "/.gitconfig"))
+    (subpath (string-append (param "HOME_DIR") "/.llxprt"))
+    (literal "/dev/null")
+)
+(allow file-read*
+    (subpath (string-append (param "HOME_DIR") "/.llxprt"))
+)
+`;
+    // The write-grant regex must capture the FULL file-write* block
+    // including the .llxprt entry near the end.
+    const writeGrantMatch = mutatedProfile.match(
+      /\(allow file-write\*[\s\S]*?\n\)\s*\n/g,
+    );
+    const writeGrants = writeGrantMatch ? writeGrantMatch.join('\n') : '';
+    expect(writeGrants).toContain(
+      '(string-append (param "HOME_DIR") "/.llxprt")',
+    );
+
+    // extractGrantBlocks must also include the mutated block.
+    const blocks = extractGrantBlocks(mutatedProfile);
+    const llxprtBlocks = blocks.filter(
+      (b) => b.includes('HOME_DIR') && b.includes('.llxprt'),
+    );
+    const writeBlocks = llxprtBlocks.filter((b) => !b.includes('file-read'));
+    // The mutation test: a reintroduced write grant IS detected.
+    expect(writeBlocks.length).toBeGreaterThan(0);
+  });
 });
 
 // ─── buildSeatbeltArgs passes canonical root params ───────────────────────
@@ -184,6 +232,24 @@ describe('buildSeatbeltArgs: canonical root resolution', () => {
     // CACHE_DIR must resolve through the canonical Storage cache resolver
     // (honoring LLXPRT_CACHE_HOME), NOT the Darwin per-user cache dir.
     expect(value).toBe(fs.realpathSync(Storage.getGlobalCacheDir()));
+  });
+
+  it('creates missing canonical root directories with mode 0o700', () => {
+    // Point CONFIG_DIR at a path that does NOT exist yet so
+    // resolveRealpathSync must create it. The auto-created directory
+    // must have a restrictive mode (0o700), not a permissive default.
+    const newConfigDir = path.join(tmpRoot, 'fresh-config');
+    expect(fs.existsSync(newConfigDir)).toBe(false);
+    process.env['LLXPRT_CONFIG_HOME'] = newConfigDir;
+
+    buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
+
+    expect(fs.existsSync(newConfigDir)).toBe(true);
+    const stat = fs.statSync(newConfigDir);
+    // On macOS/Linux the mode is masked by umask, but 0o700 as the requested
+    // mode means the result has no group/other bits. We assert that group
+    // and other bits are absent (owner-only access).
+    expect(stat.mode & 0o077).toBe(0);
   });
 });
 
