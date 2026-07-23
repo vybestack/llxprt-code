@@ -23,6 +23,74 @@ import { homedir, platform } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
+// ---------------------------------------------------------------------------
+// JSONC comment stripping (string-aware state machine)
+//
+// A naive regex like /\/\/.*$/gm corrupts Windows paths (e.g., "C:\\Users"
+// becomes "C:"). This state machine tracks whether we're inside a string
+// literal and only strips comments outside strings.
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip // line comments and /* block comments from JSONC, respecting
+ * string literals. Handles escaped quotes inside strings.
+ */
+function stripJsoncComments(text) {
+  let result = '';
+  let i = 0;
+  let inString = false;
+
+  while (i < text.length) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inString) {
+      result += ch;
+      if (ch === '\\' && next !== undefined) {
+        result += next;
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      result += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      // Line comment: skip to end of line
+      i += 2;
+      while (i < text.length && text[i] !== '\n') {
+        i++;
+      }
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      // Block comment: skip to closing */
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+        i++;
+      }
+      i += 2; // skip closing */
+      continue;
+    }
+
+    result += ch;
+    i++;
+  }
+
+  return result;
+}
+
 const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, '..');
 
@@ -158,22 +226,21 @@ function main() {
   if (existsSync(settingsPath)) {
     try {
       const raw = readFileSync(settingsPath, 'utf-8');
-      // Zed settings.json may have comments (JSONC) — strip them naively.
-      const cleaned = raw
-        .replace(/\/\/.*$/gm, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '');
-      settings = JSON.parse(cleaned);
+      settings = JSON.parse(stripJsoncComments(raw));
     } catch (e) {
-      console.warn(
-        `Warning: could not parse existing settings.json: ${e.message}`,
+      console.error(
+        `Error: could not parse existing settings.json: ${e.message}`,
       );
-      console.warn('Creating a backup and starting fresh.');
+      // Save a backup so the user can recover
       try {
         writeFileSync(
           `${settingsPath}.bak`,
           readFileSync(settingsPath, 'utf-8'),
         );
+        console.error(`A backup was saved to ${settingsPath}.bak`);
       } catch {}
+      console.error('Please fix the file manually and re-run this script.');
+      process.exit(1);
     }
   } else {
     // Ensure directory exists
@@ -211,6 +278,16 @@ function main() {
 
   if (Object.keys(env).length > 0) {
     settings.agent_servers[opts.agentName].env = env;
+  }
+
+  // Backup before write (in case of disk error mid-write)
+  if (existsSync(settingsPath)) {
+    try {
+      writeFileSync(
+        `${settingsPath}.bak`,
+        readFileSync(settingsPath, 'utf-8'),
+      );
+    } catch {}
   }
 
   // Write back

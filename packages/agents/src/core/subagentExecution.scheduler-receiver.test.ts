@@ -19,6 +19,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+// vi is used for mocking ctx components below
 import {
   initInteractiveScheduler,
   type InitSchedulerContext,
@@ -30,22 +31,29 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
  * A scheduler whose schedule() method depends on `this` — it calls
  * this.isRunning() (just like CoreToolScheduler). If the receiver is lost,
  * this throws "this.isRunning is not a function".
+ *
+ * IMPORTANT: schedule() MUST be a regular prototype method, NOT an arrow
+ * function property. Arrow functions lexically bind `this` to the instance,
+ * which would make receiver-loss impossible to detect — the test would pass
+ * even with the bug present.
  */
 class ReceiverSensitiveScheduler {
   private running = false;
+  scheduleCallCount = 0;
 
   private isRunning(): boolean {
     return this.running;
   }
 
-  schedule = vi.fn(async () => {
-    // This call will crash if `this` is wrong.
+  async schedule(_req: unknown, _signal: unknown): Promise<void> {
+    this.scheduleCallCount++;
+    // This call will crash if `this` is wrong (e.g. copied without binding).
     if (this.isRunning()) {
       throw new Error('should not be running');
     }
-  });
+  }
 
-  dispose = vi.fn(async () => {});
+  async dispose(): Promise<void> {}
 }
 
 function makeCtx(
@@ -83,14 +91,16 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
     const result = await initInteractiveScheduler(undefined, ctx);
 
     // Call schedule through the facade. Before the fix, this crashed with
-    // "this.isRunning is not a function".
+    // "this.isRunning is not a function" because the facade copied
+    // `schedule: scheduler.schedule` without binding, so `this` inside
+    // schedule() was the facade (which has no isRunning method).
     const signal = new AbortController().signal;
     await expect(
       result.scheduler.schedule([], signal),
     ).resolves.toBeUndefined();
 
     // Verify the original scheduler's schedule was actually called.
-    expect(realScheduler.schedule).toHaveBeenCalledTimes(1);
+    expect(realScheduler.scheduleCallCount).toBe(1);
   });
 
   it('preserves the scheduler receiver when schedulerFactory IS provided', async () => {
@@ -116,6 +126,6 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
       result.scheduler.schedule([], signal),
     ).resolves.toBeUndefined();
 
-    expect(realScheduler.schedule).toHaveBeenCalledTimes(1);
+    expect(realScheduler.scheduleCallCount).toBe(1);
   });
 });

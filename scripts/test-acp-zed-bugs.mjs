@@ -362,7 +362,11 @@ async function runScenario(opts, label, prompt, expectations) {
       prompt: [{ type: 'text', text: prompt }],
     });
 
-    // Wait for prompt to complete
+    // Wait for prompt to complete (or timeout)
+    // Attach a no-op catch to prevent unhandled rejection if the race
+    // resolves via the timeout/process-exit path first.
+    promptPromise.catch(() => {});
+
     const promptResult = await Promise.race([
       promptPromise,
       client.waitForCompletion(opts.timeout),
