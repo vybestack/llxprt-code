@@ -72,7 +72,7 @@ describe('my_feature', () => {
   - `settings`: Override LLxprt settings for this test
   - `fakeResponsesPath`: Use canned responses instead of live model
 
-Note: Tool call logs are automatically saved to `evals/logs/` for all evals.
+Note: Versioned JSON diagnostic logs are automatically saved to `evals/logs/` for all evals. Each log contains the raw process capture and parsed tool calls.
 
 ### Available Assertions
 

@@ -39,6 +39,42 @@ describe('JSON output', () => {
     expect(typeof parsed.stats).toBe('object');
   });
 
+  it('should preserve an exact tool-using response and separate diagnostics', async () => {
+    await rig.setup('json-output-save-memory', {
+      settings: { tools: { core: ['save_memory'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'save-memory.responses.jsonl',
+      ),
+    });
+
+    const result = await rig.run({
+      args: [
+        'Save that my favorite color is blue, then answer with exactly $blue$.',
+        '--output-format',
+        'json',
+      ],
+    });
+
+    expect(JSON.parse(result).response).toBe('$blue$');
+    expect(
+      rig
+        .readToolLogs()
+        .some(
+          (entry) =>
+            entry.toolRequest.name === 'save_memory' &&
+            entry.toolRequest.success,
+        ),
+    ).toBe(true);
+
+    const capture = rig.getLastRunCapture();
+    expect(capture?.stdout).toContain('$blue$');
+    expect(capture?.exitCode).toBe(0);
+    expect(capture?.timedOut).toBe(false);
+    expect(capture?.stderr).toBeDefined();
+    expect(result).not.toContain('StdErr:');
+  });
+
   it('should return a valid JSON with a session ID', async () => {
     await rig.setup('json-output-session-id', {
       fakeResponsesPath: join(

@@ -4,9 +4,75 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { env } from 'node:process';
 import type { Writable } from 'node:stream';
+
+/**
+ * Structured capture of the most recent process run, available for diagnosis
+ * after `spawnRun` / `spawnRunWithTimeout` resolve or reject. Contains the raw
+ * (untransformed) child stdout and stderr so callers can inspect the original
+ * process output regardless of the transform applied to the resolved value.
+ */
+export interface RunCapture {
+  /** Raw stdout accumulated from the child process (before transform). */
+  readonly stdout: string;
+  /** Raw stderr accumulated from the child process. */
+  readonly stderr: string;
+  /** The process exit code, or null when the process was killed/timed out. */
+  readonly exitCode: number | null;
+  /** Whether the process timed out. */
+  readonly timedOut: boolean;
+}
+
+export type RunCaptureHandler = (capture: RunCapture) => void;
+
+const TERMINATION_GRACE_MS = 500;
+const FORCE_KILL_CLOSE_GRACE_MS = 500;
+
+function signalProcess(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (process.platform !== 'win32' && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // The child may have exited between the timeout and the signal.
+    }
+  }
+
+  if (
+    process.platform === 'win32' &&
+    signal === 'SIGKILL' &&
+    child.pid !== undefined
+  ) {
+    const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    killer.once('error', () => {});
+    return;
+  }
+
+  child.kill(signal);
+}
+
+function createTimeoutError(timeoutMs: number): Error {
+  return new Error(`TestRig.run() timed out after ${timeoutMs}ms`);
+}
+
+function captureRun(
+  accumulator: StreamAccumulator,
+  exitCode: number | null,
+  timedOut: boolean,
+  onCapture: RunCaptureHandler | undefined,
+): void {
+  onCapture?.({
+    stdout: accumulator.stdout,
+    stderr: accumulator.stderr,
+    exitCode,
+    timedOut,
+  });
+}
 
 /**
  * Stream handler that accumulates stdout/stderr and mirrors them to the
@@ -56,13 +122,15 @@ export interface RunContext {
 
 /**
  * Spawn a child process for `TestRig.run` / `runCommand` and resolve with the
- * captured stdout. Mirrors output when verbose mode is enabled.
+ * captured stdout. Mirrors output when verbose mode is enabled and reports the
+ * structured raw capture before resolving or rejecting.
  */
 export function spawnRun(
   ctx: RunContext,
   options: RunOptions,
   isJsonOutput: boolean,
   transform: (stdout: string) => string,
+  onCapture?: RunCaptureHandler,
 ): Promise<string> {
   const { onStdout, onStderr, accumulator } = createStreamHandlers();
 
@@ -72,13 +140,28 @@ export function spawnRun(
     env: ctx.childEnv,
   });
 
-  pipeStdin(child, options);
-
   child.stdout.on('data', onStdout);
   child.stderr.on('data', onStderr);
 
   return new Promise<string>((resolve, reject) => {
-    child.on('close', (code: number) => {
+    let settled = false;
+
+    child.once('error', (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      captureRun(accumulator, null, false, onCapture);
+      reject(error);
+    });
+
+    child.on('close', (code: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      captureRun(accumulator, code, false, onCapture);
+
       if (code === 0) {
         const transformed = transform(accumulator.stdout);
         resolve(
@@ -90,18 +173,19 @@ export function spawnRun(
         );
       }
     });
+
+    pipeStdin(child, options);
   });
 }
 
-/**
- * Spawn a child process with a timeout for `TestRig.run`.
- */
+/** Spawn a run with bounded SIGTERM/SIGKILL timeout handling. */
 export function spawnRunWithTimeout(
   ctx: RunContext,
   options: RunOptions,
   isJsonOutput: boolean,
   transform: (stdout: string) => string,
   timeoutMs: number,
+  onCapture?: RunCaptureHandler,
 ): Promise<string> {
   const { onStdout, onStderr, accumulator } = createStreamHandlers();
 
@@ -109,17 +193,65 @@ export function spawnRunWithTimeout(
     cwd: ctx.testDir,
     stdio: 'pipe',
     env: ctx.childEnv,
+    detached: process.platform !== 'win32',
   });
-
-  pipeStdin(child, options);
 
   child.stdout.on('data', onStdout);
   child.stderr.on('data', onStderr);
 
-  let timeoutHandle: NodeJS.Timeout;
-  const processPromise = new Promise<string>((resolve, reject) => {
-    child.on('close', (code: number) => {
-      clearTimeout(timeoutHandle);
+  return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    let didTimeout = false;
+    const timers: NodeJS.Timeout[] = [];
+    const timeoutError = createTimeoutError(timeoutMs);
+    const settleTimedOut = (): void => {
+      if (!settled) {
+        settled = true;
+        captureRun(accumulator, null, true, onCapture);
+        reject(timeoutError);
+      }
+    };
+    const forceKill = (): void => {
+      signalProcess(child, 'SIGKILL');
+      timers.push(setTimeout(settleTimedOut, FORCE_KILL_CLOSE_GRACE_MS));
+    };
+    timers.push(
+      setTimeout(() => {
+        didTimeout = true;
+        signalProcess(child, 'SIGTERM');
+        timers.push(setTimeout(forceKill, TERMINATION_GRACE_MS));
+      }, timeoutMs),
+    );
+    const clearTimers = (): void => {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+    };
+
+    child.once('error', (error) => {
+      if (!settled) {
+        settled = true;
+        if (!didTimeout) {
+          clearTimers();
+        }
+        captureRun(accumulator, null, didTimeout, onCapture);
+        reject(didTimeout ? timeoutError : error);
+      }
+    });
+
+    child.on('close', (code: number | null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimers();
+      captureRun(accumulator, code, didTimeout, onCapture);
+
+      if (didTimeout) {
+        reject(timeoutError);
+        return;
+      }
+
       if (code === 0) {
         const transformed = transform(accumulator.stdout);
         resolve(
@@ -131,16 +263,9 @@ export function spawnRunWithTimeout(
         );
       }
     });
-  });
 
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeoutHandle = setTimeout(() => {
-      child.kill('SIGTERM');
-      reject(new Error(`TestRig.run() timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+    pipeStdin(child, options);
   });
-
-  return Promise.race([processPromise, timeoutPromise]);
 }
 
 function maybeAppendStderr(

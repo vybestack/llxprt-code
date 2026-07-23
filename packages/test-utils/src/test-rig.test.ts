@@ -68,4 +68,25 @@ describe('TestRig setup and cleanup behavior', () => {
     expect(testDir).not.toBeNull();
     expect(existsSync(testDir as string)).toBe(true);
   });
+
+  it('rejects overlapping run operations on one rig', async () => {
+    createRoot();
+    const rig = new TestRig();
+    rig.setup('overlapping runs');
+
+    const firstRun = rig.runCommand(['--version']);
+    const secondRun = rig.runCommand(['--version']);
+
+    try {
+      await secondRun;
+      throw new Error('Expected the overlapping run to reject');
+    } catch (error) {
+      if (!(error instanceof Error)) {
+        throw new Error(`Expected Error, received ${String(error)}`);
+      }
+      expect(error.message).toMatch(/overlapping run operations/);
+    }
+
+    await firstRun;
+  });
 });

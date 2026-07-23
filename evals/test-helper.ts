@@ -6,28 +6,92 @@
 
 import { it } from 'vitest';
 import fs from 'node:fs';
+import { z } from 'zod';
 import {
   TestRig,
   type TestRigSetupOptions,
+  type RunCapture,
 } from '@vybestack/llxprt-code-test-utils';
 
 export * from '@vybestack/llxprt-code-test-utils';
 
 export type EvalPolicy = 'ALWAYS_PASSES' | 'USUALLY_PASSES';
 
+const EvalOutputSchema = z.object({ response: z.string() });
+
+export function buildEvalArgs(prompt: string): string[] {
+  return [`--prompt=${prompt}`, '--output-format', 'json'];
+}
+
+export function extractModelResponse(output: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    throw new Error('Expected valid JSON output from LLxprt CLI');
+  }
+
+  const result = EvalOutputSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      'Expected LLxprt CLI JSON output to include a string response',
+    );
+  }
+  return result.data.response;
+}
+
+/**
+ * Serialized shape of the eval artifact written to evals/logs. Contains the
+ * structured process-run capture (separate stdout/stderr/exitCode/timedOut)
+ * alongside the extracted tool-call records for post-run diagnosis.
+ */
+export interface EvalArtifact {
+  readonly schemaVersion: 1;
+  readonly capture: RunCapture | null;
+  readonly toolCalls: unknown;
+}
+
+export function formatEvalLog(
+  capture: RunCapture | null,
+  toolCalls: unknown,
+): string {
+  const artifact: EvalArtifact = { schemaVersion: 1, capture, toolCalls };
+  return JSON.stringify(artifact, null, 2);
+}
+
 export function evalTest(policy: EvalPolicy, evalCase: EvalCase): void {
   const fn = async (): Promise<void> => {
     const rig = new TestRig();
+    let primaryError: unknown;
+    let failed = false;
     try {
       rig.setup(evalCase.name, evalCase.params);
-      const result = await rig.run({ args: evalCase.prompt });
-      await evalCase.assert(rig, result);
-    } finally {
-      await logToFile(
-        evalCase.name,
-        JSON.stringify(rig.readToolLogs(), null, 2),
-      );
-      await rig.cleanup();
+      const cliOutput = await rig.run({ args: buildEvalArgs(evalCase.prompt) });
+      await evalCase.assert(rig, extractModelResponse(cliOutput));
+    } catch (error) {
+      failed = true;
+      primaryError = error;
+    }
+
+    let finalizationError: unknown;
+    try {
+      await finalizeEval(rig, evalCase.name);
+    } catch (error) {
+      finalizationError = error;
+    }
+
+    if (failed) {
+      if (finalizationError !== undefined) {
+        throw new AggregateError(
+          [primaryError, finalizationError],
+          'Eval failed and diagnostics finalization also failed',
+          { cause: primaryError },
+        );
+      }
+      throw primaryError;
+    }
+    if (finalizationError !== undefined) {
+      throw finalizationError;
     }
   };
 
@@ -47,6 +111,45 @@ export interface EvalCase {
   params?: TestRigSetupOptions;
   prompt: string;
   assert: (rig: TestRig, result: string) => Promise<void>;
+}
+
+async function finalizeEval(rig: TestRig, name: string): Promise<void> {
+  const capture = rig.getLastRunCapture();
+  let toolCalls: unknown;
+  try {
+    toolCalls = rig.readToolLogs();
+  } catch (error) {
+    toolCalls = {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  let artifactError: unknown;
+  try {
+    await logToFile(name, formatEvalLog(capture, toolCalls));
+  } catch (error) {
+    artifactError = error;
+  }
+
+  let cleanupError: unknown;
+  try {
+    await rig.cleanup();
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  if (artifactError !== undefined && cleanupError !== undefined) {
+    throw new AggregateError(
+      [artifactError, cleanupError],
+      'Writing eval diagnostics and cleaning up both failed',
+    );
+  }
+  if (artifactError !== undefined) {
+    throw artifactError;
+  }
+  if (cleanupError !== undefined) {
+    throw cleanupError;
+  }
 }
 
 // Canonical deterministic contract for the save_memory eval: the prompt

@@ -9,6 +9,84 @@ import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '../..');
+describe('eval JSON output contract', () => {
+  /** @type {(prompt: string) => string[]} */
+  let buildEvalArgs;
+  /** @type {(output: string) => string} */
+  let extractModelResponse;
+  /** @type {(capture: { stdout: string, stderr: string, exitCode: number | null, timedOut: boolean } | null, toolCalls: unknown) => string} */
+  let formatEvalLog;
+
+  beforeAll(async () => {
+    const url = pathToFileURL(join(ROOT, 'evals/test-helper.ts')).href;
+    const mod = await import(url);
+    buildEvalArgs = mod.buildEvalArgs;
+    extractModelResponse = mod.extractModelResponse;
+    formatEvalLog = mod.formatEvalLog;
+  });
+
+  it('requests structured JSON output for eval prompts', () => {
+    expect(buildEvalArgs('--remember this')).toEqual([
+      '--prompt=--remember this',
+      '--output-format',
+      'json',
+    ]);
+  });
+
+  it('extracts only the assistant response from CLI JSON output', () => {
+    const cliOutput = JSON.stringify({
+      session_id: 'session-1',
+      response: '$blue$',
+      stats: { tools: { totalCalls: 1 } },
+    });
+
+    expect(extractModelResponse(cliOutput)).toBe('$blue$');
+  });
+
+  it('rejects malformed CLI JSON output', () => {
+    expect(() => extractModelResponse('not json')).toThrow(
+      /valid JSON output/i,
+    );
+  });
+
+  it('rejects CLI JSON output without a response', () => {
+    expect(() =>
+      extractModelResponse(JSON.stringify({ session_id: 'session-1' })),
+    ).toThrow(/string response/i);
+  });
+
+  it('rejects CLI JSON output with a non-string response', () => {
+    expect(() =>
+      extractModelResponse(
+        JSON.stringify({ session_id: 'session-1', response: 42 }),
+      ),
+    ).toThrow(/string response/i);
+  });
+
+  it('includes structured run capture and tool calls in the eval artifact log', () => {
+    const capture = {
+      stdout: '{"response":"$blue$"}',
+      stderr: 'some diagnostic',
+      exitCode: 0,
+      timedOut: false,
+    };
+    const toolCalls = [{ toolRequest: { name: 'save_memory' } }];
+
+    expect(JSON.parse(formatEvalLog(capture, toolCalls))).toEqual({
+      schemaVersion: 1,
+      capture,
+      toolCalls,
+    });
+  });
+
+  it('serializes a null capture when no run has occurred', () => {
+    expect(JSON.parse(formatEvalLog(null, []))).toEqual({
+      schemaVersion: 1,
+      capture: null,
+      toolCalls: [],
+    });
+  });
+});
 
 /**
  * Issue #2605: The save_memory eval contract is deterministic. The prompt tells

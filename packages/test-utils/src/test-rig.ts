@@ -42,6 +42,7 @@ import {
   spawnRun,
   spawnRunWithTimeout,
   type RunContext,
+  type RunCapture,
 } from './process-run.js';
 import type { ParsedLog } from './types.js';
 
@@ -54,6 +55,7 @@ export type {
   HookLogEntry,
   TelemetryAttributes,
 } from './types.js';
+export type { RunCapture } from './process-run.js';
 export { CommandRun } from './command-run.js';
 export { InteractiveRun } from './interactive-run.js';
 export {
@@ -103,6 +105,8 @@ export class TestRig {
   testDir: string | null = null;
   testName: string | undefined;
   _lastRunStdout: string | undefined;
+  private _lastRunCapture: RunCapture | null = null;
+  private _runInProgress = false;
   fakeResponsesPath: string | undefined;
   originalFakeResponsesPath: string | undefined;
   private _interactiveRuns: InteractiveRun[] = [];
@@ -118,6 +122,25 @@ export class TestRig {
   /** Expose a structured diagnostic dump for helpers in other modules. */
   dumpDiagnostic(label: string, content: string): void {
     this._diagnostics.dump(label, content);
+  }
+
+  /**
+   * Return a copy of the structured capture (raw stdout, stderr, exitCode,
+   * timedOut) from the most recent `run` / `runCommand`, or null when no run
+   * has completed. The capture reflects the raw child streams before any
+   * transform or stderr-append logic.
+   */
+  getLastRunCapture(): RunCapture | null {
+    return this._lastRunCapture === null ? null : { ...this._lastRunCapture };
+  }
+
+  private beginRun(): void {
+    if (this._runInProgress) {
+      throw new Error('TestRig does not support overlapping run operations');
+    }
+    this._runInProgress = true;
+    this._lastRunCapture = null;
+    this._lastRunStdout = undefined;
   }
 
   setup(testName: string, options: TestRigSetupOptions = {}) {
@@ -171,64 +194,87 @@ export class TestRig {
   }
 
   async run(options: RunMethodOptions): Promise<string> {
-    assertProviderConfig(this.fakeResponsesPath);
+    this.beginRun();
+    try {
+      assertProviderConfig(this.fakeResponsesPath);
 
-    const yolo = options.yolo !== false;
-    const extraArgs = buildExtraArgs(this.fakeResponsesPath, yolo);
-    const { command, initialArgs } = this._getCommandAndArgs(extraArgs);
-    const commandArgs = [...initialArgs];
+      const yolo = options.yolo !== false;
+      const extraArgs = buildExtraArgs(this.fakeResponsesPath, yolo);
+      const { command, initialArgs } = this._getCommandAndArgs(extraArgs);
+      const commandArgs = [...initialArgs];
 
-    appendUserArgs(commandArgs, options.args);
-    appendProfileFlag(commandArgs);
+      appendUserArgs(commandArgs, options.args);
+      appendProfileFlag(commandArgs);
 
-    const childEnv = buildChildEnv(
-      this.testDir as string,
-      this.fakeResponsesPath,
-    );
-    const isJsonOutput =
-      commandArgs.includes('--output-format') && commandArgs.includes('json');
+      const childEnv = buildChildEnv(
+        this.testDir as string,
+        this.fakeResponsesPath,
+      );
+      const isJsonOutput =
+        commandArgs.includes('--output-format') && commandArgs.includes('json');
 
-    const ctx: RunContext = {
-      command,
-      commandArgs,
-      testDir: this.testDir as string,
-      childEnv,
-    };
+      const ctx: RunContext = {
+        command,
+        commandArgs,
+        testDir: this.testDir as string,
+        childEnv,
+      };
 
-    const transform = (stdout: string): string => {
-      this._lastRunStdout = stdout;
-      if (env['LLXPRT_SANDBOX'] === 'podman') {
-        return stripTelemetryFromStdout(stdout);
-      }
-      return stdout;
-    };
+      const transform = (stdout: string): string => {
+        this._lastRunStdout = stdout;
+        if (env['LLXPRT_SANDBOX'] === 'podman') {
+          return stripTelemetryFromStdout(stdout);
+        }
+        return stdout;
+      };
 
-    return spawnRunWithTimeout(
-      ctx,
-      options,
-      isJsonOutput,
-      transform,
-      getDefaultTimeout() * 4,
-    );
+      return await spawnRunWithTimeout(
+        ctx,
+        options,
+        isJsonOutput,
+        transform,
+        getDefaultTimeout() * 4,
+        (capture) => {
+          this._lastRunCapture = capture;
+          this._lastRunStdout = capture.stdout;
+        },
+      );
+    } finally {
+      this._runInProgress = false;
+    }
   }
 
   async runCommand(
     args: string[],
     options: { stdin?: string } = {},
   ): Promise<string> {
-    const { command, initialArgs } = this._getCommandAndArgs();
-    const commandArgs = [...initialArgs, ...args];
+    this.beginRun();
+    try {
+      const { command, initialArgs } = this._getCommandAndArgs();
+      const commandArgs = [...initialArgs, ...args];
 
-    const ctx: RunContext = {
-      command,
-      commandArgs,
-      testDir: this.testDir as string,
-    };
+      const ctx: RunContext = {
+        command,
+        commandArgs,
+        testDir: this.testDir as string,
+      };
 
-    return spawnRun(ctx, { stdin: options.stdin }, false, (stdout) => {
-      this._lastRunStdout = stdout;
-      return stdout;
-    });
+      return await spawnRun(
+        ctx,
+        { stdin: options.stdin },
+        false,
+        (stdout) => {
+          this._lastRunStdout = stdout;
+          return stdout;
+        },
+        (capture) => {
+          this._lastRunCapture = capture;
+          this._lastRunStdout = capture.stdout;
+        },
+      );
+    } finally {
+      this._runInProgress = false;
+    }
   }
 
   readFile(fileName: string): string {
