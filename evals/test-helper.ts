@@ -33,8 +33,14 @@ export function extractModelResponse(output: string): string {
 
   const result = EvalOutputSchema.safeParse(parsed);
   if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => {
+        const path = issue.path.join('.');
+        return `${path === '' ? '<root>' : path}: ${issue.message}`;
+      })
+      .join('; ');
     throw new Error(
-      'Expected LLxprt CLI JSON output to include a string response',
+      `Expected LLxprt CLI JSON output to include a string response: ${details}`,
     );
   }
   return result.data.response;
@@ -48,12 +54,16 @@ export function extractModelResponse(output: string): string {
 export interface EvalArtifact {
   readonly schemaVersion: 1;
   readonly capture: RunCapture | null;
-  readonly toolCalls: unknown;
+  readonly toolCalls: ReturnType<TestRig['readToolLogs']> | EvalArtifactError;
+}
+
+interface EvalArtifactError {
+  readonly error: string;
 }
 
 export function formatEvalLog(
   capture: RunCapture | null,
-  toolCalls: unknown,
+  toolCalls: ReturnType<TestRig['readToolLogs']> | EvalArtifactError,
 ): string {
   const artifact: EvalArtifact = { schemaVersion: 1, capture, toolCalls };
   return JSON.stringify(artifact, null, 2);
@@ -115,7 +125,7 @@ export interface EvalCase {
 
 async function finalizeEval(rig: TestRig, name: string): Promise<void> {
   const capture = rig.getLastRunCapture();
-  let toolCalls: unknown;
+  let toolCalls: ReturnType<TestRig['readToolLogs']> | EvalArtifactError;
   try {
     toolCalls = rig.readToolLogs();
   } catch (error) {
@@ -142,6 +152,7 @@ async function finalizeEval(rig: TestRig, name: string): Promise<void> {
     throw new AggregateError(
       [artifactError, cleanupError],
       'Writing eval diagnostics and cleaning up both failed',
+      { cause: artifactError },
     );
   }
   if (artifactError !== undefined) {

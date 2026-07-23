@@ -33,6 +33,8 @@ const FORCE_KILL_CLOSE_GRACE_MS = 500;
 function signalProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   if (process.platform !== 'win32' && child.pid !== undefined) {
     try {
+      // Timeout-managed children are spawned detached below, which makes the
+      // child PID the process-group ID on POSIX systems.
       process.kill(-child.pid, signal);
       return;
     } catch {
@@ -52,11 +54,22 @@ function signalProcess(child: ChildProcess, signal: NodeJS.Signals): void {
       stdio: 'ignore',
       windowsHide: true,
     });
-    killer.once('error', () => {});
+    killer.once('error', () => {
+      try {
+        child.kill(signal);
+      } catch {
+        // The main child may already have exited while taskkill was starting.
+      }
+    });
+    killer.unref();
     return;
   }
 
-  child.kill(signal);
+  try {
+    child.kill(signal);
+  } catch {
+    // The child may have exited between the timeout and the fallback signal.
+  }
 }
 
 function createTimeoutError(timeoutMs: number): Error {
