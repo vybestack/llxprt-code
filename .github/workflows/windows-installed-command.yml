@@ -1,0 +1,99 @@
+name: 'Windows Installed Command (issue #2603)'
+
+on:
+  pull_request:
+    paths:
+      - 'packages/cli/bin/**'
+      - 'packages/cli/package.json'
+      - 'packages/cli/scripts/install-native-launchers.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/postinstall.cjs'
+      - 'scripts/tests/issue-2603-release-pack.cjs'
+      - 'scripts/tests/issue-2603-windows-probe.ts'
+      - 'scripts/tests/issue-2603-startup-benchmark.cjs'
+      - 'scripts/windows-installed-command-smoke.cjs'
+      - 'scripts/windows-installed-command-smoke/**'
+      - '.github/workflows/windows-installed-command.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'packages/cli/bin/**'
+      - 'packages/cli/package.json'
+      - 'packages/cli/scripts/install-native-launchers.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/postinstall.cjs'
+      - 'scripts/tests/issue-2603-release-pack.cjs'
+      - 'scripts/tests/issue-2603-windows-probe.ts'
+      - 'scripts/tests/issue-2603-startup-benchmark.cjs'
+      - 'scripts/windows-installed-command-smoke.cjs'
+      - 'scripts/windows-installed-command-smoke/**'
+      - '.github/workflows/windows-installed-command.yml'
+  workflow_dispatch:
+
+# Cancel superseded runs of this workflow for the same ref so that repeated
+# pushes to a PR do not queue redundant Windows install smokes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installed-command:
+    runs-on: 'windows-latest'
+    # 60 min (root cause D): the smoke does real global/local/npm-exec
+    # installs plus a benchmark. 30 min was too tight when multiple installs
+    # ran back-to-back. All install timeouts are env-configurable and stay
+    # well under this job budget.
+    timeout-minutes: 60
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      # Publish the absolute path to PowerShell 7 (pwsh.exe) so the smoke
+      # resolves it robustly under a constrained PATH. windows-latest ships
+      # pwsh but NOT legacy `powershell` on PATH, which previously caused
+      # every PowerShell-gated step to fail with ENOENT (run 29850614559).
+      - name: 'Export PowerShell 7 path'
+        shell: 'pwsh'
+        run: |
+          "PWSH_PATH=$((Get-Command pwsh).Source)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: 'Install dependencies (npm ci)'
+        run: 'npm ci'
+
+      # The smoke runs the behavioral checks AND the startup benchmark (as a
+      # child process using the already-installed launcher + platform bun), so
+      # no separate benchmark step is needed. The benchmark is invoked with
+      # LLXPRT_BENCH_LAUNCHER/LLXPRT_BENCH_BUN so it never repacks or
+      # reinstalls — it reuses the install the smoke already proved.
+      - name: 'Run Windows installed-command behavioral smoke + benchmark'
+        run: 'node scripts/windows-installed-command-smoke.cjs'
+
+      # Upload the small diagnostic JSON written on failure (root cause I).
+      # Hosted runner temp vanishes post-job, so this small artifact (no
+      # node_modules) is how failures are debugged offline. Kept tiny.
+      - name: 'Upload diagnostic artifact on failure'
+        if: ${{ failure() }}
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'llxprt-win-smoke-diagnostic'
+          path: '${{ runner.temp }}/llxprt-win-smoke-diagnostic-*.json'
+          if-no-files-found: 'ignore'
+          retention-days: 7

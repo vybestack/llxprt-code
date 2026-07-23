@@ -18,7 +18,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { keyCommand } from './keyCommand.js';
+import { keyCommand, invalidateKeyCompletionCache } from './keyCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -121,6 +121,7 @@ let context: CommandContext;
 describe('/key subcommands', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    invalidateKeyCompletionCache();
     mockKeyring = createMockKeyring();
     tempDir = await createTempFallbackDir();
     mockStorage = createTestStorage(mockKeyring, tempDir);
@@ -148,6 +149,16 @@ describe('/key subcommands', () => {
   async function runKey(args: string): Promise<MessageActionReturn> {
     const result = await keyCommand.action!(context, args);
     return result as MessageActionReturn;
+  }
+
+  // Helper: run schema completion for a given full line
+  async function complete(fullLine: string): Promise<string[]> {
+    const { createCompletionHandler } = await import(
+      '../commands/schema/index.js'
+    );
+    const handler = createCompletionHandler(keyCommand.schema!);
+    const result = await handler(context, undefined, fullLine);
+    return result.suggestions.map((s) => s.value);
   }
 
   // ─── R27.2: Table-Driven Parsing Tests ──────────────────────────────────────
@@ -568,16 +579,6 @@ describe('/key subcommands', () => {
      * We exercise the real integration via createCompletionHandler.
      */
 
-    // Helper: run schema completion for a given full line
-    async function complete(fullLine: string): Promise<string[]> {
-      const { createCompletionHandler } = await import(
-        '../commands/schema/index.js'
-      );
-      const handler = createCompletionHandler(keyCommand.schema!);
-      const result = await handler(context, undefined, fullLine);
-      return result.suggestions.map((s) => s.value);
-    }
-
     it('suggests subcommand names for partial first token', async () => {
       const completions = await complete('/key s');
       expect(completions).toContain('save');
@@ -637,6 +638,124 @@ describe('/key subcommands', () => {
 
       const completions = await complete('/key load ');
       expect(completions).toStrictEqual([]);
+    });
+  });
+
+  // ─── Issue #2620: Key-Name Completion Cache Tests ───────────────────────────
+
+  describe('/key — Key-name completion cache (issue #2620)', () => {
+    /**
+     * Issue #2620: typing `/key load ` triggered a keychain enumeration on
+     * every keystroke. The completer now caches listKeys() results with a
+     * short TTL and invalidates on save/delete. Uses the top-level `complete`
+     * helper so no duplicate is defined here.
+     */
+
+    it('cache reduces listKeys calls within TTL', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+      await mockStorage.saveKey('beta', 'sk-beta123');
+
+      const spy = vi.spyOn(mockStorage, 'listKeys');
+
+      // Five rapid completions within the TTL window.
+      for (let i = 0; i < 5; i++) {
+        const result = await complete('/key load ');
+        expect(result).toContain('alpha');
+        expect(result).toContain('beta');
+      }
+
+      expect(spy.mock.calls.length).toBeLessThanOrEqual(1);
+      spy.mockRestore();
+    });
+
+    it('cache returns cached (stale) data within TTL until invalidated', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+
+      const first = await complete('/key load ');
+      expect(first).toStrictEqual(['alpha']);
+
+      // Externally add a key WITHOUT invalidating the cache.
+      await mockStorage.saveKey('beta', 'sk-beta123');
+
+      const second = await complete('/key load ');
+      // The cache IS honored within the TTL: it returns stale data (beta is
+      // not yet visible) until an invalidating mutation occurs.
+      expect(second).toStrictEqual(['alpha']);
+    });
+
+    it('cache is invalidated on save via /key save', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+
+      const first = await complete('/key load ');
+      expect(first).toStrictEqual(['alpha']);
+
+      await runKey('save beta sk-xxx-value-here');
+
+      const second = await complete('/key load ');
+      expect(second).toContain('alpha');
+      expect(second).toContain('beta');
+    });
+
+    it('cache is invalidated on delete via /key delete', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+      await mockStorage.saveKey('beta', 'sk-beta123');
+
+      const first = await complete('/key load ');
+      expect(first).toContain('alpha');
+      expect(first).toContain('beta');
+
+      context.overwriteConfirmed = true;
+      await runKey('delete alpha');
+
+      const second = await complete('/key load ');
+      expect(second).not.toContain('alpha');
+      expect(second).toContain('beta');
+    });
+
+    it('cache is not poisoned by a keyring error', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+
+      // First call: simulate a keyring failure by making listKeys reject.
+      // The completer must return [] and must NOT cache the failure.
+      const spy = vi.spyOn(mockStorage, 'listKeys');
+      spy.mockRejectedValueOnce(new Error('keyring unavailable'));
+
+      const failedResult = await complete('/key load ');
+      expect(failedResult).toStrictEqual([]);
+
+      // Second call: listKeys now succeeds. Because the error was not cached,
+      // the completer re-reads and returns the real key names.
+      const okResult = await complete('/key load ');
+      expect(okResult).toStrictEqual(['alpha']);
+
+      spy.mockRestore();
+    });
+
+    it('coalesces concurrent cache misses onto a single in-flight listKeys call', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+
+      // Delay listKeys so both completions fire while the first enumeration
+      // is still pending; coalescing should hand both the same promise.
+      const spy = vi.spyOn(mockStorage, 'listKeys');
+      spy.mockImplementation(
+        () =>
+          new Promise<string[]>((resolve) =>
+            setTimeout(() => resolve(['alpha']), 50),
+          ),
+      );
+
+      const [a, b] = await Promise.all([
+        complete('/key load '),
+        complete('/key load '),
+      ]);
+
+      // Both completions resolve to the same coalesced result.
+      expect(a).toStrictEqual(['alpha']);
+      expect(b).toStrictEqual(['alpha']);
+      // A single enumeration serviced both callers.
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      spy.mockRestore();
     });
   });
 

@@ -66,14 +66,16 @@ export {
 } from './util.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// Entry is the checked-in Node launcher: it re-execs Bun against TypeScript
-// source, so integration tests exercise the no-compile runtime path.
+// Entry is the TypeScript source run directly under Bun. The checked-in
+// launcher (packages/cli/bin/llxprt) is the installed command, but for
+// integration tests we spawn Bun directly on the source entry point to
+// exercise the same no-compile runtime path without a Node relay.
 const CLI_ENTRY_PATH = join(
   __dirname,
   '..',
   '..',
   '..',
-  'packages/cli/bin/llxprt.cjs',
+  'packages/cli/index.ts',
 );
 
 interface RunMethodOptions {
@@ -81,6 +83,16 @@ interface RunMethodOptions {
   stdin?: string;
   stdinDoesNotEnd?: boolean;
   yolo?: boolean;
+}
+
+/**
+ * Options accepted by {@link TestRig.setup}. Exported so eval/integration
+ * authors can type their own case objects against the real setup parameter
+ * rather than loosening to `Record<string, any>`.
+ */
+export interface TestRigSetupOptions {
+  settings?: Record<string, unknown>;
+  fakeResponsesPath?: string;
 }
 
 /**
@@ -108,13 +120,7 @@ export class TestRig {
     this._diagnostics.dump(label, content);
   }
 
-  setup(
-    testName: string,
-    options: {
-      settings?: Record<string, unknown>;
-      fakeResponsesPath?: string;
-    } = {},
-  ) {
+  setup(testName: string, options: TestRigSetupOptions = {}) {
     this.testName = testName;
     const sanitizedName = sanitizeTestName(testName);
     const testDir = join(
@@ -154,8 +160,8 @@ export class TestRig {
 
   /**
    * The command and args to use to invoke LLxprt CLI. Allows switching between
-   * the checked-in Node launcher (which re-execs Bun on the TypeScript source)
-   * and the installed 'llxprt' binary.
+   * spawning Bun directly on the TypeScript source (the development path) and
+   * the installed 'llxprt' binary.
    */
   private _getCommandAndArgs(extraInitialArgs: string[] = []): {
     command: string;
@@ -446,7 +452,14 @@ export class TestRig {
       env: childEnv,
     };
 
-    const executable = command === 'node' ? process.execPath : command;
+    // When command is 'bun', use process.execPath (the exact Bun executable
+    // when running under Bun) rather than the literal 'bun', which may not be
+    // on PATH or may resolve to a different version. This mirrors how the
+    // 'node' case uses the exact Node executable.
+    const executable =
+      command === 'bun' && typeof process.versions.bun === 'string'
+        ? process.execPath
+        : command;
     const ptyProcess = pty.spawn(executable, commandArgs, ptyOptions);
 
     const run = new InteractiveRun(ptyProcess, this._diagnostics);

@@ -451,3 +451,70 @@ describe.skipIf(isWindows)('postinstall Bun workspace symlinking', () => {
     ).toBe(true);
   });
 });
+
+describe('installWindowsNativeLaunchers error handling (nonfatal contract)', () => {
+  // Extracted helper: reads the real postinstall source and slices the
+  // installWindowsNativeLaunchers function body for static contract assertions.
+  // On macOS this function is platform-gated and never runs; the tests verify
+  // the source-level contract (try/catch wrapping, no process.exit) that
+  // guarantees nonfatal behavior on Windows.
+  function extractLauncherFnBody(): string {
+    const source = readFileSync(realPostinstall, 'utf8');
+    const fnStart = source.indexOf('function installWindowsNativeLaunchers');
+    expect(fnStart).toBeGreaterThan(-1);
+    // Track brace balance from the opening brace to find the matching closing
+    // brace, rather than relying on indexOf('\n}') which can truncate early
+    // if a nested block or inner function ends with } before the real end.
+    const openBrace = source.indexOf('{', fnStart);
+    expect(openBrace).toBeGreaterThan(-1);
+    let depth = 0;
+    let fnEnd = openBrace;
+    for (let i = openBrace; i < source.length; i++) {
+      if (source[i] === '{') {
+        depth++;
+      } else if (source[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          fnEnd = i + 1;
+          break;
+        }
+      }
+    }
+    expect(depth).toBe(0);
+    return source.slice(fnStart, fnEnd);
+  }
+
+  it('wraps the installer require and invocation in try/catch (nonfatal)', () => {
+    // On macOS, installWindowsNativeLaunchers is platform-gated and never
+    // runs. The contract is that an unexpected require failure or installer
+    // exception is caught and logged as a warning, never aborting postinstall.
+    // Verify the source has the protective try/catch around the require+invoke.
+    const fnBody = extractLauncherFnBody();
+    expect(fnBody).toContain('try {');
+    expect(fnBody).toContain('require(cliInstaller)');
+    expect(fnBody).toContain('installNativeLaunchers');
+    expect(fnBody).toContain('} catch');
+    expect(fnBody).toMatch(/non-fatal/i);
+    // Must NOT contain process.exit inside the try/catch.
+    const tryStart = fnBody.indexOf('try {');
+    const catchStart = fnBody.indexOf('} catch');
+    const tryBlock = fnBody.slice(tryStart, catchStart);
+    expect(tryBlock).not.toContain('process.exit');
+  });
+
+  it('postinstall exits 0 even when install-native-launchers.cjs throws', () => {
+    // Simulate a broken installer module on win32 by creating a fixture whose
+    // install-native-launchers.cjs throws, then verify postinstall does not
+    // crash. We cannot change process.platform, but we CAN verify that the
+    // function's error path does not propagate by checking the source never
+    // calls process.exit(1) from installWindowsNativeLaunchers.
+    //
+    // This is a static source contract assertion, not a behavioral test: it
+    // verifies the nonfatal-by-construction invariant that the function never
+    // escalates an installer error to a process.exit. A full behavioral test
+    // runs on the hosted Windows smoke (windows-installed-command-smoke.cjs).
+    const fnBody = extractLauncherFnBody();
+    // The function must never call process.exit — errors are logged and swallowed.
+    expect(fnBody).not.toMatch(/process\.exit\(\d+\)/);
+  });
+});

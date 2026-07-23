@@ -151,9 +151,12 @@ function collectEntries(
           label: definition.label,
           category: definition.category,
           description: formatDescription(definition),
-          defaultValue: formatDefaultValue(definition.default, {
-            quoteStrings: true,
-          }),
+          defaultValue: formatDefaultValue(
+            resolveDocumentedDefault(definition),
+            {
+              quoteStrings: true,
+            },
+          ),
           requiresRestart: Boolean(definition.requiresRestart),
           enumValues: definition.options?.map((option) =>
             formatDefaultValue(option.value, { quoteStrings: true }),
@@ -176,6 +179,18 @@ function formatDescription(definition: SettingDefinition) {
     return definition.description.trim();
   }
   return 'Description not provided.';
+}
+
+/**
+ * Resolves the default value advertised in generated documentation.
+ *
+ * Mirrors the schema generator: `documentedDefault` takes precedence so a
+ * setting can advertise a public default that differs from its runtime merge
+ * default (e.g. `streamFirstResponseTimeoutMs` documents 300000 while its
+ * runtime `default` stays `undefined`).
+ */
+function resolveDocumentedDefault(definition: SettingDefinition): unknown {
+  return definition.documentedDefault ?? definition.default;
 }
 
 function formatType(definition: SettingDefinition): string {

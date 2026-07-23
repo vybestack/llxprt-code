@@ -739,16 +739,25 @@ runtimeDescribe(
       };
     }
 
-    it('spawns node with the CLI launcher and forwards user args', () => {
-      const { binDir, nodeLogPath } = setupFakeBinDir();
+    it('spawns bun with the CLI entry and forwards user args', () => {
+      const { binDir, bunLogPath } = setupFakeBinDir();
       try {
         const { status } = runStartWithFakeBin(binDir, ['--version']);
         expect(status).toBe(0);
-        const nodeArgs = readFileSync(nodeLogPath, 'utf-8')
-          .trim()
-          .split(NEWLINE);
-        expect(nodeArgs[0]).toBe('./packages/cli/bin/llxprt.cjs');
-        expect(nodeArgs).toContain('--version');
+        const bunArgs = readFileSync(bunLogPath, 'utf-8').trim().split(NEWLINE);
+        // start.ts spawns bun for the CLI entry (packages/cli/index.ts) and
+        // forwards user args. Assert that SOME bun invocation contains both
+        // the entry and --version, without depending on last-match ordering
+        // (start.ts may emit multiple bun invocations for discovery).
+        const cliWithVersion = bunArgs.filter(
+          (line) =>
+            line.includes('packages/cli/index.ts') &&
+            line.includes('--version'),
+        );
+        expect(
+          cliWithVersion.length,
+          `expected a bun invocation containing both the CLI entry and --version; got: ${bunArgs.join(NEWLINE)}`,
+        ).toBeGreaterThan(0);
       } finally {
         rmSync(binDir, { recursive: true, force: true });
       }

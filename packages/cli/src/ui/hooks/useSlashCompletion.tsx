@@ -105,6 +105,9 @@ function useStateRefs(): StateRefs {
   const start = useRef(-1);
   const end = useRef(-1);
   const prev = useRef<string>('');
+  const schemaCompletionTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const ctxRef = useRef<{
     isArgumentCompletion: boolean;
     leafCommand: SlashCommand | null;
@@ -119,6 +122,7 @@ function useStateRefs(): StateRefs {
     completionStart: start,
     completionEnd: end,
     previousInput: prev,
+    schemaCompletionTimer,
     slashCompletionContextRef: ctxRef,
   };
 }

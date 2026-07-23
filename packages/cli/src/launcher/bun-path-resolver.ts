@@ -4,10 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { dirname, join } from 'node:path';
+import { dirname, join, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { access, constants } from 'node:fs/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
+import {
+  classifyWindowsPathCandidates,
+  isWindowsBunWrapper,
+  orderWindowsBunCandidates,
+  type WindowsBunCandidate,
+} from './bun-candidate-policy.js';
 
 const PATH_COMMAND_TIMEOUT_MS = 5_000;
 const MAX_PATH_COMMAND_OUTPUT_BYTES = 65_536;
@@ -38,14 +44,16 @@ function binCandidatesForPlatform(platform: string): readonly string[] {
  * Direct dependency executable names under node_modules/bun/bin.
  *
  * The published "bun" npm package maps its "bun" bin entry to "bin/bun.exe"
- * on every platform (see node_modules/bun/package.json), so the real native
- * executable is always named bun.exe. On Windows we additionally tolerate a
- * bun.cmd wrapper for robustness, though the canonical path is bun.exe.
+ * on every platform (see node_modules/bun/package.json), making bun.exe the
+ * canonical candidate and the first one probed. POSIX additionally accepts
+ * bare bun as a compatibility fallback for layouts that retain the platform
+ * package's original executable name. Windows likewise tolerates bun.cmd as a
+ * wrapper fallback.
  */
 function directDependencyCandidatesForPlatform(
   platform: string,
 ): readonly string[] {
-  return platform === 'win32' ? ['bun.exe', 'bun.cmd'] : ['bun.exe'];
+  return platform === 'win32' ? ['bun.exe', 'bun.cmd'] : ['bun.exe', 'bun'];
 }
 
 /**
@@ -73,17 +81,15 @@ async function resolveFromNodeModules(
   const depCandidates = directDependencyCandidatesForPlatform(platform);
 
   for (const dir of ancestorDirs(moduleDir)) {
-    // 1. Prefer the package-local .bin shim (fastest, correct symlink target).
+    // Prefer the package-manager .bin entry before direct-package fallbacks.
     for (const candidate of binCandidates) {
       const candidatePath = join(dir, 'node_modules', '.bin', candidate);
       if (await pathChecker(candidatePath)) {
         return candidatePath;
       }
     }
-    // 2. Fall back to the direct dependency executable. In published npm
-    //    installs the .bin shim may be absent (e.g., some pnpm layouts or
-    //    partial installs) but the bun package still ships its executable at
-    //    node_modules/bun/bin/bun.exe.
+    // Some pnpm or partial layouts retain the direct package executable but
+    // omit its .bin entry.
     for (const candidate of depCandidates) {
       const candidatePath = join(dir, 'node_modules', 'bun', 'bin', candidate);
       if (await pathChecker(candidatePath)) {
@@ -94,28 +100,109 @@ async function resolveFromNodeModules(
   return null;
 }
 
+function pathLookupTool(platform: string): string {
+  if (platform !== 'win32') {
+    return 'which';
+  }
+  const systemRoot = process.env['SystemRoot'];
+  return systemRoot !== undefined && win32.isAbsolute(systemRoot)
+    ? win32.join(systemRoot, 'System32', 'where.exe')
+    : 'where.exe';
+}
+
+async function readPathCandidates(
+  platform: string,
+  pathCommand: PathCommand,
+): Promise<readonly string[]> {
+  const tool = pathLookupTool(platform);
+  let result: string | null;
+  try {
+    result = await pathCommand(tool, ['bun']);
+  } catch {
+    return [];
+  }
+  if (result === null) {
+    return [];
+  }
+  return result
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^(["'])(.+?)\1$/, '$2'))
+    .filter((line) => line.length > 0);
+}
+
 async function resolveFromPath(
   platform: string,
   pathCommand: PathCommand,
   pathChecker: PathChecker,
 ): Promise<string | null> {
-  const tool = platform === 'win32' ? 'where' : 'which';
-  let result: string | null;
-  try {
-    result = await pathCommand(tool, ['bun']);
-  } catch {
-    return null;
-  }
-  if (result === null) {
-    return null;
-  }
-  for (const line of result.split(/\r?\n/)) {
-    const trimmed = line.trim().replace(/^(["'])(.+?)\1$/, '$2');
-    if (trimmed.length > 0 && (await pathChecker(trimmed))) {
-      return trimmed;
+  const candidates = await readPathCandidates(platform, pathCommand);
+  for (const candidate of candidates) {
+    if (await pathChecker(candidate)) {
+      return candidate;
     }
   }
   return null;
+}
+
+function windowsNodeModuleCandidates(
+  moduleDir: string,
+): readonly WindowsBunCandidate[] {
+  return [...ancestorDirs(moduleDir)].flatMap((dir) => [
+    {
+      path: join(dir, 'node_modules', '.bin', 'bun.exe'),
+      kind: 'bin-native' as const,
+    },
+    {
+      path: join(dir, 'node_modules', '.bin', 'bun.cmd'),
+      kind: 'wrapper' as const,
+    },
+    {
+      path: join(dir, 'node_modules', 'bun', 'bin', 'bun.exe'),
+      kind: 'direct-native' as const,
+    },
+    {
+      path: join(dir, 'node_modules', 'bun', 'bin', 'bun.cmd'),
+      kind: 'wrapper' as const,
+    },
+  ]);
+}
+
+async function firstUsableCandidate(
+  candidates: readonly WindowsBunCandidate[],
+  pathChecker: PathChecker,
+): Promise<string | null> {
+  for (const candidate of candidates) {
+    if (await pathChecker(candidate.path)) {
+      return candidate.path;
+    }
+  }
+  return null;
+}
+
+async function resolveWindowsBunPath(
+  moduleDir: string,
+  pathChecker: PathChecker,
+  pathCommand: PathCommand,
+): Promise<string | null> {
+  const localCandidates = orderWindowsBunCandidates(
+    windowsNodeModuleCandidates(moduleDir),
+  );
+  const localNative = await firstUsableCandidate(
+    localCandidates.filter((candidate) => !isWindowsBunWrapper(candidate)),
+    pathChecker,
+  );
+  if (localNative !== null) {
+    return localNative;
+  }
+
+  const pathCandidates = classifyWindowsPathCandidates(
+    await readPathCandidates('win32', pathCommand),
+  );
+  const remainingCandidates = orderWindowsBunCandidates([
+    ...localCandidates.filter(isWindowsBunWrapper),
+    ...pathCandidates,
+  ]);
+  return firstUsableCandidate(remainingCandidates, pathChecker);
 }
 
 export async function resolveBunPath(
@@ -126,6 +213,10 @@ export async function resolveBunPath(
     options.moduleDir ?? dirname(fileURLToPath(import.meta.url));
   const pathChecker = options.pathChecker ?? defaultPathChecker;
   const pathCommand = options.pathCommand ?? defaultPathCommand;
+
+  if (platform === 'win32') {
+    return resolveWindowsBunPath(moduleDir, pathChecker, pathCommand);
+  }
 
   const fromNodeModules = await resolveFromNodeModules(
     moduleDir,
@@ -156,13 +247,10 @@ type PathCommandResult =
 
 function spawnPathCommand(tool: string, args: string[]): ChildProcess | null {
   try {
-    // The default command runs on the current host, so shell behavior follows
-    // process.platform even when tests inject logical platform values elsewhere.
+    // Execute the lookup tool directly so a shell cannot reinterpret arguments.
     return spawn(tool, args, {
       stdio: ['ignore', 'pipe', 'ignore'],
-      ...(process.platform === 'win32'
-        ? { windowsHide: true, shell: true }
-        : {}),
+      ...(process.platform === 'win32' ? { windowsHide: true } : {}),
     });
   } catch {
     return null;

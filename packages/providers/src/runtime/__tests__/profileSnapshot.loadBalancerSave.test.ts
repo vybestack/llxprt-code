@@ -55,7 +55,13 @@ vi.mock('../runtimeAccessors.js', () => ({
       () => runtimeServicesState.activeProviderName,
     ),
     getProviderSettingsSnapshot: vi.fn(() => ({})),
-    getActiveProviderOrThrow: vi.fn(),
+    // Not exercised by these save-path tests; throw if accidentally called so
+    // an empty mock cannot hide a future dependency (issue #2482).
+    getActiveProviderOrThrow: vi.fn(() => {
+      throw new Error(
+        'getActiveProviderOrThrow should not be called during profile save snapshot tests',
+      );
+    }),
     extractModelParams: vi.fn(() => ({})),
   },
 }));

@@ -5,22 +5,30 @@
  */
 
 /**
- * Behavioral tests for the configurable timeout + spawn-error classification
- * contract of scripts/check-agents-api-surface.mjs.
+ * Behavioral tests for scripts/check-agents-api-surface.mjs.
  *
- * These tests exercise the ACTUAL exported helpers — no mocks, no spawned tsc.
- * They verify:
- *   - resolveBuildTimeoutMs honors the env override and falls back to the
- *     default for absent / malformed / non-positive values (fail-closed).
- *   - describeTscSpawnError classifies each error category correctly and
- *     reflects the actually-configured timeout in the timeout message.
+ * Two test areas are covered:
  *
- * The script's main() build/snapshot guard is covered end-to-end by the
- * package pretest (npm run lint:agents-api-surface) and the agents
- * publicSurface.guard.test.ts; here we cover the testable pure helpers that
- * were previously untested.
+ *  1. Pure helper contract — resolveBuildTimeoutMs honors the env override
+ *     and falls back to the default for absent / malformed / non-positive
+ *     values (fail-closed). describeTscSpawnError classifies each error
+ *     category correctly and reflects the actually-configured timeout in the
+ *     timeout message. These exercise the ACTUAL exported helpers — no mocks,
+ *     no spawned tsc.
+ *
+ *  2. End-to-end process run — the script runs the repository TypeScript
+ *     compiler without npm or npx on PATH (using createRequire/process.execPath
+ *     to resolve the local tsc), proving the guard has no implicit CLI tool
+ *     dependency.
+ *
+ * The script's main() snapshot guard is also covered by the package pretest
+ * (npm run lint:agents-api-surface) and agents publicSurface.guard.test.ts.
  */
 
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -28,6 +36,9 @@ import {
   describeTscSpawnError,
   DEFAULT_BUILD_TIMEOUT_MS,
 } from '../check-agents-api-surface.mjs';
+
+const repoRoot = resolve(import.meta.dirname, '../..');
+const checkerPath = join(repoRoot, 'scripts', 'check-agents-api-surface.mjs');
 
 describe('resolveBuildTimeoutMs', () => {
   it('returns the default when the env var is absent', () => {
@@ -145,7 +156,7 @@ describe('describeTscSpawnError', () => {
   it('classifies an ENOENT spawn error', () => {
     const msg = describeTscSpawnError({ code: 'ENOENT' });
     expect(msg).toContain('ENOENT');
-    expect(msg).toContain('PATH');
+    expect(msg).toContain('Node');
   });
 
   it('classifies an arbitrary signal termination', () => {
@@ -182,4 +193,34 @@ describe('describeTscSpawnError', () => {
     const msg = describeTscSpawnError({ status: 0, signal: null });
     expect(msg).toBeNull();
   });
+});
+
+describe('agents API-surface checker process', () => {
+  it('runs the repository TypeScript compiler without npm or npx on PATH', () => {
+    const emptyPath = mkdtempSync(join(tmpdir(), 'agents-api-empty-path-'));
+
+    try {
+      const result = spawnSync(process.execPath, [checkerPath], {
+        cwd: repoRoot,
+        env: { ...process.env, PATH: emptyPath, Path: emptyPath },
+        encoding: 'utf8',
+        // The configurable default timeout is 5 min (300000ms); allow headroom
+        // above it for slow CI runners / cold tsc builds.
+        timeout: 360_000,
+      });
+      const diagnostics = [
+        `status: ${String(result.status)}`,
+        `error: ${result.error?.message ?? '<none>'}`,
+        `stdout: ${result.stdout}`,
+        `stderr: ${result.stderr}`,
+      ].join('\n');
+
+      expect(result.status, diagnostics).toBe(0);
+      expect(result.stdout, diagnostics).toContain(
+        'PASS: agents API-surface report matches expected snapshot.',
+      );
+    } finally {
+      rmSync(emptyPath, { recursive: true, force: true });
+    }
+  }, 370_000);
 });

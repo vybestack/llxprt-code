@@ -453,8 +453,8 @@ describe('published package no-compile runtime contract (S6)', () => {
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
     ) as CliPackageMetadata;
 
-    expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt.cjs');
-    expect(cliPackage.bin?.llxprt).toBe('bin/llxprt.cjs');
+    expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt');
+    expect(cliPackage.bin?.llxprt).toBe('bin/llxprt');
     expect(cliPackage.scripts?.prepack).toBeUndefined();
     expect(cliPackage.scripts?.start).toBe('bun index.ts');
     expect(cliPackage.scripts?.debug).toBe('bun --inspect-brk index.ts');
@@ -463,7 +463,10 @@ describe('published package no-compile runtime contract (S6)', () => {
   it('ships the launcher and TypeScript source needed by Bun at runtime', () => {
     const packed = getPackedPaths();
 
-    expect(packed.has('packages/cli/bin/llxprt.cjs')).toBe(true);
+    // The POSIX launcher (issue #2603) has a valid #!/bin/sh shebang so it is
+    // directly execve-compatible on POSIX. On Windows, the root postinstall
+    // generates native .cmd/.ps1 launchers that invoke the package-local Bun.
+    expect(packed.has('packages/cli/bin/llxprt')).toBe(true);
     expect(packed.has('packages/cli/index.ts')).toBe(true);
     expect(packed.has('packages/cli/src/cli.tsx')).toBe(true);
     expect(packed.has('packages/core/index.ts')).toBe(true);
@@ -747,10 +750,13 @@ describe('published package no-compile runtime contract (S6)', () => {
     },
   );
 
-  it('runs the checked-in Node launcher without a compiled CLI entry', () => {
+  it('runs the checked-in launcher without a compiled CLI entry', () => {
+    // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
+    // directly execve-compatible (no /bin/sh wrapper needed). Running it
+    // directly exercises the real installed-command path.
     const stdout = execFileSync(
-      process.execPath,
-      [join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.cjs'), '--version'],
+      join(repoRoot, 'packages', 'cli', 'bin', 'llxprt'),
+      ['--version'],
       {
         cwd: repoRoot,
         encoding: 'utf8',

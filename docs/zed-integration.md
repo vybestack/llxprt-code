@@ -40,7 +40,7 @@ Open Zed settings (`Cmd+,` on macOS, `Ctrl+,` on Linux) and add an agent server.
         "--provider",
         "openai",
         "--model",
-        "hf:moonshotai/Kimi-K2.7-Code",
+        "hf:moonshotai/Kimi-K3",
         "--key-name",
         "synthetic",
         "--baseurl",
@@ -60,10 +60,10 @@ Profiles are the cleanest approach — they capture provider, model, key, base U
 
 ```
 /provider openai
-/model hf:moonshotai/Kimi-K2.7-Code
+/model hf:moonshotai/Kimi-K3
 /key load synthetic
 /set base-url https://api.synthetic.new/openai/v1
-/profile save model kimi-k2
+/profile save model kimi-k3
 ```
 
 Then reference it in Zed:
@@ -73,7 +73,7 @@ Then reference it in Zed:
   "agent_servers": {
     "llxprt": {
       "command": "/opt/homebrew/bin/llxprt",
-      "args": ["--experimental-acp", "--profile-load", "kimi-k2", "--yolo"]
+      "args": ["--experimental-acp", "--profile-load", "kimi-k3", "--yolo"]
     }
   }
 }
@@ -98,7 +98,7 @@ Configure multiple entries to switch between providers in Zed:
   "agent_servers": {
     "llxprt-kimi": {
       "command": "/opt/homebrew/bin/llxprt",
-      "args": ["--experimental-acp", "--profile-load", "kimi-k2", "--yolo"]
+      "args": ["--experimental-acp", "--profile-load", "kimi-k3", "--yolo"]
     },
     "llxprt-gemini": {
       "command": "/opt/homebrew/bin/llxprt",

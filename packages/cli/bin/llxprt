@@ -1,0 +1,391 @@
+#!/bin/sh
+# shellcheck disable=SC2250
+set -u
+
+# Resolve the real location of this script, following symlinks using only
+# portable POSIX constructs (readlink without -f, case-based join). This works
+# on stock macOS BSD and Linux without GNU coreutils.
+#
+# A bounded iteration count guards against pathological symlink cycles. In
+# practice npm .bin links are single-hop, but a crafted or corrupt chain is
+# rejected after MAX_SYMLINK_HOPS rather than looping indefinitely.
+_llxprt_self=$0
+_llxprt_hops=0
+MAX_SYMLINK_HOPS=40
+while [ -L "$_llxprt_self" ]; do
+  _llxprt_hops=$((_llxprt_hops + 1))
+  if [ "$_llxprt_hops" -gt "$MAX_SYMLINK_HOPS" ]; then
+    printf '%s\n' 'LLxprt Code: symlink resolution exceeded maximum hops (possible cycle).' >&2
+    printf '%s\n' "The symlink chain at $_llxprt_self may be cyclic or corrupt." >&2
+    printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+    exit 43
+  fi
+  _llxprt_dir=$(dirname -- "$_llxprt_self")
+  # On readlink failure (permission denied, dangling link, I/O error), emit an
+  # actionable error and exit 43 immediately rather than preserving the same
+  # symlink (which would spin MAX_SYMLINK_HOPS iterations). The hop bound
+  # above still guards against cycles where readlink succeeds.
+  if ! _llxprt_target=$(readlink -- "$_llxprt_self" 2>/dev/null); then
+    printf '%s\n' 'LLxprt Code: could not resolve symlink (readlink failed).' >&2
+    printf '%s\n' "The symlink at $_llxprt_self is broken, cyclic, or unreadable." >&2
+    printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+    exit 43
+  fi
+  case "$_llxprt_target" in
+    /*) _llxprt_self=$_llxprt_target ;;
+    *)  _llxprt_self=$_llxprt_dir/$_llxprt_target ;;
+  esac
+done
+_llxprt_script_dir=$(cd -- "$(dirname -- "$_llxprt_self")" 2>/dev/null && pwd) || \
+  _llxprt_script_dir=$(dirname -- "$_llxprt_self")
+
+# Read the pinned Bun dependency version and package name from this package's
+# own package.json. When an exact pin is present, discovered Bun candidates are
+# validated against this pin so an unrelated Bun (a different version) is
+# rejected even if it lives inside an allowed boundary. A missing or unreadable
+# candidate package.json/version is also rejected when a pin exists, so a
+# partial install cannot silently fall through to an unrelated Bun.
+_llxprt_pkg_json=$_llxprt_script_dir/../package.json
+_llxprt_bun_pin=""
+if [ -f "$_llxprt_pkg_json" ]; then
+  _llxprt_bun_pin=$(sed -n 's/^[[:space:]]*"bun"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_pkg_json" 2>/dev/null | head -n1)
+fi
+
+# Derive the candidate bun package.json path from a bun binary path. The binary
+# lives at .../bun/bin/bun.exe and its package.json is two dirs up
+# (.../bun/package.json). Sets _llxprt_bun_pkg to the derived path and returns
+# 0; returns 1 for layouts where the package.json cannot be derived.
+_llxprt_derive_bun_pkg() {
+  _llxprt_candidate=$1
+  case "$_llxprt_candidate" in
+    */bin/bun|*/bin/bun.exe)
+      # .../bun/bin/bun.exe -> .../bun/package.json (two dirs up from binary)
+      _llxprt_bun_pkg=$(dirname -- "$(dirname -- "$_llxprt_candidate")")/package.json
+      return 0
+      ;;
+    *)
+      # Unknown layout: cannot derive package.json.
+      return 1
+      ;;
+  esac
+}
+
+# Check whether $_llxprt_bun_pin is an exact X.Y.Z version (with optional
+# prerelease suffix). Returns 0 for an exact pin, 1 for a range/non-exact spec.
+# This is stricter than a bare digit-leading glob: "1.x" and "1.3.14 - 2.0.0"
+# start with a digit but are NOT exact versions and must not be treated as pins.
+# A prerelease pin like "1.3.14-beta.1" IS an exact version and must be
+# accepted so the strict version equality check is applied during Bun beta/rc
+# testing cycles. The prerelease suffix (dash followed by dot-separated
+# alphanumeric identifiers) is validated so ranges like "1.3.14-" or
+# "1.3.14-alpha.." are still rejected.
+_llxprt_is_exact_pin() {
+  _llxprt_pin=$1
+  _llxprt_prerelease=""
+  _llxprt_has_prerelease=0
+  # Split on the first dash to separate the core version from any prerelease
+  # suffix (e.g. "1.3.14-beta.1" -> core="1.3.14", prerelease="beta.1").
+  # A range like "1.x" or "^1.3.14" contains no dash and is handled below by
+  # the core-only numeric check.
+  case "$_llxprt_pin" in
+    *-*)
+      _llxprt_core=${_llxprt_pin%%-*}
+      _llxprt_prerelease=${_llxprt_pin#*-}
+      _llxprt_has_prerelease=1
+      ;;
+    *)
+      _llxprt_core=$_llxprt_pin
+      ;;
+  esac
+  # The core (before any dash) must be purely numeric with dots.
+  case "$_llxprt_core" in
+    *[!0-9.]*) return 1 ;;
+    *) ;;
+  esac
+  # Must have exactly two dots (three numeric groups) in the core.
+  _llxprt_rest=$_llxprt_core
+  _llxprt_group=0
+  while [ -n "$_llxprt_rest" ]; do
+    _llxprt_part=${_llxprt_rest%%.*}
+    case "$_llxprt_part" in
+      ''|*[!0-9]*) return 1 ;;
+      *) ;;
+    esac
+    _llxprt_group=$((_llxprt_group + 1))
+    case "$_llxprt_rest" in
+      *.*) _llxprt_rest=${_llxprt_rest#*.} ;;
+      *) break ;;
+    esac
+  done
+  [ "$_llxprt_group" -eq 3 ] || return 1
+  # If a prerelease separator is present, validate its non-empty,
+  # dot-separated identifiers (which may contain hyphens per semver).
+  if [ "$_llxprt_has_prerelease" -eq 1 ]; then
+    [ -n "$_llxprt_prerelease" ] || return 1
+    case "$_llxprt_prerelease" in
+      .*|*.|*..*) return 1 ;;
+      *) ;;
+    esac
+    _llxprt_pre_rest=$_llxprt_prerelease
+    while [ -n "$_llxprt_pre_rest" ]; do
+      _llxprt_pre_part=${_llxprt_pre_rest%%.*}
+      case "$_llxprt_pre_part" in
+        ''|*[!A-Za-z0-9-]*) return 1 ;;
+        *) ;;
+      esac
+      case "$_llxprt_pre_rest" in
+        *.*) _llxprt_pre_rest=${_llxprt_pre_rest#*.} ;;
+        *) break ;;
+      esac
+    done
+  fi
+  return 0
+}
+
+# Check whether a discovered Bun binary's version matches the dependency pin.
+#
+# When no exact pin is known (empty _llxprt_bun_pin or a range like "^1.3.14"),
+# the boundary check is the primary defense and the candidate is accepted
+# (return 0).
+#
+# When an exact pin IS known, the candidate's package.json version MUST be
+# present and MUST match. A missing/unreadable package.json or missing version
+# field is rejected (return 1) rather than accepted, so a partial or tampered
+# install cannot bypass the pin. This is stricter than a mere advisory check.
+_llxprt_bun_validates() {
+  _llxprt_candidate=$1
+  # No exact pin: accept (boundary check is the primary defense). A range
+  # pin (e.g. "^1.3.14" or "1.x") is not exact, so we cannot compare equality.
+  if [ -z "$_llxprt_bun_pin" ] || ! _llxprt_is_exact_pin "$_llxprt_bun_pin"; then
+    return 0
+  fi
+  if ! _llxprt_derive_bun_pkg "$_llxprt_candidate"; then
+    # Cannot derive package.json for this layout; reject under an exact pin.
+    return 1
+  fi
+  if [ ! -f "$_llxprt_bun_pkg" ]; then
+    # Candidate package.json missing: reject under an exact pin rather than
+    # accept, so a partial install cannot bypass version verification.
+    return 1
+  fi
+  _llxprt_found_ver=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' -- "$_llxprt_bun_pkg" 2>/dev/null | head -n1)
+  # sed may succeed with exit 0 but print nothing (malformed JSON, binary
+  # garbage, or a non-version manifest). Treat an empty extraction as a
+  # rejection under exact-pin semantics — do NOT accept.
+  if [ -z "$_llxprt_found_ver" ]; then
+    # Version field missing/unreadable: reject under an exact pin.
+    return 1
+  fi
+  [ "$_llxprt_found_ver" = "$_llxprt_bun_pin" ]
+}
+
+# Determine the package root (parent of the bin/ directory) and whether the
+# package is installed under an enclosing node_modules directory. When installed
+# (e.g. consumer/node_modules/@vybestack/llxprt-code/bin/llxprt), the enclosing
+# node_modules boundary is honored and consumer ancestors are never climbed.
+# When NOT under a node_modules (source workspace: packages/cli/bin/llxprt), a
+# verified workspace-root fallback is used instead.
+_llxprt_pkg_root=$(cd -- "$_llxprt_script_dir/.." 2>/dev/null && pwd) || \
+  _llxprt_pkg_root=$_llxprt_script_dir/..
+
+# Returns 0 if $_llxprt_pkg_root is nested under a directory literally named
+# "node_modules" (an installed package), 1 otherwise. Sets
+# _llxprt_enclosing_nm to the nearest enclosing node_modules path when found.
+_llxprt_find_enclosing_nm() {
+  _llxprt_search=$_llxprt_pkg_root
+  _llxprt_enclosing_nm=""
+  while [ "$_llxprt_search" != "/" ] && [ -n "$_llxprt_search" ]; do
+    _llxprt_parent=$(dirname -- "$_llxprt_search")
+    if [ "$(basename -- "$_llxprt_parent")" = "node_modules" ]; then
+      _llxprt_enclosing_nm=$_llxprt_parent
+      return 0
+    fi
+    _llxprt_search=$_llxprt_parent
+  done
+  return 1
+}
+
+# Verify a candidate repository root is the genuine llxprt-code workspace root
+# for this package using canonical filesystem structure validation — NOT regex
+# or grep scanning of arbitrary root JSON. Since the candidate root is derived
+# deterministically as exactly three directories above this launcher
+# (packages/cli/bin/llxprt → packages/cli/bin → packages/cli → root), the
+# canonical layout is verified structurally:
+#   1. The candidate's package.json exists.
+#   2. The canonical package path <candidate>/packages/cli equals our pkg_root.
+# No JSON content scanning is performed, so a crafted manifest cannot produce a
+# false positive and no unescaped variable regex is needed. Sets
+# _llxprt_ws_root on success.
+_llxprt_verify_workspace_root() {
+  _llxprt_candidate_root=$1
+  _llxprt_root_manifest=$_llxprt_candidate_root/package.json
+  if [ ! -f "$_llxprt_root_manifest" ]; then
+    return 1
+  fi
+  # Canonical structural check: the package root must be exactly
+  # <candidate>/packages/cli. This confirms the launcher sits at the canonical
+  # source-workspace path without scanning any manifest content. Both sides of
+  # the comparison are canonicalized via cd && pwd so symlinked components,
+  # redundant separators, or ./.. segments cannot cause a false mismatch.
+  _llxprt_canonical_pkg=$(cd -- "$_llxprt_candidate_root/packages/cli" 2>/dev/null && pwd) || \
+    _llxprt_canonical_pkg="$_llxprt_candidate_root/packages/cli"
+  _llxprt_pkg_root_abs=$(cd -- "$_llxprt_pkg_root" 2>/dev/null && pwd) || \
+    _llxprt_pkg_root_abs="$_llxprt_pkg_root"
+  if [ "$_llxprt_pkg_root_abs" != "$_llxprt_canonical_pkg" ]; then
+    return 1
+  fi
+  _llxprt_ws_root=$_llxprt_candidate_root
+  return 0
+}
+
+# Resolve the bundled Bun runtime. Resolution is strictly bounded so an
+# unrelated consumer Bun can never be accepted:
+#
+#   1. Package-local: <pkg>/node_modules/bun/bin/bun.exe
+#   2. Hoisted (installed only): <enclosing-node_modules>/bun/bin/bun.exe
+#   3. Workspace root (source workspace only): if the package is NOT under a
+#      node_modules and the repository root two levels up is a verified
+#      llxprt-code workspace (its manifest references this package), permit
+#      only that verified root's node_modules/bun/bin/bun.exe.
+#
+# We deliberately do NOT scan .bin symlinks: resolving them portably without
+# GNU readlink -f is unreliable, and the direct bun/bin/bun.exe paths are
+# authoritative under both npm and Bun installers. We never generic-climb
+# arbitrary ancestors.
+_llxprt_bun=""
+# 1. Package-local Bun.
+if [ -x "$_llxprt_pkg_root/node_modules/bun/bin/bun.exe" ] && \
+   _llxprt_bun_validates "$_llxprt_pkg_root/node_modules/bun/bin/bun.exe"; then
+  _llxprt_bun=$_llxprt_pkg_root/node_modules/bun/bin/bun.exe
+fi
+
+# 2. Hoisted Bun within the enclosing node_modules (installed packages only).
+if [ -z "$_llxprt_bun" ] && _llxprt_find_enclosing_nm; then
+  if [ -x "$_llxprt_enclosing_nm/bun/bin/bun.exe" ] && \
+     _llxprt_bun_validates "$_llxprt_enclosing_nm/bun/bin/bun.exe"; then
+    _llxprt_bun=$_llxprt_enclosing_nm/bun/bin/bun.exe
+  fi
+fi
+
+# 3. Workspace-root Bun (source workspace only). The package is NOT under a
+#    node_modules; verify the repository root two levels up
+#    (packages/cli -> packages -> repo-root) is a genuine workspace whose
+#    manifest references this package, then accept only its node_modules/bun.
+if [ -z "$_llxprt_bun" ] && ! _llxprt_find_enclosing_nm; then
+  _llxprt_ws_candidate=$(cd -- "$_llxprt_pkg_root/../.." 2>/dev/null && pwd) || \
+    _llxprt_ws_candidate=""
+  if [ -n "$_llxprt_ws_candidate" ] && \
+     _llxprt_verify_workspace_root "$_llxprt_ws_candidate" && \
+     [ -x "$_llxprt_ws_root/node_modules/bun/bin/bun.exe" ] && \
+     _llxprt_bun_validates "$_llxprt_ws_root/node_modules/bun/bin/bun.exe"; then
+    _llxprt_bun=$_llxprt_ws_root/node_modules/bun/bin/bun.exe
+  fi
+fi
+
+if [ -z "$_llxprt_bun" ]; then
+  printf '%s\n' 'LLxprt Code: bundled Bun runtime was not found.' >&2
+  printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+  printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+  exit 43
+fi
+
+# Validate the Bun executable's native binary magic before exec. A bare exec
+# on a corrupt/text file triggers the shell's ENOEXEC fallback, which silently
+# interprets the file as a shell script — masking the corruption. Reading the
+# first 4 bytes via `od` (portable -An -tx1 -N4 form) lets us reject non-native
+# binaries with an actionable exit 43 without spawning Bun.
+#
+# Platform-gated format acceptance:
+#   Darwin:  Mach-O only (feedface/feedfacf/cefaedfe/cffaedfe, fat cafebabe/bebafeca)
+#   Linux:   ELF only (7f454c46)
+#   MINGW/MSYS/CYGWIN: PE/COFF only (4d5a, "MZ") — Windows runs PE natively.
+#
+# Note: wrong-architecture vs wrong-format are distinct failure modes. This
+# check validates the FORMAT (the OS can parse the container); it does NOT
+# validate the architecture (e.g. arm64 vs x86_64). A wrong-architecture binary
+# will be exec'd and fail with an OS error, which is a different, less common
+# failure than a corrupt/text file. Architecture validation would require
+# parsing the binary header (e.g. ELF e_machine or Mach-O cputype) and
+# comparing against `uname -m`, which adds significant complexity for marginal
+# gain; the format check covers the primary corruption vector.
+
+# `od` is a POSIX-standard utility; verify it is available before relying on
+# it. A missing or failing `od` is treated as a launcher runtime failure (exit
+# 43) with a clear diagnostic rather than silently skipping the format check.
+if ! command -v od >/dev/null 2>&1; then
+  printf '%s\n' 'LLxprt Code: required tool "od" was not found on PATH.' >&2
+  printf '%s\n' 'The launcher needs od to validate the bundled Bun binary format.' >&2
+  printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+  printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+  exit 43
+fi
+
+# Capture od's combined stdout+stderr into a single read so we can detect a
+# read failure (non-existent/unreadable file) separately from a successful
+# read of an unrecognized format.
+_llxprt_od_out=$(od -An -tx1 -N4 -- "$_llxprt_bun" 2>&1) || {
+  # od itself failed (read error, I/O error). Treat as a launcher runtime
+  # failure with a clear diagnostic.
+  printf '%s\n' 'LLxprt Code: could not read bundled Bun binary to validate its format.' >&2
+  printf '%s\n' "od reported: $_llxprt_od_out" >&2
+  printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
+  printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+  printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+  exit 43
+}
+_llxprt_magic=$(printf '%s' "$_llxprt_od_out" | tr -d ' \n')
+
+_llxprt_kernel=$(uname -s 2>/dev/null || printf '%s' '')
+case "$_llxprt_kernel" in
+  MINGW*|MSYS*|CYGWIN*)
+    # Windows POSIX layer: only PE/COFF is accepted (the OS runs PE natively;
+    # ELF and Mach-O would indicate a corrupt or wrong-platform install).
+    case "$_llxprt_magic" in
+      4d5a*) ;;
+      *)
+        printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
+        printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
+        printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+        printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+        exit 43
+        ;;
+    esac
+    ;;
+  Darwin)
+    # macOS: only Mach-O is accepted.
+    case "$_llxprt_magic" in
+      feedface|feedfacf|cefaedfe|cffaedfe|cafebabe|bebafeca) ;;
+      *)
+        printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
+        printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
+        printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+        printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+        exit 43
+        ;;
+    esac
+    ;;
+  *)
+    # Linux and other ELF systems: only ELF is accepted.
+    case "$_llxprt_magic" in
+      7f454c46) ;;
+      *)
+        printf '%s\n' 'LLxprt Code: bundled Bun runtime is not a usable native binary.' >&2
+        printf '%s\n' 'The bundled bun.exe may be corrupt, the wrong platform, or an unrecognized native format.' >&2
+        printf '%s\n' 'Reinstall the package with "npm install @vybestack/llxprt-code"' >&2
+        printf '%s\n' 'to restore the bundled Bun dependency, or visit https://bun.sh' >&2
+        exit 43
+        ;;
+    esac
+    ;;
+esac
+
+_llxprt_entry="$_llxprt_pkg_root/index.ts"
+
+if [ ! -f "$_llxprt_entry" ]; then
+  printf '%s\n' 'LLxprt Code: TypeScript entry point (index.ts) was not found.' >&2
+  printf '%s\n' "Expected: $_llxprt_entry" >&2
+  printf '%s\n' 'Your installation may be corrupt; reinstall @vybestack/llxprt-code.' >&2
+  exit 43
+fi
+
+exec "$_llxprt_bun" "$_llxprt_entry" "$@"

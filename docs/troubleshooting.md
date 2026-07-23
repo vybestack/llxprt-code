@@ -222,13 +222,14 @@ The `is-in-ci` package detects `CI`, `CONTINUOUS_INTEGRATION`, or any `CI_*` env
 
 ## Exit Codes
 
-| Exit Code | Error Type                 | Description                              |
-| --------- | -------------------------- | ---------------------------------------- |
-| 41        | `FatalAuthenticationError` | Authentication failed                    |
-| 42        | `FatalInputError`          | Invalid input (non-interactive mode)     |
-| 44        | `FatalSandboxError`        | Sandbox setup failed                     |
-| 52        | `FatalConfigError`         | Invalid settings.json                    |
-| 53        | `FatalTurnLimitedError`    | Max turns reached (non-interactive mode) |
+| Exit Code | Error Type                 | Description                                                                                                                                         |
+| --------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 41        | `FatalAuthenticationError` | Authentication failed                                                                                                                               |
+| 42        | `FatalInputError`          | Invalid input (non-interactive mode)                                                                                                                |
+| 43        | Launcher runtime failure   | Bundled Bun runtime missing, corrupt, wrong platform, or an unrecognized native format — reinstall `@vybestack/llxprt-code` or visit https://bun.sh |
+| 44        | `FatalSandboxError`        | Sandbox setup failed                                                                                                                                |
+| 52        | `FatalConfigError`         | Invalid settings.json                                                                                                                               |
+| 53        | `FatalTurnLimitedError`    | Max turns reached (non-interactive mode)                                                                                                            |
 
 ## Sandbox Issues
 
@@ -277,7 +278,7 @@ Cache metrics only appear when the provider supports and reports them. OAuth use
 
 ## Building from Source
 
-The CLI's run path starts with the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`), which resolves [Bun](https://bun.sh) and executes the TypeScript entrypoint (`packages/cli/index.ts`) directly. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run.
+The CLI's installed command uses platform-native launchers (`packages/cli/bin/llxprt`) that resolve the package-bundled [Bun](https://bun.sh) and execute the TypeScript entrypoint (`packages/cli/index.ts`) directly — no Node process is started on the installed path. No pre-compiled CLI `dist/` artifact or retired `bundle/llxprt.js` artifact is required for the CLI to run.
 
 To build from source:
 

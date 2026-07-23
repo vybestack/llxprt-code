@@ -30,7 +30,7 @@ Get started immediately with powerful LLM options:
 /provider codex
 /model gpt-5.5
 
-# Kimi subscription (K2.7 Code, thinking always on)
+# Kimi subscription (Kimi K3, 1M context, native vision, thinking always on)
 /provider kimi
 /key **************
 /model kimi-for-coding
@@ -43,7 +43,7 @@ Get started immediately with powerful LLM options:
 - **Load Balancer Profiles**: Balance requests across providers or accounts with automatic failover
 - **Free & Low-Cost Tiers**: Start with a Google account (Gemini) or a Qwen account — see [authentication](./docs/cli/authentication.md) for current tier availability
 - **Provider Flexibility**: Switch between any Anthropic, Gemini, OpenAI, Kimi, or OpenAI-compatible provider
-- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K2.7 Code, MiniMax M3, and Qwen 3 Coder Next
+- **Top Open Models**: Works seamlessly with GLM 5.2, Kimi K3, MiniMax M3, and Qwen 3 Coder Next
 - **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
 - **Privacy First**: No telemetry by default, local processing available
 - **Subagent Flexibility**: Create agents with different models, providers, or settings
@@ -104,23 +104,25 @@ LLxprt Code is a command-line AI assistant designed for developers who want powe
 
 ### Bun Runtime and Install Fallback
 
-LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, the checked-in Node launcher (`packages/cli/bin/llxprt.cjs`) resolves Bun and re-execs the TypeScript entrypoint (`packages/cli/index.ts`) under it. The CLI's run path does not require a pre-compiled CLI `dist/` artifact or the retired `bundle/llxprt.js` artifact.
+LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxprt`, the platform-native launcher (`packages/cli/bin/llxprt`) resolves the package-bundled Bun and execs the TypeScript entrypoint (`packages/cli/index.ts`) directly — no Node process is started on the installed command path. The CLI's run path does not require a pre-compiled CLI `dist/` artifact or the retired `bundle/llxprt.js` artifact.
 
-**Bun resolution order (production launcher):**
+**Bun resolution (production launcher):**
 
-1. `node_modules/.bin/bun` (the bundled Bun, climbing ancestor directories)
-2. `node_modules/bun/bin/bun.exe` (direct dependency fallback)
-3. `bun` found on `PATH` (via `which`/`where`)
+1. Package-local: `<package>/node_modules/bun/bin/bun.exe` (the package's pinned Bun dependency)
+2. Hoisted (installed packages only): the enclosing `node_modules/bun/bin/bun.exe` (npm/Bun hoisting), stopping at the enclosing `node_modules` boundary — never climbing into consumer ancestors
+3. Workspace root (source workspace only): when the package is not under a `node_modules` and the repository root is a verified llxprt-code workspace (its manifest references this package), that verified root's `node_modules/bun/bin/bun.exe`
 
-If no Bun runtime is found, the launcher prints an error with instructions:
+The launcher never scans `.bin` symlinks and never falls back to a global `bun` on `PATH`. When the package's `package.json` declares an exact Bun pin (e.g. `1.3.14`), a candidate whose `package.json`/version is missing or mismatched is rejected.
 
-> Bun runtime was not found. Install it with "npm install" (it is bundled as the "bun" dependency) or install Bun directly from https://bun.sh and ensure it is on your PATH.
+If no package-local Bun runtime is found, the launcher prints an actionable error (exit code 43):
+
+> LLxprt Code: bundled Bun runtime was not found. Reinstall the package with "npm install @vybestack/llxprt-code" to restore the bundled Bun dependency, or visit https://bun.sh
 
 To resolve this:
 
 - **npm users:** Re-run `npm install @vybestack/llxprt-code` (or `npm install -g @vybestack/llxprt-code`) to restore the bundled Bun dependency.
 - **Homebrew users:** Run `brew upgrade llxprt-code` to get the latest formula, or `brew reinstall llxprt-code` to restore a broken installation.
-- **All users:** Install Bun directly from [https://bun.sh](https://bun.sh) and ensure it is on your `PATH`.
+- **All users:** If the bundled Bun dependency cannot be restored, reinstalling the package is the supported path. A separately installed global Bun is not used by the launcher.
 
 **Windows pty caveat:** On Windows, the `node-pty` module has a known terminal resize race condition (`Cannot resize a pty that has already exited`). The CLI silences this specific error at the process level. On POSIX systems under Bun, a dedicated `bun-pty` adapter (`packages/core/src/utils/bunPtyAdapter.ts`) is used instead of `node-pty` to work around a Bun hang. Windows uses `@lydell/node-pty` (with `node-pty` as fallback), not the Bun adapter. If you encounter terminal sizing issues on Windows, use a compatible terminal emulator; the resize race is in `node-pty` itself, not the Bun runtime.
 
@@ -141,7 +143,7 @@ llxprt
 - **Multi-Account Failover** - Configure multiple OAuth buckets that failover automatically on rate limits
 - **Load Balancer Profiles** - Balance across providers/accounts with roundrobin or failover policies
 - **Extensive Provider Support** - Anthropic, Gemini, OpenAI, Kimi, and any OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
-- **Top Open Models** - GLM 5.2, Kimi K2.7 Code, MiniMax M3, Qwen 3 Coder Next
+- **Top Open Models** - GLM 5.2, Kimi K3, MiniMax M3, Qwen 3 Coder Next
 - **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
 - **Profile System** - Save provider configurations and model settings
 - **Advanced Subagents** - Isolated AI assistants with different models/providers
@@ -176,19 +178,28 @@ llxprt "Generate unit tests for payment module" > tests/payment.test.js
 
 LLxprt Code works seamlessly with the best open-weight models. The specs below are illustrative vendor capabilities, not necessarily the built-in provider defaults — see the [Provider Quick Reference](./docs/providers/quick-reference.md) for the model IDs and context limits LLxprt ships with.
 
-### Kimi K2.7 Code
+### Kimi K3
 
-- **Context Window**: 262,144 tokens (256K)
-- **Architecture**: Trillion-parameter MoE (32B active)
-- **Strengths**: Long-horizon agentic coding, multi-step tool orchestration, ~30% fewer reasoning tokens than K2.6
-- **Special**: Thinking mode is always on (no non-thinking mode; in Kimi Code, disabling thinking falls back to K2.6)
+- **Context Window**: 1,000,000 tokens (1M)
+- **Architecture**: Frontier MoE with always-on thinking
+- **Strengths**: Long-horizon agentic coding, multi-step tool orchestration, native vision (images and video)
+- **Special**: Thinking mode is always on and cannot be disabled; `reasoning.effort` accepts `low` / `high` / `max` (default `max`)
+- **Vision**: Native, but requires base64 or `ms://<file-id>` inputs (no public image URLs)
 
 ```bash
+# Subscription-served model (Kimi Code subscription)
 /provider kimi
 /model kimi-for-coding
+
+# Or pay-per-token on the Moonshot API (model id: kimi-k3)
+/provider kimi
+/baseurl https://api.moonshot.ai/v1
+/keyfile ~/.moonshot_key
+/model kimi-k3
+
 # Or via Synthetic/Chutes:
 /provider synthetic
-/model hf:moonshotai/Kimi-K2.7-Code
+/model hf:moonshotai/Kimi-K3
 ```
 
 ### GLM 5.2

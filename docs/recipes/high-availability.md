@@ -16,7 +16,7 @@ This recipe guides you through setting up LLxprt Code with multiple providers fo
 | Claude   | 200,000             | Premium   | Complex reasoning, analysis |
 | Codex    | 262,144             | Premium   | General tasks, fast         |
 | Gemini   | 1,048,576 (API key) | Free/Paid | Large context               |
-| Kimi     | 262,144             | Paid      | Deep reasoning, tool use    |
+| Kimi     | 1,000,000           | Paid      | Deep reasoning, tool use    |
 
 > Context windows can differ by auth variant (API key vs OAuth/subscription); the figures above use the practical API-key defaults.
 
@@ -135,9 +135,9 @@ Use the best model for complex tasks:
 /keyfile ~/.anthropic_key
 /profile save model claude-thinking
 
-# Strong Kimi K2 alternative
+# Strong Kimi K3 alternative
 /provider kimi
-/model kimi-for-coding
+/model kimi-k3
 /keyfile ~/.kimi_key
 /profile save model kimi-thinking
 

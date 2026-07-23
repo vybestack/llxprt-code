@@ -14,6 +14,36 @@ export class StreamIdleTimeoutError extends Error {
 }
 
 /**
+ * A provider-neutral transport/provider liveness signal (issue #2607).
+ *
+ * Emitted by a provider SSE parser when a raw lifecycle event (e.g. OpenAI
+ * Responses `response.created` / `response.in_progress`) proves the HTTP
+ * response and SSE stream are alive, even when no semantic IContent has been
+ * yielded yet. This satisfies the first-response watchdog without requiring
+ * visible model output, preventing false timeouts on healthy reasoning-model
+ * continuations.
+ */
+export interface StreamLivenessEvent {
+  /**
+   * The provider event name that established liveness (e.g.
+   * 'response.created', 'response.in_progress', 'http-headers').
+   */
+  readonly sourceEvent: string;
+  /**
+   * Whether the liveness was observed at the SSE layer (a parsed SSE data
+   * event) versus a coarser signal (e.g. HTTP response headers received).
+   */
+  readonly sseObserved: boolean;
+}
+
+/**
+ * Listener invoked by a provider stream parser when a liveness signal is
+ * observed. Listener failures MUST NOT break stream parsing; parsers wrap
+ * invocations in try/catch.
+ */
+export type StreamLivenessListener = (event: StreamLivenessEvent) => void;
+
+/**
  * Default stream idle timeout in milliseconds.
  * Disabled by default (0). Set to a positive number via
  * LLXPRT_STREAM_IDLE_TIMEOUT_MS env var or 'stream-idle-timeout-ms'
@@ -124,15 +154,34 @@ function normalizeTimeoutConfigValue(value: unknown): number | undefined {
  * Values <= 0 are normalized to 0 (disabled sentinel).
  * Invalid/empty string values fall through to the next priority level.
  */
-function resolveTimeout(
+
+/**
+ * The provenance of a resolved timeout value, for diagnostics. 'default' means
+ * the fallback default was used; 'env' means the environment variable won;
+ * otherwise the value is the specific ephemeral setting key (hyphenated or
+ * camelCase alias) that supplied the value.
+ */
+export type StreamTimeoutSource = 'default' | 'env' | (string & {});
+
+export interface ResolvedStreamTimeout {
+  readonly ms: number;
+  readonly source: StreamTimeoutSource;
+}
+
+/**
+ * Like {@link resolveTimeout} but also reports which input supplied the value
+ * (issue #2607 diagnostics). Mirrors the exact priority/normalization rules so
+ * callers can rely on `.ms` being identical to the numeric resolver.
+ */
+function resolveTimeoutSource(
   envName: string,
   configKeys: readonly string[],
   fallbackDefault: number,
   config?: { getEphemeralSetting?: (key: string) => unknown },
-): number {
+): ResolvedStreamTimeout {
   const envValue = normalizeTimeoutConfigValue(process.env[envName]);
   if (envValue !== undefined) {
-    return envValue;
+    return { ms: envValue, source: 'env' };
   }
 
   for (const settingKey of configKeys) {
@@ -140,11 +189,11 @@ function resolveTimeout(
       config?.getEphemeralSetting?.(settingKey),
     );
     if (configValue !== undefined) {
-      return configValue;
+      return { ms: configValue, source: settingKey };
     }
   }
 
-  return fallbackDefault;
+  return { ms: fallbackDefault, source: 'default' };
 }
 
 /**
@@ -169,7 +218,23 @@ function resolveTimeout(
 export function resolveStreamIdleTimeoutMs(config?: {
   getEphemeralSetting?: (key: string) => unknown;
 }): number {
-  return resolveTimeout(
+  return resolveTimeoutSource(
+    LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
+    STREAM_IDLE_TIMEOUT_CONFIG_KEYS,
+    DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+    config,
+  ).ms;
+}
+
+/**
+ * Source-aware variant of {@link resolveStreamIdleTimeoutMs}. Returns both the
+ * resolved ms value and the provenance ('env', a setting key, or 'default').
+ * The `.ms` field is identical to {@link resolveStreamIdleTimeoutMs}.
+ */
+export function resolveStreamIdleTimeoutMsSource(config?: {
+  getEphemeralSetting?: (key: string) => unknown;
+}): ResolvedStreamTimeout {
+  return resolveTimeoutSource(
     LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
     STREAM_IDLE_TIMEOUT_CONFIG_KEYS,
     DEFAULT_STREAM_IDLE_TIMEOUT_MS,
@@ -201,7 +266,24 @@ export function resolveStreamIdleTimeoutMs(config?: {
 export function resolveStreamFirstResponseTimeoutMs(config?: {
   getEphemeralSetting?: (key: string) => unknown;
 }): number {
-  return resolveTimeout(
+  return resolveTimeoutSource(
+    LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
+    STREAM_FIRST_RESPONSE_CONFIG_KEYS,
+    DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
+    config,
+  ).ms;
+}
+
+/**
+ * Source-aware variant of {@link resolveStreamFirstResponseTimeoutMs}. Returns
+ * both the resolved ms value and the provenance ('env', a setting key, or
+ * 'default'). The `.ms` field is identical to
+ * {@link resolveStreamFirstResponseTimeoutMs}.
+ */
+export function resolveStreamFirstResponseTimeoutMsSource(config?: {
+  getEphemeralSetting?: (key: string) => unknown;
+}): ResolvedStreamTimeout {
+  return resolveTimeoutSource(
     LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
     STREAM_FIRST_RESPONSE_CONFIG_KEYS,
     DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,

@@ -26,7 +26,6 @@ import {
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import {
-  getErrorMessage,
   UnauthorizedError,
   toFriendlyError,
 } from '@vybestack/llxprt-code-core/utils/errors.js';
@@ -44,12 +43,21 @@ import { getCodeAssistServer } from '@vybestack/llxprt-code-core/code_assist/cod
 import { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
 import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
 import {
-  nextStreamEventWithIdleTimeout,
-  resolveStreamIdleTimeoutMs,
-  resolveStreamFirstResponseTimeoutMs,
+  resolveStreamIdleTimeoutMsSource,
+  resolveStreamFirstResponseTimeoutMsSource,
   DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  type StreamLivenessListener,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import {
+  createStreamWatchdog,
+  type StreamWatchdog,
+  type StreamWatchdogFire,
+} from '@vybestack/llxprt-code-core/utils/streamWatchdog.js';
+import {
+  buildStructuredError,
+  isAbortSignalActive,
+  safeJsonStringify,
+} from './turnJsonUtils.js';
 import {
   DEFAULT_AGENT_ID,
   AgentEventType,
@@ -59,19 +67,29 @@ import {
   type StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
-/**
- * Transitional turn-request type — avoids importing a provider SDK PartListUnion.
- * Accepts strings and arrays of part-shaped objects that the chatSession's
- * normalizeToolInteractionInput can handle. Narrows to AgentMessageInput at P21.
- *
- * @plan:PLAN-20260707-AGENTNEUTRAL.P08
- */
 type TurnRequest = string | object | readonly unknown[];
 /** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
 export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 
-const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
-  'Stream idle timeout: no response received within the allowed time.';
+function formatStreamIdleTimeoutMessage(
+  fire: StreamWatchdogFire,
+  livenessObserved: boolean,
+): string {
+  const guardLabel =
+    fire.guard === 'first-response'
+      ? 'First-response'
+      : 'Inter-chunk stream-idle';
+  const livenessPart = livenessObserved
+    ? '; provider liveness was observed before the timeout'
+    : '';
+  return `${guardLabel} timeout: no response received within the allowed time (threshold ${fire.thresholdMs}ms) from ${fire.configSource}${livenessPart}.`;
+}
+
+interface IdleFlag {
+  timedOut: boolean;
+  fire: StreamWatchdogFire | undefined;
+  livenessObserved: boolean;
+}
 
 /**
  * Filters ContentBlocks by hook-restricted allowed tool names.
@@ -116,56 +134,6 @@ interface EmitFinishReasonOptions {
   stopReason: string | undefined;
 }
 
-/**
- * Safely checks if an AbortSignal (or runtime-nullish value) has been aborted.
- * Runtime payloads can pass null/undefined despite declared types.
- */
-function isAbortSignalActive(signal: unknown): boolean {
-  return (
-    signal != null &&
-    typeof signal === 'object' &&
-    (signal as { aborted?: unknown }).aborted === true
-  );
-}
-
-function createSafeJsonReplacer(): (key: string, value: unknown) => unknown {
-  const seen = new WeakSet<object>();
-  return (_key: string, value: unknown): unknown => {
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-
-    if (typeof value !== 'object' || value === null) {
-      return value;
-    }
-
-    if (seen.has(value)) {
-      return '[Circular]';
-    }
-    seen.add(value);
-
-    if (Array.isArray(value)) {
-      return value;
-    }
-
-    const record = value as Record<string, unknown>;
-    return Object.keys(record)
-      .sort()
-      .reduce<Record<string, unknown>>((sorted, key) => {
-        sorted[key] = record[key];
-        return sorted;
-      }, {});
-  };
-}
-
-function safeJsonStringify(value: unknown, space?: number): string {
-  try {
-    return JSON.stringify(value, createSafeJsonReplacer(), space);
-  } catch (error) {
-    return `[Unserializable request: ${getErrorMessage(error)}]`;
-  }
-}
-
 // Re-export types that consumers need from this module
 export {
   DEFAULT_AGENT_ID,
@@ -204,6 +172,11 @@ export type {
   StructuredError,
   ServerTool,
 } from '@vybestack/llxprt-code-core/core/turn.js';
+
+interface TurnWatchdogBundle {
+  readonly watchdog: StreamWatchdog;
+  readonly idleMs: number;
+}
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
@@ -434,36 +407,29 @@ export class Turn {
     streamIterator: AsyncIterator<StreamEvent>,
     timeoutController: AbortController,
     signal: AbortSignal,
-    effectiveTimeoutMs: number,
-    idleFlag: { timedOut: boolean },
+    watchdog: StreamWatchdog,
+    idleMs: number,
+    idleFlag: IdleFlag,
     onStreamProgress: () => void,
     firstResult?: IteratorResult<StreamEvent>,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     let cumulativeOutcome = this.createEmptyResponseOutcome();
     let pendingResult: IteratorResult<StreamEvent> | undefined = firstResult;
     for (;;) {
-      // Use watchdog if timeout > 0, otherwise call iterator.next() directly
       let result: IteratorResult<StreamEvent>;
       if (pendingResult !== undefined) {
         // First event was already fetched (and bounded by the first-response
         // watchdog in run()); consume it directly, then clear the pending slot.
         result = pendingResult;
         pendingResult = undefined;
-      } else if (effectiveTimeoutMs > 0) {
-        result = await nextStreamEventWithIdleTimeout({
-          iterator: streamIterator,
-          timeoutMs: effectiveTimeoutMs,
-          signal: timeoutController.signal,
-          onTimeout: () => {
-            if (signal.aborted) {
-              return;
-            }
-            idleFlag.timedOut = true;
-            timeoutController.abort();
-          },
-          createTimeoutError: () =>
-            new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
-        });
+      } else if (watchdog.isActive) {
+        // The watchdog governs the whole stream: its inter-chunk guard is
+        // rearmed by both provider liveness pings and semantic events, so a
+        // healthy stream never false-trips regardless of chunk cadence.
+        result = await Promise.race([
+          streamIterator.next(),
+          watchdog.timeoutPromise,
+        ]);
       } else {
         // Watchdog disabled: call iterator.next() directly
         result = await streamIterator.next();
@@ -487,6 +453,8 @@ export class Turn {
         return;
       }
       if (dispatch.action === 'process' && dispatch.chunk != null) {
+        // Only a real model chunk advances the semantic-output watchdog.
+        watchdog.onSemanticEvent();
         onStreamProgress();
         cumulativeOutcome = this.mergeResponseOutcome(
           cumulativeOutcome,
@@ -566,53 +534,11 @@ export class Turn {
     };
   }
 
-  private extractErrorStatus(error: unknown): number | undefined {
-    if (typeof error !== 'object' || error === null || !('status' in error)) {
-      return undefined;
-    }
-    return typeof error.status === 'number' ? error.status : undefined;
-  }
-
-  private extractErrorCategory(
-    error: unknown,
-  ): StructuredError['category'] | undefined {
-    if (typeof error !== 'object' || error === null || !('category' in error)) {
-      return undefined;
-    }
-    const category = error.category;
-    switch (category) {
-      case 'rate_limit':
-      case 'quota':
-      case 'authentication':
-      case 'server_error':
-      case 'network':
-      case 'client_error':
-        return category;
-      default:
-        return undefined;
-    }
-  }
-
-  private extractErrorReason(
-    error: unknown,
-  ): StructuredError['reason'] | undefined {
-    if (typeof error !== 'object' || error === null || !('reason' in error)) {
-      return undefined;
-    }
-    switch (error.reason) {
-      case 'retries_exhausted':
-      case 'all_buckets_exhausted':
-        return error.reason;
-      default:
-        return undefined;
-    }
-  }
-
   private async *handleRunError(
     e: unknown,
     req: TurnRequest,
     signal: AbortSignal,
-    idleFlag: { timedOut: boolean },
+    idleFlag: IdleFlag,
     observedProviderError: StructuredError | undefined,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     if (signal.aborted) {
@@ -629,11 +555,19 @@ export class Turn {
     }
 
     if (idleFlag.timedOut) {
+      const fire = idleFlag.fire ?? {
+        guard: 'first-response' as const,
+        thresholdMs: 0,
+        configSource: 'default',
+      };
       yield {
         type: AgentEventType.StreamIdleTimeout,
         value: {
           error: {
-            message: TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE,
+            message: formatStreamIdleTimeoutMessage(
+              fire,
+              idleFlag.livenessObserved,
+            ),
             status: undefined,
           },
         },
@@ -658,24 +592,44 @@ export class Turn {
       contextForReport,
       'Turn.run-sendMessageStream',
     );
-    const status = this.extractErrorStatus(error);
-    const category = this.extractErrorCategory(error);
-    const reason = this.extractErrorReason(error);
-    const structuredError: StructuredError = {
-      message: getErrorMessage(error),
-      ...(status !== undefined ? { status } : {}),
-      ...(category !== undefined ? { category } : {}),
-      ...(reason !== undefined ? { reason } : {}),
-    };
+    const structuredError = buildStructuredError(error);
     yield { type: AgentEventType.Error, value: { error: structuredError } };
   }
 
   // The run method yields simpler events suitable for server logic
+  private createTurnWatchdog(
+    timeoutController: AbortController,
+    idleFlag: IdleFlag,
+  ): TurnWatchdogBundle {
+    const idleResolution = resolveStreamIdleTimeoutMsSource(
+      this.chat.getConfig(),
+    );
+    const firstResponseResolution = resolveStreamFirstResponseTimeoutMsSource(
+      this.chat.getConfig(),
+    );
+    const watchdog = createStreamWatchdog({
+      firstResponseMs: firstResponseResolution.ms,
+      firstResponseSource: firstResponseResolution.source,
+      idleMs: idleResolution.ms,
+      idleSource: idleResolution.source,
+      onFire: (fire) => {
+        idleFlag.timedOut = true;
+        idleFlag.fire = fire;
+        timeoutController.abort();
+      },
+    });
+    return { watchdog, idleMs: idleResolution.ms };
+  }
+
   async *run(
     req: TurnRequest,
     signal: AbortSignal,
   ): AsyncGenerator<ServerAgentStreamEvent> {
-    const idleFlag: { timedOut: boolean } = { timedOut: false };
+    const idleFlag: IdleFlag = {
+      timedOut: false,
+      fire: undefined,
+      livenessObserved: false,
+    };
     let observedProviderError: StructuredError | undefined;
     const onProviderError = (error: StructuredError): void => {
       observedProviderError = error;
@@ -699,26 +653,24 @@ export class Turn {
 
       let streamIterator: AsyncIterator<StreamEvent> | undefined;
 
-      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-        this.chat.getConfig(),
-      );
-      const firstResponseTimeoutMs = resolveStreamFirstResponseTimeoutMs(
-        this.chat.getConfig(),
+      const { watchdog, idleMs } = this.createTurnWatchdog(
+        timeoutController,
+        idleFlag,
       );
 
+      const onStreamLiveness: StreamLivenessListener = (event) => {
+        idleFlag.livenessObserved = true;
+        watchdog.onLiveness(event);
+      };
+
       try {
-        // Acquire the stream AND await the FIRST event, bounding the entire
-        // window (activation + connect + first token) by the first-response
-        // watchdog. After the first event arrives the first-response timer is
-        // cancelled and inter-chunk gaps are governed solely by the existing
-        // (default-off) effectiveTimeoutMs watchdog in consumeStreamEvents.
         const { iterator, firstResult } = await this.acquireFirstStreamEvent(
           req,
           timeoutSignal,
-          timeoutController,
-          firstResponseTimeoutMs,
+          watchdog,
           idleFlag,
           onProviderError,
+          onStreamLiveness,
         );
         streamIterator = iterator;
 
@@ -726,7 +678,8 @@ export class Turn {
           streamIterator,
           timeoutController,
           signal,
-          effectiveTimeoutMs,
+          watchdog,
+          idleMs,
           idleFlag,
           () => {
             observedProviderError = undefined;
@@ -734,9 +687,14 @@ export class Turn {
           firstResult,
         );
       } finally {
-        timeoutController.abort();
-        await closeIteratorBounded(streamIterator, timeoutSignal);
-        signal.removeEventListener('abort', onParentAbort);
+        await this.cleanupStreamResources(
+          watchdog,
+          timeoutController,
+          streamIterator,
+          timeoutSignal,
+          signal,
+          onParentAbort,
+        );
       }
     } catch (e) {
       yield* this.handleRunError(
@@ -750,120 +708,111 @@ export class Turn {
   }
 
   /**
-   * Acquire the response stream and await its FIRST event, bounding the whole
-   * time-to-first-response window (both the sendMessageStream() acquisition and
-   * the first .next(), since the network work happens on that first .next()) by
-   * the first-response watchdog. A dedicated AbortController drives the timer
-   * and is aborted in `finally` once the first event resolves or throws, so it
-   * can never fire mid-stream. On timeout it sets idleFlag.timedOut, aborts the
-   * turn's timeoutController, and throws the canonical idle-timeout error so
-   * handleRunError yields StreamIdleTimeout; a parent-signal abort during the
-   * wait yields UserCancelled instead (guarded by `!timeoutSignal.aborted`).
-   * When disabled (<=0) the behavior is the pre-existing direct acquire-then-
-   * next with no bound. Mirrors the first-chunk-timeout pattern in
-   * loadBalancing/streamTimeout.ts and RetryOrchestrator.ts.
+   * Tears down watchdog, timeout controller, and stream iterator without
+   * letting a cleanup failure mask the original stream result. Iterator
+   * cleanup rejections are logged as warnings but never rethrown.
    */
+  private async cleanupStreamResources(
+    watchdog: StreamWatchdog,
+    timeoutController: AbortController,
+    streamIterator: AsyncIterator<StreamEvent> | undefined,
+    timeoutSignal: AbortSignal,
+    signal: AbortSignal,
+    onParentAbort: () => void,
+  ): Promise<void> {
+    watchdog.cancel();
+    timeoutController.abort();
+    try {
+      await closeIteratorBounded(streamIterator, timeoutSignal);
+    } catch (cleanupError) {
+      this.logger.warn(
+        () =>
+          `[stream:turn] iterator cleanup failed: ${
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError)
+          }`,
+      );
+    }
+    signal.removeEventListener('abort', onParentAbort);
+  }
+
   private async acquireFirstStreamEvent(
     req: TurnRequest,
     timeoutSignal: AbortSignal,
-    timeoutController: AbortController,
-    firstResponseTimeoutMs: number,
-    idleFlag: { timedOut: boolean },
+    watchdog: StreamWatchdog,
+    idleFlag: IdleFlag,
     onProviderError: (error: StructuredError) => void,
+    onStreamLiveness: StreamLivenessListener,
   ): Promise<{
     iterator: AsyncIterator<StreamEvent>;
     firstResult: IteratorResult<StreamEvent>;
   }> {
-    if (firstResponseTimeoutMs <= 0) {
-      // First-response watchdog explicitly disabled: direct acquire + first next.
+    if (!watchdog.isActive) {
       const iterator = await this.openResponseStreamIterator(
         req,
         timeoutSignal,
         onProviderError,
+        onStreamLiveness,
       );
       try {
         const firstResult = await iterator.next();
         return { iterator, firstResult };
       } catch (error) {
-        // On a first-next failure the iterator has not yet been handed to
-        // run() (streamIterator is still unassigned there), so close it here to
-        // avoid leaking the provider connection before rethrowing.
         await closeIteratorBounded(iterator, timeoutSignal);
         throw error;
       }
     }
 
-    // Dedicated timer cancelled in `finally` so it can never fire mid-stream.
-    const firstResponseTimer = new AbortController();
-    const timeoutPromise = delay(
-      firstResponseTimeoutMs,
-      firstResponseTimer.signal,
-    ).then(() => {
-      // If the parent already aborted, do NOT mask that with a timeout error:
-      // surface an AbortError so the race settles with the accurate cause.
-      // handleRunError yields UserCancelled either way, but the thrown error is
-      // then correct for any upstream diagnostics.
-      if (timeoutSignal.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
-      }
-      idleFlag.timedOut = true;
-      timeoutController.abort();
-      throw new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE);
-    });
-    // Aborting the timer (in `finally`, once the event wins) rejects the
-    // delay() with an AbortError. Suppress it: the timeout losing the race is
-    // expected, and an unhandled rejection could otherwise crash under strict
-    // Node --unhandled-rejections modes.
-    timeoutPromise.catch(() => {});
-
-    // Race the ENTIRE first-response window: acquisition (sendMessageStream)
-    // AND the first .next(), because in production the network work happens on
-    // the first .next(), not necessarily during acquisition. The
-    // firstEventPromise chains acquisition then first-next; whichever of it or
-    // the timeout settles first wins.
     let acquiredIterator: AsyncIterator<StreamEvent> | undefined;
-    const firstEventPromise = (async () => {
-      const iterator = await this.openResponseStreamIterator(
-        req,
-        timeoutSignal,
-        onProviderError,
-      );
-      acquiredIterator = iterator;
+    const acquisitionPromise = this.openResponseStreamIterator(
+      req,
+      timeoutSignal,
+      onProviderError,
+      onStreamLiveness,
+    );
+    acquisitionPromise
+      .then((iterator) => {
+        acquiredIterator = iterator;
+        return iterator;
+      })
+      .catch(() => undefined);
+    const firstEventPromise = acquisitionPromise.then(async (iterator) => {
       const firstResult = await iterator.next();
       return { iterator, firstResult };
-    })();
-    // Attach a no-op rejection handler immediately (mirroring timeoutPromise
-    // above) so that if firstEventPromise rejects in the brief window before
-    // the catch block below attaches the real cleanup handler, it cannot
-    // surface as an unhandled rejection under strict Node modes. Promise.race
-    // still delivers the rejection to the caller.
+    });
     firstEventPromise.catch(() => {});
 
     try {
-      const result = await Promise.race([firstEventPromise, timeoutPromise]);
-      // firstEventPromise won: the caller owns and later closes this iterator.
+      const result = await Promise.race([
+        firstEventPromise,
+        watchdog.timeoutPromise,
+      ]);
       return result;
     } catch (error) {
-      // The timeout won (or acquisition/first-next threw). firstEventPromise is
-      // the loser, so its result is discarded and must be cleaned up. Attaching
-      // the cleanup HERE — only once we know firstEvent lost — makes correctness
-      // independent of microtask ordering: on the winning path above we return
-      // without ever attaching cleanup, so the returned iterator is never closed
-      // underneath the caller. On the losing path, close the iterator whether it
-      // resolves LATE (first event arrived just after the abort) or REJECTS (the
-      // aborted provider throws), and swallow the rejection to avoid an
-      // unhandled rejection under strict Node modes.
-      await closeIteratorBounded(acquiredIterator, timeoutSignal);
-      firstEventPromise
-        .then(async (late) => {
-          if (late.iterator !== acquiredIterator) {
-            await closeIteratorBounded(late.iterator, timeoutSignal);
-          }
-        })
+      watchdog.cancel();
+      const iteratorAtCatch = acquiredIterator;
+      await closeIteratorBounded(iteratorAtCatch, timeoutSignal);
+      // Close a late-acquired iterator without waiting for its first next().
+      acquisitionPromise
+        .then((lateIterator) =>
+          lateIterator === iteratorAtCatch
+            ? undefined
+            : closeIteratorBounded(lateIterator, timeoutSignal),
+        )
         .catch(() => undefined);
+      if (idleFlag.fire !== undefined) {
+        throw new Error(
+          formatStreamIdleTimeoutMessage(
+            idleFlag.fire,
+            idleFlag.livenessObserved,
+          ),
+        );
+      }
+      if (timeoutSignal.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       throw error;
-    } finally {
-      firstResponseTimer.abort();
     }
   }
 
@@ -876,6 +825,7 @@ export class Turn {
     req: TurnRequest,
     timeoutSignal: AbortSignal,
     onProviderError: (error: StructuredError) => void,
+    onStreamLiveness?: StreamLivenessListener,
   ): Promise<AsyncIterator<StreamEvent>> {
     // Bridge: chatSession.sendMessageStream still expects Google-shaped
     // SendMessageParameters (until P21). The value is structurally compatible;
@@ -888,6 +838,7 @@ export class Turn {
         config: {
           abortSignal: timeoutSignal,
           onProviderError,
+          ...(onStreamLiveness !== undefined ? { onStreamLiveness } : {}),
         },
       },
       this.prompt_id,

@@ -16,16 +16,71 @@
  * Defaults to current directory if not specified.
  *
  * Outputs a GitHub-flavored Markdown summary to stdout.
+ *
+ * Exit codes:
+ *   0 - at least one report with usable assertions was aggregated
+ *   1 - no reports found, or reports contained no usable assertion data
+ *
+ * Environment:
+ *   AGGREGATE_SKIP_HISTORICAL=1 - skip fetching historical workflow runs
+ *     (useful in tests and when GH_TOKEN is unavailable)
+ *
+ * Architecture: this is a thin orchestrator. The cohesive concerns live in:
+ *   - aggregate-evals-schema.js      (strict current-report schema/parser,
+ *                                     stats merge; historical reports reuse
+ *                                     the SAME strict parser)
+ *   - aggregate-evals-historical.js  (retention window, pagination, download)
+ *   - aggregate-evals-cardinality.js (artifact identity, cardinality,
+ *                                     expected-attempts CLI/env parsing)
+ *
+ * The cardinality and historical helpers used by tests are re-exported from
+ * here so the CLI entry point and the test-facing API stay compatible. The
+ * schema/parser helpers (parseCurrentReport, aggregateStats) are consumed
+ * internally by this orchestrator and the historical module; they are NOT
+ * re-exported because no consumer requires them via this module's public API
+ * surface.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readdirSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const WORKFLOW_NAME = 'evals-nightly.yml';
-const MAX_HISTORICAL_RUNS = 10;
+import {
+  parseCurrentReport,
+  aggregateStats,
+} from './aggregate-evals-schema.js';
+import {
+  isWithinRetentionWindow,
+  selectRunsInWindow,
+  listWorkflowRunsInWindow,
+  fetchHistoricalData,
+  normalizeRunEntry,
+} from './aggregate-evals-historical.js';
+import {
+  extractAttemptFromPath,
+  validateCardinality,
+  validateTopLevelArtifactDirs,
+  parseExpectedAttempts,
+  resolveExpectedAttempts,
+} from './aggregate-evals-cardinality.js';
+
+// Re-export the test-facing API so the CLI entry point and existing dynamic
+// imports (loadAggregateModule) stay compatible after decomposition. Only the
+// cardinality and historical helpers that tests consume via this module are
+// re-exported; the schema/parser helpers are internal-only.
+export {
+  isWithinRetentionWindow,
+  selectRunsInWindow,
+  listWorkflowRunsInWindow,
+  normalizeRunEntry,
+};
+export {
+  extractAttemptFromPath,
+  validateCardinality,
+  validateTopLevelArtifactDirs,
+  parseExpectedAttempts,
+};
+
 const REPO_URL = 'https://github.com/vybestack/llxprt-code';
 
 /**
@@ -62,175 +117,51 @@ function findReportsEntry(fullPath, entry, reports) {
 }
 
 /**
- * Record a single assertion result into the stats map.
+ * Strictly aggregate CURRENT reports. Any malformed current report fails the
+ * whole aggregation closed; the result is only usable when every report is
+ * valid and at least one passed/failed assertion was recorded.
+ *
+ * Each per-report parse is wrapped in try/catch so an UNEXPECTED exception
+ * (not a normal schema validation error — those are already recorded as
+ * diagnostics by the parser) fails closed with a fatal error message instead
+ * of crashing the script with an uncaught exception and bypassing the
+ * exit-code-1 contract. Normal strict diagnostics are never lost: the parsed
+ * result's own errors array is still accumulated.
+ *
+ * @param {string[]} reports - Array of report.json paths
+ * @param {(reportPath: string) => {valid: boolean, stats: Map<string, {pass: number, fail: number, total: number}>, errors: string[], usableAssertions: number}} [parseReport] -
+ *   injectable report parser (defaults to the strict `parseCurrentReport`)
+ * @returns {{valid: boolean, stats: Map<string, {pass: number, fail: number, total: number}>, errors: string[], usableAssertions: number, reports: string[]}}
  */
-function recordAssertion(stats, assertion) {
-  const testName = assertion.title || assertion.fullName || 'unknown';
-  const status = assertion.status || 'unknown';
-
-  if (!stats.has(testName)) {
-    stats.set(testName, { pass: 0, fail: 0, total: 0 });
-  }
-
-  const testStats = stats.get(testName);
-  testStats.total++;
-
-  if (status === 'passed') {
-    testStats.pass++;
-  } else if (status === 'failed') {
-    testStats.fail++;
-  }
-}
-
-/**
- * Parse a vitest JSON report and extract test statistics.
- * @param {string} reportPath - Path to report.json
- * @returns {Map<string, {pass: number, fail: number, total: number}>}
- */
-function getStats(reportPath) {
+export function aggregateReports(reports, parseReport = parseCurrentReport) {
   const stats = new Map();
-  try {
-    const content = readFileSync(reportPath, 'utf-8');
-    const report = JSON.parse(content);
-
-    if (!report.testResults || !Array.isArray(report.testResults)) {
-      console.error(
-        `Warning: Invalid report format in ${reportPath}: missing testResults`,
-      );
-      return stats;
-    }
-
-    for (const testResult of report.testResults) {
-      if (
-        !testResult.assertionResults ||
-        !Array.isArray(testResult.assertionResults)
-      ) {
-        continue;
-      }
-
-      for (const assertion of testResult.assertionResults) {
-        recordAssertion(stats, assertion);
-      }
-    }
-  } catch (err) {
-    console.error(`Warning: Could not parse ${reportPath}: ${err.message}`);
-  }
-  return stats;
-}
-
-/**
- * Download and process artifacts for a single historical run.
- */
-function processHistoricalRun(historical, tempDir, run) {
-  const runId = String(run.databaseId);
-  const runDir = join(tempDir, runId);
-
-  // Download artifacts for this run
-  const downloadResult = spawnSync(
-    'gh',
-    ['run', 'download', runId, '-D', runDir],
-    { encoding: 'utf-8' },
-  );
-
-  if (downloadResult.status !== 0) {
-    console.error(
-      `Warning: Could not download artifacts for run ${runId}: ${downloadResult.stderr}`,
-    );
-    return;
-  }
-
-  // Find and parse all report.json files in this run's artifacts
-  const reports = findReports(runDir);
-  const runStats = new Map();
+  const errors = [];
+  let usableAssertions = 0;
 
   for (const reportPath of reports) {
-    const reportStats = getStats(reportPath);
-    aggregateStats(runStats, reportStats);
-  }
-
-  if (runStats.size > 0) {
-    historical.set(runId, runStats);
-  }
-}
-
-/**
- * Merge a set of report stats into the aggregated stats map.
- */
-function aggregateStats(target, source) {
-  for (const [testName, stats] of source) {
-    if (!target.has(testName)) {
-      target.set(testName, { pass: 0, fail: 0, total: 0 });
-    }
-    const aggregated = target.get(testName);
-    aggregated.pass += stats.pass;
-    aggregated.fail += stats.fail;
-    aggregated.total += stats.total;
-  }
-}
-
-/**
- * Fetch historical eval data from previous nightly workflow runs.
- * @returns {Map<string, Map<string, {pass: number, fail: number, total: number}>>}
- *   Outer map: run ID -> inner map
- *   Inner map: test name -> stats
- */
-function fetchHistoricalData() {
-  const historical = new Map();
-
-  try {
-    // List completed workflow runs
-    const listResult = spawnSync(
-      'gh',
-      [
-        'run',
-        'list',
-        '--workflow',
-        WORKFLOW_NAME,
-        '--status',
-        'completed',
-        '--limit',
-        String(MAX_HISTORICAL_RUNS),
-        '--json',
-        'databaseId,conclusion,headSha',
-      ],
-      { encoding: 'utf-8' },
-    );
-
-    if (listResult.status !== 0) {
-      console.error(
-        `Warning: Could not list workflow runs: ${listResult.stderr}`,
-      );
-      return historical;
-    }
-
-    const runs = JSON.parse(listResult.stdout);
-    if (!Array.isArray(runs) || runs.length === 0) {
-      console.error(`Warning: No historical runs found for ${WORKFLOW_NAME}`);
-      return historical;
-    }
-
-    // Create temporary directory for downloads
-    const tempDir = mkdtempSync(join(tmpdir(), 'llxprt-evals-'));
-
+    let parsed;
     try {
-      for (const run of runs) {
-        processHistoricalRun(historical, tempDir, run);
-      }
-    } finally {
-      // Clean up temp directory
-      try {
-        rmSync(tempDir, { recursive: true, force: true });
-      } catch (err) {
-        console.error(
-          `Warning: Could not clean up temp directory ${tempDir}: ${err.message}`,
-        );
-      }
+      parsed = parseReport(reportPath);
+    } catch (err) {
+      // An unexpected exception during parsing must fail closed rather than
+      // crash the script. Normal schema diagnostics are returned (not thrown)
+      // by the parser; this guards against unforeseen throws.
+      errors.push(
+        `Fatal error parsing ${reportPath}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      continue;
     }
-  } catch (err) {
-    console.error(`Warning: Could not fetch historical data: ${err.message}`);
+    aggregateStats(stats, parsed.stats);
+    errors.push(...parsed.errors);
+    usableAssertions += parsed.usableAssertions;
   }
 
-  return historical;
+  return {
+    valid: errors.length === 0 && usableAssertions > 0,
+    stats,
+    errors,
+    usableAssertions,
+  };
 }
 
 /**
@@ -252,6 +183,66 @@ function appendHistoricalPassRates(
       row.push('—');
     }
   }
+}
+
+/**
+ * Build the Markdown table header row (Test | [Run N]* | Current) and its
+ * alignment row, parameterized by the historical run ids.
+ * @param {string[]} historicalRuns
+ * @returns {{headers: string[], alignments: string[]}}
+ */
+function buildTableHeader(historicalRuns) {
+  const headers = ['Test'];
+  const alignments = [':---'];
+
+  if (historicalRuns.length > 0) {
+    for (const runId of historicalRuns) {
+      headers.push(`[Run ${runId}](${REPO_URL}/actions/runs/${runId})`);
+      alignments.push(':---:');
+    }
+  }
+  headers.push('**Current**');
+  alignments.push(':---:');
+  return { headers, alignments };
+}
+
+/**
+ * Build a single Markdown table row for a test name, including the historical
+ * pass-rate cells and the current-run pass rate.
+ * @param {string} testName
+ * @param {{pass: number, fail: number, total: number}} currentTestStats
+ * @param {string[]} historicalRuns
+ * @param {Map<string, Map<string, {pass: number, fail: number, total: number}>>} historicalStats
+ * @returns {string[]}
+ */
+function buildTestRow(
+  testName,
+  currentTestStats,
+  historicalRuns,
+  historicalStats,
+) {
+  const row = [];
+
+  // Test name with search link
+  const searchUrl = `${REPO_URL}/search?q=${encodeURIComponent(testName)}&type=code`;
+  row.push(`[${testName}](${searchUrl})`);
+
+  // Historical pass rates
+  if (historicalRuns.length > 0) {
+    appendHistoricalPassRates(row, historicalRuns, historicalStats, testName);
+  }
+
+  // Current run pass rate
+  if (currentTestStats && currentTestStats.total > 0) {
+    const passRate = (
+      (currentTestStats.pass / currentTestStats.total) *
+      100
+    ).toFixed(0);
+    row.push(`**${passRate}%**`);
+  } else {
+    row.push('**—**');
+  }
+  return row;
 }
 
 /**
@@ -286,17 +277,7 @@ function generateMarkdown(currentStats, historicalStats) {
 
   // Build table header
   const historicalRuns = Array.from(historicalStats.keys());
-  const headers = ['Test'];
-  const alignments = [':---'];
-
-  if (historicalRuns.length > 0) {
-    for (const runId of historicalRuns) {
-      headers.push(`[Run ${runId}](${REPO_URL}/actions/runs/${runId})`);
-      alignments.push(':---:');
-    }
-  }
-  headers.push('**Current**');
-  alignments.push(':---:');
+  const { headers, alignments } = buildTableHeader(historicalRuns);
 
   lines.push(`| ${headers.join(' | ')} |`);
   lines.push(`| ${alignments.join(' | ')} |`);
@@ -305,29 +286,12 @@ function generateMarkdown(currentStats, historicalStats) {
   const testNames = Array.from(currentStats.keys()).sort();
 
   for (const testName of testNames) {
-    const row = [];
-
-    // Test name with search link
-    const searchUrl = `${REPO_URL}/search?q=${encodeURIComponent(testName)}&type=code`;
-    row.push(`[${testName}](${searchUrl})`);
-
-    // Historical pass rates
-    if (historicalRuns.length > 0) {
-      appendHistoricalPassRates(row, historicalRuns, historicalStats, testName);
-    }
-
-    // Current run pass rate
-    const currentTestStats = currentStats.get(testName);
-    if (currentTestStats && currentTestStats.total > 0) {
-      const passRate = (
-        (currentTestStats.pass / currentTestStats.total) *
-        100
-      ).toFixed(0);
-      row.push(`**${passRate}%**`);
-    } else {
-      row.push('**—**');
-    }
-
+    const row = buildTestRow(
+      testName,
+      currentStats.get(testName),
+      historicalRuns,
+      historicalStats,
+    );
     lines.push(`| ${row.join(' | ')} |`);
   }
 
@@ -340,27 +304,75 @@ function generateMarkdown(currentStats, historicalStats) {
 }
 
 /**
- * Main entry point
+ * Run aggregation over an artifacts directory. Returns the exit code so the
+ * CLI entry point can propagate success/failure.
+ *
+ * @param {string} artifactsDir - Directory containing downloaded artifacts
+ * @param {number[]} expectedAttempts - expected matrix attempt identities
+ * @returns {number} 0 when usable results were aggregated, 1 otherwise
  */
-function main() {
-  const artifactsDir = process.argv[2] || '.';
+function aggregateArtifacts(artifactsDir, expectedAttempts) {
+  // First validate the DIRECT TOP-LEVEL artifact directories. The GitHub
+  // download-artifact action lays out one directory per artifact, so any extra
+  // or stray top-level directory must be rejected even when it carries no
+  // report. This runs before report discovery so a stray artifact is caught
+  // regardless of whether it happens to contain a report.json.
+  const topLevelErrors = validateTopLevelArtifactDirs(
+    artifactsDir,
+    expectedAttempts,
+  );
+  if (topLevelErrors.length > 0) {
+    for (const error of topLevelErrors) {
+      console.error(`Error: ${error}`);
+    }
+    console.error(
+      `Aggregation aborted: ${topLevelErrors.length} top-level artifact cardinality issue(s) under ${artifactsDir} (expected attempts ${JSON.stringify(expectedAttempts)}).`,
+    );
+    return 1;
+  }
 
-  // Find all report.json files in the artifacts directory
   const reports = findReports(artifactsDir);
 
   if (reports.length === 0) {
-    console.log('No reports found.');
-    return;
+    console.log(`No reports found under ${artifactsDir}.`);
+    return 1;
   }
 
-  // Aggregate current run stats
-  const currentStats = new Map();
-  for (const reportPath of reports) {
-    const reportStats = getStats(reportPath);
-    aggregateStats(currentStats, reportStats);
+  const cardinalityErrors = validateCardinality(reports, expectedAttempts);
+  if (cardinalityErrors.length > 0) {
+    for (const error of cardinalityErrors) {
+      console.error(`Error: ${error}`);
+    }
+    console.error(
+      `Aggregation aborted: ${cardinalityErrors.length} cardinality issue(s) under ${artifactsDir} (expected attempts ${JSON.stringify(expectedAttempts)}).`,
+    );
+    return 1;
   }
 
-  // Fetch historical data
+  const aggregated = aggregateReports(reports);
+
+  // Fail closed for ANY malformed current report: a single invalid report
+  // means result collection is broken and must not be masked by valid ones.
+  if (aggregated.errors.length > 0) {
+    for (const error of aggregated.errors) {
+      console.error(`Error: ${error}`);
+    }
+    console.error(
+      `Aggregation aborted: ${aggregated.errors.length} malformed current report issue(s) in ${reports.length} report(s) under ${artifactsDir}.`,
+    );
+    return 1;
+  }
+
+  // Defensive backstop: per-report strictness already fails closed on reports
+  // with zero usable assertions, so this branch should be unreachable in
+  // practice. It is retained as a guard against regressions in that logic.
+  if (aggregated.usableAssertions === 0 || aggregated.stats.size === 0) {
+    console.log(
+      `No usable assertion data found in ${reports.length} report(s) under ${artifactsDir}.`,
+    );
+    return 1;
+  }
+
   let historicalStats = new Map();
   try {
     historicalStats = fetchHistoricalData();
@@ -370,9 +382,29 @@ function main() {
     );
   }
 
-  // Generate and output markdown
-  const markdown = generateMarkdown(currentStats, historicalStats);
+  const markdown = generateMarkdown(aggregated.stats, historicalStats);
   console.log(markdown);
+  return 0;
 }
 
-main();
+function main() {
+  const artifactsDir = process.argv[2] || '.';
+  let expectedAttempts;
+  try {
+    expectedAttempts = resolveExpectedAttempts(process.argv);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  process.exitCode = aggregateArtifacts(artifactsDir, expectedAttempts);
+}
+
+const isMainModule =
+  typeof process !== 'undefined' &&
+  process.argv[1] !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isMainModule) {
+  main();
+}

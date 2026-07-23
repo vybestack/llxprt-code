@@ -253,6 +253,47 @@ function stripPeerFlagsFromLockfile() {
   }
 }
 
+/**
+ * Installs the Windows native launchers (cmd/ps1) for the CLI workspace. Both
+ * the Bun and npm postinstall branches run this at the same lifecycle point
+ * (after their own manager-specific steps) so the launchers are generated
+ * exactly once per install with the correct package layout. Errors during
+ * launcher generation are surfaced but never fatal: the package still installs.
+ */
+function installWindowsNativeLaunchers() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+  const cliInstaller = path.join(
+    repoRoot,
+    'packages',
+    'cli',
+    'scripts',
+    'install-native-launchers.cjs',
+  );
+  if (!fs.existsSync(cliInstaller)) {
+    return;
+  }
+  try {
+    const { installNativeLaunchers } = require(cliInstaller);
+    installNativeLaunchers({
+      packageRoot: path.join(repoRoot, 'packages', 'cli'),
+      log: console.log,
+    });
+  } catch (error) {
+    // Normalize non-Error rejections (string, number, null) so the message
+    // extraction never throws and postinstall stays non-fatal as documented.
+    const msg =
+      error && typeof error.message === 'string'
+        ? error.message
+        : String(error);
+    console.warn(
+      'Warning: Windows native launcher generation failed (non-fatal):',
+      msg,
+    );
+  }
+}
+
 // Under Bun, only the npm-specific actions below are skipped: Bun does not
 // consume package-lock.json (so peer-flag sanitization is irrelevant and must
 // not mutate it), and it resolves workspace packages through Bun's own install.
@@ -261,6 +302,7 @@ function stripPeerFlagsFromLockfile() {
 // symlinks so Bun resolves the live TypeScript source tree consistently.
 if (detectInstaller() === 'bun') {
   symlinkBunWorkspaceCopies();
+  installWindowsNativeLaunchers();
   process.exit(0);
 }
 
@@ -280,3 +322,5 @@ if (hasWorkspaceSources) {
     process.exit(1);
   }
 }
+
+installWindowsNativeLaunchers();

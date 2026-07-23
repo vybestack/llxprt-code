@@ -23,6 +23,7 @@ import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';
 import type { StructuredError } from '../../core/turn.js';
+import type { StreamLivenessListener } from '../../utils/streamIdleTimeout.js';
 
 export interface RuntimeProviderTool {
   type: 'function';
@@ -63,6 +64,15 @@ export interface RuntimeGenerateChatOptions {
   runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
   onProviderError?: (error: StructuredError) => void;
+  /**
+   * Optional provider-neutral transport-liveness listener (issue #2607).
+   * Providers that observe raw lifecycle evidence (e.g. an OpenAI Responses
+   * `response.created` SSE event) should invoke this to signal the connection
+   * is alive even before any semantic IContent is produced. The Turn-level
+   * first-response watchdog uses this to avoid false timeouts on healthy
+   * reasoning-model streams.
+   */
+  onStreamLiveness?: StreamLivenessListener;
   metadata?: Record<string, unknown>;
   resolved?: {
     model?: string;

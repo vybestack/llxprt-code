@@ -5,13 +5,23 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { ExecFileOptions } from 'node:child_process';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './secure-browser-launcher.js';
 
+type ExecFilePromise = (
+  command: string,
+  args: string[],
+  options: ExecFileOptions,
+) => Promise<{ stdout: string; stderr: string }>;
+
 // Create mock function using vi.hoisted
-const mockExecFile = vi.hoisted(() => vi.fn());
+const mockExecFile = vi.hoisted(() => vi.fn<ExecFilePromise>());
 
 // Mock modules
 vi.mock('node:child_process');
@@ -39,6 +49,16 @@ describe('secure-browser-launcher', () => {
       value: platform,
       configurable: true,
     });
+  }
+
+  function requireWindowsDirectory(
+    windowsDirectory: string | undefined,
+  ): asserts windowsDirectory is string {
+    if (windowsDirectory === undefined) {
+      throw new Error(
+        'Windows integration test requires SystemRoot or windir to locate System32\\where.exe.',
+      );
+    }
   }
 
   describe('URL validation', () => {
@@ -95,29 +115,92 @@ describe('secure-browser-launcher', () => {
   });
 
   describe('Command injection prevention', () => {
-    it('should prevent PowerShell command injection on Windows', async () => {
+    it('keeps the exact Windows URL in the environment and out of constant PowerShell source', async () => {
       setPlatform('win32');
+      const url =
+        'https://example.com/callback path?name=O\'Brien&quote="double quotes"&state=$(whoami);pipe|tick`&redirect=>out#fragment';
 
-      // The POC from the vulnerability report
-      const maliciousUrl =
-        "http://127.0.0.1:8080/?param=example#$(Invoke-Expression([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('Y2FsYy5leGU='))))";
+      await openBrowserSecurely(url);
 
-      await openBrowserSecurely(maliciousUrl);
-
-      // Verify that execFile was called (not exec) and the URL is passed safely
       expect(mockExecFile).toHaveBeenCalledWith(
         'powershell.exe',
         [
           '-NoProfile',
           '-NonInteractive',
-          '-WindowStyle',
-          'Hidden',
           '-Command',
-          `Start-Process '${maliciousUrl.replace(/'/g, "''")}'`,
+          '$browserUrl = $env:LLXPRT_BROWSER_URL; Remove-Item Env:LLXPRT_BROWSER_URL; Start-Process -FilePath $browserUrl',
         ],
-        expect.any(Object),
+        {
+          env: {
+            ...process.env,
+            SHELL: undefined,
+            LLXPRT_BROWSER_URL: url,
+          },
+          shell: false,
+          windowsHide: true,
+        },
       );
+
+      const args = mockExecFile.mock.calls[0]?.[1] ?? [];
+      expect(args.join(' ')).not.toContain(url);
+      expect(args.join(' ')).not.toContain('-WindowStyle');
+      expect(args.join(' ')).not.toContain('Hidden');
     });
+
+    it.runIf(process.platform === 'win32')(
+      'executes the production PowerShell launch with where.exe and remains usable afterward',
+      async () => {
+        const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
+        requireWindowsDirectory(windowsDirectory);
+        const harmlessTarget = join(windowsDirectory, 'System32', 'where.exe');
+        const directory = await mkdtemp(
+          join(tmpdir(), 'llxprt-browser-launch-'),
+        );
+        const sentinelPath = join(directory, 'parent-sentinel.txt');
+        const { execFile: executeFile } =
+          await vi.importActual<typeof import('node:child_process')>(
+            'node:child_process',
+          );
+
+        mockExecFile.mockImplementationOnce(async (command, args, options) => {
+          await new Promise<void>((resolve, reject) => {
+            executeFile(
+              command,
+              args,
+              {
+                ...options,
+                env: {
+                  ...options.env,
+                  LLXPRT_BROWSER_URL: harmlessTarget,
+                },
+              },
+              (error) => {
+                if (error) {
+                  reject(error);
+                  return;
+                }
+                resolve();
+              },
+            );
+          });
+          return { stdout: '', stderr: '' };
+        });
+
+        try {
+          setPlatform('win32');
+          await openBrowserSecurely('https://example.com/safe-integration');
+          expect(mockExecFile).toHaveBeenCalledTimes(1);
+          await writeFile(sentinelPath, 'parent remains usable', 'utf8');
+
+          await expect(readFile(sentinelPath, 'utf8')).resolves.toBe(
+            'parent remains usable',
+          );
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      },
+      10_000,
+    );
 
     it('should handle URLs with special shell characters safely', async () => {
       setPlatform('darwin');
@@ -141,28 +224,6 @@ describe('secure-browser-launcher', () => {
         );
       }
     });
-
-    it('should properly escape single quotes in URLs on Windows', async () => {
-      setPlatform('win32');
-
-      const urlWithSingleQuotes =
-        "http://example.com/path?name=O'Brien&test='value'";
-      await openBrowserSecurely(urlWithSingleQuotes);
-
-      // Verify that single quotes are escaped by doubling them
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-WindowStyle',
-          'Hidden',
-          '-Command',
-          `Start-Process 'http://example.com/path?name=O''Brien&test=''value'''`,
-        ],
-        expect.any(Object),
-      );
-    });
   });
 
   describe('Platform-specific behavior', () => {
@@ -172,19 +233,6 @@ describe('secure-browser-launcher', () => {
       expect(mockExecFile).toHaveBeenCalledWith(
         'open',
         ['https://example.com'],
-        expect.any(Object),
-      );
-    });
-
-    it('should use PowerShell on Windows', async () => {
-      setPlatform('win32');
-      await openBrowserSecurely('https://example.com');
-      expect(mockExecFile).toHaveBeenCalledWith(
-        'powershell.exe',
-        expect.arrayContaining([
-          '-Command',
-          `Start-Process 'https://example.com'`,
-        ]),
         expect.any(Object),
       );
     });

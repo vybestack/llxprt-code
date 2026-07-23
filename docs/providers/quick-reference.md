@@ -252,9 +252,14 @@ Guidance:
 
 ### Kimi (Moonshot AI)
 
-Kimi offers the K2-family models with deep reasoning and multi-step tool orchestration.
+Kimi ships the K3 frontier model with deep reasoning, multi-step tool orchestration, and native multimodal vision. There are two ways to reach it:
 
-#### Using API Key
+- **`kimi-for-coding`** — the subscription-served model (Kimi Code subscription). Use the `kimi` provider alias, which points at the `/coding/v1` endpoint. Thinking is always on.
+- **`kimi-k3`** — the pay-per-token model on the raw Moonshot API (`https://api.moonshot.ai/v1`). Same K3 capabilities, billed per token.
+
+> **Note:** The `kimi` alias's `defaultModel` is `kimi-for-coding` (the subscription path). To use the pay-per-token `kimi-k3` on the Moonshot API, point the alias at the raw endpoint with `/baseurl https://api.moonshot.ai/v1` and `/model kimi-k3`.
+
+#### Using the subscription (kimi-for-coding)
 
 ```bash
 /provider kimi
@@ -262,50 +267,69 @@ Kimi offers the K2-family models with deep reasoning and multi-step tool orchest
 /model kimi-for-coding
 ```
 
-#### Model geometry & recommended settings (Kimi)
-
-- Context: 262,144 tokens
-- Max output: 32,768 tokens
-- Architecture: Trillion-parameter MoE (32B active)
-- Strengths: Deep reasoning, 200-300 sequential tool calls, native thinking mode
+#### Using the Moonshot API pay-per-token (kimi-k3)
 
 ```bash
-/set context-limit 262144
-/set modelparam max_tokens 32768
+/provider kimi
+/baseurl https://api.moonshot.ai/v1
+/keyfile ~/.moonshot_key
+/model kimi-k3
+```
+
+#### Model geometry & recommended settings (Kimi K3)
+
+- Context: 1,000,000 tokens (1M)
+- Max output: 131,072 tokens (default; up to 1,048,576 max)
+- Architecture: Frontier MoE with always-on thinking
+- Strengths: Deep reasoning, 200-300 sequential tool calls, native vision (images **and** video)
+- Reasoning effort: `low` / `high` / `max` (default `max`). **There is no `medium` for K3.** Thinking is always on and cannot be disabled.
+- Vision: Native, but requires base64 or `ms://<file-id>` inputs — public image URLs are not accepted.
+
+```bash
+/set context-limit 1000000
+/set modelparam max_tokens 131072
+/set reasoning.effort max
 /set reasoning.enabled true
 /set reasoning.includeInResponse true
 ```
 
-**Profile JSON:**
+**Profile JSON (pay-per-token kimi-k3 on the Moonshot API):**
 
 ```json
 {
   "version": 1,
   "provider": "kimi",
-  "model": "kimi-for-coding",
-  "modelParams": { "max_tokens": 32768 },
+  "model": "kimi-k3",
+  "modelParams": { "max_tokens": 131072 },
   "ephemeralSettings": {
-    "context-limit": 262144,
+    "context-limit": 1000000,
+    "base-url": "https://api.moonshot.ai/v1",
+    "reasoning.effort": "max",
     "reasoning.enabled": true,
     "reasoning.includeInResponse": true
   }
 }
 ```
 
-#### Kimi K2 via Synthetic/Chutes
+#### Pricing (Kimi K3)
 
-Kimi K2 is also available through third-party providers:
+- **Subscription (`kimi-for-coding`)** — flat-rate Kimi Code subscription plan; usage is covered by the subscription.
+- **Pay-per-token (`kimi-k3` on the Moonshot API)** — $0.30 / 1M cached input tokens, $3.00 / 1M non-cached input tokens, $15.00 / 1M output tokens (flat).
+
+#### Kimi K3 via Synthetic/Chutes
+
+Kimi K3 is also available through third-party providers:
 
 ```bash
 # Via Synthetic
 /provider synthetic
 /keyfile ~/.synthetic_key
-/model hf:moonshotai/Kimi-K2.7-Code
+/model hf:moonshotai/Kimi-K3
 
 # Via Chutes
 /provider chutes-ai
 /keyfile ~/.chutes_key
-/model moonshotai/Kimi-K2.7-Code
+/model moonshotai/Kimi-K3
 ```
 
 ### Synthetic (Hugging Face Models)
@@ -318,7 +342,7 @@ Kimi K2 is also available through third-party providers:
 
 #### Model geometry & recommended settings (Synthetic)
 
-Popular models: `hf:zai-org/GLM-4.7`, `hf:moonshotai/Kimi-K2.7-Code`
+Popular models: `hf:zai-org/GLM-4.7`, `hf:moonshotai/Kimi-K3`
 
 Guidance:
 

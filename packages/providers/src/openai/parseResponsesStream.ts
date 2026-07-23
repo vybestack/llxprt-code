@@ -12,6 +12,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
@@ -108,6 +109,14 @@ export interface ParseResponsesStreamOptions {
    * Defaults to true.
    */
   includeThinkingInResponse?: boolean;
+  /**
+   * Optional provider-neutral liveness listener (issue #2607). Invoked for
+   * successfully parsed lifecycle SSE events (e.g. response.created,
+   * response.in_progress) that evidence transport/provider activation even
+   * when they yield no semantic IContent. Malformed data and [DONE] do not
+   * count. Listener failures are swallowed so parsing is never broken.
+   */
+  onStreamLiveness?: StreamLivenessListener;
 }
 
 /**
@@ -674,6 +683,25 @@ function* dispatchEventCases(
 }
 
 /**
+ * Notifies the optional liveness listener for any successfully parsed SSE
+ * event. Every successfully JSON-parsed event proves the transport is alive.
+ * Listener failures are swallowed so parsing is never broken.
+ */
+function notifyStreamLiveness(
+  listener: StreamLivenessListener | undefined,
+  event: ResponsesEvent,
+): void {
+  if (listener === undefined) {
+    return;
+  }
+  try {
+    listener({ sourceEvent: event.type, sseObserved: true });
+  } catch {
+    // A throwing listener must never break stream parsing.
+  }
+}
+
+/**
  * Dispatch a single SSE event to the appropriate handler.
  */
 function* dispatchEvent(
@@ -718,6 +746,7 @@ async function* tryDispatchEvent(
   hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
   lastLoggedType: string | undefined,
+  onStreamLiveness: StreamLivenessListener | undefined,
 ): AsyncGenerator<IContent, DispatchResult> {
   let event: ResponsesEvent;
   try {
@@ -731,6 +760,8 @@ async function* tryDispatchEvent(
       lastLoggedType,
     };
   }
+
+  notifyStreamLiveness(onStreamLiveness, event);
 
   return yield* dispatchEvent(
     event,
@@ -748,7 +779,7 @@ export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
   options: ParseResponsesStreamOptions = {},
 ): AsyncIterableIterator<IContent> {
-  const { includeThinkingInResponse = true } = options;
+  const { includeThinkingInResponse = true, onStreamLiveness } = options;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -795,6 +826,7 @@ export async function* parseResponsesStream(
           hasEmittedVisibleThinking,
           emittedThoughts,
           lastLoggedType,
+          onStreamLiveness,
         );
         hasEmittedVisibleThinking = dispatchState.hasEmittedVisibleThinking;
         reasoningText = dispatchState.reasoningText;

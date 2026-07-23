@@ -149,6 +149,12 @@ export const CONFIG_FIELD_CLASSIFICATION: readonly ClassificationEntry[] = [
     rationale: 'Drives the terminal idle-timeout stream event (REQ-003).',
   },
   {
+    field: 'streamFirstResponseTimeoutMs',
+    classification: 'typed',
+    rationale:
+      'Drives the first-response watchdog (issue #2607); a CLI-behavior setting, not a model param.',
+  },
+  {
     field: 'toolOutputLimits',
     classification: 'typed',
     rationale: 'Maps to ConfigParameters.truncateToolOutputThreshold/Lines.',

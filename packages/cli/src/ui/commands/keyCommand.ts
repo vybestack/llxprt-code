@@ -35,6 +35,69 @@ import { firstNonEmptyString } from '../../utils/coalesce.js';
 const SUBCOMMANDS = ['save', 'load', 'show', 'list', 'delete'] as const;
 type Subcommand = (typeof SUBCOMMANDS)[number];
 
+// ─── Key-Name Completion Cache (issue #2620) ────────────────────────────────
+//
+// Issue #2620: `/key load <name>` triggered an OS keychain enumeration on every
+// keystroke because keyNameCompleter called listKeys() with no caching. Key
+// names change rarely, so a short TTL cache dramatically reduces keyring reads
+// (and thus macOS Keychain authorization prompts). The cache is invalidated
+// only by the mutating /key subcommands (save, delete) AFTER a successful
+// mutation; load does not change the stored key set and does not invalidate.
+
+const KEY_NAME_CACHE_TTL_MS = 5000;
+
+interface KeyNameCacheState {
+  names: readonly string[];
+  expiresAt: number;
+}
+
+let keyNameCache: KeyNameCacheState | null = null;
+// Coalesces concurrent cache misses onto a single in-flight listKeys() call.
+let keyNameInFlight: Promise<readonly string[]> | null = null;
+// Bumped on every invalidation so an in-flight read that started before a
+// mutation can be discarded instead of repopulating the cache with stale names.
+let keyNameGeneration = 0;
+
+/**
+ * Invalidate the key-name completion cache. Called by mutating /key
+ * subcommands so subsequent autocompletion reflects the latest keyring state.
+ */
+export function invalidateKeyCompletionCache(): void {
+  keyNameGeneration += 1;
+  keyNameCache = null;
+  // An in-flight result from before the mutation is now stale.
+  keyNameInFlight = null;
+}
+
+async function getCachedKeyNames(): Promise<readonly string[]> {
+  const now = Date.now();
+  if (keyNameCache && keyNameCache.expiresAt > now) {
+    return keyNameCache.names;
+  }
+  // Cache miss — coalesce concurrent callers onto a single in-flight promise.
+  if (keyNameInFlight) {
+    return keyNameInFlight;
+  }
+  const startGeneration = keyNameGeneration;
+  const pending = createProviderKeyStorage().listKeys();
+  keyNameInFlight = pending;
+  try {
+    const names = await pending;
+    // Only cache if no mutation invalidated during the read; compute the
+    // expiry AFTER resolution so a slow keychain read still gets a full TTL.
+    if (keyNameGeneration === startGeneration) {
+      keyNameCache = { names, expiresAt: Date.now() + KEY_NAME_CACHE_TTL_MS };
+    }
+    return names;
+  } finally {
+    // Only clear our in-flight slot if we still own it; a concurrent
+    // invalidation may have already nulled it.
+    if (keyNameInFlight === pending) {
+      keyNameInFlight = null;
+    }
+  }
+}
+
 // ─── Error Formatting (R18.1) ────────────────────────────────────────────────
 
 /**
@@ -133,6 +196,9 @@ async function handleSave(
   // Save the key (R13.1)
   try {
     await storage.saveKey(name, apiKey);
+    // Invalidate only after a successful mutation so failed/declined paths
+    // don't trigger needless future keychain prompts.
+    invalidateKeyCompletionCache();
     return {
       type: 'message',
       messageType: 'info',
@@ -203,6 +269,9 @@ async function handleLoad(
     if (extendedContext.checkPaymentModeChange) {
       setTimeout(extendedContext.checkPaymentModeChange, 100);
     }
+
+    // Note: load only reads/activates a key — it does NOT change the stored
+    // key-name set, so the completion cache is left intact.
 
     return {
       type: 'message',
@@ -384,6 +453,9 @@ async function handleDelete(
 
     // Delete (R17.1)
     await storage.deleteKey(name);
+    // Invalidate only after a successful mutation so failed/declined paths
+    // don't trigger needless future keychain prompts.
+    invalidateKeyCompletionCache();
     return {
       type: 'message',
       messageType: 'info',
@@ -411,8 +483,7 @@ async function handleDelete(
  */
 const keyNameCompleter: CompleterFn = async (_ctx, partial) => {
   try {
-    // @plan:PLAN-20250214-CREDPROXY.P33
-    const names = await createProviderKeyStorage().listKeys();
+    const names = await getCachedKeyNames();
     return names
       .filter((name) => name.startsWith(partial))
       .map((name) => ({ value: name }));

@@ -9,7 +9,7 @@
   "startCommand": [
     "bash",
     "-c",
-    "cd /Users/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/fakeproject && exec node /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/bin/llxprt.cjs --profile-load chutesminimax --yolo"
+    "cd /Users/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/fakeproject && exec bun /Users/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/index.ts --profile-load chutesminimax --yolo"
   ],
   "yolo": true,
   "steps": [

@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execFile } from 'node:child_process';
+import { execFile, type ExecFileOptions } from 'node:child_process';
 import { promisify } from 'node:util';
 import { platform } from 'node:os';
 import { URL } from 'node:url';
 
 const execFileAsync = promisify(execFile);
+const WINDOWS_BROWSER_URL_ENV_VAR = 'LLXPRT_BROWSER_URL';
 
 /**
  * Validates that a URL is safe to open in a browser.
@@ -44,79 +45,84 @@ function validateUrl(url: string): void {
   }
 }
 
+interface BrowserLaunchPlan {
+  readonly command: string;
+  readonly args: string[];
+  readonly options: ExecFileOptions;
+}
+
+function createBrowserLaunchPlan(
+  platformName: NodeJS.Platform,
+  url: string,
+): BrowserLaunchPlan {
+  const env = {
+    ...process.env,
+    SHELL: undefined,
+  };
+
+  switch (platformName) {
+    case 'darwin':
+      return {
+        command: 'open',
+        args: [url],
+        options: { env, shell: false },
+      };
+    case 'win32':
+      return {
+        command: 'powershell.exe',
+        args: [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `$browserUrl = $env:${WINDOWS_BROWSER_URL_ENV_VAR}; Remove-Item Env:${WINDOWS_BROWSER_URL_ENV_VAR}; Start-Process -FilePath $browserUrl`,
+        ],
+        options: {
+          env: { ...env, [WINDOWS_BROWSER_URL_ENV_VAR]: url },
+          shell: false,
+          windowsHide: true,
+        },
+      };
+    case 'linux':
+    case 'freebsd':
+    case 'openbsd':
+      return {
+        command: 'xdg-open',
+        args: [url],
+        options: { env, shell: false },
+      };
+    default:
+      throw new Error(`Unsupported platform: ${platformName}`);
+  }
+}
+
 /**
  * Opens a URL in the default browser using platform-specific commands.
  * This implementation avoids shell injection vulnerabilities by:
  * 1. Validating the URL to ensure it's HTTP/HTTPS only
  * 2. Using execFile instead of exec to avoid shell interpretation
- * 3. Passing the URL as an argument rather than constructing a command string
+ * 3. Keeping URL data out of PowerShell command source
  *
  * @param url The URL to open
  * @throws Error if the URL is invalid or if opening the browser fails
  */
 export async function openBrowserSecurely(url: string): Promise<void> {
-  // Validate the URL first
   validateUrl(url);
 
   const platformName = platform();
-  let command: string;
-  let args: string[];
-
-  switch (platformName) {
-    case 'darwin':
-      // macOS
-      command = 'open';
-      args = [url];
-      break;
-
-    case 'win32':
-      // Windows - use PowerShell with Start-Process
-      // This avoids the cmd.exe shell which is vulnerable to injection
-      command = 'powershell.exe';
-      args = [
-        '-NoProfile',
-        '-NonInteractive',
-        '-WindowStyle',
-        'Hidden',
-        '-Command',
-        `Start-Process '${url.replace(/'/g, "''")}'`,
-      ];
-      break;
-
-    case 'linux':
-    case 'freebsd':
-    case 'openbsd':
-      // Linux and BSD variants
-      // Try xdg-open first, fall back to other options
-      command = 'xdg-open';
-      args = [url];
-      break;
-
-    default:
-      throw new Error(`Unsupported platform: ${platformName}`);
-  }
-
-  const options: Record<string, unknown> = {
-    // Don't inherit parent's environment to avoid potential issues
-    env: {
-      ...process.env,
-      // Ensure we're not in a shell that might interpret special characters
-      SHELL: undefined,
-    },
-    // Detach the browser process so it doesn't block
-    detached: true,
-    stdio: 'ignore',
-  };
+  const launchPlan = createBrowserLaunchPlan(platformName, url);
 
   try {
-    await execFileAsync(command, args, options);
+    await execFileAsync(
+      launchPlan.command,
+      launchPlan.args,
+      launchPlan.options,
+    );
   } catch (error) {
-    // For Linux, try fallback commands if xdg-open fails
     if (
       (platformName === 'linux' ||
         platformName === 'freebsd' ||
         platformName === 'openbsd') &&
-      command === 'xdg-open'
+      launchPlan.command === 'xdg-open'
     ) {
       const fallbackCommands = [
         'gnome-open',
@@ -129,14 +135,13 @@ export async function openBrowserSecurely(url: string): Promise<void> {
       const succeeded = await tryFallbackBrowserCommands(
         fallbackCommands,
         url,
-        options,
+        launchPlan.options,
       );
       if (succeeded) {
         return;
       }
     }
 
-    // Re-throw the error if all attempts failed
     throw new Error(
       `Failed to open browser: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
@@ -197,9 +202,9 @@ export function shouldLaunchBrowser(
 }
 
 async function tryFallbackBrowserCommands(
-  fallbackCommands: string[],
+  fallbackCommands: readonly string[],
   url: string,
-  options: Record<string, unknown>,
+  options: ExecFileOptions,
 ): Promise<boolean> {
   for (const fallbackCommand of fallbackCommands) {
     try {

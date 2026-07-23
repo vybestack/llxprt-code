@@ -13,12 +13,13 @@ import { tmpdir } from 'node:os';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
-const launcher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt.cjs');
+const launcher = join(repoRoot, 'packages', 'cli', 'bin', 'llxprt');
 
 // spawnSync blocks the event loop, so Vitest's per-test timeout cannot
 // interrupt a hung child; the spawnSync `timeout` below is the real guard. Keep
-// it generous — the Node launcher re-execs the CLI under Bun, so a cold spawn on
-// a loaded CI runner takes seconds — while still bounding a genuine hang.
+// it generous — the POSIX launcher execs Bun on the TypeScript source, so a
+// cold spawn on a loaded CI runner takes seconds — while still bounding a
+// genuine hang.
 const SPAWN_KILL_TIMEOUT_MS = 120_000;
 
 // Vitest per-test budget. Kept above SPAWN_KILL_TIMEOUT_MS so the spawnSync
@@ -37,13 +38,17 @@ function runLauncherVersion(env: NodeJS.ProcessEnv): {
   stdout: string;
   stderr: string;
 } {
-  const result = spawnSync(process.execPath, [launcher, '--version'], {
+  // The launcher (issue #2603) has a valid #!/bin/sh shebang, so it is
+  // directly execve-compatible. Running it directly exercises the real
+  // installed-command path. The launcher resolves the package-bundled Bun and
+  // execs index.ts.
+  const result = spawnSync(launcher, ['--version'], {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 1024 * 1024,
     env,
     // Kill a hung child here (spawnSync blocks the event loop, so Vitest's
-    // per-test timeout cannot). Generous enough to absorb a cold Bun re-exec on
+    // per-test timeout cannot). Generous enough to absorb a cold Bun exec on
     // a loaded CI runner, tight enough to bound a genuine hang.
     timeout: SPAWN_KILL_TIMEOUT_MS,
   });
@@ -70,7 +75,7 @@ describe('CLI entry smoke guard (issue #2435)', () => {
   // Regression guard for https://github.com/vybestack/llxprt-code/issues/2435.
   //
   // The smoke-test.yml workflow does a fresh checkout + `npm ci` (no build, no
-  // generate step), then runs `node ./packages/cli/bin/llxprt.cjs --version`.
+  // generate step), then runs the launcher `--version`.
   // Previously this crashed at module-load time because AboutBox.tsx and
   // bugCommand.ts had a hard static ESM import of a gitignored, build-generated
   // `git-commit.ts`. With the resilient loader, the CLI must print its version

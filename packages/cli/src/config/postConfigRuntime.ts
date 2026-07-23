@@ -6,6 +6,8 @@
 
 import {
   ApprovalMode,
+  STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+  STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
@@ -84,33 +86,73 @@ type ApplyToolPoliciesInput = Pick<
 
 // ─── Sub-functions ────────────────────────────────────────────────────────────
 
+// ─── Stream timeout settings application ───────────────────────────────────
+
+/**
+ * Profile/runtime settings input that may carry either the camelCase Settings
+ * key or the canonical hyphenated ephemeral key. The hyphenated keys are NOT
+ * part of the public JSON Settings schema (they would falsely advertise
+ * themselves as JSON properties); they are modeled locally here because
+ * profiles and runtime code historically set them as ephemerals directly.
+ */
+export type StreamTimeoutSettingsInput = Settings & {
+  readonly 'stream-idle-timeout-ms'?: unknown;
+  readonly 'stream-first-response-timeout-ms'?: unknown;
+};
+
+/**
+ * Generic applicator for a camel/hyphenated timeout setting pair. Reads both
+ * the camelCase Settings key and the canonical hyphenated ephemeral key from
+ * the supplied settings object and pushes whichever are defined onto Config
+ * ephemerals. The hyphenated key is applied second so it wins the resolver's
+ * priority order (canonical before alias).
+ */
+function applyStreamTimeoutSettingPair(
+  config: Pick<Config, 'setEphemeralSetting'>,
+  settings: StreamTimeoutSettingsInput,
+  camelKey: keyof Settings,
+  canonicalKey: 'stream-idle-timeout-ms' | 'stream-first-response-timeout-ms',
+): void {
+  const camelValue = settings[camelKey];
+  if (camelValue !== undefined) {
+    config.setEphemeralSetting(camelKey, camelValue);
+  }
+  const canonicalValue = settings[canonicalKey];
+  if (canonicalValue !== undefined) {
+    config.setEphemeralSetting(canonicalKey, canonicalValue);
+  }
+}
+
 export function applyStreamIdleTimeoutSettings(
   config: Pick<Config, 'setEphemeralSetting'>,
-  settings: Settings,
+  settings: StreamTimeoutSettingsInput,
 ): void {
-  const camelCaseValue = settings.streamIdleTimeoutMs;
-  if (camelCaseValue !== undefined) {
-    config.setEphemeralSetting(
-      STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
-      camelCaseValue,
-    );
-  }
-  const settingsRecord = settings as Record<string, unknown>;
-  const hyphenatedValue = settingsRecord[STREAM_IDLE_TIMEOUT_SETTING_KEY];
-  if (hyphenatedValue !== undefined) {
-    config.setEphemeralSetting(
-      STREAM_IDLE_TIMEOUT_SETTING_KEY,
-      hyphenatedValue,
-    );
-  }
+  applyStreamTimeoutSettingPair(
+    config,
+    settings,
+    STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
+    STREAM_IDLE_TIMEOUT_SETTING_KEY,
+  );
+}
+
+export function applyStreamFirstResponseTimeoutSettings(
+  config: Pick<Config, 'setEphemeralSetting'>,
+  settings: StreamTimeoutSettingsInput,
+): void {
+  applyStreamTimeoutSettingPair(
+    config,
+    settings,
+    STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
+    STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
+  );
 }
 
 interface ProfileEphemeralSettingsInput {
   readonly config: Pick<Config, 'setEphemeralSetting'>;
   readonly bootstrapArgs: Pick<BootstrapProfileArgs, 'profileJson'>;
   readonly argv: Pick<CliArgs, 'provider'>;
-  readonly settings: Settings;
-  readonly profileSettingsWithTools: Settings;
+  readonly settings: StreamTimeoutSettingsInput;
+  readonly profileSettingsWithTools: StreamTimeoutSettingsInput;
   readonly profileLoadResult: Pick<ProfileLoadResult, 'profileToLoad'>;
 }
 
@@ -128,6 +170,7 @@ export function applyGlobalAndProfileEphemeralSettings(
 
   // Global settings must apply even when --provider suppresses profile values.
   applyStreamIdleTimeoutSettings(config, settings);
+  applyStreamFirstResponseTimeoutSettings(config, settings);
 
   const profileToLoad = profileLoadResult.profileToLoad;
   const shouldApplyProfileSettings =
@@ -138,6 +181,7 @@ export function applyGlobalAndProfileEphemeralSettings(
   }
 
   applyStreamIdleTimeoutSettings(config, profileSettingsWithTools);
+  applyStreamFirstResponseTimeoutSettings(config, profileSettingsWithTools);
 
   const ephemeralKeys = [
     'auth-key',

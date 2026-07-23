@@ -43,6 +43,12 @@ type GeneratedSettingsSchema = {
       minimum?: number;
       maximum?: number;
     };
+    streamFirstResponseTimeoutMs?: {
+      type?: string;
+      default?: number;
+      minimum?: number;
+      maximum?: number;
+    };
   };
   $defs: {
     ModelConfig: {
@@ -98,6 +104,7 @@ describe('SettingsSchema', () => {
         'allowPtyThemeOverride',
         'ptyScrollbackLimit',
         'streamIdleTimeoutMs',
+        'streamFirstResponseTimeoutMs',
       ];
 
       expectedSettings.forEach((setting) => {
@@ -424,6 +431,78 @@ describe('SettingsSchema', () => {
         expect(setting).toBeDefined();
         expect(setting?.type).toBe('number');
         expect(setting?.default).toBe(0);
+        expect(setting?.minimum).toBeUndefined();
+        expect(setting?.maximum).toBeUndefined();
+      });
+    });
+
+    describe('streamFirstResponseTimeoutMs', () => {
+      it('should be defined as a top-level setting in SETTINGS_SCHEMA', () => {
+        expect(SETTINGS_SCHEMA.streamFirstResponseTimeoutMs).toBeDefined();
+      });
+
+      it('should be a number type in SETTINGS_SCHEMA', () => {
+        expect(SETTINGS_SCHEMA.streamFirstResponseTimeoutMs.type).toBe(
+          'number',
+        );
+      });
+
+      it('should not define minimum or maximum constraints (permissive finite-number intent)', () => {
+        expect('minimum' in SETTINGS_SCHEMA.streamFirstResponseTimeoutMs).toBe(
+          false,
+        );
+        expect('maximum' in SETTINGS_SCHEMA.streamFirstResponseTimeoutMs).toBe(
+          false,
+        );
+      });
+
+      it('should keep runtime default undefined so settings merge does not materialize an unconfigured ephemeral', () => {
+        expect(
+          SETTINGS_SCHEMA.streamFirstResponseTimeoutMs.default,
+        ).toBeUndefined();
+      });
+
+      it('should advertise a documented/schema default of 300000 via documentedDefault', () => {
+        expect(
+          SETTINGS_SCHEMA.streamFirstResponseTimeoutMs.documentedDefault,
+        ).toBe(300000);
+      });
+
+      it('should accept a positive integer value via validation', () => {
+        const result = validateSettings({ streamFirstResponseTimeoutMs: 5000 });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept zero (watchdog disabled) via validation', () => {
+        const result = validateSettings({ streamFirstResponseTimeoutMs: 0 });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept a negative value via validation (no minimum constraint)', () => {
+        const result = validateSettings({ streamFirstResponseTimeoutMs: -1 });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept a fractional value via validation (no multipleOf constraint)', () => {
+        const result = validateSettings({
+          streamFirstResponseTimeoutMs: 0.5,
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept the documented default 300000 via validation (explicit setting still applied)', () => {
+        const result = validateSettings({
+          streamFirstResponseTimeoutMs: 300000,
+        });
+        expect(result.success).toBe(true);
+      });
+
+      it('should advertise default 300000 in the generated settings.schema.json (documentedDefault precedence over undefined runtime default)', () => {
+        const setting =
+          parsedGeneratedSchema.properties.streamFirstResponseTimeoutMs;
+        expect(setting).toBeDefined();
+        expect(setting?.type).toBe('number');
+        expect(setting?.default).toBe(300000);
         expect(setting?.minimum).toBeUndefined();
         expect(setting?.maximum).toBeUndefined();
       });

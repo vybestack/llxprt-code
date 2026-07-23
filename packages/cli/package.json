@@ -11,12 +11,13 @@
   "main": "index.ts",
   "types": "index.ts",
   "bin": {
-    "llxprt": "bin/llxprt.cjs"
+    "llxprt": "bin/llxprt"
   },
   "scripts": {
     "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js",
     "start": "bun index.ts",
     "debug": "bun --inspect-brk index.ts",
+    "postinstall": "node scripts/install-native-launchers.cjs",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
@@ -32,6 +33,7 @@
     "bin",
     "index.ts",
     "src",
+    "scripts/install-native-launchers.cjs",
     "README.md",
     "LICENSE",
     "!**/*.test.ts",

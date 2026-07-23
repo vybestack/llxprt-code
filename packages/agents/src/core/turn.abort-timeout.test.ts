@@ -362,7 +362,7 @@ describe('Turn run - abort and idle timeout', () => {
           value: {
             error: {
               message:
-                'Stream idle timeout: no response received within the allowed time.',
+                'Inter-chunk stream-idle timeout: no response received within the allowed time (threshold 30000ms) from stream-idle-timeout-ms.',
               status: undefined,
             },
           },

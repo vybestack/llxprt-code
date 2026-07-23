@@ -92,11 +92,34 @@ describe('cli-args helpers', () => {
     setEnv('LLXPRT_TEST_PROFILE', ' profile-name ');
 
     expect(
-      getCommandAndArgs('/packages/cli/bin/llxprt.cjs', ['--flag']),
+      getCommandAndArgs('/packages/cli/index.ts', ['--flag']),
     ).toStrictEqual({
       command: 'llxprt',
       initialArgs: ['--flag'],
     });
     expect(getProfileName()).toBe('profile-name');
+  });
+
+  it('uses bun and the TypeScript entry path when installed CLI is not requested', () => {
+    setEnv('INTEGRATION_TEST_USE_INSTALLED_LLXPRT', 'false');
+
+    expect(
+      getCommandAndArgs('/packages/cli/index.ts', ['--flag']),
+    ).toStrictEqual({
+      command: 'bun',
+      initialArgs: ['/packages/cli/index.ts', '--flag'],
+    });
+  });
+
+  it('uses bun and the TypeScript entry path when installed CLI env is unset', () => {
+    // Unset the environment variable entirely (not just set to false).
+    delete process.env.INTEGRATION_TEST_USE_INSTALLED_LLXPRT;
+
+    expect(
+      getCommandAndArgs('/packages/cli/index.ts', ['--flag']),
+    ).toStrictEqual({
+      command: 'bun',
+      initialArgs: ['/packages/cli/index.ts', '--flag'],
+    });
   });
 });

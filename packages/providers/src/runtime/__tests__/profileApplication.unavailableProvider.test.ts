@@ -85,9 +85,17 @@ describe('selectAvailableProvider (issue #2479)', () => {
     expect(result.requestedProvider).toBeNull();
   });
 
-  it('keeps the silent fallback for empty-string provider', () => {
+  it('keeps the silent fallback for whitespace-only provider', () => {
     const result = selectAvailableProvider('   ', ['openai']);
     expect(result.providerName).toBe('openai');
+    expect(result.didFallback).toBe(false);
+    expect(result.requestedProvider).toBeNull();
+  });
+
+  it('keeps the silent fallback for empty-string provider', () => {
+    const result = selectAvailableProvider('', ['openai']);
+    expect(result.providerName).toBe('openai');
+    expect(result.didFallback).toBe(false);
     expect(result.requestedProvider).toBeNull();
   });
 

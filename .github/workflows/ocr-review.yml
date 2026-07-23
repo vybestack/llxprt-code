@@ -42,6 +42,8 @@ env:
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
+  OCR_VERSION: '1.7.9'
+  OCR_CONCURRENCY: '2'
 
 jobs:
   code-review:
@@ -214,7 +216,7 @@ jobs:
             exit 0
           fi
           OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          if ! npm install --prefix "$OCR_PREFIX" --ignore-scripts @alibaba-group/open-code-review@1.6.1 2>> ocr-stderr.log; then
+          if ! npm install --prefix "$OCR_PREFIX" --ignore-scripts "@alibaba-group/open-code-review@${OCR_VERSION}" 2>> ocr-stderr.log; then
             echo "::warning::OpenCodeReview installation failed."
             echo "70" > ocr-exit-code.txt
             mark_infrastructure_failure "install" "OpenCodeReview installation failed"
@@ -509,6 +511,7 @@ jobs:
             --format json \
             --audience agent \
             --timeout 30 \
+            --concurrency "$OCR_CONCURRENCY" \
             > ocr-stdout.raw 2> ocr-stderr.log
           status=$?
           if ! cp ocr-stdout.raw ocr-result.json; then
@@ -516,7 +519,15 @@ jobs:
           fi
           echo "$status" > ocr-exit-code.txt
           if [ "$status" -ne 0 ]; then
-            if grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed" ocr-stderr.log; then
+            if grep -Eqi "429|rate limit" ocr-stderr.log; then
+              mark_infrastructure_failure "review" "OCR review failed: HTTP 429 rate limit"
+            elif grep -Eqi "529|overloaded" ocr-stderr.log; then
+              mark_infrastructure_failure "review" "OCR review failed: HTTP 529 provider overloaded"
+            elif grep -Eqi "401|403|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key" ocr-stderr.log; then
+              mark_infrastructure_failure "review" "OCR review failed: authentication or configuration error"
+            elif grep -Eqi "timeout|timed out" ocr-stderr.log; then
+              mark_infrastructure_failure "review" "OCR review failed: timeout"
+            elif grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed" ocr-stderr.log; then
               mark_infrastructure_failure "review" "all OCR per-file reviews failed; likely LLM provider/config/auth failure"
             else
               mark_infrastructure_failure "review" "OCR review command failed"
@@ -720,6 +731,31 @@ jobs:
               return `${comment.path}\u0000${comment.line}\u0000${startLine}\u0000${unrenderFindingText(comment.body)}`;
             }
 
+            function deduplicationKey(finding) {
+              if (!finding || typeof finding !== 'object') return String(finding || '');
+              const path = finding.path || '';
+              const startLine = finding.start_line || '';
+              const endLine = finding.end_line || '';
+              const body = finding.content || finding.comment || finding.message || finding.body || '';
+              return `${path}\u0000${startLine}\u0000${endLine}\u0000${redactSecretDiagnostics(String(body))}`;
+            }
+
+            function deduplicateFindings(findings) {
+              const seen = new Map();
+              const deduped = [];
+              let suppressed = 0;
+              for (const finding of findings) {
+                const key = deduplicationKey(finding);
+                if (seen.has(key)) {
+                  suppressed += 1;
+                } else {
+                  seen.set(key, true);
+                  deduped.push(finding);
+                }
+              }
+              return { deduped, suppressed };
+            }
+
             async function existingInlineCommentKeys() {
               const comments = await github.paginate(github.rest.pulls.listReviewComments, {
                 owner, repo, pull_number: number, per_page: 100,
@@ -755,6 +791,11 @@ jobs:
             } else {
               core.warning(`Skipping OCR output parsing because phase ${phase} already recorded exit code ${exitCode}.`);
             }
+
+            const dedupedFindings = deduplicateFindings(findings);
+            let suppressedDuplicateCount = 0;
+            suppressedDuplicateCount = dedupedFindings.suppressed;
+            findings = dedupedFindings.deduped;
 
             // Split findings into inline (resolvable file/line) vs. lineless.
             const inline = [];
@@ -891,6 +932,9 @@ jobs:
               `- ${statusLine}`,
               `- ${artifactLine}`,
             ];
+            if (suppressedDuplicateCount > 0) {
+              body.push(`- Suppressed ${suppressedDuplicateCount} exact duplicate finding(s).`);
+            }
             if (!ran || infrastructureFailure) {
               body.push(
                 '',
@@ -921,13 +965,12 @@ jobs:
             }
             const summary = body.join('\n');
 
-            // Sticky summary: update in place if the marker exists, else create.
-            try {
+            async function reconcileMarkerComment() {
               const comments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              const markerComments = comments.filter((c) =>
-                c.body && c.body.includes(MARKER));
+              const markerComments = comments.filter((comment) =>
+                comment.body && comment.body.includes(MARKER));
               const existing = markerComments[0];
               for (const duplicate of markerComments.slice(1)) {
                 try {
@@ -939,15 +982,40 @@ jobs:
                   core.warning(redactSecretDiagnostics(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`));
                 }
               }
+              return existing || null;
+            }
+
+            async function createOrUpdateMarkerComment(summary) {
+              let existing = null;
+              try {
+                existing = await reconcileMarkerComment();
+              } catch (reconcileErr) {
+                core.warning(redactSecretDiagnostics(`Reconciliation failed before summary posting; attempting create: ${reconcileErr.message || reconcileErr}`));
+              }
               if (existing) {
                 await github.rest.issues.updateComment({
                   owner, repo, comment_id: existing.id, body: summary,
                 });
-              } else {
+                return;
+              }
+              try {
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: number, body: summary,
                 });
+              } catch (createErr) {
+                const reconciled = await reconcileMarkerComment();
+                if (reconciled) {
+                  await github.rest.issues.updateComment({
+                    owner, repo, comment_id: reconciled.id, body: summary,
+                  });
+                } else {
+                  throw createErr;
+                }
               }
+            }
+
+            try {
+              await createOrUpdateMarkerComment(summary);
             } catch (summaryError) {
               core.warning(redactSecretDiagnostics(`Failed to post OCR sticky summary; continuing without failing the workflow: ${summaryError.message || summaryError}`));
             }
@@ -1031,9 +1099,15 @@ jobs:
               }
             }
           };
+          const REDACTED_PENDING = '[REDACTED-PENDING]';
           for (const fileName of diagnosticArtifacts) {
             try {
-              fs.writeFileSync(fileName, redact(fs.readFileSync(fileName, 'utf8')));
+              const originalContent = fs.readFileSync(fileName, 'utf8');
+              fs.writeFileSync(fileName, REDACTED_PENDING);
+              const redactedContent = redact(originalContent);
+              const tempFile = `${fileName}.redacting`;
+              fs.writeFileSync(tempFile, redactedContent);
+              fs.renameSync(tempFile, fileName);
             } catch (error) {
               if (error && error.code !== 'ENOENT') {
                 replaceWithRedactionFailure(fileName, error);
@@ -1272,17 +1346,48 @@ jobs:
             }
             create_infrastructure_issue() {
               local issue_body_file
+              local create_stderr
               issue_body_file="$1"
               shift
-              if retry_gh gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd"; then
+              create_stderr="$(mktemp)"
+              if gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" 2>"${create_stderr}"; then
+                rm -f "${create_stderr}"
                 return 0
               fi
-              echo "::warning::Failed to create OCR infrastructure issue with ci/cd label; retrying without labels."
-              if retry_gh gh issue create "$@" --body-file "$issue_body_file"; then
-                return 0
+              if grep -Eqi "label|labels|not found|does not exist" "${create_stderr}"; then
+                echo "::warning::OCR infrastructure issue label was unavailable; retrying without labels."
+                if gh issue create "$@" --body-file "$issue_body_file"; then
+                  rm -f "${create_stderr}"
+                  return 0
+                fi
               fi
+              rm -f "${create_stderr}"
               echo "::warning::Failed to create OCR infrastructure issue."
               return 1
+            }
+            converge_duplicate_tracking_issues() {
+              local dup_issues
+              if ! dup_issues="$(
+                gh issue list \
+                  --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-asc" \
+                  --limit 30 \
+                  --json number,title \
+                  --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number]"
+              )"; then
+                echo "::warning::Failed to list duplicate tracking issues for convergence; duplicates may accumulate."
+                return 0
+              fi
+              local dup_count
+              dup_count="$(printf '%s' "$dup_issues" | jq 'length')"
+              if [ "$dup_count" -le 1 ]; then
+                return 0
+              fi
+              local KEEP_ISSUE
+              KEEP_ISSUE="$(printf '%s' "$dup_issues" | jq -r '.[0]')"
+              for dup in $(printf '%s' "$dup_issues" | jq -r '.[1:][]'); do
+                gh issue comment "${KEEP_ISSUE}" --body "Consolidated duplicate tracking issue #${dup} into this issue." || true
+                gh issue close "${dup}" || true
+              done
             }
             if ! EXISTING_ISSUE="$(
               retry_gh gh issue list \
@@ -1307,7 +1412,8 @@ jobs:
               return 1
             fi
             if [ -n "$EXISTING_ISSUE" ]; then
-              retry_gh gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue."
+              gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue."
+              converge_duplicate_tracking_issues
               return 0
             fi
             if ! EXISTING_ISSUE="$(
@@ -1321,11 +1427,13 @@ jobs:
               return 0
             fi
             if [ -n "$EXISTING_ISSUE" ]; then
-              retry_gh gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue after recheck."
+              gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue after recheck."
+              converge_duplicate_tracking_issues
               return 0
             fi
             create_infrastructure_issue "$body_file" \
               --title "${ISSUE_TITLE}"
+            converge_duplicate_tracking_issues
             return 0
           }
           notify_ocr_infrastructure_failure || echo "::warning::OCR infrastructure issue notification failed; continuing."

@@ -79,8 +79,8 @@ export function buildExtraArgs(
 
 /**
  * Compute the command and its base args, choosing the installed `llxprt`
- * binary for npm release tests and `node <entryPath>` (the checked-in launcher,
- * which relaunches into Bun on TypeScript source) otherwise.
+ * binary for npm release tests and `bun <entryPath>` (running the TypeScript
+ * source directly) otherwise.
  */
 export function getCommandAndArgs(
   entryPath: string,
@@ -88,7 +88,7 @@ export function getCommandAndArgs(
 ): { command: string; initialArgs: string[] } {
   const isNpmReleaseTest =
     env['INTEGRATION_TEST_USE_INSTALLED_LLXPRT'] === 'true';
-  const command = isNpmReleaseTest ? 'llxprt' : 'node';
+  const command = isNpmReleaseTest ? 'llxprt' : 'bun';
   const initialArgs = isNpmReleaseTest
     ? extraInitialArgs
     : [entryPath, ...extraInitialArgs];

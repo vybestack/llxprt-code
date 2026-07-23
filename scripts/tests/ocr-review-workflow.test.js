@@ -230,7 +230,7 @@ describe('.github/workflows/ocr-review.yml', () => {
 
     expectContainsAll(installRun, [
       'OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-      'npm install --prefix "$OCR_PREFIX" --ignore-scripts @alibaba-group/open-code-review@1.6.1',
+      'npm install --prefix "$OCR_PREFIX" --ignore-scripts "@alibaba-group/open-code-review@${OCR_VERSION}"',
       'echo "70" > ocr-exit-code.txt',
       'OCR_BIN="${OCR_PREFIX}/node_modules/.bin"',
       'echo "$OCR_BIN" >> "$GITHUB_PATH"',
@@ -240,6 +240,8 @@ describe('.github/workflows/ocr-review.yml', () => {
     ]);
     expect(installRun).not.toContain('${OCR_PREFIX}/bin');
     expect(installRun).not.toContain('npm install -g');
+    expect(installRun).not.toContain('@alibaba-group/open-code-review@1.6.1');
+    expect(installRun).not.toContain('@alibaba-group/open-code-review@latest');
   });
 
   it('records OCR phases and keeps provider/runtime failures non-blocking', () => {
@@ -803,14 +805,16 @@ describe('.github/workflows/ocr-review.yml', () => {
       "$(TZ=UTC date +'%Y-%m-%d')",
       'create_infrastructure_issue() {',
       'local issue_body_file',
+      'local create_stderr',
       'issue_body_file="$1"',
       'shift',
-      'retry_gh gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd"',
-      'Failed to create OCR infrastructure issue with ci/cd label; retrying without labels.',
-      'retry_gh gh issue create "$@" --body-file "$issue_body_file"',
+      'gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" 2>"${create_stderr}"',
+      'if grep -Eqi "label|labels|not found|does not exist" "${create_stderr}"; then',
+      'gh issue create "$@" --body-file "$issue_body_file"',
       'Failed to create OCR infrastructure issue.',
       'return 1',
       'create_infrastructure_issue "$body_file"',
+      'converge_duplicate_tracking_issues',
     ]);
     expect(normalizedNotifyRun).not.toContain('sleep 5');
     expect(normalizedNotifyRun).not.toContain("$(date +'%Y-%m-%d')");

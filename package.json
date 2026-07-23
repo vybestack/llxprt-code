@@ -102,7 +102,7 @@
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "format:check": "prettier --check .",
     "format:all": "./scripts/format-all.sh",
-    "typecheck": "npm run typecheck --workspaces --if-present && tsc --project tsconfig.scripts.json",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --project tsconfig.scripts.json && tsc --project evals/tsconfig.json",
     "check": "npm run lint:all",
     "gate:agents-neutral": "npx tsx scripts/agents-neutral-gate.ts --enforce-imports && npx tsx scripts/agents-neutral-test-gate.ts",
     "gate:agents-neutral:count": "npx tsx scripts/agents-neutral-gate.ts --count",
@@ -114,6 +114,9 @@
     "release:version": "bun scripts/version.ts",
     "telemetry": "bun scripts/telemetry.ts",
     "check:lockfile": "bun scripts/check-lockfile.ts",
+    "test:issue-2603-smoke": "node scripts/tests/issue-2603-release-install-smoke.cjs",
+    "test:issue-2603-benchmark": "node scripts/tests/issue-2603-startup-benchmark.cjs",
+    "test:windows-installed-smoke": "node scripts/windows-installed-command-smoke.cjs",
     "clean": "bun scripts/clean.ts"
   },
   "overrides": {
@@ -149,7 +152,7 @@
     "typescript": "5.8.3"
   },
   "bin": {
-    "llxprt": "packages/cli/bin/llxprt.cjs"
+    "llxprt": "packages/cli/bin/llxprt"
   },
   "files": [
     "packages/cli/bin/",
