@@ -82,8 +82,8 @@ Dumps are OpenAI API compliant and can be replayed with curl. Since the dump inc
 ### Extract and Send Request
 
 ```bash
-# DUMPS resolves the cache dumps directory using Storage's full fallback chain:
-# LLXPRT_CACHE_HOME -> LLXPRT_CONFIG_HOME -> platform default.
+# Linux example: LLXPRT_CACHE_HOME -> LLXPRT_CONFIG_HOME -> Linux default.
+# See Application Directories for the macOS and Windows defaults.
 DUMPS="${LLXPRT_CACHE_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.cache/llxprt-code}}/dumps"
 jq '.request.body' "$DUMPS/YOUR_DUMP.json" > /tmp/body.json
 
@@ -220,9 +220,9 @@ See [Debug Logging](../debug-logging.md) for more information.
 - Consider redacting sensitive data before sharing dumps
 
 ```bash
-# Clean up old dumps (cache directory — see Application Directories).
-# The cache dir honors LLXPRT_CACHE_HOME, then LLXPRT_CONFIG_HOME, then the
-# platform default. This expression matches Storage's full fallback chain.
+# Clean up old dumps. This Linux example honors LLXPRT_CACHE_HOME, then
+# LLXPRT_CONFIG_HOME, then the Linux default; see Application Directories for
+# the macOS and Windows defaults.
 CACHE_DIR="${LLXPRT_CACHE_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.cache/llxprt-code}}"
 rm -f "${CACHE_DIR}/dumps/"*.json
 
