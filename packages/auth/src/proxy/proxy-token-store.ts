@@ -92,7 +92,7 @@ export class ProxyTokenStore implements TokenStore {
 
   async acquireRefreshLock(
     _provider: string,
-    _options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    _options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     return true;
   }
@@ -103,7 +103,7 @@ export class ProxyTokenStore implements TokenStore {
 
   async acquireAuthLock(
     _provider: string,
-    _options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    _options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     return true;
   }

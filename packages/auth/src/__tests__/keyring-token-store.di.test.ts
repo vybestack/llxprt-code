@@ -12,7 +12,11 @@
  * not on mock call counts (no toHaveBeenCalled theater).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import * as path from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import { KeyringTokenStore } from '../keyring-token-store.js';
 import type {
   IDebugLogger,
@@ -80,11 +84,84 @@ const VALID_TOKEN: OAuthToken = {
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('KeyringTokenStore DI behavioral tests', () => {
+/**
+ * Per-suite temp-lock-dir ownership. Each describe block owns its own tracker
+ * (not a shared module-level array) so concurrent test files and sibling
+ * suites do not share mutable state. The tracker collects dirs created by {@link freshLockDir}
+ * within a single suite; {@link cleanupLockDirs} removes them in afterEach.
+ *
+ * Within a single suite, the tracker's `dirs` array is mutated by
+ * {@link freshLockDir} (push) and {@link cleanupLockDirs} (splice). This is
+ * safe ONLY under sequential execution — see the `describe.sequential`
+ * usage below and its rationale.
+ *
+ * Cleanup errors stay observable: each rm failure is collected and surfaced
+ * after the loop so a failed cleanup does not silently orphan temp dirs or
+ * mask a real failure (cleanup-error observability contract).
+ */
+interface LockDirTracker {
+  readonly dirs: string[];
+  freshLockDir(): string;
+  cleanupLockDirs(): Promise<void>;
+}
+
+function createLockDirTracker(): LockDirTracker {
+  const dirs: string[] = [];
+  return {
+    dirs,
+    freshLockDir(): string {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'llxprt-auth-di-locks-'));
+      dirs.push(dir);
+      return dir;
+    },
+    async cleanupLockDirs(): Promise<void> {
+      const cleanupErrors: unknown[] = [];
+      for (const dir of dirs.splice(0)) {
+        try {
+          await fs.rm(dir, { recursive: true, force: true });
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+      if (cleanupErrors.length > 0) {
+        throw new Error(
+          `afterEach cleanup failed for ${cleanupErrors.length} dir(s): ${cleanupErrors.map((e) => (e instanceof Error ? e.message : String(e))).join('; ')}`,
+        );
+      }
+    },
+  };
+}
+
+// ─── Sequential execution rationale ─────────────────────────────────────────
+//
+// Both suites below use `describe.sequential` rather than `describe`. The
+// per-suite `LockDirTracker.dirs` array is mutated by freshLockDir (push) and
+// cleanupLockDirs (splice). Under vitest's default concurrent test execution
+// these mutations would race (lost pushes, splice-on-stale-length, torn
+// cleanup), orphaning temp dirs or corrupting the tracker. Sequential
+// execution guarantees:
+//   - only one test mutates `dirs` at a time,
+//   - afterEach cleanup sees a stable snapshot of created dirs.
+//
+// The alternative (truly per-test ownership) would require each test to own
+// and clean up its own dir directly rather than via a shared tracker; that is
+// more verbose and loses the shared cleanup-error-observability guarantee.
+// `describe.sequential` is the minimal, explicit enforcement that keeps the
+// tracker pattern safe while preserving observable cleanup failures.
+
+describe.sequential('KeyringTokenStore DI behavioral tests', () => {
+  // Per-suite ownership: this describe owns its own tracker so concurrent
+  // test files / sibling suites do not share mutable lock-dir state.
+  // Sequential execution (describe.sequential) keeps the tracker's mutable
+  // `dirs` array race-free within this suite — see the rationale above.
+  const locks = createLockDirTracker();
+  afterEach(() => locks.cleanupLockDirs());
+
   it('saveToken → getToken round-trip: stored token data is retrievable', async () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -106,6 +183,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -127,6 +205,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -153,6 +232,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -173,6 +253,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -210,6 +291,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
 
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -221,6 +303,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -240,6 +323,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -258,6 +342,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     );
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -278,6 +363,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
 
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -290,6 +376,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -308,6 +395,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
 
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -322,6 +410,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
 
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -335,6 +424,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
 
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -346,6 +436,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -370,6 +461,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
 
@@ -391,11 +483,76 @@ describe('KeyringTokenStore DI behavioral tests', () => {
     const store = createInMemorySecureStore();
     const tokenStore = new KeyringTokenStore({
       secureStore: store,
+      lockDir: locks.freshLockDir(),
       logger: createNoOpLogger(),
     });
     await tokenStore.saveToken('provider', VALID_TOKEN);
     const result = await tokenStore.getToken('provider');
     expect(result).not.toBeNull();
     expect(result!.access_token).toBe('test-access-token');
+  });
+});
+
+describe.sequential('KeyringTokenStore lockDir contract (P8)', () => {
+  // Per-suite ownership: this sibling describe owns its own tracker so it does
+  // not rely on (or mutate) the first suite's mutable state, and its
+  // afterEach cleanup is wired directly here (sibling scopes do not inherit
+  // the parent's afterEach). Sequential execution (describe.sequential) keeps
+  // the tracker's mutable `dirs` array race-free within this suite — see the
+  // rationale above.
+  const locks = createLockDirTracker();
+  afterEach(() => locks.cleanupLockDirs());
+
+  it('constructor requires lockDir and directs callers to createKeyringTokenStore()', () => {
+    const store = createInMemorySecureStore();
+    expect(
+      () =>
+        new KeyringTokenStore({
+          secureStore: store,
+          logger: createNoOpLogger(),
+        }),
+    ).toThrow(/createKeyringTokenStore/);
+  });
+
+  it('acquireRefreshLock creates the lock file inside the injected lockDir', async () => {
+    const store = createInMemorySecureStore();
+    const lockDir = locks.freshLockDir();
+    const tokenStore = new KeyringTokenStore({
+      secureStore: store,
+      lockDir,
+      logger: createNoOpLogger(),
+    });
+
+    const acquired = await tokenStore.acquireRefreshLock('codex', {
+      waitMs: 1000,
+    });
+    expect(acquired).toBe(true);
+
+    const lockFile = path.join(lockDir, 'codex-refresh.lock');
+    const stat = await fs.stat(lockFile);
+    expect(stat.isFile()).toBe(true);
+
+    await tokenStore.releaseRefreshLock('codex');
+  });
+
+  it('acquireAuthLock creates an auth lock file inside the injected lockDir', async () => {
+    const store = createInMemorySecureStore();
+    const lockDir = locks.freshLockDir();
+    const tokenStore = new KeyringTokenStore({
+      secureStore: store,
+      lockDir,
+      logger: createNoOpLogger(),
+    });
+
+    const acquired = await tokenStore.acquireAuthLock('gemini', {
+      waitMs: 1000,
+    });
+    expect(acquired).toBe(true);
+
+    const lockFile = path.join(lockDir, 'gemini-auth.lock');
+    const stat = await fs.stat(lockFile);
+    expect(stat.isFile()).toBe(true);
+
+    await tokenStore.releaseAuthLock('gemini');
   });
 });

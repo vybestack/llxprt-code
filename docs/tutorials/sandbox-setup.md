@@ -203,7 +203,7 @@ This is expected and protects host key storage from sandbox writes.
 
 ## Step 8: create your own profile
 
-Create `~/.llxprt/sandboxes/custom.json`:
+Create `<config>/sandboxes/custom.json` (see [Application Directories](../reference/application-directories.md) for `<config>`):
 
 ```json
 {

@@ -46,6 +46,15 @@ function makeConfig(): Config {
   } as unknown as Config;
 }
 
+function makeService(): TodoContinuationService {
+  return new TodoContinuationService({
+    config: makeConfig(),
+    todoReminderService: {} as never,
+    complexitySuggestionCooldown: 0,
+    todoDataDirResolver: () => '/tmp/test-todo-data',
+  });
+}
+
 function makeContext(
   overrides: Partial<PostTurnContext> = {},
 ): PostTurnContext {
@@ -65,7 +74,7 @@ function makeContext(
 describe('TodoContinuationService classifyPostTurnAction (characterization)', () => {
   describe('deterministic behavior', () => {
     it('returns Finish when no todos are active', () => {
-      const svc = new TodoContinuationService(makeConfig());
+      const svc = makeService();
       const action = svc.classifyPostTurnAction(
         makeContext({ activeTodos: [] }),
       );
@@ -73,7 +82,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
     });
 
     it('returns Finish when retry count exceeds max', () => {
-      const svc = new TodoContinuationService(makeConfig());
+      const svc = makeService();
       const action = svc.classifyPostTurnAction(
         makeContext({
           activeTodos: [makeTodo()],
@@ -85,7 +94,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
     });
 
     it('returns Finish when all todos are completed', () => {
-      const svc = new TodoContinuationService(makeConfig());
+      const svc = makeService();
       const action = svc.classifyPostTurnAction(
         makeContext({
           activeTodos: [makeTodo({ status: 'completed' })],
@@ -96,7 +105,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
     });
 
     it('returns Finish when tool calls were made (regardless of pending todos)', () => {
-      const svc = new TodoContinuationService(makeConfig());
+      const svc = makeService();
       const action = svc.classifyPostTurnAction(
         makeContext({
           activeTodos: [makeTodo({ status: 'pending' })],
@@ -108,7 +117,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
     });
 
     it('returns RetryWithReminder when todos are pending, no tool calls, and content was produced', () => {
-      const svc = new TodoContinuationService(makeConfig());
+      const svc = makeService();
       const action = svc.classifyPostTurnAction(
         makeContext({
           activeTodos: [makeTodo({ status: 'pending' })],
@@ -121,7 +130,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
     });
 
     it('returns Finish when no visible content or tool calls', () => {
-      const svc = new TodoContinuationService(makeConfig());
+      const svc = makeService();
       const action = svc.classifyPostTurnAction(
         makeContext({
           activeTodos: [makeTodo({ status: 'pending' })],
@@ -147,7 +156,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
             maxRetries: fc.integer({ min: 1, max: 10 }),
           }),
           (props) => {
-            const svc = new TodoContinuationService(makeConfig());
+            const svc = makeService();
             const action = svc.classifyPostTurnAction(
               makeContext({
                 ...props,
@@ -175,7 +184,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
             maxRetries: fc.integer({ min: 1, max: 10 }),
           }),
           (props) => {
-            const svc = new TodoContinuationService(makeConfig());
+            const svc = makeService();
             const action = svc.classifyPostTurnAction(
               makeContext({
                 ...props,
@@ -197,7 +206,7 @@ describe('TodoContinuationService classifyPostTurnAction (characterization)', ()
           fc.integer({ min: 1, max: 20 }),
           (retry, max) => {
             if (retry < max) return true;
-            const svc = new TodoContinuationService(makeConfig());
+            const svc = makeService();
             const action = svc.classifyPostTurnAction(
               makeContext({
                 activeTodos: [makeTodo({ status: 'pending' })],

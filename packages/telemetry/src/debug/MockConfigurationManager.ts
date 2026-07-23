@@ -21,7 +21,7 @@ export class MockConfigurationManager {
     enabled: true,
     namespaces: ['*'],
     level: 'debug',
-    output: { target: 'file stderr', directory: '~/.llxprt/debug' },
+    output: { target: 'file stderr', directory: '<log>/debug' },
     redactPatterns: ['apiKey', 'token', 'password'],
   };
   private listeners = new Set<() => void>();

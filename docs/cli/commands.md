@@ -132,7 +132,7 @@ Extensions are managed from the terminal with `llxprt extensions` (not slash com
 
 ## Custom Commands
 
-You can create your own slash commands by placing executable files in `~/.llxprt/commands/` or `.llxprt/commands/` in your project.
+You can create your own slash commands by placing executable files in your [user `commands/` directory](../reference/application-directories.md) (`<config>/commands/`) or `.llxprt/commands/` in your project.
 
 ### How Custom Commands Work
 
@@ -141,7 +141,7 @@ When you type `/mycommand`, LLxprt looks for a matching executable in the comman
 **Execution flow:**
 
 1. User types `/mycommand some arguments`
-2. LLxprt finds `~/.llxprt/commands/mycommand` (or `.llxprt/commands/mycommand`)
+2. LLxprt finds `<config>/commands/mycommand` (or `.llxprt/commands/mycommand` in your project)
 3. Runs the executable with the arguments
 4. The command's stdout is sent to the model as context
 
@@ -158,7 +158,7 @@ When you type `/mycommand`, LLxprt looks for a matching executable in the comman
     - **Editing commands:** Delete with `x`, change with `c`, insert with `i`, `a`, `o`, `O`; complex operations like `dd`, `cc`, `dw`, `cw`
     - **Count support:** Prefix commands with numbers (e.g., `3h`, `5w`, `10G`)
     - **Repeat last command:** Use `.` to repeat the last editing operation
-    - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
+    - **Persistent setting:** Vim mode preference is saved to your [user settings.json](../reference/application-directories.md) and restored between sessions
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 - **`/init`**
@@ -174,7 +174,7 @@ Custom commands allow you to save and reuse your favorite or most frequently use
 
 LLxprt Code discovers commands from two locations, loaded in a specific order:
 
-1.  **User Commands (Global):** Located in `~/.llxprt/commands/`. These commands are available in any project you are working on.
+1.  **User Commands (Global):** Located in `<config>/commands/` (see [Application Directories](../reference/application-directories.md)). These commands are available in any project you are working on.
 2.  **Project Commands (Local):** Located in `<your-project-root>/.llxprt/commands/`. These commands are specific to the current project and can be checked into version control to be shared with your team.
 
 If a command in the project directory has the same name as a command in the user directory, the **project command will always be used.** This allows projects to override global commands with project-specific versions.
@@ -183,7 +183,7 @@ If a command in the project directory has the same name as a command in the user
 
 The name of a command is determined by its file path relative to its `commands` directory. Subdirectories are used to create namespaced commands, with the path separator (`/` or `\`) being converted to a colon (`:`).
 
-- A file at `~/.llxprt/commands/test.toml` becomes the command `/test`.
+- A file at `<config>/commands/test.toml` (see [Application Directories](../reference/application-directories.md)) becomes the command `/test`.
 - A file at `<project>/.llxprt/commands/git/commit.toml` becomes the namespaced command `/git:commit`.
 
 #### TOML File Format (v1)
@@ -339,13 +339,15 @@ Let's create a global command that asks the model to refactor a piece of code.
 First, ensure the user commands directory exists, then create a `refactor` subdirectory for organization and the final TOML file.
 
 ```bash
-mkdir -p ~/.llxprt/commands
-cat > ~/.llxprt/commands/git-diff << 'EOF'
+mkdir -p "${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/commands"
+cat > "${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/commands/git-diff" << 'EOF'
 #!/bin/bash
 git diff --stat
 EOF
-chmod +x ~/.llxprt/commands/git-diff
+chmod +x "${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/commands/git-diff"
 ```
+
+> The path above uses the Linux config default; see [Application Directories](../reference/application-directories.md) for the macOS/Windows equivalents and the `LLXPRT_CONFIG_HOME` override.
 
 Now `/git-diff` will show your git changes and send the output to the model.
 

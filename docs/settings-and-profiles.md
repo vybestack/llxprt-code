@@ -1,6 +1,6 @@
 # Settings and Profiles
 
-LLxprt Code has two kinds of configuration: **persistent settings** (saved to `~/.llxprt/settings.json`) and **ephemeral settings** (session-only, but saveable to profiles).
+LLxprt Code has two kinds of configuration: **persistent settings** (saved to your [user `settings.json`](./reference/application-directories.md)) and **ephemeral settings** (session-only, but saveable to profiles).
 
 ## Profiles (Recommended)
 
@@ -37,7 +37,7 @@ llxprt --profile-load kimi-k2
 /profile set-default none       # Clear auto-load
 ```
 
-Profiles are stored in `~/.llxprt/profiles/<name>.json`.
+Profiles are stored in `<config>/profiles/<name>.json` (see [Application Directories](./reference/application-directories.md)).
 
 ### CLI Flags Override Profiles
 

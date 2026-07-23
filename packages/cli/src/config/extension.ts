@@ -155,8 +155,7 @@ export class ExtensionStorage {
   }
 
   static getUserExtensionsDir(): string {
-    const storage = new Storage(os.homedir());
-    return storage.getExtensionsDir();
+    return Storage.getUserExtensionsDir();
   }
 
   static async createTmpDir(): Promise<string> {
@@ -211,14 +210,18 @@ export function loadExtensions(
     return [];
   }
 
-  const allExtensions = [...loadUserExtensions()];
+  const folderTrusted = isWorkspaceTrusted(settings) ?? true;
+  // Workspace-before-user precedence: trusted
+  // workspace extensions are scanned first so the first-occurrence dedup
+  // map keeps a workspace extension over a same-name user extension, and
+  // a user extension over a same-name compat root extension.
+  const allExtensions: LlxprtExtension[] = [];
 
-  if (
-    (isWorkspaceTrusted(settings) ?? true) &&
-    settings.extensionManagement !== true
-  ) {
+  if (folderTrusted && settings.extensionManagement !== true) {
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
   }
+
+  allExtensions.push(...loadUserExtensions());
 
   const uniqueExtensions = new Map<string, LlxprtExtension>();
 
@@ -235,16 +238,16 @@ export function loadExtensions(
 }
 
 export function loadUserExtensions(): LlxprtExtension[] {
-  const userExtensions = loadExtensionsFromDir(os.homedir());
-
-  const uniqueExtensions = new Map<string, LlxprtExtension>();
-  for (const extension of userExtensions) {
-    if (!uniqueExtensions.has(extension.name)) {
-      uniqueExtensions.set(extension.name, extension);
-    }
-  }
-
-  return Array.from(uniqueExtensions.values());
+  // User extensions live under the canonical data-category dir (mirrors the
+  // startup migration destination). The `.gemini/extensions` root under the
+  // user home is a read-only compatibility source for migrated Gemini CLI
+  // setups. Legacy `~/.llxprt/extensions` is NOT scanned here: startup
+  // migration already copied it to the canonical data dir.
+  const userRoots = [
+    ExtensionStorage.getUserExtensionsDir(),
+    path.join(os.homedir(), COMPAT_EXTENSIONS_DIRECTORY_NAME),
+  ];
+  return loadExtensionsFromRoots(userRoots, os.homedir());
 }
 
 /**
@@ -270,28 +273,46 @@ export function loadExtensionsFromDir(
   dir: string,
   workspaceDir: string = dir,
 ): LlxprtExtension[] {
-  // LLxprt-first precedence: scan .llxprt/extensions first, then
-  // .gemini/extensions. Extensions are deduplicated by name, with the
-  // first occurrence (LLxprt) winning.
-  const llxprtExtensionsDir = new Storage(dir).getExtensionsDir();
-  const compatExtensionsDir = path.join(dir, COMPAT_EXTENSIONS_DIRECTORY_NAME);
-  const extensionRoots = [llxprtExtensionsDir, compatExtensionsDir];
+  // LLxprt-first precedence, NO dedup: returns every extension so callers
+  // apply precedence-based dedup by name.
+  return loadExtensionsFromRoots(
+    [
+      new Storage(dir).getExtensionsDir(),
+      path.join(dir, COMPAT_EXTENSIONS_DIRECTORY_NAME),
+    ],
+    workspaceDir,
+    /* dedupe */ false,
+  );
+}
 
-  const extensions: LlxprtExtension[] = [];
-  for (const extensionsDir of extensionRoots) {
+/**
+ * Scan explicit extension roots in order. When `dedupe` is true (default, used
+ * for global user-extension scanning), each name is emitted once in
+ * root-precedence order. When false (workspace scanning), all extensions are
+ * returned for caller-side dedup.
+ */
+export function loadExtensionsFromRoots(
+  roots: readonly string[],
+  workspaceDir: string,
+  dedupe = true,
+): LlxprtExtension[] {
+  const out: LlxprtExtension[] = [];
+  const seen = new Set<string>();
+  for (const extensionsDir of roots) {
     const entries = readExtensionDirEntries(extensionsDir);
-    if (entries === null) {
-      continue;
-    }
+    if (entries === null) continue;
     for (const subdir of entries) {
-      const extensionDir = path.join(extensionsDir, subdir);
-      const extension = loadExtension({ extensionDir, workspaceDir });
-      if (extension != null) {
-        extensions.push(extension);
+      const extension = loadExtension({
+        extensionDir: path.join(extensionsDir, subdir),
+        workspaceDir,
+      });
+      if (extension !== null && (!dedupe || !seen.has(extension.name))) {
+        seen.add(extension.name);
+        out.push(extension);
       }
     }
   }
-  return extensions;
+  return out;
 }
 
 const extensionLoaderDeps = {

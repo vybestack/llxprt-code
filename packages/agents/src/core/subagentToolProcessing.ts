@@ -32,6 +32,7 @@ import { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   SubagentTerminateMode,
@@ -611,9 +612,20 @@ export async function buildTodoCompletionPrompt(
   }
 
   try {
-    let todos = await new TodoStore(sessionId, subagentId).readTodos();
+    // Inject the canonical Storage data root explicitly:
+    // TodoStore must receive explicit canonical data-root injection. The
+    // subagentId preserves per-subagent isolation via a distinct filename.
+    // Extracted once so the primary and fallback reads stay consistent (#6).
+    const todoDataDirResolver = () => Storage.getGlobalDataDir();
+    let todos = await new TodoStore(
+      sessionId,
+      { dataDirResolver: todoDataDirResolver },
+      subagentId,
+    ).readTodos();
     if (todos.length === 0) {
-      todos = await new TodoStore(sessionId).readTodos();
+      todos = await new TodoStore(sessionId, {
+        dataDirResolver: todoDataDirResolver,
+      }).readTodos();
     }
 
     if (todos.length === 0) {

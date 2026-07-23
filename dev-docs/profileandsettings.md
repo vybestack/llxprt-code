@@ -19,7 +19,7 @@ Ephemeral settings are runtime configuration values that can be changed during a
 
 ### Profiles
 
-Profiles are JSON files stored in `~/.llxprt/profiles/` that contain:
+Profiles are JSON files stored in `<config>/profiles/` (see [Application Directories](../docs/reference/application-directories.md)) that contain:
 
 - `version` - Profile format version
 - `provider` - Provider name (e.g., "openai", "anthropic", "gemini")
@@ -27,7 +27,7 @@ Profiles are JSON files stored in `~/.llxprt/profiles/` that contain:
 - `modelParams` - Model-specific parameters (e.g., temperature)
 - `ephemeralSettings` - All runtime configuration settings
 
-Example profile (`~/.llxprt/profiles/synthetic.json`):
+Example profile (`<config>/profiles/synthetic.json`, see [Application Directories](../docs/reference/application-directories.md)):
 
 ```json
 {

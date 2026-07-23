@@ -334,7 +334,7 @@ export class OAuthError extends Error {
         return 'Wait a few minutes and try again.';
       case OAuthErrorType.STORAGE_ERROR:
       case OAuthErrorType.FILE_PERMISSIONS:
-        return 'Check that you have write permissions to ~/.llxprt directory.';
+        return 'Check that the OS keyring is unlocked and that the LLxprt data directory is writable (see docs/reference/application-directories.md).';
       case OAuthErrorType.CORRUPTED_DATA:
         return `Run 'llxprt auth logout ${provider}' then sign in again.`;
       case OAuthErrorType.SECURITY_VIOLATION:

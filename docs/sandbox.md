@@ -71,7 +71,7 @@ export LLXPRT_SANDBOX=false                   # Disable
 
 ## Sandbox Profiles
 
-Profiles are JSON files in `~/.llxprt/sandboxes/`. They control engine, image, resources, networking, SSH agent, and extra mounts. Default profiles are created automatically the first time you use `--sandbox-profile-load`.
+Profiles are JSON files in `<config>/sandboxes/` (see [Application Directories](./reference/application-directories.md)). They control engine, image, resources, networking, SSH agent, and extra mounts. Default profiles are created automatically the first time you use `--sandbox-profile-load`.
 
 ### Built-in Profiles
 
@@ -114,10 +114,14 @@ Profiles are JSON files in `~/.llxprt/sandboxes/`. They control engine, image, r
 
 ### Creating Custom Profiles
 
-Create a JSON file in `~/.llxprt/sandboxes/`:
+Create a JSON file in `<config>/sandboxes/` (see [Application Directories](./reference/application-directories.md)):
 
 ```bash
-cat > ~/.llxprt/sandboxes/beefy.json << 'EOF'
+# SANDBOX_DIR=<config>/sandboxes — set this to your sandbox profiles directory.
+# The config dir resolves via the canonical resolver (LLXPRT_CONFIG_HOME, then
+# the platform default), consistent with sandbox-profiles docs.
+SANDBOX_DIR="${LLXPRT_CONFIG_HOME:-$(node --input-type=module -e "import envPaths from 'env-paths'; process.stdout.write(envPaths('llxprt-code',{suffix:''}).config)")}/sandboxes"
+cat > "$SANDBOX_DIR/beefy.json" << 'EOF'
 {
   "engine": "docker",
   "resources": { "cpus": 4, "memory": "8g", "pids": 512 },

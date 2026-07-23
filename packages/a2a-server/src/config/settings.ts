@@ -6,7 +6,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { homedir } from 'node:os';
 
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
@@ -15,23 +14,20 @@ import {
   LLXPRT_CONFIG_DIR,
   type TelemetrySettings,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import stripJsonComments from 'strip-json-comments';
 
 export const SETTINGS_DIRECTORY_NAME = LLXPRT_CONFIG_DIR;
 
 /**
- * Lazily compute the user settings directory using the current `homedir()`.
- * This avoids computing the path at module-load time, which would capture the
- * real home directory before test mocks can override `os.homedir()`.
+ * Resolves the user (global) settings path through the central Storage path
+ * authority, honoring `LLXPRT_CONFIG_HOME` and the platform config directory.
+ * This keeps A2A parity with the CLI, which already resolves user settings via
+ * `Storage.getGlobalSettingsPath()`.
  */
 function getUserSettingsPath(): string {
-  return path.join(homedir(), SETTINGS_DIRECTORY_NAME, 'settings.json');
+  return Storage.getGlobalSettingsPath();
 }
-
-/** @deprecated Use getUserSettingsPath() instead — computed at load time for testability */
-export const USER_SETTINGS_DIR = path.join(homedir(), SETTINGS_DIRECTORY_NAME);
-/** @deprecated Use getUserSettingsPath() instead — computed at load time for testability */
-export const USER_SETTINGS_PATH = path.join(USER_SETTINGS_DIR, 'settings.json');
 
 // Reconcile with https://github.com/google-gemini/gemini-cli/blob/b09bc6656080d4d12e1d06734aae2ec33af5c1ed/packages/cli/src/config/settings.ts#L53
 export interface Settings {

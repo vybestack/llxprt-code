@@ -6,36 +6,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { PromptInstaller, REQUIRED_DIRECTORIES } from './prompt-installer.js';
+import {
+  PromptInstaller,
+  REQUIRED_DIRECTORIES,
+  MissingBaseDirError,
+} from './prompt-installer.js';
+import { matchesBackupPath } from './prompt-installer.test-helpers.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
-
-function isDigit(ch: string): boolean {
-  return ch >= '0' && ch <= '9';
-}
-
-/** Validates a backup path of form `<dir>/prompt-backup-YYYYMMDD_HHMMSS`. */
-function matchesBackupPath(value: string): boolean {
-  const idx = value.lastIndexOf('prompt-backup-');
-  if (idx === -1) {
-    return false;
-  }
-  const suffix = value.slice(idx + 'prompt-backup-'.length);
-  if (suffix.length !== 15) {
-    return false;
-  }
-  // YYYYMMDD_HHMMSS = 15 chars: 8 digits, '_', 6 digits
-  for (let i = 0; i < 8; i++) {
-    if (!isDigit(suffix[i])) return false;
-  }
-  if (suffix[8] !== '_') return false;
-  for (let i = 9; i < 15; i++) {
-    if (!isDigit(suffix[i])) return false;
-  }
-  return true;
-}
 
 // Helper to check if we're on Windows
 const isWindows = (): boolean => os.platform() === 'win32';
@@ -205,13 +185,22 @@ describe('PromptInstaller', () => {
       expect(existsSync(testBaseDir)).toBe(false);
     });
 
-    it('should handle null baseDir by using default', async () => {
-      const result = await installer.install(null, defaultFiles, {
-        dryRun: true,
-      });
+    it('should reject null baseDir instead of falling back to a default', async () => {
+      await expect(
+        installer.install(null, defaultFiles, { dryRun: true }),
+      ).rejects.toBeInstanceOf(MissingBaseDirError);
+    });
 
-      expect(result.success).toBe(true);
-      expect(result.baseDir).toContain(path.join('.llxprt', 'prompts'));
+    it('should reject undefined baseDir instead of falling back to a default', async () => {
+      await expect(
+        installer.install(undefined, defaultFiles, { dryRun: true }),
+      ).rejects.toBeInstanceOf(MissingBaseDirError);
+    });
+
+    it('should reject blank/whitespace baseDir with a clear diagnostic', async () => {
+      await expect(installer.install('   ', defaultFiles)).rejects.toThrow(
+        /install requires a non-empty already-resolved base directory/,
+      );
     });
 
     it('should reject invalid base directory paths', async () => {
@@ -423,10 +412,10 @@ describe('PromptInstaller', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should handle null baseDir by using default', async () => {
-      const result = await installer.uninstall(null, { dryRun: true });
-
-      expect(result.success).toBe(true);
+    it('should reject null baseDir instead of falling back to a default', async () => {
+      await expect(installer.uninstall(null, { dryRun: true })).rejects.toThrow(
+        /uninstall requires a non-empty already-resolved base directory/,
+      );
     });
   });
 
@@ -507,10 +496,10 @@ describe('PromptInstaller', () => {
       expect(result.warnings).toContain('Empty file: core.md');
     });
 
-    it('should handle null baseDir by using default', async () => {
-      const result = await installer.validate(null);
-
-      expect(result.baseDir).toContain(path.join('.llxprt', 'prompts'));
+    it('should reject null baseDir instead of falling back to a default', async () => {
+      await expect(installer.validate(null)).rejects.toThrow(
+        /validate requires a non-empty already-resolved base directory/,
+      );
     });
   });
 

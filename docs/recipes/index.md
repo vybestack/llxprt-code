@@ -34,17 +34,13 @@ Maximum uptime with load balancing across Claude, OpenAI, and Gemini.
 ## Quick Start
 
 1. Choose a recipe that matches your use case
-2. Copy the profile JSON to `~/.llxprt/profiles/<name>.json`
+2. Copy the profile JSON to `<config>/profiles/<name>.json` (see [Application Directories](../reference/application-directories.md))
 3. Or use the interactive commands to set up step-by-step
 4. Load with `/profile load <name>`
 
 ## Profile Storage
 
-All profiles are stored in:
-
-```
-~/.llxprt/profiles/
-```
+All profiles are stored in `<config>/profiles/` (see [Application Directories](../reference/application-directories.md)).
 
 ## See Also
 

@@ -71,13 +71,13 @@ See [Profiles](./cli/profiles.md) for more on multi-bucket failover.
 
 ## Token Storage
 
-OAuth tokens are stored in your **OS keyring** (macOS Keychain, GNOME Keyring, Windows Credential Vault) via `@napi-rs/keyring`. If the keyring is unavailable, tokens fall back to encrypted files in the OS-standard data directory (via `env-paths`):
+OAuth tokens are stored in your **OS keyring** (macOS Keychain, GNOME Keyring, Windows Credential Vault) via `@napi-rs/keyring`. If the keyring is unavailable, tokens fall back to encrypted files in LLxprt's [data directory](./reference/application-directories.md) (overridable via `LLXPRT_DATA_HOME`):
 
 - **macOS:** `~/Library/Application Support/llxprt-code/secure-store/`
 - **Linux:** `~/.local/share/llxprt-code/secure-store/`
-- **Windows:** `%APPDATA%/llxprt-code/secure-store/`
+- **Windows:** `%LOCALAPPDATA%\llxprt-code\Data\secure-store`
 
-Tokens are **not** stored as plain JSON files. The old `~/.llxprt/oauth/*.json` file locations are obsolete.
+Tokens are **not** stored as plain JSON files. Legacy plaintext token files (`oauth_creds.json` under the old `~/.llxprt` directory, or `~/.gemini/oauth_creds.json` from Gemini CLI) are read **only once** during startup migration; LLxprt never creates them during normal operation. After migration, tokens live exclusively in the keyring or encrypted fallback above (see [Application Directories](./reference/application-directories.md) for the migration details).
 
 Tokens refresh automatically when they approach expiration. You should never need to manage token files directly.
 

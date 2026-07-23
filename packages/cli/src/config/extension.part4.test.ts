@@ -117,7 +117,23 @@ vi.mock('./settings.js', () => ({
   },
 }));
 
-const EXTENSIONS_DIRECTORY_NAME = path.join(LLXPRT_CONFIG_DIR, 'extensions');
+// Canonical user-extensions directory name under the data-category dir
+// (Storage.getUserExtensionsDir() => <dataHome>/extensions). Tests redirect
+// LLXPRT_DATA_HOME to tempHomeDir, so fixtures land at <tempHome>/extensions.
+const USER_EXTENSIONS_DIRECTORY_NAME = 'extensions';
+// Workspace-local extensions remain under <workspace>/.llxprt/extensions.
+const WORKSPACE_EXTENSIONS_DIRECTORY_NAME = path.join(
+  LLXPRT_CONFIG_DIR,
+  'extensions',
+);
+// Env keys that redirect Storage category dirs to the temp home.
+const ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
 
 describe('extension tests', () => {
   let tempHomeDir: string;
@@ -131,37 +147,62 @@ describe('extension tests', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
-    userExtensionsDir = path.join(tempHomeDir, EXTENSIONS_DIRECTORY_NAME);
-    fs.mkdirSync(userExtensionsDir, { recursive: true });
+    try {
+      for (const key of ENV_KEYS) {
+        SAVED_ENV[key] = process.env[key];
+        process.env[key] = tempHomeDir;
+      }
+      userExtensionsDir = path.join(
+        tempHomeDir,
+        USER_EXTENSIONS_DIRECTORY_NAME,
+      );
+      fs.mkdirSync(userExtensionsDir, { recursive: true });
 
-    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
-    vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
-    vi.mocked(execSync).mockClear();
-    Object.values(mockGit).forEach((fn) => fn.mockReset());
-    mockLogExtensionInstallEvent.mockReset();
-    mockLogExtensionUninstall.mockReset();
-    mockLogExtensionEnable.mockReset();
-    mockLogExtensionDisable.mockReset();
-    vi.mocked(ExtensionUninstallEvent).mockClear();
-    vi.mocked(ExtensionDisableEvent).mockClear();
-    vi.mocked(ExtensionEnableEvent).mockClear();
-    // Default: extensions are enabled with extensionConfig enabled for tests
-    mockLoadSettings.mockReturnValue({
-      merged: {
-        admin: {
-          extensions: {
-            enabled: true,
+      vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+      vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
+      vi.mocked(execSync).mockClear();
+      Object.values(mockGit).forEach((fn) => fn.mockReset());
+      mockLogExtensionInstallEvent.mockReset();
+      mockLogExtensionUninstall.mockReset();
+      mockLogExtensionEnable.mockReset();
+      mockLogExtensionDisable.mockReset();
+      vi.mocked(ExtensionUninstallEvent).mockClear();
+      vi.mocked(ExtensionDisableEvent).mockClear();
+      vi.mocked(ExtensionEnableEvent).mockClear();
+      // Default: extensions are enabled with extensionConfig enabled for tests
+      mockLoadSettings.mockReturnValue({
+        merged: {
+          admin: {
+            extensions: {
+              enabled: true,
+            },
+          },
+          experimental: {
+            extensionConfig: true,
           },
         },
-        experimental: {
-          extensionConfig: true,
-        },
-      },
-    });
+      });
+    } catch (error) {
+      for (const key of ENV_KEYS) {
+        if (SAVED_ENV[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = SAVED_ENV[key];
+        }
+      }
+      throw error;
+    }
   });
 
   afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -173,7 +214,7 @@ describe('extension tests', () => {
     beforeEach(() => {
       workspaceExtensionsDir = path.join(
         tempWorkspaceDir,
-        EXTENSIONS_DIRECTORY_NAME,
+        WORKSPACE_EXTENSIONS_DIRECTORY_NAME,
       );
       fs.mkdirSync(workspaceExtensionsDir, { recursive: true });
     });
@@ -222,11 +263,7 @@ describe('extension tests', () => {
           async (_) => false, // User declines to trust workspace
         );
 
-        const userExtensionsDir = path.join(
-          tempHomeDir,
-          LLXPRT_CONFIG_DIR,
-          'extensions',
-        );
+        const userExtensionsDir = path.join(tempHomeDir, 'extensions');
         expect(fs.readdirSync(userExtensionsDir).length).toBe(0);
       });
 
@@ -307,11 +344,7 @@ describe('extension tests', () => {
 
       expect(failed).toStrictEqual([]);
 
-      const userExtensionsDir = path.join(
-        tempHomeDir,
-        LLXPRT_CONFIG_DIR,
-        'extensions',
-      );
+      const userExtensionsDir = path.join(tempHomeDir, 'extensions');
       const userExt1Path = path.join(userExtensionsDir, 'ext1');
       const extensions = loadExtensions(
         new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),

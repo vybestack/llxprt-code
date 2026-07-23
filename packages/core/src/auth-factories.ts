@@ -31,7 +31,8 @@ import type {
   ISettingsService as AuthISettingsService,
   IProviderRuntimeContext,
 } from '@vybestack/llxprt-code-auth';
-import { SecureStore } from './storage/secure-store.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { SecureStore, type KeyringAdapter } from './storage/secure-store.js';
 import { getProviderKeyStorage } from './storage/provider-key-storage.js';
 import { DebugLogger } from './debug/DebugLogger.js';
 
@@ -44,15 +45,31 @@ const AUTH_SECURE_STORE_SERVICE = 'llxprt-code-oauth';
  *
  * The returned KeyringTokenStore can immediately save/load tokens
  * using the OS keychain via core's SecureStore implementation.
+ *
+ * OAuth advisory locks resolve through the central Storage log/state
+ * category (`Storage.getOAuthLocksDir()`), honoring LLXPRT_LOG_HOME then
+ * the compatibility LLXPRT_CONFIG_HOME fallback.
+ *
+ * @param keyringLoader - Optional keyring-adapter factory override. Production
+ *   callers omit this to use the real OS keyring. Tests pass a factory
+ *   returning `null` to deterministically force the encrypted file fallback
+ *   path without depending on the host keyring's availability.
  */
-export function createKeyringTokenStore(): KeyringTokenStore {
+export function createKeyringTokenStore(
+  keyringLoader?: () => Promise<KeyringAdapter | null>,
+): KeyringTokenStore {
   const secureStore = new SecureStore(AUTH_SECURE_STORE_SERVICE, {
     // Preserve existing OAuth behavior: SecureStore fallback files are encrypted
     // at rest, and Linux keeps an encrypted fallback after successful keyring writes.
     fallbackPolicy: 'allow',
+    keyringLoader,
   });
   const logger = new DebugLogger('llxprt:auth:keyring');
-  return new KeyringTokenStore({ secureStore, logger });
+  return new KeyringTokenStore({
+    secureStore,
+    lockDir: Storage.getOAuthLocksDir(),
+    logger,
+  });
 }
 
 /**

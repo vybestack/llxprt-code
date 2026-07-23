@@ -60,6 +60,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
   beforeEach(() => {
     tokenStore = new KeyringTokenStore({
       secureStore: createFakeSecureStore(),
+      lockDir: '/tmp/llxprt-auth-tokenstore-spec-locks',
       logger: createNoOpLogger(),
     });
   });

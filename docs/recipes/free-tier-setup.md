@@ -61,7 +61,7 @@ Hello, can you help me with a coding task?
 
 ### Complete Gemini Free Profile JSON
 
-Save this to `~/.llxprt/profiles/gemini-free.json`:
+Save this to `<config>/profiles/gemini-free.json` (see [Application Directories](../reference/application-directories.md)):
 
 ```json
 {
@@ -111,7 +111,7 @@ Qwen's free OAuth tier ended 2026-04-15. Use a DashScope API key:
 
 ### Complete Qwen Free Profile JSON
 
-Save this to `~/.llxprt/profiles/qwen-free.json`:
+Save this to `<config>/profiles/qwen-free.json`:
 
 ```json
 {
@@ -161,7 +161,7 @@ llxprt --profile-load qwen-free
 
 For maximum availability, create a profile that uses Gemini as primary with Qwen as backup. This uses LLxprt's load balancer feature:
 
-Save this to `~/.llxprt/profiles/free-tier-lb.json`:
+Save this to `<config>/profiles/free-tier-lb.json` (see [Application Directories](../reference/application-directories.md)):
 
 ```json
 {

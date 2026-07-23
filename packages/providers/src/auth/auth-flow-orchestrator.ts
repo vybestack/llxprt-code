@@ -117,8 +117,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
   /**
    * Authenticate with a specific provider for a given bucket.
-   * Acquires auth lock (waitMs:60000, staleMs:360000).
-   * Nested refresh lock (waitMs:10000, staleMs:30000) is acquired when an
+   * Acquires auth lock (waitMs:60000).
+   * Nested refresh lock (waitMs:10000) is acquired when an
    * expired token with a refresh_token is found — to avoid replaying
    * single-use refresh tokens concurrently.
    */
@@ -143,7 +143,6 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
     const lockAcquired = await this.tokenStore.acquireAuthLock(providerName, {
       waitMs: 60000, // Wait up to 60 seconds
-      staleMs: 360000, // Break locks older than 6 minutes
       bucket,
     });
 
@@ -295,7 +294,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Returns true if the refresh succeeded (caller should return early),
    * false if browser auth is still needed.
    *
-   * Lock parameters: waitMs:10000, staleMs:30000 (prevents replaying single-use tokens).
+   * Lock parameters: waitMs:10000 (prevents replaying single-use tokens).
    */
   private async attemptRefreshBeforeBrowser(
     providerName: string,
@@ -317,7 +316,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
     const refreshLockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
-      { waitMs: 10000, staleMs: 30000, bucket },
+      { waitMs: 10000, bucket },
     );
 
     if (!refreshLockAcquired) {

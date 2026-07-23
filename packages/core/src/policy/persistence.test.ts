@@ -538,10 +538,10 @@ priority = 100
       // but the implementation must not import ClearcutLogger)
     });
 
-    it('should use ~/.llxprt/policies/ path (not Google paths)', async () => {
+    it('should use Storage.getUserPoliciesDir() (canonical config-category path, not Google paths)', async () => {
       createPolicyUpdater(policyEngine, messageBus);
 
-      const userPoliciesDir = '/home/user/.llxprt/policies';
+      const userPoliciesDir = '/tmp/llxprt-test-policies';
       vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
       (fs.mkdir as unknown as Mock).mockResolvedValue(undefined);
       (fs.readFile as unknown as Mock).mockRejectedValue(

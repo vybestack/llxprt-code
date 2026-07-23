@@ -151,9 +151,19 @@ describe('Storage — static path methods', () => {
     expect(result).toContain('mcp-oauth-tokens.json');
   });
 
-  it('getGlobalMemoryFilePath ends with memory.md', () => {
-    const result = Storage.getGlobalMemoryFilePath();
-    expect(result).toContain('memory.md');
+  it('getGlobalMemoryDir ends with the config dir (no memory.md filename)', () => {
+    const result = Storage.getGlobalMemoryDir();
+    expect(result).toBe(Storage.getGlobalConfigDir());
+  });
+
+  it('getUserExtensionsDir ends with extensions', () => {
+    const result = Storage.getUserExtensionsDir();
+    expect(result).toContain('extensions');
+  });
+
+  it('getOAuthLocksDir ends with oauth/locks', () => {
+    const result = Storage.getOAuthLocksDir();
+    expect(result).toContain(path.join('oauth', 'locks'));
   });
 
   it('getUserCommandsDir ends with commands', () => {

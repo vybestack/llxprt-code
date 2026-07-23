@@ -20,7 +20,26 @@ RESPONSES_ENDPOINT="${API_BASE}/responses"
 MODEL="gpt-5.2"  # From Codex debug output: model=gpt-5.2
 ORIGINATOR="codex_cli_rs"
 
-AUTH_DIR="${HOME}/.llxprt/codex-auth"
+# Resolve the canonical data directory honoring LLxprt overrides, matching the
+# central Storage contract precedence:
+#   CODEX_AUTH_DIR (explicit) -> LLXPRT_DATA_HOME -> LLXPRT_CONFIG_HOME ->
+#   platform data dir (via env-paths). Never read/write live credentials from
+#   the legacy ~/.llxprt tree.
+#
+# Category overrides (LLXPRT_DATA_HOME/LLXPRT_CONFIG_HOME) are honored ONLY
+# when non-empty absolute paths; relative/blank values are ignored in favor of
+# env-paths defaults (matching Storage).
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "${_SCRIPT_DIR}/llxprt-paths.sh"
+# Record the caller's script dir so env-paths defaults resolve from any cwd (#6).
+llxprt_paths_init "${_SCRIPT_DIR}"
+CODEX_DATA_BASE="$(llxprt_resolve_data_dir)"
+if _CODEX_AUTH="$(llxprt_normalized_abs_override "${CODEX_AUTH_DIR:-}")"; then
+    AUTH_DIR="$_CODEX_AUTH"
+else
+    AUTH_DIR="${CODEX_DATA_BASE}/codex-auth"
+fi
 AUTH_FILE="${AUTH_DIR}/auth.json"
 
 # Codex's auth file location
@@ -80,6 +99,15 @@ fi
 AUTH_TOKEN="${ACCESS_TOKEN}"
 echo "Using access_token from ${AUTH_SOURCE}"
 echo "Account ID: ${ACCOUNT_ID}"
+
+# Emit the credential-path warning ONLY once a credential file has actually
+# been loaded (AUTH_SOURCE is set), so the notice never fires when no auth is
+# present. Write to stderr (not stdout) so stdout stays parseable for API
+# consumers, and gate behind CODEX_VERBOSE so the resolved credential path is
+# not disclosed by default (privacy parity with codex-models.sh).
+if [ "${CODEX_VERBOSE:-0}" = "1" ]; then
+    echo "WARNING: ${AUTH_DIR} contains live credentials (access/refresh tokens)." >&2
+fi
 
 # ============================================================================
 # Load the Codex system prompt
@@ -252,7 +280,12 @@ read -r -d '' TOOLS_JSON << 'EOF' || true
 ]
 EOF
 
-# Save tools to temp file for proper JSON handling
+# Save tools to temp file for proper JSON handling. chmod failure must be
+# fatal: the directory is about to hold live credential artifacts, so a
+# failure to lock it down to mode 700 must abort rather than continue writing
+# into an unprotected directory.
+mkdir -p "${AUTH_DIR}"
+chmod 700 "${AUTH_DIR}" || { echo "ERROR: Failed to secure credential directory ${AUTH_DIR}" >&2; exit 1; }
 TOOLS_TEMP_FILE="${AUTH_DIR}/tools_temp.json"
 echo "${TOOLS_JSON}" > "${TOOLS_TEMP_FILE}"
 

@@ -26,7 +26,7 @@ Settings are merged from four files. The precedence order for single-value
 settings (like `theme`) is:
 
 1. System Defaults (`system-defaults.json`)
-2. User Settings (`~/.llxprt/settings.json`)
+2. User Settings (your user `settings.json` in LLxprt's [config directory](../reference/application-directories.md))
 3. Workspace Settings (`<project>/.llxprt/settings.json`)
 4. System Overrides (`settings.json`)
 
@@ -50,7 +50,7 @@ Here is how settings from different levels are combined.
   }
   ```
 
-- **User `settings.json` (`~/.llxprt/settings.json`):**
+- **User `settings.json`** (in LLxprt's [config directory](../reference/application-directories.md)):
 
   ```json
   {
@@ -149,9 +149,10 @@ This results in the following merged configuration:
 - **Location**:
   - **Linux**: `/etc/llxprt-code/settings.json`
   - **Windows**: `C:\ProgramData\llxprt-code\settings.json`
-  - **macOS**: `/Library/Application Support/LLxprt-Code/settings.json`
-  - The path can be overridden using the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH`
-    environment variable.
+  - **macOS**: `/Library/Application Support/LlxprtCode/settings.json`
+  - The path can be overridden using the `LLXPRT_SYSTEM_SETTINGS_PATH`
+    environment variable (a legacy alias `LLXPRT_CODE_SYSTEM_SETTINGS_PATH`
+    is also honored for backward compatibility).
 - **Control**: This file should be managed by system administrators and
   protected with appropriate file permissions to prevent unauthorized
   modification by users.
@@ -161,7 +162,7 @@ configuration patterns described below.
 
 ### Enforcing system settings with a wrapper script
 
-While the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` environment variable provides
+While the `LLXPRT_SYSTEM_SETTINGS_PATH` environment variable provides
 flexibility, a user could potentially override it to point to a different
 settings file, bypassing the centrally managed configuration. To mitigate this,
 enterprises can deploy a wrapper script or alias that ensures the environment
@@ -181,7 +182,7 @@ that appears earlier in the user's `PATH` than the actual LLxprt Code binary
 
 # Enforce the path to the corporate system settings file.
 # This ensures that the company's configuration is always applied.
-export LLXPRT_CODE_SYSTEM_SETTINGS_PATH="/etc/llxprt-code/settings.json"
+export LLXPRT_SYSTEM_SETTINGS_PATH="/etc/llxprt-code/settings.json"
 
 # Find the original llxprt executable.
 # This is a simple example; a more robust solution might be needed
@@ -197,7 +198,7 @@ fi
 exec "$REAL_LLXPRT_PATH" "$@"
 ```
 
-By deploying this script, the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` is set within
+By deploying this script, the `LLXPRT_SYSTEM_SETTINGS_PATH` is set within
 the script's environment, and the `exec` command replaces the script process
 with the actual LLxprt Code process, which inherits the environment variable.
 This makes it significantly more difficult for a user to bypass the enforced

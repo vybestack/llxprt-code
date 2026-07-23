@@ -213,7 +213,7 @@ Local servers generally ignore the `Authorization` header, so `/key clear` is su
 
 #### Save a reusable profile
 
-Instead of re-typing the commands above every session, persist them to a profile. Profiles live in `~/.llxprt/profiles/<name>.json` and are loaded with `/profile load <name>` or the `--profile-load` flag.
+Instead of re-typing the commands above every session, persist them to a profile. Profiles live in `<config>/profiles/<name>.json` (see [Application Directories](./reference/application-directories.md)) and are loaded with `/profile load <name>` or the `--profile-load` flag.
 
 You can build the profile interactively and run `/profile save <name>`, or hand-write the JSON. For a llama.cpp server, use the `openai` provider (its server is OpenAI-compatible) and these ephemeral settings keys:
 
@@ -227,7 +227,7 @@ You can build the profile interactively and run `/profile save <name>`, or hand-
 
 > **Note:** The persisted key is `tool-format` (kebab-case), not `toolFormat`.
 
-Example profile (`~/.llxprt/profiles/llamacpp.json`):
+Example profile (`<config>/profiles/llamacpp.json`):
 
 ```json
 {
@@ -300,7 +300,7 @@ Start the server. The example below uses a practical 32K runtime context even th
 
 The short model name `gemma-4-12b-it-qat-q4_0.gguf` was accepted directly by both `curl /v1/chat/completions` and by LLxprt Code's profile `model` field.
 
-Save a profile for it (`~/.llxprt/profiles/gemma4-llamacpp.json`):
+Save a profile for it (`<config>/profiles/gemma4-llamacpp.json`, see [Application Directories](./reference/application-directories.md)):
 
 ```json
 {

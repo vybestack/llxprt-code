@@ -260,6 +260,8 @@ export {
 export {
   TodoStore as LocalTodoStore,
   DEFAULT_AGENT_ID as TODO_DEFAULT_AGENT_ID,
+  type TodoDataDirResolver,
+  type TodoStoreOptions,
 } from './tools/todo-store.js';
 export {
   todoEvents,

@@ -11,6 +11,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { repairProfiles } from './profileRepair.js';
 import { copyEntry, pathEntryExists } from './legacyCopyEngine.js';
 import { copyProfilesDirNormalized } from './legacyProfileNormalization.js';
+import { reconcileGlobalMemory } from './memoryReconciliation.js';
 import {
   hasErrnoCode,
   uniqueTempPath,
@@ -508,8 +509,13 @@ export function runStartupMigrationWithPath(
   // appears after an earlier successful repair.
   const repair = executeRepair(legacyDir, destinations);
 
+  // Reconcile global memory files that the production memory tool may have
+  // written into the data directory (pre-fix CoreStorageServiceAdapter) into
+  // the canonical config directory. Non-destructive; marker-gated.
+  const memoryReconciliation = executeMemoryReconciliation(destinations);
+
   logStartupSummary(destinations, migration, repair);
-  return { migration, repair };
+  return { migration, repair, memoryReconciliation };
 }
 
 /**
@@ -543,11 +549,14 @@ function finalizeMigrationMarker(
 
 /**
  * Runs the startup migration check using paths from {@link Storage}. Skipped
- * entirely when `LLXPRT_CONFIG_HOME` is set (explicit override). Delegates to
+ * entirely when `LLXPRT_CONFIG_HOME` is a non-empty absolute override
+ * (explicit user takeover). Relative/blank values are ignored, matching
+ * Storage's exact override-validity contract, so migration/reconciliation
+ * still proceeds against the platform-default config dir. Delegates to
  * {@link runStartupMigrationWithPath}.
  */
 export function runStartupMigration(): StartupMigrationResult {
-  if (process.env['LLXPRT_CONFIG_HOME']) {
+  if (Storage.isNonEmptyAbsoluteOverride(process.env['LLXPRT_CONFIG_HOME'])) {
     return {
       migration: {
         migrated: false,
@@ -557,6 +566,11 @@ export function runStartupMigration(): StartupMigrationResult {
       repair: {
         migrated: false,
         reason: 'LLXPRT_CONFIG_HOME override is set; skipping repair',
+        filesCopied: 0,
+      },
+      memoryReconciliation: {
+        migrated: false,
+        reason: 'LLXPRT_CONFIG_HOME override is set; skipping reconciliation',
         filesCopied: 0,
       },
     };
@@ -663,6 +677,13 @@ export function reportStartupResult(
     );
   }
 
+  const memRec = result.memoryReconciliation;
+  if (memRec.error === true) {
+    messages.push(
+      `Warning: global memory reconciliation could not complete (${memRec.reason}).`,
+    );
+  }
+
   return { messages, needsLegacyFallback };
 }
 
@@ -716,6 +737,22 @@ function executeRepair(
     return {
       migrated: false,
       reason: 'profile repair encountered an internal error',
+      filesCopied: 0,
+      error: true,
+    };
+  }
+}
+
+function executeMemoryReconciliation(
+  destinations: MigrationDestinations,
+): MigrationResult {
+  try {
+    return reconcileGlobalMemory(destinations);
+  } catch (error) {
+    logger.error('Global memory reconciliation failed:', error);
+    return {
+      migrated: false,
+      reason: 'global memory reconciliation encountered an internal error',
       filesCopied: 0,
       error: true,
     };

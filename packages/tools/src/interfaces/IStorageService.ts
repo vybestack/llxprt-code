@@ -21,10 +21,28 @@
 
 export interface IStorageService {
   /**
-   * Get the path to the LLXPRT directory.
-   * @returns The LLXPRT directory path.
+   * Get the directory holding global memory/context files.
+   *
+   * Global memory lives in the LLxprt config category (user-editable);
+   * the concrete filenames are runtime-configurable.
+   *
+   * @returns The global memory directory path.
    */
-  getLLXPRTDir(): string;
+  getGlobalMemoryDir(): string;
+
+  /**
+   * Get the canonical app-managed global data directory.
+   *
+   * This is the single authority for the data category path (credentials,
+   * state, conversations, todos, history). The path honors
+   * `LLXPRT_DATA_HOME` → `LLXPRT_CONFIG_HOME` → platform-default precedence,
+   * with relative/blank overrides ignored — exactly matching the central
+   * Storage contract. Leaf packages consume this via dependency injection
+   * rather than duplicating the platform algorithm.
+   *
+   * @returns The canonical global data directory path.
+   */
+  getGlobalDataDir(): string;
 
   /**
    * Read a file's content as a string.

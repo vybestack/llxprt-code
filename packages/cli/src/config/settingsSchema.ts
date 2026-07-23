@@ -181,7 +181,8 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
     properties: {
       profile: {
         type: 'string',
-        description: 'Reference to profile name in ~/.llxprt/profiles/',
+        description:
+          'Reference to a saved profile name (profiles live in the LLxprt config directory).',
       },
       systemPrompt: {
         type: 'string',

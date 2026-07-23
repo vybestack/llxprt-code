@@ -24,8 +24,6 @@ import {
   setInstalledPermissions,
   removeEmptyDirs,
   fixFilePermissions,
-  copyDirectory,
-  countFiles,
 } from './installer/directory-utils.js';
 import {
   type PromptConflictReason,
@@ -40,11 +38,34 @@ import {
   formatBackupTimestamp,
   classifyBackupError,
 } from './installer/path-expansion.js';
+import { randomUUID } from 'node:crypto';
+import {
+  snapshotDirectory,
+  BackupClaimCleanupError,
+  type SnapshotDirectoryOptions,
+} from './installer/backup-operations.js';
 
 const logger = new DebugLogger('llxprt:prompt-config:installer');
 
-export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
 export const REQUIRED_DIRECTORIES = ['', 'env', 'tools', 'providers'] as const;
+
+/**
+ * A base directory was not supplied (null/undefined/blank) to a PromptInstaller
+ * operation. The caller MUST resolve a concrete base directory through the
+ * {@link PromptService}/{@link Storage} authority before invoking install,
+ * uninstall, validate, repair, or backup. PromptInstaller deliberately does
+ * NOT fall back to a hardcoded home-anchored path.
+ */
+export class MissingBaseDirError extends Error {
+  constructor(operation: string) {
+    super(
+      `${operation} requires a non-empty already-resolved base directory. ` +
+        `Resolve one through PromptService (which derives it from Storage.getGlobalConfigDir()) ` +
+        `or Storage before calling PromptInstaller.`,
+    );
+    this.name = 'MissingBaseDirError';
+  }
+}
 
 export interface InstallOptions {
   force?: boolean;
@@ -100,6 +121,15 @@ export interface BackupResult {
   error?: string;
 }
 
+/**
+ * Behavioral seam for {@link PromptInstaller.backup}. Production callers leave
+ * this undefined so the real atomic snapshot + sidecar claim protocol runs
+ * against the filesystem. Tests inject a {@link SnapshotDirectoryOptions}
+ * (e.g. a failing `releaseClaim`) to exercise partial-success paths that the
+ * real filesystem cannot reliably produce cross-platform.
+ */
+export type BackupOptions = SnapshotDirectoryOptions;
+
 export const DefaultsMapSchema = z.record(z.string(), z.string());
 export type DefaultsMap = z.infer<typeof DefaultsMapSchema>;
 
@@ -110,12 +140,24 @@ export type DefaultsMap = z.infer<typeof DefaultsMapSchema>;
 export class PromptInstaller {
   private readonly defaultSourceDirs?: readonly string[];
 
+  /**
+   * Optional backup behavior overrides forwarded to {@link snapshotDirectory}.
+   * Defaults to real production behavior; tests inject a `releaseClaim` to
+   * force the partial-success (published-but-cleanup-failed) path.
+   */
+  private readonly backupOptions?: BackupOptions;
+
+  constructor(options?: { backup?: BackupOptions }) {
+    this.backupOptions = options?.backup;
+  }
+
   async install(
-    baseDir: string | null,
+    baseDir: string | null | undefined,
     defaults: DefaultsMap,
     options?: InstallOptions,
   ): Promise<InstallResult> {
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+    requireResolvedBaseDir(baseDir, 'install');
+    const expandedBaseDir = baseDir as string;
 
     if (expandedBaseDir.includes('..') || !path.isAbsolute(expandedBaseDir)) {
       return this.invalidBaseDirResult(expandedBaseDir);
@@ -362,13 +404,13 @@ export class PromptInstaller {
   }
 
   async uninstall(
-    baseDir: string | null,
+    baseDir: string | null | undefined,
     options?: UninstallOptions,
   ): Promise<UninstallResult> {
+    requireResolvedBaseDir(baseDir, 'uninstall');
+    const expandedBaseDir = baseDir as string;
     const removed: string[] = [];
     const errors: string[] = [];
-
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
     if (!existsSync(expandedBaseDir)) {
       return { success: true, removed: [], errors: [] };
@@ -449,8 +491,11 @@ export class PromptInstaller {
     return undefined;
   }
 
-  async validate(baseDir: string | null): Promise<ValidationResult> {
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+  async validate(
+    baseDir: string | null | undefined,
+  ): Promise<ValidationResult> {
+    requireResolvedBaseDir(baseDir, 'validate');
+    const expandedBaseDir = baseDir as string;
 
     let isValid = true;
     const errors: string[] = [];
@@ -598,10 +643,11 @@ export class PromptInstaller {
   }
 
   async repair(
-    baseDir: string | null,
+    baseDir: string | null | undefined,
     defaults: DefaultsMap,
     options?: RepairOptions,
   ): Promise<RepairResult> {
+    requireResolvedBaseDir(baseDir, 'repair');
     const validation = await this.validate(baseDir);
 
     const expandedBaseDir = validation.baseDir;
@@ -801,11 +847,27 @@ export class PromptInstaller {
     }
   }
 
+  /**
+   * Backs up the prompt directory into a timestamped snapshot under
+   * `backupPath`. Delegates the copy/manifest/verify/atomic-publish steps to
+   * {@link snapshotDirectory} so publication semantics (collision-safe,
+   * exclusive sidecar claim, atomic rename) are shared rather than
+   * duplicated.
+   *
+   * Partial-success contract: when the backup is successfully published but
+   * the cooperating sidecar claim could not be released afterwards,
+   * {@link BackupClaimCleanupError} is thrown by `snapshotDirectory`. This
+   * method catches that specific error and returns a structured
+   * `{success:false, backupPath, error}` result preserving the published
+   * backup on disk. The backup tree IS the user's data; deleting it on a
+   * cleanup failure would discard a successful backup.
+   */
   async backup(
-    baseDir: string | null,
+    baseDir: string | null | undefined,
     backupPath: string,
   ): Promise<BackupResult> {
-    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
+    requireResolvedBaseDir(baseDir, 'backup');
+    const expandedBaseDir = baseDir as string;
 
     if (!existsSync(expandedBaseDir)) {
       return { success: false, error: 'Nothing to backup' };
@@ -816,56 +878,43 @@ export class PromptInstaller {
     }
 
     const timestamp = formatBackupTimestamp(new Date());
-    const backupDir = path.join(backupPath, `prompt-backup-${timestamp}`);
-
-    try {
-      return await this.performBackup(expandedBaseDir, backupDir);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      try {
-        await fs.rm(backupDir, { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
-      }
-      return { success: false, error: classifyBackupError(errorMsg) };
-    }
-  }
-
-  private async performBackup(
-    expandedBaseDir: string,
-    backupDir: string,
-  ): Promise<BackupResult> {
-    await fs.mkdir(backupDir, { recursive: true });
-
-    let fileCount = 0;
-    let totalSize = 0;
-
-    await copyDirectory(expandedBaseDir, backupDir, async (filePath) => {
-      fileCount++;
-      const stats = await fs.stat(filePath);
-      totalSize += stats.size;
-    });
-
-    const manifest = {
-      backupDate: new Date().toISOString(),
-      sourcePath: expandedBaseDir,
-      fileCount,
-      totalSize,
-    };
-
-    await fs.writeFile(
-      path.join(backupDir, 'backup-manifest.json'),
-      JSON.stringify(manifest, null, 2),
+    // Unique-by-construction candidate name: timestamp + UUID suffix so no
+    // overwrite race exists. Two backups in the same second, or a backup
+    // colliding with a pre-existing dir/file, never overwrite the existing
+    // path — each publishes to its own unique path. The underlying
+    // publishStagingExclusive still handles any exact-path collision as a
+    // last-resort retry, but the UUID suffix makes that vanishingly rare.
+    const backupDir = path.join(
+      backupPath,
+      `prompt-backup-${timestamp}-${randomUUID().slice(0, 8)}`,
     );
 
-    const verifyCount = await countFiles(backupDir);
-    if (verifyCount !== fileCount + 1) {
-      logger.warn(
-        `Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`,
+    try {
+      const snapshot = await snapshotDirectory(
+        expandedBaseDir,
+        backupDir,
+        this.backupOptions,
       );
+      return {
+        success: true,
+        backupPath: snapshot.backupPath,
+        fileCount: snapshot.fileCount,
+        totalSize: snapshot.totalSize,
+      };
+    } catch (error) {
+      // Partial success: the backup WAS published but the sidecar claim could
+      // not be released. Preserve the published backup on disk and surface
+      // both the published path and the cleanup error to the caller.
+      if (error instanceof BackupClaimCleanupError) {
+        return {
+          success: false,
+          backupPath: error.backupPath,
+          error: classifyBackupError(error.message),
+        };
+      }
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: classifyBackupError(errorMsg) };
     }
-
-    return { success: true, backupPath: backupDir, fileCount, totalSize };
   }
 
   expandPath(inputPath: string): string {
@@ -874,5 +923,24 @@ export class PromptInstaller {
 
   hashContent(content: string): string {
     return hashContentImpl(content);
+  }
+}
+
+/**
+ * Requires a non-empty, already-resolved base directory for a PromptInstaller
+ * operation. Null, undefined, or blank (whitespace-only) values are rejected
+ * with a clear diagnostic directing the caller to resolve a concrete path
+ * through {@link PromptService}/{@link Storage} first. PromptInstaller never
+ * falls back to a hardcoded home-anchored path.
+ */
+function requireResolvedBaseDir(
+  baseDir: string | null | undefined,
+  operation: string,
+): void {
+  if (baseDir === null || baseDir === undefined) {
+    throw new MissingBaseDirError(operation);
+  }
+  if (typeof baseDir !== 'string' || baseDir.trim() === '') {
+    throw new MissingBaseDirError(operation);
   }
 }

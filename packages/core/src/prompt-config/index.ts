@@ -36,9 +36,10 @@ export type {
   RepairOptions,
   RepairResult,
   BackupResult,
+  BackupOptions,
   DefaultsMap,
 } from './prompt-installer.js';
-export { DEFAULT_BASE_DIR, REQUIRED_DIRECTORIES } from './prompt-installer.js';
+export { REQUIRED_DIRECTORIES } from './prompt-installer.js';
 export type {
   PromptServiceConfig,
   ValidationResult as PromptServiceValidationResult,

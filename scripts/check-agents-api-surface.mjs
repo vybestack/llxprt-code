@@ -25,6 +25,11 @@
  * preflight-results.md section 7). Source-path tsconfig resolution means no
  * dependency dist/ is required, so this guard is clean-CI safe in the
  * pre-build lint job.
+ *
+ * The tsc declaration-build timeout defaults to DEFAULT_BUILD_TIMEOUT_MS
+ * (300000ms / 5 min). Override via the LLXPRT_API_SURFACE_BUILD_TIMEOUT_MS
+ * environment variable for slower CI runners; non-positive or non-finite
+ * values fall back to the default (fail-closed).
  */
 
 import { execFileSync } from 'node:child_process';
@@ -37,7 +42,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   parseExportedNames,
@@ -62,6 +67,40 @@ const TYPE_ROOT_CANDIDATES = [
   join(AGENTS_PACKAGE_DIR, 'node_modules', '@types'),
   join(REPO_ROOT, 'node_modules', '@types'),
 ];
+
+/**
+ * Default tsc declaration-build timeout. Observed cold-build time in isolation
+ * is ~5s, but the full monorepo test gate (`npm run test` running every
+ * workspace's vitest suite) can starve a trailing workspace of CPU so badly
+ * that this pretest's isolated `tsc` build takes well over a minute. 120s was
+ * too tight for that tail latency and produced spurious "timed out" gate
+ * failures that masked the real (passing) API-surface result.
+ *
+ * The default is deliberately generous (5 minutes): the build either completes
+ * or, on a genuine hang, the fail-closed path below still surfaces the timeout
+ * as a hard failure. Override via `LLXPRT_API_SURFACE_BUILD_TIMEOUT_MS` for
+ * slower CI runners or local constrained machines.
+ */
+export const DEFAULT_BUILD_TIMEOUT_MS = 300_000;
+
+/**
+ * Resolve the tsc build timeout, honoring an environment override. A
+ * non-positive or non-finite value falls back to the default so a malformed
+ * override can never silently disable the fail-closed timeout.
+ *
+ * Exported so tests can verify the resolution contract without spawning tsc.
+ */
+export function resolveBuildTimeoutMs(env = process.env) {
+  const raw = env.LLXPRT_API_SURFACE_BUILD_TIMEOUT_MS;
+  if (raw === undefined || raw === '') {
+    return DEFAULT_BUILD_TIMEOUT_MS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_BUILD_TIMEOUT_MS;
+  }
+  return Math.floor(parsed);
+}
 
 const tempDir = mkdtempSync(join(tmpdir(), 'agents-api-surface-'));
 let tempDirCleaned = false;
@@ -153,7 +192,19 @@ function createTempTsConfig() {
   return tempConfigPath;
 }
 
-function describeTscSpawnError(err) {
+/**
+ * Classify a tsc spawn error into a human-readable message. Returns null for
+ * ordinary non-zero exits (which `runTscBuild` reports separately).
+ *
+ * Exported for unit testing the classification contract directly, without
+ * needing to spawn a real tsc process. `timeoutMs` is threaded in so the
+ * timeout message reflects the actually-configured budget rather than a stale
+ * hardcoded value.
+ */
+export function describeTscSpawnError(
+  err,
+  timeoutMs = DEFAULT_BUILD_TIMEOUT_MS,
+) {
   if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
     if (err.stdout) console.log(err.stdout);
     if (err.stderr) console.error(err.stderr);
@@ -173,7 +224,7 @@ function describeTscSpawnError(err) {
   if (err.signal === 'SIGTERM' && err.status == null) {
     if (err.stdout) console.log(err.stdout);
     if (err.stderr) console.error(err.stderr);
-    return 'tsc declaration build timed out after 120000ms; API-surface check did not complete.';
+    return `tsc declaration build timed out after ${timeoutMs}ms; API-surface check did not complete.`;
   }
   if (err.signal) {
     return `tsc process terminated by signal ${err.signal}; declaration build did not complete.`;
@@ -192,16 +243,17 @@ function describeTscSpawnError(err) {
 
 function runTscBuild(tempConfigPath) {
   const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const timeoutMs = resolveBuildTimeoutMs();
   try {
     execFileSync(npxCmd, ['tsc', '-p', tempConfigPath], {
       stdio: 'pipe',
       cwd: REPO_ROOT,
       encoding: 'utf8',
       maxBuffer: 10 * 1024 * 1024,
-      timeout: 120_000,
+      timeout: timeoutMs,
     });
   } catch (err) {
-    const spawnErrorMsg = describeTscSpawnError(err);
+    const spawnErrorMsg = describeTscSpawnError(err, timeoutMs);
     if (spawnErrorMsg) throw new Error(spawnErrorMsg);
 
     const exitCode = err.status !== undefined ? err.status : 1;
@@ -299,11 +351,20 @@ function main() {
   process.exit(0);
 }
 
-try {
-  main();
-} catch (err) {
-  console.error(
-    `\nAgents API-surface guard FAILED: ${err instanceof Error ? err.message : String(err)}`,
-  );
-  process.exit(1);
+// Only run the guard when executed directly (node scripts/check-...mjs), not
+// when imported (e.g. by unit tests of resolveBuildTimeoutMs /
+// describeTscSpawnError). This is the standard ESM entry-point guard.
+const isDirectEntry =
+  process.argv[1] !== undefined &&
+  pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (isDirectEntry) {
+  try {
+    main();
+  } catch (err) {
+    console.error(
+      `\nAgents API-surface guard FAILED: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
 }

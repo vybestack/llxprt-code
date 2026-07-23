@@ -14,8 +14,30 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const execFileAsync = promisify(execFile);
-const HARNESS_TIMEOUT_MS = 60_000;
-const TEST_TIMEOUT_MS = 70_000;
+
+/**
+ * The Bun native-module smoke harness spawns a real `bun` subprocess. In
+ * isolation it completes in well under a second, but under the full
+ * `npm run test:scripts` fanout (~1900 tests competing for CPU) the subprocess
+ * can be starved of scheduler time and exceed a tight fixed timeout, producing
+ * spurious failures that mask the real (passing) result.
+ *
+ * The harness timeout is configurable via
+ * LLXPRT_BUN_SMOKE_TIMEOUT_MS (non-positive / non-finite falls back to the
+ * default). The default is deliberately generous so genuine hangs still
+ * fail-closed without flapping under load.
+ */
+function resolveHarnessTimeoutMs(env = process.env) {
+  const DEFAULT = 120_000;
+  const raw = env.LLXPRT_BUN_SMOKE_TIMEOUT_MS;
+  if (raw === undefined || raw === '') return DEFAULT;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT;
+  return Math.floor(parsed);
+}
+
+const HARNESS_TIMEOUT_MS = resolveHarnessTimeoutMs();
+const TEST_TIMEOUT_MS = HARNESS_TIMEOUT_MS + 10_000;
 
 function collectProcessDiagnostics(error) {
   return [error.stdout, error.stderr]

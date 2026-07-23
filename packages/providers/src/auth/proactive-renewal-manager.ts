@@ -252,7 +252,7 @@ export class ProactiveRenewalManager {
     // Issue #1159: Acquire lock before refreshing
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
-      { waitMs: 10000, staleMs: 30000, bucket: normalizedBucket },
+      { waitMs: 10000, bucket: normalizedBucket },
     );
 
     if (!lockAcquired) {

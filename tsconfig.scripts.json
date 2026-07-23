@@ -20,6 +20,8 @@
     "scripts/build_vscode_companion.ts",
     "scripts/check-build-status.ts",
     "scripts/check-cli-import-boundary.ts",
+    "scripts/check-legacy-paths.ts",
+    "scripts/legacy-paths/**/*.ts",
     "scripts/check-lockfile.ts",
     "scripts/check-storage-import-boundary.ts",
     "scripts/check-storage-package-cycle.ts",

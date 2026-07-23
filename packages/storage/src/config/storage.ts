@@ -8,60 +8,41 @@ import * as path from 'node:path';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import envPaths from 'env-paths';
+import {
+  resolveGlobalConfigDir as resolveGlobalConfigDirShared,
+  resolveGlobalDataDir as resolveGlobalDataDirShared,
+  resolveGlobalCacheDir as resolveGlobalCacheDirShared,
+  resolveGlobalLogDir as resolveGlobalLogDirShared,
+  resolveEnvOverride,
+} from './path-resolver.js';
 
 export const LLXPRT_DIR = '.llxprt';
 export const PROVIDER_ACCOUNTS_FILENAME = 'provider_accounts.json';
 export const OAUTH_FILE = 'oauth_creds.json';
 const TMP_DIR_NAME = 'tmp';
 
-// Platform-standard paths for llxprt-code (no suffix to match the
-// secure-store.ts pattern). Files are split across four XDG-aligned
-// categories: config, data, cache, and log/state.
-const platformPaths = envPaths('llxprt-code', { suffix: '' });
-
+/**
+ * Resolves a system-wide settings env override (absolute-path validity).
+ * System settings use a distinct env-var family (`LLXPRT_SYSTEM_*`) from the
+ * XDG-category overrides consumed by the shared path-resolver, so this
+ * helper remains local to Storage (the shared resolver is the authority for
+ * the four XDG-category dirs; system settings are bounded here so there is
+ * no duplicate algorithm elsewhere).
+ */
 function resolveSystemSettingsEnv(raw: string | undefined): string | undefined {
-  if (raw === undefined) {
-    return undefined;
-  }
-  const trimmed = raw.trim();
-  if (trimmed === '') {
-    return undefined;
-  }
-  if (!path.isAbsolute(trimmed)) {
-    return undefined;
-  }
-  return path.resolve(trimmed);
+  return resolveEnvOverride(raw);
 }
 
 /**
  * Resolves an environment-variable override, falling back to a secondary
  * override (for backward compat) and then to the platform default.
  *
- * For example, the data dir checks `LLXPRT_DATA_HOME` first, then falls
- * back to `LLXPRT_CONFIG_HOME` (so existing tests that set one override
- * continue to work), then uses the platform default.
+ * Delegated to the shared {@link resolveEnvOverride} /
+ * {@link resolveCanonicalDir} authority in `path-resolver.ts`
+ * (ONE implementation, no duplication). Retained here only as the
+ * private bridge so the public `Storage.getGlobal*Dir()` surface continues
+ * to own the application-facing contract.
  */
-function resolveDir(
-  primaryEnv: string,
-  fallbackEnv: string | undefined,
-  platformDefault: string,
-): string {
-  const primary = resolveSystemSettingsEnv(process.env[primaryEnv]);
-  if (primary !== undefined) {
-    return primary;
-  }
-  if (fallbackEnv !== undefined) {
-    const fallback = resolveSystemSettingsEnv(process.env[fallbackEnv]);
-    if (fallback !== undefined) {
-      return fallback;
-    }
-  }
-  if (!platformDefault) {
-    throw new Error('platformDefault must not be empty for resolveDir');
-  }
-  return platformDefault;
-}
 
 export class Storage {
   private readonly targetDir: string;
@@ -82,7 +63,7 @@ export class Storage {
    * Windows: `%APPDATA%\llxprt-code\Config`
    */
   static getGlobalConfigDir(): string {
-    return resolveDir('LLXPRT_CONFIG_HOME', undefined, platformPaths.config);
+    return resolveGlobalConfigDirShared();
   }
 
   /**
@@ -99,11 +80,7 @@ export class Storage {
    * Windows: `%LOCALAPPDATA%\llxprt-code\Data`
    */
   static getGlobalDataDir(): string {
-    return resolveDir(
-      'LLXPRT_DATA_HOME',
-      'LLXPRT_CONFIG_HOME',
-      platformPaths.data,
-    );
+    return resolveGlobalDataDirShared();
   }
 
   /**
@@ -119,11 +96,7 @@ export class Storage {
    * Windows: `%LOCALAPPDATA%\llxprt-code\Cache`
    */
   static getGlobalCacheDir(): string {
-    return resolveDir(
-      'LLXPRT_CACHE_HOME',
-      'LLXPRT_CONFIG_HOME',
-      platformPaths.cache,
-    );
+    return resolveGlobalCacheDirShared();
   }
 
   /**
@@ -140,11 +113,7 @@ export class Storage {
    * Windows: `%LOCALAPPDATA%\llxprt-code\Log`
    */
   static getGlobalLogDir(): string {
-    return resolveDir(
-      'LLXPRT_LOG_HOME',
-      'LLXPRT_CONFIG_HOME',
-      platformPaths.log,
-    );
+    return resolveGlobalLogDirShared();
   }
 
   /**
@@ -213,18 +182,85 @@ export class Storage {
     return path.join(Storage.getGlobalDataDir(), OAUTH_FILE);
   }
 
-  static getGlobalMemoryFilePath(): string {
-    return path.join(Storage.getGlobalDataDir(), 'memory.md');
+  /**
+   * App-managed user (global) extensions directory.
+   *
+   * Extensions installed by the user live under the data category so they
+   * survive cache clears and are not treated as user-editable config.
+   *
+   * Override precedence (inherited from {@link getGlobalDataDir}):
+   * 1. `LLXPRT_DATA_HOME`
+   * 2. `LLXPRT_CONFIG_HOME` (backward-compat fallback)
+   * 3. platform data dir
+   */
+  static getUserExtensionsDir(): string {
+    return path.join(Storage.getGlobalDataDir(), 'extensions');
   }
 
-  // ── System settings (unchanged — system-wide, not user-specific) ────
+  /**
+   * Directory holding global memory/context files (`LLXPRT.md` variants and
+   * `.LLXPRT_SYSTEM`).
+   *
+   * These files are directly user-editable, so they belong to the config
+   * category. This directory is owned by Storage; the concrete filenames
+   * (which are runtime-configurable via `contextFileName`) are owned by the
+   * tools package.
+   *
+   * Override precedence (inherited from {@link getGlobalConfigDir}):
+   * 1. `LLXPRT_CONFIG_HOME`
+   * 2. platform config dir
+   */
+  static getGlobalMemoryDir(): string {
+    return Storage.getGlobalConfigDir();
+  }
 
+  /**
+   * OAuth advisory lock directory.
+   *
+   * Refresh/auth advisory locks are non-secret ephemeral runtime state and
+   * therefore belong to the log/state category. They contain no credentials.
+   *
+   * Override precedence (inherited from {@link getGlobalLogDir}):
+   * 1. `LLXPRT_LOG_HOME`
+   * 2. `LLXPRT_CONFIG_HOME` (backward-compat fallback)
+   * 3. platform log/state dir
+   */
+  static getOAuthLocksDir(): string {
+    return path.join(Storage.getGlobalLogDir(), 'oauth', 'locks');
+  }
+
+  // ── System settings (system-wide, not user-specific) ────
+
+  /**
+   * Canonical system-wide settings path.
+   *
+   * This is the SINGLE authority for the system settings path. Both the CLI
+   * settings loader and the policy engine resolve through here so they agree.
+   *
+   * Override precedence:
+   * 1. `LLXPRT_SYSTEM_SETTINGS_PATH` (canonical) — non-empty absolute path
+   * 2. `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` (legacy compatibility alias) —
+   *      non-empty absolute path. Bounded: honored only here inside Storage
+   *      so there is no duplicate algorithm elsewhere.
+   * 3. Platform default
+   *
+   * Platform defaults:
+   *   macOS:  `/Library/Application Support/LlxprtCode/settings.json`
+   *   Windows: `C:\ProgramData\llxprt-code\settings.json`
+   *   Linux:   `/etc/llxprt-code/settings.json`
+   */
   static getSystemSettingsPath(): string {
-    const sanitized = resolveSystemSettingsEnv(
+    const canonical = resolveSystemSettingsEnv(
       process.env['LLXPRT_SYSTEM_SETTINGS_PATH'],
     );
-    if (sanitized !== undefined) {
-      return sanitized;
+    if (canonical !== undefined) {
+      return canonical;
+    }
+    const legacyAlias = resolveSystemSettingsEnv(
+      process.env['LLXPRT_CODE_SYSTEM_SETTINGS_PATH'],
+    );
+    if (legacyAlias !== undefined) {
+      return legacyAlias;
     }
     if (os.platform() === 'darwin') {
       return '/Library/Application Support/LlxprtCode/settings.json';
@@ -234,8 +270,54 @@ export class Storage {
     return '/etc/llxprt-code/settings.json';
   }
 
+  /**
+   * System-wide defaults path (sibling of the system settings file).
+   *
+   * Override precedence:
+   * 1. `LLXPRT_SYSTEM_DEFAULTS_PATH` (canonical) — non-empty absolute path
+   * 2. `LLXPRT_CODE_SYSTEM_DEFAULTS_PATH` (legacy compatibility alias)
+   * 3. Sibling `system-defaults.json` next to {@link getSystemSettingsPath}
+   */
+  static getSystemDefaultsPath(): string {
+    const canonical = resolveSystemSettingsEnv(
+      process.env['LLXPRT_SYSTEM_DEFAULTS_PATH'],
+    );
+    if (canonical !== undefined) {
+      return canonical;
+    }
+    const legacyAlias = resolveSystemSettingsEnv(
+      process.env['LLXPRT_CODE_SYSTEM_DEFAULTS_PATH'],
+    );
+    if (legacyAlias !== undefined) {
+      return legacyAlias;
+    }
+    return path.join(
+      path.dirname(Storage.getSystemSettingsPath()),
+      'system-defaults.json',
+    );
+  }
+
   static getSystemPoliciesDir(): string {
     return path.join(path.dirname(Storage.getSystemSettingsPath()), 'policies');
+  }
+
+  /**
+   * Override-validity contract shared across all `LLXPRT_*_HOME` and
+   * `LLXPRT_SYSTEM_SETTINGS_PATH` resolution.
+   *
+   * A category override (or compatibility config override) is honored only
+   * when it is a non-empty absolute path. Relative, blank, and
+   * whitespace-only values are ignored in favor of the platform default /
+   * env-paths resolution, exactly matching the behavior of the private
+   * `resolveSystemSettingsEnv` helper used by {@link resolveDir} and
+   * {@link getSystemSettingsPath}.
+   *
+   * Exposed publicly so non-Storage consumers (e.g. the CLI startup
+   * migration orchestrator) can reuse the exact same validity contract
+   * instead of approximating it with a raw truthiness check.
+   */
+  static isNonEmptyAbsoluteOverride(value: string | undefined): boolean {
+    return resolveSystemSettingsEnv(value) !== undefined;
   }
 
   // ── Log/state-category paths ────────────────────────────────────────

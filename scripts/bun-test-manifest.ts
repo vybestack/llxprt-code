@@ -16,11 +16,24 @@ export interface BunTestWorkspaceEntry {
    * path is used as the cwd and file resolution root.
    */
   readonly cwd?: string;
+  /**
+   * Optional Bun `--preload` script path (relative to the workspace cwd) run
+   * before any test module is imported. Used by workspaces whose tests must
+   * isolate global state (e.g. Storage roots) before test modules import the
+   * singleton — `bun test` does not run Vitest `setupFiles`, so a preload is
+   * the only way to guarantee ordering under Bun.
+   */
+  readonly preload?: string;
 }
 
 export interface BunTestFile {
   readonly file: string;
   readonly cwd: string;
+  /**
+   * Resolved absolute preload path for this file's workspace, or undefined
+   * when the workspace declares no preload. Passed to `bun test --preload`.
+   */
+  readonly preload?: string;
 }
 
 export interface BunManifestDependencies {
@@ -60,7 +73,9 @@ function getErrorCode(error: unknown): string | undefined {
 export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'a2a-server',
+    preload: 'bun-preload-storage-isolation.ts',
     files: [
+      'src/storage-isolation.bun.test.ts',
       'src/agent/task-support.test.ts',
       'src/agent/task.neutral-continuation.test.ts',
       'src/agent/task.test.ts',
@@ -132,11 +147,14 @@ export function resolveBunNativeTestFiles(
 ): BunTestFile[] {
   const files = BUN_NATIVE_TEST_MANIFEST.filter(
     ({ workspace }) => !workspaceFilter || workspace === workspaceFilter,
-  ).flatMap(({ workspace, files, cwd }) => {
+  ).flatMap(({ workspace, files, cwd, preload }) => {
     const resolvedCwd = resolveWorkspaceCwd(repoRoot, workspace, cwd);
+    const resolvedPreload =
+      preload !== undefined ? join(resolvedCwd, preload) : undefined;
     return files.map((file) => ({
       cwd: resolvedCwd,
       file: join(resolvedCwd, file),
+      preload: resolvedPreload,
     }));
   });
   const missingFiles: string[] = [];
@@ -153,6 +171,35 @@ export function resolveBunNativeTestFiles(
       } else {
         throw new BunManifestStatError(file, code, error);
       }
+    }
+  }
+  // Validate declared preload scripts exist (deduplicated — one per workspace).
+  const preloadPaths = new Set<string>();
+  for (const { preload } of files) {
+    if (preload !== undefined) {
+      preloadPaths.add(preload);
+    }
+  }
+  for (const preload of preloadPaths) {
+    try {
+      if (!dependencies.stat(preload).isFile()) {
+        throw new BunManifestStatError(
+          preload,
+          undefined,
+          new Error('not a file'),
+        );
+      }
+    } catch (error: unknown) {
+      if (error instanceof BunManifestStatError) {
+        throw error;
+      }
+      const code = getErrorCode(error);
+      if (code === 'ENOENT') {
+        throw new Error(
+          `Bun native test manifest declares a missing preload: ${preload}`,
+        );
+      }
+      throw new BunManifestStatError(preload, code, error);
     }
   }
   if (missingFiles.length > 0) {

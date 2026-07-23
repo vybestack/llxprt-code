@@ -147,7 +147,7 @@ Enterprise administrator policies (future use):
 ## Complete Example
 
 ```toml
-# Custom policy file: ~/.llxprt/my-policy.toml
+# Custom policy file: <config>/my-policy.toml (see Application Directories)
 
 # Allow all read-only tools (override defaults)
 [[rule]]
@@ -358,7 +358,7 @@ priority = 2.6
 
 ### Step 1: Create a TOML file
 
-Create a new file (e.g., `~/.llxprt/my-policy.toml`):
+Create a new file (e.g., `<config>/my-policy.toml` in LLxprt's [config directory](./reference/application-directories.md)):
 
 ```toml
 # My custom policy
@@ -371,7 +371,7 @@ priority = 2.5
 
 ### Step 2: Configure Settings
 
-Add to `~/.llxprt/settings.json`:
+Add to your [settings.json](./reference/application-directories.md):
 
 ```json
 {

@@ -10,8 +10,9 @@
  *
  * Durable profile persistence (REQ-021). Wraps the real `ProfileManager`
  * (`@vybestack/llxprt-code-settings`): `saveProfile`/`listProfiles`/
- * `deleteProfile` round-trip against `~/.llxprt/profiles` (or an explicit
- * directory). These are standalone — they do NOT require a live `Agent`.
+ * `deleteProfile` round-trip against the configured profiles directory in the
+ * LLxprt config directory (or an explicit directory). These are standalone —
+ * they do NOT require a live `Agent`.
  */
 
 import { ProfileManager } from '@vybestack/llxprt-code-settings';

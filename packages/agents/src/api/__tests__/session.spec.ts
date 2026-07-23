@@ -76,12 +76,22 @@ function messageText(msg: AgentMessage | AgentHistoryItem): string {
 /**
  * Derives the core storage temp dir for a working directory, mirroring
  * @vybestack/llxprt-code-storage Storage.getProjectTempDir
- * (`~/.llxprt/tmp/<sha256(workingDir)>`). Used only for test cleanup so
+ * (`<globalLogDir>/tmp/<sha256(workingDir)>`). Used only for test cleanup so
  * checkpoint/recording artifacts never accumulate in the shared global temp.
+ *
+ * Storage resolves the global log dir via LLXPRT_LOG_HOME, then
+ * LLXPRT_CONFIG_HOME, then the platform default. The vitest setup file
+ * (test-setup-storage-isolation.ts) calls isolateStorageRoots() which sets all
+ * of these to subdirectories under a unique temp root, so cleanup always
+ * targets the isolated tree — never the real user home.
  */
 function storageTempDirFor(workingDir: string): string {
   const hash = createHash('sha256').update(workingDir).digest('hex');
-  return join(homedir(), '.llxprt', 'tmp', hash);
+  const logHome =
+    process.env.LLXPRT_LOG_HOME ??
+    process.env.LLXPRT_CONFIG_HOME ??
+    join(homedir(), '.llxprt');
+  return join(logHome, 'tmp', hash);
 }
 
 /**

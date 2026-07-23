@@ -164,7 +164,7 @@ Add `LLXPRT_DEBUG` to the environment if something isn't working:
 }
 ```
 
-Logs go to `~/.llxprt/debug/`. Only enable when troubleshooting — they get large.
+Logs go to LLxprt's [log/state directory](./reference/application-directories.md) under `<log>/debug/` (overridable via `LLXPRT_LOG_HOME`). Only enable when troubleshooting — they get large.
 
 ## Troubleshooting
 

@@ -15,6 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
@@ -22,6 +23,14 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from './secure-store.js';
+
+// Shared env-var key list for data/config path overrides (the
+// override and platform-default suites previously duplicated this list).
+const SECURE_STORE_PATH_ENV_KEYS = [
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CONFIG_HOME',
+  'XDG_DATA_HOME',
+] as const;
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -604,6 +613,152 @@ function getFallbackDir(store: object): string {
   return (store as SecureStoreInternals).fallbackDir;
 }
 
+describe('SecureStore — fallback honors LLXPRT_DATA_HOME override (P7)', () => {
+  const ENV_KEYS = SECURE_STORE_PATH_ENV_KEYS;
+  const savedEnv: Record<string, string | undefined> = {};
+  for (const key of ENV_KEYS) {
+    savedEnv[key] = process.env[key];
+  }
+
+  // Track temp dirs created by individual tests so afterEach can remove them
+  // (no temp-dir leaks in new storage tests).
+  const createdTempDirs: string[] = [];
+
+  function trackTempDir(dir: string): string {
+    createdTempDirs.push(dir);
+    return dir;
+  }
+
+  function restoreEnv(): void {
+    for (const key of ENV_KEYS) {
+      if (savedEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedEnv[key];
+      }
+    }
+  }
+
+  beforeEach(() => {
+    for (const key of ENV_KEYS) {
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    // Remove every temp dir created during the test. Surface
+    // cleanup failures observably rather than silently swallowing them: a
+    // swallowed rm error masks filesystem/permission problems and leaks temp
+    // dirs across runs. Collect all errors and throw after the loop so one
+    // failure does not abort the remaining cleanup.
+    const cleanupErrors: unknown[] = [];
+    for (const dir of createdTempDirs.splice(0)) {
+      try {
+        fsSync.rmSync(dir, { recursive: true, force: true });
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+    }
+    if (cleanupErrors.length > 0) {
+      throw new Error(
+        `secure-store.fallback.test afterEach cleanup failed for ${cleanupErrors.length} dir(s): ${cleanupErrors.map((e) => (e instanceof Error ? e.message : String(e))).join('; ')}`,
+      );
+    }
+  });
+
+  it('default fallbackDir resolves under LLXPRT_DATA_HOME when set', () => {
+    const tmpDataHome = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-data-home-')),
+    );
+    process.env['LLXPRT_DATA_HOME'] = tmpDataHome;
+
+    const store = new SecureStore('llxprt-code-oauth', {
+      keyringLoader: async () => null,
+      fallbackPolicy: 'allow',
+    });
+    const fallbackDir = getFallbackDir(store);
+    expect(fallbackDir).toBe(
+      path.join(tmpDataHome, 'secure-store', 'llxprt-code-oauth'),
+    );
+  });
+
+  it('default fallbackDir falls back to LLXPRT_CONFIG_HOME when only it is set', () => {
+    const tmpConfigHome = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-config-home-')),
+    );
+    process.env['LLXPRT_CONFIG_HOME'] = tmpConfigHome;
+
+    const store = new SecureStore('llxprt-code-oauth', {
+      keyringLoader: async () => null,
+      fallbackPolicy: 'allow',
+    });
+    const fallbackDir = getFallbackDir(store);
+    expect(fallbackDir).toBe(
+      path.join(tmpConfigHome, 'secure-store', 'llxprt-code-oauth'),
+    );
+  });
+
+  it('LLXPRT_DATA_HOME wins over LLXPRT_CONFIG_HOME', () => {
+    const tmpDataHome = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-data-home-2-')),
+    );
+    const tmpConfigHome = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-config-home-2-')),
+    );
+    process.env['LLXPRT_DATA_HOME'] = tmpDataHome;
+    process.env['LLXPRT_CONFIG_HOME'] = tmpConfigHome;
+
+    const store = new SecureStore('llxprt-code-oauth', {
+      keyringLoader: async () => null,
+      fallbackPolicy: 'allow',
+    });
+    const fallbackDir = getFallbackDir(store);
+    expect(fallbackDir.startsWith(tmpDataHome)).toBe(true);
+  });
+
+  it('writes an encrypted envelope under LLXPRT_DATA_HOME and round-trips it', async () => {
+    const tmpDataHome = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-data-home-3-')),
+    );
+    process.env['LLXPRT_DATA_HOME'] = tmpDataHome;
+
+    const store = new SecureStore('test-roundtrip', {
+      keyringLoader: async () => null,
+      fallbackPolicy: 'allow',
+      // Avoid requiring a machine secret in CI sandboxes.
+      machineSecretLoader: async () => null,
+    });
+    await store.set('hello', 'world');
+    const fallbackDir = getFallbackDir(store);
+    const expectedPath = path.join(fallbackDir, 'hello.enc');
+    const stat = await fs.stat(expectedPath);
+    expect(stat.isFile()).toBe(true);
+
+    const retrieved = await store.get('hello');
+    expect(retrieved).toBe('world');
+  });
+
+  it('env var changed AFTER construction does not move an existing instance dir', () => {
+    const tmpDataHomeA = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-data-A-')),
+    );
+    process.env['LLXPRT_DATA_HOME'] = tmpDataHomeA;
+    const store = new SecureStore('frozen', {
+      keyringLoader: async () => null,
+      fallbackPolicy: 'allow',
+    });
+    const captured = getFallbackDir(store);
+
+    const tmpDataHomeB = trackTempDir(
+      fsSync.mkdtempSync(path.join(os.tmpdir(), 'secure-store-data-B-')),
+    );
+    process.env['LLXPRT_DATA_HOME'] = tmpDataHomeB;
+
+    expect(getFallbackDir(store)).toBe(captured);
+  });
+});
+
 describe('SecureStore — Default Path Uses Platform Standards', () => {
   /**
    * @given SecureStore created without explicit fallbackDir
@@ -614,7 +769,34 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
    * - macOS: ~/Library/Application Support/llxprt-code/secure-store/{service}
    * - Linux: ~/.local/share/llxprt-code/secure-store/{service} (or $XDG_DATA_HOME)
    * - Windows: %LOCALAPPDATA%\llxprt-code\secure-store\{service}
+   *
+   * NOTE: These tests clear the LLxprt data/config overrides (set by the
+   * storage isolation setup) so the real platform default is exercised.
+   * The override-honoring behavior is covered by the
+   * "fallback honors LLXPRT_DATA_HOME override (P7)" suite above.
    */
+  const PLATFORM_ENV_KEYS = SECURE_STORE_PATH_ENV_KEYS;
+  const savedPlatformEnv: Record<string, string | undefined> = {};
+  for (const key of PLATFORM_ENV_KEYS) {
+    savedPlatformEnv[key] = process.env[key];
+  }
+
+  beforeEach(() => {
+    for (const key of PLATFORM_ENV_KEYS) {
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of PLATFORM_ENV_KEYS) {
+      if (savedPlatformEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = savedPlatformEnv[key];
+      }
+    }
+  });
+
   it('default fallbackDir is not under ~/.llxprt', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,

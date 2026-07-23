@@ -69,7 +69,10 @@ describe('CodexOAuthProvider', () => {
       fallbackPolicy: 'allow',
       keyringLoader: async () => createMockKeyring(),
     });
-    tokenStore = new KeyringTokenStore({ secureStore });
+    tokenStore = new KeyringTokenStore({
+      secureStore,
+      lockDir: path.join(tempDir, 'locks'),
+    });
     provider = new CodexOAuthProvider(tokenStore);
   });
 
@@ -147,7 +150,7 @@ describe('CodexOAuthProvider', () => {
   });
 
   describe('logout', () => {
-    it('should remove stored tokens from ~/.llxprt/oauth/codex.json', async () => {
+    it('should remove stored tokens via the token store', async () => {
       const validToken = {
         access_token: 'test-access-token',
         token_type: 'Bearer' as const,

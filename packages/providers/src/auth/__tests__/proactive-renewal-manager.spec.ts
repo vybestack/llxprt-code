@@ -236,7 +236,7 @@ describe('ProactiveRenewalManager', () => {
       expect(provider.refreshToken).toHaveBeenCalledTimes(2);
     });
 
-    it('should preserve refresh lock parameters (waitMs: 10000, staleMs: 30000)', async () => {
+    it('should preserve refresh lock parameters (waitMs: 10000)', async () => {
       const nowSec = Date.now() / 1000;
       const token = createMockToken(nowSec + 600);
 
@@ -249,7 +249,7 @@ describe('ProactiveRenewalManager', () => {
 
       expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith(
         'test-provider',
-        { waitMs: 10000, staleMs: 30000, bucket: 'default' },
+        { waitMs: 10000, bucket: 'default' },
       );
     });
 

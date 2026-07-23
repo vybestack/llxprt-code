@@ -1,6 +1,6 @@
 # Prompt Configuration
 
-LLxprt Code builds its system prompt from markdown files organized in a hierarchy. You can customize any part by placing override files in `~/.llxprt/prompts/`.
+LLxprt Code builds its system prompt from markdown files organized in a hierarchy. You can customize any part by placing override files in the `prompts/` subdirectory of LLxprt's [config directory](./reference/application-directories.md) (`<config>/prompts/`, overridable via `LLXPRT_CONFIG_HOME`).
 
 ## How It Works
 
@@ -23,7 +23,7 @@ The same hierarchy applies to `env/` and `tools/` subdirectories.
 ## Directory Structure
 
 ```
-~/.llxprt/prompts/
+<config>/prompts/
 ├── core.md                              # Override the main system prompt
 ├── compression.md                       # Override compression instructions
 ├── env/
@@ -45,7 +45,7 @@ The same hierarchy applies to `env/` and `tools/` subdirectories.
 └── subagent-delegation.md             # Subagent delegation directives
 ```
 
-If a file doesn't exist in your `~/.llxprt/prompts/` directory, the built-in default is used. You only need to create files for things you want to change.
+If a file doesn't exist in your `<config>/prompts/` directory (see [Application Directories](./reference/application-directories.md)), the built-in default is used. You only need to create files for things you want to change.
 
 ## Tool Prompts
 
@@ -112,7 +112,7 @@ The internal in-memory cache invalidates when prompt files change on disk (via f
 
 ## Small / Local Models
 
-If you're running a local model with a constrained context window (e.g., 8K–32K tokens), the default `core.md` may be too large. Create a stripped-down override at `~/.llxprt/prompts/core.md` with just the essentials — shorter instructions, fewer examples, no subagent delegation. Keep `enable-tool-prompts` off (the default) to avoid bloating the prompt further.
+If you're running a local model with a constrained context window (e.g., 8K–32K tokens), the default `core.md` may be too large. Create a stripped-down override at `<config>/prompts/core.md` (see [Application Directories](./reference/application-directories.md)) with just the essentials — shorter instructions, fewer examples, no subagent delegation. Keep `enable-tool-prompts` off (the default) to avoid bloating the prompt further.
 
 ## Contributing Prompt Improvements
 

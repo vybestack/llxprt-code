@@ -9,7 +9,11 @@ import type { IStorageService } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 export class CoreStorageServiceAdapter implements IStorageService {
-  getLLXPRTDir(): string {
+  getGlobalMemoryDir(): string {
+    return Storage.getGlobalMemoryDir();
+  }
+
+  getGlobalDataDir(): string {
     return Storage.getGlobalDataDir();
   }
 
@@ -25,3 +29,14 @@ export class CoreStorageServiceAdapter implements IStorageService {
     await fs.mkdir(dirPath, { recursive: true });
   }
 }
+
+/**
+ * Shared module-level adapter instance.
+ *
+ * Global memory reads/writes must agree on a single directory across
+ * MemoryTool, memoryDiscovery, prompts, and the CLI memory command. Sharing
+ * one adapter ensures the global config-category directory resolves once and
+ * consistently for every consumer.
+ */
+export const coreStorageServiceAdapter: CoreStorageServiceAdapter =
+  new CoreStorageServiceAdapter();

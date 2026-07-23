@@ -29,7 +29,7 @@ Use the `/set` command to configure for the current session:
 
 ### 2. Default Configuration (Persistent)
 
-Add to your `~/.llxprt/settings.json` file:
+Add to your user [settings.json](./reference/application-directories.md) file (in LLxprt's config directory):
 
 ```json
 {

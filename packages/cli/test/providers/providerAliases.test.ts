@@ -117,7 +117,7 @@ describe('Provider alias integration', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('registers user-defined alias providers from ~/.llxprt/providers', () => {
+  it('registers user-defined alias providers from the canonical data providers directory (<dataDir>/providers)', () => {
     const providerManager = getProviderManager();
 
     expect(providerManager.listProviders()).toContain('myotherprovider');
@@ -144,6 +144,23 @@ describe('Provider alias integration', () => {
     ).providerConfig;
     expect(providerConfig?.defaultModel).toBe('my-test-model');
     expect(aliasProvider?.getDefaultModel()).toBe('my-test-model');
+    // Strengthen: the alias was read from the canonical data providers
+    // directory (LLXPRT_DATA_HOME/providers), not a packaged builtin. The
+    // alias name 'myotherprovider' and its defaultModel are user-supplied
+    // values that exist only in the on-disk myotherprovider.config file we
+    // wrote under <dataDir>/providers. Verify that file is the source.
+    const aliasConfigPath = path.join(
+      tempDir,
+      '.llxprt',
+      'providers',
+      'myotherprovider.config',
+    );
+    expect(fs.existsSync(aliasConfigPath)).toBe(true);
+    const onDiskConfig = JSON.parse(
+      fs.readFileSync(aliasConfigPath, 'utf-8'),
+    ) as { baseProvider: string; defaultModel: string };
+    expect(onDiskConfig.baseProvider).toBe('openai');
+    expect(onDiskConfig.defaultModel).toBe(aliasProvider?.getDefaultModel());
   });
 
   it('includes packaged provider aliases by default', () => {

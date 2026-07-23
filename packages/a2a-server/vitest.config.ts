@@ -107,6 +107,13 @@ export default defineConfig({
     reporters: [['default'], ['junit', { outputFile: 'junit.xml' }]],
     passWithNoTests: true,
     setupFiles: ['./test-setup-storage-isolation.ts'],
+    // Runner compatibility: these test files
+    // previously mocked `node:os` (to redirect `os.homedir()`) via a
+    // `vi.mock` factory that captured a top-level `const`, causing a TDZ
+    // ReferenceError under Vitest. They now use production dependency
+    // injection (`homeDir` option) instead of `node:os` mocking, making them
+    // compatible with BOTH Bun and Vitest. No test files are excluded.
+    exclude: ['**/node_modules/**', '**/dist/**'],
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',

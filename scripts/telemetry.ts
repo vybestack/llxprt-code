@@ -6,18 +6,22 @@
 
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
-import { constants as osConstants, homedir } from 'node:os';
+import { constants as osConstants } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { isErrnoException, messageOf } from './utils/error-guards.ts';
+import { resolveGlobalConfigDir } from '../packages/storage/src/config/path-resolver.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..');
 
 const SETTINGS_DIRECTORY_NAME = '.llxprt';
-const USER_SETTINGS_DIR = join(homedir(), SETTINGS_DIRECTORY_NAME);
-const USER_SETTINGS_PATH = join(USER_SETTINGS_DIR, 'settings.json');
+// User (global) settings live under the canonical config directory resolved
+// via the shared path-resolver authority: honors LLXPRT_CONFIG_HOME and the
+// platform default (not the legacy ~/.llxprt global layout). Workspace-local
+// .llxprt settings are retained below.
+const USER_SETTINGS_PATH = join(resolveGlobalConfigDir(), 'settings.json');
 const WORKSPACE_SETTINGS_PATH = join(
   projectRoot,
   SETTINGS_DIRECTORY_NAME,
@@ -85,7 +89,8 @@ function cliTargetValue(): string | undefined {
   return process.argv[index + 1] ?? '';
 }
 
-// Precedence: CLI --target overrides settings; workspace settings override user settings.
+// Precedence: CLI --target overrides settings; workspace settings override
+// user (global) settings resolved via the canonical config directory.
 const cliTarget = cliTargetValue();
 const effectiveSettingsTarget =
   cliTarget === undefined

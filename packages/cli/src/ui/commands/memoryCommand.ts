@@ -5,6 +5,7 @@
  */
 
 import {
+  coreStorageServiceAdapter,
   getErrorMessage,
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
@@ -89,7 +90,7 @@ function handleCoreMemoryAdd(
   const filePath =
     firstArg === 'core.project'
       ? getProjectCoreMemoryFilePath(workingDir)
-      : getGlobalCoreMemoryFilePath();
+      : getGlobalCoreMemoryFilePath(coreStorageServiceAdapter);
 
   void (async () => {
     try {

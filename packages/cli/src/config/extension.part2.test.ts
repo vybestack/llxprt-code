@@ -17,7 +17,6 @@ import {
   installOrUpdateExtension,
 } from './extension.js';
 import {
-  LLXPRT_CONFIG_DIR,
   type LlxprtExtension,
   ExtensionUninstallEvent,
   ExtensionDisableEvent,
@@ -104,7 +103,18 @@ vi.mock('./settings.js', () => ({
   },
 }));
 
-const EXTENSIONS_DIRECTORY_NAME = path.join(LLXPRT_CONFIG_DIR, 'extensions');
+// Canonical user-extensions directory name under the data-category dir
+// (Storage.getUserExtensionsDir() => <dataHome>/extensions). Tests redirect
+// LLXPRT_DATA_HOME to tempHomeDir, so fixtures land at <tempHome>/extensions.
+const EXTENSIONS_DIRECTORY_NAME = 'extensions';
+// Env keys that redirect Storage category dirs to the temp home.
+const ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
 
 describe('extension tests', () => {
   let tempHomeDir: string;
@@ -118,6 +128,10 @@ describe('extension tests', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
+    for (const key of ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = tempHomeDir;
+    }
     userExtensionsDir = path.join(tempHomeDir, EXTENSIONS_DIRECTORY_NAME);
     fs.mkdirSync(userExtensionsDir, { recursive: true });
 
@@ -149,6 +163,13 @@ describe('extension tests', () => {
   });
 
   afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
     vi.restoreAllMocks();

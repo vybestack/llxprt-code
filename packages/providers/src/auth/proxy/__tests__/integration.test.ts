@@ -82,7 +82,7 @@ class InMemoryTokenStore implements TokenStore {
 
   async acquireRefreshLock(
     _provider: string,
-    _options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    _options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     return true;
   }
@@ -93,7 +93,7 @@ class InMemoryTokenStore implements TokenStore {
 
   async acquireAuthLock(
     _provider: string,
-    _options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    _options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     return true;
   }

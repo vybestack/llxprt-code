@@ -311,7 +311,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   });
 
   /**
-   * Regression guard (issue #2450 OCR finding): `RetryableQuotaError` (a Google
+   * Regression guard (issue #2450): `RetryableQuotaError` (a Google
    * quota-limit error) carries NO HTTP `.status` — only `cause.code: 429` and
    * `retryDelayMs`. Core's `isRetryableError` handles it via `instanceof` at
    * PRIORITY 2, but `getErrorStatus` does NOT traverse `.cause.code`. If the

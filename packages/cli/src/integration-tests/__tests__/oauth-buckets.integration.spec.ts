@@ -138,7 +138,10 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       fallbackPolicy: 'allow',
       keyringLoader: async () => createMockKeyring(),
     });
-    tokenStore = new KeyringTokenStore({ secureStore });
+    tokenStore = new KeyringTokenStore({
+      secureStore,
+      lockDir: path.join(oauthDir, 'locks'),
+    });
 
     // Create OAuth manager
     oauthManager = new OAuthManager(tokenStore);

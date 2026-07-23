@@ -22,7 +22,6 @@ import {
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -46,6 +45,9 @@ describe('memoryDiscovery subfunctions', () => {
   let cwd: string;
   let projectRoot: string;
   let homedir: string;
+  let configDir: string;
+  let savedConfigHome: string | undefined;
+  let savedDataHome: string | undefined;
 
   async function createEmptyDir(fullPath: string) {
     await fsPromises.mkdir(fullPath, { recursive: true });
@@ -70,18 +72,41 @@ describe('memoryDiscovery subfunctions', () => {
     projectRoot = await createEmptyDir(path.join(testRootDir, 'project'));
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
     homedir = await createEmptyDir(path.join(testRootDir, 'userhome'));
+    // Isolated config/data roots via the real LLXPRT_CONFIG_HOME /
+    // LLXPRT_DATA_HOME behavior — no Storage method mocking. This ensures
+    // the canonical config-category global memory directory diverges from
+    // the legacy ~/.llxprt so we can behaviorally prove the canonical file
+    // is loaded while the legacy file is ignored.
+    configDir = await createEmptyDir(path.join(testRootDir, 'confighome'));
+    const dataDir = await createEmptyDir(path.join(testRootDir, 'datahome'));
+    savedConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+    savedDataHome = process.env['LLXPRT_DATA_HOME'];
+    process.env['LLXPRT_CONFIG_HOME'] = configDir;
+    process.env['LLXPRT_DATA_HOME'] = dataDir;
+
     vi.mocked(os.homedir).mockReturnValue(homedir);
-    const llxprtDir = path.join(homedir, LLXPRT_DIR);
-    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockImplementation(() => llxprtDir);
-    vi.spyOn(Storage, 'getGlobalConfigDir').mockImplementation(() => llxprtDir);
-    vi.spyOn(Storage, 'getGlobalDataDir').mockImplementation(() => llxprtDir);
-    vi.spyOn(Storage, 'getGlobalCacheDir').mockImplementation(() => llxprtDir);
-    vi.spyOn(Storage, 'getGlobalLogDir').mockImplementation(() => llxprtDir);
   });
 
   afterEach(async () => {
     setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
-    await fsPromises.rm(testRootDir, { recursive: true, force: true });
+    if (savedConfigHome === undefined) {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    } else {
+      process.env['LLXPRT_CONFIG_HOME'] = savedConfigHome;
+    }
+    if (savedDataHome === undefined) {
+      delete process.env['LLXPRT_DATA_HOME'];
+    } else {
+      process.env['LLXPRT_DATA_HOME'] = savedDataHome;
+    }
+    try {
+      await fsPromises.rm(testRootDir, { recursive: true, force: true });
+    } catch (cleanupError) {
+      // Surface cleanup failure as a process-level exit code so it is
+      // visible in CI without using console.
+      process.exitCode = 1;
+      throw new Error(`Failed to cleanup testRootDir: ${String(cleanupError)}`);
+    }
   });
 
   describe('project-scoped memory discovery (issue #985)', () => {
@@ -156,7 +181,7 @@ describe('memoryDiscovery subfunctions', () => {
 
     it('should not duplicate global memory path when scanning .llxprt/ directories', async () => {
       const globalFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        path.join(configDir, DEFAULT_CONTEXT_FILENAME),
         'Global memory content',
       );
 
@@ -180,7 +205,7 @@ describe('memoryDiscovery subfunctions', () => {
   describe('loadGlobalMemory', () => {
     it('should load global memory file if it exists', async () => {
       const globalMemoryFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        path.join(configDir, DEFAULT_CONTEXT_FILENAME),
         'Global memory content',
       );
 
@@ -369,7 +394,7 @@ describe('memoryDiscovery subfunctions', () => {
 
     it('should not duplicate global memory path when .llxprt/ scan encounters global dir', async () => {
       const globalFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        path.join(configDir, DEFAULT_CONTEXT_FILENAME),
         'Global memory',
       );
 
@@ -577,7 +602,7 @@ describe('memoryDiscovery subfunctions', () => {
   describe('loadCoreMemory', () => {
     it('should load global .LLXPRT_SYSTEM file', async () => {
       const globalCoreFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        path.join(configDir, '.LLXPRT_SYSTEM'),
         'Global core memory',
       );
 
@@ -607,7 +632,7 @@ describe('memoryDiscovery subfunctions', () => {
 
     it('should load both global and project .LLXPRT_SYSTEM files', async () => {
       const globalCoreFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        path.join(configDir, '.LLXPRT_SYSTEM'),
         'Global core memory',
       );
 
@@ -623,10 +648,9 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(2);
-      expect(result.files.map((f) => f.path)).toStrictEqual([
-        projectCoreFile,
-        globalCoreFile,
-      ]);
+      expect(result.files.map((f) => f.path).sort()).toStrictEqual(
+        [projectCoreFile, globalCoreFile].sort(),
+      );
     });
 
     it('should return empty if no .LLXPRT_SYSTEM files exist', async () => {
@@ -637,6 +661,103 @@ describe('memoryDiscovery subfunctions', () => {
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(0);
+    });
+  });
+
+  describe('canonical config-category global memory (P5)', () => {
+    // No inner beforeEach needed: the outer beforeEach already sets
+    // LLXPRT_CONFIG_HOME=configDir (isolated from the legacy homedir/.llxprt
+    // via real env-var behavior, not Storage mocking). These tests prove the
+    // canonical config file is loaded while a conflicting legacy file under
+    // fake-home/.llxprt is ignored.
+
+    it('loadGlobalMemory reads the canonical config file, not legacy ~/.llxprt', async () => {
+      const canonicalFile = await createTestFile(
+        path.join(configDir, DEFAULT_CONTEXT_FILENAME),
+        'Canonical global memory',
+      );
+      await createTestFile(
+        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Legacy global memory',
+      );
+
+      const result = await loadGlobalMemory();
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(canonicalFile);
+      expect(result.files[0].content).toBe('Canonical global memory');
+    });
+
+    it('upward traversal loads the canonical config file exactly once and never the legacy file', async () => {
+      const canonicalFile = await createTestFile(
+        path.join(configDir, DEFAULT_CONTEXT_FILENAME),
+        'Canonical global memory',
+      );
+      await createTestFile(
+        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Legacy global memory',
+      );
+
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
+
+      expect(result.filePaths).toContain(canonicalFile);
+      const canonicalOccurrences = result.filePaths.filter(
+        (p) => p === canonicalFile,
+      ).length;
+      expect(canonicalOccurrences).toBe(1);
+      const legacyFile = path.join(
+        homedir,
+        LLXPRT_DIR,
+        DEFAULT_CONTEXT_FILENAME,
+      );
+      expect(result.filePaths).not.toContain(legacyFile);
+    });
+
+    it('a genuine workspace .llxprt/LLXPRT.md still loads alongside the canonical global file', async () => {
+      const canonicalFile = await createTestFile(
+        path.join(configDir, DEFAULT_CONTEXT_FILENAME),
+        'Canonical global memory',
+      );
+      const workspaceFile = await createTestFile(
+        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Workspace memory',
+      );
+
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
+
+      expect(result.filePaths).toContain(canonicalFile);
+      expect(result.filePaths).toContain(workspaceFile);
+    });
+
+    it('loadCoreMemory reads canonical config .LLXPRT_SYSTEM, not legacy', async () => {
+      const canonicalCore = await createTestFile(
+        path.join(configDir, '.LLXPRT_SYSTEM'),
+        'Canonical core memory',
+      );
+      await createTestFile(
+        path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        'Legacy core memory',
+      );
+
+      const result = await loadCoreMemory([]);
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(canonicalCore);
+      expect(result.files[0].content).toBe('Canonical core memory');
     });
   });
 });

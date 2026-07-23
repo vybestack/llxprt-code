@@ -41,7 +41,7 @@ LLxprt Code discovers skills from three primary locations:
 
 1.  **Workspace Skills** (`.llxprt/skills/`): Workspace-specific skills that are
     typically committed to version control and shared with the team.
-2.  **User Skills** (`~/.llxprt/skills/`): Personal skills available across all
+2.  **User Skills** (`<config>/skills/`, see [Application Directories](../reference/application-directories.md)): Personal skills available across all
     your workspaces.
 3.  **Extension Skills**: Skills bundled within installed
     [extensions](../extensions/index.md).
@@ -73,7 +73,7 @@ The `llxprt skills` command provides management utilities:
 llxprt skills list
 
 # Install a skill from a Git repository, local directory, or zipped skill file (.skill)
-# Uses the user scope by default (~/.llxprt/skills)
+# Uses the user scope by default (<config>/skills — see Application Directories)
 llxprt skills install https://github.com/user/repo.git
 llxprt skills install /path/to/local/skill
 llxprt skills install /path/to/local/my-expertise.skill
@@ -135,7 +135,7 @@ description: <what the skill does and when LLxprt should use it>
 
 ### Example: Team Code Reviewer
 
-Create `~/.llxprt/skills/code-reviewer/SKILL.md`:
+Create `<config>/skills/code-reviewer/SKILL.md` (see [Application Directories](../reference/application-directories.md)):
 
 ```markdown
 ---

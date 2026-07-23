@@ -24,7 +24,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { LLXPRT_CONFIG_DIR } from '@vybestack/llxprt-code-core';
 
 vi.mock('os', async (importOriginal) => {
   const mockedOs = await importOriginal<typeof os>();
@@ -34,11 +33,22 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-const { uninstallExtension, EXTENSIONS_CONFIG_FILENAME } = await import(
-  '../extension.js'
-);
+const { uninstallExtension, EXTENSIONS_CONFIG_FILENAME, ExtensionStorage } =
+  await import('../extension.js');
 
-const LLXPRT_EXT_SUBDIR = path.join(LLXPRT_CONFIG_DIR, 'extensions');
+// Env keys that redirect Storage category dirs to the temp home so
+// Storage.getUserExtensionsDir() (the canonical data-category dir) resolves
+// under tempHomeDir. Production reads global user extensions from
+// ExtensionStorage.getUserExtensionsDir(), NOT from homedir()/.llxprt/extensions,
+// so fixtures must land where that helper resolves.
+const STORAGE_ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
+
 const COMPAT_EXT_SUBDIR = '.gemini/extensions';
 
 describe('exact-case uninstall identity', () => {
@@ -52,7 +62,14 @@ describe('exact-case uninstall identity', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'uninstall-id-ws-'),
     );
-    llxprtExtensionsDir = path.join(tempHomeDir, LLXPRT_EXT_SUBDIR);
+    for (const key of STORAGE_ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = tempHomeDir;
+    }
+    // Compute the canonical LLxprt user-extensions dir via the same helper
+    // production uses (ExtensionStorage.getUserExtensionsDir()), so fixtures
+    // land at the exact path root enumeration scans.
+    llxprtExtensionsDir = ExtensionStorage.getUserExtensionsDir();
     compatExtensionsDir = path.join(tempHomeDir, COMPAT_EXT_SUBDIR);
     fs.mkdirSync(llxprtExtensionsDir, { recursive: true });
     fs.mkdirSync(compatExtensionsDir, { recursive: true });
@@ -61,6 +78,13 @@ describe('exact-case uninstall identity', () => {
   });
 
   afterEach(() => {
+    for (const key of STORAGE_ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
     vi.restoreAllMocks();

@@ -17,11 +17,37 @@ CLIENT_VERSION="0.72.0"
 MODELS_ENDPOINT="${API_BASE}/models?client_version=${CLIENT_VERSION}"
 ORIGINATOR="codex_cli_rs"
 
-AUTH_DIR="${HOME}/.llxprt/codex-auth"
+# Resolve the canonical data directory honoring LLxprt overrides, matching the
+# central Storage contract precedence:
+#   CODEX_AUTH_DIR (explicit) -> LLXPRT_DATA_HOME -> LLXPRT_CONFIG_HOME ->
+#   platform data dir (via env-paths). Never read live credentials from the
+#   legacy ~/.llxprt tree.
+#
+# Category overrides (LLXPRT_DATA_HOME/LLXPRT_CONFIG_HOME) are honored ONLY
+# when non-empty absolute paths; relative/blank values are ignored in favor of
+# env-paths defaults (matching Storage).
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "${_SCRIPT_DIR}/llxprt-paths.sh"
+# Record the caller's script dir so env-paths defaults resolve from any cwd (#6).
+llxprt_paths_init "${_SCRIPT_DIR}"
+CODEX_DATA_BASE="$(llxprt_resolve_data_dir)"
+if _CODEX_AUTH="$(llxprt_normalized_abs_override "${CODEX_AUTH_DIR:-}")"; then
+    AUTH_DIR="$_CODEX_AUTH"
+else
+    AUTH_DIR="${CODEX_DATA_BASE}/codex-auth"
+fi
 AUTH_FILE="${AUTH_DIR}/auth.json"
 
 # Codex's auth file location
 CODEX_AUTH_FILE="${HOME}/.codex/auth.json"
+
+# Warn on stderr (not stdout) so the credential-path notice never contaminates
+# this script's JSON API output on stdout, and gate behind a debug flag so the
+# resolved credential path is not disclosed by default.
+if [ "${CODEX_VERBOSE:-0}" = "1" ]; then
+    echo "NOTE: ${AUTH_DIR} is the resolved canonical data directory for Codex credentials and may contain live credentials (access/refresh tokens)." >&2
+fi
 
 # ============================================================================
 # Helper functions - Match codex-rs default_client.rs get_codex_user_agent()

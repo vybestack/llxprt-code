@@ -1,16 +1,13 @@
 /**
- * @license
- * Copyright 2025 Google LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
  * Filesystem-backed behavior tests for the A2A extension loader.
  *
  * These tests exercise the real `loadExtensions` against temp directories
  * containing real manifest and metadata files. No mocks of the loader itself —
- * only real filesystem I/O against throwaway directories. The `os.homedir()`
- * mock isolates user-level extension scanning from workspace-level tests.
+ * only real filesystem I/O against throwaway directories. The injected
+ * `homeDir` option isolates user-level extension scanning from workspace-level
+ * tests (production dependency injection instead of `node:os` module mocking —
+ * No `vi.mock('node:os')` is used, making these tests
+ * compatible with BOTH Bun and Vitest.
  *
  * Contract verified (analogous to the CLI loader):
  * - llxprt-extension.json takes precedence over gemini-extension.json.
@@ -26,13 +23,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-const actualOs = { ...os };
-
-vi.mock('node:os', () => ({
-  ...actualOs,
-  homedir: vi.fn(() => actualOs.homedir()),
-}));
 
 const loggerErrorSpy = vi.fn();
 vi.mock('../utils/logger.js', () => ({
@@ -53,6 +43,12 @@ const {
   INSTALL_METADATA_FILENAME_FALLBACK,
   loadInstallMetadata,
 } = await import('./extension.js');
+
+// Env keys that redirect Storage category dirs so user-scope extensions land
+// under the temp fake home instead of the real user filesystem. The canonical
+// user extensions dir is <LLXPRT_DATA_HOME>/extensions.
+const ENV_KEYS = ['LLXPRT_DATA_HOME', 'LLXPRT_CONFIG_HOME'] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
 
 interface Harness {
   workspaceDir: string;
@@ -89,13 +85,23 @@ describe('A2A extension loader', () => {
   beforeEach(() => {
     harness = createHarness();
     fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-ext-test-home-'));
-    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
-    homedirMock.mockReturnValue(fakeHome);
+    // Redirect the canonical Storage data dir to the fake home so that
+    // user-scope extensions resolve under <fakeHome>/extensions (mirrors the
+    // production contract: Storage.getUserExtensionsDir() => <data>/extensions).
+    for (const key of ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = fakeHome;
+    }
   });
 
   afterEach(() => {
-    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
-    homedirMock.mockImplementation(() => actualOs.homedir());
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(fakeHome, { recursive: true, force: true });
     fs.rmSync(harness.workspaceDir, { recursive: true, force: true });
   });
@@ -117,6 +123,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.name).toBe('primary');
@@ -141,6 +148,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.name).toBe('legacy-ext');
@@ -202,6 +210,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
 
       expect(extensions[0]?.mcpServers?.canonical).toStrictEqual(
@@ -229,6 +238,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.hooks).toBeDefined();
@@ -251,6 +261,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.contextFiles).toContain(
@@ -282,6 +293,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.installMetadata?.source).toBe(
@@ -305,6 +317,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.installMetadata?.source).toBe(
@@ -369,6 +382,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       // Extension should not load due to malformed primary metadata
       expect(extensions).toHaveLength(0);
@@ -408,6 +422,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.map((extension) => extension.name)).toStrictEqual([
         'valid-neighbor',
@@ -435,6 +450,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(0);
       expect(
@@ -468,6 +484,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.name).toBe('gemini-ext');
@@ -489,6 +506,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.mcpServers).toHaveProperty('legacy-server');
@@ -510,6 +528,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.contextFiles).toContain(
@@ -537,6 +556,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.hooks).toBeDefined();
@@ -559,6 +579,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.version).toBe('2.0.0');
@@ -580,6 +601,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(2);
       const names = extensions.map((e) => e.name).sort();
@@ -600,6 +622,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'ws-ext')).toBe(true);
     });
@@ -612,7 +635,9 @@ describe('A2A extension loader', () => {
         { name: 'ws-ext-default', version: '1.0.0' },
       );
 
-      const extensions = loadExtensions(harness.workspaceDir);
+      const extensions = loadExtensions(harness.workspaceDir, {
+        homeDir: fakeHome,
+      });
       expect(extensions.some((e) => e.name === 'ws-ext-default')).toBe(true);
     });
 
@@ -626,13 +651,16 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: false,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'ws-blocked')).toBe(false);
     });
 
     it('retains user (home) extensions even when folderTrust is false', () => {
-      // Create a user-level extension in the fake home
-      const homeExtensionsDir = path.join(fakeHome, EXTENSIONS_DIRECTORY_NAME);
+      // User extensions resolve through Storage.getUserExtensionsDir()
+      // (<LLXPRT_DATA_HOME>/extensions). beforeEach redirects LLXPRT_DATA_HOME
+      // to fakeHome, so the canonical user dir is <fakeHome>/extensions.
+      const homeExtensionsDir = path.join(fakeHome, 'extensions');
       fs.mkdirSync(homeExtensionsDir, { recursive: true });
       const userExtDir = path.join(homeExtensionsDir, 'user-ext');
       fs.mkdirSync(userExtDir, { recursive: true });
@@ -651,6 +679,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: false,
+        homeDir: fakeHome,
       });
 
       // User extension should be present
@@ -660,7 +689,8 @@ describe('A2A extension loader', () => {
     });
 
     it('keeps user MCP servers and modern executable hooks active when folderTrust is false', () => {
-      const homeExtensionsDir = path.join(fakeHome, EXTENSIONS_DIRECTORY_NAME);
+      // Canonical user extensions dir: <LLXPRT_DATA_HOME>/extensions
+      const homeExtensionsDir = path.join(fakeHome, 'extensions');
       const userExtDir = path.join(homeExtensionsDir, 'trusted-user-ext');
       fs.mkdirSync(path.join(userExtDir, 'hooks'), { recursive: true });
       fs.writeFileSync(
@@ -688,6 +718,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: false,
+        homeDir: fakeHome,
       });
       const userExtension = extensions.find(
         (extension) => extension.name === 'trusted-user-ext',
@@ -715,6 +746,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: false,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'ws-mcp')).toBe(false);
     });
@@ -739,6 +771,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: false,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'ws-hook')).toBe(false);
     });

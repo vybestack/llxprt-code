@@ -66,8 +66,9 @@ describe('OAuthError', () => {
       'Unable to save Test-provider authentication data. Please check file permissions.',
     );
     expect(error.actionRequired).toBe(
-      'Check that you have write permissions to ~/.llxprt directory.',
+      'Check that the OS keyring is unlocked and that the LLxprt data directory is writable (see docs/reference/application-directories.md).',
     );
+    expect(error.actionRequired).not.toContain('~/.llxprt');
   });
 
   it('should categorize security violations as critical', () => {

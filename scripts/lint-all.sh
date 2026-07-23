@@ -24,6 +24,15 @@ else
     FAILED=1
 fi
 
+# Legacy path guard (issue #2606 Phase 10)
+echo -e "\n${YELLOW}Running legacy-paths guard...${NC}"
+if npm run lint:legacy-paths; then
+    echo -e "${GREEN}✓ legacy-paths guard passed${NC}"
+else
+    echo -e "${RED}✗ legacy-paths guard failed${NC}"
+    FAILED=1
+fi
+
 # LSP package linting (separate config, excluded from root eslint)
 echo -e "\n${YELLOW}Running ESLint on LSP package...${NC}"
 if (cd packages/lsp && npx eslint .); then

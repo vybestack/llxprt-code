@@ -352,16 +352,20 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
   });
 
   describe('IStorageService contract', () => {
-    it('requires getLLXPRTDir, readFile, writeFile, ensureDir', async () => {
+    it('requires getGlobalMemoryDir, getGlobalDataDir, readFile, writeFile, ensureDir', async () => {
       const service: IStorageService = {
-        getLLXPRTDir: () => '/home/user/.llxprt',
+        getGlobalMemoryDir: () => '/home/user/.llxprt',
+        getGlobalDataDir: () => '/home/user/.local/share/llxprt-code',
         readFile: async (path: string) => `content of ${path}`,
         writeFile: async () => {},
         ensureDir: async () => {},
       };
       assertImplements<IStorageService>(service);
 
-      expect(service.getLLXPRTDir()).toBe('/home/user/.llxprt');
+      expect(service.getGlobalMemoryDir()).toBe('/home/user/.llxprt');
+      expect(service.getGlobalDataDir()).toBe(
+        '/home/user/.local/share/llxprt-code',
+      );
       const content = await service.readFile('/home/user/.llxprt/LLXPRT.md');
       expect(content).toContain('content of');
     });

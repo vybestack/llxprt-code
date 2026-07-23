@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync, spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ import {
   getPassthroughEnvVars,
   isSandboxDebugModeEnabled,
 } from './sandbox-env.js';
+import { Storage } from '@vybestack/llxprt-code-storage';
 
 const execAsync = promisify(exec);
 
@@ -125,15 +126,23 @@ function resolveProxyUrl(): string {
   return candidates.find((v): v is string => !!v) ?? 'http://localhost:8877';
 }
 
-function buildSeatbeltArgs(
+export function buildSeatbeltArgs(
   profileFile: string,
   nodeOptions: string,
   cliConfig?: Config,
   cliArgs: string[] = [],
 ): string[] {
-  const cacheDir = fs.realpathSync(
-    execSync('getconf DARWIN_USER_CACHE_DIR').toString().trim(),
-  );
+  // Resolve canonical config/data/cache/log roots via the shared path
+  // resolver (Storage delegates to path-resolver.ts — the SINGLE authority).
+  // These are passed as dedicated params so .sb profiles grant writes to the
+  // exact canonical roots instead of the legacy HOME_DIR/.llxprt path.
+  // CACHE_DIR resolves through Storage.getGlobalCacheDir() (honoring
+  // LLXPRT_CACHE_HOME → LLXPRT_CONFIG_HOME → platform cache), NOT the Darwin
+  // per-user cache dir, so .sb profiles and runtime agree on one cache root.
+  const configDir = resolveRealpathSync(Storage.getGlobalConfigDir());
+  const dataDir = resolveRealpathSync(Storage.getGlobalDataDir());
+  const cacheDir = resolveRealpathSync(Storage.getGlobalCacheDir());
+  const logDir = resolveRealpathSync(Storage.getGlobalLogDir());
   const args = [
     '-D',
     `TARGET_DIR=${fs.realpathSync(process.cwd())}`,
@@ -143,6 +152,12 @@ function buildSeatbeltArgs(
     `HOME_DIR=${fs.realpathSync(os.homedir())}`,
     '-D',
     `CACHE_DIR=${cacheDir}`,
+    '-D',
+    `CONFIG_DIR=${configDir}`,
+    '-D',
+    `DATA_DIR=${dataDir}`,
+    '-D',
+    `LOG_DIR=${logDir}`,
   ];
 
   const MAX_INCLUDE_DIRS = 5;
@@ -174,6 +189,30 @@ function buildSeatbeltArgs(
     ].join(' '),
   );
   return args;
+}
+
+/**
+ * Resolves the canonical real path for a directory, creating it first if it
+ * does not exist (so realpathSync does not fail on a fresh install where the
+ * canonical config/data/log dirs have not yet been materialized). Falls back
+ * to `path.resolve` when the path cannot be resolved (e.g. a parent is
+ * inaccessible), matching the conservative behavior of the original code.
+ */
+function resolveRealpathSync(dirPath: string): string {
+  try {
+    return fs.realpathSync(dirPath);
+  } catch {
+    // The directory does not exist yet. Create it so the sandbox profile
+    // grants writes to a real path, then resolve.
+    try {
+      fs.mkdirSync(dirPath, { recursive: true });
+      return fs.realpathSync(dirPath);
+    } catch {
+      // Creation failed (permissions, etc.) — fall back to a lexical resolve
+      // so the sandbox still launches with a best-effort path.
+      return path.resolve(dirPath);
+    }
+  }
 }
 
 interface SeatbeltProxySetup {

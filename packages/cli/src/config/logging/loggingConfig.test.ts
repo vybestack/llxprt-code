@@ -35,8 +35,7 @@ interface ExtendedConfig {
 
 // Mock extended config class for testing
 class MockExtendedConfig implements ExtendedConfig {
-  private conversationLogPath =
-    process.env.HOME + '/.llxprt/logs/conversations';
+  private conversationLogPath = process.env.HOME + '/conversations-test';
   private cliFlags: {
     logConversations?: boolean;
     conversationLogPath?: string;
@@ -375,7 +374,7 @@ describe('Conversation Logging Configuration', () => {
     expect(freshConfig.getMaxLogSizeMB()).toBe(10);
     expect(freshConfig.getMaxLogFiles()).toBe(5);
     expect(freshConfig.getConversationLogPath()).toContain(
-      '/.llxprt/logs/conversations',
+      '/conversations-test',
     );
   });
 

@@ -13,6 +13,9 @@
       "@vybestack/llxprt-code-storage/config/storage.js": [
         "./src/config/storage.ts"
       ],
+      "@vybestack/llxprt-code-storage/config/path-resolver.js": [
+        "./src/config/path-resolver.ts"
+      ],
       "@vybestack/llxprt-code-storage/services/fileSystemService.js": [
         "./src/services/fileSystemService.ts"
       ],

@@ -24,6 +24,7 @@ import {
   UNCONFIGURED_PROVIDER,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import {
   createAgentClient,
   createToolScheduler,
@@ -308,14 +309,15 @@ export function setTargetDir(agentSettings: AgentSettings | undefined): string {
   }
 }
 
-export function loadEnvironment(): void {
-  const envFilePath = findEnvFile(process.cwd());
+export function loadEnvironment(options: { homeDir?: string } = {}): void {
+  const homeDir = options.homeDir ?? homedir();
+  const envFilePath = findEnvFile(process.cwd(), homeDir);
   if (envFilePath) {
     dotenv.config({ path: envFilePath, override: true });
   }
 }
 
-function findEnvFile(startDir: string): string | null {
+function findEnvFile(startDir: string, homeDir: string): string | null {
   let currentDir = path.resolve(startDir);
   let parentDir = path.resolve(startDir);
   // Use do/while so the root directory is still probed before exiting,
@@ -334,12 +336,14 @@ function findEnvFile(startDir: string): string | null {
     }
     parentDir = path.dirname(currentDir);
   } while (parentDir !== currentDir && parentDir !== '');
-  // check .env under home as fallback, again preferring llxprt-specific .env
-  const homeLlxprtEnvPath = path.join(homedir(), LLXPRT_CONFIG_DIR, '.env');
-  if (fs.existsSync(homeLlxprtEnvPath)) {
-    return homeLlxprtEnvPath;
+  // Global LLxprt .env fallback: resolve through the central Storage config
+  // directory so LLXPRT_CONFIG_HOME and the platform config location are
+  // honored (parity with the CLI's global .env resolution).
+  const globalLlxprtEnvPath = path.join(Storage.getGlobalConfigDir(), '.env');
+  if (fs.existsSync(globalLlxprtEnvPath)) {
+    return globalLlxprtEnvPath;
   }
-  const homeEnvPath = path.join(homedir(), '.env');
+  const homeEnvPath = path.join(homeDir, '.env');
   if (fs.existsSync(homeEnvPath)) {
     return homeEnvPath;
   }

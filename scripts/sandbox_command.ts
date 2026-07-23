@@ -24,6 +24,7 @@ import os from 'node:os';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import dotenv from 'dotenv';
+import { resolveGlobalConfigDir } from '../packages/storage/src/config/path-resolver.js';
 
 const argv = yargs(hideBin(process.argv))
   .option('q', {
@@ -98,7 +99,7 @@ function sandboxValueFromParsedSettings(parsed: unknown): string | undefined {
 let sandboxSetting: string | undefined = process.env.LLXPRT_SANDBOX;
 
 if (sandboxSetting === undefined) {
-  const userSettingsFile = join(os.homedir(), '.llxprt', 'settings.json');
+  const userSettingsFile = join(resolveGlobalConfigDir(), 'settings.json');
   if (existsSync(userSettingsFile)) {
     try {
       const parsed = JSON.parse(

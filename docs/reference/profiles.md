@@ -1,6 +1,6 @@
 # Profile File Reference
 
-Profiles are JSON files stored in `~/.llxprt/profiles/<name>.json`. They capture your full provider/model/settings configuration so you can switch contexts with one command.
+Profiles are JSON files stored in `<config>/profiles/<name>.json` (see [Application Directories](./application-directories.md)). They capture your full provider/model/settings configuration so you can switch contexts with one command.
 
 You almost never need to hand-edit these files. Use `/profile save`, `/profile load`, `/provider`, `/model`, `/baseurl`, `/key`, `/keyfile`, `/set`, and `/set modelparam` to build your configuration, then save it. This reference documents the file format for when you need to understand what's inside, troubleshoot, or automate profile creation.
 
@@ -215,14 +215,14 @@ llxprt --profile-load kimi-k2 --key-name synthetic-alt --set context-limit=10000
 
 ## File Location
 
-Profiles are stored in `~/.llxprt/profiles/`. The filename (minus `.json`) is the profile name:
+Profiles are stored in `<config>/profiles/` (see [Application Directories](./application-directories.md)). The filename (minus `.json`) is the profile name:
 
 ```
-~/.llxprt/profiles/
+<config>/profiles/
 ├── kimi-k2.json
 ├── opus-thinking.json
 ├── codex-high.json
 └── my-lb-setup.json
 ```
 
-The default profile (set via `/profile set-default <name>`) is recorded in `~/.llxprt/settings.json` and loads automatically on startup.
+The default profile (set via `/profile set-default <name>`) is recorded in your user `settings.json` in the [config directory](./application-directories.md) and loads automatically on startup.

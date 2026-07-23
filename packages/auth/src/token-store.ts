@@ -68,13 +68,12 @@ export interface TokenStore {
    * @param provider - The provider name
    * @param options - Optional configuration for lock behavior
    *   - waitMs: Maximum time to wait for lock
-   *   - staleMs: Threshold for considering a lock stale
    *   - bucket: Optional bucket name for multi-account support
    * @returns true if lock was acquired, false otherwise
    */
   acquireRefreshLock(
     provider: string,
-    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean>;
 
   /**
@@ -89,13 +88,12 @@ export interface TokenStore {
    * @param provider - The provider name
    * @param options - Optional configuration for lock behavior
    *   - waitMs: Maximum time to wait for lock (default: 60000ms)
-   *   - staleMs: Threshold for considering a lock stale (default: 360000ms)
    *   - bucket: Optional bucket name for multi-account support
    * @returns true if lock was acquired, false otherwise
    */
   acquireAuthLock(
     provider: string,
-    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean>;
 
   /**

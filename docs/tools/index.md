@@ -76,7 +76,7 @@ By default, the model must ask permission before:
 - Running shell commands
 - Making web requests
 
-You control this through **policies** (in `settings.json` or `~/.llxprt/policies/`):
+You control this through **policies** (in `settings.json` or `<config>/policies/` — see [Application Directories](../reference/application-directories.md)):
 
 ```json
 {

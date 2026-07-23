@@ -8,22 +8,55 @@
  * @plan:PLAN-20250823-AUTHFIXES.P15
  * @requirement:REQ-004
  * End-to-end integration tests for OAuth authentication
+ *
+ * TEST ISOLATION: these tests must NEVER operate on
+ * the real `~/.llxprt` home directory. The token path is resolved through a
+ * per-test canonical temp directory injected via the `LLXPRT_CONFIG_HOME`
+ * env override, so every read/write/remove targets an isolated temp tree
+ * that is removed in `afterEach`. The real user home is never touched.
  */
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
+import { tmpdir } from 'os';
+import { mkdtempSync, rmSync } from 'node:fs';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
 
 describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
-  const tokenPath = join(homedir(), '.llxprt', 'oauth');
+  // Isolated per-test temp config root. The token directory is resolved
+  // under this root instead of the real user home so the real ~/.llxprt is
+  // never touched. `LLXPRT_CONFIG_HOME` is the canonical env override honored
+  // by Storage; child CLI processes inherit it via the spawned env.
+  let isolatedRoot: string;
+  let tokenPath: string;
+  let prevConfigHome: string | undefined;
 
   beforeEach(async () => {
-    // Clean token directory
+    isolatedRoot = mkdtempSync(join(tmpdir(), 'llxprt-auth-e2e-'));
+    tokenPath = join(isolatedRoot, 'oauth');
+    prevConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    process.env.LLXPRT_CONFIG_HOME = isolatedRoot;
+    // Clean token directory within the isolated root.
     await fs.rm(tokenPath, { recursive: true, force: true });
   });
+
+  afterEach(async () => {
+    if (prevConfigHome === undefined) {
+      delete process.env.LLXPRT_CONFIG_HOME;
+    } else {
+      process.env.LLXPRT_CONFIG_HOME = prevConfigHome;
+    }
+    rmSync(isolatedRoot, { recursive: true, force: true });
+  });
+
+  /** Spawns the CLI inheriting the isolated config-home override. */
+  function spawnCli(args: string[]): ReturnType<typeof spawn> {
+    return spawn('npm', ['run', 'cli', '--', ...args], {
+      env: { ...process.env },
+    });
+  }
 
   /**
    * @requirement:REQ-001
@@ -46,9 +79,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     );
 
     // Step 2: Start CLI and verify no re-authentication required
-    const cli = spawn('npm', ['run', 'cli'], {
-      env: { ...process.env, SKIP_AUTH_PROMPT: 'true' },
-    });
+    const cli = spawnCli([]);
 
     let output = '';
     cli.stdout.on('data', (data) => {
@@ -86,7 +117,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     );
 
     // Step 2: Run logout command
-    const cli = spawn('npm', ['run', 'cli']);
+    const cli = spawnCli([]);
 
     cli.stdin.write('/auth anthropic logout\n');
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -135,7 +166,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     );
 
     // Step 2: Use CLI - should trigger refresh
-    const cli = spawn('npm', ['run', 'cli']);
+    const cli = spawnCli([]);
 
     cli.stdin.write('/model qwen\n');
     cli.stdin.write('Test message\n');
@@ -178,7 +209,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
       JSON.stringify(anthropicToken),
     );
 
-    const cli = spawn('npm', ['run', 'cli']);
+    const cli = spawnCli([]);
 
     // Logout from qwen only
     cli.stdin.write('/auth qwen logout\n');
@@ -209,7 +240,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     // Simulate complete user workflow
 
     // 1. First session - authenticate
-    const session1 = spawn('npm', ['run', 'cli']);
+    const session1 = spawnCli([]);
 
     // Mock successful authentication
     const token = {
@@ -226,7 +257,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     session1.kill();
 
     // 2. Second session - should work without auth
-    const session2 = spawn('npm', ['run', 'cli']);
+    const session2 = spawnCli([]);
 
     let output2 = '';
     session2.stdout.on('data', (data) => {
@@ -242,7 +273,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     session2.kill();
 
     // 3. Third session - logout
-    const session3 = spawn('npm', ['run', 'cli']);
+    const session3 = spawnCli([]);
 
     session3.stdin.write('/auth anthropic logout\n');
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -250,7 +281,7 @@ describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
     session3.kill();
 
     // 4. Fourth session - requires re-auth
-    const session4 = spawn('npm', ['run', 'cli']);
+    const session4 = spawnCli([]);
 
     let output4 = '';
     session4.stdout.on('data', (data) => {

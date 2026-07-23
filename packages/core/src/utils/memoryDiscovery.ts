@@ -14,6 +14,7 @@ import {
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
 } from '@vybestack/llxprt-code-tools';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
 import type { FileFilteringOptions } from '../config/constants.js';
@@ -21,6 +22,7 @@ import { DEFAULT_MEMORY_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
 import { debugLogger } from './debugLogger.js';
+import { coreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 
 // Simple console logger, similar to the one previously in CLI's config.ts
 // Follow-up (#1569): Integrate with a more robust server-side logger if available/appropriate.
@@ -132,7 +134,7 @@ async function getLlxprtMdFilePathsInternal(
 async function searchUpwardForLlxprtMd(
   llxprtMdFilename: string,
   resolvedCwd: string,
-  globalMemoryPath: string,
+  excludedPaths: ReadonlySet<string>,
   resolvedHome: string,
   debugMode: boolean,
 ): Promise<string[]> {
@@ -146,15 +148,19 @@ async function searchUpwardForLlxprtMd(
     ? path.dirname(projectRoot)
     : path.dirname(resolvedHome);
 
+  // legacy-exclusion (migration-only contract): never resurrect a surviving
+  // ~/.llxprt/<filename> as a workspace file when walking through $HOME.
+  const legacyLlxprtDir = path.join(resolvedHome, LLXPRT_DIR);
+
   while (
     currentDir &&
     currentDir !== path.dirname(currentDir) &&
-    currentDir !== path.join(resolvedHome, LLXPRT_DIR)
+    currentDir !== legacyLlxprtDir
   ) {
     const potentialPath = path.join(currentDir, llxprtMdFilename);
     try {
       await fs.access(potentialPath, fsSync.constants.R_OK);
-      if (potentialPath !== globalMemoryPath) {
+      if (!excludedPaths.has(potentialPath)) {
         upwardPaths.unshift(potentialPath);
       }
     } catch {
@@ -164,7 +170,7 @@ async function searchUpwardForLlxprtMd(
     const llxprtDirPath = path.join(currentDir, LLXPRT_DIR, llxprtMdFilename);
     try {
       await fs.access(llxprtDirPath, fsSync.constants.R_OK);
-      if (llxprtDirPath !== globalMemoryPath) {
+      if (!excludedPaths.has(llxprtDirPath)) {
         upwardPaths.unshift(llxprtDirPath);
       }
     } catch {
@@ -193,11 +199,10 @@ async function findGlobalAndWorkspacePaths(
 ): Promise<Set<string>> {
   const allPaths = new Set<string>();
   const resolvedHome = path.resolve(userHomePath);
-  const globalMemoryPath = path.join(
-    resolvedHome,
-    LLXPRT_DIR,
-    llxprtMdFilename,
-  );
+
+  // Canonical global memory file lives in the config-category directory.
+  const globalMemoryDir = Storage.getGlobalMemoryDir();
+  const globalMemoryPath = path.join(globalMemoryDir, llxprtMdFilename);
 
   try {
     await fs.access(globalMemoryPath, fsSync.constants.R_OK);
@@ -210,6 +215,20 @@ async function findGlobalAndWorkspacePaths(
     // It's okay if it's not found.
   }
 
+  // Structural exclusion set for upward traversal: the canonical global
+  // memory path and the legacy ~/.llxprt/<filename> (migration-only) must
+  // never be re-added as workspace files, regardless of whether they
+  // currently exist on disk. The consumers guard with fs.access before
+  // adding found paths, so a non-existent entry here is a harmless no-op
+  // (structural/placeholder intent made explicit)
+  const excludedPaths = new Set<string>([globalMemoryPath]);
+  const legacyGlobalPath = path.join(
+    resolvedHome,
+    LLXPRT_DIR,
+    llxprtMdFilename,
+  );
+  excludedPaths.add(legacyGlobalPath);
+
   if (dir && folderTrust) {
     const resolvedCwd = path.resolve(dir);
     if (debugMode)
@@ -220,7 +239,7 @@ async function findGlobalAndWorkspacePaths(
     const upwardPaths = await searchUpwardForLlxprtMd(
       llxprtMdFilename,
       resolvedCwd,
-      globalMemoryPath,
+      excludedPaths,
       resolvedHome,
       debugMode,
     );
@@ -241,7 +260,9 @@ async function findGlobalAndWorkspacePaths(
     });
     downwardPaths.sort();
     for (const dPath of downwardPaths) {
-      allPaths.add(dPath);
+      if (!excludedPaths.has(dPath)) {
+        allPaths.add(dPath);
+      }
     }
   }
   return allPaths;
@@ -380,11 +401,11 @@ export interface MemoryLoadResult {
 export async function loadGlobalMemory(
   debugMode: boolean = false,
 ): Promise<MemoryLoadResult> {
-  const userHome = homedir();
+  const globalMemoryDir = Storage.getGlobalMemoryDir();
   const llxprtMdFilenames = getAllLlxprtMdFilenames();
 
   const accessChecks = llxprtMdFilenames.map(async (filename) => {
-    const globalPath = path.join(userHome, LLXPRT_DIR, filename);
+    const globalPath = path.join(globalMemoryDir, filename);
     try {
       await fs.access(globalPath, fsSync.constants.R_OK);
       if (debugMode) {
@@ -428,7 +449,10 @@ async function findUpwardLlxprtFiles(
   let currentDir = path.resolve(startDir);
   const resolvedStopDir = path.resolve(stopDir);
   const llxprtMdFilenames = getAllLlxprtMdFilenames();
-  const globalLlxprtDir = path.resolve(path.join(homedir(), LLXPRT_DIR));
+  // legacy-exclusion (migration-only contract): stop walking at ~/.llxprt so a
+  // surviving legacy global file is never resurrected as workspace memory.
+  const legacyGlobalLlxprtDir = path.resolve(path.join(homedir(), LLXPRT_DIR));
+  const canonicalGlobalMemoryDir = path.resolve(Storage.getGlobalMemoryDir());
 
   if (debugMode) {
     logger.debug(
@@ -437,7 +461,7 @@ async function findUpwardLlxprtFiles(
   }
 
   let done = false;
-  while (!done && currentDir !== globalLlxprtDir) {
+  while (!done && currentDir !== legacyGlobalLlxprtDir) {
     const accessChecks = llxprtMdFilenames.map(async (filename) => {
       const checks: Array<Promise<string | null>> = [];
 
@@ -458,10 +482,18 @@ async function findUpwardLlxprtFiles(
         (async () => {
           try {
             await fs.access(llxprtDirPath, fsSync.constants.R_OK);
-            if (llxprtDirPath !== path.join(globalLlxprtDir, filename)) {
-              return llxprtDirPath;
+            // Exclude the canonical global memory file when it physically lives
+            // inside a .llxprt directory being walked (e.g. cwd is the config
+            // dir's parent). The canonical global file is loaded separately.
+            if (
+              path.resolve(path.dirname(llxprtDirPath)) ===
+                canonicalGlobalMemoryDir ||
+              path.resolve(path.dirname(llxprtDirPath)) ===
+                legacyGlobalLlxprtDir
+            ) {
+              return null;
             }
-            return null;
+            return llxprtDirPath;
           } catch {
             return null;
           }
@@ -541,7 +573,9 @@ export async function loadCoreMemory(
 ): Promise<MemoryLoadResult> {
   const allPaths = new Set<string>();
 
-  const globalCoreMemoryPath = getGlobalCoreMemoryFilePath();
+  const globalCoreMemoryPath = getGlobalCoreMemoryFilePath(
+    coreStorageServiceAdapter,
+  );
   try {
     await fs.access(globalCoreMemoryPath, fsSync.constants.R_OK);
     allPaths.add(globalCoreMemoryPath);

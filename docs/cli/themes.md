@@ -29,7 +29,7 @@ LLxprt Code comes with a selection of pre-defined themes, which you can list usi
 3.  Using the arrow keys, select a theme. Some interfaces might offer a live preview or highlight as you select.
 4.  Confirm your selection to apply the theme.
 
-**Note:** Theme selection follows the same precedence as other settings (workspace `.llxprt/settings.json` > user `~/.llxprt/settings.json` > system overrides). `/theme` will update the highest-precedence writable file; you no longer need to delete the `"theme"` key manually before switching themes.
+**Note:** Theme selection follows the same precedence as other settings (workspace `.llxprt/settings.json` > [user settings.json](../reference/application-directories.md) > system overrides). `/theme` will update the highest-precedence writable file; you no longer need to delete the `"theme"` key manually before switching themes.
 
 ### Theme Persistence
 

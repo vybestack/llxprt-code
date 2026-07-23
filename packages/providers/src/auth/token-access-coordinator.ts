@@ -381,7 +381,7 @@ export class TokenAccessCoordinator {
   /**
    * Handle token refresh when token is expired or expiring soon.
    * Acquires refresh lock with TOCTOU double-check.
-   * Lock parameters: waitMs:10000, staleMs:30000 (hot path, not on user-facing single-bucket flow).
+   * Lock parameters: waitMs:10000 (hot path, not on user-facing single-bucket flow).
    */
   private async refreshExpiredToken(
     providerName: string,
@@ -396,7 +396,7 @@ export class TokenAccessCoordinator {
 
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
-      { waitMs: 10000, staleMs: 30000, bucket: bucketToUse },
+      { waitMs: 10000, bucket: bucketToUse },
     );
 
     if (!lockAcquired) {
@@ -687,7 +687,7 @@ export class TokenAccessCoordinator {
   ): Promise<string | null | undefined> {
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
-      { waitMs: 5000, staleMs: 30000, bucket: bucketToCheck },
+      { waitMs: 5000, bucket: bucketToCheck },
     );
 
     if (lockAcquired) {
@@ -880,7 +880,7 @@ export class TokenAccessCoordinator {
   ): Promise<boolean> {
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
-      { waitMs: 10000, staleMs: 30000, bucket },
+      { waitMs: 10000, bucket },
     );
 
     if (!lockAcquired) {

@@ -20,7 +20,6 @@ import {
   loadExtensions,
 } from './extension.js';
 import {
-  LLXPRT_CONFIG_DIR,
   ExtensionUninstallEvent,
   ExtensionDisableEvent,
   ExtensionEnableEvent,
@@ -107,7 +106,20 @@ vi.mock('./settings.js', () => ({
   },
 }));
 
-const EXTENSIONS_DIRECTORY_NAME = path.join(LLXPRT_CONFIG_DIR, 'extensions');
+// Canonical user-extensions directory name under the data-category dir
+// (Storage.getUserExtensionsDir() => <dataHome>/extensions). Tests redirect
+// LLXPRT_DATA_HOME to tempHomeDir, so fixtures land at <tempHome>/extensions.
+const EXTENSIONS_DIRECTORY_NAME = 'extensions';
+
+// Env keys that redirect Storage category dirs to the temp home so tests do
+// not touch the real user filesystem.
+const ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
 
 describe('extension tests', () => {
   let tempHomeDir: string;
@@ -121,6 +133,14 @@ describe('extension tests', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
+    // Redirect all LLxprt category dirs to the temp home so Storage resolves
+    // user extensions under <tempHome>/.llxprt/extensions (config falls back
+    // to data via the compat chain). This mirrors how the existing suite
+    // laid out fixtures under tempHome/.llxprt/extensions.
+    for (const key of ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = tempHomeDir;
+    }
     userExtensionsDir = path.join(tempHomeDir, EXTENSIONS_DIRECTORY_NAME);
     fs.mkdirSync(userExtensionsDir, { recursive: true });
 
@@ -152,9 +172,19 @@ describe('extension tests', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempHomeDir, { recursive: true, force: true });
-    fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
+    try {
+      fs.rmSync(tempHomeDir, { recursive: true, force: true });
+      fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   describe('loadExtensions', () => {
@@ -613,6 +643,93 @@ describe('extension tests', () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Invalid extension name: "bad_name"'),
       );
+    });
+  });
+
+  // ── Workspace-before-user precedence ──────────────
+
+  describe('workspace-before-user precedence', () => {
+    it('a same-name workspace extension wins over a user extension', () => {
+      // Place a user extension.
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'shared-name',
+        version: '1.0.0',
+      });
+      // Place a same-name workspace extension under <workspace>/.llxprt/extensions.
+      const workspaceExtensionsDir = path.join(
+        tempWorkspaceDir,
+        '.llxprt',
+        'extensions',
+      );
+      createExtension({
+        extensionsDir: workspaceExtensionsDir,
+        name: 'shared-name',
+        version: '2.0.0',
+      });
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        tempWorkspaceDir,
+      );
+
+      const shared = extensions.find((e) => e.name === 'shared-name');
+      expect(shared).toBeDefined();
+      // The workspace version (2.0.0) must win over the user version (1.0.0).
+      expect(shared?.version).toBe('2.0.0');
+      expect(shared?.path).toContain(tempWorkspaceDir);
+    });
+
+    it('loads a user-only extension when no same-name workspace extension exists', () => {
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'user-only',
+        version: '1.0.0',
+      });
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        tempWorkspaceDir,
+      );
+
+      const userOnly = extensions.find((e) => e.name === 'user-only');
+      expect(userOnly).toBeDefined();
+      expect(userOnly?.version).toBe('1.0.0');
+      expect(userOnly?.path).toContain(userExtensionsDir);
+    });
+
+    it('does not load workspace extensions when workspace is untrusted', () => {
+      // Place a workspace extension.
+      const workspaceExtensionsDir = path.join(
+        tempWorkspaceDir,
+        '.llxprt',
+        'extensions',
+      );
+      createExtension({
+        extensionsDir: workspaceExtensionsDir,
+        name: 'workspace-ext',
+        version: '1.0.0',
+      });
+      // Place a user extension (should still load regardless of trust).
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'user-ext',
+        version: '1.0.0',
+      });
+
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        tempWorkspaceDir,
+      );
+
+      // Untrusted: workspace extensions are NOT loaded.
+      expect(
+        extensions.find((e) => e.name === 'workspace-ext'),
+      ).toBeUndefined();
+      // User extensions still load.
+      expect(extensions.find((e) => e.name === 'user-ext')).toBeDefined();
     });
   });
 });

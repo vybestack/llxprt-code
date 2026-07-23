@@ -19,7 +19,7 @@ import {
   AgentClient,
   type Turn,
 } from '@vybestack/llxprt-code-agents/internals.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -44,6 +44,11 @@ describe('Task-list Continuation Integration Tests', () => {
   let sessionId: string;
   let originalHome: string | undefined;
 
+  // Canonical data-root resolver injected at every TodoStore construction
+  // site. Extracted once so all construction sites in
+  // this suite stay consistent (#22: avoid copy-paste drift).
+  const globalDataDirResolver = (): string => Storage.getGlobalDataDir();
+
   const createTodo = (
     id: string,
     content: string,
@@ -60,7 +65,9 @@ describe('Task-list Continuation Integration Tests', () => {
     process.env.HOME = tempDir;
 
     sessionId = 'integration-test-session';
-    todoStore = new TodoStore(sessionId);
+    todoStore = new TodoStore(sessionId, {
+      dataDirResolver: globalDataDirResolver,
+    });
 
     config = new Config({
       sessionId,
@@ -218,8 +225,12 @@ describe('Task-list Continuation Integration Tests', () => {
       const session1Id = 'session-1';
       const session2Id = 'session-2';
 
-      const store1 = new TodoStore(session1Id);
-      const store2 = new TodoStore(session2Id);
+      const store1 = new TodoStore(session1Id, {
+        dataDirResolver: globalDataDirResolver,
+      });
+      const store2 = new TodoStore(session2Id, {
+        dataDirResolver: globalDataDirResolver,
+      });
 
       const todos1 = [createTodo('1', 'Session 1 task', 'in_progress')];
       const todos2 = [createTodo('1', 'Session 2 task', 'pending')];

@@ -185,6 +185,38 @@ export interface BunTestRunnerDependencies {
   readonly stderr: (line: string) => void;
 }
 
+/**
+ * Builds the base Bun test arguments (shared across all files in a run).
+ */
+function buildBaseArgs(
+  tsconfigOverride: string | null,
+  timeout: number,
+): readonly string[] {
+  const args = ['test'];
+  if (tsconfigOverride) {
+    args.push('--tsconfig-override', tsconfigOverride);
+  }
+  args.push('--max-concurrency', '1', '--timeout', String(timeout));
+  return args;
+}
+
+/**
+ * Builds the full spawn args for a single Bun test file, including the
+ * preload script when the manifest entry defines one.
+ */
+function buildSpawnArgs(
+  executable: string,
+  baseArgs: readonly string[],
+  entry: BunTestFile,
+): readonly string[] {
+  const args = [executable, ...baseArgs];
+  if (entry.preload !== undefined) {
+    args.push('--preload', entry.preload);
+  }
+  args.push(entry.file);
+  return args;
+}
+
 export function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
@@ -224,11 +256,7 @@ export function runBunTests(
     `Running ${files.length} native Bun test files in isolated processes`,
   );
 
-  const baseArgs = ['test'];
-  if (tsconfigOverride) {
-    baseArgs.push('--tsconfig-override', tsconfigOverride);
-  }
-  baseArgs.push('--max-concurrency', '1', '--timeout', String(options.timeout));
+  const baseArgs = buildBaseArgs(tsconfigOverride, options.timeout);
 
   let passed = 0;
   let failed = 0;
@@ -236,7 +264,7 @@ export function runBunTests(
   for (const entry of files) {
     try {
       const child = dependencies.spawn(
-        [dependencies.executable, ...baseArgs, entry.file],
+        buildSpawnArgs(dependencies.executable, baseArgs, entry),
         {
           cwd: entry.cwd,
           env: dependencies.environment,

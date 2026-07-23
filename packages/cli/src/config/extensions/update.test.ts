@@ -18,7 +18,6 @@ import {
   loadExtension,
 } from '../extension.js';
 import { checkForAllExtensionUpdates, updateExtension } from './update.js';
-import { LLXPRT_CONFIG_DIR } from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from '../trustedFolders.js';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import { createExtension } from '../../test-utils/createExtension.js';
@@ -79,6 +78,13 @@ describe('update tests', () => {
   let tempHomeDir: string;
   let tempWorkspaceDir: string;
   let userExtensionsDir: string;
+  const ENV_KEYS = [
+    'LLXPRT_CONFIG_HOME',
+    'LLXPRT_DATA_HOME',
+    'LLXPRT_CACHE_HOME',
+    'LLXPRT_LOG_HOME',
+  ] as const;
+  const SAVED_ENV: Record<string, string | undefined> = {};
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
@@ -88,7 +94,12 @@ describe('update tests', () => {
       path.join(tempHomeDir, 'gemini-cli-test-workspace-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    userExtensionsDir = path.join(tempHomeDir, LLXPRT_CONFIG_DIR, 'extensions');
+    for (const key of ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = tempHomeDir;
+    }
+    // Canonical user extensions dir is <dataHome>/extensions.
+    userExtensionsDir = path.join(tempHomeDir, 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -98,6 +109,13 @@ describe('update tests', () => {
   });
 
   afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
   });

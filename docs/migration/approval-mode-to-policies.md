@@ -203,7 +203,7 @@ Test a few tool executions to confirm expected behavior.
 
 ### Step 3: Create Custom Policy File (Optional)
 
-Create `~/.llxprt/my-policy.toml`:
+Create `<config>/my-policy.toml` (see [Application Directories](../reference/application-directories.md)):
 
 ```toml
 # My custom policies - override defaults
@@ -248,17 +248,17 @@ priority = 2.5
 
 ### Step 4: Configure Policy Path
 
-Add to `~/.llxprt/settings.json`:
+Add to your [user `settings.json`](../reference/application-directories.md):
 
 ```json
 {
   "tools": {
-    "policyPath": "/Users/yourname/.llxprt/my-policy.toml"
+    "policyPath": "/Users/yourname/Library/Preferences/llxprt-code/my-policy.toml"
   }
 }
 ```
 
-**Important:** Use absolute paths, not `~` or relative paths.
+**Important:** Use absolute paths, not `~` or relative paths. The example shows the macOS config-directory location; on Linux use `~/.config/llxprt-code/my-policy.toml` and on Windows use `%APPDATA%\llxprt-code\Config\my-policy.toml`. See [Application Directories](../reference/application-directories.md) for the canonical paths on each OS.
 
 ### Step 5: Verify and Test
 
@@ -281,7 +281,7 @@ Once satisfied with policy-based configuration, you can remove legacy settings:
 
   // Keep these:
   "tools": {
-    "policyPath": "/Users/yourname/.llxprt/my-policy.toml"
+    "policyPath": "/absolute/path/to/my-policy.toml"
   }
 }
 ```
@@ -300,7 +300,7 @@ Once satisfied with policy-based configuration, you can remove legacy settings:
 
 **Migration to policies:**
 
-1. Create `~/.llxprt/dev-policy.toml`:
+1. Create `<config>/dev-policy.toml` (see [Application Directories](../reference/application-directories.md)):
 
 ```toml
 # Auto-approve write tools for development
@@ -338,7 +338,7 @@ priority = 2.5
 ```json
 {
   "tools": {
-    "policyPath": "/Users/yourname/.llxprt/dev-policy.toml"
+    "policyPath": "/absolute/path/to/dev-policy.toml"
   }
 }
 ```
@@ -355,7 +355,7 @@ priority = 2.5
 
 **Migration to policies:**
 
-1. Create `~/.llxprt/secure-policy.toml`:
+1. Create `<config>/secure-policy.toml` (see [Application Directories](../reference/application-directories.md)):
 
 ```toml
 # Read-only tools allowed
@@ -403,7 +403,7 @@ priority = 2.5
 ```json
 {
   "tools": {
-    "policyPath": "/Users/yourname/.llxprt/secure-policy.toml"
+    "policyPath": "/Users/yourname/Library/Preferences/llxprt-code/secure-policy.toml"
   }
 }
 ```
@@ -689,13 +689,13 @@ Create profiles for different use cases:
 {
   "profiles": {
     "dev": {
-      "tools.policyPath": "/Users/me/.llxprt/dev-policy.toml"
+      "tools.policyPath": "/absolute/path/to/dev-policy.toml"
     },
     "secure": {
-      "tools.policyPath": "/Users/me/.llxprt/secure-policy.toml"
+      "tools.policyPath": "/absolute/path/to/secure-policy.toml"
     },
     "demo": {
-      "tools.policyPath": "/Users/me/.llxprt/demo-policy.toml"
+      "tools.policyPath": "/absolute/path/to/demo-policy.toml"
     }
   }
 }

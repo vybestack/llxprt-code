@@ -11,7 +11,13 @@ import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-r
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 
-// Mock TodoStore so persisted todo state doesn't hit the filesystem
+// Inject a fake TodoStore so persisted todo state doesn't hit the filesystem.
+// The fake is a minimal stand-in for the real LocalTodoStore constructor —
+// it returns the three async methods the service calls. We assert on the
+// OUTCOMES (returned todos, paused state, written values), never on how the
+// constructor was called, because testing constructor-invocation arguments
+// is mock theater that breaks when the internal wiring changes without
+// changing behavior (RULES.md: test behavior, not implementation).
 const {
   todoStoreReadMock,
   todoStoreReadPausedMock,
@@ -85,6 +91,7 @@ function makeService(
       overrides.todoReminderService ?? new TodoReminderService(),
     complexitySuggestionCooldown:
       overrides.complexitySuggestionCooldown ?? 300000,
+    todoDataDirResolver: () => '/mock/data/dir',
   });
 }
 
@@ -236,10 +243,6 @@ describe('TodoContinuationService', () => {
       todoStoreReadMock.mockResolvedValue([pendingTodo]);
       const result = await service.readTodoSnapshot();
       expect(result).toStrictEqual([pendingTodo]);
-      expect(mockTodoStoreConstructor).toHaveBeenCalledWith(
-        'test-session',
-        expect.anything(),
-      );
     });
 
     it('returns empty array on error', async () => {
@@ -256,10 +259,6 @@ describe('TodoContinuationService', () => {
       const result = await service.readPausedState();
 
       expect(result).toBe(true);
-      expect(mockTodoStoreConstructor).toHaveBeenCalledWith(
-        'test-session',
-        expect.anything(),
-      );
     });
 
     it('returns false on error', async () => {
@@ -276,10 +275,6 @@ describe('TodoContinuationService', () => {
       await service.clearPausedState();
 
       expect(todoStoreWritePausedMock).toHaveBeenCalledWith(false);
-      expect(mockTodoStoreConstructor).toHaveBeenCalledWith(
-        'test-session',
-        expect.anything(),
-      );
     });
 
     it('does not throw when clearing paused state fails', async () => {

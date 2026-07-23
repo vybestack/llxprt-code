@@ -168,7 +168,7 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
     key: 'dumponerror',
     category: 'cli-behavior',
     description:
-      'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled)',
+      'Dump API request body to the dumps directory in your LLxprt cache directory on errors (enabled/disabled)',
     type: 'enum',
     enumValues: ['enabled', 'disabled'],
     persistToProfile: true,
@@ -240,7 +240,7 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
   {
     key: 'enable-tool-prompts',
     category: 'cli-behavior',
-    description: 'Load tool-specific prompts from ~/.llxprt/prompts/tools/**',
+    description: 'Load tool-specific prompts from <config>/prompts/tools/**',
     type: 'boolean',
     persistToProfile: true,
   },

@@ -28,8 +28,8 @@ import {
   disableExtension,
   EXTENSIONS_CONFIG_FILENAME_FALLBACK,
   INSTALL_METADATA_FILENAME,
+  ExtensionStorage,
 } from '../extension.js';
-import { LLXPRT_CONFIG_DIR } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../settings.js';
 
 vi.mock('os', async (importOriginal) => {
@@ -48,7 +48,19 @@ vi.mock('../settings.js', () => ({
   },
 }));
 
-const LLXPRT_EXT_SUBDIR = path.join(LLXPRT_CONFIG_DIR, 'extensions');
+// Env keys that redirect Storage category dirs to the temp home so
+// Storage.getUserExtensionsDir() (the canonical data-category dir) resolves
+// under tempHomeDir. Production reads global user extensions from
+// ExtensionStorage.getUserExtensionsDir(), NOT from homedir()/.llxprt/extensions,
+// so fixtures must land where that helper resolves.
+const STORAGE_ENV_KEYS = [
+  'LLXPRT_CONFIG_HOME',
+  'LLXPRT_DATA_HOME',
+  'LLXPRT_CACHE_HOME',
+  'LLXPRT_LOG_HOME',
+] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
+
 const COMPAT_EXT_SUBDIR = '.gemini/extensions';
 
 describe('root-aware extension management', () => {
@@ -62,7 +74,14 @@ describe('root-aware extension management', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'root-aware-workspace-'),
     );
-    llxprtExtensionsDir = path.join(tempHomeDir, LLXPRT_EXT_SUBDIR);
+    for (const key of STORAGE_ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = tempHomeDir;
+    }
+    // Compute the canonical LLxprt user-extensions dir via the same helper
+    // production uses (ExtensionStorage.getUserExtensionsDir()), so fixtures
+    // land at the exact path root enumeration scans.
+    llxprtExtensionsDir = ExtensionStorage.getUserExtensionsDir();
     compatExtensionsDir = path.join(tempHomeDir, COMPAT_EXT_SUBDIR);
     fs.mkdirSync(llxprtExtensionsDir, { recursive: true });
     fs.mkdirSync(compatExtensionsDir, { recursive: true });
@@ -71,6 +90,13 @@ describe('root-aware extension management', () => {
   });
 
   afterEach(() => {
+    for (const key of STORAGE_ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     vi.restoreAllMocks();
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
@@ -269,7 +295,7 @@ describe('root-aware extension management', () => {
     });
   });
 
-  // ---- Finding: per-entry error resilience (OCR remediation) ----
+  // ---- per-entry error resilience ----
 
   describe('per-entry error resilience', () => {
     it('loadExtensionByName continues past a broken symlink entry', () => {

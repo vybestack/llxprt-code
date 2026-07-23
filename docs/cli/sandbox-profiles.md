@@ -7,10 +7,10 @@ This guide is focused on Linux and macOS. Windows is not tested yet for this wor
 ## Profile location
 
 ```text
-~/.llxprt/sandboxes/<profile-name>.json
+<config>/sandboxes/<profile-name>.json
 ```
 
-Example: `~/.llxprt/sandboxes/dev.json`
+Example: `<config>/sandboxes/dev.json` (see [Application Directories](../reference/application-directories.md))
 
 Built-in profile files are created automatically when profile loading is used.
 
@@ -202,35 +202,52 @@ Podman runs in a VM on macOS, so there are extra constraints:
 - conflicting `--network` values can disable bridge setup
 - VM memory must exceed the container `resources.memory` limit, or the process gets OOM-killed (exit code 137). See [Sandbox troubleshooting](../sandbox.md#podman-macos-oom-killed-with-exit-code-137).
 
-If SSH forwarding is unreliable, use a dedicated socket path:
+If SSH forwarding is unreliable, use a dedicated socket path (the location is your choice — this example uses a path in your home directory):
 
 ```bash
-ssh-agent -a ~/.llxprt/ssh-agent.sock
-export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
+ssh-agent -a ~/.ssh/llxprt-agent.sock
+export SSH_AUTH_SOCK=~/.ssh/llxprt-agent.sock
 ssh-add ~/.ssh/id_ed25519
 ```
 
 ## Listing and inspecting profiles
 
+Sandbox profiles live in `<config>/sandboxes/` (see [Application Directories](../reference/application-directories.md)). The config directory is overridable via `LLXPRT_CONFIG_HOME` and follows the platform default (`~/.config/llxprt-code` on Linux, `~/Library/Preferences/llxprt-code` on macOS, `%APPDATA%\llxprt-code\Config` on Windows).
+
+Set a shell variable for convenience:
+
 ```bash
-ls ~/.llxprt/sandboxes/
-cat ~/.llxprt/sandboxes/dev.json
+# Linux / macOS
+SANDBOX_DIR="${LLXPRT_CONFIG_HOME:-$(node --input-type=module -e "import envPaths from 'env-paths'; process.stdout.write(envPaths('llxprt-code',{suffix:''}).config)")}/sandboxes"
+ls "$SANDBOX_DIR"
+cat "$SANDBOX_DIR/dev.json"
+```
+
+```powershell
+# Windows (PowerShell)
+$ConfigHome = if ($env:LLXPRT_CONFIG_HOME) { $env:LLXPRT_CONFIG_HOME } `
+  else { Join-Path $env:APPDATA 'llxprt-code\Config' }
+$SANDBOX_DIR = Join-Path $ConfigHome 'sandboxes'
+Get-ChildItem $SANDBOX_DIR
+Get-Content "$SANDBOX_DIR\dev.json"
 ```
 
 ## Common issues
 
 ### Profile not found
 
-If `--sandbox-profile-load custom` fails, verify file exists:
+If `--sandbox-profile-load custom` fails, verify the file exists:
 
 ```bash
-ls ~/.llxprt/sandboxes/custom.json
+SANDBOX_DIR="${LLXPRT_CONFIG_HOME:-$(node --input-type=module -e "import envPaths from 'env-paths'; process.stdout.write(envPaths('llxprt-code',{suffix:''}).config)")}/sandboxes"
+ls "$SANDBOX_DIR/custom.json"
 ```
 
 ### Invalid JSON
 
 ```bash
-jq . ~/.llxprt/sandboxes/custom.json
+SANDBOX_DIR="${LLXPRT_CONFIG_HOME:-$(node --input-type=module -e "import envPaths from 'env-paths'; process.stdout.write(envPaths('llxprt-code',{suffix:''}).config)")}/sandboxes"
+jq . "$SANDBOX_DIR/custom.json"
 ```
 
 ### Engine missing

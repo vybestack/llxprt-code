@@ -204,13 +204,20 @@ export function writeRequiredManifests(write: FixtureHelpers['write']): void {
 
 /**
  * Create a temp fixture directory, run `fn` with write helpers, and clean up.
- * Cleanup errors are emitted as warnings rather than thrown.
+ *
+ * Surfaces BOTH fn and cleanup failures: when fn throws AND cleanup also
+ * throws, neither error is silently dropped — they are combined into an
+ * AggregateError so both stay observable (issue #2606 contract: cleanup
+ * failures must not be swallowed, masking real failures or leaking temp
+ * dirs across CI runs). A cleanup-only failure is rethrown after the block.
  */
 export async function withFixture(
   fn: (helpers: FixtureHelpers) => Promise<ScriptResult>,
 ): Promise<ScriptResult> {
   const root = mkdtempSync(join(tmpdir(), 'genai-enclave-'));
-  let result: ScriptResult;
+  let fnError: unknown;
+  let result: ScriptResult | undefined;
+  let cleanupError: unknown;
   try {
     const write = (relPath: string, content: string): void => {
       const full = join(root, relPath);
@@ -218,20 +225,40 @@ export async function withFixture(
       writeFileSync(full, content);
     };
     result = await fn({ root, write });
-  } finally {
-    try {
-      rmSync(root, { recursive: true, force: true });
-    } catch (cleanupError) {
-      const msg =
-        cleanupError instanceof Error
-          ? cleanupError.message
-          : String(cleanupError);
-      console.warn(
-        `[genai-enclave] Warning: temp cleanup failed for ${root}: ${msg}`,
-      );
-    }
+  } catch (error) {
+    // Capture the fn error without throwing inside the try so the finally
+    // cleanup still runs; rethrow decisions happen after cleanup completes.
+    fnError = error;
   }
-  return result;
+  try {
+    rmSync(root, { recursive: true, force: true });
+  } catch (error) {
+    cleanupError = error;
+  }
+  // Combine failures so neither is silently dropped. When both fn and
+  // cleanup failed, AggregateError preserves both for diagnosis.
+  if (fnError !== undefined && cleanupError !== undefined) {
+    const fnMsg = fnError instanceof Error ? fnError.message : String(fnError);
+    const cleanupMsg =
+      cleanupError instanceof Error
+        ? cleanupError.message
+        : String(cleanupError);
+    throw new AggregateError(
+      [fnError, cleanupError],
+      `[genai-enclave] fn failed (${fnMsg}) AND temp cleanup failed for ${root}: ${cleanupMsg}`,
+    );
+  }
+  if (cleanupError !== undefined) {
+    const msg =
+      cleanupError instanceof Error
+        ? cleanupError.message
+        : String(cleanupError);
+    throw new Error(`[genai-enclave] temp cleanup failed for ${root}: ${msg}`);
+  }
+  if (fnError !== undefined) {
+    throw fnError;
+  }
+  return result!;
 }
 
 // ─── Fixture content helpers ────────────────────────────────────────────────

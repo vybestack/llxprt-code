@@ -81,7 +81,7 @@ class InMemoryTokenStore implements TokenStore {
 
   async acquireRefreshLock(
     provider: string,
-    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     const k = `${this.key(provider, options?.bucket)}:lock`;
     if (this.locks.get(k) === true) {
@@ -98,7 +98,7 @@ class InMemoryTokenStore implements TokenStore {
 
   async acquireAuthLock(
     provider: string,
-    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     const k = `${this.key(provider, options?.bucket)}:auth-lock`;
     if (this.locks.get(k) === true) {

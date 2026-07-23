@@ -63,7 +63,8 @@ describe('MemoryTool', () => {
   };
 
   const mockStorageService: IStorageService = {
-    getLLXPRTDir: () => path.join(os.homedir(), '.llxprt'),
+    getGlobalMemoryDir: () => path.join(os.homedir(), '.llxprt'),
+    getGlobalDataDir: () => path.join(os.homedir(), '.llxprt'),
     readFile: (filePath: string) => fs.readFile(filePath, 'utf-8'),
     writeFile: (filePath: string, content: string) =>
       fs.writeFile(filePath, content, 'utf-8'),

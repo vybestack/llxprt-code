@@ -157,7 +157,7 @@ llxprt --profile-load my-profile
 
 ## Manual Profile Files
 
-Profiles are stored as JSON in `~/.llxprt/profiles/`. You can edit them directly.
+Profiles are stored as JSON in your [profiles directory](../reference/application-directories.md) (`<config>/profiles/`, overridable via `LLXPRT_CONFIG_HOME`). You can edit them directly.
 
 Profiles work with any OpenAI-compatible or Anthropic-compatible endpoint. Here's an example targeting Synthetic:
 

@@ -52,7 +52,7 @@ llxprt --delete-session 3
 
 ### How It Works
 
-Sessions are recorded to `~/.llxprt/sessions/`. Each session file contains the full conversation history — model responses, tool calls and results, and thinking blocks. When you resume, the conversation is replayed into the model's context so it picks up with full awareness of what happened before.
+Sessions are recorded to LLxprt's [log/state directory](./reference/application-directories.md) under `<log>/tmp/<project_hash>/` (overridable via `LLXPRT_LOG_HOME`). Each session file contains the full conversation history — model responses, tool calls and results, and thinking blocks. When you resume, the conversation is replayed into the model's context so it picks up with full awareness of what happened before.
 
 Sessions are per-project. Running `llxprt --continue` in a different directory shows that directory's sessions.
 
@@ -91,7 +91,7 @@ It's disabled by default. Enable it with `--checkpointing`:
 llxprt --checkpointing
 ```
 
-Or in `~/.llxprt/settings.json`:
+Or in your [user `settings.json`](./reference/application-directories.md):
 
 ```json
 {
@@ -101,7 +101,7 @@ Or in `~/.llxprt/settings.json`:
 }
 ```
 
-When enabled, LLxprt creates a shadow git snapshot (in `~/.llxprt/history/<project_hash>`, separate from your project's git) each time a `write_file` or `replace` tool is about to run. It also saves the conversation state and tool call details to `~/.llxprt/tmp/<project_hash>/checkpoints/`.
+When enabled, LLxprt creates a shadow git snapshot (in `<data>/history/<project_hash>` within LLxprt's [data directory](./reference/application-directories.md), separate from your project's git) each time a `write_file` or `replace` tool is about to run. It also saves the conversation state and tool call details to `<log>/tmp/<project_hash>/checkpoints/` under LLxprt's [log/state directory](./reference/application-directories.md).
 
 The `/restore` command (only available when checkpointing is enabled) lets you roll back:
 

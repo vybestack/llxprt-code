@@ -60,7 +60,7 @@ detailed threat model and mitigation strategies.
 ### 1. Enable Hooks
 
 Hooks are **disabled by default** and require explicit opt-in. Add the
-following to your `~/.llxprt/settings.json`:
+following to your [user `settings.json`](../reference/application-directories.md):
 
 ```json
 {
@@ -76,7 +76,14 @@ to run.
 
 ### 2. Configure a Hook
 
-Add hooks to your `settings.json`:
+Add hooks to your `settings.json`. Hook scripts can live anywhere — the
+`command` field accepts any path with `~` expansion. The example keeps the
+script under LLxprt's [config directory](../reference/application-directories.md)
+(`$LLXPRT_CONFIG_HOME` if set, otherwise the platform default
+`~/.config/llxprt-code` on Linux / `~/Library/Preferences/llxprt-code` on macOS
+/ `%APPDATA%\llxprt-code\Config` on Windows). The shell snippets spell this out
+as `${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/hooks` (the Linux default;
+swap in the macOS/Windows default for your platform):
 
 ```json
 {
@@ -86,7 +93,7 @@ Add hooks to your `settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.llxprt/hooks/security-policy.sh"
+            "command": "${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/hooks/security-policy.sh"
           }
         ]
       }
@@ -97,7 +104,7 @@ Add hooks to your `settings.json`:
 
 ### 3. Write Your Hook Script
 
-Create `~/.llxprt/hooks/security-policy.sh`:
+Create `${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/hooks/security-policy.sh` (or any location you prefer):
 
 ```bash
 #!/bin/bash
@@ -124,7 +131,7 @@ exit 0
 Make it executable:
 
 ```bash
-chmod +x ~/.llxprt/hooks/security-policy.sh
+chmod +x "${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/hooks/security-policy.sh"
 ```
 
 ### 4. Test It
@@ -175,11 +182,18 @@ fi
 
 ### Audit Logging
 
-Log all tool calls for compliance:
+Log all tool calls for compliance. The recommended location is LLxprt's
+canonical log/state directory (`$LLXPRT_LOG_HOME`, falling back to
+`$LLXPRT_CONFIG_HOME`, then the platform default
+`~/.local/state/llxprt-code` on Linux / `~/Library/Logs/llxprt-code` on macOS
+/ `%LOCALAPPDATA%\llxprt-code\Log` on Windows); you may also write to a
+workspace-local `.llxprt/audit.log` or wherever your team's policy requires:
 
 ```bash
-# Log to file
-echo "$(date) - Tool: $TOOL_NAME, Path: $PATH_VALUE" >> ~/.llxprt/audit.log
+# Log to LLxprt's canonical log/state directory (or choose your own path)
+LOG_DIR="${LLXPRT_LOG_HOME:-${LLXPRT_CONFIG_HOME:-$HOME/.local/state/llxprt-code}}"
+mkdir -p "$LOG_DIR"
+echo "$(date) - Tool: $TOOL_NAME, Path: $PATH_VALUE" >> "$LOG_DIR/audit.log"
 echo '{"decision": "allow"}'
 exit 0
 ```

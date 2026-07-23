@@ -52,6 +52,13 @@ describe('extension skills loading', () => {
   let tempHomeDir: string;
   let tempWorkspaceDir: string;
   let userExtensionsDir: string;
+  const ENV_KEYS = [
+    'LLXPRT_CONFIG_HOME',
+    'LLXPRT_DATA_HOME',
+    'LLXPRT_CACHE_HOME',
+    'LLXPRT_LOG_HOME',
+  ] as const;
+  const SAVED_ENV: Record<string, string | undefined> = {};
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
@@ -60,14 +67,25 @@ describe('extension skills loading', () => {
     tempWorkspaceDir = fs.mkdtempSync(
       path.join(tempHomeDir, 'llxprt-ext-skills-test-workspace-'),
     );
-    const EXTENSIONS_DIRECTORY_NAME = path.join('.llxprt', 'extensions');
-    userExtensionsDir = path.join(tempHomeDir, EXTENSIONS_DIRECTORY_NAME);
+    for (const key of ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = tempHomeDir;
+    }
+    // Canonical user extensions dir is <dataHome>/extensions.
+    userExtensionsDir = path.join(tempHomeDir, 'extensions');
     fs.mkdirSync(userExtensionsDir, { recursive: true });
 
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
   });
 
   afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });

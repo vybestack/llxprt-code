@@ -1,5 +1,6 @@
 /**
- * Subagent configuration stored in ~/.llxprt/subagents/<name>.json
+ * Subagent configuration stored in <subagentsDir>/<name>.json
+ * (the configured subagents directory under the LLxprt config dir).
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P03
  * @requirement:REQ-001
  * @requirement:REQ-012
@@ -8,7 +9,7 @@ export interface SubagentConfig {
   /** Subagent identifier (matches filename without .json) */
   name: string;
 
-  /** Reference to profile name in ~/.llxprt/profiles/ */
+  /** Reference to a saved profile name (profiles live in the LLxprt config dir) */
   profile: string;
 
   /** System prompt text for this subagent */

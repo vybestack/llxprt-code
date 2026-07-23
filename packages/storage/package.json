@@ -21,6 +21,11 @@
       "bun": "./src/config/storage.ts",
       "import": "./dist/src/config/storage.js"
     },
+    "./config/path-resolver.js": {
+      "types": "./dist/src/config/path-resolver.d.ts",
+      "bun": "./src/config/path-resolver.ts",
+      "import": "./dist/src/config/path-resolver.js"
+    },
     "./services/fileSystemService.js": {
       "types": "./dist/src/services/fileSystemService.d.ts",
       "bun": "./src/services/fileSystemService.ts",

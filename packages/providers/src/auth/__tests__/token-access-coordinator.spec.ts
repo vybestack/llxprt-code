@@ -10,8 +10,8 @@
  * These tests cover the isolated TokenAccessCoordinator class before
  * the full wiring into OAuthManager.  They focus on:
  *   A) Authenticator guard error when auth-required path reached with no authenticator
- *   B) getOAuthToken refresh-lock parameters (waitMs:10000 / staleMs:30000)
- *   C) getToken disk-check refresh-lock parameters (waitMs:5000 / staleMs:30000)
+ *   B) getOAuthToken refresh-lock parameters (waitMs:10000)
+ *   C) getToken disk-check refresh-lock parameters (waitMs:5000)
  *   D) peekStoredToken reads from store without locking
  *   E) withBucketResolutionLock serialises concurrent calls for same provider
  *   F) getToken returns null when provider not registered
@@ -220,7 +220,6 @@ describe('TokenAccessCoordinator', () => {
 
     expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith('anthropic', {
       waitMs: 5000,
-      staleMs: 30000,
       bucket: 'default',
     });
   });
@@ -230,7 +229,7 @@ describe('TokenAccessCoordinator', () => {
   // --------------------------------------------------------------------------
 
   describe('TokenAccessCoordinator – getOAuthToken refresh lock parameters', () => {
-    it('acquires refresh lock with waitMs:10000 and staleMs:30000 when token is expired', async () => {
+    it('acquires refresh lock with waitMs:10000 when token is expired', async () => {
       const provider = createMockProvider('anthropic');
       const expiredToken = makeToken('expired', -10); // expired 10s ago
       const { coordinator, tokenStore } = makeCoordinator({ provider });
@@ -243,7 +242,7 @@ describe('TokenAccessCoordinator', () => {
 
       expect(tokenStore.acquireRefreshLock).toHaveBeenCalledWith(
         'anthropic',
-        expect.objectContaining({ waitMs: 10000, staleMs: 30000 }),
+        expect.objectContaining({ waitMs: 10000 }),
       );
     });
 
@@ -310,7 +309,7 @@ describe('TokenAccessCoordinator', () => {
   // --------------------------------------------------------------------------
 
   describe('TokenAccessCoordinator – getToken disk-check refresh lock parameters', () => {
-    it('acquires refresh lock with waitMs:5000 and staleMs:30000 in disk-check path', async () => {
+    it('acquires refresh lock with waitMs:5000 in disk-check path', async () => {
       const provider = createMockProvider('anthropic');
       const { coordinator, tokenStore } = makeCoordinator({ provider });
 
@@ -338,7 +337,7 @@ describe('TokenAccessCoordinator', () => {
         ([, opts]) => (opts as { waitMs?: number }).waitMs === 5000,
       );
       expect(diskCheckCall).toBeDefined();
-      expect(diskCheckCall![1]).toMatchObject({ waitMs: 5000, staleMs: 30000 });
+      expect(diskCheckCall![1]).toMatchObject({ waitMs: 5000 });
     });
 
     it('releases disk-check refresh lock on all error paths', async () => {

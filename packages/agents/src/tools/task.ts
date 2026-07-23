@@ -746,7 +746,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
           subagent_name: {
             type: 'string',
             description:
-              'Name of the registered subagent to launch (as defined in ~/.llxprt/subagents).',
+              'Name of the registered subagent to launch (as defined in the configured subagents directory).',
           },
           goal_prompt: {
             type: 'string',

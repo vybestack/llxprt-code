@@ -140,7 +140,6 @@ describe('OAuthManager concurrency', () => {
         'anthropic',
         expect.objectContaining({
           waitMs: 10000,
-          staleMs: 30000,
           bucket: undefined,
         }),
       );

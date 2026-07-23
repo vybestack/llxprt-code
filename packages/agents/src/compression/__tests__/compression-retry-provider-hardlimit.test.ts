@@ -740,7 +740,7 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   });
 
   // -----------------------------------------------------------------------
-  // Test H: compressAndRecompose callback contract (Issue #2588 OCR finding)
+  // Test H: compressAndRecompose callback contract (issue #2588 regression).
   //
   // compressAndRecompose is invoked from the provider compression callback
   // (CompressionHandler.attachCompressionCallback). That callback's try/catch

@@ -17,10 +17,11 @@
  * NEVER copied onto providerState or into any ProviderStatus/ProfileDetail.
  *
  * Hermeticity: the real ProviderKeyStorage persists to the HOST keychain /
- * ~/.llxprt/provider-keys unless LLXPRT_CREDENTIAL_SOCKET is set. The agents
- * tests do NOT mock it and do NOT set that env. Writing real secrets there
- * would POLLUTE the developer's host machine. The keyStore here is a
- * per-agent in-memory Map — it dies with the agent and never touches disk.
+ * the LLxprt data directory (provider-keys) unless LLXPRT_CREDENTIAL_SOCKET
+ * is set. The agents tests do NOT mock it and do NOT set that env. Writing
+ * real secrets there would POLLUTE the developer's host machine. The keyStore
+ * here is a per-agent in-memory Map — it dies with the agent and never
+ * touches disk.
  */
 
 import type { AuthBucket } from '../agent.js';

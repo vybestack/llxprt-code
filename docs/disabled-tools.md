@@ -75,7 +75,7 @@ The `disabled-tools` setting is an ephemeral setting that can be saved to profil
 /profile load minimal-tools
 ```
 
-Profiles are stored in `~/.llxprt/profiles/<profile-name>.json` and include your current disabled tools along with other settings like model parameters, provider configuration, and other ephemeral settings.
+Profiles are stored in your [profiles directory](./reference/application-directories.md) (`<config>/profiles/<profile-name>.json`) and include your current disabled tools along with other settings like model parameters, provider configuration, and other ephemeral settings.
 
 ## Agent Usage
 

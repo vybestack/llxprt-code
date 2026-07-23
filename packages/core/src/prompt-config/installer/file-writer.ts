@@ -14,6 +14,50 @@ import {
   updateManifestEntry,
 } from './manifest-operations.js';
 
+/**
+ * Structural errno guard: returns the `code` string property from an error,
+ * or undefined. Avoids `as NodeJS.ErrnoException` assertions.
+ */
+function fsErrorCode(error: unknown): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code: unknown }).code === 'string'
+  ) {
+    return (error as { code: string }).code;
+  }
+  return undefined;
+}
+
+/** Result of {@link cleanupTempFile}: ok, or a discriminated error. */
+export interface CleanupTempFileResult {
+  readonly ok: boolean;
+  readonly benign: boolean;
+  readonly error?: string;
+}
+
+/**
+ * Best-effort async temp cleanup that classifies the outcome so callers
+ * never silently swallow a non-benign failure and never add noise for a
+ * benign one. ENOENT (the temp was never created or already removed) is
+ * benign and must NOT surface as an error; all other failures are
+ * non-benign and must be composed with any primary error.
+ */
+export async function cleanupTempFile(
+  tempPath: string,
+): Promise<CleanupTempFileResult> {
+  try {
+    await fs.unlink(tempPath);
+    return { ok: true, benign: false };
+  } catch (error) {
+    const code = fsErrorCode(error);
+    if (code === 'ENOENT') {
+      return { ok: false, benign: true, error: String(error) };
+    }
+    return { ok: false, benign: false, error: String(error) };
+  }
+}
 const logger = new DebugLogger('llxprt:prompt-config:installer');
 
 export interface WriteFileResult {
@@ -78,12 +122,14 @@ export async function writeInstallFile(
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    try {
-      await fs.unlink(tempPath);
-    } catch {
-      // Ignore cleanup errors
+    const cleanup = await cleanupTempFile(tempPath);
+    if (!cleanup.ok && !cleanup.benign) {
+      return {
+        installed: false,
+        skipped: false,
+        error: `${classifyWriteError(fullPath, errorMsg)} (cleanup: ${cleanup.error})`,
+      };
     }
-
     return {
       installed: false,
       skipped: false,

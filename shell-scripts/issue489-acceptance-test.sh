@@ -14,8 +14,38 @@ set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
-DEBUG_DIR="${HOME}/.llxprt/debug"
-PROFILE_DIR="${HOME}/.llxprt/profiles"
+# Resolve canonical config and log/state directories honoring LLxprt overrides,
+# matching the central Storage contract precedence. Never read/write the
+# legacy ~/.llxprt tree for app-managed artifacts.
+#
+# Category overrides (LLXPRT_*_HOME) are honored ONLY when non-empty absolute
+# paths; relative/blank values are ignored in favor of env-paths defaults
+# (matching Storage).
+# shellcheck disable=SC1091
+. "${SCRIPT_DIR}/llxprt-paths.sh"
+# Record the caller's script dir so env-paths defaults resolve from any cwd (#6).
+llxprt_paths_init "${SCRIPT_DIR}"
+CONFIG_BASE="$(llxprt_resolve_config_dir)"
+if [ -z "${CONFIG_BASE}" ]; then
+    echo "Error: Failed to resolve canonical config directory" >&2
+    exit 1
+fi
+LOG_BASE="$(llxprt_resolve_log_dir)"
+if [ -z "${LOG_BASE}" ]; then
+    echo "Error: Failed to resolve canonical log directory" >&2
+    exit 1
+fi
+# LLXPRT_DEBUG_DIR is an explicit per-script override, honored ONLY when it is
+# a non-empty absolute path (matching the Storage override-validity contract).
+# Relative/blank values are ignored in favor of the canonical log/state debug
+# tree (finding #58). The value is TRIMMED so ' /abs/path ' produces the same
+# canonical path as '/abs/path' (finding F).
+if _DEBUG_DIR="$(llxprt_normalized_abs_override "${LLXPRT_DEBUG_DIR:-}")"; then
+    DEBUG_DIR="$_DEBUG_DIR"
+else
+    DEBUG_DIR="${LOG_BASE}/debug"
+fi
+PROFILE_DIR="${CONFIG_BASE}/profiles"
 PROFILE_NAME="testlb489"
 TEST_OUTPUT="${PROJECT_DIR}/test-issue489-output.log"
 

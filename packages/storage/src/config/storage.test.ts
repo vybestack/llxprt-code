@@ -238,11 +238,84 @@ describe('Storage – data-category methods resolve under data dir', () => {
       path.join(DATA_OVERRIDE_DIR, 'oauth_creds.json'),
     );
   });
+});
 
-  it('getGlobalMemoryFilePath returns <dataDir>/memory.md', () => {
-    expect(Storage.getGlobalMemoryFilePath()).toBe(
-      path.join(DATA_OVERRIDE_DIR, 'memory.md'),
+describe('Storage – data-category extensions + memory/locks helpers', () => {
+  beforeEach(() => {
+    process.env['LLXPRT_CONFIG_HOME'] = OVERRIDE_DIR;
+    process.env['LLXPRT_DATA_HOME'] = DATA_OVERRIDE_DIR;
+    process.env['LLXPRT_CACHE_HOME'] = CACHE_OVERRIDE_DIR;
+    process.env['LLXPRT_LOG_HOME'] = LOG_OVERRIDE_DIR;
+  });
+
+  afterEach(restoreEnv);
+
+  it('getUserExtensionsDir returns <dataDir>/extensions', () => {
+    expect(Storage.getUserExtensionsDir()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'extensions'),
     );
+  });
+
+  it('getUserExtensionsDir honors LLXPRT_DATA_HOME when only it is set', () => {
+    delete process.env['LLXPRT_CONFIG_HOME'];
+    process.env['LLXPRT_DATA_HOME'] = DATA_OVERRIDE_DIR;
+    expect(Storage.getUserExtensionsDir()).toBe(
+      path.join(DATA_OVERRIDE_DIR, 'extensions'),
+    );
+  });
+
+  it('getUserExtensionsDir falls back to LLXPRT_CONFIG_HOME for compat', () => {
+    delete process.env['LLXPRT_DATA_HOME'];
+    expect(Storage.getUserExtensionsDir()).toBe(
+      path.join(OVERRIDE_DIR, 'extensions'),
+    );
+  });
+
+  it('getGlobalMemoryDir equals getGlobalConfigDir', () => {
+    expect(Storage.getGlobalMemoryDir()).toBe(Storage.getGlobalConfigDir());
+    expect(Storage.getGlobalMemoryDir()).toBe(OVERRIDE_DIR);
+  });
+
+  it('getGlobalMemoryDir honors LLXPRT_CONFIG_HOME override alone', () => {
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CACHE_HOME'];
+    delete process.env['LLXPRT_LOG_HOME'];
+    expect(Storage.getGlobalMemoryDir()).toBe(OVERRIDE_DIR);
+  });
+
+  it('getOAuthLocksDir returns <logDir>/oauth/locks', () => {
+    expect(Storage.getOAuthLocksDir()).toBe(
+      path.join(LOG_OVERRIDE_DIR, 'oauth', 'locks'),
+    );
+  });
+
+  it('getOAuthLocksDir falls back to LLXPRT_CONFIG_HOME for compat', () => {
+    delete process.env['LLXPRT_LOG_HOME'];
+    expect(Storage.getOAuthLocksDir()).toBe(
+      path.join(OVERRIDE_DIR, 'oauth', 'locks'),
+    );
+  });
+});
+
+describe('Storage – getUserExtensionsDir default platform path', () => {
+  beforeEach(() => {
+    delete process.env['LLXPRT_CONFIG_HOME'];
+    delete process.env['LLXPRT_DATA_HOME'];
+    delete process.env['LLXPRT_CACHE_HOME'];
+    delete process.env['LLXPRT_LOG_HOME'];
+  });
+
+  afterEach(restoreEnv);
+
+  it('getUserExtensionsDir resolves under the platform data dir and ends with extensions', () => {
+    const result = Storage.getUserExtensionsDir();
+    expect(path.basename(result)).toBe('extensions');
+    const expectedParent = platformSegment(
+      'Application Support',
+      'Data',
+      'share',
+    );
+    expect(result).toContain(expectedParent);
   });
 });
 
@@ -584,6 +657,127 @@ describe('Storage – getSystemPoliciesDir derives from sanitized path', () => {
     process.env[ENV_KEY] = 'relative/settings.json';
     expect(Storage.getSystemPoliciesDir()).toBe(
       path.join(path.dirname(expectedDefaultSystemSettingsPath()), 'policies'),
+    );
+  });
+});
+
+describe('Storage – legacy system-settings alias and defaults path', () => {
+  const CANONICAL = 'LLXPRT_SYSTEM_SETTINGS_PATH';
+  const LEGACY = 'LLXPRT_CODE_SYSTEM_SETTINGS_PATH';
+  const CANONICAL_DEFAULTS = 'LLXPRT_SYSTEM_DEFAULTS_PATH';
+  const LEGACY_DEFAULTS = 'LLXPRT_CODE_SYSTEM_DEFAULTS_PATH';
+  let savedCanonical: string | undefined;
+  let savedLegacy: string | undefined;
+  let savedCanonicalDefaults: string | undefined;
+  let savedLegacyDefaults: string | undefined;
+
+  beforeEach(() => {
+    savedCanonical = process.env[CANONICAL];
+    savedLegacy = process.env[LEGACY];
+    savedCanonicalDefaults = process.env[CANONICAL_DEFAULTS];
+    savedLegacyDefaults = process.env[LEGACY_DEFAULTS];
+    delete process.env[CANONICAL];
+    delete process.env[LEGACY];
+    delete process.env[CANONICAL_DEFAULTS];
+    delete process.env[LEGACY_DEFAULTS];
+  });
+
+  afterEach(() => {
+    if (savedCanonical === undefined) delete process.env[CANONICAL];
+    else process.env[CANONICAL] = savedCanonical;
+    if (savedLegacy === undefined) delete process.env[LEGACY];
+    else process.env[LEGACY] = savedLegacy;
+    if (savedCanonicalDefaults === undefined)
+      delete process.env[CANONICAL_DEFAULTS];
+    else process.env[CANONICAL_DEFAULTS] = savedCanonicalDefaults;
+    if (savedLegacyDefaults === undefined) delete process.env[LEGACY_DEFAULTS];
+    else process.env[LEGACY_DEFAULTS] = savedLegacyDefaults;
+  });
+
+  it('honors the legacy alias when canonical is unset', () => {
+    process.env[LEGACY] = '/legacy/settings.json';
+    expect(Storage.getSystemSettingsPath()).toBe('/legacy/settings.json');
+  });
+
+  it('canonical takes precedence over legacy when both are set', () => {
+    process.env[CANONICAL] = '/canonical/settings.json';
+    process.env[LEGACY] = '/legacy/settings.json';
+    expect(Storage.getSystemSettingsPath()).toBe('/canonical/settings.json');
+  });
+
+  it('ignores a relative legacy alias in favor of platform default', () => {
+    process.env[LEGACY] = 'relative/path';
+    expect(Storage.getSystemSettingsPath()).toBe(
+      expectedDefaultSystemSettingsPath(),
+    );
+  });
+
+  it('getSystemDefaultsPath derives from settings path when no defaults env', () => {
+    const settings = Storage.getSystemSettingsPath();
+    const expected = path.join(path.dirname(settings), 'system-defaults.json');
+    expect(Storage.getSystemDefaultsPath()).toBe(expected);
+  });
+
+  it('getSystemDefaultsPath honors canonical defaults env', () => {
+    process.env[CANONICAL_DEFAULTS] = '/canonical/defaults.json';
+    expect(Storage.getSystemDefaultsPath()).toBe('/canonical/defaults.json');
+  });
+
+  it('getSystemDefaultsPath honors legacy defaults alias', () => {
+    process.env[LEGACY_DEFAULTS] = '/legacy/defaults.json';
+    expect(Storage.getSystemDefaultsPath()).toBe('/legacy/defaults.json');
+  });
+
+  it('getSystemDefaultsPath canonical takes precedence over legacy', () => {
+    process.env[CANONICAL_DEFAULTS] = '/canonical/defaults.json';
+    process.env[LEGACY_DEFAULTS] = '/legacy/defaults.json';
+    expect(Storage.getSystemDefaultsPath()).toBe('/canonical/defaults.json');
+  });
+
+  it('getSystemDefaultsPath ignores relative defaults override', () => {
+    process.env[CANONICAL_DEFAULTS] = 'relative/defaults.json';
+    const settings = Storage.getSystemSettingsPath();
+    const expected = path.join(path.dirname(settings), 'system-defaults.json');
+    expect(Storage.getSystemDefaultsPath()).toBe(expected);
+  });
+
+  it('getSystemPoliciesDir is consistent with getSystemSettingsPath', () => {
+    process.env[CANONICAL] = '/custom/dir/settings.json';
+    expect(Storage.getSystemPoliciesDir()).toBe('/custom/dir/policies');
+  });
+});
+
+describe('Storage.isNonEmptyAbsoluteOverride — override-validity contract', () => {
+  it('returns true for a non-empty absolute path', () => {
+    expect(Storage.isNonEmptyAbsoluteOverride('/etc/llxprt-code')).toBe(true);
+  });
+
+  it('returns false for a relative path', () => {
+    expect(Storage.isNonEmptyAbsoluteOverride('relative/path')).toBe(false);
+  });
+
+  it('returns false for a blank string', () => {
+    expect(Storage.isNonEmptyAbsoluteOverride('')).toBe(false);
+  });
+
+  it('returns false for a whitespace-only string', () => {
+    expect(Storage.isNonEmptyAbsoluteOverride('   ')).toBe(false);
+  });
+
+  it('returns false for undefined', () => {
+    expect(Storage.isNonEmptyAbsoluteOverride(undefined)).toBe(false);
+  });
+
+  it('returns true for an absolute path containing traversal segments', () => {
+    // Validity is about non-empty+absolute; normalization happens elsewhere.
+    expect(Storage.isNonEmptyAbsoluteOverride('/a/../b/settings.json')).toBe(
+      true,
+    );
+  });
+
+  it('trims surrounding whitespace before checking', () => {
+    expect(Storage.isNonEmptyAbsoluteOverride('   /etc/llxprt-code   ')).toBe(
+      true,
     );
   });
 });

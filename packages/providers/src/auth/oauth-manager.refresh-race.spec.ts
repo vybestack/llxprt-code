@@ -70,7 +70,10 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       fallbackPolicy: 'allow',
       keyringLoader: async () => createMockKeyring(),
     });
-    tokenStore = new KeyringTokenStore({ secureStore });
+    tokenStore = new KeyringTokenStore({
+      secureStore,
+      lockDir: join(tempDir, 'locks'),
+    });
     oauthManager = new OAuthManager(tokenStore);
 
     // Reset refresh call counter

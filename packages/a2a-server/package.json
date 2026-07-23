@@ -18,9 +18,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "bun test --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml",
+    "test": "bun test --preload ./bun-preload-storage-isolation.ts --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace a2a-server",
-    "test:ci": "bun test --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml --coverage --coverage-reporter=lcov --coverage-dir=coverage",
+    "test:ci": "bun test --preload ./bun-preload-storage-isolation.ts --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml --coverage --coverage-reporter=lcov --coverage-dir=coverage",
     "typecheck": "tsc --noEmit",
     "test:vitest": "vitest run --config ./vitest.config.ts"
   },

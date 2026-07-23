@@ -29,4 +29,5 @@ export interface MigrationResult {
 export interface StartupMigrationResult {
   readonly migration: MigrationResult;
   readonly repair: MigrationResult;
+  readonly memoryReconciliation: MigrationResult;
 }

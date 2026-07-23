@@ -19,7 +19,7 @@ When enabled, LLxprt logs conversations locally to help with debugging, analysis
 
 ### Storage Details
 
-- **Location**: `~/.llxprt/conversations/`
+- **Location**: `<data>/conversations/` (see [Application Directories](./reference/application-directories.md))
 - **Format**: JSONL (one JSON object per line)
 - **File Naming**: `conversation-YYYY-MM-DD.jsonl` (daily rotation)
 - **Permissions**: Files are readable only by your user account
@@ -93,7 +93,7 @@ Enables conversation logging with automatic local storage.
 Conversation logging enabled. Data stored locally only.
 ```
 
-After enabling, all new conversations will be logged to your local `~/.llxprt/conversations/` directory.
+After enabling, all new conversations will be logged to your local `<data>/conversations/` directory (see [Application Directories](./reference/application-directories.md)).
 
 ### `/logging disable`
 
@@ -185,7 +185,7 @@ LLxprt's telemetry can be configured through settings files, environment variabl
 
 ### Settings File Configuration
 
-Add telemetry configuration to your `~/.llxprt/settings.json` or workspace `.llxprt/settings.json`:
+Add telemetry configuration to your [user settings.json](./reference/application-directories.md) (in LLxprt's config directory) or workspace `.llxprt/settings.json`:
 
 ```json
 {
@@ -197,7 +197,7 @@ Add telemetry configuration to your `~/.llxprt/settings.json` or workspace `.llx
     "redactUrls": true,
     "redactEmails": true,
     "redactPersonalInfo": true,
-    "conversationLogPath": "~/.llxprt/conversations",
+    "conversationLogPath": "",
     "maxLogFiles": 10,
     "maxLogSizeMB": 50,
     "retentionDays": 30,
@@ -206,13 +206,15 @@ Add telemetry configuration to your `~/.llxprt/settings.json` or workspace `.llx
 }
 ```
 
+Leave `conversationLogPath` empty (or omit it) to use the default `<data>/conversations` location; set it to an absolute path to override.
+
 ### Configuration Options Reference
 
 #### Core Logging Settings
 
 - `logConversations` (boolean): Enable conversation logging (default: `false`)
 - `logResponses` (boolean): Include full AI responses in logs (default: `false`)
-- `conversationLogPath` (string): Directory for log files (default: `~/.llxprt/conversations`)
+- `conversationLogPath` (string): Directory for log files (default: `<data>/conversations`, see [Application Directories](./reference/application-directories.md))
 
 #### Data Retention Settings
 
@@ -243,7 +245,7 @@ Settings are applied in the following order (highest precedence first):
 1. **Command-line flags** (when using the `llxprt` CLI)
 2. **Environment variables**
 3. **Workspace settings** (`.llxprt/settings.json` in current directory)
-4. **User settings** (`~/.llxprt/settings.json` in home directory)
+4. **User settings** (your user `settings.json` in LLxprt's [config directory](./reference/application-directories.md))
 5. **Default values**
 
 ## Testing and Development
@@ -274,19 +276,19 @@ To debug issues with LLxprt:
 1. **Enable logging**: `/logging enable`
 2. **Reproduce the issue**: Run the problematic commands
 3. **View recent logs**: `/logging show 20`
-4. **Examine log files**: Check `~/.llxprt/conversations/` for detailed JSONL data
+4. **Examine log files**: Check `<data>/conversations/` (see [Application Directories](./reference/application-directories.md)) for detailed JSONL data
 
 The log files contain structured data that can be analyzed with standard JSON tools:
 
 ```bash
-# View today's conversation log
-cat ~/.llxprt/conversations/conversation-$(date +%Y-%m-%d).jsonl | jq '.'
+# View today's conversation log (data directory — see Application Directories)
+cat "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/conversation-$(date +%Y-%m-%d).jsonl" | jq '.'
 
 # Filter for specific providers
-cat ~/.llxprt/conversations/conversation-*.jsonl | jq 'select(.provider == "openai")'
+cat "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/conversation-"*.jsonl | jq 'select(.provider == "openai")'
 
 # Count conversations by provider
-cat ~/.llxprt/conversations/conversation-*.jsonl | jq -r '.provider' | sort | uniq -c
+cat "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/conversation-"*.jsonl | jq -r '.provider' | sort | uniq -c
 ```
 
 ## Privacy Guarantees
@@ -353,7 +355,7 @@ LLxprt fundamentally differs from the original Google Gemini CLI in its approach
 ### Common Issues
 
 **Q: I enabled logging but don't see any log files**
-A: Check that the log directory exists and you have write permissions. The default path is `~/.llxprt/conversations/`.
+A: Check that the log directory exists and you have write permissions. The default path is `<data>/conversations/` (see [Application Directories](./reference/application-directories.md)).
 
 **Q: My log files are very large**
 A: Configure `maxLogSizeMB` and `maxLogFiles` in your settings to control file rotation and size limits.
@@ -362,7 +364,7 @@ A: Configure `maxLogSizeMB` and `maxLogFiles` in your settings to control file r
 A: Some patterns may not be caught by automatic redaction. Consider adding custom redaction patterns or disabling logging for sensitive workflows.
 
 **Q: How do I permanently delete all conversation logs?**
-A: Remove the entire conversation log directory: `rm -rf ~/.llxprt/conversations/`
+A: Remove the entire conversation log directory: `rm -rf "${LLXPRT_DATA_HOME:-$HOME/.local/share/llxprt-code}/conversations/"`
 
 ### Getting Help
 

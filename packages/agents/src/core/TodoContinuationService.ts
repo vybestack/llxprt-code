@@ -57,20 +57,48 @@ function getToolResponseName(block: ContentBlock): string | undefined {
  * Normalizes a task-list entry for snapshot comparison. Runtime payloads may
  * omit or null out fields despite the declared type.
  */
+/**
+ * Structural accessor for a task-list entry's optional fields. Runtime
+ * payloads may omit or null out fields despite the declared type. The
+ * `as unknown as Record` widening is guarded by the entry input type (an
+ * object), so the runtime shape is already object-typed before widening to
+ * a string-keyed record.
+ */
+function taskEntryFields(todo: Todo): Record<string, unknown> {
+  return todo as unknown as Record<string, unknown>;
+}
+
+/**
+ * Converts a runtime task-list entry id (string, number, or missing) to a
+ * stable string for snapshot comparison. Extracted to avoid a nested ternary.
+ */
+function taskEntryIdToString(rawId: unknown): string {
+  if (typeof rawId === 'string') {
+    return rawId;
+  }
+  if (typeof rawId === 'number') {
+    return String(rawId);
+  }
+  return '';
+}
+
 function normalizeTodoForComparison(todo: Todo): {
   id: string;
   status: string;
   content: string;
 } {
-  const raw = todo as Partial<Todo>;
-  const rawStatus = raw.status;
+  const raw = taskEntryFields(todo);
+  const rawStatus = raw['status'];
   const status =
     typeof rawStatus === 'string' && rawStatus.length > 0
       ? rawStatus.toLowerCase()
       : 'pending';
-  const content = typeof raw.content === 'string' ? raw.content : '';
+  const rawContent = raw['content'];
+  const content = typeof rawContent === 'string' ? rawContent : '';
+  const rawId = raw['id'];
+  const id = taskEntryIdToString(rawId);
   return {
-    id: `${raw.id ?? ''}`,
+    id,
     status,
     content,
   };
@@ -144,19 +172,29 @@ export class TodoContinuationService {
 
   private readonly todoReminderService: TodoReminderService;
   private readonly config: Config;
+  private readonly todoDataDirResolver: () => string;
 
   constructor({
     config,
     todoReminderService,
     complexitySuggestionCooldown,
+    todoDataDirResolver,
   }: {
     config: Config;
     todoReminderService: TodoReminderService;
     complexitySuggestionCooldown: number;
+    /**
+     * Canonical task-list data directory resolver (wired to
+     * `Storage.getGlobalDataDir()` at the composition root). Required: the
+     * agents package no longer relies on a module-level global resolver or a
+     * duplicate platform algorithm in the tools leaf package.
+     */
+    todoDataDirResolver: () => string;
   }) {
     this.config = config;
     this.todoReminderService = todoReminderService;
     this.complexitySuggestionCooldown = complexitySuggestionCooldown;
+    this.todoDataDirResolver = todoDataDirResolver;
   }
 
   updateTodoToolAvailabilityFromDeclarations(
@@ -264,7 +302,13 @@ export class TodoContinuationService {
   async readTodoSnapshot(): Promise<Todo[]> {
     try {
       const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const store = new TodoStore(
+        sessionId,
+        {
+          dataDirResolver: this.todoDataDirResolver,
+        },
+        DEFAULT_AGENT_ID,
+      );
       return await store.readTodos();
     } catch {
       // Reading persisted task-list state failed; return an empty snapshot.
@@ -275,7 +319,13 @@ export class TodoContinuationService {
   async readPausedState(): Promise<boolean> {
     try {
       const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const store = new TodoStore(
+        sessionId,
+        {
+          dataDirResolver: this.todoDataDirResolver,
+        },
+        DEFAULT_AGENT_ID,
+      );
       return await store.readPausedState();
     } catch {
       return false;
@@ -285,7 +335,13 @@ export class TodoContinuationService {
   async clearPausedState(): Promise<void> {
     try {
       const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const store = new TodoStore(
+        sessionId,
+        {
+          dataDirResolver: this.todoDataDirResolver,
+        },
+        DEFAULT_AGENT_ID,
+      );
       await store.writePausedState(false);
     } catch {
       // Clearing paused task-list state failed; do not block the new prompt.

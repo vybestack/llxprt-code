@@ -128,7 +128,7 @@ describe('AuthFlowOrchestrator', () => {
   });
 
   describe('authenticate() — auth lock parameters', () => {
-    it('acquires auth lock with waitMs:60000 and staleMs:360000', async () => {
+    it('acquires auth lock with waitMs:60000', async () => {
       const tokenStore = createTokenStore();
       const registry = new ProviderRegistry();
       const provider = createProvider('anthropic');
@@ -141,14 +141,13 @@ describe('AuthFlowOrchestrator', () => {
         'anthropic',
         expect.objectContaining({
           waitMs: 60000,
-          staleMs: 360000,
         }),
       );
     });
   });
 
   describe('authenticate() — nested refresh lock parameters', () => {
-    it('acquires nested refresh lock with waitMs:10000 and staleMs:30000 when expired token has refresh_token', async () => {
+    it('acquires nested refresh lock with waitMs:10000  when expired token has refresh_token', async () => {
       const tokenStore = createTokenStore();
       const expiredToken = makeToken('expired-token', -100); // expired
 
@@ -169,7 +168,6 @@ describe('AuthFlowOrchestrator', () => {
         'anthropic',
         expect.objectContaining({
           waitMs: 10000,
-          staleMs: 30000,
         }),
       );
     });

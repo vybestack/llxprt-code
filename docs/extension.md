@@ -193,20 +193,38 @@ llxprt extensions validate ./my-extension
 
 ## How It Works
 
-On startup, LLxprt Code looks for extensions in two locations:
+On startup, LLxprt Code discovers extensions from several roots, in this
+precedence order:
 
-1. `<workspace>/.llxprt/extensions`
-2. `<home>/.llxprt/extensions`
+1. **Trusted workspace roots** (highest precedence):
+   - `<workspace>/.llxprt/extensions`
+   - `<workspace>/.gemini/extensions` (Gemini CLI compatibility, read-only)
+2. **Canonical user root**: `<data>/extensions` — the user extensions directory
+   under the canonical data directory (see
+   [Application Directories](./reference/application-directories.md); on a
+   default install this is `~/.local/share/llxprt-code/extensions` on Linux,
+   `~/Library/Application Support/llxprt-code/extensions` on macOS, and
+   `%LOCALAPPDATA%\llxprt-code\Data\extensions` on Windows).
+3. **Read-only Gemini CLI compatibility root**: `~/.gemini/extensions` — scanned
+   read-only so extensions installed by Gemini CLI keep working after migrating
+   to LLxprt.
 
-LLxprt Code loads all extensions from both locations. If an extension with the
-same name exists in both locations, the extension in the workspace directory
-takes precedence.
+LLxprt Code loads all extensions from every root. When an extension with the
+same name exists in more than one root, the extension in the higher-precedence
+root wins (within a level, `.llxprt/extensions` takes precedence over
+`.gemini/extensions`).
 
-Within each location, individual extensions exist as a directory containing a
+> **Note:** The legacy `~/.llxprt/extensions` directory is **not** an active
+> root. On startup, the migration step copies any extensions it contains into
+> the canonical `<data>/extensions` root (see
+> [Application Directories](./reference/application-directories.md)). To install
+> a new user extension, place it under `<data>/extensions`.
+
+Within each root, individual extensions exist as a directory containing a
 `llxprt-extension.json` file (or `gemini-extension.json` for Gemini CLI
 extensions). For example:
 
-`<home>/.llxprt/extensions/my-extension/llxprt-extension.json`
+`<data>/extensions/my-extension/llxprt-extension.json`
 
 ### `llxprt-extension.json`
 
@@ -297,7 +315,7 @@ Each object in the array should have the following properties:
 
 When a user installs this extension, they will be prompted to enter their API
 key. The value will be saved to a `.env` file in the extension's directory
-(e.g., `<home>/.llxprt/extensions/my-api-extension/.env`).
+(e.g., `<data>/extensions/my-api-extension/.env` — see [Application Directories](./reference/application-directories.md)).
 
 ## Extension Commands
 
@@ -391,7 +409,7 @@ An extension's `llxprt-extension.json` (or `gemini-extension.json`) can include 
 When multiple hooks are configured across different scopes, LLxprt Code applies them in this order:
 
 1. **System hooks** (configured by system administrators)
-2. **User hooks** (in `~/.llxprt/settings.json`)
+2. **User hooks** (in your [user settings.json](./reference/application-directories.md), in LLxprt's config directory)
 3. **Extension hooks** (from enabled extensions)
 4. **Project hooks** (in `.llxprt/settings.json`)
 
@@ -462,8 +480,8 @@ server using an argument like
 
 **Supported variables:**
 
-| Variable                     | Description                                                                                                                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `${extensionPath}`           | The fully-qualified path of the extension in the user's filesystem, e.g., `/Users/username/.llxprt/extensions/example-extension`. This will not unwrap symlinks. |
-| `${workspacePath}`           | The fully-qualified path of the current workspace.                                                                                                               |
-| `${/}` or `${pathSeparator}` | The path separator (differs per OS).                                                                                                                             |
+| Variable                     | Description                                                                                                                                                                                                                                              |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `${extensionPath}`           | The fully-qualified path of the extension in the user's filesystem, e.g., `/home/username/.local/share/llxprt-code/extensions/example-extension` (see [Application Directories](./reference/application-directories.md)). This will not unwrap symlinks. |
+| `${workspacePath}`           | The fully-qualified path of the current workspace.                                                                                                                                                                                                       |
+| `${/}` or `${pathSeparator}` | The path separator (differs per OS).                                                                                                                                                                                                                     |

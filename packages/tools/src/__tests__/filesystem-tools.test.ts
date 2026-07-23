@@ -130,12 +130,12 @@ function createGrepHost(
 }
 
 /**
-
  * Minimal structural fake for IStorageService using real filesystem.
  */
 function _createFakeStorageService(baseDir: string): IStorageService {
   return {
-    getLLXPRTDir: () => baseDir,
+    getGlobalMemoryDir: () => baseDir,
+    getGlobalDataDir: () => baseDir,
     readFile: async (path: string) => readFileSync(path, 'utf-8'),
     writeFile: async (path: string, content: string) =>
       writeFileSync(path, content, 'utf-8'),

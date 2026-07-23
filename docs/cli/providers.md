@@ -148,7 +148,7 @@ The new alias appears immediately in `/provider` and persists across sessions.
 
 ### Manual Alias Files
 
-Create `~/.llxprt/providers/<alias>.config`:
+Create `<data>/providers/<alias>.config` in LLxprt's [data directory](../reference/application-directories.md) (overridable via `LLXPRT_DATA_HOME`, with `LLXPRT_CONFIG_HOME` as a compatibility fallback):
 
 ```json
 {

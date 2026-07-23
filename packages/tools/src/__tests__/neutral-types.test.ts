@@ -16,6 +16,19 @@ import {
 import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
+import type { ITodoService } from '../interfaces/ITodoService.js';
+
+// Minimal neutral ITodoService fixture. The todo tools now require this
+// dependency at the type boundary; the schema/type tests below never invoke
+// execute(), so no real storage is needed. This fixture exists only to satisfy
+// the mandatory constructor contract — it is a real object, not a mock of the
+// tool under test.
+const neutralTodoService: ITodoService = {
+  getTodoStore: () => ({}),
+  getReminderService: () => ({}),
+  getContextTracker: () => ({}),
+  getDefaultAgentId: () => 'neutral',
+};
 
 describe('Type enum runtime values', () => {
   it.each([
@@ -32,21 +45,21 @@ describe('Type enum runtime values', () => {
 
 describe('todo tools schema preserves exact runtime values', () => {
   it('TodoWrite schema has type: "OBJECT" at root (not a symbol or enum object)', () => {
-    const tool = new TodoWrite(undefined, undefined);
+    const tool = new TodoWrite(neutralTodoService);
     const schema = tool.schema;
     const jsonSchema = schema.parametersJsonSchema as Record<string, unknown>;
     expect(jsonSchema['type']).toBe('OBJECT');
   });
 
   it('TodoRead schema has type: "OBJECT"', () => {
-    const tool = new TodoRead(undefined);
+    const tool = new TodoRead(neutralTodoService);
     const schema = tool.schema;
     const jsonSchema = schema.parametersJsonSchema as Record<string, unknown>;
     expect(jsonSchema['type']).toBe('OBJECT');
   });
 
   it('TodoPause schema has type: "OBJECT" and reason.type: "STRING"', () => {
-    const tool = new TodoPause(undefined, undefined);
+    const tool = new TodoPause(neutralTodoService);
     const schema = tool.schema;
     const jsonSchema = schema.parametersJsonSchema as {
       type: string;
@@ -59,7 +72,7 @@ describe('todo tools schema preserves exact runtime values', () => {
 
 describe('schema is JSON-serializable (no enum symbols leak)', () => {
   it('TodoWrite schema round-trips through JSON.stringify without data loss', () => {
-    const tool = new TodoWrite(undefined, undefined);
+    const tool = new TodoWrite(neutralTodoService);
     const schema = tool.schema;
     const serialized = JSON.stringify(schema);
     const parsed = JSON.parse(serialized);
@@ -70,7 +83,7 @@ describe('schema is JSON-serializable (no enum symbols leak)', () => {
 
 describe('FunctionDeclaration structural assignability', () => {
   it('accepts the shape produced by DeclarativeTool.schema', () => {
-    const tool = new TodoRead(undefined);
+    const tool = new TodoRead(neutralTodoService);
     const schema = tool.schema;
     const _check: FunctionDeclaration = schema;
     expect(_check.name).toBe(TodoRead.Name);

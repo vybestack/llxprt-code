@@ -9,7 +9,7 @@
   "yolo": true,
   "startCommand": [
     "env",
-    "LLXPRT_CODE_SYSTEM_SETTINGS_PATH=scripts/system-settings.use-pty.json",
+    "LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.use-pty.json",
     "LLXPRT_DEBUG=llxprt:*",
     "LLXPRT_DEBUG_SESSION_ID=shell-harness",
     "bun",

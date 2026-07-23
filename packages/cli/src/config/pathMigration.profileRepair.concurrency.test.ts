@@ -252,6 +252,11 @@ describe('reportStartupResult — startup reporting helper', () => {
           reason: 'no repair needed',
           filesCopied: 0,
         },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation needed',
+          filesCopied: 0,
+        },
       },
       '/legacy',
     );
@@ -269,6 +274,11 @@ describe('reportStartupResult — startup reporting helper', () => {
           error: true,
         },
         repair: { migrated: false, reason: 'no repair', filesCopied: 0 },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation',
+          filesCopied: 0,
+        },
       },
       '/legacy',
     );
@@ -288,6 +298,11 @@ describe('reportStartupResult — startup reporting helper', () => {
           filesCopied: 0,
           error: true,
         },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation',
+          filesCopied: 0,
+        },
       },
       '/legacy',
     );
@@ -303,6 +318,11 @@ describe('reportStartupResult — startup reporting helper', () => {
         repair: {
           migrated: false,
           reason: 'profiles lock busy; repair deferred to next startup',
+          filesCopied: 0,
+        },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation',
           filesCopied: 0,
         },
       },
@@ -327,6 +347,11 @@ describe('reportStartupResult — startup reporting helper', () => {
           filesCopied: 0,
           error: true,
         },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation',
+          filesCopied: 0,
+        },
       },
       '/legacy',
     );
@@ -350,6 +375,11 @@ describe('reportStartupResult — startup reporting helper', () => {
           filesCopied: 0,
           profilesRepaired: 3,
           error: true,
+        },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation',
+          filesCopied: 0,
         },
       },
       '/legacy',
@@ -510,6 +540,11 @@ describe('runStartupMigrationWithPath — marker write failure scenarios', () =>
         repair: {
           migrated: false,
           reason: 'no repair needed',
+          filesCopied: 0,
+        },
+        memoryReconciliation: {
+          migrated: false,
+          reason: 'no reconciliation',
           filesCopied: 0,
         },
       },

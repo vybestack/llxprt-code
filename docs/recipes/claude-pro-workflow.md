@@ -57,7 +57,7 @@ A dialog will prompt you for your authorization code. Visit the Anthropic consol
 /profile save model claude-pro
 ```
 
-The profile is saved to `~/.llxprt/profiles/claude-pro.json` automatically.
+The profile is saved to `<config>/profiles/claude-pro.json` automatically (see [Application Directories](../reference/application-directories.md)).
 
 ## Enabling Thinking Mode
 

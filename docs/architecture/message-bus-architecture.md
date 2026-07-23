@@ -743,7 +743,7 @@ evaluate(toolName: string, args: Record<string, unknown>, serverName?: string): 
 **CLI Command:**
 
 ```bash
-llxprt test-policy ~/.llxprt/my-policy.toml \
+llxprt test-policy /absolute/path/to/my-policy.toml \
   --tool edit \
   --args '{"file_path": "/etc/hosts"}'
 ```
@@ -751,7 +751,7 @@ llxprt test-policy ~/.llxprt/my-policy.toml \
 **Output:**
 
 ```
-Testing policy: ~/.llxprt/my-policy.toml
+Testing policy: /absolute/path/to/my-policy.toml
 
 Rule matched:
   Priority: 2.7

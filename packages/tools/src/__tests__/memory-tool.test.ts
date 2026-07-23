@@ -60,7 +60,8 @@ function createTempDir(prefix = 'llxprt-memory-test-'): {
  */
 function createFakeStorageService(baseDir: string): IStorageService {
   return {
-    getLLXPRTDir: () => baseDir,
+    getGlobalMemoryDir: () => baseDir,
+    getGlobalDataDir: () => baseDir,
     readFile: async (path: string) => readFileSync(path, 'utf-8'),
     writeFile: async (path: string, content: string) =>
       writeFileSync(path, content, 'utf-8'),
@@ -117,13 +118,13 @@ describe('Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () =>
     });
   });
 
-  describe('IStorageService LLXPRT directory path', () => {
-    it('getLLXPRTDir returns configured base directory', () => {
+  describe('IStorageService global memory directory path', () => {
+    it('getGlobalMemoryDir returns configured base directory', () => {
       const storage = createFakeStorageService(tempDir);
 
-      // Primary assertion: LLXPRT dir path matches (observable)
-      expect(storage.getLLXPRTDir()).toBe(tempDir);
-      expect(typeof storage.getLLXPRTDir()).toBe('string');
+      // Primary assertion: global memory dir path matches (observable)
+      expect(storage.getGlobalMemoryDir()).toBe(tempDir);
+      expect(typeof storage.getGlobalMemoryDir()).toBe('string');
     });
   });
 
@@ -140,13 +141,13 @@ describe('Memory Tool Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () =>
   });
 
   describe('Key storage path matches pre-extraction behavior', () => {
-    it('LLXPRT dir path is used for key storage files', () => {
+    it('global memory dir path is used for key storage files', () => {
       const storage = createFakeStorageService(tempDir);
-      const storageDir = storage.getLLXPRTDir();
+      const storageDir = storage.getGlobalMemoryDir();
 
       // Primary assertion: Storage dir path is consistent (observable)
       expect(storageDir).toBe(tempDir);
-      // This is a regression guard: if LLXPRT dir resolution changes,
+      // This is a regression guard: if global memory dir resolution changes,
       // this test catches it
     });
   });

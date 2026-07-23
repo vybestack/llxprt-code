@@ -89,17 +89,22 @@ See [Sandboxing](./sandbox.md).
 
 ## Syncing Configurations with Gemini CLI
 
-If you run both tools, you can share some configuration via symlinks:
+If you're migrating from Gemini CLI, you may want to import existing configuration. LLxprt Code stores its files in [OS-standard directories](./reference/application-directories.md) rather than `~/.llxprt`, so **don't symlink into `~/.llxprt`** — copy your Gemini CLI files into LLxprt's config directory once instead.
+
+### One-time legacy import
 
 ```bash
-# Link context/memory files
-ln -s ~/.gemini/GEMINI.md ~/.llxprt/LLXPRT.md
+# Resolve LLxprt's config directory for your platform (see Application Directories)
+# Example on Linux: CONFIG_DIR="${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}"
 
-# Link MCP server configs (usually compatible)
-ln -s ~/.gemini/settings.json ~/.llxprt/settings.json
+# Import your global memory/context file
+cp ~/.gemini/GEMINI.md "$CONFIG_DIR/LLXPRT.md"
+
+# Import settings (review first — not 100% compatible; see caveats below)
+cp ~/.gemini/settings.json "$CONFIG_DIR/settings.json"
 ```
 
-**Caveats:** Settings aren't 100% compatible. LLxprt Code has multi-provider auth, profiles, and settings that Gemini CLI doesn't. If you hit issues, maintain separate configs.
+After importing, review the settings file: LLxprt Code has multi-provider auth, profiles, and settings that Gemini CLI doesn't, so some keys may be ignored or need adjustment.
 
 ### What Transfers Well
 

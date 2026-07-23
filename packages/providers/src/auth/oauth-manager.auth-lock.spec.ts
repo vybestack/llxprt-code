@@ -350,7 +350,6 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
         'anthropic',
         expect.objectContaining({
           waitMs: 10000,
-          staleMs: 30000,
         }),
       );
       expect(tokenStore.releaseRefreshLock).toHaveBeenCalled();
@@ -529,7 +528,6 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
         'anthropic',
         expect.objectContaining({
           waitMs: 10000,
-          staleMs: 30000,
           bucket: 'default',
         }),
       );

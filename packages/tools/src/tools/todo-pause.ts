@@ -22,7 +22,7 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
   static readonly Name = 'todo_pause';
 
   constructor(
-    private readonly todoService?: ITodoService,
+    private readonly todoService: ITodoService,
     private readonly toolHost?: IToolHost,
   ) {
     super(
@@ -142,10 +142,10 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
 
     const reason = reasonResult.reason;
 
-    const store = this.todoService?.getTodoStore(this.context);
-    if (store?.writePausedState) {
+    const store = this.todoService.getTodoStore(this.context);
+    if (store.writePausedState) {
       await store.writePausedState(true);
-    } else if (store?.setTodos && store.getTodos) {
+    } else if (store.setTodos && store.getTodos) {
       store.setTodos([
         ...store.getTodos(),
         { id: '__pause__', content: `pause: ${reason}`, status: 'pending' },

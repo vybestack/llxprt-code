@@ -223,7 +223,8 @@ export const innerCommandOptions: Record<string, Options> = {
   },
   'sandbox-profile-load': {
     type: 'string',
-    description: 'Load a sandbox profile from ~/.llxprt/sandboxes/<name>.json',
+    description:
+      'Load a sandbox profile from the sandboxes directory in your LLxprt config directory (<config>/sandboxes/<name>.json)',
   },
   debug: {
     alias: 'd',
@@ -346,7 +347,8 @@ export const innerCommandOptions: Record<string, Options> = {
   },
   dumponerror: {
     type: 'boolean',
-    description: 'Dump request body to ~/.llxprt/dumps/ on API errors.',
+    description:
+      'Dump request body to the dumps directory in your LLxprt cache directory on API errors.',
     default: false,
   },
   continue: {

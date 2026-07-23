@@ -9,6 +9,8 @@ import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import { promises as fs } from 'node:fs';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
@@ -62,6 +64,7 @@ describe('OAuth Provider Premature Initialization', () => {
     vi.clearAllMocks();
     tokenStore = new KeyringTokenStore({
       secureStore: createStubSecureStore(),
+      lockDir: join(tmpdir(), 'llxprt-providers-init-locks'),
     });
     oauthManager = new OAuthManager(tokenStore);
 

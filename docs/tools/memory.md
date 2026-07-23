@@ -12,12 +12,12 @@ You can also edit these files directly — they're plain markdown.
 
 There are four scopes, controlling where the fact is saved:
 
-| Scope               | File Location                                     | Loaded When                                |
-| ------------------- | ------------------------------------------------- | ------------------------------------------ |
-| `project` (default) | `.llxprt/LLXPRT.md` in the project directory      | Working in that project                    |
-| `global`            | `~/.llxprt/LLXPRT.md`                             | Every session                              |
-| `core.project`      | `.llxprt/.LLXPRT_SYSTEM` in the project directory | Working in that project (in system prompt) |
-| `core.global`       | `~/.llxprt/.LLXPRT_SYSTEM`                        | Every session (in system prompt)           |
+| Scope               | File Location                                                                                      | Loaded When                                |
+| ------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `project` (default) | `.llxprt/LLXPRT.md` in the project directory                                                       | Working in that project                    |
+| `global`            | `<config>/LLXPRT.md` (see [Application Directories](../reference/application-directories.md))      | Every session                              |
+| `core.project`      | `.llxprt/.LLXPRT_SYSTEM` in the project directory                                                  | Working in that project (in system prompt) |
+| `core.global`       | `<config>/.LLXPRT_SYSTEM` (see [Application Directories](../reference/application-directories.md)) | Every session (in system prompt)           |
 
 **Project** memories apply only when you're working in a specific project. **Global** memories apply everywhere.
 
@@ -27,7 +27,7 @@ Memory loading isn't just "read one file." LLxprt Code discovers memory files ac
 
 ### 1. Global Memory (always loaded)
 
-`~/.llxprt/LLXPRT.md` is loaded in every session, regardless of where you are.
+`<config>/LLXPRT.md` — the global memory file in LLxprt's [config directory](../reference/application-directories.md) — is loaded in every session, regardless of where you are.
 
 ### 2. Upward Walk (project root to CWD)
 
@@ -59,7 +59,7 @@ When the model reads or modifies a file in a subdirectory it hasn't visited yet,
 
 The final context includes memory from:
 
-1. **Global** `~/.llxprt/LLXPRT.md`
+1. **Global** `<config>/LLXPRT.md` (see [Application Directories](../reference/application-directories.md))
 2. **Upward** from project root down to CWD (outermost first)
 3. **Downward** from CWD into subdirectories
 4. **JIT** as the model touches new directories
@@ -109,7 +109,7 @@ You can also manually edit the LLXPRT.md files:
 View your current memories by reading the files directly:
 
 ```
-cat ~/.llxprt/LLXPRT.md
+cat "${LLXPRT_CONFIG_HOME:-$HOME/.config/llxprt-code}/LLXPRT.md"
 cat .llxprt/LLXPRT.md
 ```
 

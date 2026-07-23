@@ -23,7 +23,7 @@ Telemetry configuration is managed via settings files and environment variables.
 Configure telemetry using one of the following methods:
 
 1.  **Settings files (recommended):**
-    - **User settings file (`~/.llxprt/settings.json`):** Global configuration for all projects.
+    - **User settings file** (in LLxprt's [config directory](./reference/application-directories.md)): Global configuration for all projects.
     - **Workspace settings file (`.llxprt/settings.json`):** Project-specific configuration.
 
     Add a `telemetry` object to your settings file (see [Example settings](#example-settings) below).
@@ -40,7 +40,7 @@ When multiple configuration methods are used, settings are applied in the follow
 1.  **CLI flags** (temporary session overrides)
 2.  **Environment variables**
 3.  **Workspace settings file (`.llxprt/settings.json`)**
-4.  **User settings file (`~/.llxprt/settings.json`)**
+4.  **User settings file** (in LLxprt's [config directory](./reference/application-directories.md))
 5.  **Defaults:**
     - `telemetry.enabled`: `false`
     - `telemetry.target`: `local`
@@ -53,7 +53,7 @@ When multiple configuration methods are used, settings are applied in the follow
 
 ### Example settings
 
-The following code can be added to your workspace (`.llxprt/settings.json`) or user (`~/.llxprt/settings.json`) settings to enable telemetry for local debugging only:
+The following code can be added to your workspace (`.llxprt/settings.json`) or [user settings file](./reference/application-directories.md) (in LLxprt's config directory) to enable telemetry for local debugging only:
 
 ```json
 {
@@ -107,7 +107,7 @@ Use the `npm run telemetry -- --target=local` command to set up a local telemetr
     Open your web browser and navigate to **http://localhost:16686** to access the Jaeger UI. Here you can inspect detailed traces of LLxprt Code operations.
 
 1.  **Inspect logs and metrics**:
-    The script redirects the OTEL collector output (which includes logs and metrics) to `~/.llxprt/tmp/<projectHash>/otel/collector.log`. The script will provide links to view and a command to tail your telemetry data (traces, metrics, logs) locally.
+    The script redirects the OTEL collector output (which includes logs and metrics) to `<log>/tmp/<projectHash>/otel/collector.log` (see [Application Directories](./reference/application-directories.md)). The script will provide links to view and a command to tail your telemetry data (traces, metrics, logs) locally.
 
 1.  **Stop the services**:
     Press `Ctrl+C` in the terminal where the script is running to stop the OTEL Collector and Jaeger services.
@@ -148,7 +148,7 @@ The `npm run telemetry -- --target=gcp` command sets up a local OpenTelemetry co
     Use the links provided by the script to navigate to the Google Cloud Console and view your traces, metrics, and logs.
 
 1.  **Inspect local collector logs**:
-    The script redirects the local OTEL collector output to `~/.llxprt/tmp/<projectHash>/otel/collector-gcp.log`. The script provides links to view and command to tail your collector logs locally.
+    The script redirects the local OTEL collector output to `<log>/tmp/<projectHash>/otel/collector-gcp.log` (see [Application Directories](./reference/application-directories.md)). The script provides links to view and command to tail your collector logs locally.
 
 1.  **Stop the service**:
     Press `Ctrl+C` in the terminal where the script is running to stop the OTEL Collector.

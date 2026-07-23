@@ -89,6 +89,7 @@ function makeService(
       overrides.todoReminderService ?? new TodoReminderService(),
     complexitySuggestionCooldown:
       overrides.complexitySuggestionCooldown ?? 300000,
+    todoDataDirResolver: () => '/mock/data/dir',
   });
 }
 

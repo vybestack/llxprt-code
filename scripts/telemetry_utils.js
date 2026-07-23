@@ -23,13 +23,28 @@ const projectHash = crypto
   .update(projectRoot)
   .digest('hex');
 
-// User-level .llxprt directory in home
-const USER_LLXPRT_DIR = path.join(os.homedir(), '.llxprt');
+// Use the SINGLE shared path-resolution authority (issue #2606 finding 6):
+// no duplicate algorithm. The shared resolver honors the same override
+// precedence (LLXPRT_LOG_HOME -> LLXPRT_CONFIG_HOME -> platform log dir) and
+// the same absolute-path validity rules as the central Storage contract.
+// Dynamic import with fallback so an unrelated packages/storage issue does
+// not break telemetry entirely.
+let LOG_DIR;
+try {
+  const mod = await import('../packages/storage/src/config/path-resolver.ts');
+  LOG_DIR = mod.resolveGlobalLogDir();
+} catch (e) {
+  console.warn(
+    `telemetry_utils: falling back to platform log dir: ${e.message}`,
+  );
+  LOG_DIR = path.join(os.homedir(), '.local', 'state', 'llxprt-code');
+}
 // Project-level .llxprt directory in the workspace
 const WORKSPACE_LLXPRT_DIR = path.join(projectRoot, '.llxprt');
 
-// Telemetry artifacts are stored in a hashed directory under the user's ~/.llxprt/tmp
-export const OTEL_DIR = path.join(USER_LLXPRT_DIR, 'tmp', projectHash, 'otel');
+// Telemetry artifacts are stored in a hashed directory under the canonical
+// log/state directory's tmp subtree.
+export const OTEL_DIR = path.join(LOG_DIR, 'tmp', projectHash, 'otel');
 export const BIN_DIR = path.join(OTEL_DIR, 'bin');
 
 // Workspace settings remain in the project's .llxprt directory

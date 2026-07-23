@@ -76,6 +76,7 @@ LLxprt Code ships with built-in tools for file editing, shell commands, web sear
 
 ## Reference
 
+- [Application Directories](./reference/application-directories.md) — where config, data, cache, and logs live on Linux/macOS/Windows, and how to override them
 - [Ephemeral Settings Reference](./reference/ephemerals.md) — every ephemeral setting with defaults, types, and advice
 - [Profile File Reference](./reference/profiles.md) — the profile JSON format, auth config, load balancers, precedence
 - [Commands](./cli/commands.md)

@@ -106,7 +106,7 @@ Subagents bind to profiles, not directly to providers or models. This means:
 
 ## Storage and files
 
-Subagents are stored under `~/.llxprt/subagents/` as JSON files. Each file includes the profile, mode, system prompt, and timestamps. You can back these up or version them as needed.
+Subagents are stored under `<config>/subagents/` (see [Application Directories](./reference/application-directories.md)) as JSON files. Each file includes the profile, mode, system prompt, and timestamps. You can back these up or version them as needed.
 
 ## Examples
 

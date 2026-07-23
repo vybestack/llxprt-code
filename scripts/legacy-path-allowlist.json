@@ -1,0 +1,147 @@
+[
+  {
+    "path": "packages/storage/src/config/storage.ts",
+    "pattern": "~/\\.llxprt|homeDir.*\\.llxprt|LLXPRT_DIR",
+    "reason": "Defines Storage.getLegacyLlxprtDir() — the single central migration-only helper that resolves ~/.llxprt as a startup-migration INPUT. The doc comment identifies the path as legacy. No active runtime reader/writer defaults to this path."
+  },
+  {
+    "path": "packages/storage/src/config/storage.ts",
+    "pattern": "LLXPRT_CODE_SYSTEM_SETTINGS_PATH|LLXPRT_CODE_SYSTEM_DEFAULTS_PATH|Application Support.*llxprt-code|LOCALAPPDATA.*llxprt-code|XDG_DATA_HOME.*llxprt-code",
+    "reason": "Storage is the single central OS-platform path authority. It implements the bounded compatibility fallback for the legacy LLXPRT_CODE_SYSTEM_SETTINGS_PATH/DEFAULTS_PATH alias and references the macOS 'Library/Application Support' + 'llxprt-code' / 'LlxprtCode' platform default. No duplicate algorithm may exist elsewhere."
+  },
+  {
+    "path": "packages/cli/src/cli.tsx",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment at the startup-migration call site explicitly identifies the path as legacy ('Migrate legacy ~/.llxprt/ to platform-standard path'). The actual resolution uses Storage.getLegacyLlxprtDir() and Storage.getGlobalConfigDir(). Migration orchestration/fallback only."
+  },
+  {
+    "path": "packages/cli/src/config/settings.ts",
+    "pattern": "LLXPRT_CODE_SYSTEM_SETTINGS_PATH",
+    "reason": "Doc comment on getSystemSettingsPath() documenting that Storage (the single authority) honors the legacy alias. The CLI function itself delegates to Storage.getSystemSettingsPath() — no duplicate algorithm or independent read of the alias lives here."
+  },
+  {
+    "path": "packages/cli/src/config/extension.ts",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment in loadUserExtensions() explicitly identifies the path as legacy ('Legacy ~/.llxprt/extensions is NOT scanned here'). Actual user-extension roots resolve through Storage.getUserExtensionsDir() and the .gemini compatibility root."
+  },
+  {
+    "path": "packages/a2a-server/src/config/extension.ts",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment in the a2a loadExtensions() explicitly identifies the path as legacy ('Legacy ~/.llxprt/extensions is NOT scanned'). Actual user-extension roots resolve through Storage.getUserExtensionsDir() and the .gemini compatibility root."
+  },
+  {
+    "path": "scripts/telemetry_utils.js",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment at the canonical log-dir resolver explicitly identifies the legacy path as the avoided behavior ('avoids writing telemetry artifacts under the legacy ~/.llxprt/tmp tree'). Actual resolution uses env-paths with LLXPRT_LOG_HOME/LLXPRT_CONFIG_HOME precedence."
+  },
+  {
+    "path": "scripts/telemetry.ts",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment at the canonical config-dir resolver explicitly identifies the legacy path as the avoided behavior ('not the legacy ~/.llxprt global layout'). Actual resolution uses resolveGlobalConfigDir() with LLXPRT_CONFIG_HOME/platform precedence."
+  },
+  {
+    "path": "packages/core/src/utils/memoryDiscovery.ts",
+    "pattern": "homedir\\(\\)[^\\n]{0,40}(LLXPRT_DIR|\\.llxprt)|~/\\.llxprt",
+    "reason": "Legacy-exclusion sentinel in upward memory traversal: stops walking at ~/.llxprt so a surviving legacy global file is never resurrected as workspace memory. The comment identifies the path as legacy-exclusion (migration-only contract). Scoped to the sentinel line only."
+  },
+  {
+    "path": "docs/reference/application-directories.md",
+    "pattern": "~/\\.llxprt",
+    "reason": "Canonical application-directories reference page. Every ~/.llxprt occurrence explicitly identifies the path as legacy migration input ('Older versions...', '~/.llxprt is an input only', 'legacy global ~/.llxprt'). This is the authoritative explanation of the migration story."
+  },
+  {
+    "path": "docs/reference/application-directories.md",
+    "pattern": "LLXPRT_CODE_SYSTEM_SETTINGS_PATH",
+    "reason": "Documents the bounded backward-compatibility alias honored inside Storage. Explains users should prefer the canonical LLXPRT_SYSTEM_SETTINGS_PATH. The alias name is referenced as a compatibility note, not as an active default."
+  },
+  {
+    "path": "docs/cli/enterprise.md",
+    "pattern": "LLXPRT_CODE_SYSTEM_SETTINGS_PATH",
+    "reason": "Documents the bounded backward-compatibility alias for the system settings path. The canonical env var LLXPRT_SYSTEM_SETTINGS_PATH is presented as primary; the alias is noted for backward compatibility."
+  },
+  {
+    "path": "docs/cli/configuration.md",
+    "pattern": "LLXPRT_CODE_SYSTEM_SETTINGS_PATH|LLXPRT_CODE_SYSTEM_DEFAULTS_PATH",
+    "reason": "Documents the bounded backward-compatibility aliases honored inside Storage for system settings/defaults paths. The canonical env vars are presented as primary; the aliases are noted for backward compatibility."
+  },
+  {
+    "path": "docs/gemini-cli-tips.md",
+    "pattern": "~/\\.llxprt",
+    "reason": "Gemini-CLI migration tips. Line 92 explicitly says 'don't symlink into ~/.llxprt' and directs users to copy into the config directory. Line 35 is an arbitrary user-selected keyfile path example. Both clearly identify the path as legacy/optional."
+  },
+  {
+    "path": "docs/extension.md",
+    "pattern": "~/\\.llxprt/extensions",
+    "reason": "Intentional legacy migration note in the active-root guidance: states the legacy ~/.llxprt/extensions directory is NOT an active root and is copied to <data>/extensions on startup. The note identifies the path as legacy and directs users to <data>/extensions. Active guidance uses <data>/extensions."
+  },
+  {
+    "path": "docs/oauth-setup.md",
+    "pattern": "~/\\.llxprt",
+    "reason": "Explains that old ~/.llxprt/oauth/*.json file locations are obsolete and read only once during startup migration. Clearly identifies the path as legacy."
+  },
+  {
+    "path": "shell-scripts/codex-call.sh",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment (line 27) explains the script now resolves canonical data paths via LLXPRT_DATA_HOME/env-paths instead of the legacy ~/.llxprt tree. The comment identifies the path as legacy. Actual path resolution uses env-paths."
+  },
+  {
+    "path": "shell-scripts/codex-models.sh",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment (line 24) explains the script now resolves canonical data paths via LLXPRT_DATA_HOME/env-paths instead of the legacy ~/.llxprt tree. Actual path resolution uses env-paths."
+  },
+  {
+    "path": "shell-scripts/codex-oauth.sh",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment (line 27) explains the script now resolves canonical data paths via LLXPRT_DATA_HOME/env-paths instead of the legacy ~/.llxprt tree. Actual path resolution uses env-paths."
+  },
+  {
+    "path": "shell-scripts/issue489-acceptance-test.sh",
+    "pattern": "~/\\.llxprt",
+    "reason": "Comment (line 19) explains the script now resolves canonical config/log paths via LLXPRT_*_HOME/env-paths instead of the legacy ~/.llxprt tree. Actual path resolution uses env-paths."
+  },
+  {
+    "path": "docs/sandbox.md",
+    "pattern": "~/\\.llxprt/ssh-agent",
+    "reason": "User-selected arbitrary SSH agent socket path (~/.llxprt/ssh-agent.sock) chosen by the user for Podman macOS SSH agent forwarding. Not LLxprt-managed app data; the user picks any socket path. See audit exclusion #7 in research/wrongpaths.md."
+  },
+  {
+    "path": "docs/troubleshooting.md",
+    "pattern": "~/\\.llxprt/ssh-agent",
+    "reason": "User-selected arbitrary SSH agent socket path (~/.llxprt/ssh-agent.sock) chosen by the user for Podman macOS SSH agent forwarding. Not LLxprt-managed app data; the user picks any socket path. See audit exclusion #7 in research/wrongpaths.md."
+  },
+  {
+    "path": "docs/tutorials/sandbox-setup.md",
+    "pattern": "~/\\.llxprt/ssh-agent",
+    "reason": "User-selected arbitrary SSH agent socket path (~/.llxprt/ssh-agent.sock) chosen by the user for Podman macOS SSH agent forwarding. Not LLxprt-managed app data; the user picks any socket path. See audit exclusion #7 in research/wrongpaths.md."
+  },
+  {
+    "path": "packages/cli/src/utils/sandbox-macos-permissive-open.sb",
+    "pattern": "\\.llxprt",
+    "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  },
+  {
+    "path": "packages/cli/src/utils/sandbox-macos-permissive-closed.sb",
+    "pattern": "\\.llxprt",
+    "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  },
+  {
+    "path": "packages/cli/src/utils/sandbox-macos-permissive-proxied.sb",
+    "pattern": "\\.llxprt",
+    "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  },
+  {
+    "path": "packages/cli/src/utils/sandbox-macos-restrictive-open.sb",
+    "pattern": "\\.llxprt",
+    "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  },
+  {
+    "path": "packages/cli/src/utils/sandbox-macos-restrictive-closed.sb",
+    "pattern": "\\.llxprt",
+    "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  },
+  {
+    "path": "packages/cli/src/utils/sandbox-macos-restrictive-proxied.sb",
+    "pattern": "\\.llxprt",
+    "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."
+  }
+]

@@ -10,7 +10,7 @@ MCP (Model Context Protocol) servers add third-party tools to LLxprt Code. They 
 llxprt mcp add my-server -- npx -y @example/mcp-server
 ```
 
-This adds the server to your `~/.llxprt/settings.json` automatically.
+This adds the server to your [user `settings.json`](../reference/application-directories.md) automatically.
 
 ### Via settings.json
 
@@ -559,7 +559,7 @@ While you can always configure MCP servers by manually editing your `settings.js
 
 ### Adding a Server (`llxprt mcp add`)
 
-The `add` command configures a new MCP server in your `settings.json`. Based on the scope (`-s, --scope`), it will be added to either the user config `~/.llxprt/settings.json` or the project config `.llxprt/settings.json` file.
+The `add` command configures a new MCP server in your `settings.json`. Based on the scope (`-s, --scope`), it will be added to either the user config (`<config>/settings.json` — see [Application Directories](../reference/application-directories.md)) or the project config `<project>/.llxprt/settings.json` file.
 
 **Command:**
 

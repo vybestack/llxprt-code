@@ -18,6 +18,7 @@ import {
   getProjectCoreMemoryFilePath,
 } from '@vybestack/llxprt-code-tools';
 import { tildeifyPath } from '../utils/paths.js';
+import { coreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 import { UNCONFIGURED_PROVIDER, PLACEHOLDER_MODEL } from '../config/models.js';
 import type {
   PromptContext,
@@ -227,12 +228,17 @@ export interface CoreSystemPromptOptions {
 
 /**
  * Loads core (system) memory content from .LLXPRT_SYSTEM files.
- * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
- * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
+ * Reads both global (config-category `<config>/.LLXPRT_SYSTEM`) and
+ * project-level (`<cwd>/.llxprt/.LLXPRT_SYSTEM`) files and concatenates them.
  */
 export async function loadCoreMemoryContent(cwd: string): Promise<string> {
   const candidates = [
-    { path: path.resolve(getGlobalCoreMemoryFilePath()), label: 'global' },
+    {
+      path: path.resolve(
+        getGlobalCoreMemoryFilePath(coreStorageServiceAdapter),
+      ),
+      label: 'global',
+    },
     { path: path.resolve(getProjectCoreMemoryFilePath(cwd)), label: 'project' },
   ];
 

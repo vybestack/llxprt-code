@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { homedir, platform } from 'os';
+import { homedir } from 'os';
 import * as dotenv from 'dotenv';
 import process from 'node:process';
 import {
@@ -51,26 +51,25 @@ export function createTestMergedSettings(
 
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
+/**
+ * System-wide settings path.
+ *
+ * Delegates to the single canonical authority: {@link Storage.getSystemSettingsPath}.
+ * No duplicate platform algorithm or env-var name lives here — Storage owns
+ * the canonical `LLXPRT_SYSTEM_SETTINGS_PATH` and the bounded legacy alias
+ * `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` with explicit precedence.
+ */
 export function getSystemSettingsPath(): string {
-  if (process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH) {
-    return process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
-  }
-  if (platform() === 'darwin') {
-    return '/Library/Application Support/LLxprt-Code/settings.json';
-  } else if (platform() === 'win32') {
-    return 'C:\\ProgramData\\llxprt-code\\settings.json';
-  }
-  return '/etc/llxprt-code/settings.json';
+  return Storage.getSystemSettingsPath();
 }
 
+/**
+ * System-wide defaults path.
+ *
+ * Delegates to the single canonical authority: {@link Storage.getSystemDefaultsPath}.
+ */
 export function getSystemDefaultsPath(): string {
-  if (process.env['LLXPRT_CODE_SYSTEM_DEFAULTS_PATH']) {
-    return process.env['LLXPRT_CODE_SYSTEM_DEFAULTS_PATH'];
-  }
-  return path.join(
-    path.dirname(getSystemSettingsPath()),
-    'system-defaults.json',
-  );
+  return Storage.getSystemDefaultsPath();
 }
 
 export type { DnsResolutionOrder } from './settingsSchema.js';

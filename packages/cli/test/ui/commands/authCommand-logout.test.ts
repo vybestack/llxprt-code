@@ -64,7 +64,10 @@ async function createTestTokenStore(): Promise<KeyringTokenStore> {
     fallbackPolicy: 'allow',
     keyringLoader: async () => createMockKeyring(),
   });
-  return new KeyringTokenStore({ secureStore });
+  return new KeyringTokenStore({
+    secureStore,
+    lockDir: join(_tempDir, 'locks'),
+  });
 }
 
 // Skip OAuth tests in CI as they require browser interaction

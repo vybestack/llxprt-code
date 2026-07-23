@@ -13,7 +13,6 @@ import {
   type ToolResult,
 } from './tools.js';
 import type { FunctionDeclaration } from '../types/wire-types.js';
-import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import process from 'node:process';
@@ -140,16 +139,11 @@ function isCoreScope(scope?: MemoryScope): boolean {
   return scope === 'core.global' || scope === 'core.project';
 }
 
-function getDefaultGlobalLlxprtDir(): string {
-  const homeDir = os.homedir();
-  if (!homeDir) {
-    return path.join(os.tmpdir(), LLXPRT_CONFIG_DIR);
-  }
-  return path.join(homeDir, LLXPRT_CONFIG_DIR);
-}
-
 function getGlobalMemoryFilePath(storageService: IStorageService): string {
-  return path.join(storageService.getLLXPRTDir(), getCurrentLlxprtMdFilename());
+  return path.join(
+    storageService.getGlobalMemoryDir(),
+    getCurrentLlxprtMdFilename(),
+  );
 }
 
 function getProjectMemoryFilePath(workingDir: string): string {
@@ -157,12 +151,9 @@ function getProjectMemoryFilePath(workingDir: string): string {
 }
 
 export function getGlobalCoreMemoryFilePath(
-  storageService?: Pick<IStorageService, 'getLLXPRTDir'>,
+  storageService: Pick<IStorageService, 'getGlobalMemoryDir'>,
 ): string {
-  return path.join(
-    storageService?.getLLXPRTDir() ?? getDefaultGlobalLlxprtDir(),
-    CORE_MEMORY_FILENAME,
-  );
+  return path.join(storageService.getGlobalMemoryDir(), CORE_MEMORY_FILENAME);
 }
 
 export function getProjectCoreMemoryFilePath(workingDir: string): string {
@@ -174,6 +165,29 @@ export interface MemoryToolDependencies {
   settingsService?: Pick<ISettingsService, 'getSetting'>;
   getWorkingDir?: () => string;
   messageBus?: IToolMessageBus;
+}
+
+/**
+ * Narrows the constructor input into a resolved dependencies object. The
+ * accepted type intentionally includes `null`/`undefined` so that an untyped
+ * caller (e.g. plain JS, or a caller passing `undefined` via `any`) gets an
+ * explicit, actionable error instead of a silent legacy `homedir/.llxprt`
+ * fallback. Typed callers see the narrow {@link MemoryToolDependencies} |
+ * {@link IStorageService} signature on the constructor.
+ */
+function resolveMemoryToolDependencies(
+  dependencies: MemoryToolDependencies | IStorageService | null | undefined,
+): MemoryToolDependencies {
+  if (dependencies === null || dependencies === undefined) {
+    throw new Error(
+      'MemoryTool requires explicit storage dependencies; received ' +
+        String(dependencies) +
+        '. Inject an IStorageService (e.g. CoreStorageServiceAdapter).',
+    );
+  }
+  return 'storageService' in dependencies
+    ? dependencies
+    : { storageService: dependencies };
 }
 
 /**
@@ -435,22 +449,16 @@ export class MemoryTool
   private readonly settingsService?: Pick<ISettingsService, 'getSetting'>;
   private readonly getWorkingDir?: () => string;
 
-  constructor(
-    dependencies: MemoryToolDependencies | IStorageService = {
-      storageService: {
-        getLLXPRTDir: getDefaultGlobalLlxprtDir,
-        readFile: (filePath) => fs.readFile(filePath, 'utf-8'),
-        writeFile: (filePath, content) =>
-          fs.writeFile(filePath, content, 'utf-8'),
-        ensureDir: (dirPath) =>
-          fs.mkdir(dirPath, { recursive: true }).then(() => undefined),
-      },
-    },
-  ) {
-    const resolvedDependencies =
-      'storageService' in dependencies
-        ? dependencies
-        : { storageService: dependencies };
+  /**
+   * @param dependencies - Explicit storage/service wiring. There is NO
+   *   no-arg legacy `homedir/.llxprt` fallback: production must inject a
+   *   storage service (typically {@link CoreStorageServiceAdapter}) so that
+   *   the global memory directory resolves consistently with the rest of the
+   *   application. Passing `null`/`undefined` from an untyped caller throws
+   *   an explicit error rather than silently falling back.
+   */
+  constructor(dependencies: MemoryToolDependencies | IStorageService) {
+    const resolvedDependencies = resolveMemoryToolDependencies(dependencies);
     super(
       MemoryTool.Name,
       'SaveMemory',

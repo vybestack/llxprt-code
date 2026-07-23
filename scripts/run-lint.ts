@@ -28,9 +28,10 @@ function nodeOptionsWithoutMemoryLimit(): string[] {
 }
 
 function nodeOptionsWithMemoryLimit(): string {
-  return [...nodeOptionsWithoutMemoryLimit(), '--max-old-space-size=8192'].join(
-    ' ',
-  );
+  return [
+    ...nodeOptionsWithoutMemoryLimit(),
+    '--max-old-space-size=12288',
+  ].join(' ');
 }
 
 async function runLint(): Promise<void> {

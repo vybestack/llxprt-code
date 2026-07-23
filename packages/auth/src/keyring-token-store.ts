@@ -8,88 +8,31 @@
  * Keyring-backed OAuth token storage implementing the TokenStore interface.
  *
  * Delegates credential CRUD to ISecureStore (injected via DI) and uses
- * filesystem-based advisory locks for refresh concurrency control.
+ * filesystem-based advisory locks (O_EXCL) for refresh concurrency control.
  *
  * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06, PLAN-20260608-ISSUE1586.P09
  * @requirement R1.1, R1.2, R1.3, REQ-AUTH-001.1
  */
 
 import { promises as fs } from 'node:fs';
-import { join, isAbsolute, resolve } from 'node:path';
-import { homedir, platform, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   OAuthTokenSchema,
   type OAuthToken,
   type BucketStats,
 } from './types.js';
 import { type TokenStore } from './token-store.js';
-import {
-  type IDebugLogger,
-  type ISecureStore,
-  type ISecureStoreError,
-} from './interfaces/index.js';
+import { type IDebugLogger, type ISecureStore } from './interfaces/index.js';
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-/** @internal */
-const _SERVICE_NAME = 'llxprt-code-oauth';
-void _SERVICE_NAME;
-// Allow email-style bucket names (e.g., user@example.com) while keeping filenames safe.
-// @fix issue1439 - relaxed from /^[a-zA-Z0-9_-]+$/ to allow '.' and '@'
 const NAME_REGEX = /^[a-zA-Z0-9._@-]{1,64}$/;
 const DEFAULT_BUCKET = 'default';
 const DEFAULT_LOCK_WAIT_MS = 10_000;
-const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
-const LOCK_WRITE_GRACE_MS = 750;
-
-// Inline platform config path matching envPaths('llxprt-code', { suffix: '' }).config
-// without importing the package (auth is a leaf package with no extra deps).
-function getPlatformConfigDir(): string {
-  const home = homedir() || tmpdir();
-  if (platform() === 'darwin') {
-    return join(home, 'Library', 'Preferences', 'llxprt-code');
-  }
-  if (platform() === 'win32') {
-    const rawAppData = process.env['APPDATA'] ?? '';
-    const appData =
-      rawAppData !== '' ? rawAppData : join(home, 'AppData', 'Roaming');
-    return join(appData, 'llxprt-code', 'Config');
-  }
-  const rawXdgConfig = process.env['XDG_CONFIG_HOME'] ?? '';
-  const xdgConfig = rawXdgConfig !== '' ? rawXdgConfig : join(home, '.config');
-  return join(xdgConfig, 'llxprt-code');
-}
-
-/** Resolves the lock directory based on LLXPRT_CONFIG_HOME or the platform config dir.
- * Called once during construction; runtime env changes will not affect an
- * existing instance. Pass an explicit lockDir to override. */
-function getLockDir(): string {
-  const rawConfigHome = process.env['LLXPRT_CONFIG_HOME'];
-  const trimmed = rawConfigHome?.trim();
-  const baseDir =
-    trimmed !== undefined && trimmed !== '' && isAbsolute(trimmed)
-      ? resolve(trimmed)
-      : getPlatformConfigDir();
-  return join(baseDir, 'oauth', 'locks');
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-// ─── KeyringTokenStore Class ─────────────────────────────────────────────────
-
-/**
- * Keyring-backed token store with filesystem advisory locks.
- *
- * @internal **DO NOT instantiate directly in consumer code.**
- * Use `createTokenStore()` from `credential-store-factory.ts` instead.
- *
- * @plan PLAN-20260213-KEYRINGTOKENSTORE.P06, PLAN-20260608-ISSUE1586.P11
- * @plan PLAN-20250214-CREDPROXY.P36
- */
 export class KeyringTokenStore implements TokenStore {
   private static readonly NO_OP_LOGGER: IDebugLogger = {
     debug: () => {},
@@ -101,21 +44,29 @@ export class KeyringTokenStore implements TokenStore {
   private readonly secureStore: ISecureStore;
   private readonly logger: IDebugLogger;
   private readonly lockDir: string;
+  private readonly heldTokens: Map<string, string> = new Map();
 
   constructor(options?: {
-    secureStore?: ISecureStore;
+    secureStore: ISecureStore;
+    lockDir: string;
     logger?: IDebugLogger;
-    lockDir?: string;
   }) {
-    if (!options?.secureStore) {
+    if (options?.secureStore === undefined) {
       throw new Error(
         'KeyringTokenStore requires an ISecureStore instance. ' +
           'Use createKeyringTokenStore() from core.',
       );
     }
+    if (typeof options.lockDir !== 'string' || options.lockDir.trim() === '') {
+      throw new Error(
+        'KeyringTokenStore requires a lockDir (OAuth advisory lock directory). ' +
+          'Use createKeyringTokenStore() from core, which injects ' +
+          'Storage.getOAuthLocksDir().',
+      );
+    }
     this.secureStore = options.secureStore;
     this.logger = options.logger ?? KeyringTokenStore.NO_OP_LOGGER;
-    this.lockDir = options.lockDir ?? getLockDir();
+    this.lockDir = options.lockDir;
   }
 
   private validateName(name: string, label: string): void {
@@ -133,9 +84,6 @@ export class KeyringTokenStore implements TokenStore {
     return `${provider}:${resolvedBucket}`;
   }
 
-  /**
-   * Non-cryptographic FNV-1a hash for debug log identifiers.
-   */
   private hashIdentifier(key: string): string {
     let h = 0x811c9dc5;
     for (let i = 0; i < key.length; i++) {
@@ -161,157 +109,127 @@ export class KeyringTokenStore implements TokenStore {
     return join(this.lockDir, `${provider}-${resolved}-auth.lock`);
   }
 
-  /**
-   * Ensures the lock directory exists.
-   */
   private async ensureLockDir(): Promise<void> {
     await fs.mkdir(this.lockDir, { recursive: true, mode: 0o700 });
   }
 
-  /**
-   * Shared lock acquisition logic used by both refresh and auth locks.
-   */
   private async acquireLock(
     lockPath: string,
     waitMs: number,
-    staleMs: number,
   ): Promise<boolean> {
-    const startTime = Date.now();
+    if (this.heldTokens.has(lockPath)) {
+      return false;
+    }
 
+    const startTime = Date.now();
     await this.ensureLockDir();
 
     this.logger.debug(
-      `[acquireLock] wait=${waitMs} stale=${staleMs} poll=${LOCK_POLL_INTERVAL_MS}`,
+      `[acquireLock] wait=${waitMs} poll=${LOCK_POLL_INTERVAL_MS}`,
     );
 
     while (Date.now() - startTime < waitMs) {
-      const createResult = await this.tryCreateLock(lockPath);
-      if (createResult === 'acquired') {
-        return true;
+      const token = randomUUID();
+      const payload = JSON.stringify({
+        pid: process.pid,
+        timestamp: Date.now(),
+        token,
+      });
+      try {
+        const acquired = await this.tryCreateLock(lockPath, payload, token);
+        if (acquired) {
+          return true;
+        }
+      } catch (error) {
+        if (!isErrnoCode(error, 'EEXIST')) {
+          throw error;
+        }
+        // EEXIST: lock held by another owner or a stale orphan. No PID-based
+        // reclaim — poll until timeout. This is safety-over-availability: a
+        // stale orphan requires process restart or manual cleanup.
       }
 
-      if (await this.shouldRetryAfterExistingCheck(lockPath, staleMs)) {
-        await sleep(LOCK_POLL_INTERVAL_MS);
-      }
+      await sleep(LOCK_POLL_INTERVAL_MS);
     }
 
     return false;
   }
 
-  private async shouldRetryAfterExistingCheck(
-    lockPath: string,
-    staleMs: number,
-  ): Promise<boolean> {
-    const checkResult = await this.checkExistingLock(lockPath, staleMs);
-    return checkResult !== 'stale_broken';
-  }
-
-  private async removeStaleLock(lockPath: string): Promise<void> {
-    try {
-      await fs.unlink(lockPath);
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== 'ENOENT') {
-        throw error;
-      }
-    }
-  }
-
-  private async lockOwnershipConfirmed(
-    lockPath: string,
-    createdLockInfo: { pid: number; timestamp: number },
-  ): Promise<boolean> {
-    try {
-      const content = await fs.readFile(lockPath, 'utf8');
-      const existing = JSON.parse(content) as {
-        pid: number;
-        timestamp: number;
-      };
-      return (
-        existing.pid === createdLockInfo.pid &&
-        existing.timestamp === createdLockInfo.timestamp
-      );
-    } catch {
-      return false;
-    }
-  }
-
+  /**
+   * Attempts to create the lock file with O_EXCL. On success, records the
+   * token in heldTokens and returns true. On EEXIST, returns false (no
+   * throw). Other errors propagate. A close failure after a successful
+   * payload write still records ownership (the file is on disk with our
+   * content) but surfaces a warning.
+   */
   private async tryCreateLock(
     lockPath: string,
-  ): Promise<'acquired' | 'exists'> {
-    let createdLockInfo: { pid: number; timestamp: number } | null = null;
+    payload: string,
+    token: string,
+  ): Promise<boolean> {
+    const fh = await fs.open(lockPath, 'wx', 0o600);
+    let closeError: unknown;
     try {
-      const lockInfo = { pid: process.pid, timestamp: Date.now() };
-      await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
-        flag: 'wx',
-        mode: 0o600,
-      });
-      createdLockInfo = lockInfo;
-
-      if (await this.lockOwnershipConfirmed(lockPath, createdLockInfo)) {
-        return 'acquired';
-      }
+      await fh.writeFile(payload, 'utf8');
     } catch (writeError) {
-      const err = writeError as NodeJS.ErrnoException;
-      if (err.code !== 'EEXIST') {
-        throw writeError;
+      // writeFile failure means the payload may be incomplete; close
+      // and remove the orphan, then rethrow.
+      try {
+        await fh.close();
+      } catch {
+        // best-effort close
       }
+      await this.removeOrphan(lockPath);
+      throw writeError;
     }
-    return 'exists';
+    try {
+      await fh.close();
+    } catch (err) {
+      closeError = err;
+    }
+    // The payload was written successfully — we own the lock. Record
+    // the token so release can verify-and-unlink. A close error does
+    // not change ownership (the file is on disk with our content).
+    this.heldTokens.set(lockPath, token);
+    if (closeError !== undefined) {
+      this.logger.warn(
+        `[acquireLock] unexpected close error for ${lockPath}: ${closeError instanceof Error ? closeError.message : String(closeError)}`,
+      );
+    }
+    return true;
   }
 
-  private async checkExistingLock(
-    lockPath: string,
-    staleMs: number,
-  ): Promise<'retry' | 'stale_broken' | 'fresh'> {
+  private async removeOrphan(lockPath: string): Promise<void> {
     try {
-      const content = await fs.readFile(lockPath, 'utf8');
-      const existing = JSON.parse(content) as {
-        pid: number;
-        timestamp: number;
-      };
-      const lockAge = Date.now() - existing.timestamp;
-
-      const hasValidPid =
-        typeof existing.pid === 'number' &&
-        Number.isInteger(existing.pid) &&
-        existing.pid > 0;
-      const isRecentInFlightWrite =
-        !hasValidPid && lockAge <= LOCK_WRITE_GRACE_MS;
-
-      if (isRecentInFlightWrite) {
-        return 'retry';
-      }
-
-      if (lockAge > staleMs) {
-        await this.removeStaleLock(lockPath);
-        return 'stale_broken';
-      }
-
-      return 'fresh';
+      await fs.unlink(lockPath);
     } catch {
-      try {
-        const stat = await fs.stat(lockPath);
-        const fileAge = Date.now() - stat.mtimeMs;
-        if (fileAge <= LOCK_WRITE_GRACE_MS) {
-          return 'retry';
-        }
-      } catch {
-        // Ignore stat errors
-      }
-
-      await this.removeStaleLock(lockPath);
-      return 'stale_broken';
+      // best-effort cleanup of an incomplete write
     }
   }
 
   private async releaseLock(lockPath: string): Promise<void> {
-    await this.removeStaleLock(lockPath);
+    const token = this.heldTokens.get(lockPath);
+    if (token === undefined) {
+      return;
+    }
+    // Always clear heldTokens so a release error never causes a permanent
+    // self-deadlock on future acquisitions. Surface unexpected I/O errors
+    // to the caller via the throw below.
+    try {
+      const content = await fs.readFile(lockPath, 'utf8');
+      const payload = parseLockPayload(content);
+      if (payload !== null && payload.token === token) {
+        await fs.unlink(lockPath);
+      }
+    } catch (error) {
+      if (!isErrnoCode(error, 'ENOENT')) {
+        throw error;
+      }
+    } finally {
+      this.heldTokens.delete(lockPath);
+    }
   }
 
-  /**
-   * Validates and persists an OAuth token to ISecureStore.
-   */
   async saveToken(
     provider: string,
     token: OAuthToken,
@@ -326,9 +244,6 @@ export class KeyringTokenStore implements TokenStore {
     await this.secureStore.set(key, serialized);
   }
 
-  /**
-   * Retrieves and validates an OAuth token from ISecureStore.
-   */
   async getToken(
     provider: string,
     bucket?: string,
@@ -340,10 +255,10 @@ export class KeyringTokenStore implements TokenStore {
     try {
       raw = await this.secureStore.get(key);
     } catch (error) {
-      const ssError = error as ISecureStoreError;
-      if ('code' in ssError && ssError.code === 'CORRUPT') {
+      if (isSecureStoreCorruptError(error)) {
+        const msg = errorMessageOf(error);
         this.logger.warn(
-          `Corrupt token envelope for [${this.hashIdentifier(key)}]: ${ssError.message}`,
+          `Corrupt token envelope for [${this.hashIdentifier(key)}]: ${msg}`,
         );
         return null;
       }
@@ -378,9 +293,6 @@ export class KeyringTokenStore implements TokenStore {
     }
   }
 
-  /**
-   * Removes a token from ISecureStore. Best-effort — errors are swallowed.
-   */
   async removeToken(provider: string, bucket?: string): Promise<void> {
     const key = this.accountKey(provider, bucket);
     this.logger.debug(`[removeToken] [${this.hashIdentifier(key)}]`);
@@ -394,9 +306,6 @@ export class KeyringTokenStore implements TokenStore {
     }
   }
 
-  /**
-   * Lists all unique provider names from ISecureStore keys.
-   */
   async listProviders(): Promise<string[]> {
     this.logger.debug(`[listProviders]`);
     try {
@@ -416,9 +325,6 @@ export class KeyringTokenStore implements TokenStore {
     }
   }
 
-  /**
-   * Lists all bucket names for a given provider.
-   */
   async listBuckets(provider: string): Promise<string[]> {
     this.validateName(provider, 'provider');
     try {
@@ -441,9 +347,6 @@ export class KeyringTokenStore implements TokenStore {
     }
   }
 
-  /**
-   * Returns placeholder bucket statistics if a token exists for the given bucket.
-   */
   async getBucketStats(
     provider: string,
     bucket: string,
@@ -460,26 +363,19 @@ export class KeyringTokenStore implements TokenStore {
     };
   }
 
-  /**
-   * Acquires a filesystem-based advisory lock for token refresh.
-   */
   async acquireRefreshLock(
     provider: string,
-    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     this.validateName(provider, 'provider');
     if (options?.bucket) this.validateName(options.bucket, 'bucket');
 
     const lockPath = this.lockFilePath(provider, options?.bucket);
     const waitMs = options?.waitMs ?? DEFAULT_LOCK_WAIT_MS;
-    const staleMs = options?.staleMs ?? DEFAULT_STALE_THRESHOLD_MS;
 
-    return this.acquireLock(lockPath, waitMs, staleMs);
+    return this.acquireLock(lockPath, waitMs);
   }
 
-  /**
-   * Releases a filesystem-based advisory lock. Idempotent.
-   */
   async releaseRefreshLock(provider: string, bucket?: string): Promise<void> {
     this.validateName(provider, 'provider');
     if (bucket) this.validateName(bucket, 'bucket');
@@ -487,30 +383,97 @@ export class KeyringTokenStore implements TokenStore {
     return this.releaseLock(lockPath);
   }
 
-  /**
-   * Acquires a filesystem-based advisory lock for interactive authentication.
-   */
   async acquireAuthLock(
     provider: string,
-    options?: { waitMs?: number; staleMs?: number; bucket?: string },
+    options?: { waitMs?: number; bucket?: string },
   ): Promise<boolean> {
     this.validateName(provider, 'provider');
     if (options?.bucket) this.validateName(options.bucket, 'bucket');
 
     const lockPath = this.authLockFilePath(provider, options?.bucket);
     const waitMs = options?.waitMs ?? 60_000;
-    const staleMs = options?.staleMs ?? 360_000;
 
-    return this.acquireLock(lockPath, waitMs, staleMs);
+    return this.acquireLock(lockPath, waitMs);
   }
 
-  /**
-   * Releases the auth lock for a provider. Idempotent.
-   */
   async releaseAuthLock(provider: string, bucket?: string): Promise<void> {
     this.validateName(provider, 'provider');
     if (bucket) this.validateName(bucket, 'bucket');
     const lockPath = this.authLockFilePath(provider, bucket);
     return this.releaseLock(lockPath);
   }
+}
+
+interface LockPayload {
+  readonly pid: number;
+  readonly timestamp: number;
+  readonly token?: string;
+}
+
+function parseLockPayload(raw: string): LockPayload | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isLockPayloadObject(parsed)) {
+    return null;
+  }
+  return {
+    pid: parsed.pid,
+    timestamp: parsed.timestamp,
+    token: typeof parsed.token === 'string' ? parsed.token : undefined,
+  };
+}
+
+function isLockPayloadObject(
+  value: unknown,
+): value is { pid: number; timestamp: number; token?: unknown } & Record<
+  string,
+  unknown
+> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  if (!('pid' in v) || !('timestamp' in v)) {
+    return false;
+  }
+  if (typeof v.pid !== 'number' || typeof v.timestamp !== 'number') {
+    return false;
+  }
+  return true;
+}
+
+function isSecureStoreCorruptError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as Record<string, unknown>).code === 'CORRUPT'
+  );
+}
+
+function errorMessageOf(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isErrnoCode(error: unknown, expected: string): boolean {
+  return errnoCodeOf(error) === expected;
+}
+
+function errnoCodeOf(error: unknown): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code: unknown }).code === 'string'
+  ) {
+    return (error as { code: string }).code;
+  }
+  return undefined;
 }

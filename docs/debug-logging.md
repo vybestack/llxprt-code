@@ -68,7 +68,7 @@ Debug settings are resolved in priority order (highest to lowest):
 
 1. **CLI arguments** - `--debug` flag
 2. **Environment variables** - `DEBUG`, `LLXPRT_DEBUG`
-3. **User config** - `~/.llxprt/settings.json`
+3. **User config** - your user [settings.json](./reference/application-directories.md) in LLxprt's config directory
 4. **Project config** - `.llxprt/config.json`
 5. **Default config** - Built-in defaults
 
@@ -86,7 +86,7 @@ export DEBUG_LEVEL=verbose
 
 ### User Configuration
 
-Edit `~/.llxprt/settings.json`:
+Edit your [settings.json](./reference/application-directories.md):
 
 ```json
 {
@@ -96,13 +96,15 @@ Edit `~/.llxprt/settings.json`:
     "level": "debug",
     "output": {
       "target": "file",
-      "directory": "~/.llxprt/debug"
+      "directory": "<log>/debug"
     },
     "lazyEvaluation": true,
     "redactPatterns": ["apiKey", "token", "password", "secret"]
   }
 }
 ```
+
+The `output.directory` above uses LLxprt's [log/state directory](./reference/application-directories.md) (`<log>/debug`, overridable via `LLXPRT_LOG_HOME`). If you omit `directory`, the platform default is used automatically.
 
 ### Project Configuration
 
@@ -122,7 +124,7 @@ Create `.llxprt/config.json` in your project root:
 
 ### File Output (Default)
 
-Debug logs are written to `~/.llxprt/debug/` in JSONL format:
+Debug logs are written to `<log>/debug/` (see [Application Directories](./reference/application-directories.md)) in JSONL format:
 
 - **One file per run**, named by process id: `llxprt-debug-<PID>.jsonl`
 - Child processes inherit the same file when `LLXPRT_DEBUG` is set
@@ -194,17 +196,17 @@ Debug output appears in the debug console (Ctrl+O) when using stderr output.
 ### File Logs
 
 ```bash
-# View the current run log
-cat ~/.llxprt/debug/llxprt-debug-<PID>.jsonl
+# View the current run log (debug logs live under <log>/debug/ — see Application Directories)
+cat "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-<PID>.jsonl"
 
 # Pretty print with jq
-cat ~/.llxprt/debug/llxprt-debug-*.jsonl | jq '.'
+cat "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-"*.jsonl | jq '.'
 
 # Filter by namespace
-cat ~/.llxprt/debug/llxprt-debug-*.jsonl | jq 'select(.namespace | startswith("llxprt:openai"))'
+cat "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-"*.jsonl | jq 'select(.namespace | startswith("llxprt:openai"))'
 
 # Follow log in real-time
-tail -f ~/.llxprt/debug/llxprt-debug-<PID>.jsonl | jq '.'
+tail -f "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-<PID>.jsonl" | jq '.'
 ```
 
 ## Examples
@@ -264,7 +266,7 @@ llxprt --debug llxprt:*
 
 ### Can't Find Log Files?
 
-Default location: `~/.llxprt/debug/`
+Default location: `<log>/debug/` (see [Application Directories](./reference/application-directories.md)).
 
 - Files are named by date: `debug-YYYY-MM-DD.jsonl`
 - Check permissions on the directory

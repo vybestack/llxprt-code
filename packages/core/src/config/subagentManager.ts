@@ -50,7 +50,8 @@ function validateSettingsSubagent(
 }
 
 /**
- * Manages subagent configuration files in ~/.llxprt/subagents/
+ * Manages subagent configuration files in the configured subagents directory
+ * (under the LLxprt config directory).
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
  * @requirement:REQ-002
@@ -66,7 +67,8 @@ export class SubagentManager {
   private settingsSubagents: Map<string, SubagentConfig> = new Map();
 
   /**
-   * @param baseDir Directory where subagent configs are stored (e.g., ~/.llxprt/subagents/)
+   * @param baseDir Directory where subagent configs are stored (the configured
+   *   subagents directory under the LLxprt config dir, or an explicit dir)
    * @param profileManager ProfileManager instance for validation
    *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05

@@ -41,6 +41,7 @@ import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTele
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 import {
   coreEvents,
@@ -182,6 +183,7 @@ export class AgentClient implements AgentClientContract {
       config,
       todoReminderService: this.todoReminderService,
       complexitySuggestionCooldown,
+      todoDataDirResolver: () => Storage.getGlobalDataDir(),
     });
 
     this.ideContextTracker = new IdeContextTracker(config);

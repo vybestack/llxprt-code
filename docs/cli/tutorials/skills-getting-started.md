@@ -20,8 +20,7 @@ settings.
 
 ### Via `settings.json`
 
-Alternatively, you can manually edit your global settings file at
-`~/.llxprt/settings.json` (create it if it doesn't exist):
+Alternatively, you can manually edit your global settings file in LLxprt's [config directory](../../reference/application-directories.md) (create it if it doesn't exist):
 
 ```json
 {

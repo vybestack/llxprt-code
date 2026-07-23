@@ -24,6 +24,7 @@ import process from 'node:process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 const PROJECT_DIR = path.resolve('/my/project');
 
@@ -82,14 +83,15 @@ describe('Core (System) Memory', () => {
     });
 
     it('should load global .LLXPRT_SYSTEM content', async () => {
+      const globalCorePath = path.join(
+        Storage.getGlobalMemoryDir(),
+        '.LLXPRT_SYSTEM',
+      );
       vi.mocked(fsPromises.readFile).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
-          if (
-            pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes(os.homedir())
-          ) {
+          if (pathStr === globalCorePath) {
             return 'Always use TypeScript strict mode';
           }
           throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
@@ -121,14 +123,15 @@ describe('Core (System) Memory', () => {
     });
 
     it('should concatenate both global and project content', async () => {
+      const globalCorePath = path.join(
+        Storage.getGlobalMemoryDir(),
+        '.LLXPRT_SYSTEM',
+      );
       vi.mocked(fsPromises.readFile).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
-          if (
-            pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes(os.homedir())
-          ) {
+          if (pathStr === globalCorePath) {
             return 'Global directive';
           }
           if (
@@ -147,14 +150,15 @@ describe('Core (System) Memory', () => {
     });
 
     it('should skip empty .LLXPRT_SYSTEM files', async () => {
+      const globalCorePath = path.join(
+        Storage.getGlobalMemoryDir(),
+        '.LLXPRT_SYSTEM',
+      );
       vi.mocked(fsPromises.readFile).mockImplementation(
         async (filePath: Parameters<typeof fsPromises.readFile>[0]) => {
           const pathStr =
             typeof filePath === 'string' ? filePath : filePath.toString();
-          if (
-            pathStr.includes('.LLXPRT_SYSTEM') &&
-            pathStr.includes(os.homedir())
-          ) {
+          if (pathStr === globalCorePath) {
             return '   \n  ';
           }
           throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });

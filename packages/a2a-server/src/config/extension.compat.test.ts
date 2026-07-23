@@ -9,8 +9,11 @@
  *
  * These tests exercise the real `loadExtensions` against temp directories
  * containing real manifest and metadata files. No mocks of the loader itself —
- * only real filesystem I/O against throwaway directories. The `os.homedir()`
- * mock isolates user-level extension scanning from workspace-level tests.
+ * only real filesystem I/O against throwaway directories. The injected
+ * `homeDir` option isolates user-level extension scanning from workspace-level
+ * tests (production dependency injection instead of `node:os` module mocking —
+ * No `vi.mock('node:os')` is used, making these tests
+ * compatible with BOTH Bun and Vitest.
  *
  * Contract verified (analogous to the CLI loader):
  * - llxprt-extension.json takes precedence over gemini-extension.json.
@@ -26,13 +29,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-const actualOs = { ...os };
-
-vi.mock('node:os', () => ({
-  ...actualOs,
-  homedir: vi.fn(() => actualOs.homedir()),
-}));
 
 const loggerErrorSpy = vi.fn();
 vi.mock('../utils/logger.js', () => ({
@@ -52,6 +48,12 @@ const {
   INSTALL_METADATA_FILENAME,
   INSTALL_METADATA_FILENAME_FALLBACK,
 } = await import('./extension.js');
+
+// Env keys that redirect Storage category dirs so user-scope extensions land
+// under the temp fake home instead of the real user filesystem. The canonical
+// user extensions dir is <LLXPRT_DATA_HOME>/extensions.
+const ENV_KEYS = ['LLXPRT_DATA_HOME', 'LLXPRT_CONFIG_HOME'] as const;
+const SAVED_ENV: Record<string, string | undefined> = {};
 
 interface Harness {
   workspaceDir: string;
@@ -127,13 +129,22 @@ describe('A2A extension loader', () => {
   beforeEach(() => {
     harness = createHarness();
     fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'a2a-ext-test-home-'));
-    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
-    homedirMock.mockReturnValue(fakeHome);
+    // Redirect the canonical Storage data dir to the fake home so user-scope
+    // extensions resolve under <fakeHome>/extensions.
+    for (const key of ENV_KEYS) {
+      SAVED_ENV[key] = process.env[key];
+      process.env[key] = fakeHome;
+    }
   });
 
   afterEach(() => {
-    const homedirMock = os.homedir as ReturnType<typeof vi.fn>;
-    homedirMock.mockImplementation(() => actualOs.homedir());
+    for (const key of ENV_KEYS) {
+      if (SAVED_ENV[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = SAVED_ENV[key];
+      }
+    }
     fs.rmSync(fakeHome, { recursive: true, force: true });
     fs.rmSync(harness.workspaceDir, { recursive: true, force: true });
   });
@@ -162,6 +173,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'bad-event')).toBe(false);
     });
@@ -186,6 +198,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'no-cmd')).toBe(false);
     });
@@ -210,6 +223,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'valid-hooks')).toBe(true);
     });
@@ -230,6 +244,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       const extension = extensions.find(
         (entry) => entry.name === 'legacy-named-hooks',
@@ -259,6 +274,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.some((entry) => entry.name === 'mixed-hooks')).toBe(
         false,
@@ -279,6 +295,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.name).toBe('link-src');
@@ -298,6 +315,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.name).toBe('link-src-fb');
@@ -315,6 +333,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.contextFiles).toContain(
@@ -347,6 +366,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       // Extension should NOT load — malformed fallback metadata is named and
       // the extension is skipped, distinct from ENOENT (absent) which would
@@ -375,6 +395,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       // Malformed fallback metadata must skip the extension, not load it.
       expect(extensions).toHaveLength(0);
@@ -412,6 +433,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       // The valid extension should still load despite the broken symlink
       expect(extensions.some((e) => e.name === 'valid-ext')).toBe(true);
@@ -441,6 +463,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions.some((e) => e.name === 'valid-ext2')).toBe(true);
     });
@@ -468,6 +491,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.name).toBe('traversal-ext');
@@ -492,6 +516,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.contextFiles).toHaveLength(0);
@@ -513,6 +538,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.contextFiles).toContain(
@@ -535,6 +561,7 @@ describe('A2A extension loader', () => {
 
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
       expect(extensions).toHaveLength(1);
       expect(extensions[0]?.contextFiles).toContain(
@@ -546,14 +573,13 @@ describe('A2A extension loader', () => {
   // ---- Finding 6: root enumeration errors continue to next root ----
 
   describe('root enumeration errors continue to next root', () => {
-    it('continues loading from the compat root when the llxprt root is unreadable', () => {
-      // Make the llxprt extensions root unreadable by creating a file
-      // instead of a directory — fs.readdirSync will throw on it.
-      const llxprtRoot = path.join(fakeHome, EXTENSIONS_DIRECTORY_NAME);
-      // Ensure the parent .llxprt dir exists, then write a file at the
-      // extensions path so readdirSync fails.
-      fs.mkdirSync(path.dirname(llxprtRoot), { recursive: true });
-      fs.writeFileSync(llxprtRoot, 'not a directory');
+    it('continues loading from the compat root when the canonical user root is unreadable', () => {
+      // The canonical user extensions root is Storage.getUserExtensionsDir()
+      // (<LLXPRT_DATA_HOME>/extensions). Make it unreadable by creating a
+      // regular file at that path so fs.readdirSync throws — the loader must
+      // continue to the .gemini/extensions compatibility root.
+      const userRoot = path.join(fakeHome, 'extensions');
+      fs.writeFileSync(userRoot, 'not a directory');
 
       // Put a valid extension in the compat root
       const compatRoot = path.join(fakeHome, COMPAT_EXTENSIONS_DIRECTORY_NAME);
@@ -568,8 +594,9 @@ describe('A2A extension loader', () => {
       loggerErrorSpy.mockClear();
       const extensions = loadExtensions(harness.workspaceDir, {
         folderTrust: true,
+        homeDir: fakeHome,
       });
-      // The compat extension should still load despite the llxprt root error
+      // The compat extension should still load despite the user root error
       expect(extensions.some((e) => e.name === 'compat-ext')).toBe(true);
       // A diagnostic should be logged for the unreadable root
       expect(
@@ -581,7 +608,7 @@ describe('A2A extension loader', () => {
       ).toBe(true);
 
       // Cleanup
-      fs.rmSync(llxprtRoot, { force: true });
+      fs.rmSync(userRoot, { force: true });
     });
   });
 });

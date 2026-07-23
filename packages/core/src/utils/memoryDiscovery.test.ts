@@ -16,6 +16,7 @@ import {
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { LLXPRT_DIR } from './paths.js';
 import type { LlxprtExtension } from '../config/config.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -57,6 +58,17 @@ describe('memoryDiscovery', () => {
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
     homedir = await createEmptyDir(path.join(testRootDir, 'userhome'));
     vi.mocked(os.homedir).mockReturnValue(homedir);
+    // Point the canonical config/memory/data helpers at this test's homedir so
+    // the fixture layout (which places "global" memory under <homedir>/.llxprt)
+    // exercises the real global-memory read path without depending on the
+    // developer's real machine paths.
+    const llxprtDir = path.join(homedir, LLXPRT_DIR);
+    vi.spyOn(Storage, 'getGlobalLlxprtDir').mockImplementation(() => llxprtDir);
+    vi.spyOn(Storage, 'getGlobalConfigDir').mockImplementation(() => llxprtDir);
+    vi.spyOn(Storage, 'getGlobalMemoryDir').mockImplementation(() => llxprtDir);
+    vi.spyOn(Storage, 'getGlobalDataDir').mockImplementation(() => llxprtDir);
+    vi.spyOn(Storage, 'getGlobalCacheDir').mockImplementation(() => llxprtDir);
+    vi.spyOn(Storage, 'getGlobalLogDir').mockImplementation(() => llxprtDir);
   });
 
   afterEach(async () => {

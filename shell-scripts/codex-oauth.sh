@@ -20,8 +20,26 @@ REDIRECT_URI="http://localhost:${PORT}/auth/callback"
 SCOPES="openid profile email offline_access"
 ORIGINATOR="codex_cli_rs"
 
-# Where to store tokens
-AUTH_DIR="${HOME}/.llxprt/codex-auth"
+# Resolve the canonical data directory honoring LLxprt overrides, matching the
+# central Storage contract precedence:
+#   CODEX_AUTH_DIR (explicit) -> LLXPRT_DATA_HOME -> LLXPRT_CONFIG_HOME ->
+#   platform data dir (via env-paths). Never write live credentials to the
+#   legacy ~/.llxprt tree.
+#
+# Category overrides (LLXPRT_DATA_HOME/LLXPRT_CONFIG_HOME) are honored ONLY
+# when non-empty absolute paths; relative/blank values are ignored in favor of
+# env-paths defaults (matching Storage).
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "${_SCRIPT_DIR}/llxprt-paths.sh"
+# Record the caller's script dir so env-paths defaults resolve from any cwd (#6).
+llxprt_paths_init "${_SCRIPT_DIR}"
+CODEX_DATA_BASE="$(llxprt_resolve_data_dir)"
+if _CODEX_AUTH="$(llxprt_normalized_abs_override "${CODEX_AUTH_DIR:-}")"; then
+    AUTH_DIR="$_CODEX_AUTH"
+else
+    AUTH_DIR="${CODEX_DATA_BASE}/codex-auth"
+fi
 AUTH_FILE="${AUTH_DIR}/auth.json"
 
 # ============================================================================
@@ -222,7 +240,8 @@ fi
 echo ""
 echo "Saving tokens to ${AUTH_FILE}..."
 mkdir -p "${AUTH_DIR}"
-chmod 700 "${AUTH_DIR}"  # Restrict directory access to owner only
+chmod 700 "${AUTH_DIR}" || { echo "ERROR: Failed to secure credential directory ${AUTH_DIR}" >&2; exit 1; }
+echo "WARNING: ${AUTH_DIR} contains live credentials (access/refresh tokens)."
 
 cat > "${AUTH_FILE}" << EOF
 {

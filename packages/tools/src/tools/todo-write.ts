@@ -7,7 +7,7 @@
 import { Type } from '../types/schema-type.js';
 import { BaseTool, type ToolResult, Kind } from './tools.js';
 import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
-import { TodoStore, DEFAULT_AGENT_ID } from './todo-store.js';
+import { DEFAULT_AGENT_ID } from './todo-store.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
 import { todoEvents, type TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../utils/todoContextTracker.js';
@@ -96,7 +96,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   } as const;
 
   constructor(
-    private readonly todoService?: ITodoService,
+    private readonly todoService: ITodoService,
     private readonly toolHost?: IToolHost,
   ) {
     super(
@@ -158,14 +158,10 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
 
     const sessionId = this.context?.sessionId ?? 'default';
     const agentId = this.context?.agentId;
-    const serviceStore = this.todoService?.getTodoStore(this.context);
+    const serviceStore = this.todoService.getTodoStore(this.context);
 
-    const oldTodos = await this.readOldTodos(
-      serviceStore ?? null,
-      sessionId,
-      agentId,
-    );
-    await this.persistTodos(todos, serviceStore ?? null, sessionId, agentId);
+    const oldTodos = await this.readOldTodos(serviceStore, sessionId, agentId);
+    await this.persistTodos(todos, serviceStore, sessionId, agentId);
 
     const { stateChange, shouldGenerateReminder, reminder } =
       this.computeStateChange(oldTodos, todos);
@@ -221,17 +217,25 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     serviceStore: {
       readTodos?: () => Promise<Todo[]>;
       getTodos?: () => Todo[];
-    } | null,
+    },
     sessionId: string,
     agentId: string | undefined,
   ): Promise<Todo[]> {
-    if (serviceStore?.readTodos) {
+    if (serviceStore.readTodos) {
       return serviceStore.readTodos();
     }
-    if (serviceStore?.getTodos) {
+    if (serviceStore.getTodos) {
       return serviceStore.getTodos();
     }
-    return new TodoStore(sessionId, agentId).readTodos();
+    // No fallback: TodoStore now requires an explicit canonical data dir
+    // injected by the composition root. Reaching here means the tool was
+    // constructed without a wired ITodoService — fail loudly instead of
+    // silently using a parallel default.
+    throw new Error(
+      `TodoWrite cannot read todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
+        'no ITodoService store was injected. Construct the tool via the tool registry so ' +
+        'the composition root can wire Storage.getGlobalDataDir().',
+    );
   }
 
   private async persistTodos(
@@ -239,16 +243,21 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     serviceStore: {
       writeTodos?: (todos: Todo[]) => Promise<void>;
       setTodos?: (todos: Todo[]) => void;
-    } | null,
+    },
     sessionId: string,
     agentId: string | undefined,
   ): Promise<void> {
-    if (serviceStore?.writeTodos) {
+    if (serviceStore.writeTodos) {
       await serviceStore.writeTodos(todos);
-    } else if (serviceStore?.setTodos) {
+    } else if (serviceStore.setTodos) {
       serviceStore.setTodos(todos);
     } else {
-      await new TodoStore(sessionId, agentId).writeTodos(todos);
+      // No fallback: see readOldTodos above.
+      throw new Error(
+        `TodoWrite cannot persist todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
+          'no ITodoService store was injected. Construct the tool via the tool registry so ' +
+          'the composition root can wire Storage.getGlobalDataDir().',
+      );
     }
   }
 
@@ -264,21 +273,21 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     shouldGenerateReminder: boolean;
     reminder: string | null;
   } {
-    const reminderService = this.todoService?.getReminderService();
+    const reminderService = this.todoService.getReminderService();
     const localReminderService = new TodoReminderService();
 
     const stateChange =
-      reminderService?.calculateStateChange?.(oldTodos, todos) ??
+      reminderService.calculateStateChange?.(oldTodos, todos) ??
       localReminderService.calculateStateChange(oldTodos, todos);
 
     const shouldGenerateReminder =
-      reminderService?.shouldGenerateReminder?.(stateChange) ??
+      reminderService.shouldGenerateReminder?.(stateChange) ??
       localReminderService.shouldGenerateReminder(stateChange);
 
     let reminder: string | null = null;
     if (shouldGenerateReminder) {
       reminder =
-        reminderService?.getReminderForStateChange?.(stateChange) ??
+        reminderService.getReminderForStateChange?.(stateChange) ??
         localReminderService.getReminderForStateChange(stateChange) ??
         null;
     }
@@ -294,10 +303,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     if (this.context?.interactiveMode !== true) {
       return;
     }
-    const scopedAgentId =
-      agentId ?? this.todoService?.getDefaultAgentId() ?? DEFAULT_AGENT_ID;
-    const serviceTracker = this.todoService?.getContextTracker(this.context);
-    if (serviceTracker?.setActiveTodo) {
+    const scopedAgentId = agentId ?? this.todoService.getDefaultAgentId();
+    const serviceTracker = this.todoService.getContextTracker(this.context);
+    if (serviceTracker.setActiveTodo) {
       const inProgressTodo = todos.find(
         (todo) => todo.status === 'in_progress',
       );

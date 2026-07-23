@@ -58,7 +58,7 @@ type HookConfig = CommandHookConfig;
         "hooks": [
           {
             "type": "command",
-            "command": "~/.llxprt/hooks/security.sh",
+            "command": "~/bin/llxprt-hooks/security.sh",
             "timeout": 5000
           }
         ]
@@ -69,7 +69,7 @@ type HookConfig = CommandHookConfig;
         "hooks": [
           {
             "type": "command",
-            "command": "~/.llxprt/hooks/audit.sh"
+            "command": "~/bin/llxprt-hooks/audit.sh"
           }
         ]
       }
@@ -77,6 +77,12 @@ type HookConfig = CommandHookConfig;
   }
 }
 ```
+
+The `command` field accepts any path on your system (with `~` expansion). You
+can keep hook scripts under your project's `.llxprt/hooks/` directory, under a
+personal scripts directory, or anywhere else you choose — see
+[Application Directories](../reference/application-directories.md) for where
+LLxprt itself stores configuration.
 
 ## Hook Event Types
 

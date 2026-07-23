@@ -20,6 +20,7 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { logger } from '../utils/logger.js';
 
 import { readMcpServerConfig } from './mcpServerConfig.js';
@@ -415,9 +416,16 @@ function readOptionalExtensionFields(
  * When `folderTrust` is `false`, workspace extensions are NOT loaded — only
  * user (home) extensions are returned. This matches the CLI behavior where
  * untrusted workspaces cannot contribute extensions.
+ *
+ * `homeDir` optionally overrides the home directory used to resolve the
+ * `.gemini/extensions` compatibility root. Production callers omit it so the
+ * real `os.homedir()` is used; tests inject a temp dir to isolate the compat
+ * root from the real user home (production dependency injection instead of
+ * `node:os` module mocking).
  */
 export interface LoadExtensionsOptions {
   folderTrust?: boolean;
+  homeDir?: string;
 }
 
 /**
@@ -429,13 +437,14 @@ export interface LoadExtensionsOptions {
  * files.
  *
  * @param workspaceDir - The workspace directory to scan for extensions.
- * @param options - Optional folder-trust gating. Explicit false is untrusted.
+ * @param options - Optional folder-trust gating and homeDir override.
  */
 export function loadExtensions(
   workspaceDir: string,
   options: LoadExtensionsOptions = {},
 ): LlxprtExtension[] {
   const folderTrusted = options.folderTrust !== false;
+  const homeDir = options.homeDir ?? os.homedir();
 
   const allExtensions: LlxprtExtension[] = [];
 
@@ -444,8 +453,18 @@ export function loadExtensions(
     allExtensions.push(...loadExtensionsFromDir(workspaceDir, workspaceDir));
   }
 
-  // User (home) extensions are always loaded regardless of folder trust.
-  allExtensions.push(...loadExtensionsFromDir(os.homedir(), workspaceDir));
+  // User (global) extensions resolve through the central Storage data-category
+  // dir (Storage.getUserExtensionsDir()), honoring LLXPRT_DATA_HOME and the
+  // platform data location. The ~/.gemini/extensions root is a read-only
+  // compatibility source for migrated Gemini CLI setups. Legacy
+  // ~/.llxprt/extensions is NOT scanned: startup migration already copied it
+  // to the canonical data dir. User extensions load regardless of folder
+  // trust (only workspace-scope extensions are trust-gated).
+  const userRoots = [
+    Storage.getUserExtensionsDir(),
+    path.join(homeDir, COMPAT_EXTENSIONS_DIRECTORY_NAME),
+  ];
+  allExtensions.push(...loadExtensionsFromRoots(userRoots, workspaceDir));
 
   const uniqueExtensions: LlxprtExtension[] = [];
   const seenNames = new Set<string>();
@@ -460,6 +479,29 @@ export function loadExtensions(
   }
 
   return uniqueExtensions;
+}
+
+/**
+ * Scan a list of explicit extension roots and load extensions from each,
+ * deduplicating by name (first occurrence wins). Used for global user
+ * extension scanning (the canonical data dir plus the `.gemini` compat root).
+ */
+function loadExtensionsFromRoots(
+  roots: readonly string[],
+  workspaceDir: string,
+): LlxprtExtension[] {
+  const extensions: LlxprtExtension[] = [];
+  const seen = new Set<string>();
+  for (const extensionsDir of roots) {
+    const loaded = loadExtensionsFromExtensionDir(extensionsDir, workspaceDir);
+    for (const extension of loaded) {
+      if (!seen.has(extension.name)) {
+        seen.add(extension.name);
+        extensions.push(extension);
+      }
+    }
+  }
+  return extensions;
 }
 
 function loadExtensionsFromDir(

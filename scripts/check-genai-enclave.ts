@@ -55,7 +55,6 @@
 import { readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { join, relative, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import {
   isInGenaiImportEnclave,
@@ -65,6 +64,7 @@ import {
   isRuntimeExportSurface,
   getGenaiDependencyWorkspaceDirs,
 } from './genai-enclave/config.ts';
+import { discoverScannableFiles } from './genai-enclave/file-discovery.ts';
 import {
   scanGenaiImports,
   scanGeminiExports,
@@ -159,92 +159,27 @@ function dedupePaths(paths: readonly string[]): string[] {
 
 /**
  * Discover TypeScript files under packages/ to scan. When running against the
- * real repo (no GENAI_ENCLAVE_ROOT), uses `git ls-files` for tracked files
- * AND `git status` for untracked non-ignored package files. For temp fixture
- * trees, falls back to a filesystem walk.
+ * real repo (no GENAI_ENCLAVE_ROOT), uses the shared file-discovery module
+ * which combines `git ls-files` (tracked) and `git status` (untracked
+ * non-ignored) and EXCLUDES paths git reports as deleted (staged or
+ * unstaged) so an intentionally-removed tracked source is not treated as an
+ * operational read error (#2606). For temp fixture trees, falls back to a
+ * filesystem walk.
  */
 function discoverFiles(): {
   files: string[];
   errors: OperationalError[];
 } {
-  const errors: OperationalError[] = [];
-
   if (process.env.GENAI_ENCLAVE_ROOT) {
     const { files, errors: walkErrors } = walkPackages(PACKAGES_DIR);
     return { files: dedupePaths(files), errors: walkErrors };
   }
 
-  // ── Tracked files ─────────────────────────────────────────────────
-  let tracked: string;
-  try {
-    tracked = execFileSync(
-      'git',
-      [
-        'ls-files',
-        '-z',
-        'packages/**/*.ts',
-        'packages/**/*.tsx',
-        'packages/**/*.mts',
-        'packages/**/*.cts',
-        'packages/**/*.js',
-        'packages/**/*.jsx',
-        'packages/**/*.mjs',
-        'packages/**/*.cjs',
-      ],
-      {
-        cwd: REPO_ROOT,
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    errors.push({
-      message: `git ls-files failed: ${msg}`,
-    });
-    return { files: [], errors };
-  }
-
-  const trackedFiles = tracked
-    .split('\0')
-    .filter((path) => path.length > 0)
-    .map((path) => join(REPO_ROOT, path));
-
-  // ── Untracked non-ignored files ───────────────────────────────────
-  // `git status --porcelain` with `--untracked-files=all` lists untracked
-  // files with `??` prefix. We include only TypeScript files under packages/
-  // that are NOT gitignored. This prevents smuggling a new @google/genai
-  // import past CI by leaving it untracked.
-  let untrackedFiles: string[] = [];
-  try {
-    const status = execFileSync(
-      'git',
-      ['status', '--porcelain', '--untracked-files=all', '-z'],
-      {
-        cwd: REPO_ROOT,
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    );
-    untrackedFiles = status
-      .split('\0')
-      .filter((entry) => entry.length > 0)
-      .filter((entry) => entry.startsWith('?? '))
-      .map((entry) => entry.slice(3))
-      .filter(
-        (relPath) =>
-          relPath.startsWith('packages/') && isScannableFile(relPath),
-      )
-      .map((relPath) => join(REPO_ROOT, relPath));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    errors.push({
-      message: `git status failed — untracked files not checked: ${message}`,
-    });
-  }
-
-  const allFiles = dedupePaths([...trackedFiles, ...untrackedFiles]);
-  return { files: allFiles, errors };
+  const result = discoverScannableFiles(REPO_ROOT);
+  return {
+    files: dedupePaths(result.files),
+    errors: [...result.errors],
+  };
 }
 
 // ─── Manifest checking ──────────────────────────────────────────────────────

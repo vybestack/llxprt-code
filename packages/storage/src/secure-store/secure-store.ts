@@ -17,10 +17,10 @@
 import * as crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import envPaths from 'env-paths';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 import { getMachineSecret } from './machine-secret.js';
+import { Storage } from '../config/storage.js';
 import {
   deriveV1KdfInput,
   deriveV2KdfInput,
@@ -31,9 +31,6 @@ import {
   SALT_LEN,
   type Envelope,
 } from './envelope.js';
-
-// Platform-standard paths for llxprt-code app data (no suffix to match documented paths)
-const platformPaths = envPaths('llxprt-code', { suffix: '' });
 
 let _moduleLogger: StorageLogger = new NullStorageLoggerImpl();
 
@@ -269,7 +266,15 @@ export class SecureStore {
     this.serviceName = serviceName;
     this.fallbackDir =
       options?.fallbackDir ??
-      path.join(platformPaths.data, 'secure-store', serviceName);
+      path.join(
+        // Resolve through the central path authority so LLXPRT_DATA_HOME and
+        // the compatibility LLXPRT_CONFIG_HOME fallback are honored. Resolution
+        // happens at construction time; later env changes do not move an
+        // existing instance's fallback dir.
+        Storage.getGlobalDataDir(),
+        'secure-store',
+        serviceName,
+      );
     this.fallbackPolicy = options?.fallbackPolicy ?? 'allow';
     this.keyringLoaderFn =
       options?.keyringLoader ?? createDefaultKeyringAdapter;

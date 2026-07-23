@@ -13,6 +13,7 @@ import {
   type TodoUpdateEvent,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { TodoContext } from './TodoContext.js';
 
 interface TodoProviderProps {
@@ -33,7 +34,13 @@ function useTaskState(sessionId: string, agentId: string | undefined) {
   const refreshTodos = useCallback(async () => {
     try {
       setLoading(true);
-      const store = new TodoStore(sessionId, agentId);
+      const store = new TodoStore(
+        sessionId,
+        {
+          dataDirResolver: () => Storage.getGlobalDataDir(),
+        },
+        agentId,
+      );
       const loadedTodos = await store.readTodos();
       const pausedState = await store.readPausedState();
       setTodos(loadedTodos);
@@ -104,7 +111,13 @@ function useTaskPersistence(
   const updateTodos = useCallback(
     (newTodos: Todo[]) => {
       setTodos(newTodos);
-      const store = new TodoStore(sessionId, agentId);
+      const store = new TodoStore(
+        sessionId,
+        {
+          dataDirResolver: () => Storage.getGlobalDataDir(),
+        },
+        agentId,
+      );
       store.writeTodos(newTodos).catch((err) => {
         setError(
           `Failed to save todos: ${err instanceof Error ? err.message : 'Unknown error'}`,
@@ -117,7 +130,13 @@ function useTaskPersistence(
   const setPaused = useCallback(
     (newPaused: boolean) => {
       setPausedState(newPaused);
-      const store = new TodoStore(sessionId, agentId);
+      const store = new TodoStore(
+        sessionId,
+        {
+          dataDirResolver: () => Storage.getGlobalDataDir(),
+        },
+        agentId,
+      );
       store.writePausedState(newPaused).catch((err: unknown) => {
         setError(
           `Failed to save paused state: ${err instanceof Error ? err.message : 'Unknown error'}`,

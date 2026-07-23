@@ -30,6 +30,7 @@ import {
   TodoStore,
   buildContinuationDirective,
 } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-settings';
 
 describe('Compression Todo Integration (Issues #1387, #1388)', () => {
   let tempDir: string;
@@ -66,7 +67,9 @@ describe('Compression Todo Integration (Issues #1387, #1388)', () => {
     await fs.mkdir(tmpDir, { recursive: true });
 
     sessionId = 'compression-todo-test-session';
-    todoStore = new TodoStore(sessionId);
+    todoStore = new TodoStore(sessionId, {
+      dataDirResolver: () => Storage.getGlobalDataDir(),
+    });
   });
 
   afterEach(async () => {

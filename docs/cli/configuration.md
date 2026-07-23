@@ -23,16 +23,16 @@ Configuration is applied in the following order of precedence (lower numbers are
 LLxprt Code uses JSON settings files for persistent configuration. There are four locations for these files:
 
 - **System defaults file:**
-  - **Location:** `/etc/llxprt-code/system-defaults.json` (Linux), `C:\ProgramData\llxprt-code\system-defaults.json` (Windows) or `/Library/Application Support/LLxprt-Code/system-defaults.json` (macOS). The path can be overridden using the `LLXPRT_CODE_SYSTEM_DEFAULTS_PATH` environment variable.
+  - **Location:** `/etc/llxprt-code/system-defaults.json` (Linux), `C:\ProgramData\llxprt-code\system-defaults.json` (Windows) or `/Library/Application Support/LlxprtCode/system-defaults.json` (macOS). The path can be overridden using the `LLXPRT_SYSTEM_DEFAULTS_PATH` environment variable (a legacy alias `LLXPRT_CODE_SYSTEM_DEFAULTS_PATH` is also honored for backward compatibility).
   - **Scope:** Provides a base layer of system-wide default settings. These settings have the lowest precedence and are intended to be overridden by user, project, or system override settings.
 - **User settings file:**
-  - **Location:** `~/.llxprt/settings.json` (where `~` is your home directory).
+  - **Location:** Your user `settings.json` in LLxprt's [config directory](../reference/application-directories.md) (overridable via `LLXPRT_CONFIG_HOME`).
   - **Scope:** Applies to all LLxprt Code sessions for the current user. User settings override system defaults.
 - **Project settings file:**
   - **Location:** `.llxprt/settings.json` within your project's root directory.
   - **Scope:** Applies only when running LLxprt Code from that specific project. Project settings override user settings and system defaults.
 - **System settings file:**
-  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LLxprt-Code/settings.json` (macOS). The path can be overridden using the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` environment variable.
+  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LlxprtCode/settings.json` (macOS). The path can be overridden using the `LLXPRT_SYSTEM_SETTINGS_PATH` environment variable (a legacy alias `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` is also honored for backward compatibility).
   - **Scope:** Applies to all LLxprt Code sessions on the system, for all users. System settings act as overrides, taking precedence over all other settings files. May be useful for system administrators at enterprises to have controls over users' LLxprt Code setups.
 
 **Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"apiKey": "$MY_API_TOKEN"`.
@@ -1648,13 +1648,13 @@ The CLI automatically loads environment variables from `.env` files. The loading
 
 1. `.env` in the current directory
 2. `.env` in parent directories (up to filesystem root)
-3. `~/.llxprt/.env` (user-level)
+3. `<config>/.env` (user-level — see [Application Directories](../reference/application-directories.md))
 
 String values in `settings.json` can reference environment variables using `$VAR_NAME` or `${VAR_NAME}` syntax.
 
 ## Shell History
 
-Shell command history is stored per-project at `~/.llxprt/tmp/<project_hash>/shell_history`.
+Shell command history is stored per-project under LLxprt's [log/state directory](../reference/application-directories.md) at `<log>/tmp/<project_hash>/shell_history` (overridable via `LLXPRT_LOG_HOME`).
 
 ## See Also
 

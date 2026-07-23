@@ -52,7 +52,7 @@ Dumps the full model context (system prompt, conversation history, tool definiti
 /dumpcontext off      # Stop dumping
 ```
 
-Dumps are saved to `~/.llxprt/dumps/` as timestamped JSON files.
+Dumps are saved to `<cache>/dumps/` (see [Application Directories](./reference/application-directories.md)) as timestamped JSON files.
 
 ### /debug
 
@@ -99,7 +99,7 @@ LLxprt Code stores named keys in the **OS keyring** (macOS Keychain, GNOME Keyri
 
 - **macOS:** `~/Library/Application Support/llxprt-code/secure-store/`
 - **Linux:** `~/.local/share/llxprt-code/secure-store/`
-- **Windows:** `%APPDATA%/llxprt-code/secure-store/`
+- **Windows:** `%LOCALAPPDATA%\llxprt-code\Data\secure-store` (see [Application Directories](./reference/application-directories.md))
 
 To check which backend is active:
 
@@ -269,7 +269,7 @@ LLXPRT_DEBUG='*' llxprt --sandbox "your prompt"
 
 **Where are config files stored?**
 
-`~/.llxprt/settings.json` (user) and `.llxprt/settings.json` (project). See [Configuration](./cli/configuration.md).
+User settings live in LLxprt's [config directory](./reference/application-directories.md) (e.g. `~/.config/llxprt-code/settings.json` on Linux); project settings live at `.llxprt/settings.json` in your project root. See [Configuration](./cli/configuration.md).
 
 **Why don't I see cached token counts in /stats?**
 

@@ -112,7 +112,10 @@ describe('OAuth Timing Integration Tests', () => {
       fallbackPolicy: 'allow',
       keyringLoader: async () => createMockKeyring(),
     });
-    tokenStore = new KeyringTokenStore({ secureStore });
+    tokenStore = new KeyringTokenStore({
+      secureStore,
+      lockDir: path.join(tempDir, 'locks'),
+    });
     const mockOAuthSetup = createMockOAuthManager(tokenStore);
     oauthManager = mockOAuthSetup.manager;
     oauthSpies = mockOAuthSetup.spies;

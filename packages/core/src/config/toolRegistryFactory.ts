@@ -349,7 +349,9 @@ function registerStandardTools(
   const settingsServiceAdapter = new CoreSettingsServiceAdapter(config);
   const storageServiceAdapter = new CoreStorageServiceAdapter();
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
-  const todoServiceAdapter = new CoreTodoServiceAdapter();
+  const todoServiceAdapter = new CoreTodoServiceAdapter(() =>
+    storageServiceAdapter.getGlobalDataDir(),
+  );
 
   registerCoreTool(LSTool, toolHostAdapter);
   registerCoreTool(ReadFileTool, toolHostAdapter);

@@ -131,10 +131,10 @@ Settings for multi-endpoint load balancing. Only apply when using load-balanced 
 
 ## Prompt Configuration
 
-| Setting                    | Type    | Default | Profile | Description                                                                                              |
-| -------------------------- | ------- | ------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `enable-tool-prompts`      | boolean | `false` | yes     | Load tool-specific prompt files from `~/.llxprt/prompts/tools/`. Adds specialized instructions per tool. |
-| `include-folder-structure` | boolean | —       | yes     | Include the workspace folder tree in the system prompt. Helps the model navigate, but costs tokens.      |
+| Setting                    | Type    | Default | Profile | Description                                                                                                                                                           |
+| -------------------------- | ------- | ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable-tool-prompts`      | boolean | `false` | yes     | Load tool-specific prompt files from `<config>/prompts/tools/` (see [Application Directories](./application-directories.md)). Adds specialized instructions per tool. |
+| `include-folder-structure` | boolean | —       | yes     | Include the workspace folder tree in the system prompt. Helps the model navigate, but costs tokens.                                                                   |
 
 ## Custom Headers
 
@@ -165,11 +165,11 @@ Settings for multi-endpoint load balancing. Only apply when using load-balanced 
 
 ## Debugging
 
-| Setting       | Type | Default | Profile | Description                                                                                         |
-| ------------- | ---- | ------- | ------- | --------------------------------------------------------------------------------------------------- |
-| `emojifilter` | enum | `auto`  | yes     | Emoji handling: `allowed`, `auto` (detect terminal support), `warn`, `error`.                       |
-| `dumponerror` | enum | —       | yes     | Dump API request body to `~/.llxprt/dumps/` on errors: `enabled` or `disabled`.                     |
-| `dumpcontext` | enum | —       | yes     | Context dumping: `now` (dump immediately), `status`, `on` (every turn), `error` (on errors), `off`. |
+| Setting       | Type | Default | Profile | Description                                                                                                                                 |
+| ------------- | ---- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `emojifilter` | enum | `auto`  | yes     | Emoji handling: `allowed`, `auto` (detect terminal support), `warn`, `error`.                                                               |
+| `dumponerror` | enum | —       | yes     | Dump API request body to `<cache>/dumps/` on errors (see [Application Directories](./application-directories.md)): `enabled` or `disabled`. |
+| `dumpcontext` | enum | —       | yes     | Context dumping: `now` (dump immediately), `status`, `on` (every turn), `error` (on errors), `off`.                                         |
 
 ## Model Parameters
 
