@@ -206,6 +206,30 @@ describe('extension tests', () => {
       expect(extensions[0].name).toBe('test-extension');
     });
 
+    it('ignores extension enablement metadata in the canonical extension root', () => {
+      fs.writeFileSync(
+        path.join(userExtensionsDir, 'extension-enablement.json'),
+        JSON.stringify({ disabled: [] }),
+      );
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'test-extension',
+        version: '1.0.0',
+      });
+      const consoleError = vi
+        .spyOn(globalThis.console, 'error')
+        .mockImplementation(() => undefined);
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+      );
+
+      expect(extensions.map((extension) => extension.name)).toStrictEqual([
+        'test-extension',
+      ]);
+      expect(consoleError).not.toHaveBeenCalled();
+    });
+
     it('should load context file path when LLXPRT.md is present', () => {
       createExtension({
         extensionsDir: userExtensionsDir,

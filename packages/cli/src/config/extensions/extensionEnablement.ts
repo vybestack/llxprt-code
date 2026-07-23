@@ -112,6 +112,8 @@ const REGEX_SPECIAL_CHARS = new RegExp(REGEX_SPECIAL_CHARS_PATTERN, 'g');
 const GLOB_WILDCARD_PATTERN = '(/?)\\*';
 const GLOB_WILDCARD = new RegExp(GLOB_WILDCARD_PATTERN, 'g');
 
+export const EXTENSION_ENABLEMENT_FILENAME = 'extension-enablement.json';
+
 function globToRegex(glob: string): RegExp {
   // Glob patterns are sanitized: special regex chars are escaped above, only * wildcard allowed
   const regexString = glob
@@ -134,7 +136,7 @@ export class ExtensionEnablementManager {
 
   constructor(configDir: string, enabledExtensionNames?: string[]) {
     this.configDir = configDir;
-    this.configFilePath = path.join(configDir, 'extension-enablement.json');
+    this.configFilePath = path.join(configDir, EXTENSION_ENABLEMENT_FILENAME);
     this.enabledExtensionNamesOverride =
       enabledExtensionNames?.map((name) => name.toLowerCase()) ?? [];
   }

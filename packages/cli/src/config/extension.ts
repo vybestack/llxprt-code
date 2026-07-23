@@ -22,7 +22,10 @@ import {
 import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 import chalk from 'chalk';
-import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import {
+  EXTENSION_ENABLEMENT_FILENAME,
+  ExtensionEnablementManager,
+} from './extensions/extensionEnablement.js';
 import type { ConfirmationRequest } from '../ui/types.js';
 import {
   recursivelyHydrateStrings,
@@ -302,6 +305,7 @@ export function loadExtensionsFromRoots(
     const entries = readExtensionDirEntries(extensionsDir);
     if (entries === null) continue;
     for (const subdir of entries) {
+      if (subdir === EXTENSION_ENABLEMENT_FILENAME) continue;
       const extension = loadExtension({
         extensionDir: path.join(extensionsDir, subdir),
         workspaceDir,
