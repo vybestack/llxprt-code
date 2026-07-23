@@ -218,6 +218,35 @@ describe('process run capture', () => {
     });
   });
 
+  it('rejects instead of throwing when a capture handler fails', async () => {
+    const run = spawnRun(
+      bunContext('process.stdout.write("captured");', makeTempDir()),
+      {},
+      true,
+      identityTransform,
+      () => {
+        throw new Error('capture handler failed');
+      },
+    );
+
+    await expectRejection(run, /capture handler failed/);
+  });
+
+  it('isolates capture handler failures in timeout-managed runs', async () => {
+    const run = spawnRunWithTimeout(
+      bunContext('process.stdout.write("captured");', makeTempDir()),
+      {},
+      true,
+      identityTransform,
+      1500,
+      () => {
+        throw new Error('timeout capture handler failed');
+      },
+    );
+
+    await expectRejection(run, /timeout capture handler failed/);
+  });
+
   it('keeps concurrent run captures isolated by callback', async () => {
     let firstCapture: RunCapture | undefined;
     let secondCapture: RunCapture | undefined;

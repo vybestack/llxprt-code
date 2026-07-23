@@ -27,6 +27,10 @@ export interface RunCapture {
 
 export type RunCaptureHandler = (capture: RunCapture) => void;
 
+interface CaptureFailure {
+  readonly error: unknown;
+}
+
 const TERMINATION_GRACE_MS = 500;
 const FORCE_KILL_CLOSE_GRACE_MS = 500;
 
@@ -81,13 +85,25 @@ function captureRun(
   exitCode: number | null,
   timedOut: boolean,
   onCapture: RunCaptureHandler | undefined,
-): void {
-  onCapture?.({
-    stdout: accumulator.stdout,
-    stderr: accumulator.stderr,
-    exitCode,
-    timedOut,
-  });
+): CaptureFailure | null {
+  try {
+    onCapture?.({
+      stdout: accumulator.stdout,
+      stderr: accumulator.stderr,
+      exitCode,
+      timedOut,
+    });
+    return null;
+  } catch (error) {
+    return { error };
+  }
+}
+
+function captureErrorOr(
+  failure: CaptureFailure | null,
+  fallback: unknown,
+): unknown {
+  return failure === null ? fallback : failure.error;
 }
 
 /**
@@ -167,8 +183,9 @@ export function spawnRun(
         return;
       }
       settled = true;
-      captureRun(accumulator, null, false, onCapture);
-      reject(error);
+      reject(
+        captureErrorOr(captureRun(accumulator, null, false, onCapture), error),
+      );
     });
 
     child.once('close', (code: number | null) => {
@@ -176,7 +193,11 @@ export function spawnRun(
         return;
       }
       settled = true;
-      captureRun(accumulator, code, false, onCapture);
+      const captureFailure = captureRun(accumulator, code, false, onCapture);
+      if (captureFailure !== null) {
+        reject(captureFailure.error);
+        return;
+      }
 
       if (code === 0) {
         const transformed = transform(accumulator.stdout);
@@ -192,6 +213,57 @@ export function spawnRun(
 
     pipeStdin(child, options);
   });
+}
+
+interface CloseRunContext {
+  readonly accumulator: StreamAccumulator;
+  readonly onCapture: RunCaptureHandler | undefined;
+  readonly timeoutError: Error;
+  readonly transform: (stdout: string) => string;
+  readonly isJsonOutput: boolean;
+  readonly resolve: (value: string) => void;
+  readonly reject: (reason?: unknown) => void;
+}
+
+function settleClosedRun(
+  context: CloseRunContext,
+  code: number | null,
+  didTimeout: boolean,
+): void {
+  const captureFailure = captureRun(
+    context.accumulator,
+    code,
+    didTimeout,
+    context.onCapture,
+  );
+  if (captureFailure !== null) {
+    context.reject(captureFailure.error);
+    return;
+  }
+  if (didTimeout) {
+    context.reject(context.timeoutError);
+  } else if (code === 0) {
+    const transformed = context.transform(context.accumulator.stdout);
+    context.resolve(
+      maybeAppendStderr(
+        transformed,
+        context.accumulator.stderr,
+        context.isJsonOutput,
+      ),
+    );
+  } else {
+    context.reject(
+      new Error(
+        `Process exited with code ${code}:\n${context.accumulator.stderr}`,
+      ),
+    );
+  }
+}
+
+function clearRunTimers(timers: NodeJS.Timeout[]): void {
+  for (const timer of timers) {
+    clearTimeout(timer);
+  }
 }
 
 /** Spawn a run with bounded SIGTERM/SIGKILL timeout handling. */
@@ -223,8 +295,12 @@ export function spawnRunWithTimeout(
     const settleTimedOut = (): void => {
       if (!settled) {
         settled = true;
-        captureRun(accumulator, null, true, onCapture);
-        reject(timeoutError);
+        reject(
+          captureErrorOr(
+            captureRun(accumulator, null, true, onCapture),
+            timeoutError,
+          ),
+        );
       }
     };
     const forceKill = (): void => {
@@ -238,45 +314,36 @@ export function spawnRunWithTimeout(
         timers.push(setTimeout(forceKill, TERMINATION_GRACE_MS));
       }, timeoutMs),
     );
-    const clearTimers = (): void => {
-      for (const timer of timers) {
-        clearTimeout(timer);
-      }
-    };
-
     child.once('error', (error) => {
       if (!settled) {
         settled = true;
         if (!didTimeout) {
-          clearTimers();
+          clearRunTimers(timers);
         }
-        captureRun(accumulator, null, didTimeout, onCapture);
-        reject(didTimeout ? timeoutError : error);
+        const runError = didTimeout ? timeoutError : error;
+        reject(
+          captureErrorOr(
+            captureRun(accumulator, null, didTimeout, onCapture),
+            runError,
+          ),
+        );
       }
     });
 
+    const closeContext: CloseRunContext = {
+      accumulator,
+      onCapture,
+      timeoutError,
+      transform,
+      isJsonOutput,
+      resolve,
+      reject,
+    };
     child.once('close', (code: number | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimers();
-      captureRun(accumulator, code, didTimeout, onCapture);
-
-      if (didTimeout) {
-        reject(timeoutError);
-        return;
-      }
-
-      if (code === 0) {
-        const transformed = transform(accumulator.stdout);
-        resolve(
-          maybeAppendStderr(transformed, accumulator.stderr, isJsonOutput),
-        );
-      } else {
-        reject(
-          new Error(`Process exited with code ${code}:\n${accumulator.stderr}`),
-        );
+      if (!settled) {
+        settled = true;
+        clearRunTimers(timers);
+        settleClosedRun(closeContext, code, didTimeout);
       }
     });
 
