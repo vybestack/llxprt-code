@@ -26,12 +26,12 @@ PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
 # Record the caller's script dir so env-paths defaults resolve from any cwd (#6).
 llxprt_paths_init "${SCRIPT_DIR}"
 CONFIG_BASE="$(llxprt_resolve_config_dir)"
-if [ -z "${CONFIG_BASE}" ]; then
+if [[ -z "${CONFIG_BASE}" ]]; then
     echo "Error: Failed to resolve canonical config directory" >&2
     exit 1
 fi
 LOG_BASE="$(llxprt_resolve_log_dir)"
-if [ -z "${LOG_BASE}" ]; then
+if [[ -z "${LOG_BASE}" ]]; then
     echo "Error: Failed to resolve canonical log directory" >&2
     exit 1
 fi
@@ -41,7 +41,7 @@ fi
 # tree (finding #58). The value is TRIMMED so ' /abs/path ' produces the same
 # canonical path as '/abs/path' (finding F).
 if _DEBUG_DIR="$(llxprt_normalized_abs_override "${LLXPRT_DEBUG_DIR:-}")"; then
-    DEBUG_DIR="$_DEBUG_DIR"
+    DEBUG_DIR="${_DEBUG_DIR}"
 else
     DEBUG_DIR="${LOG_BASE}/debug"
 fi

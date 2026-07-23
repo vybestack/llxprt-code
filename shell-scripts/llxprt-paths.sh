@@ -44,11 +44,11 @@ llxprt_paths_init() {
 llxprt_is_abs_override() {
     _llxprt_val="${1-}"
     # Trim leading/trailing whitespace without bashisms.
-    _llxprt_val="$(printf '%s' "$_llxprt_val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [ -n "$_llxprt_val" ] || return 1
+    _llxprt_val="$(printf '%s' "${_llxprt_val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [ -n "${_llxprt_val}" ] || return 1
     # POSIX absolute-path test: leading '/' (Unix). Windows absolute paths are
     # not supported by these Unix-oriented scripts.
-    case "$_llxprt_val" in
+    case "${_llxprt_val}" in
         /*) return 0 ;;
         *) return 1 ;;
     esac
@@ -61,11 +61,11 @@ llxprt_is_abs_override() {
 # category roots).
 llxprt_normalized_abs_override() {
     _llxprt_raw="${1-}"
-    if ! llxprt_is_abs_override "$_llxprt_raw"; then
+    if ! llxprt_is_abs_override "${_llxprt_raw}"; then
         return 1
     fi
-    _llxprt_raw="$(printf '%s' "$_llxprt_raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    printf '%s' "$_llxprt_raw"
+    _llxprt_raw="$(printf '%s' "${_llxprt_raw}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    printf '%s' "${_llxprt_raw}"
 }
 
 # Print a category dir, honoring $1 (primary env), $2 (compat env fallback),
@@ -82,29 +82,30 @@ llxprt_resolve_category() {
     # Validate indirect-variable names against a safe charset to prevent
     # shell injection via eval. Only [A-Za-z_][A-Za-z_0-9]* identifiers are
     # allowed.
-    case "$_llxprt_primary" in
+    case "${_llxprt_primary}" in
         ''|*[!A-Za-z_0-9]*) return 1 ;;
+        *) ;;
     esac
 
     # Validate the category against an allowlist before interpolation into
     # the node -e command to prevent JavaScript injection.
-    case "$_llxprt_cat" in
+    case "${_llxprt_cat}" in
         config|data|cache|log) ;;
         *) return 1 ;;
     esac
 
-    if _llxprt_val="$(eval "printf '%s' \"\${$_llxprt_primary-}\"")" && llxprt_is_abs_override "$_llxprt_val"; then
-        _llxprt_val="$(printf '%s' "$_llxprt_val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        printf '%s' "$_llxprt_val"
+    if _llxprt_val="$(eval "printf '%s' \"\${${_llxprt_primary}-}\"")" && llxprt_is_abs_override "${_llxprt_val}"; then
+        _llxprt_val="$(printf '%s' "${_llxprt_val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        printf '%s' "${_llxprt_val}"
         return 0
     fi
-    if [ -n "$_llxprt_compat" ]; then
-        case "$_llxprt_compat" in
+    if [ -n "${_llxprt_compat}" ]; then
+        case "${_llxprt_compat}" in
             ''|*[!A-Za-z_0-9]*) ;;
             *)
-                if _llxprt_val="$(eval "printf '%s' \"\${$_llxprt_compat-}\"")" && llxprt_is_abs_override "$_llxprt_val"; then
-                    _llxprt_val="$(printf '%s' "$_llxprt_val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-                    printf '%s' "$_llxprt_val"
+                if _llxprt_val="$(eval "printf '%s' \"\${${_llxprt_compat}-}\"")" && llxprt_is_abs_override "${_llxprt_val}"; then
+                    _llxprt_val="$(printf '%s' "${_llxprt_val}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+                    printf '%s' "${_llxprt_val}"
                     return 0
                 fi
                 ;;
@@ -118,7 +119,7 @@ llxprt_resolve_category() {
     # (issue #2606 finding #6).
     _llxprt_repo_dir="$(_llxprt_resolve_env_paths_root)" || return 1
     (
-        cd "$_llxprt_repo_dir" || exit 1
+        cd "${_llxprt_repo_dir}" || exit 1
         node -e "import('env-paths').then(m=>process.stdout.write(m.default('llxprt-code',{suffix:''}).${_llxprt_cat}))"
     )
 }
@@ -133,31 +134,31 @@ _llxprt_resolve_env_paths_root() {
     # Candidate starting directories (absolute). Prefer the explicit init dir
     # recorded by llxprt_paths_init, then the caller's $0, then $PWD.
     _llxprt_cand_init=''
-    if [ -n "$_LLXPRT_PATHS_INIT_DIR" ]; then
-        case "$_LLXPRT_PATHS_INIT_DIR" in
-            /*) _llxprt_cand_init="$_LLXPRT_PATHS_INIT_DIR" ;;
-            *)  _llxprt_cand_init="$(pwd)/$_LLXPRT_PATHS_INIT_DIR" ;;
+    if [ -n "${_LLXPRT_PATHS_INIT_DIR}" ]; then
+        case "${_LLXPRT_PATHS_INIT_DIR}" in
+            /*) _llxprt_cand_init="${_LLXPRT_PATHS_INIT_DIR}" ;;
+            *)  _llxprt_cand_init="$(pwd)/${_LLXPRT_PATHS_INIT_DIR}" ;;
         esac
     fi
     _llxprt_cand_zero=''
     _llxprt_self="${0-}"
-    if [ -n "$_llxprt_self" ]; then
-        case "$_llxprt_self" in
-            /*) _llxprt_cand_zero="$(dirname "$_llxprt_self")" ;;
-            *)  _llxprt_cand_zero="$(dirname "$(pwd)/$_llxprt_self")" ;;
+    if [ -n "${_llxprt_self}" ]; then
+        case "${_llxprt_self}" in
+            /*) _llxprt_cand_zero="$(dirname "${_llxprt_self}")" ;;
+            *)  _llxprt_cand_zero="$(dirname "$(pwd)/${_llxprt_self}")" ;;
         esac
     fi
     _llxprt_cand_pwd="$(pwd)"
     # Walk up each candidate until node_modules/env-paths is found.
-    for _llxprt_start in "$_llxprt_cand_init" "$_llxprt_cand_zero" "$_llxprt_cand_pwd"; do
-        [ -n "$_llxprt_start" ] || continue
-        _llxprt_d="$_llxprt_start"
-        while [ "$_llxprt_d" != "" ] && [ "$_llxprt_d" != "/" ]; do
-            if [ -d "$_llxprt_d/node_modules/env-paths" ]; then
-                printf '%s' "$_llxprt_d"
+    for _llxprt_start in "${_llxprt_cand_init}" "${_llxprt_cand_zero}" "${_llxprt_cand_pwd}"; do
+        [ -n "${_llxprt_start}" ] || continue
+        _llxprt_d="${_llxprt_start}"
+        while [ "${_llxprt_d}" != "" ] && [ "${_llxprt_d}" != "/" ]; do
+            if [ -d "${_llxprt_d}/node_modules/env-paths" ]; then
+                printf '%s' "${_llxprt_d}"
                 return 0
             fi
-            _llxprt_d="$(dirname "$_llxprt_d")"
+            _llxprt_d="$(dirname "${_llxprt_d}")"
         done
     done
     return 1

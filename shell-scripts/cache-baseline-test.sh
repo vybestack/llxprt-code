@@ -31,9 +31,9 @@ llxprt_paths_init "${SCRIPT_DIR}"
 # An explicit, absolute LLXPRT_DEBUG_DIR is the only way to target a real
 # debug dir; otherwise benchmark an isolated temp dir.
 _BENCH_CLEAR=0
-if [ "${LLXPRT_CACHE_BASELINE_CLEAR_DEBUG:-0}" = "1" ]; then
+if [[ "${LLXPRT_CACHE_BASELINE_CLEAR_DEBUG:-0}" = "1" ]]; then
     if _DEBUG_DIR="$(llxprt_normalized_abs_override "${LLXPRT_DEBUG_DIR-}")"; then
-        DEBUG_DIR="$_DEBUG_DIR"
+        DEBUG_DIR="${_DEBUG_DIR}"
         _BENCH_CLEAR=1
     else
         echo "ERROR: LLXPRT_CACHE_BASELINE_CLEAR_DEBUG=1 requires an absolute LLXPRT_DEBUG_DIR." >&2
@@ -54,7 +54,7 @@ echo "=== Anthropic Prompt Cache Baseline Test ==="
 echo "Profile: ${PROFILE}"
 echo "Debug dir: ${DEBUG_DIR}"
 echo "Log file: ${LOG_FILE}"
-if [ "${_BENCH_CLEAR}" = "1" ]; then
+if [[ "${_BENCH_CLEAR}" = "1" ]]; then
     echo "Clear mode: ENABLED (caller-opted-in absolute debug dir)"
 else
     echo "Clear mode: disabled (non-destructive isolated benchmark dir)"
@@ -68,7 +68,7 @@ fi
 
 # Step 1: Prepare debug directory
 echo "Step 1: Preparing debug directory..."
-if [ "${_BENCH_CLEAR}" = "1" ]; then
+if [[ "${_BENCH_CLEAR}" = "1" ]]; then
     rm -rf "${DEBUG_DIR:?}"/*
 fi
 mkdir -p "${DEBUG_DIR}"

@@ -11,24 +11,25 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HELPER="$SCRIPT_DIR/llxprt-paths.sh"
+HELPER="${SCRIPT_DIR}/llxprt-paths.sh"
 
 failures=0
 assert() { # <label> <expected> <actual>
     _label="$1"; _exp="$2"; _act="$3"
-    if [ "$_exp" = "$_act" ]; then
-        echo "PASS: $_label"
+    if [ "${_exp}" = "${_act}" ]; then
+        echo "PASS: ${_label}"
     else
-        echo "FAIL: $_label"
-        echo "      expected: $_exp"
-        echo "      actual:   $_act"
+        echo "FAIL: ${_label}"
+        echo "      expected: ${_exp}"
+        echo "      actual:   ${_act}"
         failures=$((failures + 1))
     fi
 }
 
 # Load the helper under test (functions only; no side effects on source).
-# shellcheck disable=SC1090
-. "$HELPER"
+# shellcheck source=llxprt-paths.sh
+# shellcheck disable=SC1090,SC1091 # Path is dynamic ($HELPER); llxprt-paths.sh is passed as a tracked input in CI.
+. "${HELPER}"
 
 # llxprt_is_abs_override contract
 echo "--- llxprt_is_abs_override ---"
@@ -40,7 +41,7 @@ echo "--- llxprt_is_abs_override ---"
 check_exit() { # <label> <expected> <cmd...>
     _label="$1"; _exp="$2"; shift 2
     "$@"; _rc=$?
-    assert "$_label" "$_exp" "$_rc"
+    assert "${_label}" "${_exp}" "${_rc}"
 }
 
 check_exit 'absolute accepted' 0 llxprt_is_abs_override '/etc/llxprt'
@@ -81,83 +82,83 @@ echo "--- DATA override rejection/acceptance ---"
 
 unset LLXPRT_DATA_HOME LLXPRT_CONFIG_HOME
 GOT="$(LLXPRT_DATA_HOME='relative/data' llxprt_resolve_data_dir)"
-assert 'relative DATA override ignored -> env-paths default' "$DEFAULT_DATA" "$GOT"
+assert 'relative DATA override ignored -> env-paths default' "${DEFAULT_DATA}" "${GOT}"
 
 GOT="$(LLXPRT_DATA_HOME='' llxprt_resolve_data_dir)"
-assert 'blank DATA override ignored -> env-paths default' "$DEFAULT_DATA" "$GOT"
+assert 'blank DATA override ignored -> env-paths default' "${DEFAULT_DATA}" "${GOT}"
 
 GOT="$(LLXPRT_DATA_HOME='   ' llxprt_resolve_data_dir)"
-assert 'whitespace-only DATA override ignored -> env-paths default' "$DEFAULT_DATA" "$GOT"
+assert 'whitespace-only DATA override ignored -> env-paths default' "${DEFAULT_DATA}" "${GOT}"
 
 GOT="$(LLXPRT_DATA_HOME='/abs/data' llxprt_resolve_data_dir)"
-assert 'absolute DATA override accepted' '/abs/data' "$GOT"
+assert 'absolute DATA override accepted' '/abs/data' "${GOT}"
 
 echo "--- CONFIG override rejection/acceptance ---"
 GOT="$(LLXPRT_CONFIG_HOME='relative/cfg' llxprt_resolve_config_dir)"
-assert 'relative CONFIG override ignored -> env-paths default' "$DEFAULT_CONFIG" "$GOT"
+assert 'relative CONFIG override ignored -> env-paths default' "${DEFAULT_CONFIG}" "${GOT}"
 
 GOT="$(LLXPRT_CONFIG_HOME='   ' llxprt_resolve_config_dir)"
-assert 'whitespace-only CONFIG override ignored -> env-paths default' "$DEFAULT_CONFIG" "$GOT"
+assert 'whitespace-only CONFIG override ignored -> env-paths default' "${DEFAULT_CONFIG}" "${GOT}"
 
 GOT="$(LLXPRT_CONFIG_HOME='/abs/cfg' llxprt_resolve_config_dir)"
-assert 'absolute CONFIG override accepted' '/abs/cfg' "$GOT"
+assert 'absolute CONFIG override accepted' '/abs/cfg' "${GOT}"
 
 echo "--- LOG override rejection/acceptance ---"
 GOT="$(LLXPRT_LOG_HOME='relative/log' llxprt_resolve_log_dir)"
-assert 'relative LOG override ignored -> env-paths default' "$DEFAULT_LOG" "$GOT"
+assert 'relative LOG override ignored -> env-paths default' "${DEFAULT_LOG}" "${GOT}"
 
 GOT="$(LLXPRT_LOG_HOME='   ' llxprt_resolve_log_dir)"
-assert 'whitespace-only LOG override ignored -> env-paths default' "$DEFAULT_LOG" "$GOT"
+assert 'whitespace-only LOG override ignored -> env-paths default' "${DEFAULT_LOG}" "${GOT}"
 
 GOT="$(LLXPRT_LOG_HOME='/abs/log' llxprt_resolve_log_dir)"
-assert 'absolute LOG override accepted' '/abs/log' "$GOT"
+assert 'absolute LOG override accepted' '/abs/log' "${GOT}"
 
 echo "--- CACHE override rejection/acceptance ---"
 GOT="$(LLXPRT_CACHE_HOME='relative/cache' llxprt_resolve_cache_dir)"
-assert 'relative CACHE override ignored -> env-paths default' "$DEFAULT_CACHE" "$GOT"
+assert 'relative CACHE override ignored -> env-paths default' "${DEFAULT_CACHE}" "${GOT}"
 
 GOT="$(LLXPRT_CACHE_HOME='' llxprt_resolve_cache_dir)"
-assert 'blank CACHE override ignored -> env-paths default' "$DEFAULT_CACHE" "$GOT"
+assert 'blank CACHE override ignored -> env-paths default' "${DEFAULT_CACHE}" "${GOT}"
 
 GOT="$(LLXPRT_CACHE_HOME='/abs/cache' llxprt_resolve_cache_dir)"
-assert 'absolute CACHE override accepted' '/abs/cache' "$GOT"
+assert 'absolute CACHE override accepted' '/abs/cache' "${GOT}"
 
 echo "--- normalized (trimmed) absolute overrides (finding F) ---"
 # An absolute override with leading/trailing whitespace must be TRIMMED to the
 # canonical path so the emitted value matches what a caller passing a clean
 # path would get.
 GOT="$(LLXPRT_DATA_HOME=' /abs/data ' llxprt_resolve_data_dir)"
-assert 'DATA override trimmed' '/abs/data' "$GOT"
+assert 'DATA override trimmed' '/abs/data' "${GOT}"
 
 GOT="$(LLXPRT_CONFIG_HOME='  /abs/cfg  ' llxprt_resolve_config_dir)"
-assert 'CONFIG override trimmed' '/abs/cfg' "$GOT"
+assert 'CONFIG override trimmed' '/abs/cfg' "${GOT}"
 
 GOT="$(LLXPRT_LOG_HOME=' /abs/log ' llxprt_resolve_log_dir)"
-assert 'LOG override trimmed' '/abs/log' "$GOT"
+assert 'LOG override trimmed' '/abs/log' "${GOT}"
 
 GOT="$(LLXPRT_CACHE_HOME=' /abs/cache ' llxprt_resolve_cache_dir)"
-assert 'CACHE override trimmed' '/abs/cache' "$GOT"
+assert 'CACHE override trimmed' '/abs/cache' "${GOT}"
 
 # llxprt_normalized_abs_override helper: trims and echoes on success, exits 1
 # for invalid (relative/blank) values.
 GOT="$(llxprt_normalized_abs_override ' /abs/auth ')"
-assert 'normalized_abs_override trims' '/abs/auth' "$GOT"
+assert 'normalized_abs_override trims' '/abs/auth' "${GOT}"
 
 llxprt_normalized_abs_override 'relative' 2>/dev/null
 _rc=$?
-assert 'normalized_abs_override rejects relative' 1 "$_rc"
+assert 'normalized_abs_override rejects relative' 1 "${_rc}"
 
 llxprt_normalized_abs_override '' 2>/dev/null
 _rc=$?
-assert 'normalized_abs_override rejects blank' 1 "$_rc"
+assert 'normalized_abs_override rejects blank' 1 "${_rc}"
 
 echo "--- compatibility CONFIG fallback for DATA ---"
 # When DATA is unset but CONFIG is absolute, DATA falls back to CONFIG.
 GOT="$(unset LLXPRT_DATA_HOME; LLXPRT_CONFIG_HOME='/abs/compat' llxprt_resolve_data_dir)"
-assert 'compat CONFIG absolute accepted for DATA' '/abs/compat' "$GOT"
+assert 'compat CONFIG absolute accepted for DATA' '/abs/compat' "${GOT}"
 # When CONFIG fallback is relative, it must also be ignored.
 GOT="$(unset LLXPRT_DATA_HOME; LLXPRT_CONFIG_HOME='rel/compat' llxprt_resolve_data_dir)"
-assert 'compat CONFIG relative ignored for DATA' "$DEFAULT_DATA" "$GOT"
+assert 'compat CONFIG relative ignored for DATA' "${DEFAULT_DATA}" "${GOT}"
 
 echo "--- env-paths default resolves from arbitrary caller cwd (#6) ---"
 # The env-paths default fallback must resolve regardless of the caller's cwd,
@@ -177,20 +178,21 @@ _OUTSIDE_DIR="$(mktemp -d)"
 # retained when the `|| _rc=$?` branch does not fire (command succeeded).
 _rc=0
 GOT="$(
-    cd "$_OUTSIDE_DIR" || exit 1
+    cd "${_OUTSIDE_DIR}" || exit 1
       unset LLXPRT_DATA_HOME LLXPRT_CONFIG_HOME LLXPRT_LOG_HOME LLXPRT_CACHE_HOME
     # shellcheck source=llxprt-paths.sh
-    . "$HELPER"
-    llxprt_paths_init "$SCRIPT_DIR"
+    # shellcheck disable=SC1091 # Path is dynamic ($HELPER); followed via source directive above for top-level source.
+    . "${HELPER}"
+    llxprt_paths_init "${SCRIPT_DIR}"
     llxprt_resolve_data_dir
 )" || _rc=$?
-assert 'env-paths default resolves from outside cwd via init (exit 0)' 0 "$_rc"
-assert 'env-paths default resolves from outside cwd via init (value)' "$DEFAULT_DATA" "$GOT"
-rm -rf "$_OUTSIDE_DIR"
+assert 'env-paths default resolves from outside cwd via init (exit 0)' 0 "${_rc}"
+assert 'env-paths default resolves from outside cwd via init (value)' "${DEFAULT_DATA}" "${GOT}"
+rm -rf "${_OUTSIDE_DIR}"
 
-if [ "$failures" -gt 0 ]; then
+if [ "${failures}" -gt 0 ]; then
     echo ""
-    echo "$failures assertion(s) FAILED"
+    echo "${failures} assertion(s) FAILED"
     exit 1
 fi
 echo ""

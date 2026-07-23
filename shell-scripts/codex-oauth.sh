@@ -36,7 +36,7 @@ _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 llxprt_paths_init "${_SCRIPT_DIR}"
 CODEX_DATA_BASE="$(llxprt_resolve_data_dir)"
 if _CODEX_AUTH="$(llxprt_normalized_abs_override "${CODEX_AUTH_DIR:-}")"; then
-    AUTH_DIR="$_CODEX_AUTH"
+    AUTH_DIR="${_CODEX_AUTH}"
 else
     AUTH_DIR="${CODEX_DATA_BASE}/codex-auth"
 fi

@@ -10,32 +10,32 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SHELL_SCRIPTS_DIR="$SCRIPT_DIR/../shell-scripts"
+SHELL_SCRIPTS_DIR="${SCRIPT_DIR}/../shell-scripts"
 
 failures=0
 ran=0
 
-for test_script in "$SHELL_SCRIPTS_DIR"/*.test.sh; do
-    [ -f "$test_script" ] || continue
+for test_script in "${SHELL_SCRIPTS_DIR}"/*.test.sh; do
+    [ -f "${test_script}" ] || continue
     ran=$((ran + 1))
-    name="$(basename "$test_script")"
-    echo "--- Running $name ---"
-    if sh "$test_script"; then
-        echo "PASS: $name"
+    name="$(basename "${test_script}")"
+    echo "--- Running ${name} ---"
+    if sh "${test_script}"; then
+        echo "PASS: ${name}"
     else
-        echo "FAIL: $name"
+        echo "FAIL: ${name}"
         failures=$((failures + 1))
     fi
 done
 
 echo ""
-if [ "$ran" -eq 0 ]; then
+if [ "${ran}" -eq 0 ]; then
     echo "No shell test scripts found (*.test.sh)"
     exit 1
 fi
-if [ "$failures" -gt 0 ]; then
-    echo "$failures shell test(s) FAILED (out of $ran)"
+if [ "${failures}" -gt 0 ]; then
+    echo "${failures} shell test(s) FAILED (out of ${ran})"
     exit 1
 fi
-echo "All $ran shell test(s) PASSED"
+echo "All ${ran} shell test(s) PASSED"
 exit 0

@@ -33,7 +33,7 @@ _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 llxprt_paths_init "${_SCRIPT_DIR}"
 CODEX_DATA_BASE="$(llxprt_resolve_data_dir)"
 if _CODEX_AUTH="$(llxprt_normalized_abs_override "${CODEX_AUTH_DIR:-}")"; then
-    AUTH_DIR="$_CODEX_AUTH"
+    AUTH_DIR="${_CODEX_AUTH}"
 else
     AUTH_DIR="${CODEX_DATA_BASE}/codex-auth"
 fi
@@ -45,7 +45,7 @@ CODEX_AUTH_FILE="${HOME}/.codex/auth.json"
 # Warn on stderr (not stdout) so the credential-path notice never contaminates
 # this script's JSON API output on stdout, and gate behind a debug flag so the
 # resolved credential path is not disclosed by default.
-if [ "${CODEX_VERBOSE:-0}" = "1" ]; then
+if [[ "${CODEX_VERBOSE:-0}" = "1" ]]; then
     echo "NOTE: ${AUTH_DIR} is the resolved canonical data directory for Codex credentials and may contain live credentials (access/refresh tokens)." >&2
 fi
 

@@ -36,7 +36,7 @@ _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 llxprt_paths_init "${_SCRIPT_DIR}"
 CODEX_DATA_BASE="$(llxprt_resolve_data_dir)"
 if _CODEX_AUTH="$(llxprt_normalized_abs_override "${CODEX_AUTH_DIR:-}")"; then
-    AUTH_DIR="$_CODEX_AUTH"
+    AUTH_DIR="${_CODEX_AUTH}"
 else
     AUTH_DIR="${CODEX_DATA_BASE}/codex-auth"
 fi
@@ -105,7 +105,7 @@ echo "Account ID: ${ACCOUNT_ID}"
 # present. Write to stderr (not stdout) so stdout stays parseable for API
 # consumers, and gate behind CODEX_VERBOSE so the resolved credential path is
 # not disclosed by default (privacy parity with codex-models.sh).
-if [ "${CODEX_VERBOSE:-0}" = "1" ]; then
+if [[ "${CODEX_VERBOSE:-0}" = "1" ]]; then
     echo "WARNING: ${AUTH_DIR} contains live credentials (access/refresh tokens)." >&2
 fi
 
