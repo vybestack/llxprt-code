@@ -18,7 +18,7 @@ const LLXPRT_SERVICE_NAME_PATTERN =
   /['"]service\.name['"]:\s*['"]llxprt-code['"]/;
 const INSTRUMENTATION_SCOPE_FIELD = 'instrumentationScope:';
 const METRIC_DESCRIPTOR_FIELD = 'descriptor:';
-const LLXPRT_METRIC_NAME_PATTERN = /name:\s*['"]llxprt[._-]/m;
+const METRIC_NAME_FIELD = 'name:';
 const DATA_POINT_TYPE_FIELD = 'dataPointType:';
 const DATA_POINTS_FIELD = 'dataPoints:';
 
@@ -192,7 +192,7 @@ function isInspectedTelemetryObject(objectText: string): boolean {
 
   return (
     hasInspectedField(objectText, METRIC_DESCRIPTOR_FIELD) &&
-    LLXPRT_METRIC_NAME_PATTERN.test(objectText) &&
+    hasLlxprtMetricName(objectText) &&
     hasInspectedField(objectText, DATA_POINT_TYPE_FIELD) &&
     hasInspectedField(objectText, DATA_POINTS_FIELD)
   );
@@ -202,6 +202,26 @@ function hasInspectedField(objectText: string, field: string): boolean {
   return objectText
     .split(/\r?\n/)
     .some((line) => line.trimStart().startsWith(field));
+}
+
+function hasLlxprtMetricName(objectText: string): boolean {
+  return objectText.split(/\r?\n/).some((line) => {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith(METRIC_DESCRIPTOR_FIELD)) {
+      return false;
+    }
+    const nameIndex = trimmed.indexOf(METRIC_NAME_FIELD);
+    if (nameIndex === -1) {
+      return false;
+    }
+    const value = trimmed
+      .slice(nameIndex + METRIC_NAME_FIELD.length)
+      .trimStart();
+    return (
+      (value.startsWith("'llxprt") || value.startsWith('"llxprt')) &&
+      ['.', '_', '-'].includes(value[7])
+    );
+  });
 }
 
 function expandStandaloneLine(

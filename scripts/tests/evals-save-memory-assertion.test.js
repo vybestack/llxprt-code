@@ -33,6 +33,16 @@ describe('eval JSON output contract', () => {
     ]);
   });
 
+  it('preserves special characters and empty prompts as a single argument', () => {
+    const prompt = 'line one\n"quoted" \\path --flag';
+    expect(buildEvalArgs(prompt)).toEqual([
+      `--prompt=${prompt}`,
+      '--output-format',
+      'json',
+    ]);
+    expect(buildEvalArgs('')[0]).toBe('--prompt=');
+  });
+
   it('extracts only the assistant response from CLI JSON output', () => {
     const cliOutput = JSON.stringify({
       session_id: 'session-1',
@@ -61,6 +71,19 @@ describe('eval JSON output contract', () => {
         JSON.stringify({ session_id: 'session-1', response: 42 }),
       ),
     ).toThrow(/string response/i);
+    expect(() =>
+      extractModelResponse(
+        JSON.stringify({ session_id: 'session-1', response: null }),
+      ),
+    ).toThrow(/string response/i);
+  });
+
+  it('preserves an empty string response for the eval assertion to validate', () => {
+    expect(
+      extractModelResponse(
+        JSON.stringify({ session_id: 'session-1', response: '' }),
+      ),
+    ).toBe('');
   });
 
   it('includes structured run capture and tool calls in the eval artifact log', () => {

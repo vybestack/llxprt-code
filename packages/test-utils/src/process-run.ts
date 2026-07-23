@@ -40,6 +40,9 @@ function signalProcess(child: ChildProcess, signal: NodeJS.Signals): void {
     }
   }
 
+  // Windows has no POSIX-style graceful process-tree signal. The timeout path
+  // therefore waits through the grace period before taskkill force-terminates
+  // the tree; child.kill('SIGTERM') only targets the immediate process there.
   if (
     process.platform === 'win32' &&
     signal === 'SIGKILL' &&
@@ -155,7 +158,7 @@ export function spawnRun(
       reject(error);
     });
 
-    child.on('close', (code: number | null) => {
+    child.once('close', (code: number | null) => {
       if (settled) {
         return;
       }
@@ -239,7 +242,7 @@ export function spawnRunWithTimeout(
       }
     });
 
-    child.on('close', (code: number | null) => {
+    child.once('close', (code: number | null) => {
       if (settled) {
         return;
       }

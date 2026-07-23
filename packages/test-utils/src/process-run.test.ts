@@ -146,7 +146,7 @@ describe('process run capture', () => {
       {},
       false,
       identityTransform,
-      500,
+      1500,
       (value) => {
         capture = value;
       },
@@ -178,7 +178,7 @@ describe('process run capture', () => {
       {},
       false,
       identityTransform,
-      500,
+      1500,
       (value) => {
         capture = value;
       },
