@@ -51,6 +51,7 @@ import {
   buildToolResponses,
   classifyCompletedTools,
   recordCancelledToolHistory,
+  recordCompletedToolHistory,
 } from './loopHelpers.js';
 
 const logger = new DebugLogger('llxprt:agents:agentic-loop');
@@ -639,6 +640,17 @@ export class AgenticLoop {
       await recordCancelledToolHistory(agentTools, this.agentClient);
       return { continueLoop: false, nextMessage: [] };
     }
+    // A successful pause request (the pause tool) is a terminal signal: the
+    // loop must stop so the agent returns control to the user. Without this,
+    // the loop feeds the pause response back to the model and continues
+    // indefinitely (issue #2653). In the CLI this is masked by the React UI
+    // continuation gate, but ACP/Zed and other headless consumers have none.
+    if (hasSuccessfulTodoPause(agentTools)) {
+      // Eagerly persist tool history since there will be no next model turn
+      // to carry the response parts naturally.
+      await recordCompletedToolHistory(agentTools, this.agentClient);
+      return { continueLoop: false, nextMessage: [] };
+    }
     const responseParts = buildToolResponses(agentTools);
     if (responseParts.length === 0) {
       return { continueLoop: false, nextMessage: [] };
@@ -654,4 +666,19 @@ function* flushBuffered(queue: EventQueue): Generator<AgenticLoopEvent> {
     yield event;
     event = queue.popBuffered();
   }
+}
+
+/**
+ * Returns true if any of the completed tool calls is a successful pause
+ * (case-insensitive, no error). A failed pause must NOT terminate the loop,
+ * matching TodoContinuationService.isSuccessfulTodoPauseResponse semantics.
+ */
+function hasSuccessfulTodoPause(tools: CompletedToolCall[]): boolean {
+  return tools.some(
+    (tc) =>
+      tc.request.name.toLowerCase() === 'todo_pause' &&
+      tc.status === 'success' &&
+      tc.response.error === undefined &&
+      tc.response.errorType === undefined,
+  );
 }

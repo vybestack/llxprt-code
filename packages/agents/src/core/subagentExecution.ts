@@ -530,7 +530,15 @@ export async function initInteractiveScheduler(
 
   return {
     scheduler: {
-      schedule: scheduler.schedule,
+      // Preserve the scheduler receiver: copying scheduler.schedule directly
+      // loses `this`, causing CoreToolScheduler.schedule() to crash with
+      // "this.isRunning is not a function" (issue #2653). A closure keeps
+      // the original instance as the receiver, matching the pattern in
+      // interactiveToolScheduler.ts.
+      schedule: (
+        request: Parameters<typeof scheduler.schedule>[0],
+        signal: Parameters<typeof scheduler.schedule>[1],
+      ) => scheduler.schedule(request, signal),
       awaitCompletedCalls: channel.awaitCompletedCalls,
     },
     schedulerDispose,

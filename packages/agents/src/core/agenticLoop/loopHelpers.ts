@@ -96,7 +96,7 @@ export function buildToolResponses(
  * Awaits both writes so callers that continue or exit the loop immediately
  * afterwards can guarantee the tool history is durable before the next turn.
  */
-async function recordCompletedToolHistory(
+export async function recordCompletedToolHistory(
   tools: CompletedToolCall[],
   agentClient: AgentClientContract,
 ): Promise<void> {
