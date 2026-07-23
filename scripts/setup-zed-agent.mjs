@@ -32,7 +32,7 @@ const __filename = fileURLToPath(import.meta.url);
 // ---------------------------------------------------------------------------
 
 /**
- * Strip // line comments and /* block comments from JSONC, respecting
+ * Strip // line comments and block comments from JSONC, respecting
  * string literals. Handles escaped quotes inside strings.
  */
 function stripJsoncComments(text) {
@@ -45,50 +45,55 @@ function stripJsoncComments(text) {
     const next = text[i + 1];
 
     if (inString) {
-      result += ch;
-      if (ch === '\\' && next !== undefined) {
-        result += next;
-        i += 2;
-        continue;
-      }
-      if (ch === '"') {
-        inString = false;
-      }
-      i++;
-      continue;
-    }
-
-    if (ch === '"') {
+      const { advanced, stillInString } = consumeStringChar(ch, next);
+      result += advanced.char;
+      if (advanced.char !== '') result += advanced.extra || '';
+      inString = stillInString;
+      i += advanced.step;
+    } else if (ch === '"') {
       inString = true;
       result += ch;
       i++;
-      continue;
+    } else if (ch === '/' && next === '/') {
+      i = skipLineComment(text, i);
+    } else if (ch === '/' && next === '*') {
+      i = skipBlockComment(text, i);
+    } else {
+      result += ch;
+      i++;
     }
-
-    if (ch === '/' && next === '/') {
-      // Line comment: skip to end of line
-      i += 2;
-      while (i < text.length && text[i] !== '\n') {
-        i++;
-      }
-      continue;
-    }
-
-    if (ch === '/' && next === '*') {
-      // Block comment: skip to closing */
-      i += 2;
-      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
-        i++;
-      }
-      i += 2; // skip closing */
-      continue;
-    }
-
-    result += ch;
-    i++;
   }
 
   return result;
+}
+
+function skipLineComment(text, i) {
+  i += 2;
+  while (i < text.length && text[i] !== '\n') {
+    i++;
+  }
+  return i;
+}
+
+function skipBlockComment(text, i) {
+  i += 2;
+  while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+    i++;
+  }
+  return i + 2;
+}
+
+function consumeStringChar(ch, next) {
+  if (ch === '\\' && next !== undefined) {
+    return {
+      advanced: { char: ch, extra: next, step: 2 },
+      stillInString: true,
+    };
+  }
+  return {
+    advanced: { char: ch, extra: '', step: 1 },
+    stillInString: ch !== '"',
+  };
 }
 
 const __dirname = dirname(__filename);
@@ -238,7 +243,9 @@ function main() {
           readFileSync(settingsPath, 'utf-8'),
         );
         console.error(`A backup was saved to ${settingsPath}.bak`);
-      } catch {}
+      } catch {
+        // If backup also fails, nothing more we can do
+      }
       console.error('Please fix the file manually and re-run this script.');
       process.exit(1);
     }
@@ -284,7 +291,9 @@ function main() {
   if (existsSync(settingsPath)) {
     try {
       writeFileSync(`${settingsPath}.bak`, readFileSync(settingsPath, 'utf-8'));
-    } catch {}
+    } catch {
+      // Non-fatal: best-effort backup
+    }
   }
 
   // Write back

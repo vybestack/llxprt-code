@@ -7,7 +7,7 @@
  * bidirectionally while logging every ACP message to a log file.
  *
  * This lets us observe the full ACP protocol exchange when Zed interacts
- * with the agent, including any errors from the task tool or todo_pause.
+ * with the agent, including any errors from the `task` tool or the pause tool.
  *
  * Usage: Set this as the Zed agent server command instead of bun directly.
  *        The real agent binary and args are passed after a -- separator.
@@ -21,7 +21,6 @@ import { spawn } from 'node:child_process';
 import { createWriteStream, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { homedir } from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

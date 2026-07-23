@@ -5,23 +5,7 @@
  * Reproduces two issues that only manifest in ACP/Zed mode:
  *
  *  Bug 1: `this.isRunning is not a function` when the `task` tool is invoked.
- *  Bug 2: `todo_pause` does not stop the agent continuation loop.
- *
- * The script acts as a minimal ACP client: it spawns the llxprt-code process
- * in `--experimental-acp` mode, performs the initialize → session/new →
- * session/prompt handshake, and then inspects the SessionUpdate stream for
- * error content or unexpected continuation behavior.
- *
- * Usage:
- *   node scripts/test-acp-zed-bugs.mjs [--profile <name>] [--prompt <text>]
- *
- * Environment:
- *   LLXPRT_BINARY     Override the bun binary path (default: auto-detect)
- *   LLXPRT_ENTRY      Override the index.ts path (default: packages/cli/index.ts)
- *   LLXPRT_PROFILE    Profile to load (default: gpt56high)
- *   DEBUG             Set to 'llxprt:*' for verbose server logs
- *
- * Works on Windows, macOS, and Linux.
+ *  Bug 2: The pause tool does not stop the agent continuation loop.
  */
 
 import { spawn } from 'node:child_process';
@@ -273,6 +257,63 @@ class AcpClient {
 // Test scenarios
 // ---------------------------------------------------------------------------
 
+/**
+ * Performs ACP handshake: initialize → authenticate → session/new.
+ * Returns the session ID or null on failure.
+ */
+async function performAcpHandshake(client, opts, results) {
+  // Step 1: Initialize
+  console.log('\n[1/4] Sending initialize...');
+  const initResult = await client.send('initialize', {
+    protocolVersion: 1,
+    clientCapabilities: {
+      fs: { readTextFile: false, writeTextFile: false },
+    },
+  });
+  console.log('  [OK] Initialize succeeded');
+  results.details.protocolVersion = initResult.protocolVersion;
+
+  // Step 2: Authenticate (load profile)
+  console.log('\n[2/4] Sending authenticate...');
+  try {
+    await client.send('session/authenticate', { methodId: opts.profile });
+    console.log('  [OK] Authenticated');
+  } catch (e) {
+    console.log(`   Auth step skipped/failed: ${e.message}`);
+  }
+
+  // Step 3: Create session
+  console.log('\n[3/4] Sending session/new...');
+  const sessionResult = await client.send('session/new', {
+    cwd: projectRoot,
+    mcpServers: [],
+  });
+  console.log(`  [OK] Session created: ${sessionResult.sessionId}`);
+  results.details.sessionId = sessionResult.sessionId;
+
+  return sessionResult.sessionId;
+}
+
+function collectAcpMetrics(client, results) {
+  results.details.toolCallCount = client.toolCalls.length;
+  results.details.messageCount = client.agentMessages.length;
+  results.details.stderrErrors = client.errors.length;
+  results.details.stderrErrorSnippets = client.errors.slice(0, 3);
+}
+
+function evaluateExpectations(expectations, client, results) {
+  for (const expectation of expectations) {
+    const check = expectation.check(client, results.details);
+    results.details[expectation.name] = check;
+    if (!check.passed) {
+      results.errors.push(check.message);
+    }
+    console.log(
+      `  ${check.passed ? 'PASS' : 'FAIL'} ${expectation.name}: ${check.message}`,
+    );
+  }
+}
+
 async function runScenario(opts, label, prompt, expectations) {
   const binary = findBunBinary();
   const entry = findEntryPoint();
@@ -308,7 +349,7 @@ async function runScenario(opts, label, prompt, expectations) {
   const client = new AcpClient(child);
   client.attachStderr();
 
-  let results = {
+  const results = {
     label,
     passed: false,
     errors: [],
@@ -319,41 +360,8 @@ async function runScenario(opts, label, prompt, expectations) {
     // Wait for process to be ready
     await sleep(1000);
 
-    // Step 1: Initialize
-    console.log('\n[1/4] Sending initialize...');
-    const initResult = await client.send('initialize', {
-      protocolVersion: 1,
-      clientCapabilities: {
-        fs: {
-          readTextFile: false,
-          writeTextFile: false,
-        },
-      },
-    });
-    console.log('  ✓ Initialize succeeded');
-    console.log(`  Protocol: ${initResult.protocolVersion}`);
-    results.details.protocolVersion = initResult.protocolVersion;
-
-    // Step 2: Authenticate (load profile)
-    console.log('\n[2/4] Sending authenticate...');
-    try {
-      await client.send('session/authenticate', {
-        methodId: opts.profile,
-      });
-      console.log('  ✓ Authenticated');
-    } catch (e) {
-      console.log(`  ⚠ Auth step skipped/failed: ${e.message}`);
-    }
-
-    // Step 3: Create session
-    console.log('\n[3/4] Sending session/new...');
-    const sessionResult = await client.send('session/new', {
-      cwd: projectRoot,
-      mcpServers: [],
-    });
-    const sessionId = sessionResult.sessionId;
-    console.log(`  ✓ Session created: ${sessionId}`);
-    results.details.sessionId = sessionId;
+    const sessionId = await performAcpHandshake(client, opts, results);
+    if (!sessionId) return results;
 
     // Step 4: Prompt
     console.log('\n[4/4] Sending session/prompt...');
@@ -378,29 +386,11 @@ async function runScenario(opts, label, prompt, expectations) {
     results.details.stopReason = promptResult.stopReason;
 
     // Analyze results
-    await sleep(500); // Let any trailing updates arrive
+    await sleep(500);
+    collectAcpMetrics(client, results);
+    evaluateExpectations(expectations, client, results);
 
-    results.details.toolCallCount = client.toolCalls.length;
-    results.details.messageCount = client.agentMessages.length;
-    results.details.stderrErrors = client.errors.length;
-    results.details.stderrErrorSnippets = client.errors.slice(0, 3);
-
-    // Check expectations
-    let allPassed = true;
-
-    for (const expectation of expectations) {
-      const check = expectation.check(client, results.details);
-      results.details[expectation.name] = check;
-      if (!check.passed) {
-        allPassed = false;
-        results.errors.push(check.message);
-      }
-      console.log(
-        `  ${check.passed ? '✓' : '✗'} ${expectation.name}: ${check.message}`,
-      );
-    }
-
-    results.passed = allPassed;
+    results.passed = results.errors.length === 0;
   } catch (error) {
     results.errors.push(error.message);
     results.details.fatalError = error.message;
@@ -408,11 +398,15 @@ async function runScenario(opts, label, prompt, expectations) {
   } finally {
     try {
       child.kill('SIGTERM');
-    } catch {}
+    } catch {
+      // Process may have already exited
+    }
     await sleep(500);
     try {
       child.kill('SIGKILL');
-    } catch {}
+    } catch {
+      // Process may have already exited
+    }
   }
 
   return results;
@@ -441,19 +435,20 @@ function expectNoStderrErrors() {
 
 function expectTodoPauseStopsLoop() {
   return {
-    name: 'todo_pause stops continuation (stopReason is end_turn, not loop-detected)',
+    name: 'pause tool stops continuation (stopReason is end_turn, not loop-detected)',
     check: (client, details) => {
-      // After todo_pause, the agent should stop — not continue the loop.
+      // After the pause tool, the agent should stop — not continue the loop.
       // We check: the stopReason should be 'end_turn' and there should
       // NOT be excessive tool calls (which would indicate looping).
       const stopReason = details.stopReason;
       const timedOut = details.timedOut === true;
       // A timeout means the loop never stopped — that's the bug.
       // Otherwise, a normal end_turn/cancelled is correct behavior.
+      const validStopReason =
+        stopReason === 'end_turn' || stopReason === 'cancelled';
       const passed =
         !timedOut &&
-        (stopReason === 'end_turn' ||
-          stopReason === 'cancelled' ||
+        (validStopReason ||
           (stopReason === undefined && details.toolCallCount < 10));
       return {
         passed,
@@ -505,11 +500,11 @@ async function main() {
 
   const results = [];
 
-  // Scenario 1: todo_pause should stop the loop
+  // Scenario 1: pause tool should stop the loop
   results.push(
     await runScenario(
       opts,
-      'todo_pause stops continuation in ACP mode',
+      'pause tool stops continuation in ACP mode',
       'Use the todo_write tool to create a single todo item that says "test". ' +
         'Then immediately call todo_pause with reason "testing pause in ACP mode". ' +
         'Do not do anything else. Do not continue working.',
