@@ -221,7 +221,6 @@ export class TestRig {
       };
 
       const transform = (stdout: string): string => {
-        this._lastRunStdout = stdout;
         if (env['LLXPRT_SANDBOX'] === 'podman') {
           return stripTelemetryFromStdout(stdout);
         }
@@ -263,10 +262,7 @@ export class TestRig {
         ctx,
         { stdin: options.stdin },
         false,
-        (stdout) => {
-          this._lastRunStdout = stdout;
-          return stdout;
-        },
+        (stdout) => stdout,
         (capture) => {
           this._lastRunCapture = capture;
           this._lastRunStdout = capture.stdout;

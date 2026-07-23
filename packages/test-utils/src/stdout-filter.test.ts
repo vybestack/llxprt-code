@@ -105,6 +105,16 @@ describe('stripTelemetryFromStdout', () => {
     expect(stripTelemetryFromStdout(`${telemetry}\nanswer`)).toBe('answer');
   });
 
+  it('removes fallback tool telemetry with leading body whitespace', () => {
+    const telemetry = JSON.stringify({
+      timestamp: 123,
+      body: '  Tool call: read_file. Success: true. Duration: 2ms',
+      attributes: { function_args: '{}' },
+    });
+
+    expect(stripTelemetryFromStdout(`${telemetry}\nanswer`)).toBe('answer');
+  });
+
   it('removes Node-inspected OpenTelemetry log exporter output', () => {
     const inspected = [
       '{',

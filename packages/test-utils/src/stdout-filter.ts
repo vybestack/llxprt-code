@@ -167,7 +167,7 @@ function isJsonTelemetryObject(value: Record<string, unknown>): boolean {
   if (
     typeof value['timestamp'] !== 'number' ||
     typeof value['body'] !== 'string' ||
-    !value['body'].startsWith(TOOL_CALL_BODY_PREFIX) ||
+    !value['body'].trimStart().startsWith(TOOL_CALL_BODY_PREFIX) ||
     !isRecord(attributes)
   ) {
     return false;

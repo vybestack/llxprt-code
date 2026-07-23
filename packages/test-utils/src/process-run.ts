@@ -103,7 +103,15 @@ function captureErrorOr(
   failure: CaptureFailure | null,
   fallback: unknown,
 ): unknown {
-  return failure === null ? fallback : failure.error;
+  if (failure === null) {
+    return fallback;
+  }
+  const aggregate = new AggregateError(
+    [fallback, failure.error],
+    'Process run and capture handler both failed',
+  );
+  Object.defineProperty(aggregate, 'cause', { value: fallback });
+  return aggregate;
 }
 
 /**
@@ -195,7 +203,17 @@ export function spawnRun(
       settled = true;
       const captureFailure = captureRun(accumulator, code, false, onCapture);
       if (captureFailure !== null) {
-        reject(captureFailure.error);
+        const processError =
+          code === 0
+            ? null
+            : new Error(
+                `Process exited with code ${code}:\n${accumulator.stderr}`,
+              );
+        reject(
+          processError === null
+            ? captureFailure.error
+            : captureErrorOr(captureFailure, processError),
+        );
         return;
       }
 
@@ -236,28 +254,34 @@ function settleClosedRun(
     didTimeout,
     context.onCapture,
   );
+  let processError: Error | null = null;
+  if (didTimeout) {
+    processError = context.timeoutError;
+  } else if (code !== 0) {
+    processError = new Error(
+      `Process exited with code ${code}:\n${context.accumulator.stderr}`,
+    );
+  }
   if (captureFailure !== null) {
-    context.reject(captureFailure.error);
+    context.reject(
+      processError === null
+        ? captureFailure.error
+        : captureErrorOr(captureFailure, processError),
+    );
     return;
   }
-  if (didTimeout) {
-    context.reject(context.timeoutError);
-  } else if (code === 0) {
-    const transformed = context.transform(context.accumulator.stdout);
-    context.resolve(
-      maybeAppendStderr(
-        transformed,
-        context.accumulator.stderr,
-        context.isJsonOutput,
-      ),
-    );
-  } else {
-    context.reject(
-      new Error(
-        `Process exited with code ${code}:\n${context.accumulator.stderr}`,
-      ),
-    );
+  if (processError !== null) {
+    context.reject(processError);
+    return;
   }
+  const transformed = context.transform(context.accumulator.stdout);
+  context.resolve(
+    maybeAppendStderr(
+      transformed,
+      context.accumulator.stderr,
+      context.isJsonOutput,
+    ),
+  );
 }
 
 function clearRunTimers(timers: NodeJS.Timeout[]): void {

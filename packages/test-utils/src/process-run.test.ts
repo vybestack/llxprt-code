@@ -16,6 +16,7 @@ import {
 } from './process-run.js';
 
 const tempDirs: string[] = [];
+const SPAWN_TIMEOUT_MS = 1500;
 
 afterEach(() => {
   const dirs = tempDirs.slice();
@@ -146,7 +147,7 @@ describe('process run capture', () => {
       {},
       false,
       identityTransform,
-      1500,
+      SPAWN_TIMEOUT_MS,
       (value) => {
         capture = value;
       },
@@ -178,7 +179,7 @@ describe('process run capture', () => {
       {},
       false,
       identityTransform,
-      1500,
+      SPAWN_TIMEOUT_MS,
       (value) => {
         capture = value;
       },
@@ -191,6 +192,33 @@ describe('process run capture', () => {
       exitCode: null,
       timedOut: true,
     });
+  });
+
+  it('preserves process and capture failures together', async () => {
+    const processErrorPattern = /code 3/;
+    const captureError = new Error('capture handler failed');
+    const run = spawnRun(
+      bunContext('process.exit(3);', makeTempDir()),
+      {},
+      false,
+      identityTransform,
+      () => {
+        throw captureError;
+      },
+    );
+
+    try {
+      await run;
+      throw new Error('Expected promise to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      const aggregate = error as AggregateError;
+      expect(aggregate.errors).toHaveLength(2);
+      expect((aggregate.errors[0] as Error).message).toMatch(
+        processErrorPattern,
+      );
+      expect(aggregate.errors[1]).toBe(captureError);
+    }
   });
 
   it('captures and rejects child-process spawn errors', async () => {
@@ -238,7 +266,7 @@ describe('process run capture', () => {
       {},
       true,
       identityTransform,
-      1500,
+      SPAWN_TIMEOUT_MS * 4,
       () => {
         throw new Error('timeout capture handler failed');
       },
