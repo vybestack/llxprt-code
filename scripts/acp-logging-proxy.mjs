@@ -38,7 +38,8 @@ if (agentArgs.length === 0) {
 }
 
 // Log directory
-const logDir = process.env.ACP_PROXY_LOG_DIR || join(__dirname, '..', '.acp-proxy-logs');
+const logDir =
+  process.env.ACP_PROXY_LOG_DIR || join(__dirname, '..', '.acp-proxy-logs');
 if (!existsSync(logDir)) {
   mkdirSync(logDir, { recursive: true });
 }
@@ -63,13 +64,15 @@ function logEntry(direction, data) {
   logStream.write(JSON.stringify(entry) + '\n');
 }
 
-logStream.write(JSON.stringify({
-  ts: new Date().toISOString(),
-  event: 'proxy-start',
-  agentCmd,
-  agentCmdArgs,
-  pid: process.pid,
-}) + '\n');
+logStream.write(
+  JSON.stringify({
+    ts: new Date().toISOString(),
+    event: 'proxy-start',
+    agentCmd,
+    agentCmdArgs,
+    pid: process.pid,
+  }) + '\n',
+);
 
 // Spawn the real agent
 const child = spawn(agentCmd, agentCmdArgs, {
@@ -97,33 +100,43 @@ child.stdout.on('data', (chunk) => {
 child.stderr.on('data', (chunk) => {
   const text = chunk.toString();
   // Log errors specially
-  if (text.includes('isRunning') || text.includes('not a function') || text.includes('ERROR')) {
-    logStream.write(JSON.stringify({
-      ts: new Date().toISOString(),
-      event: 'STDERR_ERROR',
-      text: text.trim(),
-    }) + '\n');
+  if (
+    text.includes('isRunning') ||
+    text.includes('not a function') ||
+    text.includes('ERROR')
+  ) {
+    logStream.write(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        event: 'STDERR_ERROR',
+        text: text.trim(),
+      }) + '\n',
+    );
   }
   process.stderr.write(chunk);
 });
 
 // Handle process lifecycle
 child.on('error', (err) => {
-  logStream.write(JSON.stringify({
-    ts: new Date().toISOString(),
-    event: 'child-error',
-    error: err.message,
-  }) + '\n');
+  logStream.write(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'child-error',
+      error: err.message,
+    }) + '\n',
+  );
   process.exit(1);
 });
 
 child.on('exit', (code, signal) => {
-  logStream.write(JSON.stringify({
-    ts: new Date().toISOString(),
-    event: 'child-exit',
-    code,
-    signal,
-  }) + '\n');
+  logStream.write(
+    JSON.stringify({
+      ts: new Date().toISOString(),
+      event: 'child-exit',
+      code,
+      signal,
+    }) + '\n',
+  );
   logStream.end();
   process.exit(code ?? 1);
 });

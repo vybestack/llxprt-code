@@ -283,10 +283,7 @@ function main() {
   // Backup before write (in case of disk error mid-write)
   if (existsSync(settingsPath)) {
     try {
-      writeFileSync(
-        `${settingsPath}.bak`,
-        readFileSync(settingsPath, 'utf-8'),
-      );
+      writeFileSync(`${settingsPath}.bak`, readFileSync(settingsPath, 'utf-8'));
     } catch {}
   }
 
