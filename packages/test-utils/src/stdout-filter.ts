@@ -149,6 +149,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Recognize OpenTelemetry JSON LogRecord objects emitted to stdout. */
 function isJsonTelemetryObject(value: Record<string, unknown>): boolean {
   const attributes = value['attributes'];
   if (isRecord(attributes)) {
@@ -178,6 +179,7 @@ function isJsonTelemetryObject(value: Record<string, unknown>): boolean {
   );
 }
 
+/** Recognize Node util.inspect output from OpenTelemetry console exporters. */
 function isInspectedTelemetryObject(objectText: string): boolean {
   const hasServiceIdentity = LLXPRT_SERVICE_NAME_PATTERN.test(objectText);
   const hasInstrumentationScope = hasInspectedField(

@@ -128,6 +128,39 @@ describe('process run capture', () => {
     });
   });
 
+  it('captures a timed-out run that exits gracefully after SIGTERM', async () => {
+    let capture: RunCapture | undefined;
+    const run = spawnRunWithTimeout(
+      bunContext(
+        [
+          'process.on("SIGTERM", () => {',
+          '  process.stdout.write(" graceful-out");',
+          '  process.stderr.write("graceful-err");',
+          '  process.exit(0);',
+          '});',
+          'process.stdout.write("started");',
+          'setInterval(() => {}, 1000);',
+        ].join('\n'),
+        makeTempDir(),
+      ),
+      {},
+      false,
+      identityTransform,
+      500,
+      (value) => {
+        capture = value;
+      },
+    );
+
+    await expectRejection(run, /timed out/);
+    expect(capture).toEqual({
+      stdout: 'started graceful-out',
+      stderr: 'graceful-err',
+      exitCode: 0,
+      timedOut: true,
+    });
+  });
+
   it('captures shutdown output and force-kills a run that ignores SIGTERM', async () => {
     let capture: RunCapture | undefined;
     const run = spawnRunWithTimeout(
