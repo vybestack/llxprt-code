@@ -49,8 +49,8 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     notifyRun = commandText(notifyStep);
   });
 
-  it('exposes a single OCR_VERSION env var set to 1.7.9 (Behavior 1)', () => {
-    expect(workflow.env?.OCR_VERSION).toBe('1.7.9');
+  it('exposes a single OCR_VERSION env var set to 1.7.16 (Behavior 1)', () => {
+    expect(workflow.env?.OCR_VERSION).toBe('1.7.16');
   });
 
   it('installs OpenCodeReview using the OCR_VERSION env var (Behavior 1)', () => {
@@ -61,7 +61,7 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       '"@alibaba-group/open-code-review@${OCR_VERSION}"',
     );
     expect(installRun).not.toContain('1.6.1');
-    expect(installRun).not.toContain('@alibaba-group/open-code-review@1.7.9');
+    expect(installRun).not.toContain('@alibaba-group/open-code-review@1.7.16');
   });
 
   it('exposes a configurable OCR_CONCURRENCY env var set to 2 (Behavior 2)', () => {
