@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { IdeContextNotificationSchema } from './ide-schemas.js';
 import { z } from 'zod';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { PingRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, {
@@ -36,6 +37,25 @@ const MCP_SESSION_ID_HEADER = 'mcp-session-id';
 const IDE_SERVER_PORT_ENV_VAR = 'LLXPRT_CODE_IDE_SERVER_PORT';
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
 const IDE_AUTH_TOKEN_ENV_VAR = 'LLXPRT_CODE_IDE_AUTH_TOKEN';
+
+/**
+ * Tracks the initial `ide/contextUpdate` delivery for each session atomically.
+ *
+ * - `pending`: a delivery attempt is in-flight (shared boolean promise).
+ * - `delivered`: the initial context notification was confirmed sent via the
+ *   authoritative ping-associated path.
+ * - `undefined`: no delivery has been attempted yet for this session.
+ *
+ * The in-flight promise (`Promise<boolean>`) ensures concurrent ping/GET
+ * delivery attempts share a single send with compatible boolean result
+ * semantics. A failed attempt clears only its own in-flight entry so it
+ * remains retryable.
+ */
+interface SessionDeliveryEntry {
+  status: 'pending' | 'delivered';
+  inFlight?: Promise<boolean>;
+}
+type SessionContextDelivery = Map<string, SessionDeliveryEntry>;
 
 interface WritePortAndWorkspaceArgs {
   context: vscode.ExtensionContext;
@@ -92,23 +112,41 @@ async function writePortAndWorkspace({
   }
 }
 
-function sendIdeContextUpdateNotification(
+async function sendIdeContextUpdateNotification(
   transport: StreamableHTTPServerTransport,
   log: (message: string) => void,
   openFilesManager: OpenFilesManager,
-) {
+  relatedRequestId?: string | number,
+): Promise<boolean> {
   const ideContext = openFilesManager.state;
 
-  const notification = IdeContextNotificationSchema.parse({
-    jsonrpc: '2.0',
-    method: 'ide/contextUpdate',
-    params: ideContext,
-  });
+  try {
+    const notification = IdeContextNotificationSchema.parse({
+      jsonrpc: '2.0',
+      method: 'ide/contextUpdate',
+      params: ideContext,
+    });
 
-  void transport.send(notification);
+    await transport.send(
+      notification,
+      relatedRequestId === undefined ? undefined : { relatedRequestId },
+    );
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`Failed to send ide/contextUpdate notification: ${message}`);
+    return false;
+  }
 }
 
 export class IDEServer {
+  /**
+   * Maximum time (ms) to wait for a single transport's close() to resolve
+   * during shutdown. The SDK's close() can hang when an active SSE GET stream
+   * is still open, so we bound it to prevent server.stop() from deadlocking.
+   */
+  static readonly TRANSPORT_CLOSE_TIMEOUT_MS = 2000;
+
   private server: HTTPServer | undefined;
   private context: vscode.ExtensionContext | undefined;
   private log: (message: string) => void;
@@ -128,7 +166,7 @@ export class IDEServer {
     return new Promise((resolve, reject) => {
       this.context = context;
       this.authToken = randomUUID();
-      const sessionsWithInitialNotification = new Set<string>();
+      const sessionContextDelivery: SessionContextDelivery = new Map();
       const app = express();
       app.use(express.json({ limit: '10mb' }));
 
@@ -136,10 +174,9 @@ export class IDEServer {
       this.registerHostValidation(app);
       this.registerAuthorization(app);
 
-      const mcpServer = createMcpServer(this.diffManager, this.log);
       this.openFilesManager = new OpenFilesManager(context);
       this.registerIdeChangeSubscriptions(context);
-      this.registerMcpRoutes(app, mcpServer, sessionsWithInitialNotification);
+      this.registerMcpRoutes(app, sessionContextDelivery);
       this.registerErrorHandler(app);
       this.startHttpServer(app, context, resolve, reject);
     });
@@ -198,6 +235,168 @@ export class IDEServer {
     });
   }
 
+  /**
+   * Synchronizes the initial IDE context with a client-initiated `ping`
+   * request that arrives after MCP initialization.
+   *
+   * The client issues a standard `ping` immediately after `initialize`. We
+   * intercept it here: if the session has not yet received its initial
+   * `ide/contextUpdate`, we send the notification (awaited, associated with
+   * the ping's request id so it is delivered in the same response stream)
+   * before letting the ping response go out. This guarantees the context is
+   * stored on the client before `connect()` resolves, without sending custom
+   * notifications during the `initialize` handshake (which would violate MCP
+   * lifecycle ordering).
+   *
+   * If the initial delivery fails (missing transport, send returns false, or
+   * send throws), the session entry is cleared so a later ping can retry, and
+   * we throw an error so the ping response is a JSON-RPC error — the client
+   * MUST NOT treat a successful ping as context-receipt acknowledgment.
+   */
+  private registerPingSynchronization(
+    mcpServer: McpServer,
+    sessionContextDelivery: SessionContextDelivery,
+  ) {
+    mcpServer.server.setRequestHandler(PingRequestSchema, (_request, extra) =>
+      this.deliverInitialContextOnPing(
+        extra.sessionId,
+        extra.requestId,
+        sessionContextDelivery,
+      ),
+    );
+  }
+
+  private async deliverInitialContextOnPing(
+    sessionId: string | undefined,
+    requestId: string | number,
+    sessionContextDelivery: SessionContextDelivery,
+  ): Promise<Record<string, never>> {
+    if (sessionId === undefined) {
+      throw new Error('Cannot deliver initial IDE context: missing session id');
+    }
+
+    // Ping delivery is authoritative: a successful ping-associated send marks
+    // the session delivered. A false/rejection must propagate as a JSON-RPC
+    // error so the client does not treat a successful ping as context-receipt
+    // acknowledgment.
+    const delivered = await this.deliverInitialContext(
+      sessionId,
+      sessionContextDelivery,
+      { relatedRequestId: requestId, authoritative: true },
+    );
+    if (!delivered) {
+      throw new Error('Failed to deliver initial IDE context notification');
+    }
+    return {};
+  }
+
+  /**
+   * Atomically delivers the initial context for a session through a single
+   * typed boolean delivery state machine. Concurrent calls (e.g. overlapping
+   * ping and GET) share the exact same `Promise<boolean>`. The boolean result
+   * is compatible across both paths: true means sent, false means failed and
+   * retryable.
+   *
+   * `authoritative`: when true (ping path), a successful send permanently marks
+   * the session delivered — REGARDLESS of which caller created the shared
+   * in-flight promise. The authoritative caller upgrades the session to
+   * delivered AFTER awaiting the shared promise, rather than relying on the
+   * promise closure, so that a non-authoritative GET creating the in-flight
+   * promise cannot leave a concurrently-awaiting ping with a permanently
+   * pending session on success. When false (standalone GET path), a successful
+   * send does NOT permanently mark delivered, because the SDK standalone GET
+   * send may resolve despite the notification not actually reaching the client
+   * on an active response stream. This leaves the session retryable by a later
+   * ping.
+   *
+   * On false/rejection, the in-flight promise clears only its own entry so the
+   * session remains retryable without losing a concurrent caller's result.
+   */
+  private async deliverInitialContext(
+    sessionId: string,
+    sessionContextDelivery: SessionContextDelivery,
+    options: { relatedRequestId?: string | number; authoritative: boolean },
+  ): Promise<boolean> {
+    const { relatedRequestId, authoritative } = options;
+    const entry = sessionContextDelivery.get(sessionId);
+    if (entry?.status === 'delivered') {
+      return true;
+    }
+
+    const transport = this.transports.get(sessionId);
+    if (transport === undefined || this.openFilesManager === undefined) {
+      return false;
+    }
+
+    if (entry?.inFlight) {
+      // Concurrent callers share the exact boolean promise — no casting. The
+      // shared promise only manages the in-flight lifecycle (clearing its own
+      // entry on completion); authoritative upgrading is applied by the
+      // caller after awaiting.
+      const delivered = await entry.inFlight;
+      // An authoritative caller upgrades the session to delivered after a
+      // successful shared send, even if a non-authoritative caller created the
+      // promise. This closes the race where GET creates the in-flight promise
+      // (capturing authoritative=false) and a concurrent ping awaits it.
+      if (delivered && authoritative) {
+        sessionContextDelivery.set(sessionId, { status: 'delivered' });
+      }
+      return delivered;
+    }
+
+    // Create the in-flight boolean promise and register it BEFORE awaiting so
+    // concurrent callers share it. The closure only manages the in-flight
+    // lifecycle; it does NOT capture `authoritative`, so the creating caller's
+    // authority cannot leak into (or be absent from) concurrent awaiters.
+    const inFlight = sendIdeContextUpdateNotification(
+      transport,
+      this.log.bind(this),
+      this.openFilesManager,
+      relatedRequestId,
+    )
+      .then((delivered) => {
+        if (!delivered) {
+          // Clear only THIS in-flight attempt so it remains retryable.
+          const current = sessionContextDelivery.get(sessionId);
+          if (current?.inFlight === inFlight) {
+            sessionContextDelivery.delete(sessionId);
+          }
+        }
+        return delivered;
+      })
+      .catch(() => {
+        // Clear only THIS in-flight attempt so it remains retryable.
+        const current = sessionContextDelivery.get(sessionId);
+        if (current?.inFlight === inFlight) {
+          sessionContextDelivery.delete(sessionId);
+        }
+        return false;
+      });
+
+    sessionContextDelivery.set(sessionId, { status: 'pending', inFlight });
+    const delivered = await inFlight;
+
+    if (delivered) {
+      if (authoritative) {
+        // The authoritative creating caller upgrades the session to delivered
+        // on a successful send.
+        sessionContextDelivery.set(sessionId, { status: 'delivered' });
+      } else {
+        // Non-authoritative success: leave as pending (retryable) and clear
+        // the resolved in-flight promise so a later ping creates a FRESH send
+        // rather than awaiting this already-resolved one. This matters because
+        // the SDK standalone GET send may resolve true without the
+        // notification actually reaching the client; a later ping must be able
+        // to attempt a real authoritative send.
+        const current = sessionContextDelivery.get(sessionId);
+        if (current?.inFlight === inFlight) {
+          sessionContextDelivery.set(sessionId, { status: 'pending' });
+        }
+      }
+    }
+    return delivered;
+  }
+
   private registerIdeChangeSubscriptions(context: vscode.ExtensionContext) {
     const onDidChangeSubscription = this.openFilesManager!.onDidChange(() => {
       this.broadcastIdeContextUpdate();
@@ -206,7 +405,11 @@ export class IDEServer {
     const onDidChangeDiffSubscription = this.diffManager.onDidChange(
       (notification) => {
         for (const transport of this.transports.values()) {
-          void transport.send(notification);
+          void transport.send(notification).catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            this.log(`Failed to broadcast diff notification: ${message}`);
+          });
         }
       },
     );
@@ -215,40 +418,28 @@ export class IDEServer {
 
   private registerMcpRoutes(
     app: Express,
-    mcpServer: McpServer,
-    sessionsWithInitialNotification: Set<string>,
+    sessionContextDelivery: SessionContextDelivery,
   ) {
     app.post('/mcp', (req: Request, res: Response, next: NextFunction) => {
-      this.handleMcpPostRequest(
-        req,
-        res,
-        mcpServer,
-        sessionsWithInitialNotification,
-      ).catch(next);
+      this.handleMcpPostRequest(req, res, sessionContextDelivery).catch(next);
     });
 
     app.get('/mcp', (req: Request, res: Response, next: NextFunction) => {
-      this.handleSessionRequest(
-        req,
-        res,
-        sessionsWithInitialNotification,
-      ).catch(next);
+      this.handleSessionRequest(req, res, sessionContextDelivery).catch(next);
     });
   }
 
   private async handleMcpPostRequest(
     req: Request,
     res: Response,
-    mcpServer: McpServer,
-    sessionsWithInitialNotification: Set<string>,
+    sessionContextDelivery: SessionContextDelivery,
   ) {
     const sessionId = req.headers[MCP_SESSION_ID_HEADER] as string | undefined;
     const transport = this.resolvePostTransport(
       req,
       res,
-      mcpServer,
       sessionId,
-      sessionsWithInitialNotification,
+      sessionContextDelivery,
     );
     if (transport === undefined) {
       return;
@@ -268,20 +459,19 @@ export class IDEServer {
         });
       }
     }
-
-    this.sendInitialSessionNotification(
-      transport,
-      sessionId,
-      sessionsWithInitialNotification,
-    );
+    // Initial context delivery is handled exclusively by the ping
+    // synchronization handler, which associates the notification with the
+    // ping request id so it is delivered in the same response stream
+    // before the client's connect() resolves. Sending it here (after the
+    // initialize response) is unreliable because the notification would be
+    // routed to a standalone SSE stream that the client has not opened yet.
   }
 
   private resolvePostTransport(
     req: Request,
     res: Response,
-    mcpServer: McpServer,
     sessionId: string | undefined,
-    sessionsWithInitialNotification: Set<string>,
+    sessionContextDelivery: SessionContextDelivery,
   ): StreamableHTTPServerTransport | undefined {
     const transportForSession =
       sessionId === undefined ? undefined : this.transports.get(sessionId);
@@ -289,10 +479,7 @@ export class IDEServer {
       return transportForSession;
     }
     if (isInitializeRequest(req.body)) {
-      return this.createSessionTransport(
-        mcpServer,
-        sessionsWithInitialNotification,
-      );
+      return this.createSessionTransport(sessionContextDelivery);
     }
 
     this.log(
@@ -311,25 +498,30 @@ export class IDEServer {
   }
 
   private createSessionTransport(
-    mcpServer: McpServer,
-    sessionsWithInitialNotification: Set<string>,
+    sessionContextDelivery: SessionContextDelivery,
   ): StreamableHTTPServerTransport {
+    const mcpServer = createMcpServer(this.diffManager, this.log);
+    this.registerPingSynchronization(mcpServer, sessionContextDelivery);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (newSessionId) => {
         this.log(`New session initialized: ${newSessionId}`);
         this.transports.set(newSessionId, transport);
+        sessionContextDelivery.set(newSessionId, { status: 'pending' });
       },
     });
 
-    this.configureKeepAlive(transport, sessionsWithInitialNotification);
-    void mcpServer.connect(transport);
+    this.configureKeepAlive(transport, sessionContextDelivery);
+    void mcpServer.connect(transport).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log(`Error connecting MCP server to transport: ${message}`);
+    });
     return transport;
   }
 
   private configureKeepAlive(
     transport: StreamableHTTPServerTransport,
-    sessionsWithInitialNotification: Set<string>,
+    sessionContextDelivery: SessionContextDelivery,
   ) {
     let missedPings = 0;
     const keepAlive = setInterval(() => {
@@ -357,7 +549,7 @@ export class IDEServer {
       clearInterval(keepAlive);
       if (transport.sessionId) {
         this.log(`Session closed: ${transport.sessionId}`);
-        sessionsWithInitialNotification.delete(transport.sessionId);
+        sessionContextDelivery.delete(transport.sessionId);
         this.transports.delete(transport.sessionId);
       }
     };
@@ -366,7 +558,7 @@ export class IDEServer {
   private async handleSessionRequest(
     req: Request,
     res: Response,
-    sessionsWithInitialNotification: Set<string>,
+    sessionContextDelivery: SessionContextDelivery,
   ) {
     const sessionId = req.headers[MCP_SESSION_ID_HEADER] as string | undefined;
     const transport = sessionId ? this.transports.get(sessionId) : undefined;
@@ -376,40 +568,55 @@ export class IDEServer {
       return;
     }
 
+    // Start the GET request handling WITHOUT awaiting first. The SDK's
+    // handleGetRequest sets up the standalone SSE stream mapping
+    // synchronously before returning the Response, so by the time this
+    // call yields, the mapping is active. We then send the initial context
+    // while the GET SSE stream is live, and finally observe the request
+    // lifecycle outcome.
+    const handlePromise = transport.handleRequest(req, res);
+
+    // Capture the settled outcome synchronously so a client-abort rejection
+    // that fires while deliverInitialContext is in-flight can never become a
+    // transient unhandled rejection. The captured result is observed (and any
+    // error propagated to the existing handler) after context delivery, so
+    // request/SSE lifecycle semantics are unchanged.
+    const handleSettled = handlePromise.then<
+      { ok: true },
+      { ok: false; error: unknown }
+    >(
+      () => ({ ok: true }),
+      (error: unknown) => ({ ok: false, error }),
+    );
+
     try {
-      await transport.handleRequest(req, res);
+      // Deliver initial context on the standalone SSE stream (no
+      // relatedRequestId). The GET mapping is active because handleGetRequest
+      // set it up synchronously before this point.
+      //
+      // GET delivery is non-authoritative: the SDK standalone GET send may
+      // resolve despite the notification not actually reaching the client on
+      // an active response stream. We share the same typed boolean delivery
+      // state machine as the ping path so concurrent ping/GET overlap shares
+      // the exact boolean promise without incompatible result semantics.
+      await this.deliverInitialContext(sessionId, sessionContextDelivery, {
+        authoritative: false,
+      });
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.log(`Error delivering initial context on GET: ${errorMessage}`);
+    }
+
+    const settled = await handleSettled;
+    if (!settled.ok) {
+      const error = settled.error;
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.log(`Error handling session request: ${errorMessage}`);
       if (!res.headersSent) {
         res.status(400).send('Bad Request');
       }
-    }
-
-    this.sendInitialSessionNotification(
-      transport,
-      sessionId,
-      sessionsWithInitialNotification,
-    );
-  }
-
-  private sendInitialSessionNotification(
-    transport: StreamableHTTPServerTransport,
-    sessionId: string | undefined,
-    sessionsWithInitialNotification: Set<string>,
-  ) {
-    if (
-      this.openFilesManager &&
-      sessionId &&
-      !sessionsWithInitialNotification.has(sessionId)
-    ) {
-      sendIdeContextUpdateNotification(
-        transport,
-        this.log.bind(this),
-        this.openFilesManager,
-      );
-      sessionsWithInitialNotification.add(sessionId);
     }
   }
 
@@ -488,7 +695,7 @@ export class IDEServer {
       return;
     }
     for (const transport of this.transports.values()) {
-      sendIdeContextUpdateNotification(
+      void sendIdeContextUpdateNotification(
         transport,
         this.log.bind(this),
         this.openFilesManager,
@@ -515,9 +722,16 @@ export class IDEServer {
   }
 
   async stop(): Promise<void> {
+    // Close and clear all tracked session transports first so their
+    // keep-alive timers and session state are released promptly rather than
+    // lingering for the 60-second keep-alive interval.
+    await this.closeAllTransports();
+
     if (this.server) {
+      const server = this.server;
+      this.server = undefined;
       await new Promise<void>((resolve, reject) => {
-        this.server!.close((err?: Error) => {
+        server.close((err?: Error) => {
           if (err) {
             this.log(`Error shutting down IDE server: ${err.message}`);
             reject(err);
@@ -526,8 +740,8 @@ export class IDEServer {
           this.log(`IDE server shut down`);
           resolve();
         });
+        server.closeAllConnections();
       });
-      this.server = undefined;
     }
 
     if (this.context !== undefined) {
@@ -540,6 +754,39 @@ export class IDEServer {
         // File may not exist; cleanup is best-effort.
       }
     }
+  }
+
+  private async closeAllTransports(): Promise<void> {
+    const transports = [...this.transports.values()];
+    // Close all transports first; each transport's onclose handler removes
+    // itself from the map and clears its keep-alive interval. We do not
+    // clear the map before closing so onclose can find entries robustly.
+    //
+    // Each close is guarded by a bounded timeout: the SDK's close() can hang
+    // when an active SSE GET stream is still open (the stream handler's
+    // internal promise may not resolve until the client disconnects). We must
+    // not let a single stuck transport block server shutdown indefinitely.
+    await Promise.all(
+      transports.map(async (transport) => {
+        try {
+          await Promise.race([
+            // Pre-attached catch prevents a late rejection of the abandoned
+            // close() (when the timeout wins the race) from surfacing as an
+            // unhandled rejection in the extension host.
+            transport.close().catch(() => {}),
+            new Promise<void>((resolve) =>
+              setTimeout(resolve, IDEServer.TRANSPORT_CLOSE_TIMEOUT_MS),
+            ),
+          ]);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.log(`Error closing session transport: ${message}`);
+        }
+      }),
+    );
+    // Ensure the map is empty even if an onclose handler was missing.
+    this.transports.clear();
   }
 }
 
