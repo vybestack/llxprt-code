@@ -75,6 +75,14 @@ describe('tokenLimit', () => {
       expect(tokenLimit('claude-opus-5')).toBe(200_000);
     });
 
+    it('should return 200K limit for the claude-opus-5-latest alias', () => {
+      expect(tokenLimit('claude-opus-5-latest')).toBe(200_000);
+    });
+
+    it('should return 200K limit for a claude-opus-5 dated snapshot', () => {
+      expect(tokenLimit('claude-opus-5-20260724')).toBe(200_000);
+    });
+
     it('should return 200K (auth default) limit for claude-opus-4-7', () => {
       expect(tokenLimit('claude-opus-4-7')).toBe(200_000);
     });

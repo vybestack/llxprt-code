@@ -575,6 +575,8 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     // From the specific "claude-opus-5" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
     expect(defaults['context-limit']).toBe(200000);
+    // Overrides the provider-wide 40K default to match the 32K catalog metadata
+    expect(defaults['maxOutputTokens']).toBe(32000);
   });
 
   it('rules merge in order — claude-opus-4-8 retains its specific settings @issue:2665', () => {

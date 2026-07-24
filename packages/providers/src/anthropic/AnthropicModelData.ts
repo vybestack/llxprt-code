@@ -347,15 +347,12 @@ export function supportsAdaptiveThinking(modelId: string): boolean {
  * Get max output tokens for a given model
  */
 export function getMaxTokensForModel(modelId: string): number {
-  // Opus 4 models (including 4.6+ and the "latest" alias) default to the
-  // Claude Code / subscription max output of 32K. The 128K ceiling is
+  // Opus 4 models (including 4.6+ and the "latest" alias) and Opus 5 default
+  // to the Claude Code / subscription max output of 32K. The 128K ceiling is
   // API-only and can be raised via /set or a profile (maxOutputTokens).
-  // Opus 5 follows the same subscription default.
-  if (
-    modelId === 'claude-opus-4-latest' ||
-    modelId.includes('claude-opus-4') ||
-    modelId.includes('claude-opus-5')
-  ) {
+  // isOpus46Plus uses an anchored regex so speculative IDs like
+  // claude-opus-5-mini do not accidentally inherit this default.
+  if (modelId.includes('claude-opus-4') || isOpus46Plus(modelId)) {
     return 32000;
   }
   if (
