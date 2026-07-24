@@ -134,6 +134,7 @@ async function executeGateScript({ script, env = {}, pullsGetSequence = [] }) {
       log: () => {},
       warn: (message) => warnings.push(String(message)),
     },
+    AbortSignal,
     Number,
     String,
     Boolean,
@@ -358,7 +359,7 @@ describe('.github/workflows/_pr-mergeability-gate.yml — gate behavior', () => 
     expect(result.warnings[0]).toContain('transient API uncertainty');
     expect(result.pullRequestOptions).toHaveLength(5);
     for (const requestOptions of result.pullRequestOptions) {
-      expect(requestOptions.request).toEqual({ timeout: 10000 });
+      expect(requestOptions.request.signal).toBeDefined();
     }
     expect(result.elapsedMs).toBe(8000);
   });

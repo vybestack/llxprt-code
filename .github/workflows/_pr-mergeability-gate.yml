@@ -106,7 +106,9 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: number,
-                request: { timeout: REQUEST_TIMEOUT_MS },
+                request: {
+                  signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+                },
               });
             let mergeable = null;
             let apiUncertain = false;
