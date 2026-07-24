@@ -68,7 +68,7 @@ env:
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
-  OCR_VERSION: '1.7.9'
+  OCR_VERSION: '1.7.16'
   OCR_CONCURRENCY: '2'
 
 jobs:
