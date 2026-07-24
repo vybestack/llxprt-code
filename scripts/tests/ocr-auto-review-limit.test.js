@@ -457,9 +457,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
     // The counter is reset in the comment
     expect(result.updateCalls).toHaveLength(1);
     expect(result.updateCalls[0].body).toContain('<!-- ocr-auto-count:0 -->');
-    expect(result.updateCalls[0].body).toContain(
-      '<!-- ocr-suspended:false -->',
-    );
+    expect(result.updateCalls[0].body).not.toContain('ocr-suspended');
   });
 
   it('checkbox edit without change does not reset counter', async () => {
@@ -544,7 +542,11 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
     expect(postSuspensionScript).toContain('/ocr');
     expect(postSuspensionScript).toContain(MARKER);
     expect(postSuspensionScript).toContain('<!-- ocr-auto-count:');
-    expect(postSuspensionScript).toContain('<!-- ocr-suspended:true');
+    // The suspension state is derived from count >= limit at runtime,
+    // not stored as a separate hidden flag (issue #2666 CodeRabbit Fix3).
+    // The script may contain a backward-compat cleanup regex for old markers,
+    // but must not WRITE a new ocr-suspended:true marker.
+    expect(postSuspensionScript).not.toContain("'<!-- ocr-suspended:true'");
   });
 
   it('post-suspension writes the count and limit into the message', () => {
@@ -570,9 +572,14 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
 
   // ---- Wiring tests: skip/outcome recording ----
 
-  it('record-skipped-ocr-outcome accommodates suspension skips', () => {
+  it('record-skipped-ocr-outcome fires on both mergeability skip and suspension skip', () => {
     const skippedJob = workflow.jobs?.['record-skipped-ocr-outcome'];
     expect(skippedJob).toBeTruthy();
     expect(skippedJob.needs).toContain('mergeability-gate');
+    expect(skippedJob.needs).toContain('auto-review-gate');
+    const skippedIf = normalize(skippedJob.if);
+    expect(skippedIf).toContain(
+      normalize("needs.auto-review-gate.outputs.auto-should-run != 'true'"),
+    );
   });
 });

@@ -184,10 +184,6 @@ jobs:
               return match ? Number(match[1]) : 0;
             }
 
-            function parseSuspended(body) {
-              return /<!--\s*ocr-suspended:\s*true\s*-->/.test(body || '');
-            }
-
             async function fetchMarkerComment() {
               const comments = await github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
@@ -199,12 +195,11 @@ jobs:
                 typeof c.body === 'string' && c.body.includes(MARKER)) || null;
             }
 
-            function replaceHiddenState(body, count, suspended) {
+            function replaceHiddenState(body, count) {
               let updated = body
                 .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
                 .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '');
-              const suspendedStr = suspended ? 'true' : 'false';
-              updated += '\n<!-- ocr-auto-count:' + count + ' --><!-- ocr-suspended:' + suspendedStr + ' -->';
+              updated += '\n<!-- ocr-auto-count:' + count + ' -->';
               return updated;
             }
 
@@ -239,7 +234,7 @@ jobs:
                     core.warning(`Failed to fetch marker comment for checkbox reset: ${fetchErr.message || fetchErr}`);
                   }
                   if (marker) {
-                    const resetBody = replaceHiddenState(marker.body, 0, false);
+                    const resetBody = replaceHiddenState(marker.body, 0);
                     await github.rest.issues.updateComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
@@ -267,12 +262,10 @@ jobs:
             // ----- Read current state -----
 
             let currentCount = 0;
-            let currentSuspended = false;
             try {
               const marker = await fetchMarkerComment();
               if (marker && typeof marker.body === 'string') {
                 currentCount = parseHiddenCount(marker.body);
-                currentSuspended = parseSuspended(marker.body);
               }
             } catch (fetchErr) {
               core.warning(`Failed to read OCR sticky comment for auto-review state: ${fetchErr.message || fetchErr}`);
@@ -334,7 +327,7 @@ jobs:
             const repo = context.repo.repo;
 
             const NEWLINE = String.fromCharCode(10);
-            const body = [
+            const suspensionBlock = [
               MARKER,
               '## OpenCodeReview — automatic reviews suspended',
               '',
@@ -347,7 +340,7 @@ jobs:
               '',
               '- [ ] Re-enable automatic reviews',
               '',
-              '<!-- ocr-auto-count:' + currentCount + ' --><!-- ocr-suspended:true -->',
+              '<!-- ocr-auto-count:' + currentCount + ' -->',
             ].join(NEWLINE);
 
             async function reconcileMarkerComment() {
@@ -377,20 +370,34 @@ jobs:
               } catch (reconcileErr) {
                 core.warning(`Reconciliation failed before suspension posting; attempting create: ${reconcileErr.message || reconcileErr}`);
               }
+              // Preserve the previous review summary by appending the
+              // suspension notice to the existing body (minus old markers).
+              let finalBody = suspensionBlock;
+              if (existing && typeof existing.body === 'string') {
+                const preserved = existing.body
+                  .replace(MARKER, '')
+                  .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
+                  .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '')
+                  .replace(/## OpenCodeReview — automatic reviews suspended[\s\S]*$/, '')
+                  .trim();
+                if (preserved) {
+                  finalBody = suspensionBlock + NEWLINE + NEWLINE + '---' + NEWLINE + NEWLINE + preserved;
+                }
+              }
               if (existing) {
                 await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body,
+                  owner, repo, comment_id: existing.id, body: finalBody,
                 });
               } else {
                 try {
                   await github.rest.issues.createComment({
-                    owner, repo, issue_number: number, body,
+                    owner, repo, issue_number: number, body: finalBody,
                   });
                 } catch (createErr) {
                   const reconciled = await reconcileMarkerComment();
                   if (reconciled) {
                     await github.rest.issues.updateComment({
-                      owner, repo, comment_id: reconciled.id, body,
+                      owner, repo, comment_id: reconciled.id, body: finalBody,
                     });
                   } else {
                     throw createErr;
@@ -1332,7 +1339,7 @@ jobs:
             if (isAutomatic) {
               autoReviewCount += 1;
             }
-            body.push(`\n<!-- ocr-auto-count:${autoReviewCount} --><!-- ocr-suspended:false -->`);
+            body.push(`\n<!-- ocr-auto-count:${autoReviewCount} -->`);
             const summary = body.join('\n');
 
             async function reconcileMarkerComment() {
@@ -1601,14 +1608,23 @@ jobs:
     name: Record skipped OCR outcome
     needs:
       - mergeability-gate
+      - auto-review-gate
     if: >-
       ${{ !cancelled() &&
           needs.mergeability-gate.result == 'success' &&
-          needs.mergeability-gate.outputs.should-run != 'true' }}
+          needs.auto-review-gate.result == 'success' &&
+          (needs.mergeability-gate.outputs.should-run != 'true' ||
+           needs.auto-review-gate.outputs.auto-should-run != 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions: {}
     steps:
       - name: 'Record OCR outcome: review-skipped'
+        if: ${{ needs.mergeability-gate.outputs.should-run != 'true' }}
         shell: bash
         run: echo 'OCR review skipped by the mergeability gate.'
+
+      - name: 'Record OCR outcome: auto-review-suspended'
+        if: ${{ needs.mergeability-gate.outputs.should-run == 'true' && needs.auto-review-gate.outputs.auto-should-run != 'true' }}
+        shell: bash
+        run: echo 'OCR review skipped — automatic review limit reached.'
