@@ -38,9 +38,15 @@ for this purpose.
 
 ### Self Assigning Issues
 
-To assign an issue to yourself, simply add a comment with the text `/assign`. The comment must contain only that text and nothing else. This command will assign the issue to you, provided it is not already assigned.
+To assign an issue to yourself, add a comment that contains **only** the text `/assign` (nothing else). A GitHub Action handles the request when:
 
-Please note that you can have a maximum of 3 issues assigned to you at any given time.
+1. The issue is not already assigned.
+2. You are eligible: you have at least one **merged PR** in this repository, **or** you have a durable prior assignment (previously assigned to an issue here — current or past assignments in open or closed issues both qualify, recorded in a history index).
+3. You currently have fewer than **3** open issues assigned to you (hard cap to limit spam / hoarding).
+
+Bot accounts are ignored. On success the issue is labeled `auto-assigned` and a feedback comment is posted. Assignment may fail for several reasons (the issue was assigned by a concurrent request, the eligibility check could not be verified, GitHub API errors, or GitHub rejected or ignored the assignment because the account is unavailable or otherwise unassignable). The automation verifies each assignment and posts feedback reporting any failure.
+
+Auto-assignments older than **2 weeks** with no qualifying linked PR activity are unassigned automatically. Only the login assigned by the `/assign` automation is removed — manual co-assignees are preserved. The maintainer `acoliver` is exempt from cleanup. Comment `/assign` again if you still intend to work on the issue.
 
 ### Pull Request Guidelines
 

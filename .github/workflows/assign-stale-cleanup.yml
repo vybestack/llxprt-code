@@ -1,0 +1,57 @@
+name: Assign Stale Cleanup
+
+# Unassigns issues that were auto-assigned via /assign but have had no linked
+# PR activity for two weeks. Never unassigns acoliver.
+#
+# Uses targeted DELETE endpoints (never whole-array PATCH) to preserve
+# concurrent human state and comma-bearing label names.
+
+on:
+  schedule:
+    # Daily at 07:00 UTC
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  cleanup:
+    name: Unassign stale auto-assignments
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Restrict scheduled runs to the canonical upstream repository.
+    if: ${{ github.repository == 'vybestack/llxprt-code' }}
+    # Coordinated concurrency so overlapping scheduled runs or manual
+    # dispatches serialize cleanly. cancel-in-progress is false so an
+    # in-flight cleanup completes its full reconciliation rather than
+    # being cancelled mid-mutation. The group is stable and repository-
+    # scoped (not run-specific).
+    concurrency:
+      group: stale-cleanup-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run unassign-stale-issues script
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          chmod +x ./.github/scripts/unassign-stale-issues.sh
+          ./.github/scripts/unassign-stale-issues.sh
