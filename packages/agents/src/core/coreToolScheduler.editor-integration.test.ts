@@ -37,6 +37,7 @@ import {
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import {
   MessageBusType,
   type ToolConfirmationResponse,
@@ -58,12 +59,14 @@ import {
   ToolConfirmationOutcome,
   type ToolRegistry as ToolRegistryType,
   type IToolHost,
-  type IToolMessageBus,
 } from '@vybestack/llxprt-code-tools';
 
 const AUTO_EDIT_RULE_PRIORITY = 1.015;
 const YOLO_RULE_PRIORITY = 1.999;
 const DEFAULT_TEST_MTIME_EPOCH_SECONDS = 1_000_000;
+const TEST_SESSION_ID = 'test-session-editor-integration';
+const TEST_PREFERRED_EDITOR = 'vscode';
+const TEST_PROMPT_ID = 'prompt-editor-int';
 
 // ── Real PolicyEngine config (mirrors production TOML) ──────────────────
 
@@ -179,7 +182,7 @@ function buildTestContext(
       getCoreTools: () => [],
       getExcludeTools: () => [],
     },
-    messageBus as unknown as IToolMessageBus,
+    new CoreMessageBusAdapter(messageBus),
   );
   toolRegistry.registerTool(editTool);
   toolRegistry.registerTool(writeFileTool);
@@ -193,7 +196,7 @@ function buildTestContext(
 
   let currentMode = initialMode;
   const config = {
-    getSessionId: () => 'test-session-editor-integration',
+    getSessionId: () => TEST_SESSION_ID,
     getUsageStatisticsEnabled: () => false,
     getDebugMode: () => false,
     isInteractive: () => true,
@@ -225,7 +228,7 @@ function buildTestContext(
     toolRegistry,
     onAllToolCallsComplete,
     onToolCallsUpdate,
-    getPreferredEditor: () => 'vscode',
+    getPreferredEditor: () => TEST_PREFERRED_EDITOR,
     onEditorClose: vi.fn(),
   });
 
@@ -285,7 +288,7 @@ function makeRequest(
     name,
     args,
     isClientInitiated: false,
-    prompt_id: 'prompt-editor-int',
+    prompt_id: TEST_PROMPT_ID,
   };
 }
 
@@ -351,10 +354,7 @@ function getAwaitingCall(
 
 type ToolFixture = {
   toolName: string;
-  buildArgs: (
-    filePath: string,
-    originalContent: string,
-  ) => Record<string, unknown>;
+  buildArgs: (filePath: string) => Record<string, unknown>;
   expectedContent: string;
 };
 
@@ -463,7 +463,7 @@ describe('Editor scheduler integration (issue #2659)', () => {
       const filePath = writeFile(tempDir, 'target.txt', originalContent);
       const originalMtime = setOldMtime(filePath);
 
-      const args = fixture.buildArgs(filePath, originalContent);
+      const args = fixture.buildArgs(filePath);
       const abortController = new AbortController();
       await ctx.scheduler.schedule(
         makeRequest(`default-${fixture.toolName}`, fixture.toolName, args),
@@ -504,7 +504,7 @@ describe('Editor scheduler integration (issue #2659)', () => {
         const originalContent = 'line1\nline2\nline3\n';
         const filePath = writeFile(tempDir, 'target.txt', originalContent);
 
-        const args = fixture.buildArgs(filePath, originalContent);
+        const args = fixture.buildArgs(filePath);
         const abortController = new AbortController();
         await ctx.scheduler.schedule(
           makeRequest(`${mode}-${fixture.toolName}`, fixture.toolName, args),

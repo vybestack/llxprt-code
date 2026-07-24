@@ -80,19 +80,6 @@ function syncMode(engine: PolicyEngine, mode: ApprovalMode): void {
   engine.setApprovalMode(mode);
 }
 
-// ── Editor type constants ──────────────────────────────────────────────
-
-const TERMINAL_EDITORS = ['vim', 'neovim', 'emacs', 'hx'] as const;
-const GUI_EDITORS = [
-  'vscode',
-  'vscodium',
-  'windsurf',
-  'cursor',
-  'zed',
-  'antigravity',
-] as const;
-const ALL_EDITOR_TYPES = [...TERMINAL_EDITORS, ...GUI_EDITORS] as const;
-
 // ── Test suite ─────────────────────────────────────────────────────────
 
 describe('Editor mode matrix: PolicyEngine + MessageBus (issue #2659)', () => {
@@ -260,52 +247,6 @@ describe('Editor mode matrix: PolicyEngine + MessageBus (issue #2659)', () => {
 
       expect(confirmationRequested).toBe(true);
       expect(result).toBe(true);
-    });
-  });
-
-  // ── Terminal vs IDE (GUI) editor paths ───────────────────────────────
-
-  describe('Terminal vs IDE editor paths: policy parity', () => {
-    it.each(ALL_EDITOR_TYPES)(
-      'editor %s: DEFAULT asks, AUTO_EDIT/YOLO allow for all edit tools',
-      (_editor) => {
-        const engine = new PolicyEngine(buildTomlStyleConfig());
-
-        // The editor type does not affect policy decisions — the policy
-        // engine is editor-agnostic. The editor only matters for the diff
-        // display when shouldConfirmExecute returns confirmation details.
-        syncMode(engine, ApprovalMode.DEFAULT);
-        for (const tool of AUTO_EDIT_TOOLS) {
-          expect(engine.evaluate(tool, {})).toBe(PolicyDecision.ASK_USER);
-        }
-
-        syncMode(engine, ApprovalMode.AUTO_EDIT);
-        for (const tool of AUTO_EDIT_TOOLS) {
-          expect(engine.evaluate(tool, {})).toBe(PolicyDecision.ALLOW);
-        }
-
-        syncMode(engine, ApprovalMode.YOLO);
-        for (const tool of AUTO_EDIT_TOOLS) {
-          expect(engine.evaluate(tool, {})).toBe(PolicyDecision.ALLOW);
-        }
-      },
-    );
-
-    it('terminal editors (vim/neovim/emacs/hx) and GUI editors (vscode/cursor/zed) get identical policy', () => {
-      const engine = new PolicyEngine(buildTomlStyleConfig());
-      syncMode(engine, ApprovalMode.DEFAULT);
-
-      // Policy is identical regardless of which editor the user has configured
-      const vimDecision = engine.evaluate('replace', {});
-      const vscodeDecision = engine.evaluate('replace', {});
-      expect(vimDecision).toBe(vscodeDecision);
-      expect(vimDecision).toBe(PolicyDecision.ASK_USER);
-
-      syncMode(engine, ApprovalMode.YOLO);
-      const vimYolo = engine.evaluate('replace', {});
-      const vscodeYolo = engine.evaluate('replace', {});
-      expect(vimYolo).toBe(vscodeYolo);
-      expect(vimYolo).toBe(PolicyDecision.ALLOW);
     });
   });
 

@@ -128,7 +128,7 @@ describe('PolicyEngine mode evaluation via setApprovalMode', () => {
     expect(engine.evaluate('replace', {})).toBe(PolicyDecision.ALLOW);
   });
 
-  it('user TOML rule with modes = [yolo] appears/disappears on transition', () => {
+  it('user TOML rule with modes = [YOLO] appears/disappears on transition', () => {
     const rule: PolicyRule = {
       toolName: 'custom_tool',
       decision: PolicyDecision.ALLOW,
@@ -229,7 +229,7 @@ describe('Mode-filtered DENY precedence', () => {
   it('non-mode DENY rule (priority 2.9) overrides YOLO wildcard ALLOW (priority 1.999)', () => {
     const denyRule: PolicyRule = {
       toolName: 'run_shell_command',
-      argsPattern: /rm\s+-rf/,
+      argsPattern: /"command":"rm\s+-rf/,
       decision: PolicyDecision.DENY,
       priority: 2.9,
       source: 'User TOML',
@@ -373,6 +373,7 @@ describe('modes combined with argsPattern', () => {
     const yoloWildcard: PolicyRule = {
       decision: PolicyDecision.ALLOW,
       priority: 1.999,
+      allowRedirection: true,
       modes: [ApprovalMode.YOLO],
     };
     const defaultOnlyAllow: PolicyRule = {
