@@ -61,6 +61,10 @@ import {
   type IToolMessageBus,
 } from '@vybestack/llxprt-code-tools';
 
+const AUTO_EDIT_RULE_PRIORITY = 1.015;
+const YOLO_RULE_PRIORITY = 1.999;
+const DEFAULT_TEST_MTIME_EPOCH_SECONDS = 1_000_000;
+
 // ── Real PolicyEngine config (mirrors production TOML) ──────────────────
 
 function buildTomlStyleConfig(): PolicyEngineConfig {
@@ -68,7 +72,7 @@ function buildTomlStyleConfig(): PolicyEngineConfig {
 
   rules.push({
     decision: PolicyDecision.ALLOW,
-    priority: 1.999,
+    priority: YOLO_RULE_PRIORITY,
     allowRedirection: true,
     modes: [ApprovalMode.YOLO],
     source: 'test-yolo',
@@ -86,7 +90,7 @@ function buildTomlStyleConfig(): PolicyEngineConfig {
     rules.push({
       toolName: tool,
       decision: PolicyDecision.ALLOW,
-      priority: 1.015,
+      priority: AUTO_EDIT_RULE_PRIORITY,
       modes: [ApprovalMode.AUTO_EDIT],
       source: 'test-auto-edit',
     });
@@ -262,7 +266,10 @@ function getMtime(filePath: string): number {
  * deterministic and not affected by filesystem timestamp resolution.
  * Returns the old mtime in milliseconds.
  */
-function setOldMtime(filePath: string, epochSeconds = 1_000_000): number {
+function setOldMtime(
+  filePath: string,
+  epochSeconds = DEFAULT_TEST_MTIME_EPOCH_SECONDS,
+): number {
   const oldTime = epochSeconds;
   fs.utimesSync(filePath, oldTime, oldTime);
   return oldTime * 1000;
@@ -295,6 +302,10 @@ async function waitForCompletion(
   return onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
 }
 
+type ConfirmationDetailsProbe = {
+  confirmationDetails?: { onConfirm?: unknown };
+};
+
 /**
  * Type guard: narrows a ToolCall to the awaiting-approval variant so
  * confirmationDetails can be accessed safely without a manual cast.
@@ -308,11 +319,8 @@ function isAwaitingApproval(call: ToolCall | undefined): call is ToolCall & {
   return (
     call !== undefined &&
     call.status === 'awaiting_approval' &&
-    typeof (
-      call as {
-        confirmationDetails?: { onConfirm?: unknown };
-      }
-    ).confirmationDetails?.onConfirm === 'function'
+    typeof (call as ConfirmationDetailsProbe).confirmationDetails?.onConfirm ===
+      'function'
   );
 }
 

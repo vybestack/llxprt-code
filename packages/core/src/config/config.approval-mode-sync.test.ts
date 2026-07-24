@@ -108,6 +108,11 @@ vi.mock('../utils/fetch.js', async () => {
   return h.buildFetchMockBody(hoistedConfigMocks);
 });
 
+const DEFAULT_WRITE_RULE_PRIORITY = 1.01;
+const AUTO_EDIT_RULE_PRIORITY = 1.015;
+const READ_ONLY_RULE_PRIORITY = 1.05;
+const YOLO_RULE_PRIORITY = 1.999;
+
 /**
  * Builds a PolicyEngineConfig with declarative TOML-style rules that mirror
  * the real write.toml and yolo.toml files. This simulates what
@@ -120,7 +125,7 @@ function buildTomlStylePolicyConfig(): PolicyEngineConfig {
     rules.push({
       toolName: tool,
       decision: PolicyDecision.ASK_USER,
-      priority: 1.01,
+      priority: DEFAULT_WRITE_RULE_PRIORITY,
     });
   }
 
@@ -128,14 +133,14 @@ function buildTomlStylePolicyConfig(): PolicyEngineConfig {
     rules.push({
       toolName: tool,
       decision: PolicyDecision.ALLOW,
-      priority: 1.015,
+      priority: AUTO_EDIT_RULE_PRIORITY,
       modes: [ApprovalMode.AUTO_EDIT],
     });
   }
 
   rules.push({
     decision: PolicyDecision.ALLOW,
-    priority: 1.999,
+    priority: YOLO_RULE_PRIORITY,
     allowRedirection: true,
     modes: [ApprovalMode.YOLO],
   });
@@ -143,7 +148,7 @@ function buildTomlStylePolicyConfig(): PolicyEngineConfig {
   rules.push({
     toolName: 'glob',
     decision: PolicyDecision.ALLOW,
-    priority: 1.05,
+    priority: READ_ONLY_RULE_PRIORITY,
   });
 
   return {
