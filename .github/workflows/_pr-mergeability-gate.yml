@@ -1,0 +1,188 @@
+name: PR Mergeability Gate
+
+# Reusable read-only gate that decides whether expensive trusted-context
+# PR work should run.  It uses the GitHub REST API (authoritative for
+# mergeability) rather than the webhook payload, which is commonly null
+# while GitHub computes the result.  The gate never checks out PR code,
+# receives no provider/repository secrets, and has only pull-requests: read.
+
+on:
+  workflow_call:
+    inputs:
+      check-mergeability:
+        description: 'When false, the gate bypasses mergeability checking and permits work.'
+        required: true
+        type: boolean
+      pull-request-number:
+        description: 'The pull request number to check.'
+        required: true
+        type: string
+      expected-head-sha:
+        description: 'Optional event head SHA; skip stale event work if it differs from the current API head.'
+        required: false
+        type: string
+    outputs:
+      should-run:
+        description: "'true' when work is permitted; 'false' when it should be skipped."
+        value: ${{ jobs.gate.outputs.should-run }}
+      reason:
+        description: 'Stable diagnostic reason for the decision.'
+        value: ${{ jobs.gate.outputs.reason }}
+
+permissions:
+  pull-requests: read
+
+jobs:
+  gate:
+    name: Mergeability gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      should-run: ${{ steps.decide.outputs.should-run }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Decide mergeability
+        id: decide
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          CHECK_MERGEABILITY: ${{ inputs.check-mergeability }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected-head-sha }}
+        with:
+          script: |
+            const checkMergeability = process.env.CHECK_MERGEABILITY === 'true';
+            if (!checkMergeability) {
+              core.setOutput('should-run', 'true');
+              core.setOutput('reason', 'bypass');
+              return;
+            }
+            const rawNumber = process.env.PULL_REQUEST_NUMBER;
+            const number = Number(rawNumber);
+            if (!Number.isInteger(number) || number <= 0) {
+              core.setFailed(`Invalid pull request number for mergeability check: "${rawNumber}"`);
+              return;
+            }
+            const expectedHeadSha = process.env.EXPECTED_HEAD_SHA || '';
+            const MAX_POLLS = 5;
+            const POLL_DELAY_MS = 2000;
+            const REQUEST_TIMEOUT_MS = 10000;
+            const NETWORK_ERROR_CODES = new Set([
+              'EAI_AGAIN',
+              'ECONNABORTED',
+              'ECONNREFUSED',
+              'ECONNRESET',
+              'EHOSTUNREACH',
+              'ENETDOWN',
+              'ENETUNREACH',
+              'ENOTFOUND',
+              'EPIPE',
+              'ETIMEDOUT',
+              'UND_ERR_BODY_TIMEOUT',
+              'UND_ERR_CONNECT_TIMEOUT',
+              'UND_ERR_HEADERS_TIMEOUT',
+              'UND_ERR_SOCKET',
+            ]);
+            const isNetworkError = (error) => {
+              const seen = new Set();
+              let current = error;
+              while (
+                current &&
+                typeof current === 'object' &&
+                !seen.has(current)
+              ) {
+                seen.add(current);
+                if (
+                  typeof current.code === 'string' &&
+                  NETWORK_ERROR_CODES.has(current.code)
+                ) {
+                  return true;
+                }
+                current = current.cause;
+              }
+              return false;
+            };
+            const getPullWithTimeout = () =>
+              github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number,
+                request: { timeout: REQUEST_TIMEOUT_MS },
+              });
+            let mergeable = null;
+            let apiUncertain = false;
+            for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+              let data;
+              try {
+                const response = await getPullWithTimeout();
+                data = response.data;
+              } catch (apiError) {
+                const status = Number(apiError && apiError.status);
+                const hasHttpStatus = Number.isInteger(status) && status > 0;
+                const retryableHttpStatus =
+                  status === 429 || (status >= 500 && status <= 599);
+                const retryableError = hasHttpStatus
+                  ? retryableHttpStatus
+                  : isNetworkError(apiError);
+                if (!retryableError) {
+                  if (hasHttpStatus) {
+                    core.setFailed(
+                      `GitHub REST API rejected the mergeability check for ` +
+                        `PR #${number} with status ${status}.`,
+                    );
+                  } else {
+                    core.setFailed(
+                      `GitHub REST API failed the mergeability check for ` +
+                        `PR #${number} with an unrecognized error.`,
+                    );
+                  }
+                  return;
+                }
+                apiUncertain = true;
+                mergeable = null;
+                if (attempt < MAX_POLLS - 1) {
+                  await new Promise((resolve) =>
+                    setTimeout(resolve, POLL_DELAY_MS),
+                  );
+                }
+                continue;
+              }
+              if (expectedHeadSha && data.head && data.head.sha && data.head.sha !== expectedHeadSha) {
+                core.setOutput('should-run', 'false');
+                core.setOutput('reason', 'stale-head');
+                return;
+              }
+              mergeable = data.mergeable;
+              if (mergeable === true) {
+                core.setOutput('should-run', 'true');
+                core.setOutput('reason', 'mergeable');
+                return;
+              }
+              if (mergeable === false) {
+                core.setOutput('should-run', 'false');
+                core.setOutput('reason', 'conflict');
+                return;
+              }
+              // mergeable is null — GitHub is still computing.  Poll.
+              if (attempt < MAX_POLLS - 1) {
+                await new Promise((resolve) =>
+                  setTimeout(resolve, POLL_DELAY_MS),
+                );
+              }
+            }
+            // Bounded polling exhausted without a definitive answer.
+            // Fail open so a valid PR is not stranded indefinitely.
+            if (apiUncertain) {
+              core.warning(
+                `Could not determine mergeability for PR #${number}: ` +
+                  `transient API uncertainty after ${MAX_POLLS} attempts. ` +
+                  `Failing open.`,
+              );
+            } else {
+              core.warning(
+                `Could not determine mergeability for PR #${number}: ` +
+                  `mergeable remained null after ${MAX_POLLS} polls. ` +
+                  `Failing open.`,
+              );
+            }
+            core.setOutput('should-run', 'true');
+            core.setOutput('reason', 'uncertain');

@@ -27,15 +27,19 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
 
   beforeAll(() => {
     workflowYml = readRootFile(WORKFLOW_PATH);
+    const notifierWorkflowYml = readRootFile(
+      '.github/workflows/ocr-infrastructure-notifier.yml',
+    );
     try {
       workflow = yaml.load(workflowYml);
+      const notifierWorkflow = yaml.load(notifierWorkflowYml);
+      notifyJob = notifierWorkflow.jobs?.['notify-ocr-infrastructure-failure'];
     } catch (error) {
-      throw new Error(`Failed to parse ${WORKFLOW_PATH}: ${error.message}`, {
+      throw new Error(`Failed to parse OCR workflows: ${error.message}`, {
         cause: error,
       });
     }
     codeReviewJob = workflow.jobs?.['code-review'];
-    notifyJob = workflow.jobs?.['notify-ocr-infrastructure-failure'];
     postStep = stepNamed(codeReviewJob, 'Post OCR results');
     postScript = commandText(postStep);
     notifyStep = stepNamed(

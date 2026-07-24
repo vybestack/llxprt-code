@@ -13,18 +13,22 @@ import {
   expectCommonCredentialsRedacted,
   expectContainsAll,
   extractFunctionSource,
-  hasBashAndPerl,
   makePostSanitizer,
   normalize,
   readRootFile,
-  runNotifySanitizer,
   stepNamed,
 } from './ocr-review-workflow-helpers.js';
 
+const NOTIFIER_WORKFLOW_PATH =
+  '.github/workflows/ocr-infrastructure-notifier.yml';
+
 describe('.github/workflows/ocr-review.yml', () => {
   let workflowYml;
+  let notifierWorkflowYml;
   let workflow;
+  let notifierWorkflow;
   let codeReviewJob;
+  let mergeabilityGateJob;
 
   let postStep;
   let postScript;
@@ -38,10 +42,12 @@ describe('.github/workflows/ocr-review.yml', () => {
       workflowYml.trim(),
       `${WORKFLOW_PATH} should have content`,
     ).toBeTruthy();
+    notifierWorkflowYml = readRootFile(NOTIFIER_WORKFLOW_PATH);
     try {
       workflow = yaml.load(workflowYml);
+      notifierWorkflow = yaml.load(notifierWorkflowYml);
     } catch (error) {
-      throw new Error(`Failed to parse ${WORKFLOW_PATH}: ${error.message}`, {
+      throw new Error(`Failed to parse OCR workflows: ${error.message}`, {
         cause: error,
       });
     }
@@ -49,15 +55,27 @@ describe('.github/workflows/ocr-review.yml', () => {
       workflow && typeof workflow === 'object',
       `${WORKFLOW_PATH} should parse to a YAML mapping`,
     ).toBeTruthy();
+    expect(
+      notifierWorkflow && typeof notifierWorkflow === 'object',
+      `${NOTIFIER_WORKFLOW_PATH} should parse to a YAML mapping`,
+    ).toBeTruthy();
     codeReviewJob = workflow.jobs?.['code-review'];
     expect(
       codeReviewJob,
       'workflow should contain job: code-review',
     ).toBeTruthy();
-    notifyJob = workflow.jobs?.['notify-ocr-infrastructure-failure'];
+    mergeabilityGateJob = workflow.jobs?.['mergeability-gate'];
+    expect(
+      mergeabilityGateJob,
+      'workflow should contain job: mergeability-gate',
+    ).toBeTruthy();
+    expect(
+      workflow.jobs?.['notify-ocr-infrastructure-failure'],
+    ).toBeUndefined();
+    notifyJob = notifierWorkflow.jobs?.['notify-ocr-infrastructure-failure'];
     expect(
       notifyJob,
-      'workflow should contain job: notify-ocr-infrastructure-failure',
+      'notifier workflow should contain job: notify-ocr-infrastructure-failure',
     ).toBeTruthy();
     postStep = stepNamed(codeReviewJob, 'Post OCR results');
     postScript = commandText(postStep);
@@ -76,12 +94,13 @@ describe('.github/workflows/ocr-review.yml', () => {
     );
   });
 
-  it('uses job-level concurrency so skipped issue comments cannot cancel OCR', () => {
-    const group = codeReviewJob.concurrency?.group;
+  it('uses authorization-aware workflow concurrency around the complete run', () => {
+    const group = workflow.concurrency?.group;
     const normalizedGroup = normalize(group);
-    const normalizedJobIf = normalize(codeReviewJob.if);
+    const normalizedCodeReviewIf = normalize(codeReviewJob.if);
+    const normalizedGateIf = normalize(mergeabilityGateJob.if);
 
-    expect(workflow.concurrency).toBeUndefined();
+    expect(workflow.concurrency?.['cancel-in-progress']).toBe(true);
     expect(codeReviewJob['timeout-minutes']).toBe(60);
     expect(codeReviewJob.outputs?.infrastructure_failure).toBe(
       '${{ steps.ocr-classification.outputs.infrastructure_failure }}',
@@ -89,40 +108,25 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(codeReviewJob.outputs?.policy_failure).toBe(
       '${{ steps.ocr-classification.outputs.policy_failure }}',
     );
-    expect(codeReviewJob.concurrency?.['cancel-in-progress']).toBe(true);
-    expect(normalizedGroup).toContain(normalize('${{ github.workflow }}'));
-    expect(group).toContain(
-      'github.event.pull_request.number || github.event.issue.number || inputs.pr_number',
+    expect(mergeabilityGateJob.concurrency).toBeUndefined();
+    expect(codeReviewJob.concurrency).toBeUndefined();
+    expect(normalizedGroup).toContain("format('{0}-pr-{1}', github.workflow,");
+    expect(normalizedGroup).toContain(
+      "format('{0}-run-{1}', github.workflow, github.run_id)",
     );
-    expect(group).not.toContain('ocr-review-');
-    expect(group).not.toContain("github.event_name == 'issue_comment'");
-    expect(group).not.toContain("'command'");
-    expect(group).not.toContain("'automatic'");
-    expect(group).not.toContain('github.event.action');
-    expect(group).not.toContain('github.event.comment.author_association');
-    expect(group).not.toContain('github.event.comment.body');
-    expect(group).not.toContain(
-      "format('comment-{0}', github.event.comment.id)",
+    expect(normalizedCodeReviewIf).toContain(
+      normalize("needs.mergeability-gate.outputs.should-run == 'true'"),
     );
-    expect(normalizedJobIf).toContain(
+    expect(normalizedGateIf).toContain(
       normalize("github.event_name == 'issue_comment'"),
-    );
-    expect(normalizedGroup).not.toContain(
-      normalize('github.event.comment.author_association'),
-    );
-    expect(workflowYml).toContain(
-      'Job-level concurrency is evaluated only for runs that pass this job if filter',
-    );
-    expect(workflowYml).toContain(
-      'All authorized OCR triggers for the same PR share one workflow-scoped group',
-    );
-    expect(workflowYml).toContain(
-      'run owns the sticky summary and inline-comment posting',
     );
   });
 
   it('keeps the job filter responsible for authorized command issue comments', () => {
-    const normalizedJobIf = normalize(codeReviewJob.if);
+    // The authorization predicate has moved to the mergeability-gate job;
+    // code-review's if only checks the gate's should-run output.
+    const normalizedGateIf = normalize(mergeabilityGateJob.if);
+    const normalizedCodeReviewIf = normalize(codeReviewJob.if);
     const issueCommentFragments = [
       "github.event_name == 'issue_comment'",
       'github.event.issue.pull_request != null',
@@ -142,8 +146,11 @@ describe('.github/workflows/ocr-review.yml', () => {
     ];
 
     for (const fragment of issueCommentFragments) {
-      expect(normalizedJobIf).toContain(normalize(fragment));
+      expect(normalizedGateIf).toContain(normalize(fragment));
     }
+    expect(normalizedCodeReviewIf).toContain(
+      normalize("needs.mergeability-gate.outputs.should-run == 'true'"),
+    );
     expect(workflowYml).not.toContain(
       'Keep this predicate in sync with the code-review job if filter',
     );
@@ -453,121 +460,6 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(sanitized).toBe('first [REDACTED] second [REDACTED]');
     expect(sanitized).not.toContain(secret);
   });
-  it.skipIf(!hasBashAndPerl())(
-    'redacts exact OCR secrets with regex metacharacters and backslashes in notify diagnostics',
-    () => {
-      // Include Perl's \E escape marker to prove quotemeta prevents it from ending literal matching early.
-      const secret = String.raw`tok$^.*+?()[]{}|\slash\Eend`;
-
-      const sanitized = runNotifySanitizer(
-        notifyRun,
-        `first ${secret} second ${secret}`,
-        secret,
-      );
-
-      expect(sanitized).toBe('first [REDACTED] second [REDACTED]');
-      expect(sanitized).not.toContain(secret);
-    },
-  );
-
-  it.skipIf(!hasBashAndPerl())(
-    'redacts common credential patterns in notify diagnostics',
-    () => {
-      const diagnostic = [
-        'Error: OCR review failed for packages/agents/src/core/TurnProcessor.ts:266',
-        'snippet: for await (const event of stream) handle(event);',
-      ].join('\n');
-
-      const sanitized = runNotifySanitizer(
-        notifyRun,
-        [commonCredentialInput(), diagnostic].join('\n'),
-        'unused-secret',
-      );
-
-      expectCommonCredentialsRedacted(sanitized);
-      expect(sanitized).toContain(diagnostic);
-    },
-  );
-
-  it.skipIf(!hasBashAndPerl())(
-    'does not redact short generic token and secret diagnostic words in notify diagnostics',
-    () => {
-      const diagnostic =
-        'token=expired secret=enabled while auth_token_value remains visible';
-
-      expect(runNotifySanitizer(notifyRun, diagnostic, 'unused-secret')).toBe(
-        diagnostic,
-      );
-    },
-  );
-
-  it.skipIf(!hasBashAndPerl())(
-    'redacts the configured OCR LLM URL from notify diagnostics',
-    () => {
-      const url = 'https://llm.example.test/v1/messages?api_key=sk-url-secret';
-
-      const sanitized = runNotifySanitizer(
-        notifyRun,
-        `request failed for ${url}`,
-        'unused-secret',
-        { OCR_LLM_URL: url },
-      );
-
-      expect(sanitized).toBe('request failed for [REDACTED]');
-      expect(sanitized).not.toContain(url);
-    },
-  );
-
-  it.skipIf(!hasBashAndPerl())(
-    'fails closed with process details when notify diagnostic sanitization fails',
-    () => {
-      const secret = 'must-not-leak';
-
-      expect(() =>
-        runNotifySanitizer(notifyRun, `diagnostic ${secret}`, secret, {
-          PERL5OPT: '-MNo::Such::Module',
-        }),
-      ).toThrow(/status: .*\ncode: .*\nsignal: .*\nstderr:/);
-    },
-  );
-  it('sanitizes notify-job OCR diagnostics before issue bodies', () => {
-    expect(notifyStep.env?.OCR_LLM_TOKEN).toBe(
-      '${{ secrets.OCR_LLM_AUTH_TOKEN }}',
-    );
-    expect(notifyStep.env?.OCR_LLM_URL).toBe('${{ vars.OCR_LLM_URL }}');
-    expect(notifyStep.shell).toBe('bash');
-    expectContainsAll(notifyRun, [
-      'sanitize_diagnostics() {',
-      'local diagnostic',
-      'diagnostic="$1"',
-      'exact_secret="${OCR_LLM_TOKEN:-}"',
-      'exact_url="${OCR_LLM_URL:-}"',
-      'OCR_EXACT_SECRET="$exact_secret" OCR_EXACT_URL="$exact_url"',
-      '$url = $ENV{"OCR_EXACT_URL"} // "";',
-      'REDACTED',
-      'quotemeta($secret)',
-      'quotemeta($url)',
-      'Authorization\\s*:\\s*(?:(?:Bearer|Basic|token|ApiKey)\\s+)?',
-      'x-api-key\\s*:\\s*',
-      'api[_-]?key\\s*[=:]\\s*',
-      '[?&](?:key|api[_-]?key|token)=',
-      'access[_-]?token\\s*[=:]\\s*',
-      'refresh[_-]?token\\s*[=:]\\s*',
-      'id[_-]?token\\s*[=:]\\s*',
-      'token\\s*[=:]\\s*',
-      'secret\\s*[=:]\\s*',
-      '[A-Za-z0-9_.\\/+=:\\@-]{16,}',
-      'if ! command -v perl >/dev/null 2>&1; then',
-      'sanitize_diagnostics "$infra_failure"',
-      'diagnostic_block="$(printf \'%s\\n\' "$sanitized_infra_failure" | sed \'s/^/    /\')"',
-    ]);
-    expect(notifyRun).toContain(
-      'if ! sanitized_infra_failure="$(sanitize_diagnostics "$infra_failure")"; then',
-    );
-    expect(notifyRun).not.toContain(
-      'Infrastructure diagnostic: ${infra_failure}.',
-    );
-  });
 
   it('marks changed-test scope guard failures as policy failures with exit-code artifacts', () => {
     const initializeRun = commandText(
@@ -659,7 +551,7 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(postScript).not.toContain('body.splice(12, 0');
   });
 
-  it('surfaces zero-exit parse failures in PR and infrastructure diagnostics', () => {
+  it('surfaces zero-exit parse failures in PR and redacted artifact diagnostics', () => {
     expectContainsAll(postScript, [
       'diagnosticPhase = markerPhase;',
       "fs.writeFileSync('ocr-phase.txt', `${markerPhase}\\n`);",
@@ -668,7 +560,9 @@ describe('.github/workflows/ocr-review.yml', () => {
       '`- Infrastructure diagnostic: \\`${sanitizedInfrastructureFailure.replace(/`/g, "\\\\`")}\\``',
     ]);
     expect(postScript).toContain('Phase: \\`${diagnosticPhase}\\`');
-    expect(notifyRun).toContain('phase="$(cat ocr-phase.txt)"');
+    expect(notifyRun).toContain(
+      'Review the trusted workflow logs and the redacted ocr-review-output artifact for diagnostics.',
+    );
   });
 
   it('preserves native failure phase in diagnostics', () => {
@@ -703,71 +597,39 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(uploadStep.with?.['if-no-files-found']).toBe('warn');
   });
 
-  it('notifies a deduplicated ci/cd issue for OCR infrastructure errors', () => {
-    expect(notifyJob?.needs).toBe('code-review');
+  it('notifies a deduplicated ci/cd issue only for classified infrastructure errors', () => {
+    expect(notifyJob?.needs).toBe('classify-ocr-run');
     expect(notifyJob?.['timeout-minutes']).toBe(5);
     expect(notifyJob?.concurrency?.group).toBe(
       'ocr-review-infrastructure-issue',
     );
     expect(notifyJob?.concurrency?.['cancel-in-progress']).toBe(false);
-    expect(notifyJob.if).toBe(
-      "${{ !cancelled() && (needs.code-review.result == 'success' || needs.code-review.result == 'failure') }}",
+    expect(normalize(notifyJob.if)).toBe(
+      normalize(
+        "${{ needs.classify-ocr-run.result == 'success' && (needs.classify-ocr-run.outputs.classification == 'infrastructure-failure' || needs.classify-ocr-run.outputs.classification == 'unexpected-failure') }}",
+      ),
     );
-    expect(notifyStep.if).toContain('always()');
+    expect(notifyStep.if).toBeUndefined();
     expect(notifyStep.env?.GH_TOKEN).toBe('${{ github.token }}');
-    expect(notifyStep.env?.CODE_REVIEW_POLICY_FAILURE).toBe(
-      '${{ needs.code-review.outputs.policy_failure }}',
-    );
-    expect(notifyStep.env?.CODE_REVIEW_INFRASTRUCTURE_FAILURE).toBe(
-      '${{ needs.code-review.outputs.infrastructure_failure }}',
-    );
     expect(notifyStep.env?.GH_REPO).toBe('${{ github.repository }}');
     expect(notifyStep.env?.RUN_URL).toBe(
-      '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}',
+      '${{ github.event.workflow_run.html_url }}',
     );
-    expect(notifyStep.env?.CODE_REVIEW_RESULT).toBe(
-      '${{ needs.code-review.result }}',
+    expect(notifyStep.env?.OCR_RUN_CLASSIFICATION).toBe(
+      '${{ needs.classify-ocr-run.outputs.classification }}',
     );
-    const downloadStep = stepNamed(notifyJob, 'Download OCR artifacts');
-    expect(downloadStep.uses).toContain(
-      'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+    expect(notifierWorkflowYml).toContain(
+      'ratchet:actions/download-artifact@v4',
     );
-    expect(workflowYml).toContain('ratchet:actions/download-artifact@v4');
-    expect(downloadStep['continue-on-error']).toBe(true);
     expectContainsAll(notifyRun, [
       'notify_ocr_infrastructure_failure() {',
-      'OCR artifacts were unavailable after code-review completed with failure or infrastructure diagnostics; creating infrastructure notification.',
-      'CODE_REVIEW_INFRASTRUCTURE_FAILURE',
-      'CODE_REVIEW_POLICY_FAILURE',
-      'policy failure recorded by code-review job output',
-      'OCR policy failure output was set; skipping missing-artifact infrastructure notification.',
-      'OCR artifacts were unavailable; cannot determine whether an infrastructure failure occurred.',
-      'cd ocr-review-output || return 1',
-      'missing_diagnostics=""',
-      'for diagnostic_file in ocr-exit-code.txt ocr-phase.txt ocr-infrastructure-failure.txt ocr-policy-failure.txt; do',
-      'phase="artifact"',
-      'OCR diagnostic artifact was incomplete: ${missing_diagnostics}',
-      'OCR result artifact was missing after a zero-exit review',
-      'OCR artifacts were unavailable after code-review completed with failure or infrastructure diagnostics',
-      'OCR artifact diagnostics unavailable',
-      'exit_code="unknown"',
-      'if [ -f ocr-exit-code.txt ] && [ -s ocr-exit-code.txt ]; then',
-      'raw_exit_code="$(cat ocr-exit-code.txt)"',
-      '\'\'|*[!0-9]*) exit_code="unknown" ;;',
-      'if [ -f ocr-phase.txt ] && [ -s ocr-phase.txt ]; then',
-      'infra_failure=""',
-      'infra_failure="$(cat ocr-infrastructure-failure.txt)"',
-      'if [ -n "$policy_failure" ]; then',
-      'OCR policy failure detected; skipping infrastructure issue notification.',
-      'if [ -z "$infra_failure" ]; then',
-      'return 0',
+      'case "${OCR_RUN_CLASSIFICATION:-}" in',
+      'infrastructure-failure|unexpected-failure)',
+      'Refusing notification for non-infrastructure OCR classification.',
       'command -v gh >/dev/null 2>&1',
       'gh auth status >/dev/null 2>&1',
-      'Keep ISSUE_TITLE as a simple repository-owned literal',
       'ISSUE_TITLE="OCR review infrastructure failure"',
-      'Artifact: ocr-review-output.',
-      'diagnostic_block="$(printf \'%s\\n\' "$sanitized_infra_failure" | sed \'s/^/    /\')"',
-      'Raw stderr remains available only in the workflow artifact.',
+      'OCR review run was classified as ${OCR_RUN_CLASSIFICATION}',
       'gh issue list',
       '--search "' +
         String.raw`\"` +
@@ -788,13 +650,8 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Failed to comment on OCR infrastructure issue after recheck.',
     ]);
     expect(notifyRun).not.toContain('trap \'rm -f "$body_file"\' EXIT RETURN');
-    expect(notifyRun).toContain(
-      'policy_failure="$(cat ocr-policy-failure.txt)"',
-    );
-    expect(notifyRun).not.toContain(
-      'if [ -z "$infra_failure" ] && { [ -z "$exit_code" ] || [ "$exit_code" = "0" ]; }; then',
-    );
     expect(notifyRun).not.toContain('--label "bug"');
+    expect(JSON.stringify(notifyJob)).not.toContain('secrets.');
   });
 
   it('uses UTC dates, backoff retries, and label fallback for infrastructure issues', () => {

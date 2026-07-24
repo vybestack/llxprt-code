@@ -1,0 +1,280 @@
+name: OCR Infrastructure Notifier
+
+on:
+  workflow_run:
+    workflows:
+      - OCR Review
+    types:
+      - completed
+
+permissions: {}
+
+jobs:
+  classify-ocr-run:
+    name: Classify completed OCR run
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' ||
+          github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      classification: ${{ steps.classify.outputs.classification }}
+    steps:
+      - name: Download OCR artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ocr-review-output
+          path: ocr-review-output
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Classify completed OCR run
+        id: classify
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          ARTIFACT_PATH: ocr-review-output
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const markerOutcomes = new Map([
+              ['Record OCR outcome: policy-failure', 'policy-failure'],
+              ['Record OCR outcome: infrastructure-failure', 'infrastructure-failure'],
+              ['Record OCR outcome: success', 'success'],
+              ['Record OCR outcome: unexpected-failure', 'unexpected-failure'],
+              ['Record OCR outcome: review-skipped', 'review-skipped'],
+            ]);
+            const runId = Number(process.env.RUN_ID);
+            if (!Number.isInteger(runId) || runId <= 0) {
+              core.setFailed('Completed OCR run id was invalid.');
+              return;
+            }
+            const response = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+              filter: 'latest',
+              per_page: 100,
+            });
+            const durableOutcomes = new Set();
+            for (const job of response.data.jobs || []) {
+              for (const step of job.steps || []) {
+                if (
+                  step.conclusion === 'success' &&
+                  markerOutcomes.has(step.name)
+                ) {
+                  durableOutcomes.add(markerOutcomes.get(step.name));
+                }
+              }
+            }
+            if (durableOutcomes.size > 1) {
+              core.setFailed(
+                `Completed OCR run recorded multiple durable OCR outcomes: ${Array.from(durableOutcomes).join(', ')}.`,
+              );
+              return;
+            }
+            const artifactPath = process.env.ARTIFACT_PATH || '';
+            const readArtifact = (fileName) => {
+              if (!artifactPath) {
+                return null;
+              }
+              try {
+                return fs.readFileSync(path.join(artifactPath, fileName), 'utf8').trim();
+              } catch (error) {
+                if (error && error.code === 'ENOENT') {
+                  return null;
+                }
+                throw error;
+              }
+            };
+            const policyFailure = readArtifact('ocr-policy-failure.txt');
+            const infrastructureFailure = readArtifact(
+              'ocr-infrastructure-failure.txt',
+            );
+            const exitCode = readArtifact('ocr-exit-code.txt');
+            const result = readArtifact('ocr-result.json');
+            const runConclusion = process.env.RUN_CONCLUSION || '';
+            let artifactOutcome = null;
+            if (policyFailure) {
+              artifactOutcome = 'policy-failure';
+            } else if (runConclusion === 'failure') {
+              artifactOutcome = 'unexpected-failure';
+            } else if (infrastructureFailure) {
+              artifactOutcome = 'infrastructure-failure';
+            } else if (exitCode === '0' && result) {
+              artifactOutcome = 'success';
+            }
+            const durableOutcome = Array.from(durableOutcomes)[0] || null;
+            if (
+              durableOutcome &&
+              artifactOutcome &&
+              durableOutcome !== artifactOutcome
+            ) {
+              core.warning(
+                `OCR artifact classification ${artifactOutcome} disagreed with durable job classification ${durableOutcome}; using durable classification.`,
+              );
+            }
+            const classification =
+              durableOutcome ||
+              artifactOutcome ||
+              (runConclusion === 'failure'
+                ? 'unexpected-failure'
+                : 'not-run');
+            core.info(`Completed OCR run classified as ${classification}.`);
+            core.setOutput('classification', classification);
+
+  notify-ocr-infrastructure-failure:
+    name: Notify OCR infrastructure failure
+    needs: classify-ocr-run
+    if: >-
+      ${{ needs.classify-ocr-run.result == 'success' &&
+          (needs.classify-ocr-run.outputs.classification == 'infrastructure-failure' ||
+           needs.classify-ocr-run.outputs.classification == 'unexpected-failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: ocr-review-infrastructure-issue
+      cancel-in-progress: false
+    permissions:
+      issues: write
+    steps:
+      - name: Notify OCR infrastructure failure issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          OCR_RUN_CLASSIFICATION: ${{ needs.classify-ocr-run.outputs.classification }}
+        run: |
+          set -uo pipefail
+          notify_ocr_infrastructure_failure() {
+            if ! command -v gh >/dev/null 2>&1; then
+              echo "::warning::GitHub CLI is unavailable; skipping OCR infrastructure issue notification."
+              printf '%s\n' '### OCR infrastructure notification skipped' '' 'GitHub CLI was unavailable; see workflow logs for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              return 0
+            fi
+            if ! gh auth status >/dev/null 2>&1; then
+              echo "::warning::GitHub CLI is not authenticated; skipping OCR infrastructure issue notification."
+              printf '%s\n' '### OCR infrastructure notification skipped' '' 'GitHub CLI was not authenticated; see workflow logs for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+              return 0
+            fi
+            case "${OCR_RUN_CLASSIFICATION:-}" in
+              infrastructure-failure|unexpected-failure) ;;
+              *)
+                echo "::warning::Refusing notification for non-infrastructure OCR classification."
+                return 0
+                ;;
+            esac
+            ISSUE_TITLE="OCR review infrastructure failure"
+            retry_gh() {
+              local attempt
+              for attempt in 1 2 3 4; do
+                if "$@"; then
+                  return 0
+                fi
+                if [ "$attempt" -lt 4 ]; then
+                  sleep $(( attempt * 5 ))
+                fi
+              done
+              echo "All retries exhausted for: $*" >&2
+              return 1
+            }
+            create_infrastructure_issue() {
+              local issue_body_file
+              local create_stderr
+              issue_body_file="$1"
+              shift
+              create_stderr="$(mktemp)"
+              if gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" 2>"${create_stderr}"; then
+                rm -f "${create_stderr}"
+                return 0
+              fi
+              if grep -Eqi "label|labels|not found|does not exist" "${create_stderr}"; then
+                echo "::warning::OCR infrastructure issue label was unavailable; retrying without labels."
+                if gh issue create "$@" --body-file "$issue_body_file"; then
+                  rm -f "${create_stderr}"
+                  return 0
+                fi
+              fi
+              rm -f "${create_stderr}"
+              echo "::warning::Failed to create OCR infrastructure issue."
+              return 1
+            }
+            converge_duplicate_tracking_issues() {
+              local dup_issues
+              if ! dup_issues="$(
+                gh issue list \
+                  --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-asc" \
+                  --limit 30 \
+                  --json number,title \
+                  --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number]"
+              )"; then
+                echo "::warning::Failed to list duplicate tracking issues for convergence; duplicates may accumulate."
+                return 0
+              fi
+              local dup_count
+              dup_count="$(printf '%s' "$dup_issues" | jq 'length')"
+              if [ "$dup_count" -le 1 ]; then
+                return 0
+              fi
+              local KEEP_ISSUE
+              KEEP_ISSUE="$(printf '%s' "$dup_issues" | jq -r '.[0]')"
+              for dup in $(printf '%s' "$dup_issues" | jq -r '.[1:][]'); do
+                gh issue comment "${KEEP_ISSUE}" --body "Consolidated duplicate tracking issue #${dup} into this issue." || true
+                gh issue close "${dup}" || true
+              done
+            }
+            if ! EXISTING_ISSUE="$(
+              retry_gh gh issue list \
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+                --limit 30 \
+                --json number,title \
+                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
+            )"; then
+              echo "::warning::Failed to search for existing OCR infrastructure issue."
+              return 0
+            fi
+            body="OCR review run was classified as ${OCR_RUN_CLASSIFICATION} on $(TZ=UTC date +'%Y-%m-%d'). Run: ${RUN_URL}. Review the trusted workflow logs and the redacted ocr-review-output artifact for diagnostics."
+            if ! body_file="$(mktemp)"; then
+              echo "::warning::Failed to create OCR infrastructure issue body file."
+              return 1
+            fi
+            trap 'rm -f "$body_file"' EXIT
+            if ! printf '%s\n' "$body" > "$body_file"; then
+              echo "::warning::Failed to write OCR infrastructure issue body file."
+              rm -f "$body_file"
+              return 1
+            fi
+            if [ -n "$EXISTING_ISSUE" ]; then
+              gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue."
+              converge_duplicate_tracking_issues
+              return 0
+            fi
+            if ! EXISTING_ISSUE="$(
+              retry_gh gh issue list \
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+                --limit 30 \
+                --json number,title \
+                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
+            )"; then
+              echo "::warning::Failed to recheck for existing OCR infrastructure issue before create."
+              return 0
+            fi
+            if [ -n "$EXISTING_ISSUE" ]; then
+              gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue after recheck."
+              converge_duplicate_tracking_issues
+              return 0
+            fi
+            create_infrastructure_issue "$body_file" \
+              --title "${ISSUE_TITLE}"
+            converge_duplicate_tracking_issues
+            return 0
+          }
+          notify_ocr_infrastructure_failure || echo "::warning::OCR infrastructure issue notification failed; continuing."
+          exit 0

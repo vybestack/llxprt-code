@@ -28,8 +28,19 @@ env:
   REPO: '${{ github.repository }}'
 
 jobs:
+  mergeability-gate:
+    name: 'Mergeability gate'
+    uses: './.github/workflows/_pr-mergeability-gate.yml'
+    with:
+      check-mergeability: true
+      pull-request-number: "${{ format('{0}', github.event.pull_request.number) }}"
+      expected-head-sha: '${{ github.event.pull_request.head.sha }}'
+
   review:
     name: 'Run LLxprt review'
+    needs:
+      - 'mergeability-gate'
+    if: ${{ needs.mergeability-gate.outputs.should-run == 'true' }}
     runs-on: 'ubuntu-latest'
     timeout-minutes: 60
     env:
@@ -64,6 +75,7 @@ jobs:
         env:
           HEAD_REF_VALUE: '${{ github.event.pull_request.head.ref }}'
           HEAD_REPO_VALUE: '${{ github.event.pull_request.head.repo.full_name }}'
+          EXPECTED_HEAD_SHA: '${{ github.event.pull_request.head.sha }}'
         run: |
           set -euo pipefail
           pr_ref="refs/pr/${PR_NUMBER}"
@@ -83,6 +95,10 @@ jobs:
 
           base_sha='${{ github.event.pull_request.base.sha }}'
           head_sha="$(git rev-parse "${pr_ref}")"
+          if [[ "${head_sha}" != "${EXPECTED_HEAD_SHA}" ]]; then
+            echo "Fetched PR head changed from event SHA ${EXPECTED_HEAD_SHA} to ${head_sha}; aborting." >&2
+            exit 1
+          fi
 
           # Compute the merge-base so diffs only contain changes the PR
           # actually introduced, not unrelated main-branch activity.

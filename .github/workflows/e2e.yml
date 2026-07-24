@@ -9,9 +9,11 @@ on:
     branches:
       - 'main'
       - 'release/**'
-  # This will run for PRs from forks when a label is added.
+  # This will run for PRs from forks when the approval label is added.
+  # A new fork head requires a new maintainer approval event.
   pull_request_target:
-    types: ['labeled']
+    types:
+      - 'labeled'
   merge_group:
   workflow_dispatch:
     inputs:
@@ -36,12 +38,32 @@ jobs:
           concurrent_skipping: 'same_content'
           skip_after_successful_duplicate: 'true'
           do_not_skip: '["workflow_dispatch", "merge_group"]'
+  mergeability-gate:
+    name: 'Mergeability gate'
+    needs:
+      - 'skip_check'
+    if: >-
+      ${{ needs.skip_check.result == 'success' &&
+          needs.skip_check.outputs.should_skip != 'true' &&
+          github.event_name == 'pull_request_target' &&
+          github.event.action == 'labeled' &&
+          github.event.label.name == 'maintainer:e2e:ok' }}
+    uses: './.github/workflows/_pr-mergeability-gate.yml'
+    with:
+      check-mergeability: true
+      pull-request-number: "${{ format('{0}', github.event.pull_request.number) }}"
+      expected-head-sha: '${{ github.event.pull_request.head.sha }}'
   e2e_doc_change_filter:
     name: 'Detect doc-only changes for E2E'
     runs-on: 'ubuntu-latest'
     needs:
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    if: >-
+      ${{ needs.skip_check.result == 'success' &&
+          needs.skip_check.outputs.should_skip != 'true' &&
+          (github.event_name != 'pull_request_target' ||
+           (github.event.action == 'labeled' &&
+            github.event.label.name == 'maintainer:e2e:ok')) }}
     outputs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
@@ -124,22 +146,36 @@ jobs:
     needs:
       - e2e_doc_change_filter
       - skip_check
+      - mergeability-gate
     concurrency:
       group: >-
         ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ matrix.sandbox }}
       cancel-in-progress: true
     if: |
-      (
-        github.event_name == 'push' ||
-        github.event_name == 'merge_group' ||
-        github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository) ||
-        (github.event_name == 'pull_request_target' &&
-          github.event.label.name == 'maintainer:e2e:ok')
-      ) &&
+      !cancelled() &&
+      needs.skip_check.result == 'success' &&
+      needs.e2e_doc_change_filter.result == 'success' &&
       needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
-      needs.skip_check.outputs.should_skip != 'true'
+      needs.skip_check.outputs.should_skip != 'true' &&
+      (
+        (
+          (
+            github.event_name == 'push' ||
+            github.event_name == 'merge_group' ||
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'pull_request' &&
+              github.event.pull_request.head.repo.full_name == github.repository)
+          ) &&
+          needs.mergeability-gate.result == 'skipped'
+        ) ||
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.action == 'labeled' &&
+          github.event.label.name == 'maintainer:e2e:ok' &&
+          needs.mergeability-gate.result == 'success' &&
+          needs.mergeability-gate.outputs.should-run == 'true'
+        )
+      )
     runs-on: 'ubuntu-latest'
     strategy:
       fail-fast: false
@@ -250,21 +286,35 @@ jobs:
     needs:
       - e2e_doc_change_filter
       - skip_check
+      - mergeability-gate
     concurrency:
       group: >-
         ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-macos
       cancel-in-progress: true
     if: |
-      (
-        github.event_name == 'merge_group' ||
-        github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository) ||
-        (github.event_name == 'pull_request_target' &&
-          github.event.label.name == 'maintainer:e2e:ok')
-      ) &&
+      !cancelled() &&
+      needs.skip_check.result == 'success' &&
+      needs.e2e_doc_change_filter.result == 'success' &&
       needs.e2e_doc_change_filter.outputs.docs_only != 'true' &&
-      needs.skip_check.outputs.should_skip != 'true'
+      needs.skip_check.outputs.should_skip != 'true' &&
+      (
+        (
+          (
+            github.event_name == 'merge_group' ||
+            github.event_name == 'workflow_dispatch' ||
+            (github.event_name == 'pull_request' &&
+              github.event.pull_request.head.repo.full_name == github.repository)
+          ) &&
+          needs.mergeability-gate.result == 'skipped'
+        ) ||
+        (
+          github.event_name == 'pull_request_target' &&
+          github.event.action == 'labeled' &&
+          github.event.label.name == 'maintainer:e2e:ok' &&
+          needs.mergeability-gate.result == 'success' &&
+          needs.mergeability-gate.outputs.should-run == 'true'
+        )
+      )
     runs-on: 'macos-latest'
     continue-on-error: true
     steps:

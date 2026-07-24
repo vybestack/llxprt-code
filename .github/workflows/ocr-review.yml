@@ -35,6 +35,32 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: >-
+    ${{
+      (github.event_name == 'workflow_dispatch' ||
+       github.event_name == 'pull_request_target' ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        (github.event.comment.author_association == 'OWNER' ||
+         github.event.comment.author_association == 'MEMBER' ||
+         github.event.comment.author_association == 'COLLABORATOR') &&
+        (github.event.comment.body == '/ocr' ||
+         startsWith(github.event.comment.body, '/ocr ') ||
+         startsWith(toJSON(github.event.comment.body), '"/ocr\n') ||
+         startsWith(toJSON(github.event.comment.body), '"/ocr\r\n') ||
+         startsWith(toJSON(github.event.comment.body), '"/ocr\t') ||
+         github.event.comment.body == '/open-code-review' ||
+         startsWith(github.event.comment.body, '/open-code-review ') ||
+         startsWith(toJSON(github.event.comment.body), '"/open-code-review\n') ||
+         startsWith(toJSON(github.event.comment.body), '"/open-code-review\r\n') ||
+         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))) &&
+      format('{0}-pr-{1}', github.workflow,
+        github.event.pull_request.number || github.event.issue.number || inputs.pr_number) ||
+      format('{0}-run-{1}', github.workflow, github.run_id)
+    }}
+  cancel-in-progress: true
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   # Keep CI reviews deterministic by disabling OCR self-update checks.
@@ -46,22 +72,15 @@ env:
   OCR_CONCURRENCY: '2'
 
 jobs:
-  code-review:
-    name: OpenCodeReview
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # Infrastructure failures are intentionally non-blocking for PR checks, but
-    # this output lets downstream jobs distinguish a completed OCR review from a
-    # review that could not run because of provider, install, or script issues.
-    outputs:
-      infrastructure_failure: ${{ steps.ocr-classification.outputs.infrastructure_failure }}
-      policy_failure: ${{ steps.ocr-classification.outputs.policy_failure }}
-    # For issue_comment, only run on PR comments requesting a review.
-    # The toJSON checks intentionally support LF, CRLF, and tab after the
-    # command; other whitespace is not matched to keep triggers predictable.
+  mergeability-gate:
+    name: Mergeability gate
+    uses: ./.github/workflows/_pr-mergeability-gate.yml
+    # The gate caller owns the exact authorized event/comment predicate so
+    # unauthorized and non-PR comments cannot enter the concurrency group.
+    # workflow_dispatch bypasses mergeability checking intentionally.
     if: |
-      github.event_name == 'pull_request_target' ||
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        (github.event.comment.author_association == 'OWNER' ||
@@ -77,14 +96,26 @@ jobs:
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\n') ||
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\r\n') ||
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))
-    # Job-level concurrency is evaluated only for runs that pass this job if filter,
-    # so ordinary, unauthorized, and non-PR issue comments cannot cancel OCR.
-    # All authorized OCR triggers for the same PR share one workflow-scoped group
-    # so the latest run owns the sticky summary and inline-comment posting.
-    concurrency:
-      group: >-
-        ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
-      cancel-in-progress: true
+    with:
+      check-mergeability: ${{ github.event_name != 'workflow_dispatch' }}
+      pull-request-number: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
+      expected-head-sha: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
+
+  code-review:
+    name: OpenCodeReview
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Infrastructure failures are intentionally non-blocking for PR checks, but
+    # this output lets downstream jobs distinguish a completed OCR review from a
+    # review that could not run because of provider, install, or script issues.
+    outputs:
+      infrastructure_failure: ${{ steps.ocr-classification.outputs.infrastructure_failure }}
+      policy_failure: ${{ steps.ocr-classification.outputs.policy_failure }}
+    # The code-review job runs only when the mergeability gate permits it.
+    needs:
+      - mergeability-gate
+    if: |
+      needs.mergeability-gate.outputs.should-run == 'true'
     steps:
       - name: Resolve PR context
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
@@ -1181,260 +1212,61 @@ jobs:
           set +e
           git config --file "${HOME}/.gitconfig" --unset-all safe.directory "$GITHUB_WORKSPACE" 2>/dev/null || true
 
-  notify-ocr-infrastructure-failure:
-    name: Notify OCR infrastructure failure
+  record-ocr-outcome:
+    name: Record OCR outcome
+    needs:
+      - mergeability-gate
+      - code-review
+    if: >-
+      ${{ !cancelled() &&
+          needs.mergeability-gate.result == 'success' &&
+          needs.mergeability-gate.outputs.should-run == 'true' &&
+          (needs.code-review.result == 'success' ||
+           needs.code-review.result == 'failure') }}
     runs-on: ubuntu-latest
-    needs: code-review
-    # Skipped/cancelled superseded OCR runs should not create infrastructure issues;
-    # successful runs check artifacts because OCR runtime failures are non-blocking,
-    # and failed runs may still have artifacts from an unexpected later failure.
-    if: ${{ !cancelled() && (needs.code-review.result == 'success' || needs.code-review.result == 'failure') }}
-    timeout-minutes: 5
-    concurrency:
-      group: ocr-review-infrastructure-issue
-      cancel-in-progress: false
-    permissions:
-      actions: read
-      issues: write
+    timeout-minutes: 2
+    permissions: {}
     steps:
-      - name: Download OCR artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # ratchet:actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: ocr-review-output
-          path: ocr-review-output
-
-      - name: Notify OCR infrastructure failure issue
-        if: always()
+      - name: 'Record OCR outcome: policy-failure'
+        if: ${{ needs.code-review.outputs.policy_failure == 'true' }}
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          CODE_REVIEW_RESULT: ${{ needs.code-review.result }}
-          CODE_REVIEW_POLICY_FAILURE: ${{ needs.code-review.outputs.policy_failure }}
-          CODE_REVIEW_INFRASTRUCTURE_FAILURE: ${{ needs.code-review.outputs.infrastructure_failure }}
-          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
-        run: |
-          set -uo pipefail
-          sanitize_diagnostics() {
-            local diagnostic
-            local exact_secret
-            local exact_url
-            diagnostic="$1"
-            exact_secret="${OCR_LLM_TOKEN:-}"
-            exact_url="${OCR_LLM_URL:-}"
-            OCR_EXACT_SECRET="$exact_secret" OCR_EXACT_URL="$exact_url" perl -0pe '
-              BEGIN {
-                $redaction = "[REDACTED]";
-                $secret = $ENV{"OCR_EXACT_SECRET"} // "";
-                $url = $ENV{"OCR_EXACT_URL"} // "";
-              }
-              if (length($secret) > 0) {
-                my $quoted_secret = quotemeta($secret);
-                s/$quoted_secret/$redaction/g;
-              }
-              if (length($url) > 0) {
-                my $quoted_url = quotemeta($url);
-                s/$quoted_url/$redaction/g;
-              }
-              s/\b(Authorization\s*:\s*(?:(?:Bearer|Basic|token|ApiKey)\s+)?)([^\s,;]+)/$1$redaction/gi;
-              s/\b(x-api-key\s*:\s*)([^\s,;]+)/$1$redaction/gi;
-              s/\b(api[_-]?key\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
-              s/([?&](?:key|api[_-]?key|token)=)([^\s,;&]+)/$1$redaction/gi;
-              s/\b(access[_-]?token\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
-              s/\b(refresh[_-]?token\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
-              s/\b(id[_-]?token\s*[=:]\s*)([^\s,;&]+)/$1$redaction/gi;
-              s/\b(token\s*[=:]\s*)([A-Za-z0-9_.\/+=:\@-]{16,})/$1$redaction/gi;
-              s/\b(secret\s*[=:]\s*)([A-Za-z0-9_.\/+=:\@-]{16,})/$1$redaction/gi;
-            ' <<< "$diagnostic" || return 1
-          }
-          notify_ocr_infrastructure_failure() {
-            if ! command -v gh >/dev/null 2>&1; then
-              echo "::warning::GitHub CLI is unavailable; skipping OCR infrastructure issue notification."
-              printf '%s\n' '### OCR infrastructure notification skipped' '' 'GitHub CLI was unavailable; see workflow warnings and artifacts for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-              return 0
-            fi
-            if ! gh auth status >/dev/null 2>&1; then
-              echo "::warning::GitHub CLI is not authenticated; skipping OCR infrastructure issue notification."
-              printf '%s\n' '### OCR infrastructure notification skipped' '' 'GitHub CLI was not authenticated; see workflow warnings and artifacts for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-              return 0
-            fi
-            exit_code="unknown"
-            phase="unknown"
-            infra_failure=""
-            policy_failure=""
-            if [ -d ocr-review-output ]; then
-              cd ocr-review-output || return 1
-              missing_diagnostics=""
-              for diagnostic_file in ocr-exit-code.txt ocr-phase.txt ocr-infrastructure-failure.txt ocr-policy-failure.txt; do
-                if [ ! -f "$diagnostic_file" ]; then
-                  missing_diagnostics="${missing_diagnostics}${diagnostic_file} "
-                fi
-              done
-              if [ -f ocr-exit-code.txt ] && [ -s ocr-exit-code.txt ]; then
-                raw_exit_code="$(cat ocr-exit-code.txt)"
-                case "$raw_exit_code" in
-                  ''|*[!0-9]*) exit_code="unknown" ;;
-                  *) exit_code="$raw_exit_code" ;;
-                esac
-              fi
-              if [ -f ocr-phase.txt ] && [ -s ocr-phase.txt ]; then
-                phase="$(cat ocr-phase.txt)"
-              fi
-              if [ -f ocr-infrastructure-failure.txt ]; then
-                infra_failure="$(cat ocr-infrastructure-failure.txt)"
-              fi
-              if [ -f ocr-policy-failure.txt ]; then
-                policy_failure="$(cat ocr-policy-failure.txt)"
-              fi
-              if [ -z "$policy_failure" ] && [ "${CODE_REVIEW_POLICY_FAILURE:-}" = "true" ]; then
-                policy_failure="policy failure recorded by code-review job output"
-              fi
-              if [ -z "$infra_failure" ] && [ -n "$missing_diagnostics" ] && [ "${CODE_REVIEW_RESULT:-}" = "failure" ]; then
-                phase="artifact"
-                infra_failure="phase=artifact; reason=OCR diagnostic artifact was incomplete: ${missing_diagnostics}"
-              fi
-              if [ -z "$infra_failure" ] && [ "$exit_code" = "0" ] && [ ! -s ocr-result.json ]; then
-                phase="artifact"
-                infra_failure="phase=artifact; reason=OCR result artifact was missing after a zero-exit review"
-              fi
-            elif [ "${CODE_REVIEW_RESULT:-}" = "failure" ] || [ "${CODE_REVIEW_INFRASTRUCTURE_FAILURE:-}" = "true" ]; then
-              if [ "${CODE_REVIEW_POLICY_FAILURE:-}" = "true" ]; then
-                echo "::notice::OCR policy failure output was set; skipping missing-artifact infrastructure notification."
-                return 0
-              fi
-              phase="artifact"
-              infra_failure="phase=artifact; reason=OCR artifacts were unavailable after code-review completed with failure or infrastructure diagnostics"
-              echo "::warning::OCR artifacts were unavailable after code-review completed with failure or infrastructure diagnostics; creating infrastructure notification."
-            else
-              echo "::warning::OCR artifacts were unavailable; cannot determine whether an infrastructure failure occurred."
-              printf '%s\n' '### OCR artifact diagnostics unavailable' '' 'The OCR artifact download failed, and the code-review job did not report a policy or infrastructure failure output. See workflow logs for details.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-              return 0
-            fi
-            if [ -n "$policy_failure" ]; then
-              echo "::notice::OCR policy failure detected; skipping infrastructure issue notification."
-              return 0
-            fi
-            if [ -z "$infra_failure" ]; then
-              return 0
-            fi
-            if ! command -v perl >/dev/null 2>&1; then
-              echo "::warning::Perl is unavailable; skipping OCR infrastructure issue notification."
-              printf '%s\n' '### OCR infrastructure notification skipped' '' 'Perl was unavailable, so the final issue-notification sanitizer could not run. See the redacted OCR artifacts and workflow warnings for diagnostics.' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-              return 0
-            fi
-            # Keep ISSUE_TITLE as a simple repository-owned literal; it is used inside gh search strings below.
-            ISSUE_TITLE="OCR review infrastructure failure"
-            if ! sanitized_infra_failure="$(sanitize_diagnostics "$infra_failure")"; then
-              echo "::warning::Failed to sanitize OCR infrastructure diagnostic; skipping notification."
-              return 1
-            fi
-            retry_gh() {
-              local attempt
-              for attempt in 1 2 3 4; do
-                if "$@"; then
-                  return 0
-                fi
-                if [ "$attempt" -lt 4 ]; then
-                  sleep $(( attempt * 5 ))
-                fi
-              done
-              echo "All retries exhausted for: $*" >&2
-              return 1
-            }
-            create_infrastructure_issue() {
-              local issue_body_file
-              local create_stderr
-              issue_body_file="$1"
-              shift
-              create_stderr="$(mktemp)"
-              if gh issue create "$@" --body-file "$issue_body_file" --label "ci/cd" 2>"${create_stderr}"; then
-                rm -f "${create_stderr}"
-                return 0
-              fi
-              if grep -Eqi "label|labels|not found|does not exist" "${create_stderr}"; then
-                echo "::warning::OCR infrastructure issue label was unavailable; retrying without labels."
-                if gh issue create "$@" --body-file "$issue_body_file"; then
-                  rm -f "${create_stderr}"
-                  return 0
-                fi
-              fi
-              rm -f "${create_stderr}"
-              echo "::warning::Failed to create OCR infrastructure issue."
-              return 1
-            }
-            converge_duplicate_tracking_issues() {
-              local dup_issues
-              if ! dup_issues="$(
-                gh issue list \
-                  --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-asc" \
-                  --limit 30 \
-                  --json number,title \
-                  --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number]"
-              )"; then
-                echo "::warning::Failed to list duplicate tracking issues for convergence; duplicates may accumulate."
-                return 0
-              fi
-              local dup_count
-              dup_count="$(printf '%s' "$dup_issues" | jq 'length')"
-              if [ "$dup_count" -le 1 ]; then
-                return 0
-              fi
-              local KEEP_ISSUE
-              KEEP_ISSUE="$(printf '%s' "$dup_issues" | jq -r '.[0]')"
-              for dup in $(printf '%s' "$dup_issues" | jq -r '.[1:][]'); do
-                gh issue comment "${KEEP_ISSUE}" --body "Consolidated duplicate tracking issue #${dup} into this issue." || true
-                gh issue close "${dup}" || true
-              done
-            }
-            if ! EXISTING_ISSUE="$(
-              retry_gh gh issue list \
-                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
-                --limit 30 \
-                --json number,title \
-                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
-            )"; then
-              echo "::warning::Failed to search for existing OCR infrastructure issue."
-              return 0
-            fi
-            diagnostic_block="$(printf '%s\n' "$sanitized_infra_failure" | sed 's/^/    /')"
-            body="$(printf 'OCR review infrastructure failure on %s. Phase: %s. Exit code: %s. Artifact: ocr-review-output. Infrastructure diagnostic:\n\n%s\n\nRun: %s. Raw stderr remains available only in the workflow artifact.' "$(TZ=UTC date +'%Y-%m-%d')" "$phase" "$exit_code" "$diagnostic_block" "$RUN_URL")"
-            if ! body_file="$(mktemp)"; then
-              echo "::warning::Failed to create OCR infrastructure issue body file."
-              return 1
-            fi
-            trap 'rm -f "$body_file"' EXIT
-            if ! printf '%s\n' "$body" > "$body_file"; then
-              echo "::warning::Failed to write OCR infrastructure issue body file."
-              rm -f "$body_file"
-              return 1
-            fi
-            if [ -n "$EXISTING_ISSUE" ]; then
-              gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue."
-              converge_duplicate_tracking_issues
-              return 0
-            fi
-            if ! EXISTING_ISSUE="$(
-              retry_gh gh issue list \
-                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
-                --limit 30 \
-                --json number,title \
-                --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
-            )"; then
-              echo "::warning::Failed to recheck for existing OCR infrastructure issue before create."
-              return 0
-            fi
-            if [ -n "$EXISTING_ISSUE" ]; then
-              gh issue comment "${EXISTING_ISSUE}" --body-file "$body_file" || echo "::warning::Failed to comment on OCR infrastructure issue after recheck."
-              converge_duplicate_tracking_issues
-              return 0
-            fi
-            create_infrastructure_issue "$body_file" \
-              --title "${ISSUE_TITLE}"
-            converge_duplicate_tracking_issues
-            return 0
-          }
-          notify_ocr_infrastructure_failure || echo "::warning::OCR infrastructure issue notification failed; continuing."
-          exit 0
+        run: echo 'OCR policy failure recorded.'
+
+      - name: 'Record OCR outcome: infrastructure-failure'
+        if: >-
+          ${{ needs.code-review.result == 'success' &&
+              needs.code-review.outputs.policy_failure != 'true' &&
+              needs.code-review.outputs.infrastructure_failure == 'true' }}
+        shell: bash
+        run: echo 'Non-blocking OCR infrastructure failure recorded.'
+
+      - name: 'Record OCR outcome: success'
+        if: >-
+          ${{ needs.code-review.result == 'success' &&
+              needs.code-review.outputs.policy_failure != 'true' &&
+              needs.code-review.outputs.infrastructure_failure != 'true' }}
+        shell: bash
+        run: echo 'Successful OCR review recorded.'
+
+      - name: 'Record OCR outcome: unexpected-failure'
+        if: >-
+          ${{ needs.code-review.result == 'failure' &&
+              needs.code-review.outputs.policy_failure != 'true' }}
+        shell: bash
+        run: echo 'Unexpected OCR job failure recorded.'
+
+  record-skipped-ocr-outcome:
+    name: Record skipped OCR outcome
+    needs:
+      - mergeability-gate
+    if: >-
+      ${{ !cancelled() &&
+          needs.mergeability-gate.result == 'success' &&
+          needs.mergeability-gate.outputs.should-run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: 'Record OCR outcome: review-skipped'
+        shell: bash
+        run: echo 'OCR review skipped by the mergeability gate.'
