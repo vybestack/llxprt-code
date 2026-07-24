@@ -110,7 +110,7 @@ describe('policiesCommand', () => {
 
     expect(result.type).toBe('message');
     expect(result.messageType).toBe('info');
-    expect(result.content).toContain('Active Policy Rules:');
+    expect(result.content).toContain('Configured Policy Rules:');
     expect(result.content).toContain('shell → DENY');
     expect(result.content).toContain('glob → ALLOW');
     expect(result.content).toContain('edit → ALLOW');

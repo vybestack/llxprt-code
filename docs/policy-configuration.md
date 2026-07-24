@@ -161,19 +161,19 @@ active in:
 [[rule]]
 toolName = "replace"
 decision = "allow"
-priority = 15
+priority = 1.015
 modes = ["autoEdit"]
 
 # Only active in YOLO mode
 [[rule]]
 decision = "allow"
-allow_redirection = true
-priority = 999
+allowRedirection = true
+priority = 1.999
 modes = ["yolo"]
 ```
 
 When the approval mode changes (Ctrl-Y / Ctrl-E), the PolicyEngine's
-`currentMode` is atomically updated via `setApprovalMode()`. Rules with a
+`currentMode` is synchronously updated via `setApprovalMode()`. Rules with a
 `modes` filter that doesn't include the new mode are automatically skipped —
 rules without a `modes` filter always apply.
 
@@ -181,7 +181,7 @@ rules without a `modes` filter always apply.
 
 Mode-specific behavior is expressed declaratively via the `modes` field on
 individual rules. The PolicyEngine evaluates those rules dynamically at
-`evaluate()` time against `currentMode`, which is updated atomically via
+`evaluate()` time against `currentMode`, which is updated synchronously via
 `setApprovalMode()`. No rules are added or removed on transition — only the
 mode filter changes.
 
@@ -189,9 +189,10 @@ When `Config.setApprovalMode()` is called, it calls
 `syncModeDerivedPolicyRules()` which calls `setApprovalMode()` on the engine.
 This ensures:
 
-- YOLO→DEFAULT removes the wildcard ALLOW, reverting all tools to ASK_USER
-- AUTO_EDIT→DEFAULT removes per-tool ALLOW, reverting edit tools to ASK_USER
-- Non-mode rules (e.g., read-only ALLOW at priority 1.05) survive all transitions
+- YOLO→DEFAULT deactivates the mode-specific wildcard ALLOW
+- AUTO_EDIT→DEFAULT deactivates the mode-specific editor ALLOW rules
+- Non-mode rules and higher-priority rules remain active across transitions, so
+  their configured decisions still take precedence
 
 ### Initial CLI/Agent Parity
 

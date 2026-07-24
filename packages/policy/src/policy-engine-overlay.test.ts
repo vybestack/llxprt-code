@@ -326,7 +326,7 @@ describe('Multiple modes on a single rule', () => {
 
 describe('modes combined with argsPattern', () => {
   it('mode-filtered argsPattern rule only matches in its mode and only when args match', () => {
-    // This rule allows "safe-ls" shell command ONLY in YOLO mode.
+    // This rule denies "dangerous-cmd" only in YOLO mode.
     // We use a priority ABOVE the YOLO wildcard (1.999) so that this
     // specific rule is the decisive one, proving the argsPattern truly
     // governs the match rather than being masked by the wildcard.

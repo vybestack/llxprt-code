@@ -79,7 +79,7 @@ function formatPolicyOutput(
     (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
   );
 
-  const lines: string[] = ['Active Policy Rules:', ''];
+  const lines: string[] = ['Configured Policy Rules:', ''];
 
   const tierBands = new Map<string, typeof sortedRules>();
 
