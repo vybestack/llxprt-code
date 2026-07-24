@@ -382,6 +382,21 @@ interface DeliverInitialContextHolder {
 }
 
 /**
+ * Asserts that a private method a test synchronizes on still exists. Without
+ * this, renaming the method would leave the test installing a wrapper that is
+ * never invoked — silently reverting the test to its former flaky behaviour
+ * instead of failing loudly.
+ */
+function requireMethod<T>(method: T | undefined, name: string): T {
+  if (typeof method !== 'function') {
+    throw new Error(
+      `${name} not found: the synchronization signal this test depends on is no longer valid`,
+    );
+  }
+  return method as T;
+}
+
+/**
  * Spies on the IDEServer's private deliverInitialContext method to detect when
  * the authoritative ping has demonstrably entered the server-side delivery
  * path. This replaces the unreliable setImmediate yields that were used to
@@ -407,7 +422,13 @@ function createPingArrivalSpy(server: IDEServer): {
   });
 
   const holder = server as unknown as DeliverInitialContextHolder;
-  const realDeliver = holder.deliverInitialContext.bind(server);
+  // Fail loudly if the method is renamed. Without this the spy would install a
+  // wrapper that is never invoked, the gate would be released before the ping
+  // arrived, and the test would silently revert to being flaky.
+  const realDeliver = requireMethod(
+    holder.deliverInitialContext,
+    'IDEServer.deliverInitialContext',
+  ).bind(server);
 
   holder.deliverInitialContext = (
     sessionId: string,
@@ -426,7 +447,11 @@ function createPingArrivalSpy(server: IDEServer): {
   return {
     waitForPingEntry: () => pingEnteredPromise,
     restore: () => {
-      holder.deliverInitialContext = realDeliver;
+      // Delete the instance override rather than assigning the bound function
+      // back, so the prototype method is in effect again and the object shape
+      // matches its pre-spy state.
+      delete (holder as Partial<DeliverInitialContextHolder>)
+        .deliverInitialContext;
     },
   };
 }

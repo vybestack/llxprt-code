@@ -144,6 +144,21 @@ function createExtensionContext(): vscode.ExtensionContext {
   } as unknown as vscode.ExtensionContext;
 }
 
+/**
+ * Asserts that a private method a test synchronizes on still exists. Without
+ * this, renaming the method would leave the test installing a wrapper that is
+ * never invoked — silently reverting the test to its former flaky behaviour
+ * instead of failing loudly.
+ */
+function requireMethod<T>(method: T | undefined, name: string): T {
+  if (typeof method !== 'function') {
+    throw new Error(
+      `${name} not found: the synchronization signal this test depends on is no longer valid`,
+    );
+  }
+  return method as T;
+}
+
 async function buildConnectedStack(): Promise<{
   ideClient: IdeClient;
   ideServer: IDEServer;
@@ -272,9 +287,10 @@ describe('IdeClient with the VS Code companion server', () => {
     const serverHolder = stack.ideServer as unknown as {
       handleSessionRequest: (...args: unknown[]) => Promise<unknown>;
     };
-    const realHandleSessionRequest = serverHolder.handleSessionRequest.bind(
-      stack.ideServer,
-    );
+    const realHandleSessionRequest = requireMethod(
+      serverHolder.handleSessionRequest,
+      'IDEServer.handleSessionRequest',
+    ).bind(stack.ideServer);
     let getStreamResolve!: () => void;
     const getStreamEstablished = new Promise<void>((resolve) => {
       getStreamResolve = resolve;
@@ -288,16 +304,39 @@ describe('IdeClient with the VS Code companion server', () => {
       return result;
     };
 
-    await ideClient.connect();
-    // Drain the synchronous initial value first.
-    expect(ideContext.getIdeContext()).toBeDefined();
+    try {
+      await ideClient.connect();
+      // Drain the synchronous initial value first.
+      expect(ideContext.getIdeContext()).toBeDefined();
 
-    // Wait for the standalone GET SSE stream to arrive at the server.
-    await getStreamEstablished;
+      // Wait for the standalone GET SSE stream to arrive at the server.
+      await getStreamEstablished;
+    } finally {
+      // Drop the instance override so the prototype implementation is in
+      // effect again, even if connect() or the wait above throws.
+      delete (serverHolder as Partial<typeof serverHolder>)
+        .handleSessionRequest;
+    }
+
+    // Make the broadcast payload observably DIFFERENT from the initial
+    // context. Without this, the assertion would also be satisfied by a
+    // late-arriving initial notification racing in on the GET stream, so the
+    // test could pass even if broadcastIdeContextUpdate were broken.
+    //
+    // OpenFilesManager.state reads vscode.workspace.isTrusted live on every
+    // access, so flipping it here is reflected in the next broadcast without
+    // depending on editor event watchers (which this suite's vscode mock
+    // stubs out as no-op disposables).
+    Object.defineProperty(vscode.workspace, 'isTrusted', {
+      configurable: true,
+      value: false,
+    });
 
     const secondUpdate = new Promise<IdeContext>((resolve) => {
       const unsubscribe = ideContext.subscribeToIdeContext((next) => {
-        if (next !== undefined) {
+        // Ignore any initial-context notification still in flight; only the
+        // post-broadcast state carries isTrusted === false.
+        if (next?.workspaceState?.isTrusted === false) {
           unsubscribe();
           resolve(next);
         }
@@ -306,12 +345,12 @@ describe('IdeClient with the VS Code companion server', () => {
     stack.ideServer.broadcastIdeContextUpdate();
 
     const updated = await secondUpdate;
-    // broadcastIdeContextUpdate re-sends openFilesManager.state (the same
-    // workspaceState shape seeded by seedActiveEditor), so the incremental
-    // update must carry the active README file.
+    // The incremental update must carry the NEW trust state, proving this
+    // broadcast was delivered rather than a replayed initial context, and it
+    // must still carry the active README file.
     expect(updated).toMatchObject({
       workspaceState: {
-        isTrusted: true,
+        isTrusted: false,
         openFiles: [
           {
             path: readmePath,
