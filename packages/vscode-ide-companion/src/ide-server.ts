@@ -572,9 +572,22 @@ export class IDEServer {
     // handleGetRequest sets up the standalone SSE stream mapping
     // synchronously before returning the Response, so by the time this
     // call yields, the mapping is active. We then send the initial context
-    // while the GET SSE stream is live, and finally await the request
-    // lifecycle.
+    // while the GET SSE stream is live, and finally observe the request
+    // lifecycle outcome.
     const handlePromise = transport.handleRequest(req, res);
+
+    // Capture the settled outcome synchronously so a client-abort rejection
+    // that fires while deliverInitialContext is in-flight can never become a
+    // transient unhandled rejection. The captured result is observed (and any
+    // error propagated to the existing handler) after context delivery, so
+    // request/SSE lifecycle semantics are unchanged.
+    const handleSettled = handlePromise.then<
+      { ok: true },
+      { ok: false; error: unknown }
+    >(
+      () => ({ ok: true }),
+      (error: unknown) => ({ ok: false, error }),
+    );
 
     try {
       // Deliver initial context on the standalone SSE stream (no
@@ -595,9 +608,9 @@ export class IDEServer {
       this.log(`Error delivering initial context on GET: ${errorMessage}`);
     }
 
-    try {
-      await handlePromise;
-    } catch (error) {
+    const settled = await handleSettled;
+    if (!settled.ok) {
+      const error = settled.error;
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.log(`Error handling session request: ${errorMessage}`);

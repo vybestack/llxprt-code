@@ -131,8 +131,13 @@ class ConnectionAttempt {
   readonly generation: number;
   readonly client: Client;
   readonly receiptDeferred: ReceiptDeferred;
-  readonly receiptTimer: CancellableTimer;
   transport: StreamableHTTPClientTransport | undefined;
+
+  /**
+   * Lazily created only after a successful ping, so a slow connect/ping does
+   * not consume the post-ping receipt budget. Undefined before ping resolves.
+   */
+  receiptTimer: CancellableTimer | undefined;
 
   constructor(generation: number) {
     this.generation = generation;
@@ -142,9 +147,25 @@ class ConnectionAttempt {
       version: '1.0.0',
     });
     this.receiptDeferred = createReceiptDeferred();
-    this.receiptTimer = createCancellableTimer(
-      IdeClient.CONTEXT_RECEIPT_TIMEOUT_MS,
-    );
+  }
+
+  /**
+   * Starts the context-receipt timeout. Must be called only after a successful
+   * ping so the receipt window measures the wait for the context notification,
+   * not connect/ping latency. Safe to call once per attempt.
+   */
+  startReceiptTimer(): CancellableTimer {
+    const timer = createCancellableTimer(IdeClient.CONTEXT_RECEIPT_TIMEOUT_MS);
+    this.receiptTimer = timer;
+    return timer;
+  }
+
+  /**
+   * Cancels the receipt timer if one was started. A no-op when the timer was
+   * never created (e.g. attempt superseded before ping resolved).
+   */
+  cancelReceiptTimer(): void {
+    this.receiptTimer?.cancel();
   }
 
   /**
@@ -152,7 +173,7 @@ class ConnectionAttempt {
    * mutable `IdeClient.client` which may point to a different (newer) attempt.
    */
   async closeOwned(): Promise<void> {
-    this.receiptTimer.cancel();
+    this.cancelReceiptTimer();
     try {
       await this.client.close();
     } catch (error) {
@@ -877,17 +898,20 @@ export class IdeClient {
 
       // Ping success alone is NOT acknowledgment — only the real notification
       // handler resolving the deferred proves the context was received. Await
-      // the context receipt with a bounded, cancellable timeout. If no context
-      // arrives (including a new client against a default-ping-only server),
-      // connect must end Disconnected.
+      // the context receipt with a bounded, cancellable timeout. The timer is
+      // started only now (after ping resolved) so slow connect/ping latency
+      // does not consume the receipt budget. If no context arrives (including
+      // a new client against a default-ping-only server), connect must end
+      // Disconnected.
+      const receiptTimer = attempt.startReceiptTimer();
       const receiptResult = await Promise.race([
         attempt.receiptDeferred.promise.then(() => 'received' as const),
-        attempt.receiptTimer.promise,
+        receiptTimer.promise,
       ]);
 
       // Clear the timer on early receipt (it may have been resolved by the
       // notification before the timer elapsed).
-      attempt.receiptTimer.cancel();
+      receiptTimer.cancel();
 
       if (!this.isAttemptActive(attempt)) {
         await attempt.closeOwned();
