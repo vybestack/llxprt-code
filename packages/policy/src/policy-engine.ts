@@ -11,6 +11,14 @@ import {
   hasRedirection,
 } from './utils/shell-utils.js';
 
+const cloneRule = (rule: PolicyRule): PolicyRule => ({
+  ...rule,
+  modes: rule.modes ? [...rule.modes] : undefined,
+});
+
+const compareRulePriority = (a: PolicyRule, b: PolicyRule): number =>
+  (b.priority ?? 0) - (a.priority ?? 0);
+
 /**
  * PolicyEngine evaluates tool execution requests against configured rules.
  * Rules are matched in priority order, with the highest priority rule winning.
@@ -29,13 +37,13 @@ export class PolicyEngine {
   private currentMode: ApprovalMode;
 
   constructor(config?: PolicyEngineConfig) {
-    this.baseRules = config?.rules ? config.rules.map((r) => ({ ...r })) : [];
+    this.baseRules = config?.rules ? config.rules.map(cloneRule) : [];
     this.defaultDecision = config?.defaultDecision ?? PolicyDecision.ASK_USER;
     this.nonInteractive = config?.nonInteractive ?? false;
     this.currentMode = config?.approvalMode ?? ApprovalMode.DEFAULT;
 
     // Sort base rules by priority (highest first)
-    this.baseRules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    this.baseRules.sort(compareRulePriority);
   }
 
   /**
@@ -328,7 +336,7 @@ export class PolicyEngine {
    * @returns Array of policy rules
    */
   getRules(): readonly PolicyRule[] {
-    return this.baseRules.map((r) => ({ ...r }));
+    return this.baseRules.map(cloneRule);
   }
 
   /**
@@ -356,8 +364,8 @@ export class PolicyEngine {
    * @param rule - The policy rule to add
    */
   addRule(rule: PolicyRule): void {
-    this.baseRules.push({ ...rule });
-    this.baseRules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    this.baseRules.push(cloneRule(rule));
+    this.baseRules.sort(compareRulePriority);
   }
 
   /**

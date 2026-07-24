@@ -436,4 +436,56 @@ describe('Defensive copies', () => {
     callerRules.push({ toolName: 'shell', decision: PolicyDecision.DENY });
     expect(engine.getRules()).toHaveLength(1);
   });
+
+  it('constructor does not retain caller modes array reference', () => {
+    const modes = [ApprovalMode.YOLO];
+    const engine = new PolicyEngine({
+      rules: [
+        {
+          toolName: 'edit',
+          decision: PolicyDecision.ALLOW,
+          modes,
+        },
+      ],
+      defaultDecision: PolicyDecision.ASK_USER,
+    });
+
+    modes.splice(0, 1, ApprovalMode.DEFAULT);
+
+    expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ASK_USER);
+  });
+
+  it('addRule does not retain caller modes array reference', () => {
+    const modes = [ApprovalMode.YOLO];
+    const engine = new PolicyEngine({
+      defaultDecision: PolicyDecision.ASK_USER,
+    });
+
+    engine.addRule({
+      toolName: 'edit',
+      decision: PolicyDecision.ALLOW,
+      modes,
+    });
+    modes.splice(0, 1, ApprovalMode.DEFAULT);
+
+    expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ASK_USER);
+  });
+
+  it('getRules does not expose internal modes array references', () => {
+    const engine = new PolicyEngine({
+      rules: [
+        {
+          toolName: 'edit',
+          decision: PolicyDecision.ALLOW,
+          modes: [ApprovalMode.YOLO],
+        },
+      ],
+      defaultDecision: PolicyDecision.ASK_USER,
+    });
+    const [rule] = engine.getRules();
+
+    rule.modes?.splice(0, 1, ApprovalMode.DEFAULT);
+
+    expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ASK_USER);
+  });
 });

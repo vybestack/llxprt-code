@@ -405,7 +405,7 @@ function toolFixtures(): ToolFixture[] {
       buildArgs: (filePath) => ({
         file_path: filePath,
         patch_content:
-          '--- a/target.txt\n+++ b/target.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+LINE2\n line3',
+          '--- a/target.txt\n+++ b/target.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+LINE2\n line3\n',
       }),
       expectedContent: 'line1\nLINE2\nline3\n',
     },

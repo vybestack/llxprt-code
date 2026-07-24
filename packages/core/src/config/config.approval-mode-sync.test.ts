@@ -190,7 +190,7 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
     expect(engine.evaluate('ast_edit', {})).toBe(PolicyDecision.ASK_USER);
   });
 
-  it('YOLO→DEFAULT: ALL tools revert to ASK_USER after transition', () => {
+  it('YOLO→DEFAULT: representative tools revert to ASK_USER after transition', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
 
     const engine = config.getPolicyEngine();
