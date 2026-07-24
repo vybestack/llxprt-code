@@ -259,9 +259,41 @@ describe('IdeClient with the VS Code companion server', () => {
     diffManager = stack.diffManager;
     context = stack.context;
 
+    // The client opens a standalone GET SSE stream asynchronously after
+    // notifications/initialized (fire-and-forget _startOrAuthSse in the SDK).
+    // broadcastIdeContextUpdate delivers via this standalone GET stream; if
+    // the stream hasn't arrived at the server yet the notification is silently
+    // dropped. We must wait for the GET stream to be established on the server
+    // side before broadcasting.
+    //
+    // We detect this by spying on the IDEServer's handleSessionRequest (the
+    // GET handler). When it completes, the standalone SSE stream is active
+    // and broadcast notifications will reach the client.
+    const serverHolder = stack.ideServer as unknown as {
+      handleSessionRequest: (...args: unknown[]) => Promise<unknown>;
+    };
+    const realHandleSessionRequest = serverHolder.handleSessionRequest.bind(
+      stack.ideServer,
+    );
+    let getStreamResolve!: () => void;
+    const getStreamEstablished = new Promise<void>((resolve) => {
+      getStreamResolve = resolve;
+    });
+    serverHolder.handleSessionRequest = (...args: unknown[]) => {
+      const result = realHandleSessionRequest(...args);
+      // The GET stream is established synchronously within handleRequest,
+      // before deliverInitialContext. Resolve as soon as the handler is
+      // invoked — the standalone SSE stream mapping is active.
+      getStreamResolve();
+      return result;
+    };
+
     await ideClient.connect();
     // Drain the synchronous initial value first.
     expect(ideContext.getIdeContext()).toBeDefined();
+
+    // Wait for the standalone GET SSE stream to arrive at the server.
+    await getStreamEstablished;
 
     const secondUpdate = new Promise<IdeContext>((resolve) => {
       const unsubscribe = ideContext.subscribeToIdeContext((next) => {

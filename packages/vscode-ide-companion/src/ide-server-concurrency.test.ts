@@ -360,6 +360,77 @@ function createGatedSendSpy(): {
   };
 }
 
+/**
+ * The shape of IDEServer's private deliverInitialContext method. TypeScript's
+ * `private` keyword is a compile-time constraint; at runtime the method is
+ * accessible on the prototype. This interface provides a typed view for the
+ * spy without weakening type safety elsewhere.
+ */
+interface DeliverInitialContextFn {
+  (
+    sessionId: string,
+    sessionContextDelivery: unknown,
+    options: {
+      relatedRequestId?: string | number;
+      authoritative: boolean;
+    },
+  ): Promise<boolean>;
+}
+
+interface DeliverInitialContextHolder {
+  deliverInitialContext: DeliverInitialContextFn;
+}
+
+/**
+ * Spies on the IDEServer's private deliverInitialContext method to detect when
+ * the authoritative ping has demonstrably entered the server-side delivery
+ * path. This replaces the unreliable setImmediate yields that were used to
+ * "wait for the ping to arrive" — setImmediate only yields a couple of
+ * macrotasks and does NOT wait for the HTTP round trip the ping requires.
+ *
+ * When deliverInitialContext is called with authoritative: true (the ping
+ * path), the returned promise resolves. By the time the test awaits it, the
+ * ping has already entered the method and found (and started awaiting) the
+ * shared in-flight promise created by the GET — the exact overlap the test
+ * intends to construct.
+ *
+ * The spy calls through to the real implementation so the actual delivery
+ * logic runs unmodified.
+ */
+function createPingArrivalSpy(server: IDEServer): {
+  waitForPingEntry: () => Promise<void>;
+  restore: () => void;
+} {
+  let pingResolve!: () => void;
+  const pingEnteredPromise = new Promise<void>((resolve) => {
+    pingResolve = resolve;
+  });
+
+  const holder = server as unknown as DeliverInitialContextHolder;
+  const realDeliver = holder.deliverInitialContext.bind(server);
+
+  holder.deliverInitialContext = (
+    sessionId: string,
+    sessionContextDelivery: unknown,
+    options: {
+      relatedRequestId?: string | number;
+      authoritative: boolean;
+    },
+  ): Promise<boolean> => {
+    if (options.authoritative) {
+      pingResolve();
+    }
+    return realDeliver(sessionId, sessionContextDelivery, options);
+  };
+
+  return {
+    waitForPingEntry: () => pingEnteredPromise,
+    restore: () => {
+      holder.deliverInitialContext = realDeliver;
+    },
+  };
+}
+
 describe('IDEServer initial-context delivery concurrency', () => {
   let ideServer: IDEServer | undefined;
   let diffManager: DiffManager | undefined;
@@ -413,6 +484,10 @@ describe('IDEServer initial-context delivery concurrency', () => {
     context = createExtensionContext();
     await ideServer.start(context);
 
+    // Spy on the server-side deliverInitialContext to get a deterministic
+    // signal when the authoritative ping enters the delivery path.
+    const pingSpy = createPingArrivalSpy(ideServer);
+
     const port = Number(process.env['LLXPRT_CODE_IDE_SERVER_PORT']);
     const authToken = process.env['LLXPRT_CODE_IDE_AUTH_TOKEN']!;
 
@@ -449,11 +524,6 @@ describe('IDEServer initial-context delivery concurrency', () => {
       // Wait until the GET's send has entered the gate (in-flight promise
       // created by the non-authoritative path).
       await gate.waitForGateEntry();
-      // Yield so the in-flight promise can register in the session map before
-      // the authoritative ping arrives. setImmediate is a macrotask yield only;
-      // the gate (releaseGatePromise) is the authoritative synchronization
-      // point that actually holds the send in-flight.
-      await new Promise((resolve) => setImmediate(resolve));
 
       // 3. Issue the authoritative ping while the GET send is still in-flight.
       //    The ping must await the SAME shared in-flight promise created by GET.
@@ -464,9 +534,13 @@ describe('IDEServer initial-context delivery concurrency', () => {
         resolvedSessionId,
       );
 
-      // Let the ping reach the server and attach to the shared in-flight promise.
-      await new Promise((resolve) => setImmediate(resolve));
-      await new Promise((resolve) => setImmediate(resolve));
+      // Deterministically wait for the ping to reach the server and enter
+      // deliverInitialContext with authoritative: true. By the time this
+      // resolves, the ping has found the shared in-flight promise and is
+      // awaiting it — the exact overlap this test intends to construct.
+      // This replaces the unreliable setImmediate yields that only advanced
+      // a couple of macrotasks (insufficient for an HTTP loopback round trip).
+      await pingSpy.waitForPingEntry();
 
       // 4. Release the gate: the shared send completes successfully.
       gate.gateRelease();
@@ -501,6 +575,7 @@ describe('IDEServer initial-context delivery concurrency', () => {
       gate.gateRelease();
       getStream.close();
       gate.restore();
+      pingSpy.restore();
     }
   }, 15000);
 });

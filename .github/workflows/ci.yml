@@ -785,8 +785,7 @@ jobs:
           LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
         run: 'npm run test'
 
-      - name: 'Run script harness tests (macOS)'
-        if: matrix.os == 'macos-latest'
+      - name: 'Run script harness tests'
         env:
           CI: true
         run: npm run test:scripts
