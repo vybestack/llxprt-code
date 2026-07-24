@@ -770,7 +770,10 @@ export class IDEServer {
       transports.map(async (transport) => {
         try {
           await Promise.race([
-            transport.close(),
+            // Pre-attached catch prevents a late rejection of the abandoned
+            // close() (when the timeout wins the race) from surfacing as an
+            // unhandled rejection in the extension host.
+            transport.close().catch(() => {}),
             new Promise<void>((resolve) =>
               setTimeout(resolve, IDEServer.TRANSPORT_CLOSE_TIMEOUT_MS),
             ),

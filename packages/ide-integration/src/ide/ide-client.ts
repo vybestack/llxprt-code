@@ -92,7 +92,10 @@ function createCancellableTimer(ms: number): CancellableTimer {
   let timerId: ReturnType<typeof setTimeout> | undefined;
   let cancelFn: () => void = () => {};
   const promise = new Promise<'elapsed' | 'cancelled'>((resolve) => {
-    timerId = setTimeout(() => resolve('elapsed'), ms);
+    timerId = setTimeout(() => {
+      timerId = undefined;
+      resolve('elapsed');
+    }, ms);
     cancelFn = () => {
       if (timerId !== undefined) {
         clearTimeout(timerId);
@@ -199,6 +202,12 @@ export class IdeClient {
    * window, the connection is considered failed (Disconnected).
    */
   static readonly CONTEXT_RECEIPT_TIMEOUT_MS = 5000;
+
+  /**
+   * Message shown when the IDE connection is lost unexpectedly (onerror /
+   * onclose). Used in both handlers to avoid an inline duplicated string.
+   */
+  private static readonly CONNECTION_LOST_MESSAGE = `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`;
 
   private static instance: IdeClient | undefined;
   private client: Client | undefined = undefined;
@@ -467,22 +476,31 @@ export class IdeClient {
     // this.closeDiff() would dereference the (possibly new) this.client and
     // could send closeDiff for new-lifecycle diffs through the wrong client.
     const ownedClient = this.client;
-    const ownedDiffPaths: string[] = [];
+    // Snapshot BOTH the filePath AND its resolver BEFORE the first await. We
+    // must not iterate the live shared diffResponses Map after an await,
+    // because a reconnect may install a new client and/or add new diff entries.
+    // Capturing the resolver reference lets us settle it unconditionally (so
+    // awaiters never hang) while identity-guarding map deletion so a newer
+    // lifecycle's entry for the same path is never clobbered.
+    const ownedDiffs: Array<{
+      filePath: string;
+      resolver: (result: DiffUpdateResult) => void;
+    }> = [];
     if (
       this.state.status !== IDEConnectionStatus.Disconnected &&
       ownedClient !== undefined
     ) {
-      for (const filePath of this.diffResponses.keys()) {
-        ownedDiffPaths.push(filePath);
+      for (const [filePath, resolver] of this.diffResponses) {
+        ownedDiffs.push({ filePath, resolver });
       }
     }
 
-    for (const filePath of ownedDiffPaths) {
+    for (const { filePath } of ownedDiffs) {
       // After every await, check that this disconnect still owns the lifecycle
       // and that the owned client is still available. A reconnect that
       // completed during the prior closeDiff await claims a newer epoch; once
       // stale, stop issuing tool calls and do not mutate shared state/maps.
-      // (ownedDiffPaths is only populated when ownedClient was defined, but
+      // (ownedDiffs is only populated when ownedClient was defined, but
       // TypeScript cannot narrow across the loop boundary.)
       if (!this.isLifecycleActive(myEpoch) || ownedClient === undefined) {
         break;
@@ -494,18 +512,26 @@ export class IdeClient {
       }
     }
 
-    // Only clear shared diff state, settle resolvers, and transition to
-    // Disconnected if this disconnect is still the active lifecycle operation.
-    // A newer lifecycle may have added entries to the shared map; we must not
-    // delete or settle those.
-    if (this.isLifecycleActive(myEpoch)) {
-      for (const filePath of ownedDiffPaths) {
-        const resolver = this.diffResponses.get(filePath);
-        if (resolver) {
-          resolver({ status: 'rejected', content: undefined });
-          this.diffResponses.delete(filePath);
-        }
+    // ALWAYS settle every captured resolver — unconditionally, outside the
+    // isLifecycleActive guard. If a reconnect claimed a newer epoch mid-loop,
+    // the loop broke but these old diff awaiters would otherwise hang forever
+    // (closeDiffViaClient uses suppressNotification:true, so no IDE
+    // notification will ever settle them). Settling a resolver twice is a
+    // no-op, so this is safe even if a notification already settled it. Map
+    // deletion is identity-guarded so a newer lifecycle's entry for the same
+    // filePath is never clobbered.
+    for (const { filePath, resolver } of ownedDiffs) {
+      resolver({ status: 'rejected', content: undefined });
+      if (this.diffResponses.get(filePath) === resolver) {
+        this.diffResponses.delete(filePath);
       }
+    }
+
+    // The state transition and client clearing remain epoch-guarded: only the
+    // active lifecycle operation may flip connection status or clear
+    // this.client. A newer lifecycle may have reconnected; we must not
+    // overwrite its state.
+    if (this.isLifecycleActive(myEpoch)) {
       this.setState(
         IDEConnectionStatus.Disconnected,
         'IDE integration disabled. To enable it again, run /ide enable.',
@@ -830,7 +856,7 @@ export class IdeClient {
       }
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
+        IdeClient.CONNECTION_LOST_MESSAGE,
         true,
       );
     };
@@ -840,7 +866,7 @@ export class IdeClient {
       }
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
+        IdeClient.CONNECTION_LOST_MESSAGE,
         true,
       );
     };

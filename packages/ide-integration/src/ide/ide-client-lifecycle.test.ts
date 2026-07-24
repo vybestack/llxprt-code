@@ -684,15 +684,24 @@ describe('IdeClient connection lifecycle isolation', () => {
     ]);
     expect(newDiffSettled).toBe(false);
 
-    // old diffs should have been left unsettled too (stale disconnect stopped).
-    const diffASettled = await Promise.race([
+    // old diffs are settled as 'rejected' by the stale disconnect so their
+    // awaiters never hang (closeDiffViaClient uses suppressNotification, so no
+    // IDE notification would ever settle them). The stale disconnect must NOT
+    // delete the new lifecycle's diff entry, but it unconditionally settles
+    // its OWN captured resolvers.
+    const diffAResult = await Promise.race([
       diffA.then(
-        () => true,
-        () => true,
+        (r) => r as unknown,
+        () => 'rejected-error' as const,
       ),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+      new Promise<unknown>((resolve) =>
+        setTimeout(() => resolve('unsettled'), 50),
+      ),
     ]);
-    expect(diffASettled).toBe(false);
+    expect(diffAResult).toStrictEqual({
+      status: 'rejected',
+      content: undefined,
+    });
 
     // Suppress unhandled rejection warnings for unsettled promises in test.
     void diffA.catch(() => {});
