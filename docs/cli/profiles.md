@@ -17,7 +17,7 @@ Set up your session the way you want, then save it:
 
 ```
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 /key load anthropic
 /profile save model work-claude
 ```
@@ -130,7 +130,7 @@ llxprt --profile-load my-profile
 
 ```
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 /key load anthropic
 /profile save model primary-claude
 
@@ -151,7 +151,7 @@ llxprt --profile-load my-profile
 /auth anthropic login personal@gmail.com
 
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 /profile save model claude-multi team1@company.com team2@company.com personal@gmail.com
 ```
 

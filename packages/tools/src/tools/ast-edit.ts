@@ -19,7 +19,11 @@ import fs from 'fs';
 import type { ToolInvocation } from './tools.js';
 import { BaseDeclarativeTool, Kind, type ToolResult } from './tools.js';
 import { isNodeError } from '../utils/errors.js';
-import type { IToolHost, ILspService } from '../interfaces/index.js';
+import type {
+  IToolHost,
+  IIdeService,
+  ILspService,
+} from '../interfaces/index.js';
 import { hasWorkspaceContextCap } from '../interfaces/host-capabilities.js';
 import type {
   ModifiableDeclarativeTool,
@@ -99,6 +103,7 @@ export class ASTEditTool
 
   constructor(
     private readonly host: IToolHost,
+    private readonly ideService?: IIdeService,
     private readonly lspService?: ILspService,
   ) {
     super(
@@ -167,6 +172,7 @@ export class ASTEditTool
       params,
       this.contextCollector,
       this.lspService,
+      this.ideService,
     );
   }
 

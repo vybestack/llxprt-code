@@ -188,7 +188,7 @@ Use a less expensive model for routine tasks and reserve premium models for comp
 /profile save model gemini-fast
 
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 /profile save model claude-premium
 
 # Cheap subagent for routine tasks
@@ -310,10 +310,10 @@ When you update a profile, all subagents using that profile automatically inheri
 
 # Later: upgrade all subagents to a new model
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 /profile save model team-claude   # Overwrites existing profile
 
-# All three subagents now use claude-opus-4-8
+# All three subagents now use claude-opus-5
 ```
 
 This pattern is especially useful for:

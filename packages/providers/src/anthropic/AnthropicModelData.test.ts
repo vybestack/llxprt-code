@@ -182,7 +182,88 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
     });
 
     it('returns the Opus latest alias for the opus tier', () => {
-      expect(getLatestClaudeModel('opus')).toBe('claude-opus-4-latest');
+      expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-latest');
+    });
+  });
+});
+
+describe('AnthropicModelData Claude Opus 5 @issue:2665', () => {
+  describe('catalog entries', () => {
+    // Defaults reflect the Claude Code / subscription (auth) limits: 200K
+    // context and 32K max output. The API-only 1M/128K limits are plan-gated
+    // and can be raised via /set or a profile (context-limit / maxOutputTokens).
+    it('includes claude-opus-5 with 200K context / 32K output in OAUTH_MODELS', () => {
+      const model = OAUTH_MODELS.find((m) => m.id === 'claude-opus-5');
+      expect(model).toBeDefined();
+      expect(model?.name).toBe('Claude Opus 5');
+      expect(model?.contextWindow).toBe(200000);
+      expect(model?.maxOutputTokens).toBe(32000);
+    });
+
+    it('includes claude-opus-5 in DEFAULT_MODELS', () => {
+      expect(DEFAULT_MODELS.some((m) => m.id === 'claude-opus-5')).toBe(true);
+    });
+
+    it('includes claude-opus-5 in OAUTH_MODELS', () => {
+      expect(OAUTH_MODELS.some((m) => m.id === 'claude-opus-5')).toBe(true);
+    });
+  });
+
+  describe('isOpus46Plus', () => {
+    it('returns true for claude-opus-5 and claude-opus-5-latest', () => {
+      expect(isOpus46Plus('claude-opus-5')).toBe(true);
+      expect(isOpus46Plus('claude-opus-5-latest')).toBe(true);
+    });
+
+    it('returns true for opus-5 dated snapshots', () => {
+      expect(isOpus46Plus('claude-opus-5-20260724')).toBe(true);
+    });
+
+    it('returns true for opus 4.6/4.7/4.8 and dated snapshots', () => {
+      expect(isOpus46Plus('claude-opus-4-6')).toBe(true);
+      expect(isOpus46Plus('claude-opus-4-6-20260724')).toBe(true);
+      expect(isOpus46Plus('claude-opus-4-7')).toBe(true);
+      expect(isOpus46Plus('claude-opus-4-8')).toBe(true);
+    });
+
+    it('returns false for older opus models (4.1, 4.5, 3.x)', () => {
+      expect(isOpus46Plus('claude-opus-4-1')).toBe(false);
+      expect(isOpus46Plus('claude-opus-4-5')).toBe(false);
+      expect(isOpus46Plus('claude-opus-4-1-20250805')).toBe(false);
+      expect(isOpus46Plus('claude-3-opus-20240229')).toBe(false);
+    });
+  });
+
+  describe('getMaxTokensForModel', () => {
+    it('returns 32000 (auth default) for claude-opus-5 and claude-opus-5-latest', () => {
+      expect(getMaxTokensForModel('claude-opus-5')).toBe(32000);
+      expect(getMaxTokensForModel('claude-opus-5-latest')).toBe(32000);
+      expect(getMaxTokensForModel('claude-opus-5-20260724')).toBe(32000);
+    });
+  });
+
+  describe('getContextWindowForModel', () => {
+    it('returns 200000 (auth default) for claude-opus-5, latest, and dated variants', () => {
+      expect(getContextWindowForModel('claude-opus-5')).toBe(200000);
+      expect(getContextWindowForModel('claude-opus-5-latest')).toBe(200000);
+      expect(getContextWindowForModel('claude-opus-5-20260724')).toBe(200000);
+    });
+  });
+
+  describe('supportsAdaptiveThinking', () => {
+    it('returns true for claude-opus-5 and the latest alias', () => {
+      expect(supportsAdaptiveThinking('claude-opus-5')).toBe(true);
+      expect(supportsAdaptiveThinking('claude-opus-5-latest')).toBe(true);
+    });
+
+    it('the latest opus alias composes with supportsAdaptiveThinking', () => {
+      expect(supportsAdaptiveThinking(getLatestClaudeModel('opus'))).toBe(true);
+    });
+  });
+
+  describe('getLatestClaudeModel', () => {
+    it('returns the Opus 5 latest alias for the opus tier', () => {
+      expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-latest');
     });
   });
 });
@@ -200,8 +281,10 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
       expect(model?.maxOutputTokens).toBe(40000);
     });
 
-    it('places claude-fable-5 at the top of OAUTH_MODELS', () => {
-      expect(OAUTH_MODELS[0].id).toBe('claude-fable-5');
+    it('includes claude-fable-5 near the top of OAUTH_MODELS', () => {
+      // claude-opus-5 is the current head entry (#2665); fable remains
+      // prominently placed among the curated OAuth models.
+      expect(OAUTH_MODELS.some((m) => m.id === 'claude-fable-5')).toBe(true);
     });
 
     it('does NOT include claude-fable-5 in DEFAULT_MODELS (OAuth-only)', () => {

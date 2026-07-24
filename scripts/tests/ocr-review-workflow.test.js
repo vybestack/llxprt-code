@@ -299,11 +299,15 @@ describe('.github/workflows/ocr-review.yml', () => {
       'if [ -s ocr-exit-code.txt ]; then',
       'Skipping OCR LLM connectivity check because an earlier OCR setup/configuration failure was recorded.',
       'echo "llm-preflight" > ocr-phase.txt',
-      'timeout 120s ocr llm test >> ocr-stderr.log 2>&1',
+      'timeout 120s ocr llm test >> ocr-preflight.txt 2>&1',
+      'cat ocr-preflight.txt >> ocr-stderr.log',
       'if [ "$preflight_status" -eq 124 ]; then',
-      'mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check timed out"',
-      'mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check failed"',
+      'mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check timed out (model=${OCR_LLM_MODEL:-unknown})"',
+      'mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check failed (model=${OCR_LLM_MODEL:-unknown})"',
       'echo "$preflight_status" > ocr-exit-code.txt',
+      'echo "model=${OCR_LLM_MODEL:-unknown}"',
+      'echo "provider-url=${OCR_LLM_URL:+configured}"',
+      '} > ocr-preflight.txt',
     ]);
     expectContainsAll(previewRun, [
       'if [ -s ocr-exit-code.txt ]; then',
@@ -358,6 +362,8 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Exit code: \\`${exitCode}\\`',
       'OCR stderr excerpt',
       'ocr-stderr.log',
+      'OCR preflight excerpt',
+      'ocr-preflight.txt',
       'OCR preview stderr excerpt',
       'ocr-preview-stderr.log',
       'if (!ran || infrastructureFailure) {',
@@ -471,6 +477,7 @@ describe('.github/workflows/ocr-review.yml', () => {
 
     expectContainsAll(initializeRun, [
       'set -euo pipefail',
+      ': > ocr-preflight.txt',
       ': > ocr-policy-failure.txt',
       ': > ocr-infrastructure-failure.txt',
       'mark_policy_failure() {',
@@ -578,6 +585,7 @@ describe('.github/workflows/ocr-review.yml', () => {
     const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
     expect(uploadStep.if).toBe('always()');
     expect(uploadStep.with?.path).toContain('ocr-phase.txt');
+    expect(uploadStep.with?.path).toContain('ocr-preflight.txt');
     expect(uploadStep.with?.path).toContain('ocr-infrastructure-failure.txt');
     expect(uploadStep.with?.path).toContain('ocr-policy-failure.txt');
     const redactRun = commandText(
@@ -595,6 +603,16 @@ describe('.github/workflows/ocr-review.yml', () => {
     ]);
     expect(redactRun).not.toContain('throw error');
     expect(uploadStep.with?.['if-no-files-found']).toBe('warn');
+  });
+
+  it('creates placeholders for every uploaded artifact so uploads never fail', () => {
+    const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
+    const placeholderRun = commandText(
+      stepNamed(codeReviewJob, 'Ensure OCR artifact placeholders exist'),
+    );
+    for (const artifact of uploadStep.with?.path.trim().split(/\s+/) ?? []) {
+      expect(placeholderRun).toContain(artifact);
+    }
   });
 
   it('notifies a deduplicated ci/cd issue only for classified infrastructure errors', () => {

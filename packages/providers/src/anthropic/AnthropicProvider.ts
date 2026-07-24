@@ -352,7 +352,7 @@ export class AnthropicProvider extends BaseProvider {
 
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
-    return 'claude-opus-4-8';
+    return 'claude-opus-5';
   }
 
   /**

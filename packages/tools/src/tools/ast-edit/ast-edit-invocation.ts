@@ -25,8 +25,10 @@ import { makeRelative, shortenPath } from '../../utils/paths.js';
 import type {
   Diagnostic,
   IToolHost,
+  IIdeService,
   ILspService,
 } from '../../interfaces/index.js';
+import { toIdeConnectionStatus } from '../edit-utils.js';
 import { hasLspCap } from '../../interfaces/host-capabilities.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../../utils/lsp-diagnostics-helper.js';
@@ -53,11 +55,20 @@ function normalizeSeverity(severity: unknown): string {
 export class ASTEditToolInvocation
   implements ToolInvocation<ASTEditToolParams, ToolResult>
 {
+  /**
+   * When the IDE diff view accepts user-modified content, that full file
+   * content overrides the model-computed replacement on write (mirrors
+   * write_file). Undefined when there is no IDE confirmation or the user
+   * rejected the diff.
+   */
+  private ideAcceptedContent: string | undefined;
+
   constructor(
     private readonly host: IToolHost,
     public params: ASTEditToolParams,
     private readonly contextCollector: ASTContextCollector,
     private readonly lspService?: ILspService,
+    private readonly ideService?: IIdeService,
   ) {}
 
   toolLocations(): ToolLocation[] {
@@ -98,6 +109,16 @@ export class ASTEditToolInvocation
       DEFAULT_CREATE_PATCH_OPTIONS,
     );
 
+    const ideConfirmation =
+      this.ideService !== undefined &&
+      toIdeConnectionStatus(this.ideService.getConnectionStatus()) ===
+        'connected'
+        ? this.ideService.applyDiff({
+            filePath: this.params.file_path,
+            diff: editData.newContent,
+          })
+        : undefined;
+
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Edit: ${shortenPath(makeRelative(this.params.file_path, this.host.getTargetDir()))}`,
@@ -110,7 +131,17 @@ export class ASTEditToolInvocation
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.host.setApprovalMode('auto');
         }
+
+        if (ideConfirmation) {
+          const result = await ideConfirmation;
+          if (result.status === 'accepted' && result.content !== undefined) {
+            // The IDE returns the full file content the user reviewed (and
+            // possibly edited) in the diff view; write exactly that.
+            this.ideAcceptedContent = result.content;
+          }
+        }
       },
+      ideConfirmation,
       metadata: {
         astValidation: editData.astValidation,
         fileFreshness: editData.fileFreshness,
@@ -355,10 +386,15 @@ export class ASTEditToolInvocation
 
   private async writeEditResult(editData: CalculatedEdit): Promise<ToolResult> {
     try {
+      // When the user accepted (and possibly edited) content in the IDE diff
+      // view, that full-file content takes precedence over the model-computed
+      // replacement — mirrors write_file/edit behavior.
+      const contentToWrite = this.ideAcceptedContent ?? editData.newContent;
+
       await ensureParentDirectoriesExist(this.params.file_path);
       await fsPromises.writeFile(
         this.params.file_path,
-        editData.newContent,
+        contentToWrite,
         'utf-8',
       );
 
@@ -366,7 +402,7 @@ export class ASTEditToolInvocation
       const fileDiff = Diff.createPatch(
         fileName,
         editData.currentContent ?? '',
-        editData.newContent,
+        contentToWrite,
         'Current',
         'Applied',
         DEFAULT_CREATE_PATCH_OPTIONS,
@@ -376,7 +412,7 @@ export class ASTEditToolInvocation
         fileDiff,
         fileName,
         originalContent: editData.currentContent,
-        newContent: editData.newContent,
+        newContent: contentToWrite,
         applied: true,
         metadata: { astValidation: editData.astValidation },
       };

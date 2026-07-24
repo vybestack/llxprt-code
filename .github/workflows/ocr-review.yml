@@ -79,7 +79,7 @@ env:
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
-  OCR_VERSION: '1.7.9'
+  OCR_VERSION: '1.7.16'
   OCR_CONCURRENCY: '2'
 
 jobs:
@@ -522,6 +522,7 @@ jobs:
           : > ocr-result.json
           : > ocr-stdout.raw
           : > ocr-stderr.log
+          : > ocr-preflight.txt
           : > ocr-version.txt
           : > ocr-preview.txt
           : > ocr-preview-stderr.log
@@ -675,17 +676,22 @@ jobs:
             mark_infrastructure_failure "llm-preflight" "OpenCodeReview command is unavailable before LLM connectivity check"
             exit 0
           fi
+          {
+            echo "model=${OCR_LLM_MODEL:-unknown}"
+            echo "provider-url=${OCR_LLM_URL:+configured}"
+          } > ocr-preflight.txt
           set +e
-          timeout 120s ocr llm test >> ocr-stderr.log 2>&1
+          timeout 120s ocr llm test >> ocr-preflight.txt 2>&1
           preflight_status=$?
           set -e
+          cat ocr-preflight.txt >> ocr-stderr.log
           if [ "$preflight_status" -ne 0 ]; then
             if [ "$preflight_status" -eq 124 ]; then
-              echo "::warning::OCR LLM connectivity check timed out after 120s. Verify provider availability and network latency."
-              mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check timed out"
+              echo "::warning::OCR LLM connectivity check timed out after 120s for model ${OCR_LLM_MODEL:-unknown}. Verify provider availability and network latency."
+              mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check timed out (model=${OCR_LLM_MODEL:-unknown})"
             else
-              echo "::warning::OCR LLM connectivity check failed. Verify OCR_LLM_URL, OCR_LLM_AUTH_TOKEN, OCR_LLM_MODEL, and provider availability."
-              mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check failed"
+              echo "::warning::OCR LLM connectivity check failed for model ${OCR_LLM_MODEL:-unknown}. Verify OCR_LLM_URL, OCR_LLM_AUTH_TOKEN, OCR_LLM_MODEL, and provider availability."
+              mark_infrastructure_failure "llm-preflight" "OCR LLM connectivity check failed (model=${OCR_LLM_MODEL:-unknown})"
             fi
             echo "$preflight_status" > ocr-exit-code.txt
             exit 0
@@ -1277,6 +1283,8 @@ jobs:
                 '',
                 ...stderrSection('OCR stderr excerpt', 'ocr-stderr.log'),
                 '',
+                ...stderrSection('OCR preflight excerpt', 'ocr-preflight.txt'),
+                '',
                 ...stderrSection('OCR preview stderr excerpt', 'ocr-preview-stderr.log'),
               );
             }
@@ -1440,6 +1448,7 @@ jobs:
             'ocr-result.json',
             'ocr-stdout.raw',
             'ocr-stderr.log',
+            'ocr-preflight.txt',
             'ocr-version.txt',
             'ocr-preview.txt',
             'ocr-preview-stderr.log',
@@ -1487,6 +1496,7 @@ jobs:
             ocr-result.json \
             ocr-stdout.raw \
             ocr-stderr.log \
+            ocr-preflight.txt \
             ocr-version.txt \
             ocr-preview.txt \
             ocr-preview-stderr.log \
@@ -1527,6 +1537,7 @@ jobs:
             ocr-result.json
             ocr-stdout.raw
             ocr-stderr.log
+            ocr-preflight.txt
             ocr-version.txt
             ocr-preview.txt
             ocr-preview-stderr.log

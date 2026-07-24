@@ -90,7 +90,7 @@ describe('AnthropicProvider tool format detection', () => {
       mockSettingsService.getProviderSettings.mockReturnValue({});
       mockSettingsService.get.mockReturnValue(undefined);
 
-      expect(provider.getCurrentModel()).toBe('claude-opus-4-8');
+      expect(provider.getCurrentModel()).toBe('claude-opus-5');
     });
   });
 });
