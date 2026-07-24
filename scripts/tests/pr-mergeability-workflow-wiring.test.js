@@ -29,6 +29,7 @@ const OCR_AUTHORIZATION_PREDICATE = `
   github.event_name == 'workflow_dispatch' ||
   github.event_name == 'pull_request_target' ||
   (github.event_name == 'issue_comment' &&
+   github.event.action == 'created' &&
    github.event.issue.pull_request != null &&
    (github.event.comment.author_association == 'OWNER' ||
     github.event.comment.author_association == 'MEMBER' ||
@@ -42,7 +43,17 @@ const OCR_AUTHORIZATION_PREDICATE = `
     startsWith(github.event.comment.body, '/open-code-review ') ||
     startsWith(toJSON(github.event.comment.body), '"/open-code-review\\n') ||
     startsWith(toJSON(github.event.comment.body), '"/open-code-review\\r\\n') ||
-    startsWith(toJSON(github.event.comment.body), '"/open-code-review\\t')))
+    startsWith(toJSON(github.event.comment.body), '"/open-code-review\\t') ||
+    github.event.comment.body == '/review' ||
+    startsWith(github.event.comment.body, '/review ') ||
+    startsWith(toJSON(github.event.comment.body), '"/review\\n') ||
+    startsWith(toJSON(github.event.comment.body), '"/review\\r\\n') ||
+    startsWith(toJSON(github.event.comment.body), '"/review\\t'))) ||
+  (github.event_name == 'issue_comment' &&
+   github.event.action == 'edited' &&
+   github.event.issue.pull_request != null &&
+   github.event.comment.user.type == 'Bot' &&
+   contains(github.event.comment.body, '<!-- llxprt-code-ocr-review -->'))
 `;
 
 const OCR_CONCURRENCY_GROUP = `
@@ -63,7 +74,17 @@ const OCR_CONCURRENCY_GROUP = `
        startsWith(github.event.comment.body, '/open-code-review ') ||
        startsWith(toJSON(github.event.comment.body), '"/open-code-review\\n') ||
        startsWith(toJSON(github.event.comment.body), '"/open-code-review\\r\\n') ||
-       startsWith(toJSON(github.event.comment.body), '"/open-code-review\\t')))) &&
+       startsWith(toJSON(github.event.comment.body), '"/open-code-review\\t') ||
+       github.event.comment.body == '/review' ||
+       startsWith(github.event.comment.body, '/review ') ||
+       startsWith(toJSON(github.event.comment.body), '"/review\\n') ||
+       startsWith(toJSON(github.event.comment.body), '"/review\\r\\n') ||
+       startsWith(toJSON(github.event.comment.body), '"/review\\t'))) ||
+     (github.event_name == 'issue_comment' &&
+      github.event.action == 'edited' &&
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.type == 'Bot' &&
+      contains(github.event.comment.body, '<!-- llxprt-code-ocr-review -->'))) &&
     format('{0}-pr-{1}', github.workflow,
       github.event.pull_request.number || github.event.issue.number || inputs.pr_number) ||
     format('{0}-run-{1}', github.workflow, github.run_id)
@@ -76,6 +97,7 @@ function evaluateOcrConcurrencyGroup(group, { github, inputs = {} }) {
     github,
     inputs,
     startsWith: (value, prefix) => String(value).startsWith(prefix),
+    contains: (value, fragment) => String(value).includes(String(fragment)),
     toJSON: (value) => JSON.stringify(value),
     format: (template, ...values) =>
       template.replace(/{(\d+)}/g, (_match, index) => values[Number(index)]),
@@ -91,6 +113,8 @@ function ocrConcurrencyContext({
   association = 'NONE',
   body = '',
   inputPrNumber = '',
+  action = 'created',
+  commentUserType = 'User',
 }) {
   return {
     github: {
@@ -98,6 +122,7 @@ function ocrConcurrencyContext({
       run_id: runId,
       event_name: eventName,
       event: {
+        action,
         pull_request: { number: pullRequestNumber },
         issue: {
           number: issueNumber,
@@ -106,6 +131,7 @@ function ocrConcurrencyContext({
         comment: {
           author_association: association,
           body,
+          user: { type: commentUserType },
         },
       },
     },
@@ -245,7 +271,12 @@ describe('OCR mergeability gate wiring (.github/workflows/ocr-review.yml)', () =
   it('keeps the sequential gate and review inside one workflow concurrency owner', () => {
     expect(gateJob.concurrency).toBeUndefined();
     expect(codeReviewJob.concurrency).toBeUndefined();
-    expect(codeReviewJob.needs).toEqual(['mergeability-gate']);
+    // code-review now depends on both the mergeability gate and the OCR
+    // auto-review limit gate (issue #2666).
+    expect(codeReviewJob.needs).toEqual([
+      'mergeability-gate',
+      'auto-review-gate',
+    ]);
     expect(parsed.jobs?.['notify-ocr-infrastructure-failure']).toBeUndefined();
   });
 

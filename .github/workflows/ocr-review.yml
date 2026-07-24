@@ -23,6 +23,7 @@ on:
   issue_comment:
     types:
       - created
+      - edited
   workflow_dispatch:
     inputs:
       pr_number:
@@ -54,7 +55,17 @@ concurrency:
          startsWith(github.event.comment.body, '/open-code-review ') ||
          startsWith(toJSON(github.event.comment.body), '"/open-code-review\n') ||
          startsWith(toJSON(github.event.comment.body), '"/open-code-review\r\n') ||
-         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))) &&
+         startsWith(toJSON(github.event.comment.body), '"/open-code-review\t') ||
+         github.event.comment.body == '/review' ||
+         startsWith(github.event.comment.body, '/review ') ||
+         startsWith(toJSON(github.event.comment.body), '"/review\n') ||
+         startsWith(toJSON(github.event.comment.body), '"/review\r\n') ||
+         startsWith(toJSON(github.event.comment.body), '"/review\t'))) ||
+       (github.event_name == 'issue_comment' &&
+        github.event.action == 'edited' &&
+        github.event.issue.pull_request != null &&
+        github.event.comment.user.type == 'Bot' &&
+        contains(github.event.comment.body, '<!-- llxprt-code-ocr-review -->'))) &&
       format('{0}-pr-{1}', github.workflow,
         github.event.pull_request.number || github.event.issue.number || inputs.pr_number) ||
       format('{0}-run-{1}', github.workflow, github.run_id)
@@ -82,6 +93,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
+       github.event.action == 'created' &&
        github.event.issue.pull_request != null &&
        (github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'MEMBER' ||
@@ -95,11 +107,299 @@ jobs:
         startsWith(github.event.comment.body, '/open-code-review ') ||
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\n') ||
         startsWith(toJSON(github.event.comment.body), '"/open-code-review\r\n') ||
-        startsWith(toJSON(github.event.comment.body), '"/open-code-review\t')))
+        startsWith(toJSON(github.event.comment.body), '"/open-code-review\t') ||
+        github.event.comment.body == '/review' ||
+        startsWith(github.event.comment.body, '/review ') ||
+        startsWith(toJSON(github.event.comment.body), '"/review\n') ||
+        startsWith(toJSON(github.event.comment.body), '"/review\r\n') ||
+        startsWith(toJSON(github.event.comment.body), '"/review\t'))) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.action == 'edited' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.type == 'Bot' &&
+       contains(github.event.comment.body, '<!-- llxprt-code-ocr-review -->'))
     with:
       check-mergeability: ${{ github.event_name != 'workflow_dispatch' }}
       pull-request-number: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
       expected-head-sha: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}
+
+  auto-review-gate:
+    name: Auto-review limit gate
+    needs:
+      - mergeability-gate
+    # Runs only when the mergeability gate permits work. This gate owns the
+    # OCR auto-review suspension logic (issue #2666) so the shared reusable
+    # gate stays a pure mergeability oracle.
+    if: |
+      needs.mergeability-gate.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      auto-should-run: ${{ steps.auto-decide.outputs.auto-should-run }}
+      suspended: ${{ steps.auto-decide.outputs.suspended }}
+      is-manual: ${{ steps.auto-decide.outputs.is-manual }}
+      current-count: ${{ steps.auto-decide.outputs.current-count }}
+    steps:
+      - name: Decide auto-review limit
+        id: auto-decide
+        uses: actions/github-script@f28e40c7f34b6de8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
+          OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
+          OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2'
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
+          CHANGES_FROM: ${{ github.event.changes.body.from }}
+        with:
+          script: |
+            const MARKER = '<!-- llxprt-code-ocr-review -->';
+            const number = Number(process.env.PR_NUMBER);
+            if (!Number.isInteger(number) || number <= 0) {
+              core.setFailed('No valid PR number resolved for auto-review gate.');
+              return;
+            }
+            const eventName = process.env.EVENT_NAME || '';
+            const eventAction = process.env.EVENT_ACTION || '';
+            const commentBody = process.env.COMMENT_BODY || '';
+            const commentUserType = process.env.COMMENT_USER_TYPE || '';
+            const changesFrom = process.env.CHANGES_FROM || '';
+            const limitRaw = process.env.OCR_AUTO_REVIEW_LIMIT ||
+              process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2';
+            const parsedLimit = Number(limitRaw);
+            const limit = (Number.isInteger(parsedLimit) && parsedLimit >= 0)
+              ? parsedLimit
+              : Number(process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2');
+            const isManualTrigger =
+              eventName === 'workflow_dispatch' ||
+              (eventName === 'issue_comment' && eventAction === 'created');
+            const isEditedComment =
+              eventName === 'issue_comment' && eventAction === 'edited';
+
+            // ----- Helpers -----
+
+            function parseHiddenCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(body || '');
+              return match ? Number(match[1]) : 0;
+            }
+
+            function parseSuspended(body) {
+              return /<!--\s*ocr-suspended:\s*true\s*-->/.test(body || '');
+            }
+
+            async function fetchMarkerComment() {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                per_page: 100,
+              });
+              return comments.find((c) =>
+                typeof c.body === 'string' && c.body.includes(MARKER)) || null;
+            }
+
+            function replaceHiddenState(body, count, suspended) {
+              let updated = body
+                .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
+                .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '');
+              const suspendedStr = suspended ? 'true' : 'false';
+              updated += '\n<!-- ocr-auto-count:' + count + ' --><!-- ocr-suspended:' + suspendedStr + ' -->';
+              return updated;
+            }
+
+            // ----- Checkbox-reset detection (issue_comment.edited) -----
+
+            if (isEditedComment) {
+              // Only act on edits to a bot-authored OCR marker comment.
+              const containsMarker =
+                typeof commentBody === 'string' && commentBody.includes(MARKER);
+              const wasBot = commentUserType === 'Bot';
+              if (!containsMarker || !wasBot) {
+                core.setOutput('auto-should-run', 'false');
+                core.setOutput('suspended', 'false');
+                core.setOutput('is-manual', 'false');
+                core.setOutput('current-count', '0');
+                return;
+              }
+              const wasUnchecked = /-\s*\[\s\]/.test(changesFrom);
+              const nowChecked = /-\s*\[[xX]\]/.test(commentBody);
+              if (wasUnchecked && nowChecked) {
+                // Reset the counter to 0 in the hidden state of the comment
+                // and immediately allow a review on the current head.
+                // If the reset write fails, do NOT proceed — otherwise the
+                // stale count in the comment would cause a premature
+                // suspension on the next automatic trigger.
+                let resetSucceeded = false;
+                try {
+                  let marker = null;
+                  try {
+                    marker = await fetchMarkerComment();
+                  } catch (fetchErr) {
+                    core.warning(`Failed to fetch marker comment for checkbox reset: ${fetchErr.message || fetchErr}`);
+                  }
+                  if (marker) {
+                    const resetBody = replaceHiddenState(marker.body, 0, false);
+                    await github.rest.issues.updateComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      comment_id: marker.id,
+                      body: resetBody,
+                    });
+                    resetSucceeded = true;
+                  }
+                } catch (writeErr) {
+                  core.warning(`Failed to write reset counter to comment: ${writeErr.message || writeErr}`);
+                }
+                core.setOutput('auto-should-run', String(resetSucceeded));
+                core.setOutput('suspended', 'false');
+                core.setOutput('is-manual', String(resetSucceeded));
+                core.setOutput('current-count', '0');
+                return;
+              }
+              core.setOutput('auto-should-run', 'false');
+              core.setOutput('suspended', 'false');
+              core.setOutput('is-manual', 'false');
+              core.setOutput('current-count', '0');
+              return;
+            }
+
+            // ----- Read current state -----
+
+            let currentCount = 0;
+            let currentSuspended = false;
+            try {
+              const marker = await fetchMarkerComment();
+              if (marker && typeof marker.body === 'string') {
+                currentCount = parseHiddenCount(marker.body);
+                currentSuspended = parseSuspended(marker.body);
+              }
+            } catch (fetchErr) {
+              core.warning(`Failed to read OCR sticky comment for auto-review state: ${fetchErr.message || fetchErr}`);
+            }
+
+            // ----- Decision -----
+
+            if (isManualTrigger) {
+              core.setOutput('auto-should-run', 'true');
+              core.setOutput('suspended', 'false');
+              core.setOutput('is-manual', 'true');
+              core.setOutput('current-count', String(currentCount));
+              return;
+            }
+
+            const suspended = currentCount >= limit;
+            core.setOutput('auto-should-run', suspended ? 'false' : 'true');
+            core.setOutput('suspended', suspended ? 'true' : 'false');
+            core.setOutput('is-manual', 'false');
+            core.setOutput('current-count', String(currentCount));
+
+  post-suspension:
+    name: Post OCR suspension message
+    needs:
+      - mergeability-gate
+      - auto-review-gate
+    # Runs only when the auto-review gate determined that reviews should be
+    # suspended on an automatic trigger. This posts a sticky suspension
+    # message with a re-enable checkbox and /review instructions.
+    if: |
+      needs.mergeability-gate.outputs.should-run == 'true' &&
+      needs.auto-review-gate.outputs.suspended == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post OCR suspension message
+        uses: actions/github-script@f28e40c7f34b6de8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
+          CURRENT_COUNT: ${{ needs.auto-review-gate.outputs.current-count }}
+          OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
+          OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2'
+        with:
+          script: |
+            const MARKER = '<!-- llxprt-code-ocr-review -->';
+            const number = Number(process.env.PR_NUMBER);
+            if (!Number.isInteger(number) || number <= 0) {
+              core.setFailed('No valid PR number resolved for suspension message.');
+              return;
+            }
+            const currentCount = Number(process.env.CURRENT_COUNT || '0');
+            const limitRaw = process.env.OCR_AUTO_REVIEW_LIMIT ||
+              process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2';
+            const parsedLimit = Number(limitRaw);
+            const limit = (Number.isInteger(parsedLimit) && parsedLimit >= 0)
+              ? parsedLimit
+              : Number(process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const NEWLINE = String.fromCharCode(10);
+            const body = [
+              MARKER,
+              '## OpenCodeReview — automatic reviews suspended',
+              '',
+              'Automatic OCR reviews are **suspended** for this PR after ' + currentCount + ' of ' + limit + ' automatic reviews.',
+              '',
+              'To get more reviews you can:',
+              '',
+              '- Check the box below to re-enable automatic reviews (resets the counter), or',
+              '- Comment `/review`, `/ocr`, or `/open-code-review` to request a single review on demand.',
+              '',
+              '- [ ] Re-enable automatic reviews',
+              '',
+              '<!-- ocr-auto-count:' + currentCount + ' --><!-- ocr-suspended:true -->',
+            ].join(NEWLINE);
+
+            async function reconcileMarkerComment() {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              const markerComments = comments.filter((comment) =>
+                comment.body && comment.body.includes(MARKER));
+              const existing = markerComments[0];
+              for (const duplicate of markerComments.slice(1)) {
+                try {
+                  await github.rest.issues.deleteComment({
+                    owner, repo, comment_id: duplicate.id,
+                  });
+                  await new Promise((resolve) => setTimeout(resolve, 1000));
+                } catch (duplicateError) {
+                  core.warning(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`);
+                }
+              }
+              return existing || null;
+            }
+
+            try {
+              let existing = null;
+              try {
+                existing = await reconcileMarkerComment();
+              } catch (reconcileErr) {
+                core.warning(`Reconciliation failed before suspension posting; attempting create: ${reconcileErr.message || reconcileErr}`);
+              }
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: existing.id, body,
+                });
+              } else {
+                try {
+                  await github.rest.issues.createComment({
+                    owner, repo, issue_number: number, body,
+                  });
+                } catch (createErr) {
+                  const reconciled = await reconcileMarkerComment();
+                  if (reconciled) {
+                    await github.rest.issues.updateComment({
+                      owner, repo, comment_id: reconciled.id, body,
+                    });
+                  } else {
+                    throw createErr;
+                  }
+                }
+              }
+            } catch (summaryError) {
+              core.warning(`Failed to post OCR suspension message; continuing without failing the workflow: ${summaryError.message || summaryError}`);
+            }
 
   code-review:
     name: OpenCodeReview
@@ -111,11 +411,14 @@ jobs:
     outputs:
       infrastructure_failure: ${{ steps.ocr-classification.outputs.infrastructure_failure }}
       policy_failure: ${{ steps.ocr-classification.outputs.policy_failure }}
-    # The code-review job runs only when the mergeability gate permits it.
+    # The code-review job runs only when the mergeability gate and the
+    # auto-review gate both permit it.
     needs:
       - mergeability-gate
+      - auto-review-gate
     if: |
-      needs.mergeability-gate.outputs.should-run == 'true'
+      needs.mergeability-gate.outputs.should-run == 'true' &&
+      needs.auto-review-gate.outputs.auto-should-run == 'true'
     steps:
       - name: Resolve PR context
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
@@ -568,11 +871,14 @@ jobs:
 
       - name: Post OCR results
         if: always()
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34b6de8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         env:
           BASE_SHA: ${{ env.BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          # Whether this run is an automatic (pull_request_target) trigger.
+          # Automatic runs increment the auto-review counter; manual runs do not.
+          IS_AUTOMATIC: ${{ needs.auto-review-gate.outputs.is-manual == 'false' }}
           # Exact OCR endpoint/credential values are provided only for redaction;
           # do not log process.env from this step.
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -994,6 +1300,31 @@ jobs:
                 body.push(`- ${where}${text}`);
               }
             }
+            const isAutomatic = process.env.IS_AUTOMATIC === 'true';
+
+            // Read the current auto-review count from the existing sticky
+            // comment so it can be incremented (issue #2666). Manual triggers
+            // do not increment the counter.
+            let autoReviewCount = 0;
+            try {
+              const preComments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              const preMarker = preComments.find((c) =>
+                typeof c.body === 'string' && c.body.includes(MARKER));
+              if (preMarker) {
+                const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(preMarker.body);
+                if (match) {
+                  autoReviewCount = Number(match[1]);
+                }
+              }
+            } catch (preFetchErr) {
+              core.warning(redactSecretDiagnostics(`Could not read existing OCR comment for auto-review count: ${preFetchErr.message || preFetchErr}`));
+            }
+            if (isAutomatic) {
+              autoReviewCount += 1;
+            }
+            body.push(`\n<!-- ocr-auto-count:${autoReviewCount} --><!-- ocr-suspended:false -->`);
             const summary = body.join('\n');
 
             async function reconcileMarkerComment() {
