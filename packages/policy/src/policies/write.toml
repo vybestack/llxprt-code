@@ -24,6 +24,13 @@
 #   15: Auto-edit tool override (becomes 1.015 in default tier)
 #   50: Read-only tools (becomes 1.050 in default tier)
 #   999: YOLO mode allow-all (becomes 1.999 in default tier)
+#
+# Mode-specific rules (with `modes` filters) are evaluated DYNAMICALLY by the
+# PolicyEngine at evaluate() time. When the approval mode changes (Ctrl-Y /
+# Ctrl-E), the engine's currentMode updates via setApprovalMode(), so rules
+# with `modes = ["autoEdit"]` automatically become active/inactive without
+# reloading TOML. This eliminates the authorization desynchronization bug
+# (issue #2659) where stale mode rules persisted across transitions.
 
 [[rule]]
 toolName = "replace"
@@ -52,17 +59,17 @@ decision = "ask_user"
 priority = 10
 
 [[rule]]
-toolName = "activate_skill"
-decision = "ask_user"
-priority = 10
-
-[[rule]]
 toolName = "write_file"
 decision = "allow"
 priority = 15
 modes = ["autoEdit"]
 
 [[rule]]
+toolName = "activate_skill"
+decision = "ask_user"
+priority = 10
+
+[[rule]]
 toolName = "insert_at_line"
 decision = "ask_user"
 priority = 10
@@ -91,6 +98,17 @@ priority = 10
 
 [[rule]]
 toolName = "apply_patch"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]
+
+[[rule]]
+toolName = "ast_edit"
+decision = "ask_user"
+priority = 10
+
+[[rule]]
+toolName = "ast_edit"
 decision = "allow"
 priority = 15
 modes = ["autoEdit"]

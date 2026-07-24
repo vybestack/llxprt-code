@@ -28,7 +28,7 @@ describe('policiesCommand', () => {
   it('should have the correct name and description', () => {
     expect(policiesCommand.name).toBe('policies');
     expect(policiesCommand.description).toBe(
-      'display active policy rules and their priorities',
+      'display configured policy rules and their priorities',
     );
   });
 

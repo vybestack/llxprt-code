@@ -57,6 +57,16 @@ export interface PolicyRule {
    * "Dynamic (Confirmed)".
    */
   source?: string;
+
+  /**
+   * Approval modes in which this rule is active.
+   * If undefined or empty, the rule applies in all modes.
+   * If specified, the rule only matches when the engine's current approval
+   * mode is in this list. This enables user/admin TOML files to declare
+   * mode-specific rules (e.g. `modes = ["yolo"]`) that are evaluated
+   * dynamically at runtime — not filtered at load time.
+   */
+  modes?: ApprovalMode[];
 }
 
 export interface PolicyEngineConfig {
@@ -76,6 +86,13 @@ export interface PolicyEngineConfig {
    * When true, ASK_USER decisions become DENY.
    */
   nonInteractive?: boolean;
+
+  /**
+   * Initial approval mode for the engine. Determines which TOML rules
+   * with `modes` filters are active. Updated at runtime via setApprovalMode().
+   * Defaults to DEFAULT.
+   */
+  approvalMode?: ApprovalMode;
 }
 
 export interface PolicySettings {

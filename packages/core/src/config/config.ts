@@ -114,6 +114,7 @@ export class Config extends ConfigBase {
   constructor(params: ConfigParameters) {
     super();
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
+    this.syncModeDerivedPolicyRules(this.approvalMode);
   }
 
   // Issue #2325: Background MCP discovery promise started in initialize() so
@@ -456,6 +457,12 @@ export class Config extends ConfigBase {
     }
 
     this.approvalMode = mode;
+    this.syncModeDerivedPolicyRules(mode);
+  }
+
+  private syncModeDerivedPolicyRules(mode: ApprovalMode): void {
+    const engine = this.getPolicyEngine();
+    engine.setApprovalMode(mode);
   }
 
   updateSystemInstructionIfInitialized(): void | Promise<void> {}

@@ -144,6 +144,62 @@ Enterprise administrator policies (future use):
 | --------- | -------------------------------------- |
 | 3.0-3.999 | Reserved for enterprise admin policies |
 
+## Approval Mode Synchronization
+
+Approval modes (`DEFAULT`, `AUTO_EDIT`, `YOLO`) control how aggressively tools
+are auto-approved. The PolicyEngine evaluates mode-specific rules **dynamically**
+at `evaluate()` time using the `modes` filter — no TOML reload is needed on
+mode transitions.
+
+### The `modes` Filter
+
+Rules can declare a `modes` array to restrict which approval modes they are
+active in:
+
+```toml
+# Only active in AUTO_EDIT mode
+[[rule]]
+toolName = "replace"
+decision = "allow"
+priority = 15
+modes = ["autoEdit"]
+
+# Only active in YOLO mode
+[[rule]]
+decision = "allow"
+allow_redirection = true
+priority = 999
+modes = ["yolo"]
+```
+
+When the approval mode changes (Ctrl-Y / Ctrl-E), the PolicyEngine's
+`currentMode` is atomically updated via `setApprovalMode()`. Rules with a
+`modes` filter that doesn't include the new mode are automatically skipped —
+rules without a `modes` filter always apply.
+
+### Mode Transition Mechanism
+
+Mode-specific behavior is expressed declaratively via the `modes` field on
+individual rules. The PolicyEngine evaluates those rules dynamically at
+`evaluate()` time against `currentMode`, which is updated atomically via
+`setApprovalMode()`. No rules are added or removed on transition — only the
+mode filter changes.
+
+When `Config.setApprovalMode()` is called, it calls
+`syncModeDerivedPolicyRules()` which calls `setApprovalMode()` on the engine.
+This ensures:
+
+- YOLO→DEFAULT removes the wildcard ALLOW, reverting all tools to ASK_USER
+- AUTO_EDIT→DEFAULT removes per-tool ALLOW, reverting edit tools to ASK_USER
+- Non-mode rules (e.g., read-only ALLOW at priority 1.05) survive all transitions
+
+### Initial CLI/Agent Parity
+
+The `Config` constructor calls `syncModeDerivedPolicyRules()` after applying
+parameters, so an engine constructed with `approvalMode: YOLO` produces the
+same policy as an engine constructed in DEFAULT then transitioned to YOLO.
+This eliminates authorization desynchronization (issue #2659).
+
 ## Complete Example
 
 ```toml

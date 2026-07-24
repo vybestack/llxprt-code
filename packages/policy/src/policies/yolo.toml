@@ -1,6 +1,12 @@
 # YOLO mode policy - allow everything
 # Priority band: 1.999 (Tier 1 - Default, just below user settings)
 # WARNING: This disables all safety checks. Use only in trusted environments.
+#
+# This rule uses the `modes` filter so the PolicyEngine evaluates it
+# dynamically at runtime. When currentMode is YOLO, the rule is active;
+# when the user switches to DEFAULT or AUTO_EDIT (Ctrl-Y / Ctrl-E), the
+# rule is automatically skipped — no TOML reload needed. This eliminates
+# the authorization desynchronization bug (issue #2659).
 
 [[rule]]
 # No toolName specified = wildcard (matches all tools)

@@ -1,5 +1,6 @@
 import {
   PolicyDecision,
+  ApprovalMode,
   type PolicyEngineConfig,
   type PolicyRule,
 } from './types.js';
@@ -13,19 +14,28 @@ import {
 /**
  * PolicyEngine evaluates tool execution requests against configured rules.
  * Rules are matched in priority order, with the highest priority rule winning.
+ *
+ * Internally, rules are kept in a single sorted base list. Mode-specific
+ * behavior is expressed declaratively via the `modes` field on individual
+ * rules, which is evaluated dynamically at evaluate() time against
+ * `currentMode`. `currentMode` is updated atomically via `setApprovalMode()`,
+ * which is the sole mechanism for mode transitions — no rules are added or
+ * removed on transition, only the mode filter changes.
  */
 export class PolicyEngine {
-  private readonly rules: PolicyRule[];
+  private readonly baseRules: PolicyRule[];
   private readonly defaultDecision: PolicyDecision;
   private readonly nonInteractive: boolean;
+  private currentMode: ApprovalMode;
 
   constructor(config?: PolicyEngineConfig) {
-    this.rules = config?.rules ?? [];
+    this.baseRules = config?.rules ? config.rules.map((r) => ({ ...r })) : [];
     this.defaultDecision = config?.defaultDecision ?? PolicyDecision.ASK_USER;
     this.nonInteractive = config?.nonInteractive ?? false;
+    this.currentMode = config?.approvalMode ?? ApprovalMode.DEFAULT;
 
-    // Sort rules by priority (highest first)
-    this.rules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    // Sort base rules by priority (highest first)
+    this.baseRules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   }
 
   /**
@@ -259,10 +269,20 @@ export class PolicyEngine {
   ): PolicyRule | undefined {
     const argsString = stableStringify(args);
 
-    return this.rules.find((rule) => {
+    return this.baseRules.find((rule) => {
       // Check tool name match
       const toolMatches = !rule.toolName || rule.toolName === toolName;
       if (!toolMatches) {
+        return false;
+      }
+
+      // Check mode applicability: rules with `modes` only match when the
+      // engine's current approval mode is in the list
+      if (
+        rule.modes &&
+        rule.modes.length > 0 &&
+        !rule.modes.includes(this.currentMode)
+      ) {
         return false;
       }
 
@@ -308,7 +328,7 @@ export class PolicyEngine {
    * @returns Array of policy rules
    */
   getRules(): readonly PolicyRule[] {
-    return [...this.rules];
+    return this.baseRules.map((r) => ({ ...r }));
   }
 
   /**
@@ -336,8 +356,22 @@ export class PolicyEngine {
    * @param rule - The policy rule to add
    */
   addRule(rule: PolicyRule): void {
-    this.rules.push(rule);
-    // Re-sort rules by priority (highest first)
-    this.rules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    this.baseRules.push({ ...rule });
+    this.baseRules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  }
+
+  /**
+   * Updates the current approval mode.
+   *
+   * Mode-specific rules (those carrying a `modes` filter) are evaluated
+   * dynamically at evaluate() time against this mode — they are not loaded
+   * or unloaded. This is the sole mechanism for mode transitions and is
+   * atomically safe: there is no window where a stale mode can authorize
+   * a tool that should require confirmation.
+   *
+   * @param mode - The new approval mode
+   */
+  setApprovalMode(mode: ApprovalMode): void {
+    this.currentMode = mode;
   }
 }

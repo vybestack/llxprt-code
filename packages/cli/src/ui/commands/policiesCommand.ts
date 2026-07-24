@@ -136,7 +136,7 @@ function formatPolicyOutput(
 }
 
 /**
- * Handle /policies command — displays active policy rules.
+ * Handle /policies command — displays configured policy rules.
  * Prefers the agent.policy facade; falls back to config.getPolicyEngine()
  * when the agent is null (tracked migration debt).
  */
@@ -180,7 +180,7 @@ function handlePoliciesCommand(
 
 export const policiesCommand: SlashCommand = {
   name: 'policies',
-  description: 'display active policy rules and their priorities',
+  description: 'display configured policy rules and their priorities',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: (context: CommandContext, args: string): MessageActionReturn | void =>

@@ -23,6 +23,7 @@ import {
   type MessageBus,
   MessageBusType,
   migrateLegacyApprovalMode,
+  AUTO_EDIT_TOOLS,
   type PolicyConfigSource,
   type PolicyEngine,
   type PolicyEngineConfig,
@@ -43,6 +44,7 @@ export {
   USER_POLICY_TIER,
   formatPolicyError,
   migrateLegacyApprovalMode,
+  AUTO_EDIT_TOOLS,
 };
 export type { PolicyConfigSource, PolicyPathResolver };
 
@@ -121,6 +123,7 @@ async function buildConfigSourceRules(
     rules,
     defaultDecision: PolicyDecision.ASK_USER,
     nonInteractive,
+    approvalMode,
   };
 }
 
@@ -170,6 +173,7 @@ async function buildSettingsRules(
   return {
     rules,
     defaultDecision: PolicyDecision.ASK_USER,
+    approvalMode,
   };
 }
 

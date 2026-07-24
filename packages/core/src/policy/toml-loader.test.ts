@@ -133,7 +133,7 @@ priority = 100
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should filter rules by mode', async () => {
+    it('should preserve modes field for dynamic evaluation by PolicyEngine', async () => {
       const result = await runLoadPoliciesFromToml(`
 [[rule]]
 toolName = "glob"
@@ -148,9 +148,14 @@ priority = 100
 modes = ["yolo"]
 `);
 
-      // Only the first rule should be included (modes includes "default")
-      expect(result.rules).toHaveLength(1);
+      expect(result.rules).toHaveLength(2);
       expect(result.rules[0].toolName).toBe('glob');
+      expect(result.rules[0].modes).toStrictEqual([
+        ApprovalMode.DEFAULT,
+        ApprovalMode.YOLO,
+      ]);
+      expect(result.rules[1].toolName).toBe('grep');
+      expect(result.rules[1].modes).toStrictEqual([ApprovalMode.YOLO]);
       expect(result.errors).toHaveLength(0);
     });
 

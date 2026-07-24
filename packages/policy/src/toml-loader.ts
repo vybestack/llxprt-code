@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PolicyRule, PolicyDecision, type ApprovalMode } from './types.js';
+import { type PolicyRule, PolicyDecision, ApprovalMode } from './types.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,7 @@ const PolicyRuleSchema = z.object({
       message:
         'priority must be <= 999 to prevent tier overflow. Priorities >= 1000 would jump to the next tier.',
     }),
-  modes: z.array(z.string()).optional(),
+  modes: z.array(z.nativeEnum(ApprovalMode)).optional(),
   allowRedirection: z.boolean().optional(),
 });
 
@@ -387,42 +387,36 @@ function expandRuleToPolicyRules(
         priority: transformPriority(rule.priority, tier),
         argsPattern,
         allowRedirection: rule.allowRedirection,
+        modes: rule.modes,
         source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
       };
     });
   });
 }
 
-/** Transforms validated TOML rules into PolicyRule[], filtering by approval mode and handling errors. */
+/** Transforms validated TOML rules into PolicyRule[], preserving modes for dynamic evaluation. */
 function transformTomlRules(
   data: z.infer<typeof PolicyFileSchema>,
-  approvalMode: ApprovalMode,
+  _approvalMode: ApprovalMode,
   tier: number,
   tierName: 'default' | 'user' | 'admin',
   filePath: string,
   file: string,
   errors: PolicyFileError[],
 ): PolicyRule[] {
-  return data.rule
-    .filter((rule) => {
-      if (!rule.modes || rule.modes.length === 0) {
-        return true;
-      }
-      return rule.modes.includes(approvalMode);
-    })
-    .flatMap((rule) => {
-      const patterns = resolveRulePatterns(
-        rule,
-        filePath,
-        file,
-        tierName,
-        errors,
-      );
-      if (!patterns) {
-        return [];
-      }
-      return expandRuleToPolicyRules(rule, tier, tierName, file, patterns);
-    });
+  return data.rule.flatMap((rule) => {
+    const patterns = resolveRulePatterns(
+      rule,
+      filePath,
+      file,
+      tierName,
+      errors,
+    );
+    if (!patterns) {
+      return [];
+    }
+    return expandRuleToPolicyRules(rule, tier, tierName, file, patterns);
+  });
 }
 
 /** Scans a directory for .toml files, returning names or pushing a read error. */

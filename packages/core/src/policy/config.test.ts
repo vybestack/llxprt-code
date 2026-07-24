@@ -32,59 +32,22 @@ function createMockConfig(options: {
 describe('policy config', () => {
   describe('migrateLegacyApprovalMode', () => {
     describe('ApprovalMode.YOLO', () => {
-      it('converts YOLO to wildcard allow-all at priority 1.999', () => {
+      it('does not add mode rules (TOML handles mode-specific behavior)', () => {
         const config = createMockConfig({ approvalMode: ApprovalMode.YOLO });
         const rules = migrateLegacyApprovalMode(config);
 
-        expect(rules).toHaveLength(1);
-        expect(rules[0]).toStrictEqual({
-          // toolName undefined = wildcard
-          decision: PolicyDecision.ALLOW,
-          priority: 1.999,
-          source: 'Legacy (YOLO)',
-        });
-        expect(rules[0].toolName).toBeUndefined();
-      });
-
-      it('wildcard rule matches all tools', () => {
-        const config = createMockConfig({ approvalMode: ApprovalMode.YOLO });
-        const rules = migrateLegacyApprovalMode(config);
-
-        // Verify the rule has no toolName (wildcard)
-        expect(rules[0].toolName).toBeUndefined();
+        expect(rules).toHaveLength(0);
       });
     });
 
     describe('ApprovalMode.AUTO_EDIT', () => {
-      it('converts AUTO_EDIT to write tool rules at priority 1.015', () => {
+      it('does not add mode rules (TOML handles mode-specific behavior)', () => {
         const config = createMockConfig({
           approvalMode: ApprovalMode.AUTO_EDIT,
         });
         const rules = migrateLegacyApprovalMode(config);
 
-        // Should have rules for edit tools
-        expect(rules.length).toBeGreaterThanOrEqual(4);
-
-        const replaceRule = rules.find((r) => r.toolName === 'replace');
-        expect(replaceRule).toStrictEqual({
-          toolName: 'replace',
-          decision: PolicyDecision.ALLOW,
-          priority: 1.015,
-          source: 'Legacy (AUTO_EDIT)',
-        });
-      });
-
-      it('includes all expected write tools', () => {
-        const config = createMockConfig({
-          approvalMode: ApprovalMode.AUTO_EDIT,
-        });
-        const rules = migrateLegacyApprovalMode(config);
-
-        const toolNames = rules.map((r) => r.toolName);
-        expect(toolNames).toContain('replace');
-        expect(toolNames).toContain('write_file');
-        expect(toolNames).toContain('insert_at_line');
-        expect(toolNames).toContain('delete_line_range');
+        expect(rules).toHaveLength(0);
       });
     });
 
@@ -93,7 +56,6 @@ describe('policy config', () => {
         const config = createMockConfig({ approvalMode: ApprovalMode.DEFAULT });
         const rules = migrateLegacyApprovalMode(config);
 
-        // DEFAULT mode doesn't add any legacy rules
         expect(rules).toHaveLength(0);
       });
     });
@@ -181,38 +143,30 @@ describe('policy config', () => {
     });
 
     describe('combined scenarios', () => {
-      it('combines YOLO mode with allowed tools', () => {
+      it('only produces allowed-tools rules (mode rules handled by TOML)', () => {
         const config = createMockConfig({
           approvalMode: ApprovalMode.YOLO,
           allowedTools: ['edit'],
         });
         const rules = migrateLegacyApprovalMode(config);
 
-        // YOLO wildcard + 1 allowed tool
-        expect(rules).toHaveLength(2);
-
-        const yoloRule = rules.find((r) => r.priority === 1.999);
-        expect(yoloRule?.toolName).toBeUndefined();
-
-        const allowedRule = rules.find((r) => r.priority === 2.3);
-        expect(allowedRule?.toolName).toBe('edit');
+        expect(rules).toHaveLength(1);
+        expect(rules[0].priority).toBe(2.3);
+        expect(rules[0].toolName).toBe('edit');
       });
 
-      it('combines AUTO_EDIT with allowed tools', () => {
+      it('only produces allowed-tools rules for AUTO_EDIT', () => {
         const config = createMockConfig({
           approvalMode: ApprovalMode.AUTO_EDIT,
           allowedTools: ['glob', 'grep'],
         });
         const rules = migrateLegacyApprovalMode(config);
 
-        // 5 AUTO_EDIT tools (including apply_patch) + 2 allowed tools
-        expect(rules.length).toBe(7);
-
-        const autoEditRules = rules.filter((r) => r.priority === 1.015);
-        expect(autoEditRules.length).toBe(5);
-
+        expect(rules).toHaveLength(2);
         const allowedRules = rules.filter((r) => r.priority === 2.3);
-        expect(allowedRules.length).toBe(2);
+        expect(allowedRules).toHaveLength(2);
+        const toolNames = rules.map((r) => r.toolName).sort();
+        expect(toolNames).toStrictEqual(['glob', 'grep']);
       });
     });
   });

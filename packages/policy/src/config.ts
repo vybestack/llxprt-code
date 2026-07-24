@@ -114,38 +114,19 @@ function normalizeToolName(toolName: string): string {
   return toolName;
 }
 
-const AUTO_EDIT_TOOLS = [
+export const AUTO_EDIT_TOOLS = [
   'replace',
   'write_file',
   'insert_at_line',
   'delete_line_range',
   'apply_patch',
+  'ast_edit',
 ] as const;
 
 export function migrateLegacyApprovalMode(
   config: PolicyConfigSource,
 ): PolicyRule[] {
   const rules: PolicyRule[] = [];
-  const approvalMode = config.getApprovalMode();
-
-  if (approvalMode === 'yolo') {
-    rules.push({
-      decision: PolicyDecision.ALLOW,
-      priority: 1.999,
-      source: 'Legacy (YOLO)',
-    });
-  }
-
-  if (approvalMode === 'autoEdit') {
-    for (const tool of AUTO_EDIT_TOOLS) {
-      rules.push({
-        toolName: tool,
-        decision: PolicyDecision.ALLOW,
-        priority: 1.015,
-        source: 'Legacy (AUTO_EDIT)',
-      });
-    }
-  }
 
   const allowedTools = config.getAllowedTools();
   if (allowedTools && allowedTools.length > 0) {
