@@ -20,26 +20,26 @@ changes are grouped below.
 
 ### Bug fixes (security and correctness)
 
-| Version | Change | Why it matters to us |
-|---------|--------|----------------------|
-| 1.7.15 | `fix(llmloop): drain per-file comment work without racing pool submissions` | Race in concurrent file review could cause incomplete reviews or deadlocks. We set `OCR_CONCURRENCY: '2'`, so we are directly affected. |
-| 1.7.15 | `fix(diff): review merge commits against their first parent` | Corrects merge-commit diff computation. |
-| 1.7.15 | `fix(diff): anchor binary marker and count +/- lines by hunk state` | Improves diff accuracy. |
-| 1.7.15 | `fix(config): preserve hand-edited timeout_sec across config round-trips` | Relevant if we later make timeout configurable. |
-| 1.7.15 | `fix(llmloop): scope async memory compression to each RunPerFile conversation` | Prevents cross-file context bleed across concurrently reviewed files. |
-| 1.7.14 | `fix(llmloop): guard nil tool-call arguments map to prevent panic` | Prevents a crash during review. |
-| 1.7.16 | `fix: remove hardcoded 180s timeout from REVIEW_FILTER_TASK` | A hidden timeout could truncate reviews. |
-| 1.7.16 | `fix(agent): count only dispatchable files reviewed` | Fixes review counting that could under-report coverage (directly relevant to the observed preview-vs-reviewed discrepancy in #2649). |
-| 1.7.16 | `fix(vscode): bound brace-expansion resolution` | Security fix. |
-| 1.7.16 | `fix(deps): upgrade grpc-go for GHSA-hrxh-6v49-42gf` | Security advisory. |
+| Version | Change                                                                         | Why it matters to us                                                                                                                    |
+| ------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.7.15  | `fix(llmloop): drain per-file comment work without racing pool submissions`    | Race in concurrent file review could cause incomplete reviews or deadlocks. We set `OCR_CONCURRENCY: '2'`, so we are directly affected. |
+| 1.7.15  | `fix(diff): review merge commits against their first parent`                   | Corrects merge-commit diff computation.                                                                                                 |
+| 1.7.15  | `fix(diff): anchor binary marker and count +/- lines by hunk state`            | Improves diff accuracy.                                                                                                                 |
+| 1.7.15  | `fix(config): preserve hand-edited timeout_sec across config round-trips`      | Relevant if we later make timeout configurable.                                                                                         |
+| 1.7.15  | `fix(llmloop): scope async memory compression to each RunPerFile conversation` | Prevents cross-file context bleed across concurrently reviewed files.                                                                   |
+| 1.7.14  | `fix(llmloop): guard nil tool-call arguments map to prevent panic`             | Prevents a crash during review.                                                                                                         |
+| 1.7.16  | `fix: remove hardcoded 180s timeout from REVIEW_FILTER_TASK`                   | A hidden timeout could truncate reviews.                                                                                                |
+| 1.7.16  | `fix(agent): count only dispatchable files reviewed`                           | Fixes review counting that could under-report coverage (directly relevant to the observed preview-vs-reviewed discrepancy in #2649).    |
+| 1.7.16  | `fix(vscode): bound brace-expansion resolution`                                | Security fix.                                                                                                                           |
+| 1.7.16  | `fix(deps): upgrade grpc-go for GHSA-hrxh-6v49-42gf`                           | Security advisory.                                                                                                                      |
 
 ### Features
 
-| Version | Change |
-|----------|--------|
-| 1.7.16 | `feat(llm): iFlytek Spark as built-in provider` |
-| 1.7.16 | `feat(allowlist): GraphQL (.graphql/.gql) support` |
-| 1.7.14 | `feat: add pot code review rules` |
+| Version | Change                                             |
+| ------- | -------------------------------------------------- |
+| 1.7.16  | `feat(llm): iFlytek Spark as built-in provider`    |
+| 1.7.16  | `feat(allowlist): GraphQL (.graphql/.gql) support` |
+| 1.7.14  | `feat: add pot code review rules`                  |
 
 ## Upstream composite-action comparison
 
