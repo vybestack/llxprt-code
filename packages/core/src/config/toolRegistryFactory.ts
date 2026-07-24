@@ -353,6 +353,17 @@ function registerStandardTools(
     storageServiceAdapter.getGlobalDataDir(),
   );
 
+  // Editing tools that need both IDE diff and LSP diagnostic adapters share
+  // the same registration shape; collapsed here to keep this function within
+  // the max-lines-per-function limit.
+  const registerIdeLspTool = (ToolClass: ToolConstructor): void =>
+    registerCoreTool(
+      ToolClass,
+      toolHostAdapter,
+      ideServiceAdapter,
+      lspServiceAdapter,
+    );
+
   registerCoreTool(LSTool, toolHostAdapter);
   registerCoreTool(ReadFileTool, toolHostAdapter);
 
@@ -363,38 +374,18 @@ function registerStandardTools(
   }
 
   registerCoreTool(GlobTool, toolHostAdapter);
-  registerCoreTool(
-    EditTool,
-    toolHostAdapter,
-    ideServiceAdapter,
-    lspServiceAdapter,
-  );
-  registerCoreTool(ASTEditTool, toolHostAdapter, lspServiceAdapter);
-  registerCoreTool(WriteFileTool, toolHostAdapter);
+  registerIdeLspTool(EditTool);
+  registerIdeLspTool(ASTEditTool);
+  registerCoreTool(WriteFileTool, toolHostAdapter, ideServiceAdapter);
   registerCoreTool(ReadManyFilesTool, toolHostAdapter);
   registerCoreTool(ReadLineRangeTool, toolHostAdapter);
   registerCoreTool(ASTReadFileTool, toolHostAdapter);
   // @plan PLAN-20260211-ASTGREP.P05
   registerCoreTool(AstGrepTool, toolHostAdapter);
   registerCoreTool(StructuralAnalysisTool, toolHostAdapter);
-  registerCoreTool(
-    DeleteLineRangeTool,
-    toolHostAdapter,
-    ideServiceAdapter,
-    lspServiceAdapter,
-  );
-  registerCoreTool(
-    InsertAtLineTool,
-    toolHostAdapter,
-    ideServiceAdapter,
-    lspServiceAdapter,
-  );
-  registerCoreTool(
-    ApplyPatchTool,
-    toolHostAdapter,
-    ideServiceAdapter,
-    lspServiceAdapter,
-  );
+  registerIdeLspTool(DeleteLineRangeTool);
+  registerIdeLspTool(InsertAtLineTool);
+  registerIdeLspTool(ApplyPatchTool);
   registerCoreTool(
     ShellTool,
     new CoreShellToolHostAdapter(config),

@@ -19,7 +19,12 @@ import {
   ToolConfirmationOutcome,
 } from './tools.js';
 import { ToolErrorType } from '../types/tool-error.js';
-import type { IToolHost, IToolMessageBus } from '../interfaces/index.js';
+import type {
+  IToolHost,
+  IToolMessageBus,
+  IIdeService,
+} from '../interfaces/index.js';
+import { resolveConstructorArguments } from './edit-utils.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import {
@@ -121,6 +126,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 > {
   constructor(
     private readonly host: IToolHost,
+    private readonly ideService: IIdeService | undefined,
     params: WriteFileToolParams,
     messageBus: IToolMessageBus,
     toolName?: string,
@@ -188,6 +194,11 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       DEFAULT_CREATE_PATCH_OPTIONS,
     );
 
+    const ideConfirmation =
+      this.ideService?.getConnectionStatus() === 'connected'
+        ? this.ideService.applyDiff({ filePath, diff: newContent })
+        : undefined;
+
     return {
       type: 'edit',
       title: 'Confirm Write File',
@@ -202,7 +213,17 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         } else {
           await this.publishPolicyUpdate(outcome);
         }
+
+        if (ideConfirmation) {
+          const result = await ideConfirmation;
+          if (result.status === 'accepted' && result.content !== undefined) {
+            // The IDE returns the full file content the user reviewed (and
+            // possibly edited) in the diff view; write exactly that.
+            this.params.content = result.content;
+          }
+        }
       },
+      ideConfirmation,
     };
   }
 
@@ -381,11 +402,19 @@ export class WriteFileTool
   implements ModifiableDeclarativeTool<WriteFileToolParams>
 {
   static readonly Name: string = 'write_file';
+  private readonly ideService?: IIdeService;
 
   constructor(
     private host: IToolHost,
-    messageBus?: IToolMessageBus,
+    messageBusOrIdeService?: IToolMessageBus | IIdeService,
+    ideService?: IIdeService,
   ) {
+    const resolved = resolveConstructorArguments(
+      host,
+      messageBusOrIdeService,
+      ideService,
+      undefined,
+    );
     super(
       WriteFileTool.Name,
       'WriteFile',
@@ -415,8 +444,9 @@ export class WriteFileTool
       },
       true,
       false,
-      messageBus,
+      resolved.messageBus,
     );
+    this.ideService = resolved.ideService;
   }
 
   protected override validateToolParamValues(
@@ -469,6 +499,7 @@ export class WriteFileTool
     }
     return new WriteFileToolInvocation(
       this.host,
+      this.ideService,
       normalizedParams,
       messageBus as IToolMessageBus,
       toolName ?? this.name,
