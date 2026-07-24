@@ -365,9 +365,8 @@ export class PolicyEngine {
    *
    * Mode-specific rules (those carrying a `modes` filter) are evaluated
    * dynamically at evaluate() time against this mode — they are not loaded
-   * or unloaded. This is the sole mechanism for mode transitions and is
-   * atomically safe: there is no window where a stale mode can authorize
-   * a tool that should require confirmation.
+   * or unloaded. Because evaluation reads the current mode synchronously,
+   * the new mode applies to subsequent rule matches in the same process.
    *
    * @param mode - The new approval mode
    */

@@ -36,6 +36,11 @@ import type { PolicyEngineConfig, PolicyRule } from '../policy/types.js';
 import { AUTO_EDIT_TOOLS } from '../policy/config.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import {
+  MessageBusType,
+  type ToolConfirmationRequest,
+} from '../confirmation-bus/types.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
 const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
   loadJitSubdirectoryMemory: vi.fn(),
@@ -170,7 +175,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('YOLO→DEFAULT: ast_edit reverts from ALLOW to ASK_USER after transition', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -183,7 +187,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('YOLO→DEFAULT: ALL tools revert to ASK_USER after transition', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -204,7 +207,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('AUTO_EDIT→DEFAULT: all six edit tools revert from ALLOW to ASK_USER', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -223,7 +225,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('AUTO_EDIT→YOLO: edit tools stay ALLOW, shell becomes ALLOW', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -245,7 +246,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('YOLO→AUTO_EDIT: shell reverts to ASK_USER, edit tools stay ALLOW', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -267,7 +267,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('rapid transitions do not accumulate or lose rules', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.DEFAULT });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -293,7 +292,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('non-mode ALLOW rules in base survive mode transitions', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.DEFAULT });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
@@ -309,7 +307,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('MessageBus sees updated policy after mode transition (identity preserved)', async () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
     const bus = new MessageBus(engine, false);
@@ -323,23 +320,38 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
     config.setApprovalMode(ApprovalMode.DEFAULT);
 
-    expect(bus).toBeInstanceOf(MessageBus);
-    // After transition (DEFAULT): requestConfirmation must NOT fast-approve
-    // (policy evaluates to ASK_USER, which means it waits for a response).
-    // We verify via engine.evaluate that the policy decision changed.
-    expect(engine.evaluate('ast_edit', {})).toBe(PolicyDecision.ASK_USER);
+    const confirmationHandler = vi.fn();
+    bus.subscribe(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      confirmationHandler,
+    );
+    const afterPromise = bus.requestConfirmation(
+      { name: 'ast_edit', args: {} },
+      {},
+    );
+    await vi.waitFor(() => {
+      expect(confirmationHandler).toHaveBeenCalledOnce();
+    });
+    const confirmationRequest = confirmationHandler.mock
+      .calls[0][0] as ToolConfirmationRequest;
+    expect(confirmationRequest.type).toBe(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+    );
+    bus.respondToConfirmation(
+      confirmationRequest.correlationId,
+      ToolConfirmationOutcome.Cancel,
+    );
+    await expect(afterPromise).resolves.toBe(false);
   });
 
   // ── Initial construction matches runtime transition ──────────────────
 
   it('initial YOLO construction produces same policy as YOLO transition from DEFAULT', () => {
     const configFromYolo = makeConfig({ approvalMode: ApprovalMode.YOLO });
-    vi.spyOn(configFromYolo, 'isTrustedFolder').mockReturnValue(true);
 
     const configFromDefault = makeConfig({
       approvalMode: ApprovalMode.DEFAULT,
     });
-    vi.spyOn(configFromDefault, 'isTrustedFolder').mockReturnValue(true);
     configFromDefault.setApprovalMode(ApprovalMode.YOLO);
 
     expect(configFromYolo.getPolicyEngine().evaluate('ast_edit', {})).toBe(
@@ -352,7 +364,6 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('initial AUTO_EDIT construction includes ast_edit ALLOW', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
 
     const engine = config.getPolicyEngine();
 
