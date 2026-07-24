@@ -15,6 +15,7 @@ import {
   type Mock,
 } from 'vitest';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
+import { IdeContextNotificationSchema } from './ideContext.js';
 import * as fs from 'node:fs';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -66,11 +67,28 @@ describe('IdeClient', () => {
     });
     vi.mocked(os.tmpdir).mockReturnValue('/tmp');
 
-    // Mock MCP client and transports
+    // Mock MCP client and transports. The context notification handler is
+    // captured and invoked asynchronously (via microtask) so the client's
+    // context-receipt deferred resolves and connect succeeds.
+    let contextHandler:
+      | ((notification: { params: Record<string, unknown> }) => void)
+      | undefined = undefined;
     mockClient = {
       connect: vi.fn().mockResolvedValue(undefined),
+      ping: vi.fn().mockResolvedValue(undefined),
       close: vi.fn(),
-      setNotificationHandler: vi.fn(),
+      setNotificationHandler: vi.fn((schema, handler) => {
+        if (schema === IdeContextNotificationSchema) {
+          contextHandler = handler as typeof contextHandler;
+          // Simulate the server delivering initial context on the next
+          // microtask, so the context-receipt deferred resolves.
+          void Promise.resolve().then(() => {
+            contextHandler?.({
+              params: { workspaceState: { isTrusted: true } },
+            });
+          });
+        }
+      }),
       callTool: vi.fn(),
     } as unknown as Mocked<Client>;
     mockHttpTransport = {

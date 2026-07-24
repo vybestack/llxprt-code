@@ -45,6 +45,18 @@ type ConnectionConfig = {
   stdio?: StdioConfig;
 };
 
+/**
+ * Tri-state result for a connection attempt within {@link establishConnection}.
+ *
+ * - `'connected'`: the attempt succeeded and set Connected state.
+ * - `'failed'`: the attempt genuinely failed (connect error, ping error,
+ *   context timeout). The caller may try the next fallback.
+ * - `'superseded'`: a newer connect/startNewAttempt displaced this attempt
+ *   while it was in-flight. The caller MUST NOT touch any shared state
+ *   (no setState) because the newer attempt owns the visible lifecycle.
+ */
+type EstablishConnectionResult = 'connected' | 'failed' | 'superseded';
+
 export type IDEConnectionState = {
   status: IDEConnectionStatus;
   details?: string; // User-facing
@@ -66,9 +78,107 @@ function getRealPath(path: string): string {
 }
 
 /**
+ * Cancellable timer with an explicit settle outcome. The promise resolves with
+ * `'elapsed'` when the timer fires, or `'cancelled'` if it was cleared before
+ * firing. Retaining the handle lets us clear it on early receipt, failure,
+ * supersession, and disconnect — preventing timer leaks.
+ */
+interface CancellableTimer {
+  promise: Promise<'elapsed' | 'cancelled'>;
+  cancel: () => void;
+}
+
+function createCancellableTimer(ms: number): CancellableTimer {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  let cancelFn: () => void = () => {};
+  const promise = new Promise<'elapsed' | 'cancelled'>((resolve) => {
+    timerId = setTimeout(() => resolve('elapsed'), ms);
+    cancelFn = () => {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+        timerId = undefined;
+      }
+      resolve('cancelled');
+    };
+  });
+  return { promise, cancel: cancelFn };
+}
+
+/**
+ * Deferred that resolves to `void` on context receipt. Owned per attempt.
+ */
+interface ReceiptDeferred {
+  resolve: () => void;
+  promise: Promise<void>;
+}
+
+function createReceiptDeferred(): ReceiptDeferred {
+  let resolveFn: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    resolveFn = resolve;
+  });
+  return { resolve: resolveFn, promise };
+}
+
+/**
+ * Immutable per-connection-attempt ownership bundle. Each attempt captures its
+ * own Client, transport, context receipt deferred, and cancellable timeout.
+ * The monotonically increasing generation token (not Date.now alone) is
+ * collision-free and lets handlers/continuations verify they belong to the
+ * still-active attempt before mutating any shared state.
+ */
+class ConnectionAttempt {
+  readonly generation: number;
+  readonly client: Client;
+  readonly receiptDeferred: ReceiptDeferred;
+  readonly receiptTimer: CancellableTimer;
+  transport: StreamableHTTPClientTransport | undefined;
+
+  constructor(generation: number) {
+    this.generation = generation;
+    this.client = new Client({
+      name: 'streamable-http-client',
+      // Task(#3487): use the CLI version here.
+      version: '1.0.0',
+    });
+    this.receiptDeferred = createReceiptDeferred();
+    this.receiptTimer = createCancellableTimer(
+      IdeClient.CONTEXT_RECEIPT_TIMEOUT_MS,
+    );
+  }
+
+  /**
+   * Closes only the resources owned by THIS attempt. Must not touch the
+   * mutable `IdeClient.client` which may point to a different (newer) attempt.
+   */
+  async closeOwned(): Promise<void> {
+    this.receiptTimer.cancel();
+    try {
+      await this.client.close();
+    } catch (error) {
+      logger.debug('Failed to close attempt client:', error);
+    }
+    if (this.transport) {
+      try {
+        await this.transport.close();
+      } catch (error) {
+        logger.debug('Failed to close attempt transport:', error);
+      }
+    }
+  }
+}
+
+/**
  * Manages the connection to and interaction with the IDE server.
  */
 export class IdeClient {
+  /**
+   * Bounded timeout (ms) for waiting on initial IDE context receipt after a
+   * successful ping. If the context notification does not arrive within this
+   * window, the connection is considered failed (Disconnected).
+   */
+  static readonly CONTEXT_RECEIPT_TIMEOUT_MS = 5000;
+
   private static instance: IdeClient | undefined;
   private client: Client | undefined = undefined;
   private state: IDEConnectionState = {
@@ -85,6 +195,35 @@ export class IdeClient {
   private diffResponses = new Map<string, (result: DiffUpdateResult) => void>();
   private statusListeners = new Set<(state: IDEConnectionState) => void>();
   private trustChangeListeners = new Set<(isTrusted: boolean) => void>();
+
+  /**
+   * Monotonically increasing generation counter for collision-free attempt
+   * tokens. Never reused, so a stale handler's generation can never match a
+   * newer attempt's generation.
+   */
+  private nextGeneration = 1;
+
+  /**
+   * Monotonically increasing lifecycle epoch. Every connect() and disconnect()
+   * invocation claims a unique epoch synchronously at its very start — BEFORE
+   * its first await — by writing `activeLifecycleEpoch = this.nextLifecycleEpoch++`
+   * with no intervening await. After every await that can be superseded by a
+   * newer connect()/disconnect(), the owning operation re-checks
+   * `this.activeLifecycleEpoch === myEpoch` before mutating any shared state
+   * (client, diff map, ideContext, connection status). This guarantees that a
+   * stale operation resuming after a newer operation can never clobber the
+   * newer operation's results, because its epoch no longer matches.
+   */
+  private nextLifecycleEpoch = 1;
+  private activeLifecycleEpoch = 0;
+
+  /**
+   * The currently active connection attempt, or undefined when none is active.
+   * Starting a fresh attempt supersedes (cancels and closes) the prior one.
+   * All handlers and post-await continuations verify ownership against this
+   * before mutating shared state.
+   */
+  private activeAttempt: ConnectionAttempt | undefined = undefined;
 
   private constructor() {}
 
@@ -136,9 +275,29 @@ export class IdeClient {
       return;
     }
 
+    // Claim lifecycle ownership SYNCHRONOUSLY, before the first await. This
+    // ensures that a disconnect() (or a newer connect()) issued immediately
+    // after `const p = connect();` — with no intervening await — invalidates
+    // this invocation: after our first await resumes, the epoch will no longer
+    // match and we abort without touching shared state.
+    const myEpoch = this.claimLifecycleEpoch();
+
+    // Supersede any prior in-flight attempt AFTER claiming ownership, so that
+    // if a newer connect()/disconnect() starts while we await this close, our
+    // post-await continuation detects the stale epoch and aborts.
+    await this.supersedeActiveAttempt();
+    if (!this.isLifecycleActive(myEpoch)) {
+      return;
+    }
+
     this.setState(IDEConnectionStatus.Connecting);
 
     this.connectionConfig = await this.getConnectionConfigFromFile();
+
+    if (!this.isLifecycleActive(myEpoch)) {
+      return;
+    }
+
     this.authToken =
       this.connectionConfig?.authToken ??
       process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];
@@ -153,24 +312,34 @@ export class IdeClient {
     );
 
     if (!isValid) {
-      this.setState(IDEConnectionStatus.Disconnected, error, true);
+      if (this.isLifecycleActive(myEpoch)) {
+        this.setState(IDEConnectionStatus.Disconnected, error, true);
+      }
       return;
     }
 
     const portFromFile = this.connectionConfig?.port;
     if (portFromFile) {
-      const connected = await this.establishConnection(portFromFile);
-      if (connected) {
+      const result = await this.establishConnection(portFromFile, myEpoch);
+      if (result === 'connected' || result === 'superseded') {
         return;
       }
     }
 
+    if (!this.isLifecycleActive(myEpoch)) {
+      return;
+    }
+
     const portFromEnv = this.getPortFromEnv();
     if (portFromEnv) {
-      const connected = await this.establishConnection(portFromEnv);
-      if (connected) {
+      const result = await this.establishConnection(portFromEnv, myEpoch);
+      if (result === 'connected' || result === 'superseded') {
         return;
       }
+    }
+
+    if (!this.isLifecycleActive(myEpoch)) {
+      return;
     }
 
     this.setState(
@@ -261,18 +430,96 @@ export class IdeClient {
   }
 
   async disconnect() {
-    if (this.state.status === IDEConnectionStatus.Disconnected) {
-      return;
+    // Claim lifecycle ownership SYNCHRONOUSLY before any await. This makes a
+    // reconnect that starts while we are awaiting closeDiff()/closeOwned()
+    // claim a newer epoch, which we detect on resume so we never clobber the
+    // newer connection's client/context/state.
+    const myEpoch = this.claimLifecycleEpoch();
+
+    const attempt = this.activeAttempt;
+    this.activeAttempt = undefined;
+
+    // Snapshot the disconnect-owned client and pending diff paths BEFORE the
+    // first await. We must not iterate the live shared diffResponses Map or
+    // dereference mutable this.client after an await, because a reconnect may
+    // have installed a new client and/or added new diff entries. Calling
+    // this.closeDiff() would dereference the (possibly new) this.client and
+    // could send closeDiff for new-lifecycle diffs through the wrong client.
+    const ownedClient = this.client;
+    const ownedDiffPaths: string[] = [];
+    if (
+      this.state.status !== IDEConnectionStatus.Disconnected &&
+      ownedClient !== undefined
+    ) {
+      for (const filePath of this.diffResponses.keys()) {
+        ownedDiffPaths.push(filePath);
+      }
     }
-    for (const filePath of this.diffResponses.keys()) {
-      await this.closeDiff(filePath);
+
+    for (const filePath of ownedDiffPaths) {
+      // After every await, check that this disconnect still owns the lifecycle
+      // and that the owned client is still available. A reconnect that
+      // completed during the prior closeDiff await claims a newer epoch; once
+      // stale, stop issuing tool calls and do not mutate shared state/maps.
+      // (ownedDiffPaths is only populated when ownedClient was defined, but
+      // TypeScript cannot narrow across the loop boundary.)
+      if (!this.isLifecycleActive(myEpoch) || ownedClient === undefined) {
+        break;
+      }
+      try {
+        await IdeClient.closeDiffViaClient(ownedClient, filePath);
+      } catch (error) {
+        logger.debug(`disconnect closeDiff for ${filePath} failed:`, error);
+      }
     }
-    this.diffResponses.clear();
-    this.setState(
-      IDEConnectionStatus.Disconnected,
-      'IDE integration disabled. To enable it again, run /ide enable.',
-    );
-    void this.client?.close();
+
+    // Only clear shared diff state, settle resolvers, and transition to
+    // Disconnected if this disconnect is still the active lifecycle operation.
+    // A newer lifecycle may have added entries to the shared map; we must not
+    // delete or settle those.
+    if (this.isLifecycleActive(myEpoch)) {
+      for (const filePath of ownedDiffPaths) {
+        const resolver = this.diffResponses.get(filePath);
+        if (resolver) {
+          resolver({ status: 'rejected', content: undefined });
+          this.diffResponses.delete(filePath);
+        }
+      }
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        'IDE integration disabled. To enable it again, run /ide enable.',
+      );
+      this.client = undefined;
+    }
+
+    if (attempt) {
+      await attempt.closeOwned();
+    }
+  }
+
+  /**
+   * Calls closeDiff directly on a specific client, bypassing the mutable
+   * this.client reference. Used by disconnect cleanup so that a stale
+   * disconnect never sends tool calls through a newer lifecycle's client.
+   * Preserves the same tool arguments and logging conventions as closeDiff().
+   */
+  private static async closeDiffViaClient(
+    client: Client,
+    filePath: string,
+  ): Promise<void> {
+    logger.debug(`closeDiff -> tools/call closeDiff for ${filePath}`);
+    const result = await client.callTool({
+      name: 'closeDiff',
+      arguments: {
+        filePath,
+        suppressNotification: true,
+      },
+    });
+    try {
+      CloseDiffResponseSchema.parse(result);
+    } catch {
+      // Result parsing is best-effort during cleanup.
+    }
   }
 
   getCurrentIde(): IdeInfo | undefined {
@@ -457,40 +704,21 @@ export class IdeClient {
     };
   }
 
-  private registerClientHandlers() {
-    if (!this.client) {
-      return;
-    }
-
-    this.client.setNotificationHandler(
-      IdeContextNotificationSchema,
-      (notification) => {
-        ideContext.setIdeContext(notification.params);
-        const isTrusted = notification.params.workspaceState?.isTrusted;
-        if (isTrusted !== undefined) {
-          for (const listener of this.trustChangeListeners) {
-            listener(isTrusted);
-          }
-        }
-      },
-    );
-    this.client.onerror = (_error) => {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
-        true,
-      );
-    };
-    this.client.onclose = () => {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
-        true,
-      );
-    };
-    this.client.setNotificationHandler(
+  /**
+   * Registers the diff-related notification handlers (accepted, rejected,
+   * and the backwards-compatible closed variant). Each resolves the diff
+   * response callback for the given file path, if a pending resolver exists.
+   */
+  private registerDiffHandlers(
+    client: Client,
+    isStillActive: () => boolean,
+  ): void {
+    client.setNotificationHandler(
       IdeDiffAcceptedNotificationSchema,
       (notification) => {
+        if (!isStillActive()) {
+          return;
+        }
         const { filePath, content } = notification.params;
         const resolver = this.diffResponses.get(filePath);
         if (resolver) {
@@ -502,9 +730,12 @@ export class IdeClient {
       },
     );
 
-    this.client.setNotificationHandler(
+    client.setNotificationHandler(
       IdeDiffRejectedNotificationSchema,
       (notification) => {
+        if (!isStillActive()) {
+          return;
+        }
         const { filePath } = notification.params;
         const resolver = this.diffResponses.get(filePath);
         if (resolver) {
@@ -518,9 +749,12 @@ export class IdeClient {
 
     // For backwards compatibility. Newer extension versions will only send
     // IdeDiffRejectedNotificationSchema.
-    this.client.setNotificationHandler(
+    client.setNotificationHandler(
       IdeDiffClosedNotificationSchema,
       (notification) => {
+        if (!isStillActive()) {
+          return;
+        }
         const { filePath } = notification.params;
         const resolver = this.diffResponses.get(filePath);
         if (resolver) {
@@ -533,15 +767,83 @@ export class IdeClient {
     );
   }
 
-  private async establishConnection(port: string): Promise<boolean> {
-    let transport: StreamableHTTPClientTransport | undefined;
+  /**
+   * Registers notification and lifecycle handlers on the attempt's own Client.
+   * Every handler captures the attempt's generation token and first checks that
+   * it is still the active attempt before mutating any shared state (ideContext,
+   * connection state, or diff resolvers). Stale attempt events are ignored.
+   */
+  private registerClientHandlers(attempt: ConnectionAttempt) {
+    const client = attempt.client;
+
+    const isStillActive = () => this.activeAttempt === attempt;
+
+    client.setNotificationHandler(
+      IdeContextNotificationSchema,
+      (notification) => {
+        // Stale attempt events must be ignored and must not mutate ideContext
+        // or current state/receipt.
+        if (!isStillActive()) {
+          return;
+        }
+        ideContext.setIdeContext(notification.params);
+        // Acknowledge receipt before invoking external listeners so a throwing
+        // listener cannot prevent establishConnection from recognizing that
+        // context was received (which would cause a spurious timeout).
+        attempt.receiptDeferred.resolve();
+        const isTrusted = notification.params.workspaceState?.isTrusted;
+        if (isTrusted !== undefined) {
+          for (const listener of this.trustChangeListeners) {
+            try {
+              listener(isTrusted);
+            } catch (error) {
+              logger.debug('Trust change listener threw:', error);
+            }
+          }
+        }
+      },
+    );
+    client.onerror = (_error) => {
+      if (!isStillActive()) {
+        return;
+      }
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
+        true,
+      );
+    };
+    client.onclose = () => {
+      if (!isStillActive()) {
+        return;
+      }
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
+        true,
+      );
+    };
+
+    this.registerDiffHandlers(client, isStillActive);
+  }
+
+  private async establishConnection(
+    port: string,
+    epoch: number,
+  ): Promise<EstablishConnectionResult> {
+    const attempt = await this.startNewAttempt(epoch);
+    if (attempt === undefined) {
+      // A newer lifecycle operation superseded this one while it awaited the
+      // prior attempt's close. Abort without touching shared state.
+      return 'superseded';
+    }
     try {
-      this.client = new Client({
-        name: 'streamable-http-client',
-        // Task(#3487): use the CLI version here.
-        version: '1.0.0',
-      });
-      transport = new StreamableHTTPClientTransport(
+      // Register notification handlers (including the IdeContextNotificationSchema
+      // handler that resolves THIS attempt's deferred) before Client.connect so
+      // we never miss the initial context notification.
+      this.registerClientHandlers(attempt);
+
+      attempt.transport = new StreamableHTTPClientTransport(
         new URL(`http://${getIdeServerHost()}:${port}/mcp`),
         {
           fetch: this.createProxyAwareFetch(),
@@ -552,21 +854,140 @@ export class IdeClient {
           },
         },
       );
-      await this.client.connect(transport);
-      this.registerClientHandlers();
-      this.setState(IDEConnectionStatus.Connected);
-      return true;
-    } catch {
-      // Connection failed; cleanup transport if created.
-      if (transport) {
-        try {
-          await transport.close();
-        } catch (closeError) {
-          logger.debug('Failed to close transport:', closeError);
-        }
+      await attempt.client.connect(attempt.transport);
+
+      // Post-await continuation must verify the attempt is still active before
+      // proceeding; a superseding attempt may have started during the await.
+      if (!this.isAttemptActive(attempt)) {
+        await attempt.closeOwned();
+        return 'superseded';
       }
-      return false;
+
+      // Issue a standard MCP ping after initialization. The companion server
+      // intercepts this ping to synchronously deliver the initial IDE context
+      // notification before the ping response is sent. If the server cannot
+      // deliver context, the ping fails (JSON-RPC error) and we disconnect.
+      await attempt.client.ping();
+
+      // Post-await continuation must verify the attempt is still active.
+      if (!this.isAttemptActive(attempt)) {
+        await attempt.closeOwned();
+        return 'superseded';
+      }
+
+      // Ping success alone is NOT acknowledgment — only the real notification
+      // handler resolving the deferred proves the context was received. Await
+      // the context receipt with a bounded, cancellable timeout. If no context
+      // arrives (including a new client against a default-ping-only server),
+      // connect must end Disconnected.
+      const receiptResult = await Promise.race([
+        attempt.receiptDeferred.promise.then(() => 'received' as const),
+        attempt.receiptTimer.promise,
+      ]);
+
+      // Clear the timer on early receipt (it may have been resolved by the
+      // notification before the timer elapsed).
+      attempt.receiptTimer.cancel();
+
+      if (!this.isAttemptActive(attempt)) {
+        await attempt.closeOwned();
+        return 'superseded';
+      }
+
+      if (receiptResult !== 'received') {
+        throw new Error(
+          'Timed out waiting for initial IDE context notification',
+        );
+      }
+
+      this.setState(IDEConnectionStatus.Connected);
+      return 'connected';
+    } catch {
+      // Connection failed or context was not received. If this attempt is
+      // still active, invalidate it and close owned resources. If a newer
+      // attempt has already superseded it, close resources but report
+      // 'superseded' so the caller does not overwrite the newer attempt's
+      // state.
+      const wasActive = this.activeAttempt === attempt;
+      if (wasActive) {
+        this.activeAttempt = undefined;
+        ideContext.clearIdeContext();
+      }
+      await attempt.closeOwned();
+
+      if (!wasActive || !this.isLifecycleActive(epoch)) {
+        return 'superseded';
+      }
+      return 'failed';
     }
+  }
+
+  /**
+   * Starts a new connection attempt with a fresh monotonic generation token.
+   * The prior active attempt (if any) is superseded — awaited, not
+   * fire-and-forget — so installation only proceeds for the still-owning
+   * lifecycle operation. This prevents an older connect() that resumes after a
+   * newer connect() from installing itself and claiming ownership.
+   *
+   * Returns `undefined` if the owning operation was superseded while awaiting
+   * the prior attempt's close, signalling the caller to abort.
+   */
+  private async startNewAttempt(
+    epoch: number,
+  ): Promise<ConnectionAttempt | undefined> {
+    // AWAIT supersession rather than fire-and-forget. This serializes the
+    // prior close before installation and lets a superseding operation win.
+    await this.supersedeActiveAttempt();
+
+    // If a newer connect()/disconnect() started while we awaited the prior
+    // close, this operation no longer owns the lifecycle and must not install.
+    if (!this.isLifecycleActive(epoch)) {
+      return undefined;
+    }
+
+    const generation = this.nextGeneration++;
+    const attempt = new ConnectionAttempt(generation);
+    this.activeAttempt = attempt;
+    this.client = attempt.client;
+    ideContext.clearIdeContext();
+    return attempt;
+  }
+
+  /**
+   * Supersedes (cancels and closes) the currently active attempt, if any.
+   * The prior attempt's generation is invalidated so its handlers/continuations
+   * become no-ops, and its owned Client/transport/timer are closed.
+   */
+  private async supersedeActiveAttempt(): Promise<void> {
+    const prior = this.activeAttempt;
+    if (prior === undefined) {
+      return;
+    }
+    this.activeAttempt = undefined;
+    this.client = undefined;
+    ideContext.clearIdeContext();
+    await prior.closeOwned();
+  }
+
+  private isAttemptActive(attempt: ConnectionAttempt): boolean {
+    return this.activeAttempt === attempt;
+  }
+
+  /**
+   * Claims the next lifecycle epoch synchronously (no await between reading
+   * and writing), returning the claimed value. Both connect() and disconnect()
+   * call this as their very first action so a competing operation issued
+   * immediately afterward is guaranteed a newer epoch.
+   */
+  private claimLifecycleEpoch(): number {
+    const epoch = this.nextLifecycleEpoch;
+    this.nextLifecycleEpoch += 1;
+    this.activeLifecycleEpoch = epoch;
+    return epoch;
+  }
+
+  private isLifecycleActive(epoch: number): boolean {
+    return this.activeLifecycleEpoch === epoch;
   }
 }
 
