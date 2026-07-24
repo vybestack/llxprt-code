@@ -68,6 +68,13 @@ describe('tokenLimit', () => {
       expect(tokenLimit('claude-opus-4-8')).toBe(200_000);
     });
 
+    // Claude Opus 5 defaults to the Claude Code / subscription 200K context
+    // window. The API-only 1M window is plan-gated; override via /set or a
+    // profile (context-limit).
+    it('should return 200K (auth default) limit for claude-opus-5', () => {
+      expect(tokenLimit('claude-opus-5')).toBe(200_000);
+    });
+
     it('should return 200K (auth default) limit for claude-opus-4-7', () => {
       expect(tokenLimit('claude-opus-4-7')).toBe(200_000);
     });

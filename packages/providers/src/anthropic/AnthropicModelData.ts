@@ -62,6 +62,18 @@ function stripTrailingDateSegment(modelId: string): string {
  */
 export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-5',
+    name: 'Claude Opus 5',
+    supportedToolFormats: ['anthropic'],
+    // Claude Code / subscription (auth) 200K context window; the advertised
+    // 1M window is API-only and plan-gated (raise via /set or a profile
+    // context-limit). Output defaults to 32K — the Claude Code / subscription
+    // max output. The 128K ceiling is API-only and can be raised via /set or
+    // a profile (maxOutputTokens).
+    contextWindow: 200000,
+    maxOutputTokens: 32000,
+  },
+  {
     id: 'claude-fable-5',
     name: 'Claude Fable 5',
     supportedToolFormats: ['anthropic'],
@@ -187,6 +199,13 @@ export const OAUTH_MODELS: Array<Omit<IModel, 'provider'>> = [
  */
 export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-5',
+    name: 'Claude Opus 5',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 32000,
+  },
+  {
     id: 'claude-opus-4-8',
     name: 'Claude Opus 4.8',
     supportedToolFormats: ['anthropic'],
@@ -262,7 +281,7 @@ export function getLatestClaudeModel(
 ): string {
   switch (tier) {
     case 'opus':
-      return 'claude-opus-4-latest';
+      return 'claude-opus-5-latest';
     case 'sonnet':
       return 'claude-sonnet-5-latest';
     case 'haiku':
@@ -274,15 +293,21 @@ export function getLatestClaudeModel(
 }
 
 /**
- * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking, 128K output)
+ * Anchored Opus 4.6+ identifier: matches the `claude-opus-4-latest` and
+ * `claude-opus-5-latest` aliases, the bare opus-4-6/4-7/4-8/opus-5 aliases
+ * (and their dated snapshots), but NOT older Opus (4-1, 4-5, 3.x). An anchored
+ * regex is used instead of a substring test so version boundaries are exact.
+ */
+const OPUS_46_PLUS_PATTERN =
+  /^claude-opus-(4-latest|5-latest|4-6|4-7|4-8|5)(-\d{8})?$/i;
+
+/**
+ * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking,
+ * 128K output). Matches the "latest" aliases, the bare opus-4-6/4-7/4-8/opus-5
+ * aliases, and their dated snapshots.
  */
 export function isOpus46Plus(modelId: string): boolean {
-  return (
-    modelId === 'claude-opus-4-latest' ||
-    modelId.includes('claude-opus-4-6') ||
-    modelId.includes('claude-opus-4-7') ||
-    modelId.includes('claude-opus-4-8')
-  );
+  return OPUS_46_PLUS_PATTERN.test(modelId);
 }
 
 /**
@@ -325,7 +350,12 @@ export function getMaxTokensForModel(modelId: string): number {
   // Opus 4 models (including 4.6+ and the "latest" alias) default to the
   // Claude Code / subscription max output of 32K. The 128K ceiling is
   // API-only and can be raised via /set or a profile (maxOutputTokens).
-  if (modelId === 'claude-opus-4-latest' || modelId.includes('claude-opus-4')) {
+  // Opus 5 follows the same subscription default.
+  if (
+    modelId === 'claude-opus-4-latest' ||
+    modelId.includes('claude-opus-4') ||
+    modelId.includes('claude-opus-5')
+  ) {
     return 32000;
   }
   if (
@@ -362,15 +392,10 @@ export function getMaxTokensForModel(modelId: string): number {
  * Get context window for a given model
  */
 export function getContextWindowForModel(modelId: string): number {
-  // Claude Opus 4.6/4.7/4.8 (and the "latest" alias) default to the
+  // Claude Opus 4.6/4.7/4.8 and Opus 5 (and the "latest" alias) default to the
   // Claude Code / subscription 200K context window. The 1M window is
   // API-only and plan-gated; raise it via /set or a profile (context-limit).
-  if (
-    modelId === 'claude-opus-4-latest' ||
-    modelId.includes('claude-opus-4-6') ||
-    modelId.includes('claude-opus-4-7') ||
-    modelId.includes('claude-opus-4-8')
-  ) {
+  if (isOpus46Plus(modelId)) {
     return 200000;
   }
   // Other Claude 4 opus models have larger context windows

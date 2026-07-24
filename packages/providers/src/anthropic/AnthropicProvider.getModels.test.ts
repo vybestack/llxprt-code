@@ -255,6 +255,31 @@ describe('AnthropicProvider', () => {
       expect(opus48?.maxOutputTokens).toBe(32000);
     });
 
+    it('should include Claude Opus 5 model in OAuth model list @issue:2665', async () => {
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-5');
+
+      const opus5 = models.find((m) => m.id === 'claude-opus-5');
+      expect(opus5).toBeDefined();
+      expect(opus5?.name).toBe('Claude Opus 5');
+      expect(opus5?.provider).toBe('anthropic');
+      expect(opus5?.supportedToolFormats).toContain('anthropic');
+      expect(opus5?.contextWindow).toBe(200000);
+      expect(opus5?.maxOutputTokens).toBe(32000);
+    });
+
     it('should include Claude Fable 5 model in OAuth model list @issue:2328', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat01-fable-test-token',
@@ -364,6 +389,27 @@ describe('AnthropicProvider', () => {
       expect(opus48?.name).toBe('Claude Opus 4.8');
       expect(opus48?.contextWindow).toBe(200000);
       expect(opus48?.maxOutputTokens).toBe(32000);
+    });
+
+    it('should include Claude Opus 5 model in default list when auth is unavailable @issue:2665', async () => {
+      const noAuthProvider = new AnthropicProvider(
+        undefined,
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      vi.spyOn(noAuthProvider, 'getAuthToken').mockResolvedValue(undefined);
+
+      const models = await noAuthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      expect(modelIds).toContain('claude-opus-5');
+
+      const opus5 = models.find((m) => m.id === 'claude-opus-5');
+      expect(opus5).toBeDefined();
+      expect(opus5?.name).toBe('Claude Opus 5');
+      expect(opus5?.contextWindow).toBe(200000);
+      expect(opus5?.maxOutputTokens).toBe(32000);
     });
 
     it('should return models with correct structure', async () => {

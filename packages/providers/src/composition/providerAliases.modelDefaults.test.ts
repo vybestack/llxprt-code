@@ -507,10 +507,15 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(entry.config.modelDefaults!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('claude-opus-4-8 matches a rule with reasoning.effort: "high"', () => {
+  it('builtin anthropic.config declares claude-opus-5 as defaultModel @issue:2665', () => {
+    const entry = getAnthropicEntry();
+    expect(entry.config.defaultModel).toBe('claude-opus-5');
+  });
+
+  it('claude-opus-5 matches a rule with reasoning.effort: "high"', () => {
     const entry = getAnthropicEntry();
     const defaults = computeMatchedDefaults(
-      'claude-opus-4-8',
+      'claude-opus-5',
       entry.config.modelDefaults!,
     );
     expect(defaults['reasoning.effort']).toBe('high');
@@ -555,7 +560,24 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(Object.keys(defaults)).toHaveLength(0);
   });
 
-  it('rules merge in order — claude-opus-4-8 gets broad + specific settings', () => {
+  it('rules merge in order — claude-opus-5 gets broad + specific settings', () => {
+    const entry = getAnthropicEntry();
+    const defaults = computeMatchedDefaults(
+      'claude-opus-5',
+      entry.config.modelDefaults!,
+    );
+
+    // From the broad "claude-(opus|sonnet|haiku)" rule
+    expect(defaults['reasoning.enabled']).toBe(true);
+    expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+    expect(defaults['reasoning.includeInContext']).toBe(true);
+
+    // From the specific "claude-opus-5" rule (merged on top)
+    expect(defaults['reasoning.effort']).toBe('high');
+    expect(defaults['context-limit']).toBe(200000);
+  });
+
+  it('rules merge in order — claude-opus-4-8 retains its specific settings @issue:2665', () => {
     const entry = getAnthropicEntry();
     const defaults = computeMatchedDefaults(
       'claude-opus-4-8',
@@ -567,7 +589,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['reasoning.adaptiveThinking']).toBe(true);
     expect(defaults['reasoning.includeInContext']).toBe(true);
 
-    // From the specific "claude-opus-4-8" rule (merged on top)
+    // From the retained "claude-opus-4-8" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
     expect(defaults['context-limit']).toBe(200000);
   });

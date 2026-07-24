@@ -127,7 +127,7 @@ For production workflows, create profiles for each tier and combine them in a lo
 ```bash
 # Create primary profile with thinking
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 /set reasoning.enabled true
 /set reasoning.budget_tokens 8192
 /profile save model claude-primary

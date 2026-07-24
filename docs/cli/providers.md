@@ -8,7 +8,7 @@ LLxprt Code ships with aliases for these providers — just use `/provider <name
 
 | Provider                      | Alias           | Default Model              | Auth                 |
 | ----------------------------- | --------------- | -------------------------- | -------------------- |
-| Anthropic                     | `anthropic`     | claude-opus-4-8            | OAuth or API key     |
+| Anthropic                     | `anthropic`     | claude-opus-5              | OAuth or API key     |
 | Google Gemini                 | `gemini`        | gemini-2.5-pro             | API key or Vertex AI |
 | OpenAI (API)                  | `openai`        | gpt-5.5                    | API key              |
 | OpenAI (ChatGPT subscription) | `codex`         | gpt-5.6-sol                | OAuth                |
@@ -96,7 +96,7 @@ After saving a key once, you only need `/key load <name>` (or `--key-name <name>
 Select a model with `/model`:
 
 ```text
-/model claude-opus-4-8
+/model claude-opus-5
 /model gemini-2.5-pro
 /model grok-4
 ```
@@ -104,7 +104,7 @@ Select a model with `/model`:
 From the command line:
 
 ```bash
-llxprt --provider anthropic --model claude-opus-4-8
+llxprt --provider anthropic --model claude-opus-5
 ```
 
 Use `/model` with no arguments to see available models for the current provider.

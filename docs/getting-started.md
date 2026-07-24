@@ -78,7 +78,7 @@ If you already pay for Claude or OpenAI, use your subscription directly — no s
 llxprt
 /auth anthropic enable
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 ```
 
 **OpenAI ChatGPT Plus/Pro:**
@@ -103,7 +103,7 @@ llxprt
 /key save anthropic sk-ant-***your-key***
 /provider anthropic
 /key load anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 ```
 
 **OpenAI:**
@@ -228,7 +228,7 @@ Or set it as your default:
 1. **Be specific** — "Add error handling to the login function in src/auth.js" works better than "improve my code"
 2. **Provide context** — Mention relevant files, error messages, or constraints
 3. **Iterate** — Follow up with clarifications or ask for alternatives
-4. **Use the right model** — Larger models (claude-opus-4-8, gpt-5.5) for complex tasks, faster models (gemini-2.5-flash, claude-haiku-4-5) for quick questions
+4. **Use the right model** — Larger models (claude-opus-5, gpt-5.5) for complex tasks, faster models (gemini-2.5-flash, claude-haiku-4-5) for quick questions
 5. **Think bigger for bigger projects** — This guide gets you started with quick tasks, but for larger projects you should have distinct requirements, planning, and execution phases. Check out the [Beyond Vibe Coding](https://www.youtube.com/@AndrewOliver/podcasts) YouTube series for how to approach real-world autonomous development workflows
 
 ## Security Tip: Sandboxing

@@ -23,7 +23,7 @@ Get started immediately with powerful LLM options:
 # Your Claude Pro / Max subscription
 /auth anthropic enable
 /provider anthropic
-/model claude-opus-4-8
+/model claude-opus-5
 
 # Your ChatGPT Plus / Pro subscription (Codex)
 /auth codex enable

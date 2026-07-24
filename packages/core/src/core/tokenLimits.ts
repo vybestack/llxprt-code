@@ -73,9 +73,10 @@ const EXACT_LIMITS: Record<string, TokenCount> = {
   'gemini-2.0-flash': 1_048_576,
   'gemini-2.0-flash-preview-image-generation': 32_000,
 
-  // Claude Opus 4.6/4.7/4.8 default to the Claude Code / subscription 200K
-  // context window. The 1M window is API-only and plan-gated; override via
-  // /set or a profile (context-limit).
+  // Claude Opus 5 and Opus 4.6/4.7/4.8 default to the Claude Code /
+  // subscription 200K context window. The 1M window is API-only and
+  // plan-gated; override via /set or a profile (context-limit).
+  'claude-opus-5': 200_000,
   'claude-opus-4-8': 200_000,
   'claude-opus-4-7': 200_000,
   'claude-opus-4-6': 200_000,
