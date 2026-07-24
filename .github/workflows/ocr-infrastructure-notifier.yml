@@ -232,7 +232,7 @@ jobs:
             }
             if ! EXISTING_ISSUE="$(
               retry_gh gh issue list \
-                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-asc" \
                 --limit 30 \
                 --json number,title \
                 --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"
@@ -258,7 +258,7 @@ jobs:
             fi
             if ! EXISTING_ISSUE="$(
               retry_gh gh issue list \
-                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-desc" \
+                --search "\"${ISSUE_TITLE}\" in:title is:issue state:open sort:created-asc" \
                 --limit 30 \
                 --json number,title \
                 --jq "[.[] | select(.title == \"${ISSUE_TITLE}\") | .number] | .[0] // empty"

@@ -635,7 +635,7 @@ describe('.github/workflows/ocr-review.yml', () => {
         String.raw`\"` +
         '${ISSUE_TITLE}' +
         String.raw`\"` +
-        ' in:title is:issue state:open sort:created-desc"',
+        ' in:title is:issue state:open sort:created-asc"',
       '--label "ci/cd"',
       'if ! body_file="$(mktemp)"; then',
       'Failed to create OCR infrastructure issue body file.',
@@ -649,6 +649,8 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Failed to recheck for existing OCR infrastructure issue before create.',
       'Failed to comment on OCR infrastructure issue after recheck.',
     ]);
+    expect(notifyRun).not.toContain('sort:created-desc');
+    expect(notifyRun.match(/sort:created-asc/g)).toHaveLength(3);
     expect(notifyRun).not.toContain('trap \'rm -f "$body_file"\' EXIT RETURN');
     expect(notifyRun).not.toContain('--label "bug"');
     expect(JSON.stringify(notifyJob)).not.toContain('secrets.');
