@@ -96,7 +96,7 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 ```bash
 /provider anthropic
 /key sk-ant-your-key
-/model claude-opus-4-8
+/model claude-opus-5
 ```
 
 #### Or OAuth (Claude Pro/Max)
@@ -109,7 +109,7 @@ Note: OAuth is lazy — authentication happens when you first use the provider.
 
 #### Model geometry & recommended settings (Anthropic)
 
-Common models: `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-haiku-4-5`
+Common models: `claude-opus-5`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-haiku-4-5`
 
 Guidance:
 
@@ -128,7 +128,7 @@ Guidance:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-opus-4-8",
+  "model": "claude-opus-5",
   "modelParams": { "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 200000 }
 }

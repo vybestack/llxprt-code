@@ -266,7 +266,7 @@ describe('AnthropicProvider', () => {
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-opus-4-8',
+          model: 'claude-opus-5',
           messages: [{ role: 'user', content: 'Say hello' }],
           max_tokens: 32000,
           stream: true,
@@ -543,7 +543,7 @@ describe('AnthropicProvider', () => {
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-opus-4-8',
+          model: 'claude-opus-5',
           messages: [{ role: 'user', content: 'What is the weather?' }],
           max_tokens: 32000,
           stream: true,
