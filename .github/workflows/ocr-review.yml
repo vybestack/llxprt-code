@@ -418,6 +418,12 @@ jobs:
     outputs:
       infrastructure_failure: ${{ steps.ocr-classification.outputs.infrastructure_failure }}
       policy_failure: ${{ steps.ocr-classification.outputs.policy_failure }}
+      # Feature 5 (issue #2670): structured comment-count outputs.
+      comments_total: ${{ steps.post-ocr-results.outputs.comments_total }}
+      comments_inline: ${{ steps.post-ocr-results.outputs.comments_inline }}
+      comments_skipped: ${{ steps.post-ocr-results.outputs.comments_skipped }}
+      comments_failed: ${{ steps.post-ocr-results.outputs.comments_failed }}
+      summary_comment_url: ${{ steps.post-ocr-results.outputs.summary_comment_url }}
     # The code-review job runs only when the mergeability gate and the
     # auto-review gate both permit it.
     needs:
@@ -448,6 +454,11 @@ jobs:
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('base_sha', pr.base.sha);
             core.setOutput('head_sha', pr.head.sha);
+            // Business context for the LLM (Feature 1, issue #2670). The body
+            // is truncated to keep the command-line length bounded.
+            core.setOutput('pr_title', pr.title || '');
+            const rawBody = typeof pr.body === 'string' ? pr.body : '';
+            core.setOutput('pr_body', rawBody.slice(0, 2000));
 
       - name: Checkout trusted base
         # Fork-safety keystone: check out the trusted base branch (never the
@@ -613,6 +624,60 @@ jobs:
         run: |
           mkdir -p "${HOME}/.opencodereview"
           printf '%s' "$OCR_RULES_JSON" > "${HOME}/.opencodereview/rule.json"
+
+      - name: Configure OCR LLM settings
+        shell: bash
+        # Feature 2 & 7 (issue #2670): disable LLM "thinking" by default via
+        # llm.extra_body, and set the review language. Both are overridable
+        # through repository variables. Fork-safe: only trusted `ocr config
+        # set` commands run here; no PR-supplied config is loaded.
+        env:
+          OCR_LLM_EXTRA_BODY: ${{ vars.OCR_LLM_EXTRA_BODY }}
+          OCR_REVIEW_LANGUAGE: ${{ vars.OCR_REVIEW_LANGUAGE }}
+        run: |
+          set -euo pipefail
+          if [ -s ocr-exit-code.txt ]; then
+            echo "::warning::Skipping OCR LLM settings configuration because an earlier OCR setup failure was recorded."
+            exit 0
+          fi
+          echo "config" > ocr-phase.txt
+          if ! . ./ocr-workflow-helpers.sh; then
+            echo "::warning::Could not load OCR workflow helper script."
+            echo "127" > ocr-exit-code.txt
+            echo "phase=config; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            exit 0
+          fi
+          if ! command -v ocr >/dev/null 2>&1; then
+            echo "::warning::OpenCodeReview command is unavailable before LLM settings configuration."
+            echo "OpenCodeReview command is unavailable before LLM settings configuration." >> ocr-stderr.log
+            echo "127" > ocr-exit-code.txt
+            mark_infrastructure_failure "config" "OpenCodeReview command is unavailable before LLM settings configuration"
+            exit 0
+          fi
+          mkdir -p "${HOME}/.opencodereview"
+          # Feature 2: disable thinking by default; allow override via the
+          # OCR_LLM_EXTRA_BODY repository variable.
+          EXTRA_BODY="${OCR_LLM_EXTRA_BODY:-}"
+          if [ -z "$EXTRA_BODY" ]; then
+            EXTRA_BODY='{"thinking": {"type": "disabled"}}'
+          fi
+          if ! ocr config set llm.extra_body "$EXTRA_BODY" >> ocr-stderr.log 2>&1; then
+            echo "::warning::Failed to set OCR llm.extra_body."
+            echo "1" > ocr-exit-code.txt
+            mark_infrastructure_failure "config" "OCR llm.extra_body configuration failed"
+            exit 0
+          fi
+          # Feature 7: set review language, defaulting to English.
+          LANGUAGE="${OCR_REVIEW_LANGUAGE:-}"
+          if [ -z "$LANGUAGE" ]; then
+            LANGUAGE="English"
+          fi
+          if ! ocr config set language "$LANGUAGE" >> ocr-stderr.log 2>&1; then
+            echo "::warning::Failed to set OCR review language."
+            echo "1" > ocr-exit-code.txt
+            mark_infrastructure_failure "config" "OCR review language configuration failed"
+            exit 0
+          fi
 
       - name: Validate OCR configuration
         shell: bash
@@ -832,6 +897,13 @@ jobs:
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          # Feature 1 (issue #2670): business context for the LLM.
+          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          PR_TITLE: ${{ steps.pr-context.outputs.pr_title }}
+          PR_BODY: ${{ steps.pr-context.outputs.pr_body }}
+          OCR_BACKGROUND: ${{ vars.OCR_BACKGROUND }}
+          # Feature 4 (issue #2670): configurable LLM review timeout.
+          OCR_REVIEW_TIMEOUT: ${{ vars.OCR_REVIEW_TIMEOUT }}
         run: |
           set +e
           if [ -s ocr-exit-code.txt ]; then
@@ -852,13 +924,31 @@ jobs:
             mark_infrastructure_failure "review" "OpenCodeReview command is unavailable before review"
             exit 0
           fi
+          REVIEW_TIMEOUT="${OCR_REVIEW_TIMEOUT:-30}"
+          case "$REVIEW_TIMEOUT" in
+              ''|*[!0-9]*|0)
+              echo "::warning::OCR_REVIEW_TIMEOUT is not a positive integer; falling back to 30."
+              REVIEW_TIMEOUT=30
+              ;;
+          esac
+          # Feature 1 (issue #2670): conditionally append business context
+          # for the LLM. Gated behind OCR_BACKGROUND so existing behavior is
+          # unchanged unless the repository variable opts in.
+          REVIEW_ARGS=()
+          if [ "${OCR_BACKGROUND:-}" = 'true' ]; then
+            BACKGROUND_TEXT=$(printf 'PR %s: %s\n\n%s' "${PR_NUMBER}" "${PR_TITLE}" "${PR_BODY}")
+            if [ -n "${PR_TITLE}" ] || [ -n "${PR_BODY}" ]; then
+              REVIEW_ARGS+=(--background "$BACKGROUND_TEXT")
+            fi
+          fi
           ocr review \
             --from "$BASE_SHA" \
             --to "$HEAD_SHA" \
             --format json \
             --audience agent \
-            --timeout 30 \
+            --timeout "$REVIEW_TIMEOUT" \
             --concurrency "$OCR_CONCURRENCY" \
+            "${REVIEW_ARGS[@]}" \
             > ocr-stdout.raw 2> ocr-stderr.log
           status=$?
           if ! cp ocr-stdout.raw ocr-result.json; then
@@ -883,6 +973,7 @@ jobs:
           exit 0
 
       - name: Post OCR results
+        id: post-ocr-results
         if: always()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         env:
@@ -896,6 +987,9 @@ jobs:
           # do not log process.env from this step.
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+          # Feature 3 (issue #2670): incremental IoU overlap dedup mode.
+          OCR_INCREMENTAL: ${{ vars.OCR_INCREMENTAL }}
+          OCR_INCREMENTAL_OVERLAP_THRESHOLD: ${{ vars.OCR_INCREMENTAL_OVERLAP_THRESHOLD }}
         with:
           script: |
             const fs = require('fs');
@@ -921,6 +1015,18 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            // Issue 1 (#2670): resolve the authenticated bot login ONCE so
+            // historical review-comment dedup can be scoped to this bot.
+            // Without this, a fork contributor could post an inline review
+            // comment containing the INLINE_MARKER and suppress real findings.
+            let botLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              botLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+            }
 
             function readTrimmed(fileName, fallback = '') {
               try {
@@ -1106,12 +1212,81 @@ jobs:
               return { deduped, suppressed };
             }
 
+            // Feature 3 (issue #2670): IoU (intersection-over-union) overlap
+            // dedup for incremental comment posting. Ported from the upstream
+            // post-review-comments.js module. These complement — and do not
+            // replace — the content-based dedup above (deduplicateFindings).
+
+            function resolveThreshold(raw) {
+              const parsed = Number(raw);
+              if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+                return 0.6;
+              }
+              return parsed;
+            }
+
+            function lineSpan(c) {
+              const start = Number(c.start_line || c.line || 0);
+              const end = Number(c.line || c.start_line || 0);
+              const lo = Math.min(start, end);
+              const hi = Math.max(start, end);
+              return { start: lo, end: hi, multiline: lo !== hi };
+            }
+
+            function sameCommentSpan(cur, other, threshold) {
+              // Single-line vs single-line: match on the same line.
+              // Multi-line vs multi-line: IoU > threshold.
+              // Single vs multi: never match.
+              if (cur.multiline !== other.multiline) {
+                return false;
+              }
+              if (!cur.multiline) {
+                return cur.start === other.start;
+              }
+              const overlap = Math.max(0, Math.min(cur.end, other.end) - Math.max(cur.start, other.start) + 1);
+              const union = Math.max(cur.end, other.end) - Math.min(cur.start, other.start) + 1;
+              return overlap / union > threshold;
+            }
+
+            async function existingReviewCommentSpans() {
+              const comments = await github.paginate(github.rest.pulls.listReviewComments, {
+                owner, repo, pull_number: number, per_page: 100,
+              });
+              return comments
+                .filter((comment) => comment.user && comment.user.type === 'Bot'
+                  && botLogin !== '' && comment.user.login === botLogin
+                  && (comment.side === undefined || comment.side === 'RIGHT')
+                  && typeof comment.body === 'string'
+                  && comment.body.includes(INLINE_MARKER))
+                .map((comment) => ({
+                  path: comment.path,
+                  span: lineSpan({
+                    line: comment.line || comment.original_line,
+                    start_line: comment.start_line || comment.original_start_line,
+                  }),
+                }));
+            }
+
+            function overlapsHistory(reviewComment, history, threshold) {
+              for (const existing of history) {
+                if (reviewComment.path !== existing.path) {
+                  continue;
+                }
+                if (sameCommentSpan(reviewComment.span, existing.span, threshold)) {
+                  return true;
+                }
+              }
+              return false;
+            }
+
             async function existingInlineCommentKeys() {
               const comments = await github.paginate(github.rest.pulls.listReviewComments, {
                 owner, repo, pull_number: number, per_page: 100,
               });
               return new Set(comments
-                .filter((comment) => comment.commit_id === headSha
+                .filter((comment) => comment.user && comment.user.type === 'Bot'
+                  && botLogin !== '' && comment.user.login === botLogin
+                  && (comment.side === undefined || comment.side === 'RIGHT')
                   && typeof comment.body === 'string'
                   && comment.body.includes(INLINE_MARKER))
                 .map((comment) => inlineCommentKey({
@@ -1178,6 +1353,12 @@ jobs:
 
             // Post inline comments via a COMMENT review on the head SHA.
             let postedInline = 0;
+            let failedInline = 0;
+            let skippedOverlapCount = 0;
+            let skippedExactHistoryCount = 0;
+            // Feature 3 (issue #2670): incremental IoU overlap dedup mode.
+            const incrementalEnabled = process.env.OCR_INCREMENTAL === 'true';
+            const overlapThreshold = resolveThreshold(process.env.OCR_INCREMENTAL_OVERLAP_THRESHOLD);
             if (ran && inline.length > 0) {
               let existingInlineKeys = new Set();
               try {
@@ -1185,7 +1366,39 @@ jobs:
               } catch (listErr) {
                 core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before posting: ${listErr.message || listErr}`));
               }
-              const inlineToPost = inline.filter((c) => !existingInlineKeys.has(inlineCommentKey(c)));
+              const beforeExactFilter = inline.length;
+              let inlineToPost = inline.filter((c) => !existingInlineKeys.has(inlineCommentKey(c)));
+              skippedExactHistoryCount = beforeExactFilter - inlineToPost.length;
+              // Feature 3: when incremental mode is enabled, additionally
+              // filter out comments whose (path, line range) overlaps an
+              // existing bot review comment (IoU > threshold).
+              if (incrementalEnabled && inlineToPost.length > 0) {
+                let historySpans = [];
+                try {
+                  historySpans = await existingReviewCommentSpans();
+                } catch (listErr) {
+                  core.warning(redactSecretDiagnostics(`Could not list existing OCR review comments for incremental dedup: ${listErr.message || listErr}`));
+                }
+                if (historySpans.length > 0) {
+                  const candidates = inlineToPost.map((c) => ({
+                    comment: c,
+                    span: lineSpan(c),
+                  }));
+                  const kept = [];
+                  for (const candidate of candidates) {
+                    if (overlapsHistory(
+                      { path: candidate.comment.path, span: candidate.span },
+                      historySpans,
+                      overlapThreshold,
+                    )) {
+                      skippedOverlapCount += 1;
+                    } else {
+                      kept.push(candidate.comment);
+                    }
+                  }
+                  inlineToPost = kept;
+                }
+              }
               if (inlineToPost.length === 0) {
                 core.info('All OCR inline comments already exist on this head SHA; skipping inline posting.');
               } else {
@@ -1239,6 +1452,7 @@ jobs:
                     await new Promise((resolve) => setTimeout(resolve, 1000));
                   } catch (commentErr) {
                     core.warning(redactSecretDiagnostics(`Failed to post inline comment on ${c.path}:${c.line}: ${commentErr.message || commentErr}`));
+                    failedInline += 1;
                     const lineRange = c.start_line && c.start_line !== c.line
                       ? `${c.start_line}-${c.line}`
                       : String(c.line);
@@ -1345,8 +1559,26 @@ jobs:
             body.push(`\n<!-- ocr-auto-count:${autoReviewCount} -->`);
             const summary = body.join('\n');
 
+            async function fetchMarkerComments() {
+              const allComments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: number, per_page: 100,
+              });
+              return allComments.filter((c) =>
+                typeof c.body === 'string' && c.body.includes(MARKER));
+            }
+
             async function reconcileMarkerComment(existingComments) {
-              const comments = existingComments || markerComments;
+              let comments;
+              if (existingComments) {
+                comments = existingComments;
+              } else {
+                try {
+                  comments = await fetchMarkerComments();
+                } catch (fetchErr) {
+                  core.warning(redactSecretDiagnostics(`Could not re-fetch OCR marker comments: ${fetchErr.message || fetchErr}`));
+                  comments = [];
+                }
+              }
               const existing = comments[0];
               for (const duplicate of comments.slice(1)) {
                 try {
@@ -1369,35 +1601,53 @@ jobs:
                 core.warning(redactSecretDiagnostics(`Reconciliation failed before summary posting; attempting create: ${reconcileErr.message || reconcileErr}`));
               }
               if (existing) {
-                await github.rest.issues.updateComment({
+                const updated = await github.rest.issues.updateComment({
                   owner, repo, comment_id: existing.id, body: summary,
                 });
-                return;
+                return updated?.data || existing;
               }
               try {
-                await github.rest.issues.createComment({
+                const created = await github.rest.issues.createComment({
                   owner, repo, issue_number: number, body: summary,
                 });
+                return created?.data || null;
               } catch (createErr) {
                 // After a failed create (e.g. a race where a marker was just
                 // posted), re-list comments fresh to reconcile, since the
                 // pre-fetched list is stale at this point.
                 const reconciled = await reconcileMarkerComment(null);
                 if (reconciled) {
-                  await github.rest.issues.updateComment({
+                  const updated = await github.rest.issues.updateComment({
                     owner, repo, comment_id: reconciled.id, body: summary,
                   });
+                  return updated?.data || reconciled;
                 } else {
                   throw createErr;
                 }
               }
             }
 
+            let summaryCommentUrl = '';
             try {
-              await createOrUpdateMarkerComment(summary);
+              const summaryComment = await createOrUpdateMarkerComment(summary);
+              summaryCommentUrl = (summaryComment && summaryComment.html_url) || '';
             } catch (summaryError) {
               core.warning(redactSecretDiagnostics(`Failed to post OCR sticky summary; continuing without failing the workflow: ${summaryError.message || summaryError}`));
             }
+
+            // Feature 5 (issue #2670): structured step outputs.
+            const commentsTotal = findings.length + suppressedDuplicateCount;
+            // comments_skipped counts ONLY inline comments skipped by
+            // incremental overlap dedup and exact-key history dedup. Exact
+            // duplicate suppression (suppressedDuplicateCount) is reported
+            // separately in the summary text since it covers all findings,
+            // including lineless ones.
+            const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;
+            core.setOutput('comments_total', String(commentsTotal));
+            core.setOutput('comments_inline', String(postedInline));
+            core.setOutput('comments_skipped', String(commentsSkipped));
+            core.setOutput('comments_failed', String(failedInline));
+            core.setOutput('summary_comment_url', summaryCommentUrl);
 
             if (!ran) {
               if (policyFailure) {
