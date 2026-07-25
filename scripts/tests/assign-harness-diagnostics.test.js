@@ -106,9 +106,10 @@ describe('assign harness diagnosability (#2688)', () => {
       authorAssociation: 'MEMBER',
     });
 
-    // A failing assign run must explain itself rather than emitting an
-    // empty string.
+    // A failing assign run must name the operation that failed, not merely
+    // emit some non-empty text. A length check would pass on unrelated noise
+    // or a bare stack trace, which is the very ambiguity this issue is about.
     expect(result.status).not.toBe(0);
-    expect(result.stderr.length).toBeGreaterThan(0);
+    expect(result.stderr).toMatch(/Failed to read issue state for #7/i);
   });
 });
