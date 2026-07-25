@@ -117,7 +117,7 @@ function processSymlink(full: string, out: string[], seen: Set<string>): void {
     const stat = lstatSync(realFull);
     if (stat.isDirectory()) {
       walkDir(realFull, out, seen);
-    } else if (stat.isFile() && isMarkdown(full)) {
+    } else if (stat.isFile() && isMarkdown(realFull)) {
       out.push(full);
     }
   } catch {
@@ -169,10 +169,14 @@ function errorMessage(error: unknown): string {
 /**
  * Assert that a root directory exists and is readable. Throws RootMissingError
  * if it does not (fail-fast, not defensive swallow).
+ *
+ * Uses statSync (follows symlinks) so that a root that is itself a
+ * symlink-to-directory is accepted, consistent with the module's
+ * documented symlink-following policy.
  */
 function assertRootExists(rootPath: string): void {
   try {
-    const stat = lstatSync(rootPath);
+    const stat = statSync(rootPath);
     if (!stat.isDirectory()) {
       throw new RootMissingError(
         rootPath,

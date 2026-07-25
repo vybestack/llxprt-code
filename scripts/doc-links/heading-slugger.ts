@@ -172,14 +172,29 @@ function normalizeFragment(fragment: string): string | undefined {
 }
 
 /**
- * Check whether a fragment matches any heading slug in the content.
+ * Check whether a fragment matches any slug in a pre-built heading slug set.
  * The fragment is slugified the same way headings are, and a leading '#'
  * is stripped if present. Malformed percent-encoding yields a non-match
  * instead of throwing.
+ *
+ * Use this (with extractHeadingSlugs) when checking multiple fragments
+ * against the same document, so the document is lexed only once.
  */
-export function fragmentMatches(content: string, fragment: string): boolean {
+export function fragmentMatchesSlugs(
+  slugs: ReadonlySet<string>,
+  fragment: string,
+): boolean {
   const normalized = normalizeFragment(fragment);
   if (normalized === undefined) return false;
-  const slugs = extractHeadingSlugs(content);
   return slugs.has(normalized);
+}
+
+/**
+ * Check whether a fragment matches any heading slug in the content.
+ * Convenience wrapper that lexes the content on every call — prefer
+ * extractHeadingSlugs + fragmentMatchesSlugs when checking many fragments
+ * against the same document.
+ */
+export function fragmentMatches(content: string, fragment: string): boolean {
+  return fragmentMatchesSlugs(extractHeadingSlugs(content), fragment);
 }

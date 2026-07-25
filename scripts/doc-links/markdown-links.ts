@@ -23,8 +23,13 @@ export interface DocLink {
 }
 
 /**
- * Parse a raw link destination into its components. Returns undefined for
- * empty targets.
+ * Parse a raw link destination into its components.
+ *
+ * Returns undefined only for a target that is entirely empty/whitespace
+ * with no fragment. A pure-fragment link such as `#section` yields
+ * `{ target: '', fragment: 'section', isExternal: false }` — the empty
+ * `target` signals "same-file fragment link" so the caller can validate
+ * the anchor against the current file.
  */
 export function parseTarget(raw: string): DocLink | undefined {
   let target = raw.trim();
@@ -109,14 +114,17 @@ export function extractLinks(content: string): DocLink[] {
 }
 
 /**
- * Remove fenced code blocks from content, returning the lines that are
- * NOT inside any fence. Delegates to marked's tokenizer so fence
- * matching (length, character, indentation) is correct per CommonMark.
+ * Remove fenced code blocks AND inline code spans from content, returning
+ * the lines that are NOT inside any fence or codespan. Delegates to marked's
+ * tokenizer so fence matching (length, character, indentation) and code-span
+ * detection are correct per CommonMark.
  *
- * Kept for backward compatibility with check-doc-placement.ts and
- * heading-slugger.ts.
+ * Both fenced code blocks (Tokens.Code) and inline code spans
+ * (Tokens.Codespan) are excluded — inline code is stripped too because it
+ * can carry link-shaped text or bookkeeping markers that must not be
+ * mistaken for real content.
  */
-export function stripFencedBlocks(lines: readonly string[]): string[] {
+export function stripCodeTokens(lines: readonly string[]): string[] {
   const tokens = Lexer.lex(lines.join('\n'));
   const result: string[] = [];
   walkNonCodeTokens(tokens, result);

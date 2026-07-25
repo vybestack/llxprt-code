@@ -100,7 +100,7 @@ describe('telemetry doc accuracy (doc vs source)', () => {
   it('sdk.ts registers only HttpInstrumentation (no custom spans)', () => {
     const sdk = readSrc('packages/telemetry/src/telemetry/sdk.ts');
     expect(sdk).toContain('HttpInstrumentation');
-    expect(sdk).not.toMatch(/startSpan/);
+    expect(sdk).not.toMatch(/startSpan\s*\(/);
   });
 
   it('docs/telemetry.md states the telemetry.enabled default is false', () => {
@@ -158,7 +158,9 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     expect(doc).not.toMatch(/argv\.telemetry\s*\?\?\s*settings\.enabled/);
     // Every precedence reference must use the full settings.telemetry.enabled path.
     const matches = doc.match(/argv\.telemetry\s*\?\?\s*[^\s,)]+/g);
-    for (const m of matches ?? []) {
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBeGreaterThanOrEqual(1);
+    for (const m of matches!) {
       expect(m).toContain('settings.telemetry.enabled');
     }
   });

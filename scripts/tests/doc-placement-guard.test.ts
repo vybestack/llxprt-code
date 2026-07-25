@@ -16,11 +16,12 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   bunAvailable,
+  isCiEnvironment,
   runDocPlacementGuard,
   useTempDir,
 } from './doc-guard-helpers.ts';
 
-describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
+describe.skipIf(!isCiEnvironment() && !bunAvailable())(
   'check-doc-placement',
   () => {
     describe('internal-only directories', () => {

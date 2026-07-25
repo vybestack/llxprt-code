@@ -51,6 +51,19 @@ export function bunAvailable(): boolean {
   return cachedBunAvailable;
 }
 
+/**
+ * Detect whether tests are running under CI.
+ *
+ * Many CI systems set CI=true, but some use CI=1 or CI=yes. Treat CI as
+ * set-and-not-false: a present, non-"false" value means CI is active.
+ * An unset CI variable means local (non-CI) execution.
+ */
+export function isCiEnvironment(): boolean {
+  const ci = process.env.CI;
+  if (ci === undefined) return false;
+  return ci.toLowerCase() !== 'false';
+}
+
 export interface ScriptResult {
   readonly code: number;
   readonly stdout: string;

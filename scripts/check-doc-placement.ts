@@ -21,7 +21,7 @@
 import { statSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stripFencedBlocks } from './doc-links/markdown-links.ts';
+import { stripCodeTokens } from './doc-links/markdown-links.ts';
 import {
   collectMarkdownFiles,
   readFileText,
@@ -68,7 +68,7 @@ function relPath(root: string, abs: string): string {
  */
 function stripFences(content: string): string {
   const lines = content.split('\n');
-  const nonFenced = stripFencedBlocks(lines);
+  const nonFenced = stripCodeTokens(lines);
   return nonFenced.join('\n');
 }
 
@@ -172,6 +172,9 @@ function main(): number {
   return EXIT_FAIL;
 }
 
-if (process.argv[1]?.endsWith('check-doc-placement.ts')) {
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === resolve(process.argv[1])
+) {
   process.exit(main());
 }

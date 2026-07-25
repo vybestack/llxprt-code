@@ -18,11 +18,12 @@ import { symlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   bunAvailable,
+  isCiEnvironment,
   runDocLinksGuard,
   useTempDir,
 } from './doc-guard-helpers.ts';
 
-describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
+describe.skipIf(!isCiEnvironment() && !bunAvailable())(
   'check-doc-links',
   () => {
     describe('broken-link detection', () => {
@@ -411,8 +412,10 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const fx = useTempDir();
 
       it('accepts an anchor targeting a CJK heading', async () => {
+        // \u8fd0\u884c\u65f6 = CJK chars meaning "runtime" (yun-xing-shi)
         fx.write(
           'docs/page.md',
+          // link fragment #bun + heading "Bun" + CJK "runtime"
           '# Page\n\n[jump](#bun\u8fd0\u884c\u65f6)\n\n### Bun\u8fd0\u884c\u65f6\n',
         );
         const { code } = await runDocLinksGuard(fx.root(), 0);
@@ -420,8 +423,10 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
 
       it('still reports a genuinely absent non-ASCII anchor', async () => {
+        // \u7f3a\u5931\u7684\u6807\u9898 = CJK chars meaning "missing heading" (que-shi-de-biao-ti)
         fx.write(
           'docs/page.md',
+          // fragment references a heading that does NOT exist in this file
           '# Page\n\n[jump](#\u7f3a\u5931\u7684\u6807\u9898)\n\n### Bun\u8fd0\u884c\u65f6\n',
         );
         const { code } = await runDocLinksGuard(fx.root(), 1);
@@ -445,7 +450,6 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
 
       it('follows symlinked directories and validates links inside them', async () => {
         fx.write('docs/page.md', '# Page\n');
-        fx.write('dev-docs/page.md', '# Page\n');
         fx.write('real-docs/page.md', '# Page\n\n[broken](./nope.md)\n');
         // Create a symlink inside docs/ pointing to real-docs
         symlinkSync(
@@ -456,6 +460,35 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         const { code, stdout } = await runDocLinksGuard(fx.root(), 1);
         expect(code).toBe(1);
         expect(stdout).toContain('nope.md');
+      });
+
+      it('accepts a root directory that is itself a symlink to a real directory', async () => {
+        // The DOC_GUARD_ROOT path is a symlink to a real directory tree.
+        // assertRootExists must follow the symlink (statSync) rather than
+        // checking the link itself (lstatSync), or it falsely reports
+        // "Expected root is not a directory".
+        fx.write('docs/page.md', '# Page\n\n[ok](./other.md)\n');
+        fx.write('docs/other.md', '# Other\n');
+        // Create a symlink at a new path pointing to fx.root()
+        const linkedRoot = join(fx.root(), 'linked-root');
+        symlinkSync(fx.root(), linkedRoot, 'dir');
+        const { code } = await runDocLinksGuard(linkedRoot, 0);
+        expect(code).toBe(0);
+      });
+
+      it('scans a symlink with a non-.md name that resolves to a .md target', async () => {
+        // A symlink named notes.txt pointing at real.md must be scanned
+        // because the RESOLVED TARGET is Markdown, not the link name.
+        fx.write('docs/page.md', '# Page\n\n[linked](./notes.txt)\n');
+        fx.write('docs/real.md', '# Real\n');
+        // notes.txt -> real.md (symlink name is .txt, target is .md)
+        symlinkSync(
+          join(fx.root(), 'docs', 'real.md'),
+          join(fx.root(), 'docs', 'notes.txt'),
+          'file',
+        );
+        const { code } = await runDocLinksGuard(fx.root(), 0);
+        expect(code).toBe(0);
       });
     });
   },
