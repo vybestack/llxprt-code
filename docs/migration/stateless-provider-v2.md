@@ -2,7 +2,7 @@
 
 <!-- @plan:PLAN-20251018-STATELESSPROVIDER2.P20 @requirement:REQ-SP2-005 -->
 
-PLAN-20251018-STATELESSPROVIDER2 finalises the stateless provider architecture by introducing runtime-scoped authentication, CLI runtime registries, and migration-ready release notes. This guide walks host applications and provider authors through the upgrade.
+The stateless provider architecture finalises runtime-scoped authentication, CLI runtime registries, and migration-ready release notes. This guide walks host applications and provider authors through the upgrade.
 
 ## Overview
 

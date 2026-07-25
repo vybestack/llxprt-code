@@ -1,42 +1,120 @@
-# Uninstalling the CLI
+# Uninstalling LLxprt Code
 
-Your uninstall method depends on how you ran the CLI. Follow the instructions for either npx or a global npm installation.
+Your uninstall method depends on how you installed LLxprt Code.
 
-## Method 1: Using npx
+## Homebrew (macOS)
 
-npx runs packages from a temporary cache without a permanent installation. To "uninstall" the CLI, you must clear this cache, which will remove gemini-cli and any other packages previously executed with npx.
-
-The npx cache is a directory named `_npx` inside your main npm cache folder. You can find your npm cache path by running `npm config get cache`.
-
-**For macOS / Linux**
+If you installed via Homebrew:
 
 ```bash
-# The path is typically ~/.npm/_npx
-rm -rf "$(npm config get cache)/_npx"
+brew uninstall llxprt-code
 ```
 
-**For Windows**
+You may also remove the tap if you no longer need it:
 
-_Command Prompt_
-
-```cmd
-:: The path is typically %LocalAppData%\npm-cache\_npx
-rmdir /s /q "%LocalAppData%\npm-cache\_npx"
+```bash
+brew untap vybestack/homebrew-tap
 ```
 
-_PowerShell_
+## Global npm installation
 
-```powershell
-# The path is typically $env:LocalAppData\npm-cache\_npx
-Remove-Item -Path (Join-Path $env:LocalAppData "npm-cache\_npx") -Recurse -Force
-```
-
-## Method 2: Using npm (Global Install)
-
-If you installed the CLI globally (e.g., `npm install -g @vybestack/llxprt-code`), use the `npm uninstall` command with the `-g` flag to remove it.
+If you installed LLxprt Code globally with npm, uninstall it the same way:
 
 ```bash
 npm uninstall -g @vybestack/llxprt-code
 ```
 
-This command completely removes the package from your system.
+This removes the package and the `llxprt` command from your system.
+
+## Verify the removal
+
+```bash
+llxprt --version
+```
+
+You should see `command not found` (or the equivalent for your shell).
+
+## npx does not install anything
+
+If you ran LLxprt Code via `npx @vybestack/llxprt-code`, there is no permanent
+installation to remove. `npx` runs packages from a temporary cache and installs
+nothing on your system. You can optionally clear the npx cache to free disk
+space (see below).
+
+## Optional: Remove user data
+
+Uninstalling the package does not delete your settings, conversation logs,
+profiles, credentials, or other user data. LLxprt Code stores files across
+four OS-standard category directories plus workspace-local `.llxprt`
+directories. See [Application Directories](./reference/application-directories.md)
+for the exact paths on each platform.
+
+To remove everything:
+
+1. **Config** — user-editable settings, profiles, prompts, commands, skills,
+   policies, hooks config, global memory (`.llxprt/LLXPRT.md`):
+   - Override: `LLXPRT_CONFIG_HOME`
+   - Default: `~/.config/llxprt-code` (Linux),
+     `~/Library/Preferences/llxprt-code` (macOS),
+     `%APPDATA%\llxprt-code\Config` (Windows)
+
+2. **Data** — credentials/accounts, conversations, history, extensions:
+   - Override: `LLXPRT_DATA_HOME` (falls back to `LLXPRT_CONFIG_HOME`)
+   - Default: `~/.local/share/llxprt-code` (Linux),
+     `~/Library/Application Support/llxprt-code` (macOS),
+     `%LOCALAPPDATA%\llxprt-code\Data` (Windows)
+
+3. **Cache** — disposable caches and dumps (safe to delete):
+   - Override: `LLXPRT_CACHE_HOME` (falls back to `LLXPRT_CONFIG_HOME`)
+   - Default: `~/.cache/llxprt-code` (Linux),
+     `~/Library/Caches/llxprt-code` (macOS),
+     `%LOCALAPPDATA%\llxprt-code\Cache` (Windows)
+
+4. **Log/state** — logs, debug output, checkpoints, shell history:
+   - Override: `LLXPRT_LOG_HOME` (falls back to `LLXPRT_CONFIG_HOME`)
+   - Default: `~/.local/state/llxprt-code` (Linux),
+     `~/Library/Logs/llxprt-code` (macOS),
+     `%LOCALAPPDATA%\llxprt-code\Log` (Windows)
+
+Additionally:
+
+- **Workspace-local `.llxprt/`** — each project may have a `.llxprt/` directory
+  containing workspace settings, commands, skills, and project memory. Remove
+  these individually from each project.
+- **Legacy `~/.llxprt`** — older versions stored everything under `~/.llxprt`.
+  If you migrated, the old directory is left in place as a read-only input; you
+  can remove it manually once you've confirmed the new locations work.
+- **OS keyring credentials** — OAuth tokens and API keys may be stored in the
+  OS keyring (macOS Keychain, GNOME Keyring/KWallet, Windows Credential Vault).
+  These are not removed by deleting files. Remove them manually if needed.
+
+> **Important:** Deleting a single directory does not remove all data. LLxprt
+> Code's files are split across the four category directories above. Check each
+> one if you need a complete removal.
+
+## Optional: Clear the npx cache
+
+> [!WARNING]
+> Clearing the npx cache deletes **every** package you have ever run with `npx`,
+> not just LLxprt Code. Only do this if you understand the consequences.
+
+The npx cache lives in a `_npx` subdirectory inside your npm cache folder. Find
+your npm cache path dynamically — do not hard-code it:
+
+**macOS / Linux:**
+
+```bash
+rm -rf "$(npm config get cache)/_npx"
+```
+
+**Windows (PowerShell):**
+
+```powershell
+Remove-Item -Path (Join-Path (npm config get cache) "_npx") -Recurse -Force
+```
+
+**Windows (Command Prompt):**
+
+```cmd
+for /f "delims=" %i in ('npm config get cache') do rmdir /s /q "%i\_npx"
+```

@@ -764,7 +764,7 @@ Result: Tool would be BLOCKED
 
 ## Related Documentation
 
-- [Message Bus User Guide](../message-bus.md)
-- [Policy Configuration Guide](../policy-configuration.md)
-- [Migration Guide](../migration/approval-mode-to-policies.md)
+- [Message Bus User Guide](../../docs/message-bus.md)
+- [Policy Configuration Guide](../../docs/policy-configuration.md)
+- [Migration Guide](../../docs/migration/approval-mode-to-policies.md)
 - [Message Bus Implementation Plan](../../project-plans/20251119gmerge/messagebus.md)

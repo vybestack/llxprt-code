@@ -79,7 +79,6 @@ Settings are applied in this order (highest priority first):
 - Converts functional emojis to text (✅ → [OK])
 - Removes decorative emojis (🎉, 😀)
 - No feedback messages
-- **Requirement REQ-004.1 compliant**
 
 ### `warn` - Filter with Feedback
 

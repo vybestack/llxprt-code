@@ -96,6 +96,8 @@
     "lint:cli-boundary": "bun scripts/check-cli-import-boundary.ts",
     "lint:genai-enclave": "bun scripts/check-genai-enclave.ts",
     "lint:legacy-paths": "bun scripts/check-legacy-paths.ts",
+    "lint:doc-links": "bun scripts/check-doc-links.ts",
+    "lint:doc-placement": "bun scripts/check-doc-placement.ts",
     "lint:genai-inventory": "bun scripts/genai-import-inventory.ts --check",
     "lint:agents-api-surface": "node scripts/check-agents-api-surface.mjs",
     "lint:all": "./scripts/lint-all.sh",

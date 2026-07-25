@@ -36,7 +36,7 @@ Get an API key from [Google Cloud](https://cloud.google.com/vertex-ai/generative
 export GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"
 ```
 
-> If you see "API keys are not supported by this API," your organization may restrict API key creation. Use [Application Default Credentials](#application-default-credentials) instead.
+> If you see "API keys are not supported by this API," your organization may restrict API key creation. Use [Application Default Credentials](#application-default-credentials-adc) instead.
 
 ### Application Default Credentials (ADC)
 

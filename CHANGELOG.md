@@ -107,7 +107,7 @@
 
 ### Migration
 
-- Follow the [Stateless Provider v2 migration guide](docs/migration/stateless-provider-v2.md) alongside the earlier [Stateless Provider migration guide](docs/migration/stateless-provider.md) to adopt runtime-scoped auth.
+- Follow the [Stateless Provider v2 migration guide](docs/migration/stateless-provider-v2.md) to adopt runtime-scoped auth.
 
 ## [0.5.0] - 2025-10-18
 
@@ -133,7 +133,7 @@
 1. Create a `ProviderRuntimeContext` during bootstrap and register it with `setActiveProviderRuntimeContext()`.
 2. Replace direct calls to `getSettingsService()` with `getCliRuntimeServices()` or the runtime provided in `GenerateChatOptions`.
 3. Update subagent or automation workflows to spawn isolated contexts before mutating provider state.
-4. Review the [Stateless Provider migration guide](docs/migration/stateless-provider.md) for detailed examples and verification commands.
+4. Review the [Stateless Provider v2 migration guide](docs/migration/stateless-provider-v2.md) for detailed examples and verification commands.
 
 ### Verification
 

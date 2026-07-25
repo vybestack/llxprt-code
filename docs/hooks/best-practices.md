@@ -337,12 +337,15 @@ fi
 
 ### Enable telemetry
 
-Hook execution is logged when `telemetry.logPrompts` is enabled:
+Hook execution is logged when telemetry is enabled (`telemetry.enabled: true`).
+Note: the `telemetry.logPrompts` setting does **not** control hook I/O logging —
+hook input and output are always included in the `hook_call` telemetry event
+when telemetry is enabled, regardless of the `logPrompts` value.
 
 ```json
 {
   "telemetry": {
-    "logPrompts": true
+    "enabled": true
   }
 }
 ```
@@ -716,12 +719,15 @@ fi
 
 ## Privacy considerations
 
-Hook inputs and outputs may contain sensitive information. LLxprt Code respects
-the `telemetry.logPrompts` setting for hook data logging.
+Hook inputs and outputs may contain sensitive information. The
+`telemetry.logPrompts` setting does **not** control hook I/O logging — hook
+input and output are always included in the `hook_call` telemetry event when
+telemetry is enabled (see `logHookCall` in `packages/telemetry/src/telemetry/loggers.ts`).
+To prevent hook I/O from being logged, disable telemetry entirely.
 
 ### What data is collected
 
-Hook telemetry may include:
+When telemetry is enabled, hook telemetry includes:
 
 - **Hook inputs:** User prompts, tool arguments, file contents
 - **Hook outputs:** Hook responses, decision reasons, added context
@@ -730,39 +736,37 @@ Hook telemetry may include:
 
 ### Privacy settings
 
-**Enabled (default):**
+**Telemetry enabled (default: off):**
 
 Full hook I/O is logged to telemetry. Use this when:
 
 - Developing and debugging hooks
-- Telemetry is redirected to a trusted enterprise system
+- Telemetry output stays on your local machine (file or console)
 - You understand and accept the privacy implications
 
-**Disabled:**
+**Telemetry disabled:**
 
-Only metadata is logged (event name, duration, success/failure). Hook inputs and
-outputs are excluded. Use this when:
+No hook data is logged at all. Use this when:
 
-- Sending telemetry to third-party systems
 - Working with sensitive data
 - Privacy regulations require minimizing data collection
 
 ### Configuration
 
-**Disable PII logging in settings:**
+**Disable telemetry entirely:**
 
 ```json
 {
   "telemetry": {
-    "logPrompts": false
+    "enabled": false
   }
 }
 ```
 
-**Disable via environment variable:**
+**Disable via CLI flag (single session):**
 
 ```bash
-export LLXPRT_TELEMETRY_LOG_PROMPTS=false
+llxprt --no-telemetry
 ```
 
 ### Sensitive data in hooks
@@ -803,7 +807,7 @@ console.log(JSON.stringify(sanitizeOutput(hookOutput)));
 - [Hooks Reference](index.md) - Complete API reference
 - [Writing Hooks](writing-hooks.md) - Tutorial and examples
 - [Configuration](../cli/configuration.md) - LLxprt Code settings
-- [Hooks Design Document](../hooks-design.md) - Technical architecture
+- [Hooks Architecture](../../dev-docs/hooks/architecture.md) - Technical architecture
   // Start requests concurrently
   const p1 = fetch(url1).then((r) => r.json());
   const p2 = fetch(url2).then((r) => r.json());
@@ -960,24 +964,4 @@ else
   echo "Insufficient permissions" >&2
   exit 1
 fi
-```
-
-### Example: Secret Scanner
-
-Use `BeforeTool` hooks to prevent committing sensitive data. This is a powerful
-pattern for enhancing security in your workflow.
-
-```javascript
-const SECRET_PATTERNS = [
-  /api[_-]?key\s*[:=]\s*['"]?[a-zA-Z0-9_-]{20,}['"]?/i,
-  /password\s*[:=]\s*['"]?[^\s'"]{8,}['"]?/i,
-  /secret\s*[:=]\s*['"]?[a-zA-Z0-9_-]{20,}['"]?/i,
-  /AKIA[0-9A-Z]{16}/, // AWS access key
-  /ghp_[a-zA-Z0-9]{36}/, // GitHub personal access token
-  /sk-[a-zA-Z0-9]{48}/, // OpenAI API key
-];
-
-function containsSecret(content) {
-  return SECRET_PATTERNS.some((pattern) => pattern.test(content));
-}
 ```

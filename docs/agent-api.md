@@ -931,7 +931,7 @@ store that dies with the agent and never touches disk or the host keychain.
 ## Context Preservation Across Provider/Model Switch
 
 Switching the provider or model on a live agent **preserves conversation
-context** (REQ-005). `setModel(model)` and `setProvider(provider, model?)`:
+context**. `setModel(model)` and `setProvider(provider, model?)`:
 
 1. Apply the switch through the real runtime mutators.
 2. Re-bind the agent's loop to the **current** client (`rebuildLoop`).
@@ -1321,7 +1321,7 @@ These decisions shaped the public surface and are recorded here for posterity:
 - **`core/index` trim:** the eventual removal of low-level re-exports from the
   package root is sequenced into issue #1595; today the root entry stays
   additive and non-breaking.
-- **#2143 capability gaps (REQ-001..008):** the top-level approval-mode methods,
+- **#2143 capability gaps:** the top-level approval-mode methods,
   the `policy` / `tasks` sub-controllers, the extended `hooks` administration,
   the extended `auth` detailed metadata, the extended `mcp` OAuth/details, and
   `agent.tools.keys` close the capability gaps that previously forced a

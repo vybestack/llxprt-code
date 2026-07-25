@@ -272,6 +272,14 @@ jobs:
         run: |-
           npm run lint:legacy-paths
 
+      - name: 'Run doc-links guard (#2654)'
+        run: |-
+          npm run lint:doc-links
+
+      - name: 'Run doc-placement guard (#2654)'
+        run: |-
+          npm run lint:doc-placement
+
       - name: 'Run GenAI importer ratchet'
         run: |-
           npm run lint:genai-inventory

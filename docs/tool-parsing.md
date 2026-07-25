@@ -1,41 +1,86 @@
-# Text-Based Tool Call Parsing
+# Tool Call Format Parsing
 
-This document describes the text-based tool call parsing system in the LLxprt Code, which enables support for models that output tool calls as formatted text rather than structured JSON.
+Some models emit tool calls as specially formatted text instead of structured
+JSON. LLxprt Code can detect and parse these formats so those models work with
+built-in tools.
 
-## Overview
+## How format detection works
 
-Many open-source and specialized models don't support OpenAI's structured tool calling format. Instead, they output tool calls as specially formatted text within their responses. The LLxprt Code automatically detects and parses these formats, converting them to the standard internal format for execution.
+LLxprt Code auto-detects the appropriate tool-call format based on the active
+provider and model. You can override the auto-detected format at runtime with
+the `/toolformat` command.
 
-## Architecture
+### Supported formats
 
-The system consists of two parallel paths for tool extraction:
+The `/toolformat` command accepts the following values:
 
-1. **Structured Path**: For providers that return tool calls as JSON objects (OpenAI, Anthropic)
-   - Provider → ToolFormatter → Standard format → Execution
+| Category          | Formats                                                    |
+| ----------------- | ---------------------------------------------------------- |
+| Structured (JSON) | `openai`, `anthropic`, `deepseek`, `qwen`, `kimi`, `gemma` |
+| Text-based        | `hermes`, `xml`, `llama`                                   |
+| Special           | `auto` (return to auto-detection)                          |
 
-2. **Text-Based Path**: For models that embed tool calls in text (Gemma, Hermes, DeepSeek, Llama)
-   - Provider → TextToolCallParser → Standard format → Execution
+The `text` value is **not** a valid format — it will be rejected.
 
-Both paths produce the same `IMessage['tool_calls']` format, ensuring consistent tool execution regardless of the source.
+## Using `/toolformat`
 
-## Supported Formats
+Inside an LLxprt Code session:
 
-### 1. Gemma Format (TOOL_REQUEST)
-
+```text
+> /toolformat
+Current tool format: auto-detected (gemma)
+To override: /toolformat <format>
+To return to auto: /toolformat auto
+Supported formats:
+  Structured: openai, anthropic, deepseek, qwen, kimi, gemma
+  Text-based: hermes, xml, llama
 ```
-[TOOL_REQUEST]
-list_directory {"path": "/home/user"}
-[TOOL_REQUEST_END]
+
+- `/toolformat` (no argument): shows the currently active format.
+- `/toolformat <format>`: forces a specific format for the current session.
+- `/toolformat auto`: returns to automatic detection.
+
+Examples:
+
+```text
+> /toolformat hermes
+Tool format override set to 'hermes' for provider 'ollama'.
+
+> /toolformat auto
+Tool format override cleared for provider 'ollama'. Using auto-detection.
 ```
 
-### 2. JSON Object with END_TOOL_REQUEST
+## Provider `toolFormat` setting
 
-```
-{"name": "search", "arguments": {"query": "climate change"}}
-[END_TOOL_REQUEST]
+You can set a persistent default in the provider configuration:
+
+```json
+{
+  "providers": [
+    {
+      "name": "my-local-llm",
+      "toolFormat": "hermes"
+    }
+  ]
+}
 ```
 
-### 3. Hermes Format (tool_call tags)
+The `/toolformat` command overrides this at runtime; `/toolformat auto` clears
+the override and falls back to the provider setting or auto-detection.
+
+## Legacy settings (non-functional)
+
+The `enableTextToolCallParsing` and `textToolCallModels` settings exist in the
+configuration schema but are **legacy/non-functional**. They have no production
+consumer — nothing in the parsing pipeline reads them to gate behavior. Do not
+rely on them. Use `/toolformat` or the provider `toolFormat` setting instead.
+
+## Supported text format patterns
+
+The text-based parsers recognize the following patterns. These are the formats
+that `hermes`, `xml`, `llama`, and the structured variants actually parse.
+
+### Hermes (`<tool_call>` tags)
 
 ```xml
 <tool_call>
@@ -43,37 +88,13 @@ list_directory {"path": "/home/user"}
 </tool_call>
 ```
 
-### 4. DeepSeek Format (Unicode tokens)
-
-```
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>get_weather
-{"location": "San Francisco", "unit": "celsius"}
-<｜tool▁call▁end｜>
-```
-
-### 5. Llama Formats
-
-#### Pythonic Style (Llama 3.2):
-
-```python
-[get_user_info(user_id=7890, special='black')]
-```
-
-#### Function Tag Style:
-
-```xml
-<function=example_function>{"example_name": "example_value"}</function>
-```
-
-#### JSON Style (Llama 3.1):
+### JSON with name/arguments
 
 ```json
-{ "name": "function_name", "parameters": { "arg": "value" } }
+{ "name": "search", "arguments": { "query": "climate change" } }
 ```
 
-### 6. XML Formats
-
-#### Claude-style:
+### XML parameter tags (Claude-style)
 
 ```xml
 <invoke name="get_weather">
@@ -81,7 +102,7 @@ list_directory {"path": "/home/user"}
 </invoke>
 ```
 
-#### Generic XML:
+### Generic XML
 
 ```xml
 <tool>
@@ -92,257 +113,54 @@ list_directory {"path": "/home/user"}
 </tool>
 ```
 
-### 7. Key-Value Format
+### Gemma (TOOL_REQUEST)
+
+```
+[TOOL_REQUEST]
+list_directory {"path": "/home/user"}
+[END_TOOL_REQUEST]
+```
+
+### DeepSeek (Unicode tokens)
+
+```
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>get_weather
+{"location": "San Francisco", "unit": "celsius"}
+<｜tool▁call▁end｜>
+```
+
+### Llama (pythonic/JSON styles)
+
+```python
+[get_user_info(user_id=7890, special='black')]
+```
+
+```json
+{ "name": "function_name", "parameters": { "arg": "value" } }
+```
+
+### Key-Value
 
 ```
 ✦ tool_call: list_directory for path /home/user ignore *.log
 ```
 
-## Configuration
+## Troubleshooting
 
-### Settings
+**Tool calls not detected:**
 
-Configure text-based tool parsing in your settings file:
+1. Use `/toolformat` to check the current format.
+2. Try forcing the format with `/toolformat <format>` (e.g., `/toolformat hermes`).
+3. If the model's output doesn't match any supported pattern, the tool call
+   will be dropped.
 
-```json
-{
-  "enableTextToolCallParsing": true,
-  "textToolCallModels": ["custom-model-1", "custom-model-2"]
-}
-```
+**Malformed arguments:**
 
-- `enableTextToolCallParsing`: Enable/disable text parsing globally (default: true)
-- `textToolCallModels`: Additional models that require text parsing beyond the defaults
+The parser validates arguments as JSON. If a model emits malformed JSON, the
+tool call is dropped.
 
-### Default Models
+## Internals
 
-The following models automatically use text-based parsing:
-
-- gemma-3-12b-it
-- gemma-2-27b-it
-
-### Auto-Detection
-
-The system automatically detects the appropriate parser based on:
-
-1. Model name (e.g., models containing "gemma", "hermes", "deepseek")
-2. Base URL (for custom endpoints)
-3. Manual override via `/toolformat` command
-
-### Examples
-
-#### Basic Configuration
-
-```json
-{
-  "enableTextToolCallParsing": true,
-  "textToolCallModels": ["llama-3.2", "mixtral-instruct"]
-}
-```
-
-#### Using with OpenAI-Compatible Providers
-
-```json
-{
-  "providers": [
-    {
-      "name": "openai",
-      "apiKey": "$OPENAI_API_KEY",
-      "baseURL": "https://api.deepseek.com/v1"
-    }
-  ],
-  "textToolCallModels": ["deepseek-chat"]
-}
-```
-
-#### Testing Tool Parsing
-
-```bash
-# Check current format
-> /toolformat
-Current tool format: auto-detected (gemma)
-
-# Override to text format
-> /toolformat text
-Tool format set to: text
-
-# Test with a tool call
-> List all JavaScript files in the src directory
-```
-
-## Adding New Formats
-
-To add support for a new text-based format:
-
-1. **Add Pattern to TextToolCallParser**:
-
-```typescript
-// In TextToolCallParser.ts
-private readonly patterns = [
-  // ... existing patterns ...
-  // Format X: Your new format
-  /your-regex-pattern/gs,
-];
-```
-
-2. **Update Parsing Logic**:
-
-```typescript
-if (pattern === this.patterns[X]) {
-  // Custom parsing logic for your format
-  const [fullMatch, toolName, args] = match;
-  // Process and add to matches
-}
-```
-
-3. **Add Tests**:
-
-```typescript
-it('should parse new format', () => {
-  const content = 'Your format example';
-  const result = parser.parse(content);
-  expect(result.toolCalls).toHaveLength(1);
-  // ... assertions
-});
-```
-
-4. **Update Format Detection**:
-
-- Add model names to default lists
-- Update `requiresTextToolCallParsing()` logic
-
-## Debugging
-
-### Enable Debug Logging
-
-Set environment variable:
-
-```bash
-export DEBUG=openai:*,parser:*
-```
-
-This will show:
-
-- Parser attempts and matches
-- Failed parsing attempts with error details
-- Tool call extraction process
-- Format detection logic
-
-### Common Issues
-
-1. **Tool calls not detected**:
-   - Check if model is in `textToolCallModels` list
-   - Verify the format matches a supported pattern
-   - Look for debug logs showing parsing attempts
-   - Try manually overriding with `/toolformat text`
-
-2. **Malformed arguments**:
-   - Parser logs failed JSON parsing attempts
-   - Check for proper escaping of quotes in arguments
-   - Verify JSON structure is valid
-   - Common issue: nested quotes not escaped
-
-3. **Partial tool calls**:
-   - Ensure complete markers are present (opening and closing tags)
-   - Check for truncated responses from the model
-   - May need to increase max_tokens for the model
-
-4. **Wrong format detected**:
-   - Use `/toolformat` to check current format
-   - Override with `/toolformat <format>` if needed
-   - Check model name matches expected pattern
-
-### Testing New Formats
-
-1. Create a test file with sample output:
-
-```bash
-echo 'Your tool call format here' > test-format.txt
-```
-
-2. Run the parser test:
-
-```bash
-npm test -- --grep "YourFormat"
-```
-
-3. Check debug output:
-
-```bash
-DEBUG=parser:* npm test
-```
-
-### Troubleshooting Steps
-
-1. **Verify Model Configuration**:
-
-```bash
-# Check current provider and format
-/provider
-/toolformat
-```
-
-2. **Test Tool Call Parsing**:
-
-```bash
-# Enable debug logging
-export DEBUG=parser:*
-
-# Try a simple tool call
-> List the files in the current directory
-```
-
-3. **Check Parser Patterns**:
-   - Look in `TextToolCallParser.ts` for supported patterns
-   - Verify your model's format matches one of them
-   - Add custom pattern if needed
-
-4. **Common Fixes**:
-   - Add model to `textToolCallModels` setting
-   - Override format with `/toolformat text`
-   - Update model name detection in provider
-   - Ensure complete tool call markers in prompts
-
-### Pattern Regex Explanations
-
-1. **Gemma Format** (`[TOOL_REQUEST]`):
-   - Matches: `[TOOL_REQUEST]\nfunction_name {args}\n[TOOL_REQUEST_END]`
-   - Captures: function name and JSON arguments
-   - Multiline with optional whitespace
-
-2. **JSON with END_TOOL_REQUEST**:
-   - Matches: `{"name": "func", "arguments": {...}}[END_TOOL_REQUEST]`
-   - Supports optional line numbers (e.g., `1 {"name"...`)
-   - Flexible whitespace handling
-
-3. **Hermes XML Format**:
-   - Matches: `<tool_call>{...}</tool_call>`
-   - Extracts JSON from within XML tags
-   - Handles nested XML properly
-
-4. **DeepSeek Unicode Format**:
-   - Matches: `<｜tool▁calls▁begin｜>` markers
-   - Complex Unicode token handling
-   - Preserves original formatting
-
-## Performance Considerations
-
-- Text parsing uses regex patterns, which is slower than structured JSON parsing
-- Multiple patterns are tried sequentially until a match is found
-- Large responses with many tool calls may impact performance
-- Consider caching parsed results for repeated calls
-
-## Security
-
-- All parsed arguments go through JSON.parse() for validation
-- Malformed JSON is logged but doesn't crash the parser
-- No code execution happens during parsing
-- Tool execution has its own security layer
-
-## Future Improvements
-
-1. **Unified Parser Interface**: Create a common interface for both structured and text parsers
-2. **Pattern Optimization**: Combine similar patterns for better performance
-3. **Streaming Support**: Parse tool calls as they stream in
-4. **Format Auto-Detection**: Detect format from response content rather than model name
-5. **Plugin System**: Allow external parsers for proprietary formats
+For implementation details — supported format patterns, the parser architecture,
+and how to add new formats — see the
+[Text Tool Call Parsing internals](../dev-docs/providers/text-tool-call-parsing.md).

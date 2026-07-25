@@ -235,4 +235,4 @@ When `--non-interactive` flag is used:
 
 - Read [Policy Configuration Guide](policy-configuration.md) to create custom policies
 - See [Migration Guide](migration/approval-mode-to-policies.md) to migrate from legacy approval modes
-- Review [Architecture Document](architecture/message-bus-architecture.md) for implementation details
+- Review [Architecture Document](../dev-docs/architecture/message-bus.md) for implementation details
