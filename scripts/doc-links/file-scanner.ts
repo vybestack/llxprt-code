@@ -207,6 +207,12 @@ function assertRootExists(rootPath: string): void {
 
 /**
  * Read a file's content as UTF-8 text.
+ *
+ * Intentionally fails fast: any read error propagates. Callers have already
+ * established that the path is a readable file, so a failure here indicates an
+ * environment fault (permissions, a file removed mid-scan, a full disk) rather
+ * than a documentation defect. Reporting it as a validation failure would
+ * misattribute the cause, so it surfaces as a crash with a non-zero exit.
  */
 export function readFileText(filePath: string): string {
   return readFileSync(filePath, 'utf8');
