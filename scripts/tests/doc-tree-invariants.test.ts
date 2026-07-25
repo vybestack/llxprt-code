@@ -82,7 +82,9 @@ function processMarkerEntry(
   const full = join(dir, entry.name);
   if (entry.isDirectory()) {
     collectFilesWithMarker(full, marker, excludeDirs, results);
-  } else if (entry.isFile() && entry.name.endsWith('.md')) {
+    // Case-insensitive to match isMarkdown() in the guard itself, so this
+    // scanner cannot miss a violation living in a .MD file.
+  } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
     checkFileForMarker(full, marker, results);
   }
 }
@@ -245,7 +247,9 @@ describe('doc-tree invariants (real repo state)', () => {
 
     it('every fenced code block is balanced (no orphaned fragment)', () => {
       const content = readFile('docs/hooks/best-practices.md');
-      const fenceCount = (content.match(/^```/gm) ?? []).length;
+      // Count backtick and tilde fences of any length; docs in this repo use
+      // four-backtick fences to wrap examples that themselves contain fences.
+      const fenceCount = (content.match(/^(?:`{3,}|~{3,})/gm) ?? []).length;
       expect(fenceCount % 2).toBe(0);
     });
 

@@ -144,6 +144,12 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     // Guard against the extractor silently matching nothing, which would make
     // the per-name loop below vacuous. A bare non-empty check is deliberate:
     // any fixed threshold would break on legitimate constant refactoring.
+    // Pin multi-line handling: this constant wraps onto a second line in
+    // constants.ts, so a regex change that stops spanning newlines would
+    // silently drop it and weaken every assertion below.
+    expect(realEventNames).toContain(
+      'llxprt_code.enhanced_conversation_response',
+    );
     expect(realEventNames.length).toBeGreaterThan(0);
     expect(realMetricNames.length).toBeGreaterThan(0);
 
