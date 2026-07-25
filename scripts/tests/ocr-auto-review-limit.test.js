@@ -60,6 +60,7 @@ async function executeAutoReviewGate({
   changesFrom = '',
   commentUserType = 'Bot',
   listComments = [],
+  listCommentsError = null,
   updateCommentResult = null,
 }) {
   const outputs = {};
@@ -74,7 +75,10 @@ async function executeAutoReviewGate({
     },
     rest: {
       issues: {
-        listComments: async () => ({ data: listComments }),
+        listComments: async () => {
+          if (listCommentsError instanceof Error) throw listCommentsError;
+          return { data: listComments };
+        },
         updateComment: async (opts) => {
           updateCalls.push(opts);
           if (updateCommentResult instanceof Error) throw updateCommentResult;
@@ -148,7 +152,11 @@ async function executeAutoReviewGate({
   };
 
   const promise = vm.runInNewContext(`(async () => { ${script} })()`, sandbox);
-  await promise;
+  try {
+    await promise;
+  } catch (error) {
+    failure = String(error);
+  }
 
   return { outputs, warnings, updateCalls, failure };
 }
@@ -410,6 +418,54 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
     expect(result.outputs['suspended']).toBe('false');
   });
 
+  it('falls back to the default limit when OCR_AUTO_REVIEW_LIMIT is not a number', async () => {
+    const result = await executeAutoReviewGate({
+      script: autoGateScript,
+      eventName: 'pull_request_target',
+      eventAction: 'synchronize',
+      autoReviewLimit: 'not-a-number',
+      listComments: [
+        {
+          id: 1,
+          body: `${MARKER}\n<!-- ocr-auto-count:2 -->`,
+        },
+      ],
+    });
+    // Default limit is 2; count 2 >= 2 means suspended.
+    expect(result.outputs['suspended']).toBe('true');
+    expect(result.outputs['auto-should-run']).toBe('false');
+  });
+
+  it('falls back to the default limit when OCR_AUTO_REVIEW_LIMIT is negative', async () => {
+    const result = await executeAutoReviewGate({
+      script: autoGateScript,
+      eventName: 'pull_request_target',
+      eventAction: 'synchronize',
+      autoReviewLimit: '-1',
+      listComments: [
+        {
+          id: 1,
+          body: `${MARKER}\n<!-- ocr-auto-count:1 -->`,
+        },
+      ],
+    });
+    // Negative limit falls back to default 2; count 1 < 2 means allowed.
+    expect(result.outputs['auto-should-run']).toBe('true');
+    expect(result.outputs['suspended']).toBe('false');
+  });
+
+  it('treats a limit of 0 as suspending every automatic review', async () => {
+    const result = await executeAutoReviewGate({
+      script: autoGateScript,
+      eventName: 'pull_request_target',
+      eventAction: 'synchronize',
+      autoReviewLimit: '0',
+      listComments: [],
+    });
+    expect(result.outputs['auto-should-run']).toBe('false');
+    expect(result.outputs['suspended']).toBe('true');
+  });
+
   it('defaults to count 0 and suspended false when no sticky comment exists (AC 8)', async () => {
     const result = await executeAutoReviewGate({
       script: autoGateScript,
@@ -494,19 +550,54 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
     expect(result.updateCalls).toHaveLength(0);
   });
 
-  it('edited comment without OCR marker is a no-op', async () => {
+  it('edited bot comment without the OCR marker is a no-op', async () => {
     const result = await executeAutoReviewGate({
       script: autoGateScript,
       eventName: 'issue_comment',
       eventAction: 'edited',
       autoReviewLimit: '2',
-      commentBody: 'Some random comment that was edited',
-      changesFrom: 'Some random comment',
+      commentBody: 'Some random bot comment that was edited',
+      changesFrom: 'Some random bot comment',
+      commentUserType: 'Bot',
+      listComments: [],
+    });
+    expect(result.outputs['auto-should-run']).toBe('false');
+    expect(result.updateCalls).toHaveLength(0);
+  });
+
+  it('edited marker comment authored by a non-bot user is a no-op', async () => {
+    const oldBody = `${MARKER}\n- [ ] Re-enable automatic reviews\n<!-- ocr-auto-count:2 -->`;
+    const newBody = oldBody.replace('[ ]', '[x]');
+    const result = await executeAutoReviewGate({
+      script: autoGateScript,
+      eventName: 'issue_comment',
+      eventAction: 'edited',
+      autoReviewLimit: '2',
+      commentBody: newBody,
+      changesFrom: oldBody,
       commentUserType: 'User',
       listComments: [],
     });
     expect(result.outputs['auto-should-run']).toBe('false');
     expect(result.updateCalls).toHaveLength(0);
+  });
+
+  it('listComments API failure during edited-comment handling is non-fatal', async () => {
+    const oldBody = `${MARKER}\n- [ ] Re-enable automatic reviews\n<!-- ocr-auto-count:2 -->`;
+    const newBody = oldBody.replace('[ ]', '[x]');
+    const result = await executeAutoReviewGate({
+      script: autoGateScript,
+      eventName: 'issue_comment',
+      eventAction: 'edited',
+      autoReviewLimit: '2',
+      commentBody: newBody,
+      changesFrom: oldBody,
+      commentUserType: 'Bot',
+      listCommentsError: new Error('API rate limit'),
+      listComments: [],
+    });
+    expect(result.outputs['auto-should-run']).toBe('false');
+    expect(result.failure).toBeNull();
   });
 
   it('checkbox reset that fails to write does not proceed with stale count', async () => {

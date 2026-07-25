@@ -217,8 +217,8 @@ jobs:
                 core.setOutput('current-count', '0');
                 return;
               }
-              const wasUnchecked = /-\s*\[\s\]/.test(changesFrom);
-              const nowChecked = /-\s*\[[xX]\]/.test(commentBody);
+              const wasUnchecked = /-\s*\[\s\]\s*Re-enable automatic reviews/.test(changesFrom);
+              const nowChecked = /-\s*\[[xX]\]\s*Re-enable automatic reviews/.test(commentBody);
               if (wasUnchecked && nowChecked) {
                 // Reset the counter to 0 in the hidden state of the comment
                 // and immediately allow a review on the current head.
@@ -1319,22 +1319,25 @@ jobs:
 
             // Read the current auto-review count from the existing sticky
             // comment so it can be incremented (issue #2666). Manual triggers
-            // do not increment the counter.
-            let autoReviewCount = 0;
+            // do not increment the counter. Fetch the comment list once and
+            // reuse it for both count parsing and reconciliation below.
+            let markerComments = [];
             try {
-              const preComments = await github.paginate(github.rest.issues.listComments, {
+              const allComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              const preMarker = preComments.find((c) =>
+              markerComments = allComments.filter((c) =>
                 typeof c.body === 'string' && c.body.includes(MARKER));
-              if (preMarker) {
-                const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(preMarker.body);
-                if (match) {
-                  autoReviewCount = Number(match[1]);
-                }
-              }
             } catch (preFetchErr) {
-              core.warning(redactSecretDiagnostics(`Could not read existing OCR comment for auto-review count: ${preFetchErr.message || preFetchErr}`));
+              core.warning(redactSecretDiagnostics(`Could not list OCR comments for auto-review count: ${preFetchErr.message || preFetchErr}`));
+            }
+            let autoReviewCount = 0;
+            const preMarker = markerComments[0];
+            if (preMarker) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(preMarker.body);
+              if (match) {
+                autoReviewCount = Number(match[1]);
+              }
             }
             if (isAutomatic) {
               autoReviewCount += 1;
@@ -1342,14 +1345,10 @@ jobs:
             body.push(`\n<!-- ocr-auto-count:${autoReviewCount} -->`);
             const summary = body.join('\n');
 
-            async function reconcileMarkerComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner, repo, issue_number: number, per_page: 100,
-              });
-              const markerComments = comments.filter((comment) =>
-                comment.body && comment.body.includes(MARKER));
-              const existing = markerComments[0];
-              for (const duplicate of markerComments.slice(1)) {
+            async function reconcileMarkerComment(existingComments) {
+              const comments = existingComments || markerComments;
+              const existing = comments[0];
+              for (const duplicate of comments.slice(1)) {
                 try {
                   await github.rest.issues.deleteComment({
                     owner, repo, comment_id: duplicate.id,
@@ -1380,7 +1379,10 @@ jobs:
                   owner, repo, issue_number: number, body: summary,
                 });
               } catch (createErr) {
-                const reconciled = await reconcileMarkerComment();
+                // After a failed create (e.g. a race where a marker was just
+                // posted), re-list comments fresh to reconcile, since the
+                // pre-fetched list is stale at this point.
+                const reconciled = await reconcileMarkerComment(null);
                 if (reconciled) {
                   await github.rest.issues.updateComment({
                     owner, repo, comment_id: reconciled.id, body: summary,

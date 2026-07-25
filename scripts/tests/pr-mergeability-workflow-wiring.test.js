@@ -272,11 +272,12 @@ describe('OCR mergeability gate wiring (.github/workflows/ocr-review.yml)', () =
     expect(gateJob.concurrency).toBeUndefined();
     expect(codeReviewJob.concurrency).toBeUndefined();
     // code-review now depends on both the mergeability gate and the OCR
-    // auto-review limit gate (issue #2666).
-    expect(codeReviewJob.needs).toEqual([
-      'mergeability-gate',
-      'auto-review-gate',
-    ]);
+    // auto-review limit gate (issue #2666). Assert membership and length
+    // independently rather than pinning YAML ordering, which Actions treats
+    // as a set.
+    expect(codeReviewJob.needs).toHaveLength(2);
+    expect(codeReviewJob.needs).toContain('mergeability-gate');
+    expect(codeReviewJob.needs).toContain('auto-review-gate');
     expect(parsed.jobs?.['notify-ocr-infrastructure-failure']).toBeUndefined();
   });
 
