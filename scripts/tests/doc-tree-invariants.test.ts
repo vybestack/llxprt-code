@@ -229,9 +229,7 @@ describe('doc-tree invariants (real repo state)', () => {
     it('does not claim telemetry.logPrompts governs hook I/O logging', () => {
       const content = readFile('docs/hooks/best-practices.md');
       // The corrected doc must explicitly state logPrompts does NOT control hook I/O
-      expect(content).toMatch(
-        /logPrompts.*does.*not.*control|does.*not.*govern/i,
-      );
+      expect(content).toMatch(/logPrompts.*?does.*?not.*?(?:control|govern)/i);
     });
   });
 

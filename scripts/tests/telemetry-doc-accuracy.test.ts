@@ -33,7 +33,7 @@ function extractConstantValues(source: string, prefix: string): string[] {
   // Match: export const <NAME with prefix> = 'value';
   // The = and value may be on different lines.
   const regex = new RegExp(
-    `export\\s+const\\s+(${prefix}\\w*)\\s*=\\s*'([^']+)'`,
+    `export\\s+const\\s+(${prefix}\\w*)\\s*=\\s*'([^']*)'`,
     'g',
   );
   let match: RegExpExecArray | null;
