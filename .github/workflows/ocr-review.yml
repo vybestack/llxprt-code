@@ -904,6 +904,8 @@ jobs:
             const INFRA_FAILURE_FILE = 'ocr-infrastructure-failure.txt';
             const POLICY_FAILURE_FILE = 'ocr-policy-failure.txt';
             const REDACTION = '[REDACTED]';
+            const KNOWN_CATEGORIES = new Set(['bug', 'maintainability', 'test', 'security', 'style']);
+            const KNOWN_SEVERITIES = new Set(['high', 'medium', 'low']);
             const ocrTokenForRedaction = process.env.OCR_LLM_TOKEN;
             const ocrUrlForRedaction = process.env.OCR_LLM_URL;
             delete process.env.OCR_LLM_TOKEN;
@@ -1051,6 +1053,70 @@ jobs:
               }
             }
 
+            function validateFindingMetadata(finding) {
+              // Non-object findings (e.g. a bare string) cannot carry metadata;
+              // pass them through untouched so downstream rendering handles
+              // them. Arrays report typeof 'object', so guard explicitly to
+              // avoid silently spreading an array into a plain object.
+              if (!finding || typeof finding !== 'object' || Array.isArray(finding)) {
+                return finding;
+              }
+              const warnings = [];
+              const normalized = { ...finding };
+
+              const rawCategory = finding.category;
+              normalized.originalCategory = rawCategory;
+              if (typeof rawCategory !== 'string' || !KNOWN_CATEGORIES.has(rawCategory)) {
+                if (rawCategory !== undefined) {
+                  warnings.push(`undocumented category '${redactSecretDiagnostics(String(rawCategory))}'`);
+                }
+                normalized.category = 'unknown';
+              } else {
+                normalized.category = rawCategory;
+              }
+
+              const rawSeverity = finding.severity;
+              normalized.originalSeverity = rawSeverity;
+              if (typeof rawSeverity !== 'string' || !KNOWN_SEVERITIES.has(rawSeverity)) {
+                if (rawSeverity !== undefined) {
+                  warnings.push(`undocumented severity '${redactSecretDiagnostics(String(rawSeverity))}'`);
+                }
+                normalized.severity = 'unknown';
+              } else {
+                normalized.severity = rawSeverity;
+              }
+
+              if (warnings.length > 0) {
+                // Diagnostic emission is best-effort: a redaction or I/O
+                // failure must never abort validation and suppress findings.
+                try {
+                  const location = finding.path
+                    ? ` in ${finding.path}${Number.isInteger(finding.start_line) && finding.start_line > 0 ? `:${finding.start_line}` : ''}`
+                    : '';
+                  // Compose the full message before redacting so the path and
+                  // any credential-like substrings spanning fields are sanitized.
+                  const driftMessage = redactSecretDiagnostics(
+                    `OCR schema drift${location}: ${warnings.join(', ')}.`,
+                  );
+                  core.warning(driftMessage);
+                  // Mirror to stderr so schema drift is visible in the raw
+                  // step log stream (ocr-stderr.log captures the OCR CLI
+                  // process only; workflow warnings land in the step log).
+                  process.stderr.write(driftMessage + String.fromCharCode(10));
+                } catch (diagnosticErr) {
+                  // The diagnostic channel itself may have failed, so avoid
+                  // re-invoking it. Emit a minimal marker to stderr instead;
+                  // if even that fails, swallow — findings must still flow.
+                  try {
+                    const NEWLINE = String.fromCharCode(10);
+                    process.stderr.write('OCR schema-drift diagnostic emission failed.' + NEWLINE);
+                  } catch (_) { /* best-effort; never suppress findings */ }
+                }
+              }
+
+              return normalized;
+            }
+
             function escapeMarkdownHtml(value) {
               return value
                 .replace(new RegExp('&', 'g'), '&amp;')
@@ -1141,6 +1207,12 @@ jobs:
             } else {
               core.warning(`Skipping OCR output parsing because phase ${phase} already recorded exit code ${exitCode}.`);
             }
+
+            // Validate category/severity metadata (fail-open) before dedup so
+            // schema drift on findings that share a dedup key (path/lines/body)
+            // is still observed. Undocumented or missing values map to 'unknown'
+            // with a stderr warning, without suppressing any finding.
+            findings = findings.map(validateFindingMetadata);
 
             const dedupedFindings = deduplicateFindings(findings);
             let suppressedDuplicateCount = 0;
