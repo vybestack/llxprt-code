@@ -23,6 +23,9 @@ const HASH_PREFIX = '#';
 // GitHub keeps any Unicode letter or digit (CJK, Cyrillic, accented Latin, ...)
 // and strips only punctuation/symbols. An ASCII-only test would wrongly drop
 // non-Latin headings, breaking otherwise-valid anchors such as README_CN.md's.
+// Underscore is included deliberately: GitHub preserves it rather than
+// stripping it, so a heading such as "## write_file Tool" anchors as
+// #write_file-tool. Dropping underscores here would break those anchors.
 const UNICODE_WORD = /[\p{L}\p{N}_]/u;
 
 function isWordChar(ch: string): boolean {

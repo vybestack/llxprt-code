@@ -152,6 +152,10 @@ describe('doc-tree invariants (real repo state)', () => {
     });
 
     it('no relocated document remains at its old docs/ path', () => {
+      // docs/tool-parsing.md is deliberately absent from this list: its
+      // internals moved to dev-docs/providers/text-tool-call-parsing.md, but
+      // the docs/ path was reused for a new user-facing settings page rather
+      // than deleted. That case is covered by the test below.
       const oldPaths = [
         'docs/architecture/message-bus-architecture.md',
         'docs/hooks/architecture.md',
@@ -162,6 +166,13 @@ describe('doc-tree invariants (real repo state)', () => {
       for (const p of oldPaths) {
         expect(fileExists(p)).toBe(false);
       }
+    });
+
+    it('docs/tool-parsing.md is retained as a user-facing page that defers internals to dev-docs', () => {
+      expect(fileExists('docs/tool-parsing.md')).toBe(true);
+      expect(readFile('docs/tool-parsing.md')).toMatch(
+        /text-tool-call-parsing\.md/,
+      );
     });
 
     it('docs/tool-parsing.md still exists (user-facing settings page)', () => {
