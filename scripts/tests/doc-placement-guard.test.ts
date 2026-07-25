@@ -95,7 +95,7 @@ describe.skipIf(!isCiEnvironment() && !bunAvailable())(
         expect(code).toBe(1);
       });
 
-      it('fails on case-insensitive marker PLAN_123', async () => {
+      it('fails on PLAN_ prefix followed by alphanumeric', async () => {
         fx.write('docs/page.md', '# Page\n\nPLAN_123: work\n');
         const { code } = await runDocPlacementGuard(fx.root(), 1);
         expect(code).toBe(1);

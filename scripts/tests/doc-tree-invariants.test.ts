@@ -228,9 +228,14 @@ describe('doc-tree invariants (real repo state)', () => {
 
   describe('audience separation', () => {
     it('no user-facing page under docs/ links into dev-docs/', () => {
-      const offenders = collectMarkdownUnder('docs').filter((p) =>
-        /\]\([^)]*dev-docs\//.test(readFile(p)),
-      );
+      // Cover inline links `](dest)` and reference definitions `[id]: dest`,
+      // since either form escapes the user-facing tree.
+      const inlineLink = /\]\([^)]*dev-docs\//;
+      const referenceDef = /^ {0,3}\[[^\]]+]:[^\n]*dev-docs\//m;
+      const offenders = collectMarkdownUnder('docs').filter((p) => {
+        const content = readFile(p);
+        return inlineLink.test(content) || referenceDef.test(content);
+      });
       expect(offenders).toEqual([]);
     });
 
@@ -238,9 +243,11 @@ describe('doc-tree invariants (real repo state)', () => {
       // These break when the docs are published to vybestack.dev: they escape
       // the site and land on the raw GitHub view instead of the rendered page.
       // Derive the slug from package.json so a rename/fork does not silently
-      // disable this check.
+      // disable this check. Computed once: the pattern is stateless and the
+      // helper re-reads package.json on every call.
+      const pattern = repoBlobOrTreePattern();
       const offenders = collectMarkdownUnder('docs').filter((p) =>
-        repoBlobOrTreePattern().test(readFile(p)),
+        pattern.test(readFile(p)),
       );
       expect(offenders).toEqual([]);
     });
