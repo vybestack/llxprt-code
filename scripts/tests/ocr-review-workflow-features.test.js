@@ -16,8 +16,6 @@ import {
   stepNamed,
 } from './ocr-review-workflow-helpers.js';
 
-const INLINE_MARKER = '<!-- llxprt-code-ocr-inline -->';
-
 /**
  * Extract a named function from the workflow script and load it into an
  * isolated VM sandbox so it can be called with real inputs. Returns the
