@@ -650,7 +650,7 @@ const DUAL_MODES: readonly SecureStoreMode[] = [
 
 describe.sequential.each(DUAL_MODES)(
   'KeyringTokenStore ISecureStore backend conformance [$mode]',
-  ({ makeStore, mode }) => {
+  ({ makeStore }) => {
     // This suite owns its own temp-dir tracker so file-backed stores get
     // isolated, cleaned-up directories. Sequential execution keeps the
     // mutable `dirs` array race-free within the suite.
@@ -705,35 +705,6 @@ describe.sequential.each(DUAL_MODES)(
       await tokenStore.saveToken('dual', VALID_TOKEN);
       await tokenStore.removeToken('dual');
       expect(await tokenStore.getToken('dual')).toBeNull();
-    });
-
-    it('file-backed store persists across distinct ISecureStore instances (cross-instance consistency)', async () => {
-      // This test only applies to the file-backed double (it verifies the
-      // durable-persistence distinction from the in-memory Map). For the
-      // in-memory mode, the same assertion is trivially true within one
-      // instance and not meaningful across instances.
-      if (mode === 'in-memory') return;
-
-      const dir = locks.freshLockDir();
-      const writerStore = makeStore(dir);
-      const tokenStore = new KeyringTokenStore({
-        secureStore: writerStore,
-        lockDir: locks.freshLockDir(),
-        logger: createNoOpLogger(),
-      });
-      await tokenStore.saveToken('persistent', VALID_TOKEN);
-
-      // A second KeyringTokenStore backed by a new ISecureStore instance
-      // pointing at the same dir must see the saved token.
-      const readerStore = makeStore(dir);
-      const readerTokenStore = new KeyringTokenStore({
-        secureStore: readerStore,
-        lockDir: locks.freshLockDir(),
-        logger: createNoOpLogger(),
-      });
-      const loaded = await readerTokenStore.getToken('persistent');
-      expect(loaded).not.toBeNull();
-      expect(loaded!.access_token).toBe('test-access-token');
     });
 
     it('listProviders returns saved providers in sorted order', async () => {
@@ -792,6 +763,42 @@ describe.sequential.each(DUAL_MODES)(
       await expect(tokenStore.getToken('dual')).rejects.toThrow(
         'Permission denied',
       );
+    });
+  },
+);
+
+// ─── File-backed persistence (fallback-path distinction) ────────────────────
+//
+// The cross-instance persistence property distinguishes the file-backed double
+// (simulating the encrypted-file fallback's durable on-disk artifacts) from
+// the in-memory Map double (simulating the keyring path). It lives outside the
+// shared describe.each because it is only meaningful for the file-backed store.
+
+describe.sequential(
+  'KeyringTokenStore file-backed cross-instance persistence',
+  () => {
+    const locks = createLockDirTracker();
+    afterEach(() => locks.cleanupLockDirs());
+
+    it('a token saved by one KeyringTokenStore is visible to a second instance backed by the same dir', async () => {
+      const dir = locks.freshLockDir();
+      const writerStore = createFileBackedSecureStore(dir);
+      const writer = new KeyringTokenStore({
+        secureStore: writerStore,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+      await writer.saveToken('persistent', VALID_TOKEN);
+
+      const readerStore = createFileBackedSecureStore(dir);
+      const reader = new KeyringTokenStore({
+        secureStore: readerStore,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+      const loaded = await reader.getToken('persistent');
+      expect(loaded).not.toBeNull();
+      expect(loaded!.access_token).toBe('test-access-token');
     });
   },
 );
