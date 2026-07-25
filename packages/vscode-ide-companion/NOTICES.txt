@@ -2283,7 +2283,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ============================================================
 ip-address@10.2.0
-(git://github.com/beaugunderson/ip-address.git)
+(https://github.com/beaugunderson/ip-address.git)
 
 Copyright (C) 2011 by Beau Gunderson
 

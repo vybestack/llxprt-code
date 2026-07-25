@@ -297,6 +297,8 @@ export const HARD_EXCLUDE_PREFIXES: readonly string[] = [
   'docs/plans/',
   'docs/release-notes/',
   'docs/merge-notes/',
+  'dev-docs/plans/archive/',
+  'dev-docs/merge-notes/',
   'project-plans/',
   'research/',
   'packages/core/analysis/',

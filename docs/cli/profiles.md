@@ -5,7 +5,7 @@ Profiles save your LLxprt Code configuration so you can switch between setups in
 - **Model profiles** — save a provider, model, key, and settings
 - **Load balancer profiles** — combine multiple model profiles with failover or round-robin
 
-> **Note:** LLxprt Code also has [sandbox profiles](./sandboxing.md) for container configuration. This page covers model and load balancer profiles only.
+> **Note:** LLxprt Code also has [sandbox profiles](./sandbox-profiles.md) for container configuration. This page covers model and load balancer profiles only.
 
 ## Model Profiles
 

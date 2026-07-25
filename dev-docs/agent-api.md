@@ -1,14 +1,14 @@
-<!-- @plan:PLAN-20260617-COREAPI.P28 @requirement:REQ-020 -->
-
 # Agent API
 
-<!-- @plan:PLAN-20260622-COREAPIGAP.P19 @requirement:REQ-010 -->
+> **Internal, unstable.** This document lives in `dev-docs/` because the Agent
+> API is **not** a supported public contract today. It has no stability
+> guarantee and may change in point releases without notice or migration
+> support. Do not build external integrations against it yet.
 
-The Agent API is the public, embeddable surface for driving an LLxprt agent
-from your own code — without the CLI. You create an agent, send it input, and
-consume a typed event stream. The same primitives the CLI uses are exposed as a
-curated, stable contract so you can build chat loops, automation, and custom
-front-ends on top of LLxprt.
+The Agent API is the embeddable surface for driving an LLxprt agent from your
+own code — without the CLI. You create an agent, send it input, and consume a
+typed event stream. The same primitives the CLI uses are exposed here so you
+can build chat loops, automation, and custom front-ends on top of LLxprt.
 
 ## Entry Package
 
@@ -220,7 +220,7 @@ and fixture-driven tests continue to work without changes.
 
 `sandbox?: SandboxConfig` configures process/file sandboxing for tool execution.
 The type is re-exported from core; see the
-[sandbox documentation](./sandbox.md) for the full configuration shape.
+[sandbox documentation](../docs/sandbox.md) for the full configuration shape.
 
 ## The `Agent` Control Plane
 
@@ -423,8 +423,6 @@ agent.mcp.authenticate(server: string): Promise<McpServerAuthStatus>   // real O
 agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
 ```
 
-<!-- @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-005 -->
-
 - `McpServerAuthStatus` = `{ server: string; authenticated: boolean; requiresAuth: boolean; oauthStatus: McpOAuthStatus; sessionAuthenticated: boolean; authUrl?: string }`.
 - `McpOAuthStatus` = `'authenticated' | 'expired' | 'none' | 'not-required'` — the real persisted OAuth state surfaced from the engine helper.
 - `sessionAuthenticated: boolean` — the in-session marker, distinct from `authenticated`. It is set by either `agent.auth.mcpLogin(server)` or a successful `agent.mcp.authenticate(server)` (both mark the server authenticated for the current session); it is NOT persisted and does not by itself imply a valid stored OAuth token.
@@ -469,8 +467,6 @@ for (const server of detail.servers) {
   console.log(server.name, server.authenticated, server.tools?.length);
 }
 ```
-
-<!-- @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-005 -->
 
 Reading the corrected OAuth quad-state (`oauthStatus` / `sessionAuthenticated` /
 `requiresAuth`) off the public projection — public root import only, no deep
@@ -931,7 +927,7 @@ store that dies with the agent and never touches disk or the host keychain.
 ## Context Preservation Across Provider/Model Switch
 
 Switching the provider or model on a live agent **preserves conversation
-context** (REQ-005). `setModel(model)` and `setProvider(provider, model?)`:
+context**. `setModel(model)` and `setProvider(provider, model?)`:
 
 1. Apply the switch through the real runtime mutators.
 2. Re-bind the agent's loop to the **current** client (`rebuildLoop`).
@@ -944,8 +940,6 @@ provider/model switch — the next turn continues the conversation rather than
 starting fresh. See
 [`packages/agents/src/api/agentImpl.ts`](../packages/agents/src/api/agentImpl.ts)
 (`setModel`, `applyProviderSwitch`, `restoreChatVisibility`).
-
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
 
 ## Adopting an existing Config (`fromConfig`)
 
@@ -1012,8 +1006,6 @@ const agent = await fromConfig({
 See [Tool Confirmations and Safe Denial](#tool-confirmations-and-safe-denial)
 for the full confirmation contract.
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Settings & Config Projection
 
 An agent exposes a focused projection of its underlying `Config` for reading and
@@ -1061,8 +1053,6 @@ const viaAgent = agent.getEphemeralSettings();
 // viaAgent contains { 'context-limit': 50000, streaming: 'disabled' }.
 ```
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Current Sequence Model
 
 ```ts
@@ -1085,8 +1075,6 @@ if (model) {
 }
 ```
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Public Client Contract
 
 The `AgentClientContract` — the structural interface describing the low-level
@@ -1103,8 +1091,6 @@ the stable curated surface. It is documented on the
 [`/internals.js`](#power-user-subpath-internalsjs) subpath (and, as a
 power-user convenience, also reachable from the root today) — treat it as an
 unstable internal that may change without notice.
-
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
 
 ## Runtime Identity
 
@@ -1123,8 +1109,6 @@ const agent = await fromConfig({ config });
 const id = agent.getRuntimeId();
 console.log(id); // a non-empty string, e.g. the adopted runtime's id
 ```
-
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
 
 ## Import Boundary for #1595
 
@@ -1321,7 +1305,7 @@ These decisions shaped the public surface and are recorded here for posterity:
 - **`core/index` trim:** the eventual removal of low-level re-exports from the
   package root is sequenced into issue #1595; today the root entry stays
   additive and non-breaking.
-- **#2143 capability gaps (REQ-001..008):** the top-level approval-mode methods,
+- **#2143 capability gaps:** the top-level approval-mode methods,
   the `policy` / `tasks` sub-controllers, the extended `hooks` administration,
   the extended `auth` detailed metadata, the extended `mcp` OAuth/details, and
   `agent.tools.keys` close the capability gaps that previously forced a
@@ -1334,8 +1318,6 @@ These decisions shaped the public surface and are recorded here for posterity:
   on each call rather than holding a stale snapshot).
 
 ## A2A Server Follow-up (Next Release)
-
-<!-- @plan:PLAN-20260629-ISSUE2204 @requirement:REQ-2204-A2A -->
 
 Issue #2204 enforces the public-API boundary for the **interactive CLI** and
 **non-interactive prompt mode** — the two primary near-term clients. The A2A

@@ -20,7 +20,7 @@ The most powerful tools for enterprise administration are the system-wide
 settings files. These files allow you to define a baseline configuration
 (`system-defaults.json`) and a set of overrides (`settings.json`) that apply to
 all users on a machine. For a complete overview of configuration options, see
-the [Configuration documentation](../get-started/configuration.md).
+the [Configuration documentation](./configuration.md).
 
 Settings are merged from four files. The precedence order for single-value
 settings (like `theme`) is:
@@ -270,7 +270,7 @@ unintended tool execution.
 ## Managing custom tools (MCP servers)
 
 If your organization uses custom tools via
-[Model-Context Protocol (MCP) servers](../core/tools-api.md), it is crucial to
+[Model-Context Protocol (MCP) servers](../tools/index.md), it is crucial to
 understand how server configurations are managed to apply security policies
 effectively.
 
@@ -410,7 +410,7 @@ containerized environment.
 
 You can also specify a custom, hardened Docker image for the sandbox by building
 a custom `sandbox.Dockerfile` as described in the
-[Sandboxing documentation](./sandbox.md).
+[Sandboxing documentation](../sandbox.md).
 
 ## Controlling network access via proxy
 
@@ -438,26 +438,31 @@ an environment variable, but it can also be enforced for custom tools via the
 
 ## Telemetry and auditing
 
-For auditing and monitoring purposes, you can configure LLxprt Code to send
-telemetry data to a central location. This allows you to track tool usage and
-other events. For more information, see the
-[telemetry documentation](./telemetry.md).
+LLxprt Code can emit telemetry (traces, metrics, logs) for auditing and
+monitoring. All telemetry output is **local only** — it is written to a file
+(`--telemetry-outfile`) or the console. The SDK does not construct OTLP or
+network exporters, so data cannot be sent to a remote collector regardless of
+the `target` or `otlpEndpoint` settings. For more information, see the
+[telemetry documentation](../telemetry.md).
 
-**Example:** Enable telemetry and send it to a local OTLP collector. If
-`otlpEndpoint` is not specified, it defaults to `http://localhost:4317`.
+**Example:** Enable telemetry and write it to a local file.
 
 ```json
 {
   "telemetry": {
     "enabled": true,
-    "target": "gcp",
+    "target": "local",
+    "outfile": "/var/log/llxprt/telemetry.jsonl",
     "logPrompts": false
   }
 }
 ```
 
-**Note:** Ensure that `logPrompts` is set to `false` in an enterprise setting to
-avoid collecting potentially sensitive information from user prompts.
+**Note:** Set `logPrompts` to `false` in an enterprise setting to avoid
+including user prompt text in the `user_prompt` log event. Note that
+`logPrompts: false` does **not** redact hook input/output data — hook I/O is
+always included in `hook_call` events when telemetry is enabled. To prevent
+all hook data logging, disable telemetry entirely (`"enabled": false`).
 
 ## Authentication
 
@@ -540,8 +545,7 @@ CLI.
   },
   "telemetry": {
     "enabled": true,
-    "target": "gcp",
-    "otlpEndpoint": "https://telemetry-prod.example.com:4317",
+    "target": "local",
     "logPrompts": false
   },
   "advanced": {

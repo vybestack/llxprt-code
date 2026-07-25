@@ -80,7 +80,7 @@ Before submitting your PR, ensure that the contributor readiness checks pass by 
 
 #### 5. Update Documentation
 
-If your PR introduces a user-facing change (e.g., a new command, a modified flag, or a change in behavior), you must also update the relevant documentation in the `/docs` directory.
+If your PR introduces a user-facing change (e.g., a new command, a modified flag, or a change in behavior), you must also update the relevant documentation in the `/docs` directory. See the [Documentation Style Guide](./dev-docs/documentation-style-guide.md) for audience, placement, writing, and review standards.
 
 #### 6. Write Clear Commit Messages and a Good PR Description
 
@@ -230,7 +230,7 @@ To run the integration tests, use the following command:
 bun run test:e2e
 ```
 
-For more detailed information on the integration testing framework, please see the [Integration Tests documentation](./docs/integration-tests.md).
+For more detailed information on the integration testing framework, please see the [Integration Tests documentation](./dev-docs/integration-tests.md).
 
 ### Linting and Preflight Checks
 

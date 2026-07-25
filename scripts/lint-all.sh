@@ -33,6 +33,24 @@ else
     FAILED=1
 fi
 
+# Doc links guard (issue #2654)
+echo -e "\n${YELLOW}Running doc-links guard...${NC}"
+if npm run lint:doc-links; then
+    echo -e "${GREEN}✓ doc-links guard passed${NC}"
+else
+    echo -e "${RED}✗ doc-links guard failed${NC}"
+    FAILED=1
+fi
+
+# Doc placement guard (issue #2654)
+echo -e "\n${YELLOW}Running doc-placement guard...${NC}"
+if npm run lint:doc-placement; then
+    echo -e "${GREEN}✓ doc-placement guard passed${NC}"
+else
+    echo -e "${RED}✗ doc-placement guard failed${NC}"
+    FAILED=1
+fi
+
 # LSP package linting (separate config, excluded from root eslint)
 echo -e "\n${YELLOW}Running ESLint on LSP package...${NC}"
 if (cd packages/lsp && npx eslint .); then

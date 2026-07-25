@@ -712,4 +712,5 @@ priority = 1.0
 
 - See [Message Bus Guide](message-bus.md) for overview and architecture
 - See [Migration Guide](migration/approval-mode-to-policies.md) for migrating from legacy approval modes
-- Review [example policies](https://github.com/vybestack/llxprt-code/tree/main/packages/core/src/policy/policies) in the repository
+- Review the built-in policy files under `packages/core/src/policy/policies` in
+  a repository checkout for worked examples

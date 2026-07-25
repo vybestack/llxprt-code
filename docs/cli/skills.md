@@ -12,7 +12,7 @@ discoverable capability.
 
 ## Overview
 
-Unlike general context files ([`LLXPRT.md`](./llxprt-md.md)), which provide
+Unlike general context files ([`LLXPRT.md`](../tools/memory.md)), which provide
 persistent workspace-wide background, Skills represent **on-demand expertise**.
 This allows LLxprt to maintain a vast library of specialized capabilities—such
 as security auditing, cloud deployments, or codebase migrations—without
@@ -44,7 +44,7 @@ LLxprt Code discovers skills from three primary locations:
 2.  **User Skills** (`<config>/skills/`, see [Application Directories](../reference/application-directories.md)): Personal skills available across all
     your workspaces.
 3.  **Extension Skills**: Skills bundled within installed
-    [extensions](../extensions/index.md).
+    [extensions](../extension.md).
 
 **Precedence:** If multiple skills share the same name, higher-precedence
 locations override lower ones: **Workspace > User > Extension**.

@@ -97,7 +97,7 @@ interface HookInput {
 }
 ```
 
-Event-specific fields are added based on the event type. See [API Reference](./api-reference.md) for complete schemas.
+Event-specific fields are added based on the event type. See [API Reference](../../docs/hooks/api-reference.md) for complete schemas.
 
 ## Hook Output Format
 

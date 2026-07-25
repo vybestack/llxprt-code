@@ -264,8 +264,6 @@ bun scripts/start.ts \
   "Reply with exactly: llxprt local profile ok"
 ```
 
-Contributors who need to validate the interactive UI can drive the same profile with `scripts/tmux-harness.js`; see [tmux harness](../dev-docs/tmux-harness.md).
-
 ### Using Gemma-family GGUF models
 
 The setup above works with any GGUF model. Gemma-family models (Gemma 2, Gemma 3, Gemma 4, etc.) are a strong choice for local coding assistance and are available in GGUF form from Hugging Face.

@@ -43,7 +43,7 @@ LLxprt Code uses JSON settings files for persistent configuration. There are fou
 
 In addition to a project settings file, a project's `.llxprt` directory can contain other project-specific files related to LLxprt Code's operation, such as:
 
-- [Custom sandbox profiles](#sandboxing) (e.g., `.llxprt/sandbox-macos-custom.sb`, `.llxprt/sandbox.Dockerfile`).
+- [Custom sandbox profiles](#sandbox) (e.g., `.llxprt/sandbox-macos-custom.sb`, `.llxprt/sandbox.Dockerfile`).
 
 ### Available settings in `settings.json`:
 
@@ -1036,7 +1036,7 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
 3.  **Disable Recursive File Search:** As a last resort, you can disable recursive file search entirely by setting `enableRecursiveFileSearch` to `false`. This will be the fastest option as it avoids a recursive crawl of your project. However, it means you will need to type the full path to files when using `@` completions.
 
 - **`coreTools`** (array of strings):
-  - **Description:** Allows you to specify a list of core tool names that should be made available to the model. This can be used to restrict the set of built-in tools. See [Built-in Tools](../core/tools-api.md#built-in-tools) for a list of core tools. You can also specify command-specific restrictions for tools that support it, like the `ShellTool`. For example, `"coreTools": ["ShellTool(ls -l)"]` will only allow the `ls -l` command to be executed.
+  - **Description:** Allows you to specify a list of core tool names that should be made available to the model. This can be used to restrict the set of built-in tools. See [Built-in Tools](../tools/index.md#built-in-tools) for a list of core tools. You can also specify command-specific restrictions for tools that support it, like the `ShellTool`. For example, `"coreTools": ["ShellTool(ls -l)"]` will only allow the `ls -l` command to be executed.
   - **Default:** All tools available for use by the Gemini model.
   - **Example:** `"coreTools": ["ReadFileTool", "GlobTool", "ShellTool(ls)"]`.
 
@@ -1087,7 +1087,7 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Security Note:** Enabling this feature allows execution of nested commands, which can be a security risk if running untrusted commands. Only enable if you understand the implications. See [Shell Command Substitution](../shell-replacement.md) for more details.
 
 - **`sandbox`** (boolean or string):
-  - **Description:** Controls whether and how to use sandboxing for tool execution. If set to `true`, LLxprt Code uses a pre-built `gemini-cli-sandbox` Docker image. For more information, see [Sandboxing](#sandboxing).
+  - **Description:** Controls whether and how to use sandboxing for tool execution. If set to `true`, LLxprt Code uses the pre-built `ghcr.io/vybestack/llxprt-code/sandbox` Docker image. For more information, see [Sandboxing](#sandbox).
   - **Default:** `false`
   - **Example:** `"sandbox": "docker"`
 
@@ -1351,24 +1351,23 @@ The following settings remain at the top level of the `settings.json` file.
   - **Example:** `"preferredEditor": "vscode"`
 
 - **`telemetry`** (object)
-  - **Description:** Configures logging and metrics collection for LLxprt Code. For more information, see [Telemetry](../telemetry.md).
-  - **Default:** `{"enabled": false, "target": "local", "otlpEndpoint": "http://localhost:4317", "logPrompts": true}`
+  - **Description:** Configures logging and metrics collection for LLxprt Code. For more information, see [Telemetry](../telemetry.md). Telemetry data is always local (file or console); the SDK does not construct OTLP/network exporters.
+  - **Default:** `{"enabled": false, "target": "local", "logPrompts": true}`
   - **Properties:**
-    - **`enabled`** (boolean): Whether or not telemetry is enabled.
-    - **`target`** (string): The destination for collected telemetry. Supported values are `local` and `gcp`.
-    - **`otlpEndpoint`** (string): The endpoint for the OTLP Exporter.
-    - **`logPrompts`** (boolean): Whether or not to include the content of user prompts in the logs.
+    - **`enabled`** (boolean): Whether or not telemetry is enabled. Defaults to `false`.
+    - **`target`** (string): Intended destination category. Note: regardless of this setting, data is only written locally (file or console); no OTLP or network exporter is constructed by the SDK.
+    - **`otlpEndpoint`** (string): Read into configuration but not currently used by the SDK (no OTLP exporter is constructed).
+    - **`logPrompts`** (boolean): Controls whether user prompt text is included in the `user_prompt` log event. Does not affect hook I/O logging (hook input/output is always included in `hook_call` events when telemetry is enabled).
   - **Example:**
     ```json
     "telemetry": {
       "enabled": true,
       "target": "local",
-      "otlpEndpoint": "http://localhost:16686",
       "logPrompts": false
     }
     ```
 - **`usageStatisticsEnabled`** (boolean):
-  - **Description:** Enables or disables the collection of usage statistics. See [Usage Statistics](#usage-statistics) for more information.
+  - **Description:** Enables or disables the collection of usage statistics. See the `usageStatisticsEnabled` setting below for more information.
   - **Default:** `true`
   - **Example:**
     ```json
@@ -1487,7 +1486,7 @@ The following settings remain at the top level of the `settings.json` file.
     ```
 
 - **`emojiFilter`** (object):
-  - **Description:** Controls emoji filtering in LLM responses and file operations. See [Emoji Filter Guide](../EMOJI-FILTER.md) for detailed usage.
+  - **Description:** Controls emoji filtering in LLM responses and file operations. See [Emoji Filter Guide](../emoji-filter.md) for detailed usage.
   - **Default:** `{"mode": "auto"}`
   - **Properties:**
     - **`mode`** (string): Filtering mode - `allowed`, `auto`, `warn`, or `error`
@@ -1623,7 +1622,6 @@ The following settings remain at the top level of the `settings.json` file.
   "telemetry": {
     "enabled": true,
     "target": "local",
-    "otlpEndpoint": "http://localhost:4317",
     "logPrompts": true
   },
   "usageStatisticsEnabled": true,
