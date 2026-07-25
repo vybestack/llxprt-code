@@ -15,7 +15,7 @@ export default defineConfig({
     setupFiles: ['scripts/tests/test-setup.ts'],
     // Many script-harness tests spawn subprocesses (bash scripts, python
     // fake-gh, jq pipelines) and do filesystem work under temp directories.
-    // The Vitest 5s default is far too tight for that workload — especially
+    // Vitest's 5s default is far too tight for that workload — especially
     // on slower CI runners where process spawning and I/O are 2-3x slower.
     // 30s accommodates subprocess-heavy tests while still failing fast on a
     // genuine hang. Tests that are genuinely much slower (e.g. the pagination
