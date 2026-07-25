@@ -796,6 +796,17 @@ jobs:
           LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
         run: 'npm run test'
 
+      - name: 'Report harness toolchain versions'
+        # The assign harness shells out to jq, python3 and bash. Those differ
+        # between runner images, which is exactly the class of difference that
+        # made the nightly ubuntu-22.04 failure hard to attribute (#2688).
+        # Record them so a platform-specific failure can be diagnosed from the
+        # log alone.
+        run: |-
+          echo "bash:    $(bash --version | head -1)"
+          echo "jq:      $(jq --version)"
+          echo "python3: $(python3 --version)"
+
       - name: 'Run script harness tests'
         env:
           CI: true
