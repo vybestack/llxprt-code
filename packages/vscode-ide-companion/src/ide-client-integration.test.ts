@@ -288,27 +288,43 @@ describe('IdeClient with the VS Code companion server', () => {
     // dropped. We must wait for the GET stream to be established on the server
     // side before broadcasting.
     //
-    // We detect this by spying on the IDEServer's handleSessionRequest (the
-    // GET handler). When it completes, the standalone SSE stream is active
-    // and broadcast notifications will reach the client.
+    // We detect this by spying on the server's non-authoritative
+    // deliverInitialContext call, which runs on the GET path. Waiting for it
+    // to COMPLETE (rather than merely for the GET handler to be entered) is
+    // what makes this robust: completion means the server already pushed the
+    // initial ide/contextUpdate down the standalone stream, which is
+    // observable proof the stream is live and can carry a later broadcast.
+    // Note handleSessionRequest itself cannot be awaited here — it stays
+    // pending for the lifetime of the SSE response.
     const serverHolder = stack.ideServer as unknown as {
-      handleSessionRequest: (...args: unknown[]) => Promise<unknown>;
+      deliverInitialContext: (
+        sessionId: string,
+        delivery: unknown,
+        options: { authoritative: boolean },
+      ) => Promise<boolean>;
     };
-    const realHandleSessionRequest = requireMethod(
-      serverHolder.handleSessionRequest,
-      'IDEServer.handleSessionRequest',
+    const realDeliverInitialContext = requireMethod(
+      serverHolder.deliverInitialContext,
+      'IDEServer.deliverInitialContext',
     ).bind(stack.ideServer);
     let getStreamResolve!: () => void;
     const getStreamEstablished = new Promise<void>((resolve) => {
       getStreamResolve = resolve;
     });
-    serverHolder.handleSessionRequest = (...args: unknown[]) => {
-      const result = realHandleSessionRequest(...args);
-      // The GET stream is established synchronously within handleRequest,
-      // before deliverInitialContext. Resolve as soon as the handler is
-      // invoked — the standalone SSE stream mapping is active.
-      getStreamResolve();
-      return result;
+    serverHolder.deliverInitialContext = async (
+      sessionId: string,
+      delivery: unknown,
+      options: { authoritative: boolean },
+    ) => {
+      const delivered = await realDeliverInitialContext(
+        sessionId,
+        delivery,
+        options,
+      );
+      if (!options.authoritative) {
+        getStreamResolve();
+      }
+      return delivered;
     };
 
     try {
@@ -322,7 +338,7 @@ describe('IdeClient with the VS Code companion server', () => {
       // Drop the instance override so the prototype implementation is in
       // effect again, even if connect() or the wait above throws.
       delete (serverHolder as Partial<typeof serverHolder>)
-        .handleSessionRequest;
+        .deliverInitialContext;
     }
 
     // Make the broadcast payload observably DIFFERENT from the initial
