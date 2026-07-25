@@ -24,7 +24,7 @@
  * infrastructure adapter and assert observable output, not invocation counts.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createFakeRepo,
   defaultState,
@@ -114,6 +114,60 @@ describe('assign harness diagnosability (#2688)', () => {
 
     expect(result.status).toBe(0);
     expect(result.stderr).toMatch(/Attempt \d+ failed, retrying/i);
+  });
+
+  it('echoes script stderr to the console under CI so job logs are self-diagnosing', () => {
+    // Returning stderr makes it assertable, but most tests in this suite
+    // assert on status/state rather than stderr. On CI that left the job log
+    // showing only "expected 1 to be +0" while the script's explanation was
+    // never printed anywhere -- which is what made the ubuntu-22.04 breakage
+    // take log archaeology to diagnose.
+    const repo = staleRepo({
+      fail_config: { 'repos/test/repo/issues': 'server_error' },
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubEnv('CI', 'true');
+    let printed;
+    try {
+      repo.runCleanup();
+      // Read the recorded calls BEFORE restoring: mockRestore() also resets
+      // mock state, so reading afterwards always yields an empty list and the
+      // assertion would pass or fail for the wrong reason.
+      printed = errorSpy.mock.calls.map((args) => args.join(' ')).join('\n');
+    } finally {
+      vi.unstubAllEnvs();
+      errorSpy.mockRestore();
+    }
+
+    expect(printed).toMatch(/Candidate discovery failed/i);
+    // The failing script must be identifiable, not just the message.
+    expect(printed).toContain('unassign-stale-issues.sh');
+  });
+
+  it('stays quiet on the console outside CI', () => {
+    // Local runs should not be spammed by the many tests that deliberately
+    // drive scripts to a nonzero exit.
+    const repo = staleRepo({
+      fail_config: { 'repos/test/repo/issues': 'server_error' },
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const originalCi = process.env['CI'];
+    delete process.env['CI'];
+    let callCount;
+    try {
+      repo.runCleanup();
+      // Captured before mockRestore() resets the recorded calls.
+      callCount = errorSpy.mock.calls.length;
+    } finally {
+      if (originalCi !== undefined) {
+        process.env['CI'] = originalCi;
+      }
+      errorSpy.mockRestore();
+    }
+
+    expect(callCount).toBe(0);
   });
 
   it('surfaces the assign script’s root cause on failure', () => {

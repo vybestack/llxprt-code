@@ -56,9 +56,26 @@ function runAutomationScript(scriptRelPath, env) {
   // A signal-terminated child reports status === null; treat that as failure
   // rather than silently coercing it to 0.
   const status = result.status ?? 1;
+  const stderr = result.stderr ?? '';
+
+  // Returning stderr makes it assertable, but the twelve-file ubuntu-22.04
+  // breakage showed that is not enough on its own: most tests assert on
+  // status/state, so on CI the only visible output was a bare
+  // "expected 1 to be +0" and the script's explanation never appeared
+  // anywhere in the job log.
+  //
+  // Echo it under CI so a failing run is self-diagnosing. Guarded on CI to
+  // keep local runs quiet, and on a nonzero status so the many tests that
+  // deliberately drive scripts to fail do not spam output.
+  if (status !== 0 && stderr !== '' && process.env['CI'] !== undefined) {
+    console.error(
+      `[assign-helpers] ${scriptRelPath} exited ${status}:\n${stderr}`,
+    );
+  }
+
   return {
     stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+    stderr,
     status,
   };
 }
