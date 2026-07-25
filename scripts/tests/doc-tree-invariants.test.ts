@@ -62,6 +62,10 @@ function searchRepoForMarker(marker: string): string[] {
   return results;
 }
 
+function isBenignFsError(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+}
+
 function processMarkerEntry(
   entry: { name: string; isDirectory(): boolean; isFile(): boolean },
   dir: string,
@@ -87,8 +91,12 @@ function collectFilesWithMarker(
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return;
+  } catch (error) {
+    // A directory we cannot enumerate is unscanned, so an absence assertion
+    // built on this walk would be vacuously true. Only ENOENT is benign
+    // (a path removed mid-walk); anything else must fail loudly.
+    if (isBenignFsError(error)) return;
+    throw error;
   }
   for (const entry of entries) {
     processMarkerEntry(entry, dir, marker, excludeDirs, results);
@@ -105,8 +113,11 @@ function checkFileForMarker(
     if (content.includes(marker)) {
       results.push(relative(repoRoot, full));
     }
-  } catch {
-    // unreadable file — skip
+  } catch (error) {
+    // An unread file is an unchecked file, which would silently weaken the
+    // "no bookkeeping markers anywhere" assertion. Tolerate only ENOENT.
+    if (isBenignFsError(error)) return;
+    throw error;
   }
 }
 
