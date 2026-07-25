@@ -1,11 +1,14 @@
 name: VSCE OIDC Probe (temporary)
 
 # Temporary diagnostic workflow used to bootstrap Entra ID publishing for the
-# VS Code Marketplace. It logs in via GitHub OIDC and asks Azure DevOps for the
-# service principal's own profile, which yields the Team Foundation Identity ID
-# required to add it as a member of the "vybestack" Marketplace publisher.
+# VS Code Marketplace.
 #
-# DELETE THIS FILE once the identity has been added to the publisher.
+#   identity  - resolves the service principal's Team Foundation Identity ID,
+#               which must be added as a member of the "vybestack" publisher.
+#   verify    - confirms the identity actually has publish rights, without
+#               publishing anything.
+#
+# DELETE THIS FILE once Marketplace publishing has been verified.
 
 on:
   push:
@@ -22,6 +25,9 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
       - name: Azure login (OIDC, no subscription required)
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # ratchet:azure/login@v2.3.0
         with:
@@ -29,7 +35,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
 
-      - name: Fetch Azure DevOps profile for this identity
+      - name: Resolve Azure DevOps identity
         run: |
           # 499b84ac-1321-427f-aa17-267ca6975798 is the well-known Azure DevOps
           # resource ID; the token must be scoped to it for the profile API.
@@ -38,9 +44,17 @@ jobs:
             --resource 499b84ac-1321-427f-aa17-267ca6975798 \
             > profile.json
 
-          echo "===== FULL PROFILE ====="
-          cat profile.json
-          echo ""
           echo "===== TEAM FOUNDATION IDENTITY ID ====="
           jq -r '.id' profile.json
           echo "======================================="
+
+      - name: Verify publish rights for the vybestack publisher
+        run: |
+          # verify-pat checks publish rights without publishing anything, so it
+          # is safe to run before the publisher membership is confirmed.
+          if npx @vscode/vsce verify-pat vybestack --azure-credential; then
+            echo "PUBLISH RIGHTS CONFIRMED for publisher 'vybestack'."
+          else
+            echo "::error::Identity cannot publish as 'vybestack'. Add the Team Foundation Identity ID above as a Creator member of the publisher."
+            exit 1
+          fi
