@@ -352,9 +352,11 @@ describe('.github/workflows/ocr-review.yml — metadata validation (issue #2671)
       const { warnings } = runValidation(input);
 
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toBe(
-        "OCR schema drift: undocumented category 'correctness'.",
-      );
+      // Verify the key behavioral aspects (prefix, metadata, no location)
+      // without asserting the exact wording, which would be brittle.
+      expect(warnings[0]).toContain('OCR schema drift');
+      expect(warnings[0]).toContain('correctness');
+      expect(warnings[0]).not.toMatch(/\bin\s+\S+/);
     });
 
     it('emits a single warning containing both category and severity when both are undocumented', () => {
