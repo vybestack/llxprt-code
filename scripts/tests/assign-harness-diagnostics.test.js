@@ -58,7 +58,7 @@ function staleRepo(extraState = {}) {
 }
 
 describe('assign harness diagnosability (#2688)', () => {
-  it('surfaces the script\u2019s own root-cause message when cleanup fails', () => {
+  it('surfaces the script’s own root-cause message when cleanup fails', () => {
     // Model an infrastructure failure of the kind that broke ubuntu-22.04:
     // the script runs, but candidate discovery fails against the API.
     const repo = staleRepo({
@@ -91,7 +91,32 @@ describe('assign harness diagnosability (#2688)', () => {
     expect(result.stderr).toContain('issues/42/timeline');
   });
 
-  it('surfaces the assign script\u2019s root cause on failure', () => {
+  it('captures stderr from a run that succeeds after a recovered retry', () => {
+    // This is the exact shape of the original defect. execFileSync only
+    // returns stdout, so stderr on the SUCCESS path was unreachable and the
+    // helper hardcoded `stderr: ''`. A transient API error that the retry
+    // loop recovers from exits 0 while still warning on stderr -- previously
+    // that warning was erased, hiding the fact that the run was degraded.
+    const repo = staleRepo({
+      fail_config: {
+        requests: [
+          {
+            method: 'GET',
+            endpoint: 'repos/test/repo/issues/42/timeline',
+            on_nth: 1,
+            type: 'server_error',
+          },
+        ],
+      },
+    });
+
+    const result = repo.runCleanup();
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toMatch(/Attempt \d+ failed, retrying/i);
+  });
+
+  it('surfaces the assign script’s root cause on failure', () => {
     // The same contract must hold for assign-issue.sh, not just cleanup.
     const state = defaultState();
     state.issues = { 7: makeIssue({ number: 7 }) };
