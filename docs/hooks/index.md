@@ -162,7 +162,6 @@ For details on how extension hooks work, including scope precedence and security
 
 ## Next Steps
 
-- **[Architecture Guide](../../dev-docs/hooks/architecture.md)** - Understand how hooks work internally
 - **[Creating Custom Hooks](./creating-custom-hooks.md)** - Step-by-step tutorial with examples
 - **[API Reference](./api-reference.md)** - Complete type definitions and interfaces
 

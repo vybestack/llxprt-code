@@ -807,7 +807,6 @@ console.log(JSON.stringify(sanitizeOutput(hookOutput)));
 - [Hooks Reference](index.md) - Complete API reference
 - [Writing Hooks](writing-hooks.md) - Tutorial and examples
 - [Configuration](../cli/configuration.md) - LLxprt Code settings
-- [Hooks Architecture](../../dev-docs/hooks/architecture.md) - Technical architecture
   // Start requests concurrently
   const p1 = fetch(url1).then((r) => r.json());
   const p2 = fetch(url2).then((r) => r.json());

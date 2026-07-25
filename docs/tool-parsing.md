@@ -167,9 +167,3 @@ list_directory {"path": "/home/user"}
 
 The parser validates arguments as JSON. If a model emits malformed JSON, the
 tool call is dropped.
-
-## Internals
-
-For implementation details — supported format patterns, the parser architecture,
-and how to add new formats — see the
-[Text Tool Call Parsing internals](../dev-docs/providers/text-tool-call-parsing.md).

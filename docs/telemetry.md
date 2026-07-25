@@ -1,9 +1,24 @@
 # LLxprt Code Telemetry
 
-LLxprt Code includes an OpenTelemetry (OTEL) instrumentation layer that can
-emit traces, metrics, and logs for local debugging. **Telemetry is disabled by
-default (`telemetry.enabled` defaults to `false`) and all output stays on your
-local machine.**
+**LLxprt Code never sends telemetry anywhere.** There is no network exporter in
+the codebase — no OTLP, no Google, no vendor endpoint of any kind. Everything
+described on this page happens entirely on your own machine.
+
+Within that boundary there are two separate layers:
+
+| Layer                    | Default                          | Where it goes                 |
+| ------------------------ | -------------------------------- | ----------------------------- |
+| Session stats            | Always on                        | In memory; shown by `/stats`  |
+| OTEL traces/metrics/logs | Off (`telemetry.enabled: false`) | A local file, or your console |
+
+Session stats are what populate the `/stats` display — token counts, tool call
+tallies, and timings for the current session. They are aggregated in memory
+regardless of the `telemetry.enabled` setting, are never written to disk by this
+layer, and disappear when the session ends. Nothing to opt out of: it is your
+own usage, shown back to you.
+
+The OTEL layer is the one `telemetry.enabled` controls; it defaults to `false`,
+and the rest of this page is about that layer.
 
 This page covers OTEL telemetry (traces, metrics, logs). For conversation
 logging (the `/logging` command), see
@@ -24,9 +39,15 @@ emitted is:
   tool calls, hook calls, API requests/responses/errors, slash commands.
 
 All data is written locally — to a file if you configure an outfile, or to the
-console otherwise. **No data is sent to any external service.** There are no
-OTLP or network exporters in the telemetry code path (the SDK constructs only
-`File*Exporter` or `Console*Exporter`).
+console otherwise. The SDK constructs only `File*Exporter` or
+`Console*Exporter`; no OTLP or network exporter is imported anywhere in the
+source, so there is no code path that could transmit this data.
+
+> **Inert flags:** `--telemetry-target`, `--telemetry-otlp-endpoint`, and
+> `--telemetry-otlp-protocol` are still accepted for backward compatibility but
+> currently have **no effect** — no exporter reads them. Pointing them at a
+> collector will not send anything. Use `--telemetry-outfile` to choose where
+> output is written.
 
 ## Enable telemetry
 
@@ -101,9 +122,12 @@ set it to `false`).
 
 ## Privacy
 
-- **No external transmission**: OTLP/network exporters are absent from the code.
-  Data goes only to the configured file or console.
-- **No data sent to Google**: LLxprt Code never sends telemetry to Google.
+- **No external transmission**: no OTLP or network exporter exists in the
+  source. Data goes only to the configured file or console.
+- **No data sent to Google or anyone else**: there is no upstream endpoint,
+  vendor integration, or opt-in that would transmit telemetry off your machine.
+- **Session stats are yours**: the always-on `/stats` aggregation stays in
+  memory for the life of the session. It is not persisted and not transmitted.
 - **Prompt logging**: the `telemetry.logPrompts` setting controls whether user
   prompt **text** is included in the `llxprt_code.user_prompt` log event.
   Default is `true`; set it to `false` to redact prompt content from that
@@ -152,10 +176,3 @@ event and metric names use the `llxprt_code.*` prefix (the service name is
 - `llxprt_code.api.request.latency` (histogram, ms): API request latency
 - `llxprt_code.token.usage` (counter): token usage by type (input, output, etc.)
 - `llxprt_code.file.operation.count` (counter): file operation counts
-
-## Internals
-
-For implementation details — the NodeSDK configuration, exporter selection
-logic, batch processor settings, and why the local OTEL collector script cannot
-receive data — see
-[Telemetry Internals](../dev-docs/telemetry-internals.md).

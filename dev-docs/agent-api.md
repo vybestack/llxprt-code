@@ -1,10 +1,14 @@
 # Agent API
 
-The Agent API is the public, embeddable surface for driving an LLxprt agent
-from your own code — without the CLI. You create an agent, send it input, and
-consume a typed event stream. The same primitives the CLI uses are exposed as a
-curated, stable contract so you can build chat loops, automation, and custom
-front-ends on top of LLxprt.
+> **Internal, unstable.** This document lives in `dev-docs/` because the Agent
+> API is **not** a supported public contract today. It has no stability
+> guarantee and may change in point releases without notice or migration
+> support. Do not build external integrations against it yet.
+
+The Agent API is the embeddable surface for driving an LLxprt agent from your
+own code — without the CLI. You create an agent, send it input, and consume a
+typed event stream. The same primitives the CLI uses are exposed here so you
+can build chat loops, automation, and custom front-ends on top of LLxprt.
 
 ## Entry Package
 
@@ -216,7 +220,7 @@ and fixture-driven tests continue to work without changes.
 
 `sandbox?: SandboxConfig` configures process/file sandboxing for tool execution.
 The type is re-exported from core; see the
-[sandbox documentation](./sandbox.md) for the full configuration shape.
+[sandbox documentation](../docs/sandbox.md) for the full configuration shape.
 
 ## The `Agent` Control Plane
 

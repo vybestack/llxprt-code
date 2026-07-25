@@ -730,5 +730,5 @@ If you need to revert to the previous behavior, remove custom policy files/paths
 
 - Read [Message Bus Guide](../message-bus.md) for detailed feature overview
 - Read [Policy Configuration Guide](../policy-configuration.md) for TOML syntax and examples
-- Review [Architecture Document](../../dev-docs/architecture/message-bus.md) for implementation details
-- See [example policies](https://github.com/vybestack/llxprt-code/tree/main/packages/core/src/policy/policies) in the repository
+- Review the built-in policy files under `packages/core/src/policy/policies` in
+  a repository checkout for worked examples

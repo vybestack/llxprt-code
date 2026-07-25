@@ -17,11 +17,23 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { repoRoot } from './doc-guard-helpers.ts';
 import { extractHeadingSlugs } from '../doc-links/heading-slugger.ts';
+import { collectMarkdownFiles } from '../doc-links/file-scanner.ts';
 
 const DOCS = join(repoRoot, 'docs');
 
 function readFile(relPath: string): string {
   return readFileSync(join(repoRoot, relPath), 'utf8');
+}
+
+/**
+ * Every Markdown file under a repo-relative directory, as repo-relative
+ * paths. Reuses the guard's own scanner so these invariants see exactly the
+ * same file set the guard enforces against.
+ */
+function collectMarkdownUnder(relDir: string): string[] {
+  return collectMarkdownFiles([join(repoRoot, relDir)]).map((p) =>
+    relative(repoRoot, p),
+  );
 }
 
 function fileExists(relPath: string): boolean {
@@ -152,6 +164,7 @@ describe('doc-tree invariants (real repo state)', () => {
         'dev-docs/providers/text-tool-call-parsing.md',
         'dev-docs/merge-notes/2026-01-06-batches21-25-skipped.md',
         'dev-docs/plans/archive/2026-01-03-welcome-onboarding.md',
+        'dev-docs/agent-api.md',
       ];
       for (const p of newPaths) {
         expect(fileExists(p)).toBe(true);
@@ -169,17 +182,46 @@ describe('doc-tree invariants (real repo state)', () => {
         'docs/tool-output-format.md',
         'docs/merge-notes/batch21-25-skipped.md',
         'docs/plans/2026-01-03-welcome-onboarding.md',
+        'docs/agent-api.md',
       ];
       for (const p of oldPaths) {
         expect(fileExists(p)).toBe(false);
       }
     });
 
-    it('docs/tool-parsing.md is retained as a user-facing page that defers internals to dev-docs', () => {
+    it('docs/tool-parsing.md is retained as a user-facing page', () => {
       expect(fileExists('docs/tool-parsing.md')).toBe(true);
-      expect(readFile('docs/tool-parsing.md')).toMatch(
-        /text-tool-call-parsing\.md/,
+    });
+
+    it('obsolete user-facing records are removed rather than relocated', () => {
+      expect(fileExists('docs/migration/stateless-provider-v2.md')).toBe(false);
+      expect(fileExists('docs/release-notes/2025Q4.md')).toBe(false);
+    });
+
+    it('the emoji filter page uses a lowercase filename like its peers', () => {
+      // Compare against the real directory listing rather than existsSync:
+      // macOS is case-insensitive, so existsSync('docs/EMOJI-FILTER.md')
+      // returns true even after the file has been renamed to lowercase.
+      const names = readdirSync(DOCS).filter((n) => /emoji/i.test(n));
+      expect(names).toEqual(['emoji-filter.md']);
+    });
+  });
+
+  describe('audience separation', () => {
+    it('no user-facing page under docs/ links into dev-docs/', () => {
+      const offenders = collectMarkdownUnder('docs').filter((p) =>
+        /\]\([^)]*dev-docs\//.test(readFile(p)),
       );
+      expect(offenders).toEqual([]);
+    });
+
+    it('no page under docs/ deep-links to blob or tree URLs on GitHub', () => {
+      // These break when the docs are published to vybestack.dev: they escape
+      // the site and land on the raw GitHub view instead of the rendered page.
+      const offenders = collectMarkdownUnder('docs').filter((p) =>
+        /github\.com\/vybestack\/llxprt-code\/(blob|tree)\//.test(readFile(p)),
+      );
+      expect(offenders).toEqual([]);
     });
   });
 

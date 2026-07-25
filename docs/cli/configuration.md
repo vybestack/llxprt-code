@@ -1087,7 +1087,7 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Security Note:** Enabling this feature allows execution of nested commands, which can be a security risk if running untrusted commands. Only enable if you understand the implications. See [Shell Command Substitution](../shell-replacement.md) for more details.
 
 - **`sandbox`** (boolean or string):
-  - **Description:** Controls whether and how to use sandboxing for tool execution. If set to `true`, LLxprt Code uses a pre-built `gemini-cli-sandbox` Docker image. For more information, see [Sandboxing](#sandbox).
+  - **Description:** Controls whether and how to use sandboxing for tool execution. If set to `true`, LLxprt Code uses the pre-built `ghcr.io/vybestack/llxprt-code/sandbox` Docker image. For more information, see [Sandboxing](#sandbox).
   - **Default:** `false`
   - **Example:** `"sandbox": "docker"`
 
@@ -1486,7 +1486,7 @@ The following settings remain at the top level of the `settings.json` file.
     ```
 
 - **`emojiFilter`** (object):
-  - **Description:** Controls emoji filtering in LLM responses and file operations. See [Emoji Filter Guide](../EMOJI-FILTER.md) for detailed usage.
+  - **Description:** Controls emoji filtering in LLM responses and file operations. See [Emoji Filter Guide](../emoji-filter.md) for detailed usage.
   - **Default:** `{"mode": "auto"}`
   - **Properties:**
     - **`mode`** (string): Filtering mode - `allowed`, `auto`, `warn`, or `error`
