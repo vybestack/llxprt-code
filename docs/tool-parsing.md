@@ -14,11 +14,19 @@ the `/toolformat` command.
 
 The `/toolformat` command accepts the following values:
 
-| Category          | Formats                                                    |
-| ----------------- | ---------------------------------------------------------- |
-| Structured (JSON) | `openai`, `anthropic`, `deepseek`, `qwen`, `kimi`, `gemma` |
-| Text-based        | `hermes`, `xml`, `llama`                                   |
-| Special           | `auto` (return to auto-detection)                          |
+| Category          | Formats                                                   |
+| ----------------- | --------------------------------------------------------- |
+| Structured (JSON) | `openai`, `anthropic`, `deepseek`, `qwen`, `kimi`         |
+| Text-based        | `hermes`, `xml`, `llama`                                  |
+| Hybrid            | `gemma` (JSON tool declarations¹, text-marker responses²) |
+| Special           | `auto` (return to auto-detection)                         |
+
+¹ Tool declarations sent to the model use the JSON function-calling format
+(the request side goes through `fromOpenAIFormat`).
+
+² Tool-call responses from the model are parsed as text delimited by
+`[TOOL_REQUEST]` / `[END_TOOL_REQUEST]` markers (see the Gemma example
+below), not as JSON.
 
 The `text` value is **not** a valid format — it will be rejected.
 
@@ -32,8 +40,9 @@ Current tool format: auto-detected (gemma)
 To override: /toolformat <format>
 To return to auto: /toolformat auto
 Supported formats:
-  Structured: openai, anthropic, deepseek, qwen, kimi, gemma
+  Structured: openai, anthropic, deepseek, qwen, kimi
   Text-based: hermes, xml, llama
+  Hybrid:     gemma (JSON declarations, text-marker responses)
 ```
 
 - `/toolformat` (no argument): shows the currently active format.
@@ -115,7 +124,7 @@ that `hermes`, `xml`, `llama`, and the structured variants actually parse.
 
 ### Gemma (TOOL_REQUEST)
 
-```
+```text
 [TOOL_REQUEST]
 list_directory {"path": "/home/user"}
 [END_TOOL_REQUEST]
@@ -123,7 +132,7 @@ list_directory {"path": "/home/user"}
 
 ### DeepSeek (Unicode tokens)
 
-```
+```text
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>get_weather
 {"location": "San Francisco", "unit": "celsius"}
 <｜tool▁call▁end｜>
@@ -141,7 +150,7 @@ list_directory {"path": "/home/user"}
 
 ### Key-Value
 
-```
+```text
 ✦ tool_call: list_directory for path /home/user ignore *.log
 ```
 

@@ -1,8 +1,4 @@
-<!-- @plan:PLAN-20260617-COREAPI.P28 @requirement:REQ-020 -->
-
 # Agent API
-
-<!-- @plan:PLAN-20260622-COREAPIGAP.P19 @requirement:REQ-010 -->
 
 The Agent API is the public, embeddable surface for driving an LLxprt agent
 from your own code — without the CLI. You create an agent, send it input, and
@@ -423,8 +419,6 @@ agent.mcp.authenticate(server: string): Promise<McpServerAuthStatus>   // real O
 agent.mcp.details(opts?: McpDetailsOptions): Promise<McpDetailStatus>
 ```
 
-<!-- @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-005 -->
-
 - `McpServerAuthStatus` = `{ server: string; authenticated: boolean; requiresAuth: boolean; oauthStatus: McpOAuthStatus; sessionAuthenticated: boolean; authUrl?: string }`.
 - `McpOAuthStatus` = `'authenticated' | 'expired' | 'none' | 'not-required'` — the real persisted OAuth state surfaced from the engine helper.
 - `sessionAuthenticated: boolean` — the in-session marker, distinct from `authenticated`. It is set by either `agent.auth.mcpLogin(server)` or a successful `agent.mcp.authenticate(server)` (both mark the server authenticated for the current session); it is NOT persisted and does not by itself imply a valid stored OAuth token.
@@ -469,8 +463,6 @@ for (const server of detail.servers) {
   console.log(server.name, server.authenticated, server.tools?.length);
 }
 ```
-
-<!-- @plan:PLAN-20260622-MCPOAUTHTRUTH.P07 @requirement:REQ-005 -->
 
 Reading the corrected OAuth quad-state (`oauthStatus` / `sessionAuthenticated` /
 `requiresAuth`) off the public projection — public root import only, no deep
@@ -945,8 +937,6 @@ starting fresh. See
 [`packages/agents/src/api/agentImpl.ts`](../packages/agents/src/api/agentImpl.ts)
 (`setModel`, `applyProviderSwitch`, `restoreChatVisibility`).
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Adopting an existing Config (`fromConfig`)
 
 In addition to `createAgent` (which _builds and owns_ its own `Config`/client), the
@@ -1012,8 +1002,6 @@ const agent = await fromConfig({
 See [Tool Confirmations and Safe Denial](#tool-confirmations-and-safe-denial)
 for the full confirmation contract.
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Settings & Config Projection
 
 An agent exposes a focused projection of its underlying `Config` for reading and
@@ -1061,8 +1049,6 @@ const viaAgent = agent.getEphemeralSettings();
 // viaAgent contains { 'context-limit': 50000, streaming: 'disabled' }.
 ```
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Current Sequence Model
 
 ```ts
@@ -1085,8 +1071,6 @@ if (model) {
 }
 ```
 
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
-
 ## Public Client Contract
 
 The `AgentClientContract` — the structural interface describing the low-level
@@ -1103,8 +1087,6 @@ the stable curated surface. It is documented on the
 [`/internals.js`](#power-user-subpath-internalsjs) subpath (and, as a
 power-user convenience, also reachable from the root today) — treat it as an
 unstable internal that may change without notice.
-
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
 
 ## Runtime Identity
 
@@ -1123,8 +1105,6 @@ const agent = await fromConfig({ config });
 const id = agent.getRuntimeId();
 console.log(id); // a non-empty string, e.g. the adopted runtime's id
 ```
-
-<!-- @plan:PLAN-20260621-COREAPIREMED.P22 @requirement:REQ-007 -->
 
 ## Import Boundary for #1595
 
@@ -1334,8 +1314,6 @@ These decisions shaped the public surface and are recorded here for posterity:
   on each call rather than holding a stale snapshot).
 
 ## A2A Server Follow-up (Next Release)
-
-<!-- @plan:PLAN-20260629-ISSUE2204 @requirement:REQ-2204-A2A -->
 
 Issue #2204 enforces the public-API boundary for the **interactive CLI** and
 **non-interactive prompt mode** — the two primary near-term clients. The A2A

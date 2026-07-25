@@ -34,12 +34,13 @@ llxprt --version
 
 You should see `command not found` (or the equivalent for your shell).
 
-## npx does not install anything
+## npx does not permanently install anything
 
 If you ran LLxprt Code via `npx @vybestack/llxprt-code`, there is no permanent
-installation to remove. `npx` runs packages from a temporary cache and installs
-nothing on your system. You can optionally clear the npx cache to free disk
-space (see below).
+or global installation to remove. `npx` runs packages from a temporary cache
+rather than adding a global install or a `llxprt` command to your PATH. It does,
+however, download package contents into the npm cache (see below for optional
+cache clearing).
 
 ## Optional: Remove user data
 

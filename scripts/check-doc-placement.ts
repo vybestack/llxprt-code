@@ -72,20 +72,10 @@ function stripFences(content: string): string {
   return nonFenced.join('\n');
 }
 
-/**
- * Strip HTML comments from content. Bookkeeping markers are often hidden
- * in HTML comments (<!-- @plan:... -->), which are invisible to readers
- * but still indicate internal metadata that doesn't belong in user-facing
- * docs.
- */
-function stripHtmlComments(content: string): string {
-  return content.replace(/<!--[\s\S]*?-->/g, '');
-}
-
 function findMarkerViolations(
   content: string,
 ): ReadonlyArray<{ marker: string }> {
-  const stripped = stripHtmlComments(stripFences(content));
+  const stripped = stripFences(content);
   const found: Array<{ marker: string }> = [];
   const lowerContent = stripped.toLowerCase();
   for (const pattern of AT_MARKER_PATTERNS) {

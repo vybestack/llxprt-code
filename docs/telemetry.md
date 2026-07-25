@@ -88,7 +88,7 @@ llxprt --telemetry --telemetry-outfile=/tmp/llxprt-telemetry.log "your prompt"
 Telemetry defaults to off, so simply not enabling it is sufficient. If
 telemetry is enabled in your persisted settings (`settings.json`), omitting
 `--telemetry` on the command line does **not** disable it — the persisted
-setting still applies (the builder uses `argv.telemetry ?? settings.enabled`).
+setting still applies (the builder uses `argv.telemetry ?? settings.telemetry.enabled`).
 To explicitly disable telemetry for a single session regardless of persisted
 settings, use `--no-telemetry`:
 

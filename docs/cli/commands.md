@@ -227,8 +227,6 @@ The model receives: `Please provide a code fix for the issue described here: "Bu
 
 When you use `{{args}}` inside a shell injection block (`!{...}`), the arguments are automatically **shell-escaped** before replacement. This allows you to safely pass arguments to shell commands, ensuring the resulting command is syntactically correct and secure while preventing command injection vulnerabilities.
 
-<!-- @plan PLAN-20250219-GMERGE021.R9.P03 -->
-
 **Example (custom command TOML):**
 
 ```toml

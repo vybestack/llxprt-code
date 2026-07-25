@@ -116,6 +116,61 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
     });
 
+    describe('markers in HTML comments', () => {
+      const fx = useTempDir();
+
+      it('flags a marker hidden in an HTML comment', async () => {
+        // Markers hidden in HTML comments are invisible to readers but still
+        // internal metadata — the PRIMARY case issue #2654 complained about.
+        fx.write('docs/page.md', '# Page\n\n<!-- @plan: PLAN-999 -->\n');
+        const { code } = await runDocPlacementGuard(fx.root(), 1);
+        expect(code).toBe(1);
+      });
+
+      it('flags a REQ- marker hidden in an HTML comment', async () => {
+        fx.write('docs/page.md', '# Page\n\n<!-- @requirement: REQ-001 -->\n');
+        const { code } = await runDocPlacementGuard(fx.root(), 1);
+        expect(code).toBe(1);
+      });
+    });
+
+    describe('fenced markers in containers (lists/blockquotes)', () => {
+      const fx = useTempDir();
+
+      it('permits a marker inside a fence within a list item', async () => {
+        // BUG D: container tokens carry .raw that includes nested fences.
+        // A fenced marker inside a list item must NOT be flagged.
+        fx.write(
+          'docs/page.md',
+          '# Page\n\n1. Step one:\n\n   ```\n   @plan: PLAN-123\n   ```\n',
+        );
+        const { code } = await runDocPlacementGuard(fx.root(), 0);
+        expect(code).toBe(0);
+      });
+
+      it('permits a marker inside a fence within a blockquote', async () => {
+        fx.write('docs/page.md', '# Page\n\n> ```\n> REQ-456\n> ```\n');
+        const { code } = await runDocPlacementGuard(fx.root(), 0);
+        expect(code).toBe(0);
+      });
+
+      it('still flags an UNFENCED marker in a list item', async () => {
+        // Do not overcorrect: an unfenced marker in a list IS still caught.
+        fx.write(
+          'docs/page.md',
+          '# Page\n\n1. See @plan: PLAN-789 for details\n',
+        );
+        const { code } = await runDocPlacementGuard(fx.root(), 1);
+        expect(code).toBe(1);
+      });
+
+      it('still flags an UNFENCED marker in a blockquote', async () => {
+        fx.write('docs/page.md', '# Page\n\n> REQ-001 here\n');
+        const { code } = await runDocPlacementGuard(fx.root(), 1);
+        expect(code).toBe(1);
+      });
+    });
+
     describe('reporting', () => {
       const fx = useTempDir();
 

@@ -8,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   lstatSync,
+  statSync,
   realpathSync,
   type Dirent,
 } from 'node:fs';
@@ -248,10 +249,11 @@ export function isWithinRoot(absTarget: string, root: string): boolean {
 
 /**
  * Check whether a path exists and is a regular file (not a directory).
+ * Follows symlinks so a symlink pointing to a real file reports true.
  */
 export function isFile(absPath: string): boolean {
   try {
-    return lstatSync(absPath).isFile();
+    return statSync(absPath).isFile();
   } catch {
     return false;
   }
@@ -259,10 +261,11 @@ export function isFile(absPath: string): boolean {
 
 /**
  * Check whether a path exists and is a directory.
+ * Follows symlinks so a symlink pointing to a real directory reports true.
  */
 export function isDirectory(absPath: string): boolean {
   try {
-    return lstatSync(absPath).isDirectory();
+    return statSync(absPath).isDirectory();
   } catch {
     return false;
   }
@@ -270,10 +273,11 @@ export function isDirectory(absPath: string): boolean {
 
 /**
  * Check whether a path exists (file, directory, or any asset).
+ * Follows symlinks.
  */
 export function pathExists(absPath: string): boolean {
   try {
-    lstatSync(absPath);
+    statSync(absPath);
     return true;
   } catch {
     return false;
@@ -287,4 +291,19 @@ export function dirHasIndex(absPath: string): boolean {
   return (
     isFile(join(absPath, 'index.md')) || isFile(join(absPath, 'README.md'))
   );
+}
+
+/**
+ * Resolve the canonical index file for a directory (index.md preferred,
+ * README.md as fallback). Returns the absolute path to whichever exists,
+ * or undefined if neither exists.
+ */
+export function resolveIndexFile(absPath: string): string | undefined {
+  if (isFile(join(absPath, 'index.md'))) {
+    return join(absPath, 'index.md');
+  }
+  if (isFile(join(absPath, 'README.md'))) {
+    return join(absPath, 'README.md');
+  }
+  return undefined;
 }

@@ -115,6 +115,11 @@
     "reason": "User-selected arbitrary SSH agent socket path (~/.llxprt/ssh-agent.sock) chosen by the user for Podman macOS SSH agent forwarding. Not LLxprt-managed app data; the user picks any socket path. See audit exclusion #7 in research/wrongpaths.md."
   },
   {
+    "path": "docs/Uninstall.md",
+    "pattern": "~/\\.llxprt",
+    "reason": "Uninstall guidance. The single occurrence is labeled 'Legacy ~/.llxprt' and exists so users can find and delete the pre-migration directory; it explicitly states older versions stored data there and that the directory remains only as a read-only migration input. No active path guidance points at it."
+  },
+  {
     "path": "packages/cli/src/utils/sandbox-macos-permissive-open.sb",
     "pattern": "\\.llxprt",
     "reason": "Read-only legacy migration grant in macOS Seatbelt profile: startup migration reads ~/.llxprt to copy pre-migration config into canonical roots. No file-write* grant for HOME_DIR/.llxprt exists (write grants use CONFIG_DIR/DATA_DIR/LOG_DIR canonical params). This is the narrowest documented read-only migration grant."

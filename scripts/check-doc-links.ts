@@ -27,11 +27,10 @@ import {
   resolveTarget,
   isFile,
   isDirectory,
-  dirHasIndex,
+  resolveIndexFile,
   isWithinRoot,
   RootMissingError,
 } from './doc-links/file-scanner.ts';
-import { loadLycheeignore, isIgnored } from './doc-links/lycheeignore.ts';
 
 const EXIT_PASS = 0;
 const EXIT_FAIL = 1;
@@ -56,15 +55,11 @@ function getRoots(): { roots: string[]; root: string } {
 function checkLink(
   link: DocLink,
   fromFile: string,
-  lycheePatterns: readonly string[],
   root: string,
 ): string | undefined {
   if (link.isExternal) {
-    // Apply .lycheeignore filtering for external links
-    if (isIgnored(link.target, lycheePatterns)) {
-      return undefined;
-    }
-    return undefined; // External links are not checked (no network access)
+    // External links are never fetched (no network access in the guard).
+    return undefined;
   }
   const target = link.target;
   if (target === '') {
@@ -80,10 +75,11 @@ function checkLink(
 
   // Check if it's a directory — directories must have index.md or README.md
   if (isDirectory(absTarget)) {
-    if (!dirHasIndex(absTarget)) {
+    const indexFile = resolveIndexFile(absTarget);
+    if (indexFile === undefined) {
       return `${target} is a directory without index.md or README.md`;
     }
-    return checkFragment(link, fromFile, resolve(absTarget, 'index.md'));
+    return checkFragment(link, fromFile, indexFile);
   }
 
   // Check if it's a file
@@ -126,11 +122,7 @@ function relativePath(absPath: string): string {
   return relative(root, absPath).replace(/\\/g, '/');
 }
 
-function scanFile(
-  filePath: string,
-  lycheePatterns: readonly string[],
-  root: string,
-): readonly Break[] {
+function scanFile(filePath: string, root: string): readonly Break[] {
   let content: string;
   try {
     content = readFileText(filePath);
@@ -142,7 +134,7 @@ function scanFile(
   const links = extractLinks(content);
   const breaks: Break[] = [];
   for (const link of links) {
-    const reason = checkLink(link, filePath, lycheePatterns, root);
+    const reason = checkLink(link, filePath, root);
     if (reason) {
       breaks.push({
         file: relativePath(filePath),
@@ -173,10 +165,9 @@ function main(): number {
     throw error;
   }
 
-  const lycheePatterns = loadLycheeignore(root);
   const allBreaks: Break[] = [];
   for (const file of files) {
-    allBreaks.push(...scanFile(file, lycheePatterns, root));
+    allBreaks.push(...scanFile(file, root));
   }
   if (allBreaks.length === 0) {
     console.log('doc-links guard PASSED');

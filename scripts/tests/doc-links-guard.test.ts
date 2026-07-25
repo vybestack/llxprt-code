@@ -271,6 +271,42 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
         expect(code).toBe(1);
         expect(stdout).toContain('missing-section');
       });
+
+      it('validates a fragment on a README.md-only directory (no crash)', async () => {
+        // BUG B: dirHasIndex accepts README.md, but the fragment check
+        // hardcoded index.md, crashing with ENOENT when only README.md
+        // exists. Must produce a clean reported violation, not a crash.
+        fx.write('docs/page.md', '# Page\n\n[dir](./subdir/#missing)\n');
+        fx.write('docs/subdir/README.md', '# Sub\n');
+        const { code, stdout } = await runDocLinksGuard(fx.root(), 1);
+        expect(code).toBe(1);
+        expect(stdout).toContain('missing');
+      });
+
+      it('passes a fragment on a README.md-only directory when the heading exists', async () => {
+        fx.write('docs/page.md', '# Page\n\n[dir](./subdir/#hello)\n');
+        fx.write('docs/subdir/README.md', '# Sub\n\n## Hello\n');
+        const { code } = await runDocLinksGuard(fx.root(), 0);
+        expect(code).toBe(0);
+      });
+    });
+
+    describe('symlinked link targets', () => {
+      const fx = useTempDir();
+
+      it('accepts a link to a symlinked file target', async () => {
+        // BUG C: lstatSync describes the link itself, so a symlink to a real
+        // file reported isFile()===false ("does not exist" false positive).
+        fx.write('real/page.md', '# Real\n');
+        fx.write('docs/page.md', '# Page\n\n[linked](./linked.md)\n');
+        symlinkSync(
+          join(fx.root(), 'real', 'page.md'),
+          join(fx.root(), 'docs', 'linked.md'),
+          'file',
+        );
+        const { code } = await runDocLinksGuard(fx.root(), 0);
+        expect(code).toBe(0);
+      });
     });
 
     describe('non-Markdown fragment targets', () => {
@@ -303,11 +339,17 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       });
     });
 
-    describe('lycheeignore', () => {
+    describe('external links not network-checked', () => {
       const fx = useTempDir();
 
-      it('honors .lycheeignore entries for external URLs', async () => {
-        fx.write('docs/page.md', '# Page\n\n[x](https://ignored.example)\n');
+      it('ignores external URLs regardless of a .lycheeignore file', async () => {
+        // External links are never fetched (no network access), so a
+        // .lycheeignore file has no effect — both ignored and non-ignored
+        // external URLs pass.
+        fx.write(
+          'docs/page.md',
+          '# Page\n\n[a](https://ignored.example)\n[b](https://other.example)\n',
+        );
         fx.write('.lycheeignore', 'https://ignored.example\n');
         const { code } = await runDocLinksGuard(fx.root(), 0);
         expect(code).toBe(0);

@@ -95,7 +95,7 @@ function collectLinksFromTokens(
  * code blocks and inline code spans (marked handles this natively).
  *
  * External links (http/https/mailto) are returned but flagged isExternal
- * so the caller can apply .lycheeignore filtering.
+ * so the caller can skip them (the guard does not perform network checks).
  */
 export function extractLinks(content: string): DocLink[] {
   const links: DocLink[] = [];
@@ -124,10 +124,13 @@ export function stripFencedBlocks(lines: readonly string[]): string[] {
 }
 
 /**
- * Token types that should be excluded from line extraction (code blocks,
- * code spans, and raw HTML).
+ * Token types that should be excluded from line extraction (code blocks
+ * and code spans). Raw HTML blocks and HTML comments are NOT excluded —
+ * markers hidden in HTML comments (e.g. `<!-- @plan: ... -->`) are the
+ * primary case the placement guard must catch, and raw HTML in docs/ is
+ * prose-equivalent content that can still carry bookkeeping metadata.
  */
-const CODE_TOKEN_TYPES = new Set(['code', 'codespan', 'html']);
+const CODE_TOKEN_TYPES = new Set(['code', 'codespan']);
 
 /**
  * Recursively extract raw text from non-code tokens, producing a list
@@ -142,14 +145,25 @@ function walkNonCodeTokens(tokens: readonly Token[], result: string[]): void {
   }
 }
 
+/**
+ * Extract lines from a single token. Container tokens (paragraph,
+ * blockquote, list, list_item) carry a non-empty `.raw` containing the
+ * verbatim source — but that raw text may include nested fenced code
+ * blocks. Recursing into `.tokens`/`.items` FIRST lets walkNonCodeTokens
+ * skip nested code tokens; only leaf tokens (heading, hr, etc.) fall
+ * back to `.raw`.
+ */
 function extractTokenLines(token: Token, result: string[]): void {
-  if ('raw' in token && typeof token.raw === 'string' && token.raw !== '') {
-    const lines = token.raw.split('\n').filter((l) => l !== '');
-    result.push(...lines);
-  } else if ('tokens' in token && Array.isArray(token.tokens)) {
+  if ('tokens' in token && Array.isArray(token.tokens)) {
     walkNonCodeTokens(token.tokens as Token[], result);
+    return;
   }
   if ('items' in token && Array.isArray(token.items)) {
     walkNonCodeTokens(token.items as Token[], result);
+    return;
+  }
+  if ('raw' in token && typeof token.raw === 'string' && token.raw !== '') {
+    const lines = token.raw.split('\n').filter((l) => l !== '');
+    result.push(...lines);
   }
 }

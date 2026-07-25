@@ -150,4 +150,16 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     expect(doc).toMatch(/hook_input|hook_call/i);
     expect(doc).toMatch(/does.*not.*redact.*hook|not.*gate.*hook/i);
   });
+
+  it('docs/telemetry.md uses the correct settings.telemetry.enabled path everywhere', () => {
+    // The config builder resolves `argv.telemetry ?? settings.telemetry?.enabled`.
+    // The doc must not reference the wrong `settings.enabled` shorthand.
+    const doc = readSrc('docs/telemetry.md');
+    expect(doc).not.toMatch(/argv\.telemetry\s*\?\?\s*settings\.enabled/);
+    // Every precedence reference must use the full settings.telemetry.enabled path.
+    const matches = doc.match(/argv\.telemetry\s*\?\?\s*[^\s,)]+/g);
+    for (const m of matches ?? []) {
+      expect(m).toContain('settings.telemetry.enabled');
+    }
+  });
 });
