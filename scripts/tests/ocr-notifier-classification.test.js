@@ -267,7 +267,10 @@ describe('OCR workflow_run notification classification', () => {
     expect(outcomeJob?.permissions).toEqual({});
     expect(skippedJob?.permissions).toEqual({});
     expect(outcomeJob?.needs).toEqual(['mergeability-gate', 'code-review']);
-    expect(skippedJob?.needs).toEqual(['mergeability-gate']);
+    expect(skippedJob?.needs).toEqual([
+      'mergeability-gate',
+      'auto-review-gate',
+    ]);
     for (const scenario of truthTable.slice(0, 4)) {
       expect(stepNamed(outcomeJob, scenario.marker)).toBeTruthy();
     }

@@ -2,6 +2,9 @@
 node_modules/
 bower_components
 
+# Generated license/notice files (third-party, must not be reformatted)
+**/NOTICES.txt
+
 # Git submodules
 packages/opentui/
 

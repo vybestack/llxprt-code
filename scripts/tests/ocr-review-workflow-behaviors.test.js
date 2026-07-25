@@ -156,8 +156,8 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
   it('reconciles ambiguous createComment by marker (Behavior 6)', () => {
     expectContainsAll(postScript, [
       'async function createOrUpdateMarkerComment(summary)',
-      'async function reconcileMarkerComment()',
-      'comment.body && comment.body.includes(MARKER)',
+      'async function reconcileMarkerComment(existingComments)',
+      "typeof c.body === 'string' && c.body.includes(MARKER)",
     ]);
     const postFunctionSource = extractFunctionSource(
       postScript,
@@ -167,7 +167,7 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       'existing = await reconcileMarkerComment()',
       'github.rest.issues.updateComment({',
       'github.rest.issues.createComment({',
-      'const reconciled = await reconcileMarkerComment()',
+      'const reconciled = await reconcileMarkerComment(null)',
       'if (reconciled)',
     ]);
   });
