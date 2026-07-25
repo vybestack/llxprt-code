@@ -43,6 +43,30 @@ identifiers, not credentials — but they are stored as secrets by convention.
 No Azure subscription is required. Publishing is not an ARM operation, which is
 why the login step passes `allow-no-subscriptions: true`.
 
+## What the environment scoping does and does not guarantee
+
+The federated credential subject names the `production-release` environment, so
+only a job that declares that environment can exchange a GitHub OIDC token for
+an Entra token.
+
+That is weaker than it first appears. The `production-release` environment
+currently has no protection rules and no deployment branch policy, so **any
+branch** can declare it. GitHub evaluates environment access when the job
+starts, and `release.yml` checks out `github.sha` rather than a release branch,
+so the `release/*` branches the workflow creates mid-run are irrelevant here —
+they are an output of the job, not the ref it launched from. In practice every
+scheduled release runs from `main`, but manual dispatch accepts a `ref` input
+and has been used from feature branches.
+
+Mitigating factors: environment secrets are unavailable to fork pull requests,
+and only collaborators with push access can dispatch workflows. The previous
+`VSCE_PAT` secret sat behind exactly the same (absent) protections, so this is
+not a regression introduced by OIDC.
+
+To tighten it, restrict the environment to `main` via a deployment branch
+policy. Note this would block releasing from a feature branch, which the
+workflow's `ref` input otherwise permits.
+
 ## Reproducing the setup from scratch
 
 ```bash
