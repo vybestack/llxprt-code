@@ -13,7 +13,7 @@
  * state, not business logic.
  */
 
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import {
   mkdtempSync,
   writeFileSync,
@@ -26,6 +26,42 @@ import * as path from 'path';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const FAKE_GH = path.join(import.meta.dirname, 'fake-gh.py');
+
+/**
+ * Run one of the real bash automation scripts against the fake gh.
+ *
+ * Both the success and failure paths return the script's stderr. The scripts
+ * report their own root cause there (for example "Candidate discovery failed:
+ * ..."), so discarding it on success turns any environment-specific breakage
+ * into a bare "expected 1 to be 0" with no explanation. Keeping stderr on both
+ * paths is what lets a failure describe itself instead of requiring log
+ * archaeology.
+ *
+ * @param {string} scriptRelPath Script path relative to the repository root.
+ * @param {NodeJS.ProcessEnv} env Environment for the child process.
+ * @returns {{ stdout: string, stderr: string, status: number }}
+ */
+function runAutomationScript(scriptRelPath, env) {
+  // spawnSync rather than execFileSync: execFileSync only returns stdout, so
+  // stderr from a SUCCESSFUL run is unreachable. spawnSync surfaces both
+  // streams regardless of exit status.
+  const result = spawnSync('bash', [path.join(ROOT, scriptRelPath)], {
+    encoding: 'utf8',
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  // A signal-terminated child reports status === null; treat that as failure
+  // rather than silently coercing it to 0.
+  const status = result.status ?? 1;
+  return {
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    status,
+  };
+}
 
 let eventIdCounter = 200000;
 
@@ -125,25 +161,11 @@ export function createFakeRepo(initialState = {}) {
         PATH: pathWithFakeGh,
         ...extraEnv,
       };
-      try {
-        const stdout = execFileSync(
-          'bash',
-          [path.join(ROOT, '.github/scripts/assign-issue.sh')],
-          {
-            encoding: 'utf8',
-            env,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          },
-        );
-        return { stdout, stderr: '', status: 0, state: this.readState() };
-      } catch (err) {
-        return {
-          stdout: err.stdout?.toString() ?? '',
-          stderr: err.stderr?.toString() ?? '',
-          status: err.status ?? 1,
-          state: this.readState(),
-        };
-      }
+      const result = runAutomationScript(
+        '.github/scripts/assign-issue.sh',
+        env,
+      );
+      return { ...result, state: this.readState() };
     },
 
     /**
@@ -161,21 +183,11 @@ export function createFakeRepo(initialState = {}) {
         PATH: pathWithFakeGh,
         ...extraEnv,
       };
-      try {
-        const stdout = execFileSync(
-          'bash',
-          [path.join(ROOT, '.github/scripts/unassign-stale-issues.sh')],
-          { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] },
-        );
-        return { stdout, stderr: '', status: 0, state: this.readState() };
-      } catch (err) {
-        return {
-          stdout: err.stdout?.toString() ?? '',
-          stderr: err.stderr?.toString() ?? '',
-          status: err.status ?? 1,
-          state: this.readState(),
-        };
-      }
+      const result = runAutomationScript(
+        '.github/scripts/unassign-stale-issues.sh',
+        env,
+      );
+      return { ...result, state: this.readState() };
     },
   };
 }
@@ -226,30 +238,24 @@ exec python3 "${FAKE_GH}" "$@"
   };
 
   try {
-    const stdout = execFileSync(
-      'bash',
-      [path.join(ROOT, '.github/scripts/record-assignment-history.sh')],
-      { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] },
+    const result = runAutomationScript(
+      '.github/scripts/record-assignment-history.sh',
+      env,
     );
-    const finalState = JSON.parse(readFileSync(stateFile, 'utf8'));
-    return { stdout, stderr: '', status: 0, state: finalState };
-  } catch (err) {
     let finalState;
     try {
       finalState = JSON.parse(readFileSync(stateFile, 'utf8'));
     } catch {
+      // The script can abort before writing state; fall back to an empty
+      // shape so callers still get a usable object alongside the stderr that
+      // explains what happened.
       finalState = {
         issues: {},
         labels: {},
         comments: [],
       };
     }
-    return {
-      stdout: err.stdout?.toString() ?? '',
-      stderr: err.stderr?.toString() ?? '',
-      status: err.status ?? 1,
-      state: finalState,
-    };
+    return { ...result, state: finalState };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

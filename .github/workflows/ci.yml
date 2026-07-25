@@ -709,6 +709,13 @@ jobs:
       matrix:
         os:
           - 'ubuntu-latest'
+          # The nightly release job runs on ubuntu-22.04. Without it here,
+          # that platform is exercised only by a non-required nightly, so a
+          # 22.04-specific break is discovered hours later against a commit
+          # that already merged (see #2688). Gate the release platform on PRs
+          # instead of aligning the nightly to ubuntu-latest, which would
+          # leave the actual release runner untested.
+          - 'ubuntu-22.04'
           - 'macos-latest'
         node-version:
           - '24.x'
