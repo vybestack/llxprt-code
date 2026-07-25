@@ -23,6 +23,9 @@ export default defineConfig({
     // this with a per-test { timeout } option.
     testTimeout: 30000,
     hookTimeout: 30000,
+    // Serialize test files (not tests within a file) to remove cross-file
+    // contention between subprocess-heavy harness files (issue #2683).
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
