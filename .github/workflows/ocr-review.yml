@@ -423,6 +423,7 @@ jobs:
       comments_inline: ${{ steps.post-ocr-results.outputs.comments_inline }}
       comments_skipped: ${{ steps.post-ocr-results.outputs.comments_skipped }}
       comments_failed: ${{ steps.post-ocr-results.outputs.comments_failed }}
+      comments_routed_summary: ${{ steps.post-ocr-results.outputs.comments_routed_summary }}
       summary_comment_url: ${{ steps.post-ocr-results.outputs.summary_comment_url }}
     # The code-review job runs only when the mergeability gate and the
     # auto-review gate both permit it.
@@ -548,6 +549,7 @@ jobs:
           : > ocr-phase.txt
           : > ocr-infrastructure-failure.txt
           : > ocr-policy-failure.txt
+          : > ocr-routing-decisions.json
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
             echo "phase=$1; reason=$2" > ocr-infrastructure-failure.txt
@@ -990,6 +992,11 @@ jobs:
           # Feature 3 (issue #2670): incremental IoU overlap dedup mode.
           OCR_INCREMENTAL: ${{ vars.OCR_INCREMENTAL }}
           OCR_INCREMENTAL_OVERLAP_THRESHOLD: ${{ vars.OCR_INCREMENTAL_OVERLAP_THRESHOLD }}
+          # Issue #2672: severity-based publication routing.
+          # Shadow mode (default 'true') posts all findings inline but logs
+          # routing decisions. Set to 'false' to go live (route low-severity
+          # findings to the sticky summary).
+          OCR_ROUTING_SHADOW_MODE: ${{ vars.OCR_ROUTING_SHADOW_MODE }}
           # Fallback bot login for dedup when getAuthenticated() fails.
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
         with:
@@ -1235,6 +1242,74 @@ jobs:
               return normalized;
             }
 
+            function effectiveCategory(finding) {
+              if (!finding || typeof finding !== 'object') return 'unknown';
+              if (typeof finding.category === 'string' && finding.category && finding.category !== 'unknown') {
+                return finding.category;
+              }
+              if (typeof finding.originalCategory === 'string' && finding.originalCategory && finding.originalCategory !== 'unknown') {
+                return finding.originalCategory;
+              }
+              return 'unknown';
+            }
+
+            function effectiveSeverity(finding) {
+              if (!finding || typeof finding !== 'object') return 'unknown';
+              if (typeof finding.severity === 'string' && finding.severity && finding.severity !== 'unknown') {
+                return finding.severity;
+              }
+              if (typeof finding.originalSeverity === 'string' && finding.originalSeverity && finding.originalSeverity !== 'unknown') {
+                return finding.originalSeverity;
+              }
+              return 'unknown';
+            }
+
+            function routeFinding(finding) {
+              if (!finding || typeof finding !== 'object' || Array.isArray(finding)) {
+                return { destination: 'inline', reason: 'non-object finding: fail-safe inline' };
+              }
+              const category = effectiveCategory(finding);
+              const severity = effectiveSeverity(finding);
+
+              // Protected categories are always inline regardless of severity.
+              if (category === 'bug' || category === 'security' || category === 'correctness') {
+                return { destination: 'inline', reason: `category '${category}': always inline` };
+              }
+
+              // High/medium severity is always inline regardless of category.
+              if (severity === 'high' || severity === 'medium') {
+                return { destination: 'inline', reason: `severity '${severity}': inline` };
+              }
+
+              // Unknown category defaults to inline (fail-safe).
+              const isKnownCategory = category === 'maintainability' || category === 'test' || category === 'style';
+              if (!isKnownCategory && category !== 'other') {
+                return { destination: 'inline', reason: `category '${category}': fail-safe inline` };
+              }
+
+              // Info severity is routed to summary.
+              if (severity === 'info') {
+                return { destination: 'summary', reason: `severity 'info': routed to summary` };
+              }
+
+              // Known or 'other' category with low severity → summary.
+              if (severity === 'low') {
+                return { destination: 'summary', reason: `category '${category}' severity 'low': routed to summary` };
+              }
+
+              // Remaining unknown severities default to inline (fail-safe).
+              return { destination: 'inline', reason: `category '${category}' severity '${severity}': fail-safe inline` };
+            }
+
+            function categorySeverityLabel(finding) {
+              if (!finding || typeof finding !== 'object') {
+                return '';
+              }
+              const category = effectiveCategory(finding);
+              const severity = effectiveSeverity(finding);
+              return `**[${category}/${severity}]** `;
+            }
+
             function escapeMarkdownHtml(value) {
               return value
                 .replace(new RegExp('&', 'g'), '&amp;')
@@ -1408,35 +1483,82 @@ jobs:
             // with a stderr warning, without suppressing any finding.
             findings = findings.map(validateFindingMetadata);
 
+            // Issue #2672: compute routing decisions for EVERY finding before
+            // dedup so suppressed duplicates still get artifact records, and a
+            // protected finding (e.g. security/high) that shares a dedup key
+            // with a low-severity finding is still accounted for.
+            const routingShadowMode = process.env.OCR_ROUTING_SHADOW_MODE !== 'false';
+            const allRoutingDecisions = findings.map((f) => {
+              const decision = routeFinding(f);
+              const meta = (f && typeof f === 'object') ? f : {};
+              return {
+                path: typeof meta.path === 'string' ? meta.path : '',
+                start_line: Number.isInteger(meta.start_line) ? meta.start_line : null,
+                end_line: Number.isInteger(meta.end_line) ? meta.end_line : null,
+                category: effectiveCategory(meta),
+                severity: effectiveSeverity(meta),
+                destination: decision.destination,
+                reason: decision.reason,
+              };
+            });
+
             const dedupedFindings = deduplicateFindings(findings);
             let suppressedDuplicateCount = 0;
             suppressedDuplicateCount = dedupedFindings.suppressed;
             findings = dedupedFindings.deduped;
 
-            // Split findings into inline (resolvable file/line) vs. lineless.
+            // Issue #2672: routing decisions for the deduped set. Recomputed
+            // (not sliced from allRoutingDecisions) because dedup may remove
+            // findings from anywhere in the array.
+            const routingDecisions = findings.map((f) => {
+              const decision = routeFinding(f);
+              const meta = (f && typeof f === 'object') ? f : {};
+              return {
+                category: effectiveCategory(meta),
+                severity: effectiveSeverity(meta),
+                destination: decision.destination,
+                reason: decision.reason,
+              };
+            });
+            const wouldRouteToSummary = routingDecisions.filter((d) => d.destination === 'summary').length;
+
+            // Split findings into inline (resolvable file/line), summary-routed,
+            // and lineless. In shadow mode all line-addressable findings go
+            // inline (issue #2672). In go-live mode, findings routed to
+            // 'summary' are held back from inline posting.
             const inline = [];
+            const summaryRouted = [];
             const lineless = [];
             for (const f of findings) {
+              const decision = routeFinding(f);
               if (f && f.path && Number.isInteger(f.start_line) &&
                   Number.isInteger(f.end_line) && f.start_line > 0 && f.end_line > 0) {
-                let startLine = Number(f.start_line);
-                let endLine = Number(f.end_line);
-                if (startLine > endLine) {
-                  [startLine, endLine] = [endLine, startLine];
+                if (!routingShadowMode && decision.destination === 'summary') {
+                  summaryRouted.push(f);
+                } else {
+                  let startLine = Number(f.start_line);
+                  let endLine = Number(f.end_line);
+                  if (startLine > endLine) {
+                    [startLine, endLine] = [endLine, startLine];
+                  }
+                  const rawText = f.content || f.comment || f.message || f.body;
+                  const label = categorySeverityLabel(f);
+                  const rendered = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                  // Insert the label inside the blockquote (after the first
+                  // '> ' prefix) so the first line stays '> **[cat/sev]** text'.
+                  const labeledText = label ? rendered.replace(/^> /, `> ${label}`) : rendered;
+                  const comment = {
+                    path: String(f.path),
+                    line: endLine,
+                    side: 'RIGHT',
+                    body: `${INLINE_MARKER}\n${labeledText}`,
+                  };
+                  if (startLine < endLine) {
+                    comment.start_line = startLine;
+                    comment.start_side = 'RIGHT';
+                  }
+                  inline.push(comment);
                 }
-                const rawText = f.content || f.comment || f.message || f.body;
-                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
-                const comment = {
-                  path: String(f.path),
-                  line: endLine,
-                  side: 'RIGHT',
-                  body: `${INLINE_MARKER}\n${text}`,
-                };
-                if (startLine < endLine) {
-                  comment.start_line = startLine;
-                  comment.start_side = 'RIGHT';
-                }
-                inline.push(comment);
               } else {
                 lineless.push(f && typeof f === 'object' ? f : { body: f || 'Malformed OCR finding' });
               }
@@ -1615,10 +1737,45 @@ jobs:
               for (const f of lineless) {
                 const item = f && typeof f === 'object' ? f : {};
                 const where = item.path ? `\`${item.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
                 const rawText = item.content || item.comment || item.message || item.body;
                 const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
-                body.push(`- ${where}${text}`);
+                body.push(`- ${where}${label}${text}`);
               }
+            }
+            if (summaryRouted.length > 0) {
+              body.push('', '### Findings routed to summary', '');
+              for (const f of summaryRouted) {
+                const where = f.path ? `\`${f.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
+                const rawText = f.content || f.comment || f.message || f.body;
+                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                body.push(`- ${where}${label}${text}`);
+              }
+            }
+            if (routingShadowMode && wouldRouteToSummary > 0) {
+              body.push('', '### Shadow-mode routing preview (issue #2672)', '');
+              body.push(`- ${wouldRouteToSummary} finding(s) would be routed to this summary instead of inline comments.`);
+              const summaryByCategory = {};
+              for (const d of routingDecisions) {
+                if (d.destination === 'summary') {
+                  const key = `${d.category}/${d.severity}`;
+                  summaryByCategory[key] = (summaryByCategory[key] || 0) + 1;
+                }
+              }
+              for (const [key, count] of Object.entries(summaryByCategory)) {
+                body.push(`  - \`${key}\`: ${count}`);
+              }
+              body.push('- Set repository variable `OCR_ROUTING_SHADOW_MODE=false` to enable live routing.');
+            }
+            // Issue #2672: persist ALL routing decisions (pre-dedup) so every
+            // finding gets an artifact record with its routing reason, even
+            // duplicates that dedup later suppresses.
+            try {
+              const routingJson = JSON.stringify(allRoutingDecisions, null, 2);
+              fs.writeFileSync('ocr-routing-decisions.json', routingJson);
+            } catch (routingWriteErr) {
+              core.warning(`Failed to write ocr-routing-decisions.json: ${routingWriteErr.message || routingWriteErr}`);
             }
             const isAutomatic = process.env.IS_AUTOMATIC === 'true';
 
@@ -1746,6 +1903,7 @@ jobs:
             core.setOutput('comments_inline', String(postedInline));
             core.setOutput('comments_skipped', String(commentsSkipped));
             core.setOutput('comments_failed', String(failedInline));
+            core.setOutput('comments_routed_summary', String(summaryRouted.length));
             core.setOutput('summary_comment_url', summaryCommentUrl);
 
             if (!ran) {
@@ -1814,6 +1972,7 @@ jobs:
             'ocr-phase.txt',
             'ocr-infrastructure-failure.txt',
             'ocr-policy-failure.txt',
+            'ocr-routing-decisions.json',
           ];
           const replaceWithRedactionFailure = (fileName, error) => {
             const code = error && error.code ? error.code : 'unknown';
@@ -1861,7 +2020,8 @@ jobs:
             ocr-exit-code.txt \
             ocr-phase.txt \
             ocr-infrastructure-failure.txt \
-            ocr-policy-failure.txt; do
+            ocr-policy-failure.txt \
+            ocr-routing-decisions.json; do
             if [ ! -e "$file_name" ]; then
               : > "$file_name"
               missing="${missing}${file_name}"$'\n'
@@ -1903,6 +2063,7 @@ jobs:
             ocr-phase.txt
             ocr-infrastructure-failure.txt
             ocr-policy-failure.txt
+            ocr-routing-decisions.json
           if-no-files-found: warn
 
       - name: Clean up scoped safe.directory
