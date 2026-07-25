@@ -268,8 +268,9 @@ describe.skipIf(!isCiEnvironment() && !bunAvailable())(
         expect(code).toBe(0);
       });
 
-      it('accepts a fragment with a leading # in the URL (#my-heading)', async () => {
-        // Some links include # in the fragment text itself
+      it('accepts a cross-file fragment naming a heading in the target', async () => {
+        // The fragment must be slugified and matched against the target
+        // file's headings, not against the source file's own headings.
         fx.write('docs/page.md', '# Page\n\n[ok](./other.md#heading-text)\n');
         fx.write('docs/other.md', '# Other\n\n## Heading Text\n');
         const { code } = await runDocLinksGuard(fx.root(), 0);

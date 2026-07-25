@@ -123,6 +123,12 @@ export function extractLinks(content: string): DocLink[] {
  * (Tokens.Codespan) are excluded — inline code is stripped too because it
  * can carry link-shaped text or bookkeeping markers that must not be
  * mistaken for real content.
+ *
+ * NOTE: the returned array is NOT line-for-line aligned with the input.
+ * Code lines are removed and blank lines are dropped, so an index into the
+ * result does not correspond to a source line number. Callers that need to
+ * report positions must locate the text in the original content instead of
+ * using the returned index.
  */
 export function stripCodeTokens(lines: readonly string[]): string[] {
   const tokens = Lexer.lex(lines.join('\n'));
