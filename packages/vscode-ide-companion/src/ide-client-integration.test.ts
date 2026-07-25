@@ -150,6 +150,36 @@ function createExtensionContext(): vscode.ExtensionContext {
  * never invoked — silently reverting the test to its former flaky behaviour
  * instead of failing loudly.
  */
+/**
+ * Upper bound for server-side GET SSE stream establishment. Generous relative
+ * to the local loopback round-trip it gates, since its only job is to convert
+ * an indefinite hang into a descriptive failure.
+ */
+const GET_STREAM_TIMEOUT_MS = 10_000;
+
+/**
+ * Rejects with `message` if `promise` has not settled within `timeoutMs`. The
+ * timer is always cleared so a resolved promise cannot keep the event loop (or
+ * the worker) alive after the test finishes.
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 function requireMethod<T>(method: T | undefined, name: string): T {
   if (typeof method !== 'function') {
     throw new Error(
@@ -358,7 +388,15 @@ describe('IdeClient with the VS Code companion server', () => {
       expect(ideContext.getIdeContext()).toBeDefined();
 
       // Wait for the standalone GET SSE stream to arrive at the server.
-      await getStreamEstablished;
+      // Bounded so that if the server stops taking the non-authoritative GET
+      // path entirely, this fails with a message naming the broken
+      // synchronization assumption instead of stalling until the suite
+      // timeout reports an anonymous hang.
+      await withTimeout(
+        getStreamEstablished,
+        GET_STREAM_TIMEOUT_MS,
+        `GET SSE stream was not established within ${GET_STREAM_TIMEOUT_MS}ms: deliverInitialContext was never called with authoritative: false`,
+      );
     } finally {
       // Drop the instance override so the prototype implementation is in
       // effect again, even if connect() or the wait above throws.
