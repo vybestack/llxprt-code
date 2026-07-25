@@ -436,7 +436,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ============================================================
 which@2.0.2
-(git://github.com/isaacs/node-which.git)
+(https://github.com/isaacs/node-which.git)
 
 The ISC License
 
@@ -738,7 +738,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ============================================================
 debug@4.4.3
-(git://github.com/debug-js/debug.git)
+(https://github.com/debug-js/debug.git)
 
 (The MIT License)
 
@@ -1172,7 +1172,7 @@ SOFTWARE.
 
 ============================================================
 object-inspect@1.13.4
-(git://github.com/inspect-js/object-inspect.git)
+(https://github.com/inspect-js/object-inspect.git)
 
 MIT License
 
@@ -1468,7 +1468,7 @@ SOFTWARE.
 
 ============================================================
 has-symbols@1.1.0
-(git://github.com/inspect-js/has-symbols.git)
+(https://github.com/inspect-js/has-symbols.git)
 
 MIT License
 
@@ -1965,7 +1965,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ============================================================
 once@1.4.0
-(git://github.com/isaacs/once)
+(https://github.com/isaacs/once)
 
 The ISC License
 
@@ -2283,7 +2283,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ============================================================
 ip-address@10.2.0
-(git://github.com/beaugunderson/ip-address.git)
+(https://github.com/beaugunderson/ip-address.git)
 
 Copyright (C) 2011 by Beau Gunderson
 
@@ -4800,7 +4800,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 
 ============================================================
 require-directory@2.1.1
-(git://github.com/troygoode/node-require-directory.git)
+(https://github.com/troygoode/node-require-directory.git)
 
 The MIT License (MIT)
 

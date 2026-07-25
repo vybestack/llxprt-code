@@ -264,6 +264,27 @@ limitations under the License.`;
   }
 }
 
+/**
+ * Canonicalize a dependency repository URL's protocol.
+ *
+ * GitHub deprecated the unauthenticated git:// protocol, and npm registry
+ * metadata is migrating repository URLs from git:// to https:// package by
+ * package. Reading the value verbatim makes NOTICES.txt drift whenever a
+ * dependency's published metadata flips, which in turn makes the CI formatter
+ * gate fail nondeterministically (a `bun install` re-runs the `prepare`
+ * lifecycle that regenerates this checked-in file). Canonicalizing the
+ * protocol keeps the generated text identical regardless of which spelling the
+ * installed package advertises.
+ *
+ * @param {string} url - The repository URL read from package metadata.
+ * @returns {string} The URL with the deprecated git:// GitHub protocol
+ *   normalized to https://.
+ */
+export function normalizeGitHubRepositoryUrl(url) {
+  if (typeof url !== 'string') return url;
+  return url.replace(/^git:\/\/github\.com\//, 'https://github.com/');
+}
+
 async function getDependencyLicense(depName, depVersion) {
   let depPackageJsonPath;
   let licenseContent = 'License text not found.';
@@ -306,10 +327,11 @@ async function getDependencyLicense(depName, depVersion) {
     );
     const depPackageJson = JSON.parse(depPackageJsonContent);
 
-    repositoryUrl =
+    repositoryUrl = normalizeGitHubRepositoryUrl(
       packageMetadataFallbacks[depName]?.repository ??
-      depPackageJson.repository?.url ??
-      repositoryUrl;
+        depPackageJson.repository?.url ??
+        repositoryUrl,
+    );
 
     const packageDir = path.dirname(depPackageJsonPath);
 
@@ -545,4 +567,9 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+// Only run when invoked directly (e.g. the npm `prepare` lifecycle running
+// `node ./scripts/generate-notices.js`) so the module can be imported by tests
+// without triggering filesystem writes or registry lookups.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(console.error);
+}
