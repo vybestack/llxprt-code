@@ -141,6 +141,18 @@ describe('waitFor Vitest 3.2.6 compatibility', () => {
   );
 
   it('uses fixed interval cadence when callback duration exceeds the interval', async () => {
+    const callbackDurationMs = 35;
+    const intervalMs = 10;
+    // setTimeout(n) can be observed as slightly less than n ms of Date.now()
+    // elapsed time because the two clocks round independently, so a bare
+    // ">= callbackDurationMs" comparison is inherently flaky. The behavior
+    // under test is that the retry waits for the callback to finish instead of
+    // firing on the bare interval, so allow a small clock-granularity slack
+    // while still keeping the threshold far above intervalMs.
+    const clockGranularitySlackMs = 5;
+    const minimumSecondAttemptOffsetMs =
+      callbackDurationMs - clockGranularitySlackMs;
+
     const observe = async (
       implementation: WaitForImplementation,
     ): Promise<number[]> => {
@@ -150,10 +162,12 @@ describe('waitFor Vitest 3.2.6 compatibility', () => {
         async () => {
           starts.push(Date.now());
           attempts++;
-          await new Promise<void>((resolve) => setTimeout(resolve, 35));
+          await new Promise<void>((resolve) =>
+            setTimeout(resolve, callbackDurationMs),
+          );
           if (attempts < 2) throw new Error('retry');
         },
-        { interval: 10, timeout: 500 },
+        { interval: intervalMs, timeout: 500 },
       );
       return starts.map((time) => time - starts[0]);
     };
@@ -162,7 +176,11 @@ describe('waitFor Vitest 3.2.6 compatibility', () => {
     const shim = await observe(waitFor);
 
     expect(shim.length).toBe(native.length);
-    expect(shim[1]).toBeGreaterThanOrEqual(35);
-    expect(native[1]).toBeGreaterThanOrEqual(35);
+    // The threshold must stay meaningfully above the interval, otherwise this
+    // assertion would also pass for an implementation that ignored callback
+    // completion and retried every intervalMs.
+    expect(minimumSecondAttemptOffsetMs).toBeGreaterThan(intervalMs);
+    expect(shim[1]).toBeGreaterThanOrEqual(minimumSecondAttemptOffsetMs);
+    expect(native[1]).toBeGreaterThanOrEqual(minimumSecondAttemptOffsetMs);
   });
 });
