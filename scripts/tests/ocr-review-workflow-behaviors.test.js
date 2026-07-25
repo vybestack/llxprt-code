@@ -62,12 +62,12 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     expect(installRun).toContain(
       '"@alibaba-group/open-code-review@${OCR_VERSION}"',
     );
-    expect(installRun).not.toContain('1.6.1');
     // The install must reference the env var, never a hardcoded version
-    // literal — checked against the workflow's current OCR_VERSION so this
-    // cannot silently stop testing anything after a version bump.
-    expect(installRun).not.toContain(
-      `@alibaba-group/open-code-review@${workflow.env?.OCR_VERSION}`,
+    // literal. Matching ANY pinned semver (rather than only the currently
+    // configured one) means a stale or mismatched literal cannot slip through
+    // after a version bump.
+    expect(installRun).not.toMatch(
+      /@alibaba-group\/open-code-review@\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/,
     );
   });
 

@@ -235,6 +235,13 @@ describe('IdeClient with the VS Code companion server', () => {
       configurable: true,
       value: undefined,
     });
+    // Restore workspace trust: a test that flips this to false to make a
+    // broadcast payload observably distinct must not leak the value into
+    // subsequent tests, which assert isTrusted === true.
+    Object.defineProperty(vscode.workspace, 'isTrusted', {
+      configurable: true,
+      value: true,
+    });
     vi.unstubAllEnvs();
   });
 

@@ -509,10 +509,6 @@ describe('IDEServer initial-context delivery concurrency', () => {
     context = createExtensionContext();
     await ideServer.start(context);
 
-    // Spy on the server-side deliverInitialContext to get a deterministic
-    // signal when the authoritative ping enters the delivery path.
-    const pingSpy = createPingArrivalSpy(ideServer);
-
     const port = Number(process.env['LLXPRT_CODE_IDE_SERVER_PORT']);
     const authToken = process.env['LLXPRT_CODE_IDE_AUTH_TOKEN']!;
 
@@ -545,7 +541,15 @@ describe('IDEServer initial-context delivery concurrency', () => {
     //    in-flight send promise. The gated spy holds it in-flight.
     const getStream = openGetStream(port, authToken, resolvedSessionId!);
 
+    // Spy on the server-side deliverInitialContext to get a deterministic
+    // signal when the authoritative ping enters the delivery path. Created
+    // inside the try so the instance override is always removed by the
+    // finally block, even if an assertion below throws.
+    let pingSpy: ReturnType<typeof createPingArrivalSpy> | undefined;
+
     try {
+      pingSpy = createPingArrivalSpy(ideServer);
+
       // Wait until the GET's send has entered the gate (in-flight promise
       // created by the non-authoritative path).
       await gate.waitForGateEntry();
@@ -600,7 +604,7 @@ describe('IDEServer initial-context delivery concurrency', () => {
       gate.gateRelease();
       getStream.close();
       gate.restore();
-      pingSpy.restore();
+      pingSpy?.restore();
     }
   }, 15000);
 });
