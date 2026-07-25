@@ -97,6 +97,9 @@ function findMarkerViolations(
  * on lowercase prose.
  */
 function hasBookkeepingPrefix(content: string, prefix: string): boolean {
+  // An empty prefix would make indexOf return the same index forever and
+  // never advance, so reject it rather than spin.
+  if (prefix.length === 0) return false;
   let idx = 0;
   while (idx !== -1) {
     idx = content.indexOf(prefix, idx);
@@ -127,8 +130,13 @@ function checkDirectory(root: string): readonly Violation[] {
 function dirExists(path: string): boolean {
   try {
     return statSync(path).isDirectory();
-  } catch {
-    return false;
+  } catch (error) {
+    // ENOENT is the expected "directory absent" answer. Anything else
+    // (EACCES, ELOOP, ...) means we could not determine the answer, and
+    // silently reporting "absent" would turn a forbidden directory into a
+    // false negative. Fail loudly instead.
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return false;
+    throw error;
   }
 }
 

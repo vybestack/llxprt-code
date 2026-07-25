@@ -166,9 +166,16 @@ function scanFile(filePath: string, root: string): readonly Break[] {
   let content: string;
   try {
     content = readFileText(filePath);
-  } catch {
+  } catch (error) {
+    // Surface the underlying cause (EACCES, EISDIR, encoding errors); a bare
+    // 'unreadable file' makes CI failures undiagnosable from the log alone.
+    const detail = error instanceof Error ? error.message : String(error);
     return [
-      { file: relativePath(filePath), target: '', reason: 'unreadable file' },
+      {
+        file: relativePath(filePath),
+        target: '',
+        reason: `unreadable file: ${detail}`,
+      },
     ];
   }
   const links = extractLinks(content);

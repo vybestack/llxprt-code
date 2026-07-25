@@ -14,6 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { join, relative } from 'node:path';
 import { repoRoot } from './doc-guard-helpers.ts';
 import { extractHeadingSlugs } from '../doc-links/heading-slugger.ts';
@@ -30,6 +31,24 @@ function readFile(relPath: string): string {
  * paths. Reuses the guard's own scanner so these invariants see exactly the
  * same file set the guard enforces against.
  */
+/**
+ * Builds a matcher for GitHub blob/tree deep links into THIS repository,
+ * using the canonical URL in package.json rather than a hardcoded slug so a
+ * rename or fork cannot silently turn the assertion into a no-op.
+ */
+function repoBlobOrTreePattern(): RegExp {
+  const url = JSON.parse(readFile('package.json')).repository?.url;
+  if (typeof url !== 'string') {
+    throw new Error('package.json is missing repository.url');
+  }
+  const slug = url.match(/github\.com[/:]([^/]+\/[^/.]+)/)?.[1];
+  if (!slug) {
+    throw new Error(`Could not derive owner/repo from repository.url: ${url}`);
+  }
+  const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`github\\.com/${escaped}/(blob|tree)/`);
+}
+
 function collectMarkdownUnder(relDir: string): string[] {
   return collectMarkdownFiles([join(repoRoot, relDir)]).map((p) =>
     relative(repoRoot, p),
@@ -107,7 +126,7 @@ function collectFilesWithMarker(
   excludeDirs: Set<string>,
   results: string[],
 ): void {
-  let entries;
+  let entries: Dirent[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch (error) {
@@ -218,8 +237,10 @@ describe('doc-tree invariants (real repo state)', () => {
     it('no page under docs/ deep-links to blob or tree URLs on GitHub', () => {
       // These break when the docs are published to vybestack.dev: they escape
       // the site and land on the raw GitHub view instead of the rendered page.
+      // Derive the slug from package.json so a rename/fork does not silently
+      // disable this check.
       const offenders = collectMarkdownUnder('docs').filter((p) =>
-        /github\.com\/vybestack\/llxprt-code\/(blob|tree)\//.test(readFile(p)),
+        repoBlobOrTreePattern().test(readFile(p)),
       );
       expect(offenders).toEqual([]);
     });
