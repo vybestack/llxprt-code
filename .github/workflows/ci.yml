@@ -239,9 +239,12 @@ jobs:
         # dev-docs/bun.md). Bun re-normalizes `bun.lock` on every install
         # (dev-docs/bun.md), so restore the committed lockfile or the
         # formatter's `git diff --exit-code` below would flag the re-write.
+        # Likewise, the vscode-ide-companion `prepare` script regenerates
+        # NOTICES.txt from live npm metadata, so restore the committed copy.
         run: |-
           bun install
           git checkout -- bun.lock
+          git checkout -- packages/vscode-ide-companion/NOTICES.txt
 
       - name: 'Run formatter check'
         run: |-
