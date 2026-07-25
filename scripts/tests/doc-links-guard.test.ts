@@ -113,16 +113,30 @@ describe.skipIf(!isCiEnvironment() && !bunAvailable())(
         expect(code).toBe(0);
       });
 
-      it('detects a broken link after a malformed link on the same line (does not abort scanning)', async () => {
-        // First link is malformed (unclosed paren), second is valid broken
+      it('reports every broken link on a line rather than stopping at the first', async () => {
+        fx.write(
+          'docs/page.md',
+          '# P\n\n[one](./missing.md) and [two](./gone.md)\n',
+        );
+        const { code, stdout } = await runDocLinksGuard(fx.root(), 1);
+        expect(code).toBe(1);
+        // Both must appear; asserting only one would still pass if the scan
+        // bailed out after the first break.
+        expect(stdout).toContain('missing.md');
+        expect(stdout).toContain('gone.md');
+      });
+
+      it('keeps scanning past a malformed destination on the same line', async () => {
+        // The unclosed paren makes the first bracket pair non-link text per
+        // CommonMark, so only ./gone.md is a real link. The scan must still
+        // reach and report it.
         fx.write(
           'docs/page.md',
           '# P\n\n[broken](./missing.md [real](./gone.md)\n',
         );
         const { code, stdout } = await runDocLinksGuard(fx.root(), 1);
         expect(code).toBe(1);
-        // At least one of the broken links should be reported
-        expect(stdout).toMatch(/missing\.md|gone\.md/);
+        expect(stdout).toContain('gone.md');
       });
     });
 
@@ -179,6 +193,42 @@ describe.skipIf(!isCiEnvironment() && !bunAvailable())(
         fx.write('docs/page.md', '# Page\n\n[ok](./other.md#section)\n');
         fx.write('docs/other.md', '# Other\n\n## Section\n');
         const { code } = await runDocLinksGuard(fx.root(), 0);
+        expect(code).toBe(0);
+      });
+
+      it('accepts anchors for headings containing bold, italic, code, and links', async () => {
+        // Regression: inline tokens like `strong` expose BOTH a flat `text`
+        // and nested `tokens`, so counting both produced "boldbold" and a
+        // corrupted slug, making valid anchors look broken.
+        fx.write(
+          'docs/other.md',
+          [
+            '# Other',
+            '',
+            '## A **bold** heading',
+            '',
+            '## An _italic_ heading',
+            '',
+            '## A `code` heading',
+            '',
+            '## A [linked](./page.md) heading',
+            '',
+          ].join('\n'),
+        );
+        fx.write(
+          'docs/page.md',
+          [
+            '# Page',
+            '',
+            '[b](./other.md#a-bold-heading)',
+            '[i](./other.md#an-italic-heading)',
+            '[c](./other.md#a-code-heading)',
+            '[l](./other.md#a-linked-heading)',
+            '',
+          ].join('\n'),
+        );
+        const { code, stdout } = await runDocLinksGuard(fx.root(), 0);
+        expect(stdout).not.toMatch(/anchor/);
         expect(code).toBe(0);
       });
 

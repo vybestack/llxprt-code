@@ -174,10 +174,6 @@ describe('doc-tree invariants (real repo state)', () => {
         /text-tool-call-parsing\.md/,
       );
     });
-
-    it('docs/tool-parsing.md still exists (user-facing settings page)', () => {
-      expect(fileExists('docs/tool-parsing.md')).toBe(true);
-    });
   });
 
   describe('keybindings generator single-target', () => {

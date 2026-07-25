@@ -114,11 +114,15 @@ function tokenText(tokens: readonly Token[] | undefined): string {
         parts.push(' ');
         break;
       default:
-        if ('text' in token && typeof token.text === 'string') {
-          parts.push(token.text);
-        }
+        // Inline tokens such as `strong` and `em` carry BOTH a flattened
+        // `text` and nested `tokens` covering the same content, so taking
+        // both would double-count it ("**bold**" -> "boldbold") and corrupt
+        // the slug. Prefer the nested tokens; fall back to `text` only for
+        // leaf tokens that have none.
         if ('tokens' in token && Array.isArray(token.tokens)) {
           parts.push(tokenText(token.tokens as Token[]));
+        } else if ('text' in token && typeof token.text === 'string') {
+          parts.push(token.text);
         }
         break;
     }

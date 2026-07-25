@@ -99,7 +99,18 @@ describe('telemetry doc accuracy (doc vs source)', () => {
 
   it('sdk.ts registers only HttpInstrumentation (no custom spans)', () => {
     const sdk = readSrc('packages/telemetry/src/telemetry/sdk.ts');
-    expect(sdk).toContain('HttpInstrumentation');
+    // The doc claims HTTP is the ONLY instrumentation, so assert the exact
+    // contents of the instrumentations array. Merely checking that
+    // HttpInstrumentation is present would still pass if another
+    // instrumentation were added later, silently invalidating the doc.
+    const registered = sdk.match(/instrumentations:\s*\[([^\]]*)\]/);
+    expect(registered).not.toBeNull();
+    // Split on non-identifier characters instead of a backtracking-prone
+    // regex, then keep the Instrumentation class names.
+    const names = (registered as RegExpMatchArray)[1]
+      .split(/[^A-Za-z0-9_]+/)
+      .filter((token) => token.endsWith('Instrumentation'));
+    expect(names).toEqual(['HttpInstrumentation']);
     expect(sdk).not.toMatch(/startSpan\s*\(/);
   });
 
@@ -122,7 +133,11 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     const realEventNames = extractConstantValues(constantsSource, 'EVENT_');
     const realMetricNames = extractConstantValues(constantsSource, 'METRIC_');
     const allRealNames = [...realEventNames, ...realMetricNames];
-    expect(allRealNames.length).toBeGreaterThan(10);
+    // Guard against the extractor silently matching nothing, which would make
+    // the per-name loop below vacuous. A bare non-empty check is deliberate:
+    // any fixed threshold would break on legitimate constant refactoring.
+    expect(realEventNames.length).toBeGreaterThan(0);
+    expect(realMetricNames.length).toBeGreaterThan(0);
 
     // Extract all llxprt_code.* identifiers mentioned in the doc.
     // Use a character-by-character scan to avoid regex backtracking issues.
