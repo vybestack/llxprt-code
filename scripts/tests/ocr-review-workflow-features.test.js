@@ -536,5 +536,42 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
         'const comments = existingComments || markerComments',
       );
     });
+
+    it('counts rediscovered fallback duplicates as skipped, not posted (issue #2670)', () => {
+      // CodeRabbit: fallback dedup over-reports comments_inline.
+      // When a comment is rediscovered after batch uncertainty, it must
+      // increment skippedExactHistoryCount, not postedInline.
+      expect(postScript).toContain('skippedExactHistoryCount += 1;');
+      // The rediscovery path must use skippedExactHistoryCount, not postedInline.
+      // Check that "batch post uncertainty" is followed (within a few chars)
+      // by skippedExactHistoryCount, not postedInline.
+      const uncertaintyIdx = postScript.indexOf('after batch post uncertainty');
+      expect(uncertaintyIdx).toBeGreaterThan(-1);
+      const afterUncertainty = postScript.substring(
+        uncertaintyIdx,
+        uncertaintyIdx + 200,
+      );
+      expect(afterUncertainty).toContain('skippedExactHistoryCount');
+      expect(afterUncertainty).not.toContain('postedInline');
+    });
+
+    it('reconciles marker comments after successful create (issue #2670)', () => {
+      // CodeRabbit: successful concurrent creates can leave duplicate sticky
+      // summaries. The createComment success path must also re-fetch and
+      // reconcile.
+      const createFnSource = extractFunctionSource(
+        postScript,
+        'createOrUpdateMarkerComment',
+      );
+      // After createComment returns successfully, reconcileMarkerComment(null)
+      // must be called to clean up any concurrent duplicates.
+      expect(createFnSource).toContain('reconcileMarkerComment(null)');
+      // Count occurrences — should appear in both the catch path AND the
+      // success path now.
+      const reconcileCalls = createFnSource.match(
+        /reconcileMarkerComment\(null\)/g,
+      );
+      expect(reconcileCalls?.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

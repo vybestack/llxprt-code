@@ -1448,7 +1448,7 @@ jobs:
                   }
                   if (existingInlineKeys.has(inlineCommentKey(c))) {
                     core.warning(`Skipping duplicate OCR inline comment on ${c.path}:${c.line} after batch post uncertainty.`);
-                    postedInline += 1;
+                    skippedExactHistoryCount += 1;
                     continue;
                   }
                   try {
@@ -1625,6 +1625,14 @@ jobs:
                 const created = await github.rest.issues.createComment({
                   owner, repo, issue_number: number, body: summary,
                 });
+                // Re-fetch to reconcile any concurrent duplicate marker
+                // comments that may have been posted between the initial
+                // pre-fetch and this create.
+                try {
+                  await reconcileMarkerComment(null);
+                } catch (reconcileErr) {
+                  core.warning(redactSecretDiagnostics(`Post-create reconciliation failed; duplicate marker comments may remain: ${reconcileErr.message || reconcileErr}`));
+                }
                 return created?.data || null;
               } catch (createErr) {
                 // After a failed create (e.g. a race where a marker was just
