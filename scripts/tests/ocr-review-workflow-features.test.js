@@ -219,6 +219,7 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
         start: 5,
         end: 5,
         multiline: false,
+        lineless: false,
       });
     });
 
@@ -228,6 +229,7 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
         start: 5,
         end: 10,
         multiline: true,
+        lineless: false,
       });
     });
 
@@ -237,6 +239,17 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
         start: 5,
         end: 10,
         multiline: true,
+        lineless: false,
+      });
+    });
+
+    it('lineSpan: missing line numbers returns { lineless: true }', () => {
+      const lineSpan = loadFunctionFromScript(postScript, 'lineSpan');
+      expect(lineSpan({ line: 0, start_line: 0 })).toEqual({
+        start: -1,
+        end: -1,
+        multiline: false,
+        lineless: true,
       });
     });
 

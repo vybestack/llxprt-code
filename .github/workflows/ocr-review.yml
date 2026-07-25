@@ -936,7 +936,7 @@ jobs:
           # unchanged unless the repository variable opts in.
           REVIEW_ARGS=()
           if [ "${OCR_BACKGROUND:-}" = 'true' ]; then
-            BACKGROUND_TEXT=$(printf 'PR %s: %s\n\n%s' "${PR_NUMBER}" "${PR_TITLE}" "${PR_BODY}")
+            BACKGROUND_TEXT=$(printf '---BEGIN BUSINESS CONTEXT---\nPR %s: %s\n\n%s\n---END BUSINESS CONTEXT---' "${PR_NUMBER}" "${PR_TITLE}" "${PR_BODY}")
             if [ -n "${PR_TITLE}" ] || [ -n "${PR_BODY}" ]; then
               REVIEW_ARGS+=(--background "$BACKGROUND_TEXT")
             fi
@@ -990,6 +990,8 @@ jobs:
           # Feature 3 (issue #2670): incremental IoU overlap dedup mode.
           OCR_INCREMENTAL: ${{ vars.OCR_INCREMENTAL }}
           OCR_INCREMENTAL_OVERLAP_THRESHOLD: ${{ vars.OCR_INCREMENTAL_OVERLAP_THRESHOLD }}
+          # Fallback bot login for dedup when getAuthenticated() fails.
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
         with:
           script: |
             const fs = require('fs');
@@ -1026,6 +1028,12 @@ jobs:
               botLogin = botUser.login || '';
             } catch (e) {
               core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+              // Fall back to a configurable bot login so dedup remains
+              // functional when the authenticated-user API is unavailable.
+              botLogin = process.env.OCR_BOT_LOGIN || '';
+              if (botLogin) {
+                core.info(`Using fallback bot login from OCR_BOT_LOGIN: ${botLogin}`);
+              }
             }
 
             function readTrimmed(fileName, fallback = '') {
@@ -1228,12 +1236,19 @@ jobs:
             function lineSpan(c) {
               const start = Number(c.start_line || c.line || 0);
               const end = Number(c.line || c.start_line || 0);
+              if (start <= 0 || end <= 0) {
+                return { start: -1, end: -1, multiline: false, lineless: true };
+              }
               const lo = Math.min(start, end);
               const hi = Math.max(start, end);
-              return { start: lo, end: hi, multiline: lo !== hi };
+              return { start: lo, end: hi, multiline: lo !== hi, lineless: false };
             }
 
             function sameCommentSpan(cur, other, threshold) {
+              // Lineless comments (no resolvable line numbers) never match.
+              if (cur.lineless || other.lineless) {
+                return false;
+              }
               // Single-line vs single-line: match on the same line.
               // Multi-line vs multi-line: IoU > threshold.
               // Single vs multi: never match.
