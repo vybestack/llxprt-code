@@ -63,11 +63,14 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
       '"@alibaba-group/open-code-review@${OCR_VERSION}"',
     );
     // The install must reference the env var, never a hardcoded version
-    // literal. Matching ANY pinned semver (rather than only the currently
-    // configured one) means a stale or mismatched literal cannot slip through
+    // specifier. The negative lookahead permits exactly one form — the
+    // ${...} expansion asserted above — and rejects every literal
+    // alternative: exact pins (1.2.3), ranges (^1.2.3, ~1.2, >=1.0), and
+    // dist-tags (latest). Matching any specifier rather than only the
+    // currently configured one means a stale literal cannot slip through
     // after a version bump.
     expect(installRun).not.toMatch(
-      /@alibaba-group\/open-code-review@\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/,
+      /@alibaba-group\/open-code-review@(?!\$\{)[^"'\s]+/,
     );
   });
 

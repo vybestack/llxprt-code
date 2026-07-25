@@ -308,23 +308,48 @@ describe('IdeClient with the VS Code companion server', () => {
       'IDEServer.deliverInitialContext',
     ).bind(stack.ideServer);
     let getStreamResolve!: () => void;
-    const getStreamEstablished = new Promise<void>((resolve) => {
+    let getStreamReject!: (reason: Error) => void;
+    const getStreamEstablished = new Promise<void>((resolve, reject) => {
       getStreamResolve = resolve;
+      getStreamReject = reject;
     });
     serverHolder.deliverInitialContext = async (
       sessionId: string,
       delivery: unknown,
       options: { authoritative: boolean },
     ) => {
-      const delivered = await realDeliverInitialContext(
-        sessionId,
-        delivery,
-        options,
-      );
-      if (!options.authoritative) {
-        getStreamResolve();
+      try {
+        const delivered = await realDeliverInitialContext(
+          sessionId,
+          delivery,
+          options,
+        );
+        if (!options.authoritative) {
+          // Only a SUCCESSFUL non-authoritative delivery proves the initial
+          // context actually traversed the standalone GET stream. A false
+          // result means the transport was missing or the send failed, so the
+          // stream is not usable and proceeding would be a false positive.
+          if (delivered) {
+            getStreamResolve();
+          } else {
+            getStreamReject(
+              new Error(
+                'Non-authoritative deliverInitialContext returned false: the GET SSE stream never carried initial context',
+              ),
+            );
+          }
+        }
+        return delivered;
+      } catch (error) {
+        // Never leave the gate pending on a rejection, or the wait below would
+        // hang until the suite timeout and mask the real error.
+        if (!options.authoritative) {
+          getStreamReject(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
+        throw error;
       }
-      return delivered;
     };
 
     try {
