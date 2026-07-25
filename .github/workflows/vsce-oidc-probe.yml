@@ -1,0 +1,46 @@
+name: VSCE OIDC Probe (temporary)
+
+# Temporary diagnostic workflow used to bootstrap Entra ID publishing for the
+# VS Code Marketplace. It logs in via GitHub OIDC and asks Azure DevOps for the
+# service principal's own profile, which yields the Team Foundation Identity ID
+# required to add it as a member of the "vybestack" Marketplace publisher.
+#
+# DELETE THIS FILE once the identity has been added to the publisher.
+
+on:
+  push:
+    branches:
+      - vsce-oidc-probe
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment:
+      name: production-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Azure login (OIDC, no subscription required)
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # ratchet:azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Fetch Azure DevOps profile for this identity
+        run: |
+          # 499b84ac-1321-427f-aa17-267ca6975798 is the well-known Azure DevOps
+          # resource ID; the token must be scoped to it for the profile API.
+          az rest \
+            --url https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+            > profile.json
+
+          echo "===== FULL PROFILE ====="
+          cat profile.json
+          echo ""
+          echo "===== TEAM FOUNDATION IDENTITY ID ====="
+          jq -r '.id' profile.json
+          echo "======================================="
