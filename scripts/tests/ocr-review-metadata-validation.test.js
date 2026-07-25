@@ -16,6 +16,13 @@ import {
   stepNamed,
 } from './ocr-review-workflow-helpers.js';
 
+// Security note: The vm.runInNewContext calls in this suite execute JavaScript
+// extracted from the trusted, version-controlled ocr-review.yml workflow via
+// extractFunctionSource. This is trusted repository content (not user/PR input)
+// and the workflow helper is read from the checked-out HEAD. The vm sandbox is
+// used to evaluate the real production function in isolation with stubbed
+// globals, proving actual runtime behavior without mocking the function itself.
+
 describe('.github/workflows/ocr-review.yml — metadata validation (issue #2671)', () => {
   let workflow;
   let codeReviewJob;

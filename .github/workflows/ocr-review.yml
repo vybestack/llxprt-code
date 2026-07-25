@@ -1065,7 +1065,9 @@ jobs:
               const normalized = { ...finding };
 
               const rawCategory = finding.category;
-              normalized.originalCategory = rawCategory;
+              if (!('originalCategory' in finding)) {
+                normalized.originalCategory = rawCategory;
+              }
               if (typeof rawCategory !== 'string' || !KNOWN_CATEGORIES.has(rawCategory)) {
                 if (rawCategory !== undefined) {
                   warnings.push(`undocumented category '${redactSecretDiagnostics(String(rawCategory))}'`);
@@ -1076,7 +1078,9 @@ jobs:
               }
 
               const rawSeverity = finding.severity;
-              normalized.originalSeverity = rawSeverity;
+              if (!('originalSeverity' in finding)) {
+                normalized.originalSeverity = rawSeverity;
+              }
               if (typeof rawSeverity !== 'string' || !KNOWN_SEVERITIES.has(rawSeverity)) {
                 if (rawSeverity !== undefined) {
                   warnings.push(`undocumented severity '${redactSecretDiagnostics(String(rawSeverity))}'`);
