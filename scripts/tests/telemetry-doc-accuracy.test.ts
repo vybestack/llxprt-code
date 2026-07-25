@@ -28,6 +28,14 @@ function readSrc(relPath: string): string {
  * Parses the entire source (not line-by-line) so multi-line declarations
  * where the value is on the next line are handled correctly.
  */
+/**
+ * Collect the string values of `export const <PREFIX>...` declarations.
+ *
+ * Only single-quoted literals are matched, which is what the Prettier config
+ * enforces for this repository. Callers assert the result is non-empty so a
+ * wholesale style change surfaces as a failure rather than silent under-
+ * extraction.
+ */
 function extractConstantValues(source: string, prefix: string): string[] {
   const values: string[] = [];
   // Match: export const <NAME with prefix> = 'value';

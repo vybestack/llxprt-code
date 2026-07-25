@@ -37,15 +37,20 @@ function dirContains(dir: string, name: string): boolean {
     throw new Error(`Expected directory does not exist: ${dir}`);
   }
   try {
-    return readdirSync(dir).includes(name);
+    // Match directories only: callers assert that internal-only directories
+    // are absent, and a same-named file must not satisfy that check.
+    return readdirSync(dir, { withFileTypes: true }).some(
+      (entry) => entry.isDirectory() && entry.name === name,
+    );
   } catch (error) {
     throw new Error(`Cannot read directory ${dir}: ${String(error)}`);
   }
 }
 
 /**
- * Recursively search the repository for files containing a marker string,
- * excluding node_modules, .git, dist, bundle, coverage, and .integration-tests.
+ * Recursively search the repository for Markdown files containing a marker
+ * string. Only `.md` files are inspected. Excludes node_modules, .git, dist,
+ * bundle, coverage, .integration-tests, and project-plans.
  */
 function searchRepoForMarker(marker: string): string[] {
   const excludeDirs = new Set([

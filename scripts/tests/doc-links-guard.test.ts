@@ -232,6 +232,24 @@ describe.skipIf(!isCiEnvironment() && !bunAvailable())(
         expect(code).toBe(0);
       });
 
+      it('slugs only the visible text of headings containing inline HTML', async () => {
+        // GitHub renders inline HTML and slugs the rendered text, so
+        // "Hello <span>world</span>" anchors at #hello-world. marked exposes
+        // each tag as an html token whose `text` is raw markup; including it
+        // produced #hello-spanworldspan and broke valid anchors.
+        fx.write(
+          'docs/other.md',
+          '# Other\n\n## Hello <span>world</span>\n\n## A <br> B\n',
+        );
+        fx.write(
+          'docs/page.md',
+          '# Page\n\n[a](./other.md#hello-world)\n[b](./other.md#a--b)\n',
+        );
+        const { code, stdout } = await runDocLinksGuard(fx.root(), 0);
+        expect(stdout).not.toMatch(/anchor/);
+        expect(code).toBe(0);
+      });
+
       it('reports a #fragment that matches no heading in the target file', async () => {
         fx.write('docs/page.md', '# Page\n\n[bad](./other.md#nope)\n');
         fx.write('docs/other.md', '# Other\n');

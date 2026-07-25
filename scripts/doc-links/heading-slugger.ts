@@ -113,6 +113,12 @@ function tokenText(tokens: readonly Token[] | undefined): string {
       case 'br':
         parts.push(' ');
         break;
+      case 'html':
+        // GitHub renders inline HTML and slugs only the visible text, so a
+        // heading like "Hello <span>world</span>" anchors at #hello-world.
+        // marked exposes each tag as its own html token whose `text` is the
+        // raw markup, which must not reach the slug.
+        break;
       default:
         // Inline tokens such as `strong` and `em` carry BOTH a flattened
         // `text` and nested `tokens` covering the same content, so taking
