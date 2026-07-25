@@ -23,6 +23,18 @@ on:
         default: 'main'
         type: 'string'
 
+# An explicit top-level block is required because the mergeability-gate job
+# calls the reusable ./.github/workflows/_pr-mergeability-gate.yml, which
+# declares `pull-requests: read`. A called workflow cannot grant itself a
+# scope the caller lacks; without `pull-requests` here the run is rejected at
+# graph-construction time (startup_failure, zero jobs). `actions: read` is
+# required by fkirc/skip-duplicate-actions, and `contents: read` by the
+# checkouts and the doc-change filter.
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
 jobs:
   skip_check:
     name: 'Skip Duplicate Check'
