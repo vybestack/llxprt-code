@@ -69,8 +69,11 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     // dist-tags (latest). Matching any specifier rather than only the
     // currently configured one means a stale literal cannot slip through
     // after a version bump.
+    // The \s* tolerates the spaced form (npm resolves
+    // "@alibaba-group/open-code-review@ 1.7.16" identically to the unspaced
+    // one), so that spelling cannot evade the check.
     expect(installRun).not.toMatch(
-      /@alibaba-group\/open-code-review@(?!\$\{)[^"'\s]+/,
+      /@alibaba-group\/open-code-review@\s*(?!\$\{)[^"'\s]+/,
     );
   });
 
