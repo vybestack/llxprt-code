@@ -291,7 +291,11 @@ describe('doc-tree invariants (real repo state)', () => {
       const content = readFile('docs/hooks/best-practices.md');
       // Count backtick and tilde fences of any length; docs in this repo use
       // four-backtick fences to wrap examples that themselves contain fences.
-      const fenceCount = (content.match(/^(?:`{3,}|~{3,})/gm) ?? []).length;
+      // CommonMark permits up to three leading spaces on a fence, so allow
+      // them here - anchoring at column 0 would silently count zero fences in
+      // an indented block and make this assertion vacuously pass.
+      const fenceCount = (content.match(/^ {0,3}(?:`{3,}|~{3,})/gm) ?? [])
+        .length;
       expect(fenceCount % 2).toBe(0);
     });
 
