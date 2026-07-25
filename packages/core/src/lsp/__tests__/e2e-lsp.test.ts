@@ -644,13 +644,28 @@ describe('LSP E2E integration (P36)', () => {
     'getMcpTransportStreams returns PassThrough streams when alive',
     async () => {
       const client = new LspServiceClient({ servers: [] }, targetDir);
-      await client.start();
+      try {
+        await client.start();
 
-      expect(client.isAlive()).toBe(true);
-      const transport = client.getMcpTransportStreams();
-      expect(transport).not.toBeNull();
-      expect(transport!.readable).toBeDefined();
-      expect(transport!.writable).toBeDefined();
+        // start() deliberately swallows startup failure: it calls disable()
+        // and returns normally, leaving alive === false. Assert on the
+        // recorded reason so a CI failure is diagnosable (e.g. a transient
+        // spawn failure under runner contention) instead of reporting an
+        // opaque "expected false to be true".
+        expect({
+          alive: client.isAlive(),
+          reason: client.getUnavailableReason(),
+        }).toStrictEqual({ alive: true, reason: undefined });
+        const transport = client.getMcpTransportStreams();
+        expect(transport).not.toBeNull();
+        expect(transport!.readable).toBeDefined();
+        expect(transport!.writable).toBeDefined();
+      } finally {
+        // Always reap the spawned Bun subprocess. Leaking it starves the rest
+        // of the run of CPU and file descriptors, which itself contributes to
+        // spawn failures in later tests.
+        await client.shutdown();
+      }
     },
   );
 

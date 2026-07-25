@@ -751,7 +751,6 @@ describe('unassign-stale-issues.sh behavioral', () => {
         );
       }
     },
-    30000,
   );
 });
 

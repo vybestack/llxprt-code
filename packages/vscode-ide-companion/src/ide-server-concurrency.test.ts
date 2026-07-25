@@ -360,6 +360,102 @@ function createGatedSendSpy(): {
   };
 }
 
+/**
+ * The shape of IDEServer's private deliverInitialContext method. TypeScript's
+ * `private` keyword is a compile-time constraint; at runtime the method is
+ * accessible on the prototype. This interface provides a typed view for the
+ * spy without weakening type safety elsewhere.
+ */
+interface DeliverInitialContextFn {
+  (
+    sessionId: string,
+    sessionContextDelivery: unknown,
+    options: {
+      relatedRequestId?: string | number;
+      authoritative: boolean;
+    },
+  ): Promise<boolean>;
+}
+
+interface DeliverInitialContextHolder {
+  deliverInitialContext: DeliverInitialContextFn;
+}
+
+/**
+ * Asserts that a private method a test synchronizes on still exists. Without
+ * this, renaming the method would leave the test installing a wrapper that is
+ * never invoked — silently reverting the test to its former flaky behaviour
+ * instead of failing loudly.
+ */
+function requireMethod<T>(method: T | undefined, name: string): T {
+  if (typeof method !== 'function') {
+    throw new Error(
+      `${name} not found: the synchronization signal this test depends on is no longer valid`,
+    );
+  }
+  return method as T;
+}
+
+/**
+ * Spies on the IDEServer's private deliverInitialContext method to detect when
+ * the authoritative ping has demonstrably entered the server-side delivery
+ * path. This replaces the unreliable setImmediate yields that were used to
+ * "wait for the ping to arrive" — setImmediate only yields a couple of
+ * macrotasks and does NOT wait for the HTTP round trip the ping requires.
+ *
+ * When deliverInitialContext is called with authoritative: true (the ping
+ * path), the returned promise resolves. By the time the test awaits it, the
+ * ping has already entered the method and found (and started awaiting) the
+ * shared in-flight promise created by the GET — the exact overlap the test
+ * intends to construct.
+ *
+ * The spy calls through to the real implementation so the actual delivery
+ * logic runs unmodified.
+ */
+function createPingArrivalSpy(server: IDEServer): {
+  waitForPingEntry: () => Promise<void>;
+  restore: () => void;
+} {
+  let pingResolve!: () => void;
+  const pingEnteredPromise = new Promise<void>((resolve) => {
+    pingResolve = resolve;
+  });
+
+  const holder = server as unknown as DeliverInitialContextHolder;
+  // Fail loudly if the method is renamed. Without this the spy would install a
+  // wrapper that is never invoked, the gate would be released before the ping
+  // arrived, and the test would silently revert to being flaky.
+  const realDeliver = requireMethod(
+    holder.deliverInitialContext,
+    'IDEServer.deliverInitialContext',
+  ).bind(server);
+
+  holder.deliverInitialContext = (
+    sessionId: string,
+    sessionContextDelivery: unknown,
+    options: {
+      relatedRequestId?: string | number;
+      authoritative: boolean;
+    },
+  ): Promise<boolean> => {
+    if (options.authoritative) {
+      pingResolve();
+    }
+    return realDeliver(sessionId, sessionContextDelivery, options);
+  };
+
+  return {
+    waitForPingEntry: () => pingEnteredPromise,
+    restore: () => {
+      // Delete the instance override rather than assigning the bound function
+      // back, so the prototype method is in effect again and the object shape
+      // matches its pre-spy state.
+      delete (holder as Partial<DeliverInitialContextHolder>)
+        .deliverInitialContext;
+    },
+  };
+}
+
 describe('IDEServer initial-context delivery concurrency', () => {
   let ideServer: IDEServer | undefined;
   let diffManager: DiffManager | undefined;
@@ -445,15 +541,18 @@ describe('IDEServer initial-context delivery concurrency', () => {
     //    in-flight send promise. The gated spy holds it in-flight.
     const getStream = openGetStream(port, authToken, resolvedSessionId!);
 
+    // Spy on the server-side deliverInitialContext to get a deterministic
+    // signal when the authoritative ping enters the delivery path. Created
+    // inside the try so the instance override is always removed by the
+    // finally block, even if an assertion below throws.
+    let pingSpy: ReturnType<typeof createPingArrivalSpy> | undefined;
+
     try {
+      pingSpy = createPingArrivalSpy(ideServer);
+
       // Wait until the GET's send has entered the gate (in-flight promise
       // created by the non-authoritative path).
       await gate.waitForGateEntry();
-      // Yield so the in-flight promise can register in the session map before
-      // the authoritative ping arrives. setImmediate is a macrotask yield only;
-      // the gate (releaseGatePromise) is the authoritative synchronization
-      // point that actually holds the send in-flight.
-      await new Promise((resolve) => setImmediate(resolve));
 
       // 3. Issue the authoritative ping while the GET send is still in-flight.
       //    The ping must await the SAME shared in-flight promise created by GET.
@@ -464,9 +563,13 @@ describe('IDEServer initial-context delivery concurrency', () => {
         resolvedSessionId,
       );
 
-      // Let the ping reach the server and attach to the shared in-flight promise.
-      await new Promise((resolve) => setImmediate(resolve));
-      await new Promise((resolve) => setImmediate(resolve));
+      // Deterministically wait for the ping to reach the server and enter
+      // deliverInitialContext with authoritative: true. By the time this
+      // resolves, the ping has found the shared in-flight promise and is
+      // awaiting it — the exact overlap this test intends to construct.
+      // This replaces the unreliable setImmediate yields that only advanced
+      // a couple of macrotasks (insufficient for an HTTP loopback round trip).
+      await pingSpy.waitForPingEntry();
 
       // 4. Release the gate: the shared send completes successfully.
       gate.gateRelease();
@@ -501,6 +604,7 @@ describe('IDEServer initial-context delivery concurrency', () => {
       gate.gateRelease();
       getStream.close();
       gate.restore();
+      pingSpy?.restore();
     }
   }, 15000);
 });

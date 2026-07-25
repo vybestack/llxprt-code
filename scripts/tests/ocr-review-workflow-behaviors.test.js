@@ -49,8 +49,10 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     notifyRun = commandText(notifyStep);
   });
 
-  it('exposes a single OCR_VERSION env var set to 1.7.9 (Behavior 1)', () => {
-    expect(workflow.env?.OCR_VERSION).toBe('1.7.9');
+  it('exposes a single OCR_VERSION env var pinned to an exact version (Behavior 1)', () => {
+    // Asserting the intent (a single, exactly-pinned version) rather than one
+    // specific literal keeps this behavior enforced across version bumps.
+    expect(workflow.env?.OCR_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it('installs OpenCodeReview using the OCR_VERSION env var (Behavior 1)', () => {
@@ -60,8 +62,19 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     expect(installRun).toContain(
       '"@alibaba-group/open-code-review@${OCR_VERSION}"',
     );
-    expect(installRun).not.toContain('1.6.1');
-    expect(installRun).not.toContain('@alibaba-group/open-code-review@1.7.9');
+    // The install must reference the env var, never a hardcoded version
+    // specifier. The negative lookahead permits exactly one form — the
+    // ${...} expansion asserted above — and rejects every literal
+    // alternative: exact pins (1.2.3), ranges (^1.2.3, ~1.2, >=1.0), and
+    // dist-tags (latest). Matching any specifier rather than only the
+    // currently configured one means a stale literal cannot slip through
+    // after a version bump.
+    // The \s* tolerates the spaced form (npm resolves
+    // "@alibaba-group/open-code-review@ 1.7.16" identically to the unspaced
+    // one), so that spelling cannot evade the check.
+    expect(installRun).not.toMatch(
+      /@alibaba-group\/open-code-review@\s*(?!\$\{)[^"'\s]+/,
+    );
   });
 
   it('exposes a configurable OCR_CONCURRENCY env var set to 2 (Behavior 2)', () => {
