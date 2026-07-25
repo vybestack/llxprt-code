@@ -302,21 +302,30 @@ jobs:
           fi
           echo "VSIX_PATH=$VSIX_FILE" >> "$GITHUB_OUTPUT"
 
+      # Marketplace publishing authenticates via Microsoft Entra ID using GitHub
+      # OIDC workload identity federation rather than a Personal Access Token.
+      # Azure DevOps retires global PATs on 2026-12-01. The federated credential
+      # is scoped to this repository and the "production-release" environment, so
+      # no long-lived secret is stored. `allow-no-subscriptions` is required
+      # because publishing is not an ARM operation and the tenant has none.
+      - name: Azure login for VS Code Marketplace
+        if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # ratchet:azure/login@v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
       - name: Publish VS Code extension
         if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           VSIX_PATH: ${{ steps.vscode_package.outputs.VSIX_PATH }}
         run: |
-          if [[ -z "${VSCE_PAT}" ]]; then
-            echo "VSCE_PAT secret is not configured. Set it to publish the VS Code extension." >&2
-            exit 1
-          fi
           if [[ -z "${VSIX_PATH}" || ! -f "${VSIX_PATH}" ]]; then
             echo "VSIX package not found at ${VSIX_PATH}." >&2
             exit 1
           fi
-          npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --skip-duplicate
+          npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --azure-credential --skip-duplicate
 
       - name: Publish @vybestack/llxprt-code-tools
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
