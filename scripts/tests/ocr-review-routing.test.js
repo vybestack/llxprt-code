@@ -19,8 +19,21 @@ import {
 // extracted from the trusted, version-controlled ocr-review.yml workflow via
 // extractFunctionSource. This is trusted repository content (not user/PR input)
 // and the workflow helper is read from the checked-out HEAD. The vm sandbox is
-// used to evaluate the real production function in isolation with stubbed
-// globals, proving actual runtime behavior without mocking the function itself.
+// used to evaluate the real production function in isolation (with an empty
+// global scope), proving actual runtime behavior without mocking the function
+// itself.
+
+/**
+ * Names of the helper functions that must exist in the post step before
+ * extraction. Asserting these up front gives a precise error pointing at the
+ * missing function rather than a buried stack trace inside the VM loader.
+ */
+const REQUIRED_FUNCTION_NAMES = [
+  'effectiveCategory',
+  'effectiveSeverity',
+  'routeFinding',
+  'categorySeverityLabel',
+];
 
 describe('.github/workflows/ocr-review.yml — severity-based routing (#2672)', () => {
   let workflow;
@@ -43,31 +56,60 @@ describe('.github/workflows/ocr-review.yml — severity-based routing (#2672)', 
     postScript = commandText(postStep);
   });
 
+  function assertFunctionsPresent(script) {
+    for (const name of REQUIRED_FUNCTION_NAMES) {
+      expect(
+        script.includes(`function ${name}(`),
+        `post step should define function ${name}`,
+      ).toBe(true);
+    }
+  }
+
   /**
-   * Extract routeFinding AND its helper functions (effectiveCategory,
-   * effectiveSeverity) from the committed workflow YAML and execute them
-   * in an isolated vm sandbox. routeFinding depends on these helpers.
+   * Extract the routing functions from the committed workflow YAML, validate
+   * they are present, and load them into a single shared VM sandbox. The
+   * results are cached because the workflow source is immutable during the
+   * test run.
    */
-  function loadRouteFinding() {
-    const effCat = extractFunctionSource(postScript, 'effectiveCategory');
-    const effSev = extractFunctionSource(postScript, 'effectiveSeverity');
+  let cachedRouteFinding = null;
+  let cachedCategorySeverityLabel = null;
+
+  function loadWorkflowFunctions() {
+    if (cachedRouteFinding && cachedCategorySeverityLabel) {
+      return {
+        routeFinding: cachedRouteFinding,
+        categorySeverityLabel: cachedCategorySeverityLabel,
+      };
+    }
+    assertFunctionsPresent(postScript);
+    const helpers = [
+      extractFunctionSource(postScript, 'effectiveCategory'),
+      extractFunctionSource(postScript, 'effectiveSeverity'),
+    ];
     const routeSrc = extractFunctionSource(postScript, 'routeFinding');
-    const sandbox = {};
-    vm.createContext(sandbox);
-    vm.runInContext([effCat, effSev, routeSrc].join('\n'), sandbox);
-    expect(typeof sandbox.routeFinding).toBe('function');
-    return sandbox.routeFinding;
+    const labelSrc = extractFunctionSource(postScript, 'categorySeverityLabel');
+    const routeSandbox = {};
+    vm.createContext(routeSandbox);
+    vm.runInContext([...helpers, routeSrc].join('\n'), routeSandbox);
+    expect(typeof routeSandbox.routeFinding).toBe('function');
+    const labelSandbox = {};
+    vm.createContext(labelSandbox);
+    vm.runInContext([...helpers, labelSrc].join('\n'), labelSandbox);
+    expect(typeof labelSandbox.categorySeverityLabel).toBe('function');
+    cachedRouteFinding = routeSandbox.routeFinding;
+    cachedCategorySeverityLabel = labelSandbox.categorySeverityLabel;
+    return {
+      routeFinding: cachedRouteFinding,
+      categorySeverityLabel: cachedCategorySeverityLabel,
+    };
+  }
+
+  function loadRouteFinding() {
+    return loadWorkflowFunctions().routeFinding;
   }
 
   function loadCategorySeverityLabel() {
-    const effCat = extractFunctionSource(postScript, 'effectiveCategory');
-    const effSev = extractFunctionSource(postScript, 'effectiveSeverity');
-    const labelSrc = extractFunctionSource(postScript, 'categorySeverityLabel');
-    const sandbox = {};
-    vm.createContext(sandbox);
-    vm.runInContext([effCat, effSev, labelSrc].join('\n'), sandbox);
-    expect(typeof sandbox.categorySeverityLabel).toBe('function');
-    return sandbox.categorySeverityLabel;
+    return loadWorkflowFunctions().categorySeverityLabel;
   }
 
   // -------------------------------------------------------------------------
@@ -659,7 +701,11 @@ describe('.github/workflows/ocr-review.yml — severity-based routing (#2672)', 
       expect(afterRouted).toContain('categorySeverityLabel');
     });
 
-    it('tracks wouldRouteToSummary count from routingDecisions', () => {
+    it('tracks wouldRouteToSummary count filtering to line-addressable findings only', () => {
+      // wouldRouteToSummary must filter to findings with valid path/line
+      // numbers (hasPosition) so lineless findings — which always go to
+      // the summary — do not inflate the shadow-mode preview count.
+      expect(postScript).toContain('hasPosition');
       expect(postScript).toContain("d.destination === 'summary'");
       expect(postScript).toContain('wouldRouteToSummary');
     });

@@ -1510,17 +1510,26 @@ jobs:
             // Issue #2672: routing decisions for the deduped set. Recomputed
             // (not sliced from allRoutingDecisions) because dedup may remove
             // findings from anywhere in the array.
-            const routingDecisions = findings.map((f) => {
+            const routingDecisions = findings.map((f, i) => {
               const decision = routeFinding(f);
               const meta = (f && typeof f === 'object') ? f : {};
+              const hasPosition = meta.path && Number.isInteger(meta.start_line) &&
+                Number.isInteger(meta.end_line) && meta.start_line > 0 && meta.end_line > 0;
               return {
                 category: effectiveCategory(meta),
                 severity: effectiveSeverity(meta),
                 destination: decision.destination,
                 reason: decision.reason,
+                hasPosition,
               };
             });
-            const wouldRouteToSummary = routingDecisions.filter((d) => d.destination === 'summary').length;
+            // Only count findings that would actually be held back from
+            // inline posting (line-addressable). Lineless findings always
+            // go to the summary regardless of routing, so including them
+            // would inflate the shadow-mode preview count.
+            const wouldRouteToSummary = routingDecisions.filter(
+              (d) => d.hasPosition && d.destination === 'summary',
+            ).length;
 
             // Split findings into inline (resolvable file/line), summary-routed,
             // and lineless. In shadow mode all line-addressable findings go
@@ -1903,7 +1912,7 @@ jobs:
             core.setOutput('comments_inline', String(postedInline));
             core.setOutput('comments_skipped', String(commentsSkipped));
             core.setOutput('comments_failed', String(failedInline));
-            core.setOutput('comments_routed_summary', String(summaryRouted.length));
+            core.setOutput('comments_routed_summary', String(routingShadowMode ? wouldRouteToSummary : summaryRouted.length));
             core.setOutput('summary_comment_url', summaryCommentUrl);
 
             if (!ran) {
