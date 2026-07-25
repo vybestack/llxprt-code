@@ -144,6 +144,62 @@ function createExtensionContext(): vscode.ExtensionContext {
   } as unknown as vscode.ExtensionContext;
 }
 
+/**
+ * Asserts that a private method a test synchronizes on still exists. Without
+ * this, renaming the method would leave the test installing a wrapper that is
+ * never invoked — silently reverting the test to its former flaky behaviour
+ * instead of failing loudly.
+ */
+/**
+ * Upper bound for server-side GET SSE stream establishment. Generous relative
+ * to the local loopback round-trip it gates, since its only job is to convert
+ * an indefinite hang into a descriptive failure.
+ *
+ * The owning test declares a per-test timeout strictly greater than this, so
+ * this bound is reached first and reports the specific broken assumption. If
+ * the framework timeout were the lower of the two it would abort first with a
+ * generic "Test timed out" message and hide the root cause.
+ */
+const GET_STREAM_TIMEOUT_MS = 10_000;
+
+/**
+ * Per-test timeout for the case that awaits GET stream establishment. Kept
+ * above GET_STREAM_TIMEOUT_MS so the descriptive error always wins.
+ */
+const GET_STREAM_TEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Rejects with `message` if `promise` has not settled within `timeoutMs`. The
+ * timer is always cleared so a resolved promise cannot keep the event loop (or
+ * the worker) alive after the test finishes.
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function requireMethod<T>(method: T | undefined, name: string): T {
+  if (typeof method !== 'function') {
+    throw new Error(
+      `${name} not found: the synchronization signal this test depends on is no longer valid`,
+    );
+  }
+  return method as T;
+}
+
 async function buildConnectedStack(): Promise<{
   ideClient: IdeClient;
   ideServer: IDEServer;
@@ -220,6 +276,13 @@ describe('IdeClient with the VS Code companion server', () => {
       configurable: true,
       value: undefined,
     });
+    // Restore workspace trust: a test that flips this to false to make a
+    // broadcast payload observably distinct must not leak the value into
+    // subsequent tests, which assert isTrusted === true.
+    Object.defineProperty(vscode.workspace, 'isTrusted', {
+      configurable: true,
+      value: true,
+    });
     vi.unstubAllEnvs();
   });
 
@@ -252,45 +315,154 @@ describe('IdeClient with the VS Code companion server', () => {
     });
   });
 
-  it('reflects incremental context updates after the initial sync', async () => {
-    const stack = await buildConnectedStack();
-    ideClient = stack.ideClient;
-    ideServer = stack.ideServer;
-    diffManager = stack.diffManager;
-    context = stack.context;
+  it(
+    'reflects incremental context updates after the initial sync',
+    async () => {
+      const stack = await buildConnectedStack();
+      ideClient = stack.ideClient;
+      ideServer = stack.ideServer;
+      diffManager = stack.diffManager;
+      context = stack.context;
 
-    await ideClient.connect();
-    // Drain the synchronous initial value first.
-    expect(ideContext.getIdeContext()).toBeDefined();
-
-    const secondUpdate = new Promise<IdeContext>((resolve) => {
-      const unsubscribe = ideContext.subscribeToIdeContext((next) => {
-        if (next !== undefined) {
-          unsubscribe();
-          resolve(next);
-        }
+      // The client opens a standalone GET SSE stream asynchronously after
+      // notifications/initialized (fire-and-forget _startOrAuthSse in the SDK).
+      // broadcastIdeContextUpdate delivers via this standalone GET stream; if
+      // the stream hasn't arrived at the server yet the notification is silently
+      // dropped. We must wait for the GET stream to be established on the server
+      // side before broadcasting.
+      //
+      // We detect this by spying on the server's non-authoritative
+      // deliverInitialContext call, which runs on the GET path. Waiting for it
+      // to COMPLETE (rather than merely for the GET handler to be entered) is
+      // what makes this robust: completion means the server already pushed the
+      // initial ide/contextUpdate down the standalone stream, which is
+      // observable proof the stream is live and can carry a later broadcast.
+      // Note handleSessionRequest itself cannot be awaited here — it stays
+      // pending for the lifetime of the SSE response.
+      const serverHolder = stack.ideServer as unknown as {
+        deliverInitialContext: (
+          sessionId: string,
+          delivery: unknown,
+          options: { authoritative: boolean },
+        ) => Promise<boolean>;
+      };
+      const realDeliverInitialContext = requireMethod(
+        serverHolder.deliverInitialContext,
+        'IDEServer.deliverInitialContext',
+      ).bind(stack.ideServer);
+      let getStreamResolve!: () => void;
+      let getStreamReject!: (reason: Error) => void;
+      const getStreamEstablished = new Promise<void>((resolve, reject) => {
+        getStreamResolve = resolve;
+        getStreamReject = reject;
       });
-    });
-    stack.ideServer.broadcastIdeContextUpdate();
+      serverHolder.deliverInitialContext = async (
+        sessionId: string,
+        delivery: unknown,
+        options: { authoritative: boolean },
+      ) => {
+        try {
+          const delivered = await realDeliverInitialContext(
+            sessionId,
+            delivery,
+            options,
+          );
+          if (!options.authoritative) {
+            // Only a SUCCESSFUL non-authoritative delivery proves the initial
+            // context actually traversed the standalone GET stream. A false
+            // result means the transport was missing or the send failed, so the
+            // stream is not usable and proceeding would be a false positive.
+            if (delivered) {
+              getStreamResolve();
+            } else {
+              getStreamReject(
+                new Error(
+                  'Non-authoritative deliverInitialContext returned false: the GET SSE stream never carried initial context',
+                ),
+              );
+            }
+          }
+          return delivered;
+        } catch (error) {
+          // Never leave the gate pending on a rejection, or the wait below would
+          // hang until the suite timeout and mask the real error.
+          if (!options.authoritative) {
+            getStreamReject(
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          }
+          throw error;
+        }
+      };
 
-    const updated = await secondUpdate;
-    // broadcastIdeContextUpdate re-sends openFilesManager.state (the same
-    // workspaceState shape seeded by seedActiveEditor), so the incremental
-    // update must carry the active README file.
-    expect(updated).toMatchObject({
-      workspaceState: {
-        isTrusted: true,
-        openFiles: [
-          {
-            path: readmePath,
-            isActive: true,
-            selectedText: 'LLxprt Code',
-            cursor: { line: 1, character: 12 },
-          },
-        ],
-      },
-    });
-  });
+      try {
+        await ideClient.connect();
+        // Drain the synchronous initial value first.
+        expect(ideContext.getIdeContext()).toBeDefined();
+
+        // Wait for the standalone GET SSE stream to arrive at the server.
+        // Bounded so that if the server stops taking the non-authoritative GET
+        // path entirely, this fails with a message naming the broken
+        // synchronization assumption instead of stalling until the suite
+        // timeout reports an anonymous hang.
+        await withTimeout(
+          getStreamEstablished,
+          GET_STREAM_TIMEOUT_MS,
+          `GET SSE stream was not established within ${GET_STREAM_TIMEOUT_MS}ms: deliverInitialContext was never called with authoritative: false`,
+        );
+      } finally {
+        // Drop the instance override so the prototype implementation is in
+        // effect again, even if connect() or the wait above throws.
+        delete (serverHolder as Partial<typeof serverHolder>)
+          .deliverInitialContext;
+      }
+
+      // Make the broadcast payload observably DIFFERENT from the initial
+      // context. Without this, the assertion would also be satisfied by a
+      // late-arriving initial notification racing in on the GET stream, so the
+      // test could pass even if broadcastIdeContextUpdate were broken.
+      //
+      // OpenFilesManager.state reads vscode.workspace.isTrusted live on every
+      // access, so flipping it here is reflected in the next broadcast without
+      // depending on editor event watchers (which this suite's vscode mock
+      // stubs out as no-op disposables).
+      Object.defineProperty(vscode.workspace, 'isTrusted', {
+        configurable: true,
+        value: false,
+      });
+
+      const secondUpdate = new Promise<IdeContext>((resolve) => {
+        const unsubscribe = ideContext.subscribeToIdeContext((next) => {
+          // Ignore any initial-context notification still in flight; only the
+          // post-broadcast state carries isTrusted === false.
+          if (next?.workspaceState?.isTrusted === false) {
+            unsubscribe();
+            resolve(next);
+          }
+        });
+      });
+      stack.ideServer.broadcastIdeContextUpdate();
+
+      const updated = await secondUpdate;
+      // The incremental update must carry the NEW trust state, proving this
+      // broadcast was delivered rather than a replayed initial context, and it
+      // must still carry the active README file.
+      expect(updated).toMatchObject({
+        workspaceState: {
+          isTrusted: false,
+          openFiles: [
+            {
+              path: readmePath,
+              isActive: true,
+              selectedText: 'LLxprt Code',
+              cursor: { line: 1, character: 12 },
+            },
+          ],
+        },
+      });
+    },
+    GET_STREAM_TEST_TIMEOUT_MS,
+  );
 
   it('disconnect closes the MCP client and session transport resources', async () => {
     const stack = await buildConnectedStack();
