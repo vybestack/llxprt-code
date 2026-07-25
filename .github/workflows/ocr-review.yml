@@ -533,6 +533,274 @@ jobs:
             echo "HEAD_SHA=${HEAD_SHA}"
           } >> "$GITHUB_ENV"
 
+      - name: Read OCR checkpoint
+        id: read-checkpoint
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+        with:
+          script: |
+            const MARKER = '<!-- llxprt-code-ocr-review -->';
+            const checkpointPattern = /<!--\s*ocr-checkpoint:\s*([\s\S]*?)\s*-->/;
+            const number = Number(process.env.PR_NUMBER);
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            function deserializeCheckpoint(base64) {
+              const normalized = typeof base64 === 'string' ? base64.trim() : '';
+              if (!normalized || normalized.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+                return null;
+              }
+              try {
+                const decoded = Buffer.from(normalized, 'base64').toString('utf8');
+                const canonical = Buffer.from(decoded, 'utf8').toString('base64');
+                if (canonical !== normalized) {
+                  return null;
+                }
+                const checkpoint = JSON.parse(decoded);
+                return checkpoint && typeof checkpoint === 'object' && !Array.isArray(checkpoint)
+                  ? checkpoint
+                  : null;
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function extractCheckpointFromComment(commentBody) {
+              const match = checkpointPattern.exec(String(commentBody || ''));
+              return match ? deserializeCheckpoint(match[1]) : null;
+            }
+
+            const { data: botUser } = await github.rest.users.getAuthenticated();
+            const botLogin = botUser.login || '';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: number, per_page: 100,
+            });
+            const markerComment = comments.findLast((comment) =>
+              comment.user && comment.user.type === 'Bot'
+                && botLogin !== '' && comment.user.login === botLogin
+                && typeof comment.body === 'string' && comment.body.includes(MARKER));
+            const encodedMatch = markerComment
+              ? checkpointPattern.exec(markerComment.body)
+              : null;
+            const checkpoint = markerComment
+              ? extractCheckpointFromComment(markerComment.body)
+              : null;
+            const shaPattern = /^[0-9a-f]{40}$/i;
+            core.setOutput('CHECKPOINT_FOUND', String(Boolean(encodedMatch)));
+            core.setOutput('CHECKPOINT_VALID', String(Boolean(checkpoint)));
+            core.setOutput('CHECKPOINT_SCHEMA', String(checkpoint?.schema ?? ''));
+            core.setOutput('CHECKPOINT_HEAD', shaPattern.test(checkpoint?.head_sha || '') ? checkpoint.head_sha : '');
+            core.setOutput('CHECKPOINT_BASE_SHA', shaPattern.test(checkpoint?.base_sha || '') ? checkpoint.base_sha : '');
+            core.setOutput('CHECKPOINT_COMPLETION', String(checkpoint?.completion_state || ''));
+            core.setOutput('CHECKPOINT_VERSION', String(checkpoint?.ocr_version || ''));
+            core.setOutput('CHECKPOINT_MODEL', String(checkpoint?.ocr_model || ''));
+            core.setOutput('CHECKPOINT_RULES_HASH', String(checkpoint?.rules_hash || ''));
+            core.setOutput('CHECKPOINT_POLICY_HASH', String(checkpoint?.policy_hash || ''));
+            core.setOutput('CHECKPOINT_WORKFLOW_SCHEMA_HASH', String(checkpoint?.workflow_schema_hash || ''));
+            core.setOutput('CHECKPOINT_ENCODED', checkpoint && encodedMatch ? encodedMatch[1].trim() : '');
+
+      - name: Resolve review range
+        id: resolve-range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          MERGE_BASE: ${{ env.BASE_SHA }}
+          HEAD_SHA: ${{ env.HEAD_SHA }}
+          API_BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          OCR_VERSION: ${{ env.OCR_VERSION }}
+          CHECKPOINT_FOUND: ${{ steps.read-checkpoint.outputs.CHECKPOINT_FOUND }}
+          CHECKPOINT_VALID: ${{ steps.read-checkpoint.outputs.CHECKPOINT_VALID }}
+          CHECKPOINT_SCHEMA: ${{ steps.read-checkpoint.outputs.CHECKPOINT_SCHEMA }}
+          CHECKPOINT_HEAD: ${{ steps.read-checkpoint.outputs.CHECKPOINT_HEAD }}
+          CHECKPOINT_BASE_SHA: ${{ steps.read-checkpoint.outputs.CHECKPOINT_BASE_SHA }}
+          CHECKPOINT_COMPLETION: ${{ steps.read-checkpoint.outputs.CHECKPOINT_COMPLETION }}
+          CHECKPOINT_VERSION: ${{ steps.read-checkpoint.outputs.CHECKPOINT_VERSION }}
+          CHECKPOINT_MODEL: ${{ steps.read-checkpoint.outputs.CHECKPOINT_MODEL }}
+          CHECKPOINT_RULES_HASH: ${{ steps.read-checkpoint.outputs.CHECKPOINT_RULES_HASH }}
+          CHECKPOINT_POLICY_HASH: ${{ steps.read-checkpoint.outputs.CHECKPOINT_POLICY_HASH }}
+          CHECKPOINT_WORKFLOW_SCHEMA_HASH: ${{ steps.read-checkpoint.outputs.CHECKPOINT_WORKFLOW_SCHEMA_HASH }}
+          OCR_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_RULES_HASH: ${{ vars.OCR_RULES_HASH }}
+          OCR_POLICY_HASH: ${{ vars.OCR_POLICY_HASH }}
+          OCR_WORKFLOW_SCHEMA_HASH: ${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}
+        run: |
+          set -euo pipefail
+          IS_ANCESTOR=false
+          if [ "$EVENT_NAME" = "pull_request_target" ] \
+             && [ "$EVENT_ACTION" = "synchronize" ] \
+             && [ "$CHECKPOINT_VALID" = "true" ] \
+             && [ -n "$CHECKPOINT_HEAD" ]; then
+            if git merge-base --is-ancestor "$CHECKPOINT_HEAD" "$HEAD_SHA"; then
+              IS_ANCESTOR=true
+            fi
+          fi
+          export IS_ANCESTOR
+
+          mapfile -t RANGE_OUTPUT < <(node <<'NODE'
+          function isAncestralCheckpoint(checkpoint, currentHeadSha, baseSha) {
+            return Boolean(
+              checkpoint
+                && typeof checkpoint === 'object'
+                && checkpoint.schema === 1
+                && checkpoint.completion_state === 'complete'
+                && typeof checkpoint.head_sha === 'string'
+                && checkpoint.head_sha.length > 0
+                && typeof currentHeadSha === 'string'
+                && currentHeadSha.length > 0
+                && checkpoint.base_sha === baseSha,
+            );
+          }
+
+          function resolveReviewRange(input) {
+            const checkpoint = input.checkpoint;
+            const checkpointHead = checkpoint?.head_sha || '';
+            const full = (reason = '') => ({
+              FROM_SHA: input.mergeBase,
+              RANGE_MODE: 'full',
+              CHECKPOINT_HEAD: checkpointHead,
+              FALLBACK_REASON: reason,
+              CHECKPOINT_FOUND: Boolean(input.checkpointFound),
+              SAME_HEAD: false,
+            });
+            if (input.eventName !== 'pull_request_target' || input.eventAction !== 'synchronize') {
+              return full();
+            }
+            if (!input.checkpointFound) {
+              return full('checkpoint-missing');
+            }
+            if (!checkpoint) {
+              return full('checkpoint-corrupt');
+            }
+            if (checkpoint.schema !== 1) {
+              return full('checkpoint-schema-mismatch');
+            }
+            if (checkpoint.completion_state !== 'complete') {
+              return full('checkpoint-incomplete');
+            }
+            if (!checkpoint.head_sha) {
+              return full('checkpoint-head-missing');
+            }
+            if (checkpoint.base_sha !== input.baseSha) {
+              return full('base-sha-changed');
+            }
+            if (checkpoint.ocr_version !== input.ocrVersion) {
+              return full('ocr-version-changed');
+            }
+            if (input.ocrModel && checkpoint.ocr_model && checkpoint.ocr_model !== input.ocrModel) {
+              return full('ocr-model-changed');
+            }
+            if (input.rulesHash && checkpoint.rules_hash && checkpoint.rules_hash !== input.rulesHash) {
+              return full('rules-hash-changed');
+            }
+            if (input.policyHash && checkpoint.policy_hash && checkpoint.policy_hash !== input.policyHash) {
+              return full('policy-hash-changed');
+            }
+            if (input.workflowSchemaHash && checkpoint.workflow_schema_hash && checkpoint.workflow_schema_hash !== input.workflowSchemaHash) {
+              return full('workflow-schema-changed');
+            }
+            if (!isAncestralCheckpoint(checkpoint, input.headSha, input.baseSha)) {
+              return full('checkpoint-invalid');
+            }
+            if (checkpoint.head_sha === input.headSha) {
+              return {
+                FROM_SHA: checkpoint.head_sha,
+                RANGE_MODE: 'noop',
+                CHECKPOINT_HEAD: checkpoint.head_sha,
+                FALLBACK_REASON: '',
+                CHECKPOINT_FOUND: true,
+                SAME_HEAD: true,
+              };
+            }
+            if (!input.isAncestor) {
+              return full('checkpoint-not-ancestor');
+            }
+            return {
+              FROM_SHA: checkpoint.head_sha,
+              RANGE_MODE: 'incremental',
+              CHECKPOINT_HEAD: checkpoint.head_sha,
+              FALLBACK_REASON: '',
+              CHECKPOINT_FOUND: true,
+              SAME_HEAD: false,
+            };
+          }
+
+          const checkpoint = process.env.CHECKPOINT_VALID === 'true'
+            ? {
+                schema: Number(process.env.CHECKPOINT_SCHEMA),
+                head_sha: process.env.CHECKPOINT_HEAD,
+                base_sha: process.env.CHECKPOINT_BASE_SHA,
+                completion_state: process.env.CHECKPOINT_COMPLETION,
+                ocr_version: process.env.CHECKPOINT_VERSION,
+                ocr_model: process.env.CHECKPOINT_MODEL || '',
+                rules_hash: process.env.CHECKPOINT_RULES_HASH || '',
+                policy_hash: process.env.CHECKPOINT_POLICY_HASH || '',
+                workflow_schema_hash: process.env.CHECKPOINT_WORKFLOW_SCHEMA_HASH || '',
+              }
+            : null;
+          const result = resolveReviewRange({
+            eventName: process.env.EVENT_NAME,
+            eventAction: process.env.EVENT_ACTION,
+            mergeBase: process.env.MERGE_BASE,
+            headSha: process.env.HEAD_SHA,
+            baseSha: process.env.API_BASE_SHA,
+            ocrVersion: process.env.OCR_VERSION,
+            ocrModel: process.env.OCR_MODEL || '',
+            rulesHash: process.env.OCR_RULES_HASH || '',
+            policyHash: process.env.OCR_POLICY_HASH || '',
+            workflowSchemaHash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+            checkpointFound: process.env.CHECKPOINT_FOUND === 'true',
+            checkpoint,
+            isAncestor: process.env.IS_ANCESTOR === 'true',
+          });
+          for (const key of ['FROM_SHA', 'RANGE_MODE', 'CHECKPOINT_HEAD', 'FALLBACK_REASON', 'CHECKPOINT_FOUND', 'SAME_HEAD']) {
+            console.log(String(result[key]));
+          }
+          NODE
+          )
+          FROM_SHA="${RANGE_OUTPUT[0]}"
+          RANGE_MODE="${RANGE_OUTPUT[1]}"
+          RESOLVED_CHECKPOINT_HEAD="${RANGE_OUTPUT[2]}"
+          FALLBACK_REASON="${RANGE_OUTPUT[3]}"
+          RESOLVED_CHECKPOINT_FOUND="${RANGE_OUTPUT[4]}"
+          SAME_HEAD="${RANGE_OUTPUT[5]}"
+
+          range_stats() {
+            local from_sha="$1"
+            local to_sha="$2"
+            local files additions deletions
+            files="$(git diff --name-only "${from_sha}..${to_sha}" | awk 'NF { count += 1 } END { print count + 0 }')"
+            read -r additions deletions < <(git diff --numstat "${from_sha}..${to_sha}" | awk '$1 ~ /^[0-9]+$/ { additions += $1 } $2 ~ /^[0-9]+$/ { deletions += $2 } END { print additions + 0, deletions + 0 }')
+            printf '%s %s %s\n' "$files" "$additions" "$deletions"
+          }
+          read -r CUMULATIVE_FILES CUMULATIVE_ADDITIONS CUMULATIVE_DELETIONS < <(range_stats "$MERGE_BASE" "$HEAD_SHA")
+          read -r SELECTED_FILES SELECTED_ADDITIONS SELECTED_DELETIONS < <(range_stats "$FROM_SHA" "$HEAD_SHA")
+          cat > ocr-range-metadata.json <<EOF
+          {
+            "cumulative": {
+              "base_sha": "${MERGE_BASE}",
+              "head_sha": "${HEAD_SHA}",
+              "files": ${CUMULATIVE_FILES},
+              "lines": { "additions": ${CUMULATIVE_ADDITIONS}, "deletions": ${CUMULATIVE_DELETIONS}, "total": $((CUMULATIVE_ADDITIONS + CUMULATIVE_DELETIONS)) }
+            },
+            "selected": {
+              "base_sha": "${FROM_SHA}",
+              "head_sha": "${HEAD_SHA}",
+              "files": ${SELECTED_FILES},
+              "lines": { "additions": ${SELECTED_ADDITIONS}, "deletions": ${SELECTED_DELETIONS}, "total": $((SELECTED_ADDITIONS + SELECTED_DELETIONS)) }
+            }
+          }
+          EOF
+          {
+            echo "FROM_SHA=${FROM_SHA}"
+            echo "RANGE_MODE=${RANGE_MODE}"
+            echo "CHECKPOINT_HEAD=${RESOLVED_CHECKPOINT_HEAD}"
+            echo "FALLBACK_REASON=${FALLBACK_REASON}"
+            echo "CHECKPOINT_FOUND=${RESOLVED_CHECKPOINT_FOUND}"
+            echo "SAME_HEAD=${SAME_HEAD}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Initialize OCR artifact files
         shell: bash
         run: |
@@ -772,7 +1040,7 @@ jobs:
       - name: Verify review scope includes changed tests
         shell: bash
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          BASE_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -888,10 +1156,11 @@ jobs:
 
       - name: Run OpenCodeReview
         shell: bash
-        # Full merge-base..head diff. Parse failures are handled distinctly
-        # in the posting step (OCR failed vs. no findings).
+        # Parse failures are handled distinctly in the posting step
+        # (OCR failed vs. no findings).
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          FROM_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -908,6 +1177,30 @@ jobs:
           set +e
           if [ -s ocr-exit-code.txt ]; then
             echo "::warning::Skipping OCR review because an earlier OCR setup/configuration/preview failure was recorded."
+            exit 0
+          fi
+          if [ "$RANGE_MODE" = "noop" ]; then
+            cat > ocr-result.json <<'EOF'
+          {
+            "status": "skipped",
+            "message": "Same head; no new changes to review.",
+            "summary": {
+              "files_reviewed": 0,
+              "comments": 0,
+              "total_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "elapsed": "0s"
+            },
+            "comments": [],
+            "warnings": []
+          }
+          EOF
+            cp ocr-result.json ocr-stdout.raw
+            echo "0" > ocr-exit-code.txt
+            echo "noop" > ocr-phase.txt
             exit 0
           fi
           echo "review" > ocr-phase.txt
@@ -942,7 +1235,7 @@ jobs:
             fi
           fi
           ocr review \
-            --from "$BASE_SHA" \
+            --from "$FROM_SHA" \
             --to "$HEAD_SHA" \
             --format json \
             --audience agent \
@@ -979,6 +1272,19 @@ jobs:
         env:
           BASE_SHA: ${{ env.BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
+          API_BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          API_HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
+          FROM_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          FALLBACK_REASON: ${{ steps.resolve-range.outputs.FALLBACK_REASON }}
+          CHECKPOINT_BEFORE: ${{ steps.read-checkpoint.outputs.CHECKPOINT_ENCODED }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_AFTER: ${{ github.event.after }}
+          OCR_VERSION: ${{ env.OCR_VERSION }}
+          OCR_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           # Whether this run is an automatic (pull_request_target) trigger.
           # Automatic runs increment the auto-review counter; manual runs do not.
@@ -1044,6 +1350,169 @@ jobs:
               } catch (_) {
                 return fallback;
               }
+            }
+
+            function serializeCheckpoint(data) {
+              return Buffer.from(
+                JSON.stringify({ ...data, schema: 1 }),
+                'utf8',
+              ).toString('base64');
+            }
+
+            function deserializeCheckpoint(base64) {
+              const normalized = typeof base64 === 'string' ? base64.trim() : '';
+              if (!normalized || normalized.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+                return null;
+              }
+              try {
+                const decoded = Buffer.from(normalized, 'base64').toString('utf8');
+                if (Buffer.from(decoded, 'utf8').toString('base64') !== normalized) {
+                  return null;
+                }
+                const checkpoint = JSON.parse(decoded);
+                return checkpoint && typeof checkpoint === 'object' && !Array.isArray(checkpoint)
+                  ? checkpoint
+                  : null;
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function extractCheckpointFromComment(commentBody) {
+              const match = /<!--\s*ocr-checkpoint:\s*([A-Za-z0-9+/=]+)\s*-->/.exec(String(commentBody || ''));
+              return match ? deserializeCheckpoint(match[1]) : null;
+            }
+
+            function embedCheckpointInBody(body, checkpointData) {
+              const checkpointComment = `<!-- ocr-checkpoint:${serializeCheckpoint(checkpointData)} -->`;
+              const withoutCheckpoint = String(body || '')
+                .replace(/<!--\s*ocr-checkpoint:[\s\S]*?-->/g, '')
+                .trimEnd();
+              return withoutCheckpoint
+                ? `${withoutCheckpoint}\n${checkpointComment}`
+                : checkpointComment;
+            }
+
+            function isAncestralCheckpoint(checkpoint, currentHeadSha, baseSha) {
+              return Boolean(
+                checkpoint
+                  && typeof checkpoint === 'object'
+                  && checkpoint.schema === 1
+                  && checkpoint.completion_state === 'complete'
+                  && typeof checkpoint.head_sha === 'string'
+                  && checkpoint.head_sha.length > 0
+                  && typeof currentHeadSha === 'string'
+                  && currentHeadSha.length > 0
+                  && checkpoint.base_sha === baseSha,
+              );
+            }
+
+            function shouldAdvanceCheckpoint(decision) {
+              if (!decision.ran
+                || decision.exitCode !== 0
+                || decision.infrastructureFailure
+                || decision.policyFailure
+                || decision.failedFindings !== 0
+                || decision.completionState !== 'complete'
+                || decision.publicationState !== 'complete'
+                || decision.resultSource === 'synthesized') {
+                return false;
+              }
+              const selected = Number(decision.selectedFiles);
+              const completed = Number(decision.completedFiles);
+              if (!Number.isFinite(selected) || selected <= 0) {
+                return false;
+              }
+              return completed >= selected;
+            }
+
+            function completionStateForResult(status, resultSource) {
+              if (resultSource === 'synthesized') {
+                return 'partial';
+              }
+              return ['success', 'completed_with_warnings', 'skipped'].includes(status)
+                ? 'complete'
+                : 'partial';
+            }
+
+            function ocrObservabilityFromResult(result) {
+              const summary = result && typeof result.summary === 'object' && result.summary
+                ? result.summary
+                : {};
+              const cacheRead = Number(summary.cache_read_tokens || 0);
+              const cacheWrite = Number(summary.cache_write_tokens || 0);
+              const resultSource = result && typeof result === 'object'
+                ? (result.resultSource || 'parsed')
+                : 'parsed';
+              return {
+                completed_files: Number(summary.files_reviewed || 0),
+                elapsed: String(summary.elapsed || 'unknown'),
+                tokens: {
+                  input: Number(summary.input_tokens || 0),
+                  output: Number(summary.output_tokens || 0),
+                  cache_read: cacheRead,
+                  cache_write: cacheWrite,
+                  cache: cacheRead + cacheWrite,
+                  total: Number(summary.total_tokens || 0),
+                },
+                warnings: Array.isArray(result?.warnings) ? result.warnings : [],
+                completion_state: completionStateForResult(result?.status, resultSource),
+                result_source: resultSource,
+              };
+            }
+
+            function findingDistribution(findings, fieldName) {
+              const distribution = {};
+              for (const finding of findings) {
+                const rawValue = finding && typeof finding === 'object'
+                  ? finding[fieldName]
+                  : null;
+                const value = typeof rawValue === 'string' && rawValue.length > 0
+                  ? rawValue
+                  : 'unknown';
+                distribution[value] = (distribution[value] || 0) + 1;
+              }
+              return distribution;
+            }
+
+            function buildOcrMetadata(data) {
+              return {
+                schema: 1,
+                event: {
+                  name: data.eventName,
+                  action: data.eventAction,
+                  before: data.eventBefore,
+                  after: data.eventAfter,
+                },
+                api_resolved: {
+                  base_sha: data.apiBaseSha,
+                  head_sha: data.apiHeadSha,
+                },
+                checkpoint: {
+                  before: data.checkpointBefore,
+                  after: data.checkpointAfter,
+                },
+                range: {
+                  mode: data.rangeMode,
+                  fallback_reason: data.fallbackReason,
+                  cumulative: data.cumulative,
+                  selected: data.selected,
+                },
+                ocr: {
+                  version: data.ocrVersion,
+                  model: data.model,
+                  concurrency: data.concurrency,
+                  elapsed: data.elapsed,
+                  tokens: data.tokens,
+                },
+                findings: data.findings,
+                warnings: data.warnings,
+                terminal: {
+                  completeness_state: data.completenessState,
+                  publication_state: data.publicationState,
+                },
+                source_run_url: data.sourceRunUrl,
+              };
             }
 
             function escapeRegExp(value) {
@@ -1118,6 +1587,10 @@ jobs:
 
             let ran = true;
             let findings = [];
+            let parsedOcrResult = null;
+            let rawFindingCount = 0;
+            let schemaInvalidCount = 0;
+            let overflowFindingCount = 0;
             const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
             const exitCode = readExitCode('ocr-exit-code.txt');
             if (exitCode !== 0) {
@@ -1140,9 +1613,14 @@ jobs:
                 return null;
               }
               try {
-                const parsed = findingsFromParsed(JSON.parse(trimmed));
+                const result = JSON.parse(trimmed);
+                const parsed = findingsFromParsed(result);
                 if (!parsed) {
                   markInfrastructureFailure('parse', 'OCR output did not contain a supported findings array');
+                } else {
+                  parsedOcrResult = Array.isArray(result)
+                    ? { status: 'success', comments: result, warnings: [], resultSource: 'synthesized' }
+                    : { ...result, resultSource: result.resultSource || 'parsed' };
                 }
                 return parsed;
               } catch (parseErr) {
@@ -1154,9 +1632,17 @@ jobs:
                   return null;
                 }
                 try {
-                  const parsed = findingsFromParsed(JSON.parse(trimmed.slice(start, end + 1)));
+                  const result = JSON.parse(trimmed.slice(start, end + 1));
+                  const parsed = findingsFromParsed(result);
                   if (!parsed) {
                     markInfrastructureFailure('parse', 'OCR output did not contain a supported findings array');
+                  } else {
+                    parsedOcrResult = {
+                      status: 'success',
+                      comments: parsed,
+                      warnings: [],
+                      resultSource: 'synthesized',
+                    };
                   }
                   return parsed;
                 } catch (innerErr) {
@@ -1406,7 +1892,14 @@ jobs:
             // schema drift on findings that share a dedup key (path/lines/body)
             // is still observed. Undocumented or missing values map to 'unknown'
             // with a stderr warning, without suppressing any finding.
+            rawFindingCount = findings.length;
+            schemaInvalidCount = findings.filter((finding) =>
+              finding && typeof finding === 'object' && !Array.isArray(finding)
+                && ((finding.category !== undefined && !KNOWN_CATEGORIES.has(finding.category))
+                  || (finding.severity !== undefined && !KNOWN_SEVERITIES.has(finding.severity)))).length;
             findings = findings.map(validateFindingMetadata);
+            const severityDistribution = findingDistribution(findings, 'severity');
+            const categoryDistribution = findingDistribution(findings, 'category');
 
             const dedupedFindings = deduplicateFindings(findings);
             let suppressedDuplicateCount = 0;
@@ -1446,6 +1939,7 @@ jobs:
             let postedInline = 0;
             let failedInline = 0;
             let skippedOverlapCount = 0;
+            let batchPublicationAmbiguous = false;
             let skippedExactHistoryCount = 0;
             // Feature 3 (issue #2670): incremental IoU overlap dedup mode.
             const incrementalEnabled = process.env.OCR_INCREMENTAL === 'true';
@@ -1501,9 +1995,11 @@ jobs:
                 postedInline = inlineToPost.length;
               } catch (batchErr) {
                 core.warning(redactSecretDiagnostics(`Batch review post failed (${inlineToPost.length} comments), falling back to individual posting: ${batchErr.message || batchErr}`));
+                batchPublicationAmbiguous = true;
                 // Fallback: post each inline comment individually, with a cap to avoid secondary rate limits.
                 try {
                   existingInlineKeys = await existingInlineCommentKeys();
+                  batchPublicationAmbiguous = false;
                 } catch (listErr) {
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
@@ -1514,6 +2010,7 @@ jobs:
                       ? `${c.start_line}-${c.line}`
                       : String(c.line);
                     const overflowBody = `${unrenderFindingText(c.body)} (line ${lineRange})`;
+                    overflowFindingCount += 1;
                     lineless.push({
                       path: c.path,
                       comment: overflowBody,
@@ -1568,18 +2065,42 @@ jobs:
               statusLine = policyFailure
                 ? `OCR policy failure: ${policyFailure}`
                 : 'OCR failed to run or parse output.';
+            } else if (process.env.RANGE_MODE === 'noop') {
+              statusLine = 'Same head; no new changes to review.';
             } else if (findings.length === 0) {
               statusLine = 'No findings.';
             } else {
               statusLine = `${findings.length} finding(s) (${postedInline} posted inline).`;
             }
             const infrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
+            const rangeMetadataRaw = readTrimmed('ocr-range-metadata.json', '');
+            const rangeMetadata = rangeMetadataRaw
+              ? JSON.parse(rangeMetadataRaw)
+              : {
+                  cumulative: {
+                    base_sha: process.env.BASE_SHA || '',
+                    head_sha: headSha,
+                    files: 0,
+                    lines: { additions: 0, deletions: 0, total: 0 },
+                  },
+                  selected: {
+                    base_sha: process.env.FROM_SHA || '',
+                    head_sha: headSha,
+                    files: 0,
+                    lines: { additions: 0, deletions: 0, total: 0 },
+                  },
+                };
+            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
             let body = [
               MARKER,
               `## OpenCodeReview — PR #${number}`,
               '',
               `- Reviewed head SHA: \`${headSha}\``,
               `- Merge base: \`${process.env.BASE_SHA}\``,
+              `- Range: \`${process.env.RANGE_MODE || 'full'}\` from \`${process.env.FROM_SHA || process.env.BASE_SHA}\``,
+              `- Range fallback: \`${process.env.FALLBACK_REASON || 'none'}\``,
+              `- Scope: selected ${rangeMetadata.selected.files} file(s), +${rangeMetadata.selected.lines.additions}/-${rangeMetadata.selected.lines.deletions}; cumulative ${rangeMetadata.cumulative.files} file(s), +${rangeMetadata.cumulative.lines.additions}/-${rangeMetadata.cumulative.lines.deletions}`,
+              `- Tokens: ${ocrObservation.tokens.total} total (${ocrObservation.tokens.input} input, ${ocrObservation.tokens.output} output, ${ocrObservation.tokens.cache} cache)`,
               `- OCR version: \`${ocrVersion}\``,
               `- Phase: \`${diagnosticPhase}\``,
               `- Exit code: \`${exitCode}\``,
@@ -1632,7 +2153,9 @@ jobs:
                 owner, repo, issue_number: number, per_page: 100,
               });
               markerComments = allComments.filter((c) =>
-                typeof c.body === 'string' && c.body.includes(MARKER));
+                c.user && c.user.type === 'Bot'
+                  && botLogin !== '' && c.user.login === botLogin
+                  && typeof c.body === 'string' && c.body.includes(MARKER));
             } catch (preFetchErr) {
               core.warning(redactSecretDiagnostics(`Could not list OCR comments for auto-review count: ${preFetchErr.message || preFetchErr}`));
             }
@@ -1655,7 +2178,9 @@ jobs:
                 owner, repo, issue_number: number, per_page: 100,
               });
               return allComments.filter((c) =>
-                typeof c.body === 'string' && c.body.includes(MARKER));
+                c.user && c.user.type === 'Bot'
+                  && botLogin !== '' && c.user.login === botLogin
+                  && typeof c.body === 'string' && c.body.includes(MARKER));
             }
 
             async function reconcileMarkerComment(existingComments) {
@@ -1726,13 +2251,86 @@ jobs:
               }
             }
 
+            const checkpointBefore = deserializeCheckpoint(process.env.CHECKPOINT_BEFORE || '');
+            const summaryWithExistingCheckpoint = process.env.CHECKPOINT_BEFORE
+              ? `${summary}\n<!-- ocr-checkpoint:${process.env.CHECKPOINT_BEFORE} -->`
+              : summary;
+            let checkpointAfter = checkpointBefore;
+            let publicationState = 'ambiguous';
+            let summaryComment = null;
             let summaryCommentUrl = '';
             try {
-              const summaryComment = await createOrUpdateMarkerComment(summary);
+              summaryComment = await createOrUpdateMarkerComment(summaryWithExistingCheckpoint);
               summaryCommentUrl = (summaryComment && summaryComment.html_url) || '';
+              if (batchPublicationAmbiguous) {
+                publicationState = 'ambiguous';
+              } else {
+                publicationState = failedInline === 0 ? 'complete' : 'partial';
+              }
             } catch (summaryError) {
               core.warning(redactSecretDiagnostics(`Failed to post OCR sticky summary; continuing without failing the workflow: ${summaryError.message || summaryError}`));
             }
+
+            const checkpointDecision = {
+              ran,
+              exitCode,
+              infrastructureFailure,
+              policyFailure,
+              failedFindings: failedInline,
+              completionState: ocrObservation.completion_state,
+              publicationState,
+              selectedFiles: rangeMetadata.selected.files,
+              completedFiles: ocrObservation.completed_files,
+              resultSource: ocrObservation.result_source,
+            };
+
+            const metadata = buildOcrMetadata({
+              eventName: process.env.EVENT_NAME,
+              eventAction: process.env.EVENT_ACTION,
+              eventBefore: process.env.EVENT_BEFORE || '',
+              eventAfter: process.env.EVENT_AFTER || '',
+              apiBaseSha: process.env.API_BASE_SHA,
+              apiHeadSha: process.env.API_HEAD_SHA,
+              checkpointBefore,
+              checkpointAfter,
+              rangeMode: process.env.RANGE_MODE,
+              fallbackReason: process.env.FALLBACK_REASON || '',
+              cumulative: rangeMetadata.cumulative,
+              selected: rangeMetadata.selected,
+              ocrVersion: process.env.OCR_VERSION,
+              model: process.env.OCR_MODEL || 'unknown',
+              concurrency: Number(process.env.OCR_CONCURRENCY || 0),
+              elapsed: ocrObservation.elapsed,
+              tokens: ocrObservation.tokens,
+              findings: {
+                raw: rawFindingCount,
+                duplicate: suppressedDuplicateCount,
+                schema_invalid: schemaInvalidCount,
+                policy_tiered: 0,
+                inline: postedInline,
+                summary: lineless.length,
+                overflow: overflowFindingCount,
+                failed: failedInline,
+                severity_distribution: severityDistribution,
+                category_distribution: categoryDistribution,
+              },
+              warnings: ocrObservation.warnings,
+              completenessState: ocrObservation.completion_state,
+              publicationState,
+              sourceRunUrl: runUrl,
+            });
+            fs.writeFileSync('ocr-metadata.json', `${JSON.stringify(metadata, null, 2)}\n`);
+            await core.summary
+              .addHeading('OpenCodeReview observability')
+              .addTable([
+                [{ data: 'Metric', header: true }, { data: 'Value', header: true }],
+                ['Range', `${metadata.range.mode}: ${metadata.range.selected.base_sha}..${metadata.range.selected.head_sha}`],
+                ['Selected scope', `${metadata.range.selected.files} files / ${metadata.range.selected.lines.total} changed lines`],
+                ['Cumulative scope', `${metadata.range.cumulative.files} files / ${metadata.range.cumulative.lines.total} changed lines`],
+                ['Tokens', String(metadata.ocr.tokens.total)],
+                ['Terminal state', `${metadata.terminal.completeness_state} / ${metadata.terminal.publication_state}`],
+              ])
+              .write();
 
             // Feature 5 (issue #2670): structured step outputs.
             const commentsTotal = findings.length + suppressedDuplicateCount;
@@ -1753,6 +2351,45 @@ jobs:
                 core.setFailed(`OCR policy failure: ${policyFailure}`);
               } else {
                 core.warning(`OpenCodeReview failed or produced unparsable output (exit code ${exitCode}).`);
+              }
+            }
+            // Checkpoint advancement is intentionally the LAST state-changing
+            // operation in the posting step. Metadata write, artifact upload,
+            // and summary posting all happen before the checkpoint is advanced.
+            // If any of those fail, checkpointAfter remains checkpointBefore
+            // and the durable checkpoint is not corrupted.
+            if (shouldAdvanceCheckpoint(checkpointDecision)) {
+              checkpointAfter = {
+                schema: 1,
+                pr_number: number,
+                head_sha: headSha,
+                base_sha: process.env.API_BASE_SHA,
+                merge_base: process.env.BASE_SHA,
+                reviewed_at: new Date().toISOString(),
+                run_url: runUrl,
+                ocr_version: process.env.OCR_VERSION,
+                ocr_model: process.env.OCR_MODEL || 'unknown',
+                rules_hash: process.env.OCR_RULES_HASH || '',
+                policy_hash: process.env.OCR_POLICY_HASH || '',
+                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+                completion_state: 'complete',
+                range_mode: process.env.RANGE_MODE,
+                selected_files: rangeMetadata.selected.files,
+                completed_files: ocrObservation.completed_files,
+                publication_state: publicationState,
+              };
+              const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
+              try {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: summaryComment.id,
+                  body: checkpointSummary,
+                });
+              } catch (checkpointError) {
+                checkpointAfter = checkpointBefore;
+                publicationState = 'ambiguous';
+                core.warning(redactSecretDiagnostics(`Failed to advance OCR checkpoint: ${checkpointError.message || checkpointError}`));
               }
             }
 
@@ -1804,6 +2441,7 @@ jobs:
           };
           const diagnosticArtifacts = [
             'ocr-result.json',
+            'ocr-metadata.json',
             'ocr-stdout.raw',
             'ocr-stderr.log',
             'ocr-preflight.txt',
@@ -1852,6 +2490,7 @@ jobs:
           missing=""
           for file_name in \
             ocr-result.json \
+            ocr-metadata.json \
             ocr-stdout.raw \
             ocr-stderr.log \
             ocr-preflight.txt \
@@ -1893,6 +2532,7 @@ jobs:
           name: ocr-review-output
           path: |
             ocr-result.json
+            ocr-metadata.json
             ocr-stdout.raw
             ocr-stderr.log
             ocr-preflight.txt
