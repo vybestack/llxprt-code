@@ -5,9 +5,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import fg from 'fast-glob';
 import { createRequire } from 'node:module';
 import {
@@ -126,6 +132,22 @@ describe('classifyTestFile — ignores comments, strings, and type-only imports'
     expect(content).toContain('react-dom');
     expect(content).toContain('@vitest-environment');
     expect(classifyTestFile(self)).toBe<TestFileKind>('pure-node');
+  });
+
+  it('keeps a default React import when named imports are type-only', () => {
+    const fixtureDirectory = mkdtempSync(join(tmpdir(), 'llxprt-test-groups-'));
+    const fixturePath = join(fixtureDirectory, 'mixed-react-import.test.tsx');
+    try {
+      writeFileSync(
+        fixturePath,
+        "import React, { type ReactNode } from 'react';\nvoid React;\nexport type Node = ReactNode;\n",
+      );
+      expect(classifyTestFile(fixturePath)).toBe<TestFileKind>(
+        'react-ink-node',
+      );
+    } finally {
+      rmSync(fixtureDirectory, { recursive: true, force: true });
+    }
   });
 });
 
@@ -312,7 +334,8 @@ describe('buildTestGroups — preserved special-selection semantics', () => {
 
 describe('package-root and cwd independence', () => {
   it('PACKAGE_ROOT is resolved from import.meta.url, not process.cwd()', () => {
-    expect(PACKAGE_ROOT.endsWith('packages/cli')).toBe(true);
+    expect(basename(PACKAGE_ROOT)).toBe('cli');
+    expect(basename(dirname(PACKAGE_ROOT))).toBe('packages');
   });
 
   it('group test paths are normalized forward-slash package-relative', () => {

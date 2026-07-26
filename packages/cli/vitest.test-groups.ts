@@ -304,6 +304,9 @@ function isTypeOnlyImportClause(clause: ts.ImportClause | undefined): boolean {
   if (clause.isTypeOnly) {
     return true;
   }
+  if (clause.name !== undefined) {
+    return false;
+  }
   // import { type X, type Y } from '...' — fully type-only named bindings
   const named = clause.namedBindings;
   if (named !== undefined && ts.isNamedImports(named)) {

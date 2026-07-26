@@ -232,7 +232,6 @@ describe('cleanup', () => {
 
     registerCleanup(async () => {
       executionOrder.push('async-1');
-      // Register a new async callback mid-drain — it must run in the same pass
       registerCleanup(() => {
         executionOrder.push('async-appended');
       });
