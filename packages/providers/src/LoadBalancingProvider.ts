@@ -12,7 +12,7 @@ import type {
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderManager } from './ProviderManager.js';
-import { coreEvents } from '@vybestack/llxprt-code-core';
+import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { LoadBalancerFailoverError } from './errors.js';

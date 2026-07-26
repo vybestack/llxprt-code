@@ -12,11 +12,11 @@ import type {
   OAuthUICallback,
 } from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from './test-oauth-settings.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  SettingsService,
   resetSettingsService,
   registerSettingsService,
-} from '@vybestack/llxprt-code-settings';
+} from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';

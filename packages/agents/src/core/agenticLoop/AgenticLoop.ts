@@ -33,7 +33,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { iContentFromAgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   AgentEventType,
   type ToolCallRequestInfo,
@@ -44,7 +46,7 @@ import {
   MessageBusType,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import {
@@ -155,6 +157,12 @@ interface StreamCollectionResult {
   shouldScheduleTools: boolean;
 }
 
+interface TurnRunResult {
+  continueLoop: boolean;
+  nextMessage: AgentMessageInput;
+  allowSteerContinuation: boolean;
+}
+
 /**
  * @requirement REQ-LOOP-001
  * Engine-owned multi-turn agentic loop. Construct with
@@ -202,6 +210,12 @@ export class AgenticLoop {
   private promptCount = 0;
   private isRunning = false;
   /**
+   * Pending steer messages injected via {@link injectSteer}. Drained at the
+   * loop boundary (between turns) so the user text is appended only after all
+   * tool results are closed — shape-safe across all provider formats.
+   */
+  private pendingSteer: string[] = [];
+  /**
    * A scheduler-singleton key dedicated to this loop instance. The CLI main
    * scheduler is keyed by `config.getSessionId()`; reusing that key would make
    * the loop's `getOrCreateScheduler` call REPLACE the CLI's scheduler
@@ -228,6 +242,58 @@ export class AgenticLoop {
   private generateContinuationPromptId(initialPromptId: string): string {
     this.promptCount += 1;
     return `${initialPromptId}#continuation#${this.promptCount}`;
+  }
+
+  /**
+   * Injects a user steer message into the active loop. The message is stashed
+   * and drained at the next loop boundary (between turns), after all tool
+   * results for the current turn have settled. This is shape-safe: the user
+   * text is appended after closed tool_result blocks, which is valid in all
+   * three provider formats (Gemini, Anthropic, OpenAI).
+   *
+   * If the loop is not running, the message is silently dropped — the caller
+   * should queue it for the next turn instead.
+   */
+  injectSteer(text: string): void {
+    if (!this.isRunning) {
+      return;
+    }
+    this.pendingSteer.push(text);
+  }
+
+  /**
+   * Drains all pending steer messages, joining them with newlines. Returns
+   * null when there are none. Called only at the loop boundary by {@link run}.
+   */
+  private drainSteer(): string | null {
+    if (this.pendingSteer.length === 0) {
+      return null;
+    }
+    const text = this.pendingSteer.join('\n');
+    this.pendingSteer = [];
+    return text;
+  }
+
+  /**
+   * Normalizes an {@link AgentMessageInput} into a `ContentBlock[]` so steer
+   * text can be appended via spread. When `continueLoop` is true,
+   * `nextMessage` always comes from {@link buildNextMessage} which returns
+   * `ContentBlock[]`, but the type is the wider `AgentMessageInput`.
+   */
+  private toContentBlocks(message: AgentMessageInput): ContentBlock[] {
+    return iContentFromAgentMessageInput(message).flatMap(
+      (content) => content.blocks,
+    );
+  }
+
+  /**
+   * Builds the message for a steer continuation: when the model finished
+   * without tool calls but the user steered during the final-answer stream,
+   * the steer text alone becomes the next turn's message. Returns null when
+   * there is no steer to act on (normal loop exit).
+   */
+  private steerWhenFinished(steerText: string | null): ContentBlock[] | null {
+    return steerText ? [{ type: 'text', text: steerText }] : null;
   }
 
   /**
@@ -319,10 +385,28 @@ export class AgenticLoop {
           signal,
           currentPromptId,
         );
+        const steerText = this.drainSteer();
+        const steerContinuation =
+          !result.continueLoop && result.allowSteerContinuation
+            ? this.steerWhenFinished(steerText)
+            : null;
+        if (steerContinuation !== null) {
+          currentMessage = steerContinuation;
+          currentPromptId = this.generateContinuationPromptId(initialPromptId);
+          continue;
+        }
         if (!result.continueLoop) {
           return;
         }
-        currentMessage = result.nextMessage;
+        // Tools completed -> append steer text alongside the functionResponse
+        // parts. Shape-safe: result.nextMessage contains closed tool results,
+        // and the steer text comes after them.
+        currentMessage = steerText
+          ? [
+              ...this.toContentBlocks(result.nextMessage),
+              { type: 'text' as const, text: steerText },
+            ]
+          : result.nextMessage;
         currentPromptId = this.generateContinuationPromptId(initialPromptId);
       }
     } catch (error) {
@@ -334,6 +418,7 @@ export class AgenticLoop {
     } finally {
       unsubscribe();
       this.isRunning = false;
+      this.pendingSteer = [];
     }
   }
 
@@ -346,10 +431,7 @@ export class AgenticLoop {
     message: AgentMessageInput,
     signal: AbortSignal,
     promptId: string,
-  ): AsyncGenerator<
-    AgenticLoopEvent,
-    { continueLoop: boolean; nextMessage: AgentMessageInput }
-  > {
+  ): AsyncGenerator<AgenticLoopEvent, TurnRunResult> {
     const toolCallRequests: ToolCallRequestInfo[] = [];
     const streamResult = yield* this.streamAndCollect(
       message,
@@ -358,12 +440,19 @@ export class AgenticLoop {
       toolCallRequests,
     );
 
-    if (
-      signal.aborted ||
-      !streamResult.shouldScheduleTools ||
-      toolCallRequests.length === 0
-    ) {
-      return { continueLoop: false, nextMessage: [] };
+    if (signal.aborted || !streamResult.shouldScheduleTools) {
+      return {
+        continueLoop: false,
+        nextMessage: [],
+        allowSteerContinuation: false,
+      };
+    }
+    if (toolCallRequests.length === 0) {
+      return {
+        continueLoop: false,
+        nextMessage: [],
+        allowSteerContinuation: true,
+      };
     }
 
     const dedupedRequests = deduplicateToolCallRequests(toolCallRequests);
@@ -382,14 +471,18 @@ export class AgenticLoop {
     }
 
     if (completed === null || completed.length === 0) {
-      return { continueLoop: false, nextMessage: [] };
+      return {
+        continueLoop: false,
+        nextMessage: [],
+        allowSteerContinuation: false,
+      };
     }
 
     this.notifyAllToolCallsComplete(completed);
     yield { kind: 'tools_complete', completed };
     // Bun 1.3.14 does not unwrap a promised async-generator return value through yield*.
     const nextMessage = await this.buildNextMessage(completed);
-    return nextMessage;
+    return { ...nextMessage, allowSteerContinuation: false };
   }
 
   /**
@@ -651,7 +744,10 @@ export class AgenticLoop {
       await recordCompletedToolHistory(agentTools, this.agentClient);
       return { continueLoop: false, nextMessage: [] };
     }
-    const responseParts = buildToolResponses(agentTools);
+    const responseParts = buildToolResponses(
+      agentTools,
+      this.config.getImagePayloadBudgetBytes(),
+    );
     if (responseParts.length === 0) {
       return { continueLoop: false, nextMessage: [] };
     }

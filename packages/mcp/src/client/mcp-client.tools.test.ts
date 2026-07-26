@@ -41,6 +41,11 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 
+const createTrustedConfig = (): Config =>
+  ({
+    isTrustedFolder: () => true,
+  }) as Config;
+
 describe('mcp-client', () => {
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
@@ -57,6 +62,65 @@ describe('mcp-client', () => {
   });
 
   describe('Dynamic Tool Updates', () => {
+    it('aborts an in-flight tool refresh when disconnected', async () => {
+      let refreshSignal: AbortSignal | undefined;
+      const mockedClient = {
+        connect: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+        setNotificationHandler: vi.fn(),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: { listChanged: true } }),
+        listTools: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as SdkClientStdioLib.StdioClientTransport);
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn(),
+      } as unknown as ToolRegistry;
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        createTrustedConfig(),
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+      mockedClient.listTools.mockImplementation((_request, options) => {
+        refreshSignal = options?.signal;
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+      const notificationCallback =
+        mockedClient.setNotificationHandler.mock.calls[0][1];
+
+      const refresh = notificationCallback();
+      await vi.waitFor(() => expect(refreshSignal).toBeDefined());
+
+      await client.disconnect();
+
+      expect(refreshSignal?.aborted).toBe(true);
+      await expect(refresh).resolves.toBeUndefined();
+    });
+
     it('should set up notification handler if server supports tool list changes', async () => {
       const mockedClient = {
         connect: vi.fn(),
@@ -87,7 +151,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -124,7 +188,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -161,7 +225,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -220,7 +284,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -291,7 +355,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -362,7 +426,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -375,7 +439,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -459,7 +523,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
       );
@@ -524,7 +588,7 @@ describe('mcp-client', () => {
         {} as PromptRegistry,
         createMockResourceRegistry(),
         workspaceContext,
-        {} as Config,
+        createTrustedConfig(),
         false,
         '0.0.1',
         onToolsUpdatedSpy,
@@ -542,6 +606,241 @@ describe('mcp-client', () => {
       // Verify the signal passed was not aborted (happy path)
       const signal = onToolsUpdatedSpy.mock.calls[0][0];
       expect(signal.aborted).toBe(false);
+    });
+
+    it('clears the refresh timeout and removes new tools when the update callback fails', async () => {
+      vi.useFakeTimers();
+      try {
+        const mockedClient = {
+          connect: vi.fn(),
+          getServerCapabilities: vi
+            .fn()
+            .mockReturnValue({ tools: { listChanged: true } }),
+          setNotificationHandler: vi.fn(),
+          listTools: vi.fn().mockResolvedValue({
+            tools: [{ name: 'newTool', inputSchema: { type: 'object' } }],
+          }),
+          registerCapabilities: vi.fn(),
+          setRequestHandler: vi.fn(),
+        };
+        vi.mocked(ClientLib.Client).mockReturnValue(
+          mockedClient as unknown as ClientLib.Client,
+        );
+        vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+          {} as SdkClientStdioLib.StdioClientTransport,
+        );
+        const toolRegistry = {
+          removeMcpToolsByServer: vi.fn(),
+          registerTool: vi.fn(),
+          sortTools: vi.fn(),
+          getMessageBus: vi.fn().mockReturnValue(undefined),
+        } as unknown as ToolRegistry;
+        const client = new McpClient(
+          'test-server',
+          { command: 'test-command', timeout: 100 },
+          toolRegistry,
+          {} as PromptRegistry,
+          createMockResourceRegistry(),
+          workspaceContext,
+          createTrustedConfig(),
+          false,
+          '0.0.1',
+          vi.fn().mockRejectedValue(new Error('context refresh failed')),
+        );
+        await client.connect();
+        const notificationCallback =
+          mockedClient.setNotificationHandler.mock.calls[0][1];
+
+        await notificationCallback();
+
+        expect(vi.getTimerCount()).toBe(0);
+        expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
+        expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not remove replacement-connection tools when an old update callback fails', async () => {
+      let rejectUpdate: ((error: Error) => void) | undefined;
+      const updatePending = new Promise<void>((_resolve, reject) => {
+        rejectUpdate = reject;
+      });
+      const firstSdkClient = {
+        connect: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: { listChanged: true } }),
+        setNotificationHandler: vi.fn(),
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'oldTool', inputSchema: { type: 'object' } }],
+        }),
+        listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+        request: vi.fn().mockResolvedValue({ resources: [] }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+      };
+      const replacementSdkClient = {
+        ...firstSdkClient,
+        connect: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        setNotificationHandler: vi.fn(),
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'replacementTool', inputSchema: { type: 'object' } }],
+        }),
+      };
+      vi.mocked(ClientLib.Client)
+        .mockReturnValueOnce(firstSdkClient as unknown as ClientLib.Client)
+        .mockReturnValueOnce(
+          replacementSdkClient as unknown as ClientLib.Client,
+        );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
+        close: vi.fn().mockResolvedValue(undefined),
+      } as unknown as SdkClientStdioLib.StdioClientTransport);
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        { removePromptsByServer: vi.fn() } as unknown as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        createTrustedConfig(),
+        false,
+        '0.0.1',
+        vi.fn().mockReturnValueOnce(updatePending),
+      );
+      await client.connect();
+      const notificationCallback =
+        firstSdkClient.setNotificationHandler.mock.calls[0][1];
+      const refresh = notificationCallback();
+      await vi.waitFor(() =>
+        expect(toolRegistry.registerTool).toHaveBeenCalledOnce(),
+      );
+
+      await client.disconnect();
+      await client.connect();
+      await client.discover(createTrustedConfig());
+      const removalsBeforeOldFailure = vi.mocked(
+        toolRegistry.removeMcpToolsByServer,
+      ).mock.calls.length;
+
+      rejectUpdate?.(new Error('old update failed'));
+      await refresh;
+
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(
+        removalsBeforeOldFailure,
+      );
+    });
+
+    it('removes stale tools when authorization is revoked during refresh', async () => {
+      let trusted = true;
+      const mockedClient = {
+        connect: vi.fn(),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: { listChanged: true } }),
+        setNotificationHandler: vi.fn(),
+        listTools: vi.fn().mockImplementation(async () => {
+          trusted = false;
+          return {
+            tools: [{ name: 'newTool', inputSchema: { type: 'object' } }],
+          };
+        }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        {} as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        { isTrustedFolder: () => trusted } as Config,
+        false,
+        '0.0.1',
+      );
+      await client.connect();
+      const notificationCallback =
+        mockedClient.setNotificationHandler.mock.calls[0][1];
+
+      await notificationCallback();
+
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
+        'test-server',
+      );
+      expect(toolRegistry.registerTool).not.toHaveBeenCalled();
+      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+    });
+
+    it('removes newly registered tools when authorization is revoked during the update callback', async () => {
+      let trusted = true;
+      const mockedClient = {
+        connect: vi.fn(),
+        getServerCapabilities: vi
+          .fn()
+          .mockReturnValue({ tools: { listChanged: true } }),
+        setNotificationHandler: vi.fn(),
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: 'newTool', inputSchema: { type: 'object' } }],
+        }),
+        registerCapabilities: vi.fn(),
+        setRequestHandler: vi.fn(),
+      };
+      vi.mocked(ClientLib.Client).mockReturnValue(
+        mockedClient as unknown as ClientLib.Client,
+      );
+      vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+        {} as SdkClientStdioLib.StdioClientTransport,
+      );
+      const toolRegistry = {
+        removeMcpToolsByServer: vi.fn(),
+        registerTool: vi.fn(),
+        sortTools: vi.fn(),
+        getMessageBus: vi.fn().mockReturnValue(undefined),
+      } as unknown as ToolRegistry;
+      const client = new McpClient(
+        'test-server',
+        { command: 'test-command' },
+        toolRegistry,
+        {} as PromptRegistry,
+        createMockResourceRegistry(),
+        workspaceContext,
+        { isTrustedFolder: () => trusted } as Config,
+        false,
+        '0.0.1',
+        vi.fn().mockImplementation(async () => {
+          trusted = false;
+        }),
+      );
+      await client.connect();
+      const notificationCallback =
+        mockedClient.setNotificationHandler.mock.calls[0][1];
+
+      await notificationCallback();
+
+      expect(toolRegistry.registerTool).toHaveBeenCalledOnce();
+      expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
+      expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
     });
   });
 

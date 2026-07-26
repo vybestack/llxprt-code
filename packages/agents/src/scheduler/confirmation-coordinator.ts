@@ -24,7 +24,7 @@ import {
   type ToolConfirmationResponse,
   type SerializableConfirmationDetails,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
 import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { ToolCallResponseInfo } from '../core/turn.js';
@@ -38,8 +38,8 @@ import {
 import {
   isModifiableDeclarativeTool,
   modifyWithEditor,
-  type ModifyContext,
 } from '@vybestack/llxprt-code-tools';
+import { type ModifyContext } from '@vybestack/llxprt-code-tools';
 import { doesToolInvocationMatch } from '@vybestack/llxprt-code-core/utils/tool-utils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {

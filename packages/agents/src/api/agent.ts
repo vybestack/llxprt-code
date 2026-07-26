@@ -644,10 +644,22 @@ export interface AgentIdeControl {
 }
 
 export interface AgentSessionControl {
+  /**
+   * Resumes a previously recorded session (by 'latest' or a session
+   * reference/prefix) and returns the reconstructed history as readonly
+   * AgentHistoryItem[] so callers can replay the restored conversation (e.g. the Zed ACP loadSession
+   * path streaming session/update notifications) without a lossy getHistory()
+   * Gemini Content[] round-trip. Callers that ignore the return value remain
+   * source-compatible. The restored history is also fed through the client
+   * restore path, and a RecordingIntegration is subscribed so post-resume turns
+   * continue appending to the resumed JSONL file.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-010
+   */
   resume(
     target: 'latest' | string,
     options?: { readonly prefix?: boolean },
-  ): Promise<void>;
+  ): Promise<readonly AgentHistoryItem[]>;
   createCheckpoint(label?: string): Promise<SessionCheckpoint>;
   restoreCheckpoint(id: string): Promise<void>;
   listCheckpoints(): readonly SessionCheckpoint[];
@@ -858,6 +870,14 @@ export interface AgentLspControl {
 export interface Agent {
   chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult>;
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent>;
+
+  /**
+   * Injects a mid-turn steer message into the active agent loop. The message
+   * is stashed and drained at the next tool-call boundary (between turns),
+   * after all tool results have settled — shape-safe across all provider
+   * formats. No-op when the loop is not running.
+   */
+  injectSteer(text: string): void;
 
   getProvider(): string;
   setProvider(

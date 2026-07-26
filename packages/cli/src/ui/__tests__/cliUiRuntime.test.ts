@@ -7,8 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildSlashCommandRuntime,
+  buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
+import { AppEvent, appEvents } from '../../utils/events.js';
 
 /**
  * Creates a Proxy-based mock that satisfies the UiRuntimeBareSource structural
@@ -94,5 +96,24 @@ describe('buildSlashCommandRuntime', () => {
     const adapter = buildSlashCommandRuntime(source);
 
     expect(adapter.getAgentClientFactory?.()).toBeUndefined();
+  });
+});
+
+describe('buildUiRuntimeFromSource', () => {
+  it('uses the application event singleton when the source has no emitter', () => {
+    const source = createProxySource({
+      getExtensionEvents: () => undefined,
+    });
+    const runtime = buildUiRuntimeFromSource(source);
+    let notifications = 0;
+    const unsubscribe = runtime.events.onMcpClientUpdate(() => {
+      notifications += 1;
+    });
+
+    appEvents.emit(AppEvent.McpClientUpdate, new Map());
+    unsubscribe();
+    appEvents.emit(AppEvent.McpClientUpdate, new Map());
+
+    expect(notifications).toBe(1);
   });
 });

@@ -19,14 +19,13 @@
  */
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import {
-  AnthropicDeviceFlow,
-  CodexDeviceFlow,
-  type OAuthToken,
-} from '@vybestack/llxprt-code-auth';
+import { type OAuthToken } from '@vybestack/llxprt-code-auth';
+import { AnthropicDeviceFlow } from '@vybestack/llxprt-code-auth';
+import { CodexDeviceFlow } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
 import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   CredentialProxyServer,
   type OAuthFlowInterface,
@@ -44,6 +43,7 @@ export interface SandboxProxyHandle {
 
 let serverInstance: CredentialProxyServer | undefined;
 let actualSocketPath: string | undefined;
+let actualCapabilityToken: string | undefined;
 
 /**
  * Adapter that wraps CodexDeviceFlow to match OAuthFlowInterface.
@@ -182,15 +182,37 @@ export async function createAndStartProxy(
       ? path.dirname(config.socketPath)
       : config.socketPath;
 
-  serverInstance = new CredentialProxyServer({
-    tokenStore,
-    providerKeyStorage,
-    socketDir: requestedSocketDir,
-    flowFactories,
-    refreshCoordinator,
-  });
+  try {
+    actualCapabilityToken = crypto.randomBytes(32).toString('hex');
+    serverInstance = new CredentialProxyServer({
+      tokenStore,
+      providerKeyStorage,
+      socketDir: requestedSocketDir,
+      flowFactories,
+      refreshCoordinator,
+      capabilityToken: actualCapabilityToken,
+    });
 
-  actualSocketPath = await serverInstance.start();
+    actualSocketPath = await serverInstance.start();
+  } catch (err) {
+    // start() may have partially initialised the net.Server before failing
+    // (e.g. EADDRINUSE). Clean up to avoid orphaning a listening socket.
+    // Capture and clear module-level state synchronously BEFORE awaiting
+    // stop() so concurrent callers don't re-enter on the failing instance.
+    const failingInstance = serverInstance;
+    serverInstance = undefined;
+    actualCapabilityToken = undefined;
+    actualSocketPath = undefined;
+    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    if (failingInstance) {
+      try {
+        await failingInstance.stop();
+      } catch {
+        // best-effort cleanup; the original error is the one we want to throw
+      }
+    }
+    throw err;
+  }
 
   process.env.LLXPRT_CREDENTIAL_SOCKET = actualSocketPath;
 
@@ -205,16 +227,30 @@ export async function createAndStartProxy(
  * Stops the credential proxy server and cleans up resources.
  */
 export async function stopProxy(): Promise<void> {
-  if (!serverInstance) {
+  // Capture reference synchronously and clear the module-level variable
+  // to prevent concurrent callers from re-entering and calling .stop() twice.
+  const instance = serverInstance;
+  if (!instance) {
     return;
   }
-
-  await serverInstance.stop();
   serverInstance = undefined;
+  delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+  actualSocketPath = undefined;
+  actualCapabilityToken = undefined;
 
-  if (actualSocketPath) {
-    delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    actualSocketPath = undefined;
+  try {
+    await instance.stop();
+  } catch (err) {
+    try {
+      if (!process.stderr.destroyed) {
+        process.stderr.write(
+          `Warning: credential proxy stop() failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
+    } catch {
+      // stderr unavailable — nothing more we can do
+    }
+    throw err;
   }
 }
 
@@ -223,4 +259,13 @@ export async function stopProxy(): Promise<void> {
  */
 export function getProxySocketPath(): string | undefined {
   return actualSocketPath;
+}
+
+/**
+ * Returns the per-session capability token, if a proxy is running.
+ * This token must be injected into the sandbox so the inner process can
+ * authenticate its handshake with the credential proxy.
+ */
+export function getProxyCapabilityToken(): string | undefined {
+  return actualCapabilityToken;
 }

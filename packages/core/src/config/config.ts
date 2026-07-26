@@ -50,6 +50,7 @@ import {
   getOrCreateAsyncTaskReminderService,
   setupAsyncTaskAutoTrigger,
 } from './asyncTaskServices.js';
+import { LiveTrustTransitionLifecycle } from './liveTrustTransitionLifecycle.js';
 import { parseSettingsSubagentDefinitions } from './subagentSettingsParser.js';
 
 import {
@@ -104,6 +105,10 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { getCoreVersion } from '../utils/version.js';
+import {
+  buildMcpTrustedRules,
+  MCP_TRUSTED_POLICY_SOURCE,
+} from '../policy/config.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
@@ -111,10 +116,39 @@ import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
 
+  private readonly liveTrustTransitionLifecycle: LiveTrustTransitionLifecycle;
+
   constructor(params: ConfigParameters) {
     super();
     applyConfigParams(this as unknown as ConfigConstructorTarget, params);
     this.syncModeDerivedPolicyRules(this.approvalMode);
+    this.cachedEffectiveTrust = this.isTrustedFolder();
+    this.liveTrustTransitionLifecycle = new LiveTrustTransitionLifecycle({
+      downgradeApprovalMode: () => {
+        if (this.approvalMode !== ApprovalMode.DEFAULT) {
+          this.approvalMode = ApprovalMode.DEFAULT;
+        }
+      },
+      removeTrustedPolicyRules: () =>
+        this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE),
+      updateTrustPolicy: (trusted) => {
+        if (trusted) {
+          for (const rule of buildMcpTrustedRules({
+            mcpServers: this.getMcpServers(),
+          })) {
+            this.policyEngine.addRule(rule);
+          }
+        } else {
+          this.mcpClientManager?.quarantineForTrustRevocation();
+        }
+      },
+      transitionMcp: (trusted) =>
+        trusted
+          ? this.mcpClientManager?.onFolderTrustGained()
+          : this.mcpClientManager?.onFolderTrustRevoked(),
+      initializeHooks: (signal) => this.getHookSystem()?.initialize(signal),
+      emitTrustChanged: (trusted) => coreEvents.emitFolderTrustChanged(trusted),
+    });
   }
 
   // Issue #2325: Background MCP discovery promise started in initialize() so
@@ -163,7 +197,7 @@ export class Config extends ConfigBase {
         'Config.initialize requires an explicit session/runtime MessageBus dependency.',
       );
     }
-    this.initialized = true;
+    this.cachedEffectiveTrust = this.isTrustedFolder();
     this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
     this.getFileService();
@@ -179,6 +213,8 @@ export class Config extends ConfigBase {
       this,
       this.eventEmitter,
     );
+    this.registerIdeTrustListener();
+    this.initialized = true;
     // Issue #2325: Fire MCP discovery in the background — don't block startup.
     // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
     this.mcpDiscoveryPromise =
@@ -551,22 +587,37 @@ export class Config extends ConfigBase {
    * 'false' for untrusted.
    */
   isTrustedFolder(): boolean {
-    // isWorkspaceTrusted in cli/src/config/trustedFolder.js returns undefined
-    // when the file based trust value is unavailable, since it is mainly used
-    // in the initialization for trust dialogs, etc. Here we return true since
-    // config.isTrustedFolder() is used for the main business logic of blocking
-    // tool calls etc in the rest of the application.
-    //
-    // Default value is true since we load with trusted settings to avoid
-    // restarts in the more common path. If the user chooses to mark the folder
-    // as untrusted, the CLI will restart and we will have the trust value
-    // reloaded.
-    const context = ideContext.getIdeContext();
-    if (context?.workspaceState?.isTrusted !== undefined) {
-      return context.workspaceState.isTrusted;
-    }
+    return this.getIdeTrust() ?? this.trustedFolder ?? true;
+  }
 
-    return this.trustedFolder ?? true;
+  getIdeTrust(): boolean | undefined {
+    return (
+      this.ideTrust ?? ideContext.getIdeContext()?.workspaceState?.isTrusted
+    );
+  }
+
+  /**
+   * Updates the local trust fallback. IDE trust remains authoritative, so this
+   * only triggers a transition when the effective trust value changes.
+   */
+  setTrustedFolderLive(trusted: boolean): Promise<void> {
+    const previousEffectiveTrust = this.isTrustedFolder();
+    this.trustedFolder = trusted;
+    if (!this.initialized) {
+      return Promise.resolve();
+    }
+    return this.reconcileEffectiveTrust(previousEffectiveTrust);
+  }
+
+  private reconcileEffectiveTrust(
+    previousEffectiveTrust: boolean,
+  ): Promise<void> {
+    const effectiveTrust = this.isTrustedFolder();
+    this.cachedEffectiveTrust = effectiveTrust;
+    if (previousEffectiveTrust !== effectiveTrust) {
+      return this.liveTrustTransitionLifecycle.apply(effectiveTrust);
+    }
+    return Promise.resolve();
   }
 
   setPtyTerminalSize(
@@ -822,10 +873,92 @@ export class Config extends ConfigBase {
     return this.hookSystem;
   }
 
+  private ideTrust: boolean | undefined;
+  private cachedEffectiveTrust: boolean;
+
+  /**
+   * Resolves once any pending trust-transition side-effects have settled.
+   */
+  async whenTrustTransitionSettled(): Promise<void> {
+    await this.liveTrustTransitionLifecycle.whenSettled();
+  }
+
+  private ideTrustChangeListener:
+    | ((isTrusted: boolean | undefined) => void)
+    | undefined;
+
+  /**
+   * Subscribes to live IDE trust changes so that MCP servers, hooks, and
+   * approval mode are updated immediately without requiring a restart.
+   */
+  private registerIdeTrustListener(): void {
+    const client = this.ideClient;
+    const previousEffectiveTrust = this.cachedEffectiveTrust;
+    this.ideTrust = ideContext.getIdeContext()?.workspaceState?.isTrusted;
+    if (client && typeof client.addTrustChangeListener === 'function') {
+      this.ideTrustChangeListener = (isTrusted: boolean | undefined) => {
+        const priorEffectiveTrust = this.cachedEffectiveTrust;
+        this.ideTrust = isTrusted;
+        void this.reconcileEffectiveTrust(priorEffectiveTrust).catch(
+          (error) => {
+            Config.logger.error(
+              `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
+            );
+          },
+        );
+      };
+      client.addTrustChangeListener(this.ideTrustChangeListener);
+    }
+    void this.reconcileEffectiveTrust(previousEffectiveTrust).catch((error) => {
+      Config.logger.error(
+        `IDE trust reconciliation failed: ${getErrorMessage(error)}`,
+      );
+    });
+  }
+
   async dispose(): Promise<void> {
+    const failures: unknown[] = [];
+    try {
+      this.liveTrustTransitionLifecycle.beginDisposal();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (
+      this.ideTrustChangeListener &&
+      this.ideClient &&
+      typeof this.ideClient.removeTrustChangeListener === 'function'
+    ) {
+      try {
+        this.ideClient.removeTrustChangeListener(this.ideTrustChangeListener);
+      } catch (error) {
+        failures.push(error);
+      }
+      this.ideTrustChangeListener = undefined;
+    }
+    // Initiate MCP shutdown before awaiting trust-transition settlement so
+    // in-flight MCP work is cancelled and cannot block disposal.
+    const stopPromise = this.mcpClientManager?.stop();
+    try {
+      await this.whenTrustTransitionSettled();
+    } catch (error) {
+      failures.push(error);
+    }
     const client = this.agentClient as AgentClientContract | undefined;
     if (client !== undefined) {
-      client.dispose();
+      try {
+        client.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (this.hookSystem !== undefined) {
+      const hookSystem = this.hookSystem;
+      this.hookSystem = undefined;
+      try {
+        hookSystem.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
     }
     if (this.mcpDiscoveryPromise !== undefined) {
       try {
@@ -836,12 +969,18 @@ export class Config extends ConfigBase {
         );
       }
     }
-    // Issue #2325: Extension server discoveries fired by startExtension are
-    // tracked by whenDiscoverySettled(). Await it to avoid tearing down
-    // clients mid-connection.
-    if (this.mcpClientManager !== undefined) {
-      await this.mcpClientManager.whenDiscoverySettled();
-      await this.mcpClientManager.stop();
+    if (stopPromise !== undefined) {
+      try {
+        await stopPromise;
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Config disposal failed');
     }
   }
 }

@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { ApprovalMode, type Agent } from '@vybestack/llxprt-code-agents';
+import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { useKeypress } from './useKeypress.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import type { HistoryItemWithoutId } from '../types.js';
@@ -31,6 +32,18 @@ export function useAutoAcceptIndicator({
   useEffect(() => {
     setShowAutoAcceptIndicator(currentMode);
   }, [currentMode]);
+
+  useEffect(() => {
+    const handleFolderTrustChanged = (trusted: boolean): void => {
+      setShowAutoAcceptIndicator(
+        trusted ? agent.getApprovalMode() : ApprovalMode.DEFAULT,
+      );
+    };
+    coreEvents.on(CoreEvent.FolderTrustChanged, handleFolderTrustChanged);
+    return () => {
+      coreEvents.off(CoreEvent.FolderTrustChanged, handleFolderTrustChanged);
+    };
+  }, [agent]);
 
   useKeypress(
     (key) => {

@@ -21,7 +21,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings/settings/SettingsService.js';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import { SkillManager } from '@vybestack/llxprt-code-core/skills/skillManager.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';

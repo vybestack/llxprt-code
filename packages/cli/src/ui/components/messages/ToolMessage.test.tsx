@@ -11,9 +11,12 @@ import { ToolMessage } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
 import { Text } from 'ink';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
-import { renderWithProviders } from '../../../test-utils/render.js';
+import {
+  createMockSettings,
+  renderWithProviders,
+} from '../../../test-utils/render.js';
 import { Colors } from '../../colors.js';
-import { TOOL_STATUS } from '../../constants.js';
+import { SHELL_COMMAND_NAME, TOOL_STATUS } from '../../constants.js';
 import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 import type { ShellState } from '../../cliUiRuntime.js';
 
@@ -72,12 +75,17 @@ vi.mock('../ShellInputPrompt.js', () => ({
 const renderWithContext = (
   ui: React.ReactElement,
   streamingState: StreamingState,
+  alwaysDisplayFullShellCommand = true,
 ) => {
   const contextValue: StreamingState = streamingState;
+  const settings = createMockSettings({
+    ui: { alwaysDisplayFullShellCommand },
+  });
   return renderWithProviders(
     <StreamingContext.Provider value={contextValue}>
       {ui}
     </StreamingContext.Provider>,
+    { settings },
   );
 };
 
@@ -167,9 +175,38 @@ describe('<ToolMessage />', () => {
   describe('ctrl+r hint display', () => {
     it('does not show "Press ctrl+r" hint when not Executing', () => {
       const { lastFrame } = renderWithContext(
-        <ToolMessage {...baseProps} status={ToolCallStatus.Success} />,
+        <ToolMessage
+          {...baseProps}
+          name={SHELL_COMMAND_NAME}
+          status={ToolCallStatus.Success}
+        />,
         StreamingState.Idle,
+        false,
       );
+      expect(lastFrame()).not.toContain("Press 'ctrl+r'");
+    });
+
+    it('shows the hint for a collapsed executing shell command', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name={SHELL_COMMAND_NAME}
+          status={ToolCallStatus.Executing}
+        />,
+        StreamingState.Idle,
+        false,
+      );
+
+      expect(lastFrame()).toContain("Press 'ctrl+r'");
+    });
+
+    it('does not show the hint for an executing non-shell tool', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage {...baseProps} status={ToolCallStatus.Executing} />,
+        StreamingState.Idle,
+        false,
+      );
+
       expect(lastFrame()).not.toContain("Press 'ctrl+r'");
     });
   });
@@ -228,6 +265,53 @@ describe('<ToolMessage />', () => {
       StreamingState.Idle,
     );
     expect(lastFrame()).toMatchSnapshot();
+  });
+
+  describe('shell command description display', () => {
+    const longDescription =
+      'printf first-segment second-segment third-segment final-shell-marker';
+
+    it('displays the complete shell command by default', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name={SHELL_COMMAND_NAME}
+          description={longDescription}
+          terminalWidth={32}
+        />,
+        StreamingState.Idle,
+      );
+
+      expect(lastFrame()).toContain('final-shell-marker');
+    });
+
+    it('truncates shell commands when full display is disabled', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          name={SHELL_COMMAND_NAME}
+          description={longDescription}
+          terminalWidth={32}
+        />,
+        StreamingState.Idle,
+        false,
+      );
+
+      expect(lastFrame()).not.toContain('final-shell-marker');
+    });
+
+    it('keeps non-shell tool descriptions truncated', () => {
+      const { lastFrame } = renderWithContext(
+        <ToolMessage
+          {...baseProps}
+          description={longDescription}
+          terminalWidth={32}
+        />,
+        StreamingState.Idle,
+      );
+
+      expect(lastFrame()).not.toContain('final-shell-marker');
+    });
   });
 
   describe('shell focus state for completed shell with live PTY', () => {

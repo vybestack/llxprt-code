@@ -13,11 +13,9 @@ import type { SubAgentScope } from '../core/subagent.js';
 import { type ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
-import {
-  type ToolResult,
-  ToolErrorType,
-  createStreamNormalizer,
-} from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
+import { type ToolResult } from '@vybestack/llxprt-code-tools';
 import { type TaskToolInvocationParams } from './taskToolGovernance.js';
 import {
   handleBackgroundAbort,

@@ -16,7 +16,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { MemoryTool } from '@vybestack/llxprt-code-tools';
+import { MemoryTool } from '@vybestack/llxprt-code-tools/tools/memoryTool.js';
 import type { EditMemoryInput, EditMemoryResult } from './types.js';
 
 const fsAdapter = {

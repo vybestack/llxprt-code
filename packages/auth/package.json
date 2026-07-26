@@ -15,6 +15,56 @@
       "types": "./dist/index.d.ts",
       "bun": "./index.ts",
       "import": "./dist/index.js"
+    },
+    "./oauth-errors.js": {
+      "types": "./dist/src/oauth-errors.d.ts",
+      "bun": "./src/oauth-errors.ts",
+      "import": "./dist/src/oauth-errors.js"
+    },
+    "./oauth-ui-bridge.js": {
+      "types": "./dist/src/oauth-ui-bridge.d.ts",
+      "bun": "./src/oauth-ui-bridge.ts",
+      "import": "./dist/src/oauth-ui-bridge.js"
+    },
+    "./precedence.js": {
+      "types": "./dist/src/precedence.d.ts",
+      "bun": "./src/precedence.ts",
+      "import": "./dist/src/precedence.js"
+    },
+    "./token-merge.js": {
+      "types": "./dist/src/token-merge.d.ts",
+      "bun": "./src/token-merge.ts",
+      "import": "./dist/src/token-merge.js"
+    },
+    "./token-sanitization.js": {
+      "types": "./dist/src/token-sanitization.d.ts",
+      "bun": "./src/token-sanitization.ts",
+      "import": "./dist/src/token-sanitization.js"
+    },
+    "./types.js": {
+      "types": "./dist/src/types.d.ts",
+      "bun": "./src/types.ts",
+      "import": "./dist/src/types.js"
+    },
+    "./flows/codex-device-flow.js": {
+      "types": "./dist/src/flows/codex-device-flow.d.ts",
+      "bun": "./src/flows/codex-device-flow.ts",
+      "import": "./dist/src/flows/codex-device-flow.js"
+    },
+    "./proxy/framing.js": {
+      "types": "./dist/src/proxy/framing.d.ts",
+      "bun": "./src/proxy/framing.ts",
+      "import": "./dist/src/proxy/framing.js"
+    },
+    "./proxy/proxy-provider-key-storage.js": {
+      "types": "./dist/src/proxy/proxy-provider-key-storage.d.ts",
+      "bun": "./src/proxy/proxy-provider-key-storage.ts",
+      "import": "./dist/src/proxy/proxy-provider-key-storage.js"
+    },
+    "./proxy/proxy-token-store.js": {
+      "types": "./dist/src/proxy/proxy-token-store.d.ts",
+      "bun": "./src/proxy/proxy-token-store.ts",
+      "import": "./dist/src/proxy/proxy-token-store.js"
     }
   },
   "scripts": {

@@ -16,7 +16,9 @@
       "@vybestack/llxprt-code-settings": ["../settings/dist/index.d.ts"],
       "@vybestack/llxprt-code-settings/*": ["../settings/dist/src/*"],
       "@vybestack/llxprt-code-storage": ["../storage/dist/index.d.ts"],
-      "@vybestack/llxprt-code-storage/*": ["../storage/dist/src/*"]
+      "@vybestack/llxprt-code-storage/*": ["../storage/dist/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/dist/index.d.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/dist/src/*"]
     }
   },
   "include": [

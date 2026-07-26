@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
 
+import type { ResponseParserOptions } from './AnthropicResponseParser.js';
 let parseAnthropicResponse: typeof import('./AnthropicResponseParser.js').parseAnthropicResponse;
 
 function createMockMessage(
@@ -34,6 +35,130 @@ function createMockMessage(
   } as Anthropic.Message;
 }
 
+function createBaseParserOptions(
+  overrides: Partial<ResponseParserOptions> = {},
+): ResponseParserOptions {
+  return {
+    isOAuth: false,
+    tools: undefined,
+    unprefixToolName: (name: string) => name,
+    findToolSchema: () => undefined,
+    cacheLogger: { debug: (fn: () => string) => fn() },
+    includeThinkingInResponse: true,
+    ...overrides,
+  };
+}
+
+describe('issue #1723 – Anthropic non-streaming includeThinkingInResponse visibility', () => {
+  const parserOptions = createBaseParserOptions();
+
+  beforeAll(async () => {
+    const mod = await import('./AnthropicResponseParser.js');
+    parseAnthropicResponse = mod.parseAnthropicResponse;
+  });
+
+  it('marks thinking blocks hidden when includeThinkingInResponse is false without discarding context', () => {
+    const result = parseAnthropicResponse(
+      createMockMessage('end_turn', [
+        {
+          type: 'thinking',
+          thinking: 'private context',
+          signature: 'sig-private',
+        },
+        { type: 'text', text: 'visible answer' },
+      ]),
+      { ...parserOptions, includeThinkingInResponse: false },
+    );
+
+    expect(result.blocks).toStrictEqual([
+      {
+        type: 'thinking',
+        thought: 'private context',
+        sourceField: 'thinking',
+        signature: 'sig-private',
+        isHidden: true,
+      },
+      { type: 'text', text: 'visible answer' },
+    ]);
+  });
+
+  it('keeps thinking blocks visible when includeThinkingInResponse is true', () => {
+    const result = parseAnthropicResponse(
+      createMockMessage('end_turn', [
+        {
+          type: 'thinking',
+          thinking: 'visible context',
+          signature: 'sig-visible',
+        },
+      ]),
+      { ...parserOptions, includeThinkingInResponse: true },
+    );
+
+    expect(result.blocks[0]).toStrictEqual({
+      type: 'thinking',
+      thought: 'visible context',
+      sourceField: 'thinking',
+      signature: 'sig-visible',
+      isHidden: false,
+    });
+  });
+
+  it('marks redacted thinking blocks hidden when includeThinkingInResponse is false', () => {
+    const result = parseAnthropicResponse(
+      createMockMessage('end_turn', [
+        {
+          type: 'redacted_thinking',
+          data: 'redacted-data',
+        },
+      ]),
+      { ...parserOptions, includeThinkingInResponse: false },
+    );
+
+    expect(result.blocks[0]).toStrictEqual({
+      type: 'thinking',
+      thought: '[redacted]',
+      sourceField: 'thinking',
+      signature: 'redacted-data',
+      isHidden: true,
+    });
+  });
+
+  it('keeps redacted thinking blocks visible when includeThinkingInResponse is true', () => {
+    const result = parseAnthropicResponse(
+      createMockMessage('end_turn', [
+        {
+          type: 'redacted_thinking',
+          data: 'redacted-data',
+        },
+      ]),
+      { ...parserOptions, includeThinkingInResponse: true },
+    );
+
+    expect(result.blocks[0]).toStrictEqual({
+      type: 'thinking',
+      thought: '[redacted]',
+      sourceField: 'thinking',
+      signature: 'redacted-data',
+      isHidden: false,
+    });
+  });
+
+  it('handles redacted thinking blocks with empty signature data', () => {
+    const result = parseAnthropicResponse(
+      createMockMessage('end_turn', [{ type: 'redacted_thinking', data: '' }]),
+      { ...parserOptions, includeThinkingInResponse: false },
+    );
+
+    expect(result.blocks[0]).toStrictEqual({
+      type: 'thinking',
+      thought: '[redacted]',
+      sourceField: 'thinking',
+      signature: '',
+      isHidden: true,
+    });
+  });
+});
+
 describe('issue #1844 – Anthropic non-streaming stopReason propagation', () => {
   beforeAll(async () => {
     const mod = await import('./AnthropicResponseParser.js');
@@ -43,11 +168,8 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
   it('should include stopReason in metadata when stop_reason is "end_turn"', () => {
     const message = createMockMessage('end_turn');
     const options = {
-      isOAuth: false,
-      tools: undefined,
-      unprefixToolName: (name: string) => name,
-      findToolSchema: () => undefined,
-      cacheLogger: { debug: () => {} },
+      ...createBaseParserOptions(),
+      includeThinkingInResponse: true,
     };
 
     const result = parseAnthropicResponse(message, options);
@@ -66,11 +188,8 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
       },
     ]);
     const options = {
-      isOAuth: false,
-      tools: undefined,
-      unprefixToolName: (name: string) => name,
-      findToolSchema: () => undefined,
-      cacheLogger: { debug: () => {} },
+      ...createBaseParserOptions(),
+      includeThinkingInResponse: true,
     };
 
     const result = parseAnthropicResponse(message, options);
@@ -84,11 +203,8 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
       { type: 'text', text: 'Truncated response...' },
     ]);
     const options = {
-      isOAuth: false,
-      tools: undefined,
-      unprefixToolName: (name: string) => name,
-      findToolSchema: () => undefined,
-      cacheLogger: { debug: () => {} },
+      ...createBaseParserOptions(),
+      includeThinkingInResponse: true,
     };
 
     const result = parseAnthropicResponse(message, options);
@@ -100,11 +216,8 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
   it('should still propagate usage alongside stopReason', () => {
     const message = createMockMessage('end_turn');
     const options = {
-      isOAuth: false,
-      tools: undefined,
-      unprefixToolName: (name: string) => name,
-      findToolSchema: () => undefined,
-      cacheLogger: { debug: () => {} },
+      ...createBaseParserOptions(),
+      includeThinkingInResponse: true,
     };
 
     const result = parseAnthropicResponse(message, options);
@@ -123,11 +236,8 @@ describe('issue #1844 – Anthropic non-streaming stopReason propagation', () =>
   it('should propagate stopReason "refusal" without throwing @issue:2329', () => {
     const message = createMockMessage('refusal');
     const options = {
-      isOAuth: false,
-      tools: undefined,
-      unprefixToolName: (name: string) => name,
-      findToolSchema: () => undefined,
-      cacheLogger: { debug: () => {} },
+      ...createBaseParserOptions(),
+      includeThinkingInResponse: true,
     };
 
     const result = parseAnthropicResponse(message, options);

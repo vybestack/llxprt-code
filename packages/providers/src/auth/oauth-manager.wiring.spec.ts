@@ -33,6 +33,7 @@ const wiring = vi.hoisted(() => {
   const getAnthropicUsageInfo = vi.fn();
   const getAllAnthropicUsageInfo = vi.fn();
   const getAllCodexUsageInfo = vi.fn();
+  const getAllCodexRateLimitResetCredits = vi.fn();
   const getHigherPriorityAuth = vi.fn();
 
   return {
@@ -46,6 +47,7 @@ const wiring = vi.hoisted(() => {
     getAnthropicUsageInfo,
     getAllAnthropicUsageInfo,
     getAllCodexUsageInfo,
+    getAllCodexRateLimitResetCredits,
     getHigherPriorityAuth,
   };
 });
@@ -72,6 +74,7 @@ vi.mock('./provider-usage-info.js', () => ({
   getAnthropicUsageInfo: wiring.getAnthropicUsageInfo,
   getAllAnthropicUsageInfo: wiring.getAllAnthropicUsageInfo,
   getAllCodexUsageInfo: wiring.getAllCodexUsageInfo,
+  getAllCodexRateLimitResetCredits: wiring.getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth: wiring.getHigherPriorityAuth,
 }));
 
@@ -183,6 +186,7 @@ describe('OAuthManager wiring', () => {
     wiring.getAnthropicUsageInfo.mockResolvedValue(null);
     wiring.getAllAnthropicUsageInfo.mockResolvedValue(new Map());
     wiring.getAllCodexUsageInfo.mockResolvedValue(new Map());
+    wiring.getAllCodexRateLimitResetCredits.mockResolvedValue(new Map());
     wiring.getHigherPriorityAuth.mockResolvedValue(null);
   });
 
@@ -375,6 +379,16 @@ describe('OAuthManager wiring', () => {
     wiring.getAllCodexUsageInfo.mockResolvedValue(
       new Map([['bucket-a', { usage: 2 }]]),
     );
+    wiring.getAllCodexRateLimitResetCredits.mockResolvedValue(
+      new Map([
+        [
+          'bucket-a',
+          {
+            rate_limit_reset_credits: { available_count: 1, credits: [] },
+          },
+        ],
+      ]),
+    );
 
     await expect(manager.getToken('anthropic')).resolves.toBe('oauth-token');
     expect(tokenAccessCoordinator.getToken).toHaveBeenCalledWith(
@@ -458,6 +472,23 @@ describe('OAuthManager wiring', () => {
       new Map([['bucket-a', { usage: 2 }]]),
     );
     expect(wiring.getAllCodexUsageInfo).toHaveBeenCalledWith(
+      tokenStore,
+      config,
+    );
+
+    await expect(
+      manager.getAllCodexRateLimitResetCredits(),
+    ).resolves.toStrictEqual(
+      new Map([
+        [
+          'bucket-a',
+          {
+            rate_limit_reset_credits: { available_count: 1, credits: [] },
+          },
+        ],
+      ]),
+    );
+    expect(wiring.getAllCodexRateLimitResetCredits).toHaveBeenCalledWith(
       tokenStore,
       config,
     );

@@ -15,12 +15,10 @@
  * @fix issue2035 - Refresh on empty failed token (OAuth resolved below retry layer)
  */
 
-import {
-  mergeRefreshedToken,
-  type OAuthTokenWithExtras,
-} from '@vybestack/llxprt-code-auth';
+import { type OAuthTokenWithExtras } from '@vybestack/llxprt-code-auth';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth';
+import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth/precedence.js';
 import type { OAuthToken, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';

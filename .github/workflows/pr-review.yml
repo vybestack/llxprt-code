@@ -47,10 +47,6 @@ jobs:
       PR_NUMBER: '${{ github.event.pull_request.number }}'
       GH_TOKEN: '${{ github.token }}'
       GITHUB_TOKEN: '${{ github.token }}'
-      # OPENAI_API_KEY is set via GITHUB_ENV by quota check step below
-      # Initial value from secrets will be overridden if quota check succeeds
-      OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-      OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_STRONG_MODEL: '${{ vars.LLXPRT_STRONG_MODEL || vars.LLXPRT_DEFAULT_MODEL }}'
@@ -195,6 +191,7 @@ jobs:
 
       - name: 'Check API quota and select optimal key'
         if: steps.issue_gate.outputs.should_review == 'true'
+        id: 'quota'
         run: node scripts/ci-quota-check.js
         env:
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
@@ -368,6 +365,8 @@ jobs:
 
       - name: 'Run walkthrough pipeline'
         if: steps.issue_gate.outputs.should_review == 'true'
+        env:
+          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
         run: |
           set -euo pipefail
           # The orchestrator writes its own generic fallback comment to
@@ -384,6 +383,7 @@ jobs:
           path: 'review/walkthrough-error.log'
           if-no-files-found: 'ignore'
           retention-days: 3
+
       - name: 'Ensure fallback comment'
         if: always()
         run: |

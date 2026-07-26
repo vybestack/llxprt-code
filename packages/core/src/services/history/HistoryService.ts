@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-import { type IContent, type ToolCallBlock } from './IContent.js';
+import {
+  type IContent,
+  type ToolCallBlock,
+  type ToolResponseBlock,
+} from './IContent.js';
 import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
@@ -435,6 +439,93 @@ export class HistoryService
 
     // T1: Full recalculation through tokenizerLock
     await this.recalculateTotalTokens();
+  }
+
+  /**
+   * Immutably replace a single tool_response block with a replacement
+   * tool_response block, preserving callId/toolName invariants.
+   *
+   * Unlike a generic block-replacement API, this method enforces structural
+   * invariants that compression/truncation callers rely on:
+   *   - The target block at (entryIndex, blockIndex) MUST be a tool_response.
+   *   - The replacement MUST be a tool_response.
+   *   - The replacement MUST carry the same callId and toolName as the target.
+   * This prevents accidental corruption of tool-call/response pairing.
+   */
+  async replaceToolResponseBlock(
+    entryIndex: number,
+    blockIndex: number,
+    replacement: ToolResponseBlock,
+    modelName?: string,
+  ): Promise<boolean> {
+    if (
+      !Number.isInteger(entryIndex) ||
+      entryIndex < 0 ||
+      entryIndex >= this.history.length
+    ) {
+      return false;
+    }
+    const entry = this.history[entryIndex];
+    if (
+      !Number.isInteger(blockIndex) ||
+      blockIndex < 0 ||
+      blockIndex >= entry.blocks.length
+    ) {
+      return false;
+    }
+
+    const target = entry.blocks[blockIndex];
+    if (target.type !== 'tool_response') {
+      return false;
+    }
+    // Runtime invariant: the replacement MUST be a tool_response at runtime,
+    // even though the TypeScript type already constrains it. A malformed
+    // object with matching callId/toolName but wrong type (or missing type)
+    // could slip through at runtime and corrupt tool-call/response pairing.
+    const replacementType = (replacement as { type?: unknown }).type;
+    if (replacementType !== 'tool_response') {
+      return false;
+    }
+    if (
+      target.callId !== replacement.callId ||
+      target.toolName !== replacement.toolName
+    ) {
+      return false;
+    }
+
+    const newBlocks = [...entry.blocks];
+    newBlocks[blockIndex] = replacement;
+    const previousEntry = this.history[entryIndex];
+    const previousTotalTokens = this.totalTokens;
+    this.history[entryIndex] = { ...entry, blocks: newBlocks };
+
+    try {
+      await this.recalculateTotalTokens(modelName);
+    } catch (error) {
+      // Restore BOTH invariants: the history array AND the token accounting.
+      // recalculateTotalTokens may have already mutated this.totalTokens to
+      // reflect the replacement content before a listener/event error aborted
+      // the emit. Leaving totalTokens stale would corrupt the token budget.
+      this.history[entryIndex] = previousEntry;
+      this.totalTokens = previousTotalTokens;
+      // Best-effort notification so healthy listeners observe the rollback.
+      // A broken listener that originally caused the failure must not mask
+      // the original error.
+      try {
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: 0,
+          contentId: null,
+        });
+      } catch (emitError) {
+        this.logger.debug(
+          'tokensUpdated emit during rollback failed; original error preserved',
+          emitError,
+        );
+      }
+      throw error;
+    }
+    return true;
   }
 
   /**

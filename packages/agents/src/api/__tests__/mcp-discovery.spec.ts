@@ -144,8 +144,8 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
       expect(Array.isArray(dbTools)).toBe(true);
       expect(dbTools.length).toBeGreaterThanOrEqual(2);
       const dbToolNames = dbTools.map((t) => t.name);
-      expect(dbToolNames).toContain('query');
-      expect(dbToolNames).toContain('schema');
+      expect(dbToolNames).toContain('mcp__db-tools__query');
+      expect(dbToolNames).toContain('mcp__db-tools__schema');
 
       // discoveryState() is callable independently
       const state = agent.mcp.discoveryState();

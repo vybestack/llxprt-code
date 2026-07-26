@@ -33,6 +33,37 @@ For providers without aliases, use the OpenAI protocol:
 /model model-name
 ```
 
+## Where Model Limits Live
+
+Default model limits are data-driven and layered. Each layer takes precedence
+over the one below it:
+
+1. **User override** — `/set context-limit <N>` or a profile
+   `ephemeralSettings.context-limit`. Always wins; config never silently
+   overrides an explicit user value.
+2. **Provider alias config** —
+   `packages/providers/src/composition/aliases/*.config`. The primary source for
+   models that have an alias:
+   - **Codex** (`codex.config`): provider-wide
+     `ephemeralSettings.context-limit: 262144`; per-model `contextWindow` on each
+     `staticModels` entry (for example, `gpt-5.3-codex-spark` → `131072`).
+   - **Anthropic** (`anthropic.config`): provider-wide
+     `ephemeralSettings.maxOutputTokens: 40000`; per-model `context-limit` via
+     `modelDefaults` (for example, `claude-opus-5`, `claude-opus-4-8`,
+     `claude-sonnet-4-6`, and `claude-fable-5` → `200000`).
+3. **Core fallback catalog** — `packages/core/src/core/model-limits.json`
+   (Zod-validated by `model-limits.schema.ts`). The safety net for any model not
+   covered by an alias config. `tokenLimit()` reads this catalog at module load;
+   its signature and resolution order are unchanged.
+
+Adding or updating a limit is a data edit; no limit-logic code changes are
+needed. The core fallback catalog is imported as a JSON module. In development,
+Bun resolves it at runtime from `src/`. A built
+`@vybestack/llxprt-code-core` package must be rebuilt to copy the JSON asset next
+to the compiled JS (`dist/src/core/model-limits.json`) via
+`scripts/copy_files.ts`. Provider alias `.config` files are read at runtime. See
+`model-limits.json` for the full fallback table.
+
 ## Model Geometry and Budgeting (all providers)
 
 When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
@@ -310,6 +341,39 @@ Kimi ships the K3 frontier model with deep reasoning, multi-step tool orchestrat
   }
 }
 ```
+
+#### Multimodal support (Kimi K3)
+
+The `kimi` alias declares K3's media capabilities through its `mediaSupport`
+config:
+
+| Capability          | Status                        | Notes                                                                                                                                       |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inline images       | Enabled                       | Images in user messages and tool responses flow as `image_url` content parts.                                                               |
+| PDF/document upload | Enabled                       | Base64 PDFs are uploaded with `purpose: file-extract` and referenced by file id, keeping large documents out of the token budget.           |
+| Video               | Experimental (off by default) | Base64 videos are uploaded with `purpose: video`, then sent as `video_url` content with an `ms://<file-id>` URL on Kimi/Moonshot endpoints. |
+
+**PDF handling:** When a base64 PDF media block is present in a user message or
+tool response, it is uploaded through Kimi's Files API before the chat request.
+The uploaded file id is injected into the system message, and the inline PDF is
+replaced with a short text reference. An in-memory content-hash cache
+de-duplicates uploads across turns for the same Moonshot endpoint and account.
+If an upload fails, the PDF falls back to inline `file_data` so the request still
+proceeds.
+
+**Experimental video:** To enable native video forwarding, set:
+
+```bash
+/set kimi.experimental-video true
+```
+
+This is gated behind both the `kimi.experimental-video` setting and the
+`mediaSupport.videoSupport` capability flag. When enabled, base64 `video/*`
+blocks from user or tool messages are uploaded to Kimi/Moonshot and referenced
+in chat with the native `video_url`/`ms://<file-id>` format. This includes common
+formats such as MP4, MPEG, MOV, AVI, FLV, MPG, WebM, WMV, and 3GPP. Third-party
+aliases such as Chutes and Synthetic do not declare this capability and keep the
+default placeholder behavior.
 
 #### Pricing (Kimi K3)
 

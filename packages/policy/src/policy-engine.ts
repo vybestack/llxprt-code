@@ -5,6 +5,7 @@ import {
   type PolicyRule,
 } from './types.js';
 import { stableStringify } from './stable-stringify.js';
+import { isDestructiveCommand } from './destructive-commands.js';
 import {
   SHELL_TOOL_NAMES,
   splitCommands,
@@ -18,6 +19,12 @@ const cloneRule = (rule: PolicyRule): PolicyRule => ({
 
 const compareRulePriority = (a: PolicyRule, b: PolicyRule): number =>
   (b.priority ?? 0) - (a.priority ?? 0);
+
+/** Reads the `command` property from args as a string, or undefined if absent/non-string. */
+function readStringCommand(args: Record<string, unknown>): string | undefined {
+  const c = args['command'];
+  return typeof c === 'string' ? c : undefined;
+}
 
 /**
  * PolicyEngine evaluates tool execution requests against configured rules.
@@ -67,6 +74,16 @@ export class PolicyEngine {
       }
     }
 
+    // Hard-deny backstop: built-in destructive-command disabled-list. This is
+    // a non-bypassable guard that fires before rule matching so it beats the
+    // YOLO wildcard (priority 1.999) and any allowlist rule.
+    if (SHELL_TOOL_NAMES.includes(toolName)) {
+      const command = readStringCommand(args);
+      if (command !== undefined && isDestructiveCommand(command)) {
+        return PolicyDecision.DENY;
+      }
+    }
+
     // Find the highest priority matching rule
     const matchingRule = this.findMatchingRule(toolName, args);
 
@@ -96,8 +113,8 @@ export class PolicyEngine {
       SHELL_TOOL_NAMES.includes(toolName) &&
       decision === PolicyDecision.ALLOW
     ) {
-      const command = (args as { command?: string }).command;
-      if (command) {
+      const command = readStringCommand(args);
+      if (command !== undefined) {
         const shellResult = this.evaluateShellCommand(
           toolName,
           args,
@@ -233,8 +250,8 @@ export class PolicyEngine {
     serverName: string | undefined,
     currentResult: PolicyDecision,
   ): PolicyDecision {
-    const command = (args as { command?: string }).command;
-    if (!command) {
+    const command = readStringCommand(args);
+    if (command === undefined) {
       return currentResult;
     }
 
@@ -278,8 +295,14 @@ export class PolicyEngine {
     const argsString = stableStringify(args);
 
     return this.baseRules.find((rule) => {
-      // Check tool name match
-      const toolMatches = !rule.toolName || rule.toolName === toolName;
+      // Check tool name match (exact, prefix, or wildcard)
+      const matchesAllTools =
+        rule.toolName === undefined && rule.toolNamePrefix === undefined;
+      const toolMatches =
+        matchesAllTools ||
+        rule.toolName === toolName ||
+        (rule.toolNamePrefix !== undefined &&
+          toolName.startsWith(rule.toolNamePrefix));
       if (!toolMatches) {
         return false;
       }
@@ -380,5 +403,18 @@ export class PolicyEngine {
    */
   setApprovalMode(mode: ApprovalMode): void {
     this.currentMode = mode;
+  }
+
+  /**
+   * Removes all rules whose `source` matches the given value. Used to revoke
+   * trust-derived rules when folder trust is revoked so previously
+   * auto-allowed MCP tools fall back to requiring confirmation.
+   */
+  removeRulesBySource(source: string): void {
+    for (let i = this.baseRules.length - 1; i >= 0; i--) {
+      if (this.baseRules[i]?.source === source) {
+        this.baseRules.splice(i, 1);
+      }
+    }
   }
 }

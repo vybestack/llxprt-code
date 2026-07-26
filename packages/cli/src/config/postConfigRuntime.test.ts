@@ -209,6 +209,23 @@ describe('applyGlobalAndProfileEphemeralSettings', () => {
     expect(resolveStreamIdleTimeoutMs(config)).toBe(120_000);
   });
 
+  it('does not reapply profile tool allowlists after governance', () => {
+    const config = createCapturingConfig();
+
+    applyGlobalAndProfileEphemeralSettings({
+      config,
+      bootstrapArgs: { profileJson: '{"provider":"openai"}' },
+      argv: { provider: undefined },
+      settings: {},
+      profileSettingsWithTools: {
+        'tools.allowed': ['release_notes_no_tools'],
+      },
+      profileLoadResult: { profileToLoad: undefined },
+    });
+
+    expect(config.getEphemeralSetting('tools.allowed')).toBeUndefined();
+  });
+
   it('applies profile ephemerals when profileJson is provided without profileToLoad', () => {
     const config = createCapturingConfig();
 

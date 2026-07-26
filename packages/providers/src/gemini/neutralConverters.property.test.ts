@@ -16,7 +16,9 @@ import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { Outcome, Language, type Part } from '@google/genai';
 import {
+  geminiPartToBlock,
   geminiPartsToBlocks,
+  blockToGeminiPart,
   blocksToGeminiParts,
   geminiUsageToUsageStats,
 } from './neutralConverters.js';
@@ -113,6 +115,38 @@ describe('property-based round-trips (REQ-010.2)', () => {
       }),
       { numRuns: 200 },
     );
+  });
+
+  it('default sourceField without marker omits llxprtSourceField', () => {
+    const part = blockToGeminiPart({
+      type: 'thinking',
+      thought: 'reasoning',
+      sourceField: 'thought',
+    });
+    expect(part).toStrictEqual({ thought: true, text: 'reasoning' });
+  });
+
+  it('isHidden false survives thinking block round-trip', () => {
+    const part = blockToGeminiPart({
+      type: 'thinking',
+      thought: 'reasoning',
+      isHidden: false,
+    });
+    expect(part).toMatchObject({ llxprtThoughtIsHidden: false });
+    expect(geminiPartToBlock(part!)).toMatchObject({ isHidden: false });
+  });
+
+  it('thought part with llxprt metadata survives round-trip', () => {
+    const part = {
+      thought: true,
+      text: 'reasoning',
+      thoughtSignature: 'sig',
+      llxprtSourceField: 'thought',
+      llxprtThoughtBlockId: 'stream-1',
+      llxprtThoughtBlockStatus: 'complete',
+      llxprtThoughtIsHidden: true,
+    } as Part;
+    expect(roundTrip(part)).toStrictEqual(part);
   });
 
   it('arbitrary fileUri with mimeType survives fileData round-trip', () => {

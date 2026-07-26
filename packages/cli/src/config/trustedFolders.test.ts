@@ -16,6 +16,7 @@ vi.mock('os', async (importOriginal) => {
 });
 
 import { FatalConfigError, getIdeTrust } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   describe,
   it,
@@ -24,6 +25,7 @@ import {
   beforeEach,
   afterEach,
   type Mocked,
+  type MockedFunction,
   type Mock,
 } from 'vitest';
 import * as fs from 'fs';
@@ -39,6 +41,12 @@ import {
 } from './trustedFolders.js';
 import type { Settings } from './settings.js';
 
+function createErrorWithCode(message: string, code: string): Error {
+  return Object.assign(new Error(message), { code });
+}
+
+const TRUSTED_FOLDERS_FILE_MODE = 0o600;
+
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof fs>();
   return {
@@ -46,7 +54,12 @@ vi.mock('fs', async (importOriginal) => {
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
+    renameSync: vi.fn(),
+    chmodSync: vi.fn(),
+    statSync: vi.fn(),
+    unlinkSync: vi.fn(),
     mkdirSync: vi.fn(),
+    realpathSync: vi.fn((location: fs.PathLike) => location),
   };
 });
 
@@ -57,7 +70,11 @@ vi.mock('strip-json-comments', () => ({
 describe('Trusted Folders Loading', () => {
   let mockFsExistsSync: Mocked<typeof fs.existsSync>;
   let mockStripJsonComments: Mocked<typeof stripJsonComments>;
-  let mockFsWriteFileSync: Mocked<typeof fs.writeFileSync>;
+  let mockFsWriteFileSync: MockedFunction<typeof fs.writeFileSync>;
+  let mockFsChmodSync: MockedFunction<typeof fs.chmodSync>;
+  let mockFsStatSync: MockedFunction<typeof fs.statSync>;
+  let mockFsRenameSync: MockedFunction<typeof fs.renameSync>;
+  let mockFsUnlinkSync: MockedFunction<typeof fs.unlinkSync>;
 
   beforeEach(() => {
     resetTrustedFoldersForTesting();
@@ -65,12 +82,22 @@ describe('Trusted Folders Loading', () => {
     mockFsExistsSync = vi.mocked(fs.existsSync);
     mockStripJsonComments = vi.mocked(stripJsonComments);
     mockFsWriteFileSync = vi.mocked(fs.writeFileSync);
+    mockFsChmodSync = vi.mocked(fs.chmodSync);
+    mockFsStatSync = vi.mocked(fs.statSync);
+    mockFsRenameSync = vi.mocked(fs.renameSync);
+    mockFsUnlinkSync = vi.mocked(fs.unlinkSync);
+    mockFsStatSync.mockReturnValue({
+      mode: TRUSTED_FOLDERS_FILE_MODE,
+    } as fs.Stats);
     vi.mocked(osActual.homedir).mockReturnValue('/mock/home/user');
     (mockStripJsonComments as unknown as Mock).mockImplementation(
       (jsonString: string) => jsonString,
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
     (fs.readFileSync as Mock).mockReturnValue('{}');
+    vi.mocked(fs.realpathSync).mockImplementation((location) =>
+      typeof location === 'string' ? location : location.toString(),
+    );
   });
 
   afterEach(() => {
@@ -118,14 +145,58 @@ describe('Trusted Folders Loading', () => {
       );
       expect(folders.isPathTrusted('/trustedparent/trustme')).toBe(true);
 
-      // No explicit rule covers this file
-      expect(folders.isPathTrusted('/secret/bankaccounts.json')).toBe(
-        undefined,
-      );
-      expect(folders.isPathTrusted('/secret/mine/privatekey.pem')).toBe(
-        undefined,
-      );
+      expect(folders.isPathTrusted('/secret/bankaccounts.json')).toBe(false);
+      expect(folders.isPathTrusted('/secret/mine/privatekey.pem')).toBe(false);
       expect(folders.isPathTrusted('/user/someotherfolder')).toBe(undefined);
+    });
+
+    it('uses the most specific matching rule when trust rules compete', () => {
+      const { folders } = setup({
+        config: {
+          '/workspace': TrustLevel.TRUST_FOLDER,
+          '/workspace/private': TrustLevel.DO_NOT_TRUST,
+          '/workspace/private/public': TrustLevel.TRUST_FOLDER,
+        },
+      });
+
+      expect(folders.isPathTrusted('/workspace/private')).toBe(false);
+      expect(folders.isPathTrusted('/workspace/private/public/file')).toBe(
+        true,
+      );
+    });
+
+    it('prefers denial when direct and TRUST_PARENT rules have equal specificity', () => {
+      const { folders } = setup({
+        config: {
+          '/workspace/trust-parent-source': TrustLevel.TRUST_PARENT,
+          '/workspace': TrustLevel.DO_NOT_TRUST,
+        },
+      });
+
+      expect(folders.isPathTrusted('/workspace/project')).toBe(false);
+    });
+
+    it('does not treat a sibling string prefix as an ancestor', () => {
+      const { folders } = setup({
+        config: { '/workspace/app': TrustLevel.TRUST_FOLDER },
+      });
+
+      expect(folders.isPathTrusted('/workspace/application')).toBe(undefined);
+    });
+
+    it('fails closed when a matching denial rule cannot be canonicalized', () => {
+      const { folders } = setup({
+        config: { '/secret': TrustLevel.DO_NOT_TRUST },
+      });
+      vi.mocked(fs.realpathSync).mockImplementation((location) => {
+        const resolved = location.toString();
+        if (resolved === '/secret') {
+          throw new Error('permission denied');
+        }
+        return resolved;
+      });
+
+      expect(folders.isPathTrusted('/secret/file')).toBe(false);
     });
   });
 
@@ -188,6 +259,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('setValue should update the user config and save it', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
     loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
 
@@ -195,9 +267,220 @@ describe('Trusted Folders Loading', () => {
       TrustLevel.TRUST_FOLDER,
     );
     expect(mockFsWriteFileSync).toHaveBeenCalledWith(
-      getTrustedFoldersPath(),
+      expect.stringContaining('.trustedFolders.json.'),
       JSON.stringify({ '/new/path': TrustLevel.TRUST_FOLDER }, null, 2),
-      { encoding: 'utf-8', mode: 0o600 },
+      { encoding: 'utf-8', mode: TRUSTED_FOLDERS_FILE_MODE, flag: 'wx' },
+    );
+    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    expect(mockFsChmodSync).toHaveBeenCalledWith(
+      temporaryPath,
+      TRUSTED_FOLDERS_FILE_MODE,
+    );
+    expect(mockFsStatSync).toHaveBeenCalledWith(temporaryPath);
+    expect(mockFsRenameSync).toHaveBeenCalledWith(
+      temporaryPath,
+      getTrustedFoldersPath(),
+    );
+    expect(
+      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
+    ).toBeLessThan(mockFsChmodSync.mock.invocationCallOrder[0]);
+    expect(
+      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0],
+    ).toBeLessThan(mockFsStatSync.mock.invocationCallOrder[0]);
+    expect(mockFsChmodSync.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFsRenameSync.mock.invocationCallOrder[0],
+    );
+    expect(mockFsStatSync.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFsRenameSync.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('deleteValue should remove an existing rule and save it', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    loadedFolders.user.config['/existing/path'] = TrustLevel.TRUST_FOLDER;
+
+    loadedFolders.deleteValue('/existing/path');
+
+    expect(loadedFolders.user.config['/existing/path']).toBeUndefined();
+    expect(mockFsWriteFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('.trustedFolders.json.'),
+      JSON.stringify({}, null, 2),
+      { encoding: 'utf-8', mode: TRUSTED_FOLDERS_FILE_MODE, flag: 'wx' },
+    );
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+  });
+
+  it('deleteValue restores the in-memory rule when saving fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
+    mockFsRenameSync.mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+
+    expect(() => loadedFolders.deleteValue('/existing/path')).toThrow(
+      'rename denied',
+    );
+
+    expect(loadedFolders.user.config['/existing/path']).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
+  });
+
+  it('keeps the destination and in-memory rule unchanged when temp chmod fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    loadedFolders.user.config['/existing/path'] = TrustLevel.DO_NOT_TRUST;
+    mockFsChmodSync.mockImplementationOnce(() => {
+      throw new Error('chmod denied');
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/existing/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('chmod denied');
+
+    expect(mockFsRenameSync).not.toHaveBeenCalled();
+    expect(loadedFolders.user.config['/existing/path']).toBe(
+      TrustLevel.DO_NOT_TRUST,
+    );
+  });
+
+  it('commits the file when chmod reports that POSIX modes are unsupported', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    const unsupportedError = createErrorWithCode(
+      'chmod unsupported',
+      'ENOTSUP',
+    );
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    mockFsChmodSync.mockImplementationOnce(() => {
+      throw unsupportedError;
+    });
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+    expect(loadedFolders.user.config['/new/path']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('does not support POSIX file modes'),
+      unsupportedError,
+    );
+  });
+
+  it('commits the file when stat reports that POSIX modes are unsupported', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    const unsupportedError = createErrorWithCode('stat unsupported', 'ENOSYS');
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    mockFsStatSync.mockImplementationOnce(() => {
+      throw unsupportedError;
+    });
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+    expect(loadedFolders.user.config['/new/path']).toBe(
+      TrustLevel.TRUST_FOLDER,
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('does not support POSIX file modes'),
+      unsupportedError,
+    );
+  });
+
+  it('preserves in-memory state when writing the temporary file fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    mockFsWriteFileSync.mockImplementationOnce(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('disk full');
+
+    expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+    expect(mockFsRenameSync).not.toHaveBeenCalled();
+  });
+
+  it('removes the temporary file when the atomic rename fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+    mockFsRenameSync.mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('rename denied');
+
+    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    expect(mockFsUnlinkSync).toHaveBeenCalledWith(temporaryPath);
+    expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+  });
+
+  it('warns when a failed atomic rename cannot remove its temporary file', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const cleanupError = new Error('unlink denied');
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    const loadedFolders = loadTrustedFolders();
+    mockFsRenameSync.mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+    mockFsUnlinkSync.mockImplementationOnce(() => {
+      throw cleanupError;
+    });
+
+    expect(() =>
+      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+    ).toThrow('rename denied');
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to remove trusted folders temporary file',
+      ),
+      cleanupError,
+    );
+  });
+
+  it('atomically saves on Windows without POSIX mode operations', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    const loadedFolders = loadTrustedFolders();
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
+    expect(mockFsChmodSync).not.toHaveBeenCalled();
+    expect(mockFsStatSync).not.toHaveBeenCalled();
+    expect(mockFsRenameSync).toHaveBeenCalledWith(
+      temporaryPath,
+      getTrustedFoldersPath(),
+    );
+  });
+
+  it('performs no fallible cleanup after the atomic rename commit point', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+    const loadedFolders = loadTrustedFolders();
+
+    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+
+    expect(mockFsWriteFileSync).toHaveBeenCalledOnce();
+    expect(mockFsChmodSync).toHaveBeenCalledOnce();
+    expect(mockFsStatSync).toHaveBeenCalledOnce();
+    expect(mockFsRenameSync).toHaveBeenCalledOnce();
+    expect(mockFsUnlinkSync).not.toHaveBeenCalled();
+    const renameOrder = mockFsRenameSync.mock.invocationCallOrder[0];
+    expect(mockFsWriteFileSync.mock.invocationCallOrder[0]).toBeLessThan(
+      renameOrder,
+    );
+    expect(mockFsChmodSync.mock.invocationCallOrder[0]).toBeLessThan(
+      renameOrder,
+    );
+    expect(mockFsStatSync.mock.invocationCallOrder[0]).toBeLessThan(
+      renameOrder,
     );
   });
 });
@@ -282,10 +565,10 @@ describe('isWorkspaceTrusted', () => {
     expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
-  it('should return undefined for a child of an untrusted folder', () => {
+  it('should return false for a child of an untrusted folder', () => {
     mockCwd = '/home/user/untrusted/src';
     mockRules['/home/user/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted(mockSettings)).toBeUndefined();
+    expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
   it('should return undefined when no rules match', () => {
@@ -295,11 +578,11 @@ describe('isWorkspaceTrusted', () => {
     expect(isWorkspaceTrusted(mockSettings)).toBeUndefined();
   });
 
-  it('should prioritize trust over distrust', () => {
+  it('should prioritize the more specific distrust rule', () => {
     mockCwd = '/home/user/projectA/untrusted';
     mockRules['/home/user/projectA'] = TrustLevel.TRUST_FOLDER;
-    mockRules['/home/user/projectA/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
+    mockRules[mockCwd] = TrustLevel.DO_NOT_TRUST;
+    expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
   it('should handle path normalization', () => {
@@ -334,6 +617,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
       JSON.stringify({ [process.cwd()]: TrustLevel.DO_NOT_TRUST }),
     );
     expect(isWorkspaceTrusted(mockSettings)).toBe(true);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
   it('should return false when ideTrust is false, ignoring config', () => {
@@ -343,6 +627,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
       JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
     );
     expect(isWorkspaceTrusted(mockSettings)).toBe(false);
+    expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
   it('should fall back to config when ideTrust is undefined', () => {

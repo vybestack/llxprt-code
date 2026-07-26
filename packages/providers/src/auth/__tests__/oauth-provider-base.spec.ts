@@ -17,7 +17,7 @@ import {
   OAuthError,
   OAuthErrorType,
   OAuthErrorFactory,
-} from '@vybestack/llxprt-code-auth';
+} from '@vybestack/llxprt-code-auth/oauth-errors.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

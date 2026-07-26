@@ -1,0 +1,295 @@
+name: Issue Planner
+
+# Autonomous issue planner (GitHub Action). Generates a test-first
+# implementation plan for issues by running the LLxprt CLI agentic, then
+# posts/updates a single idempotent tagged comment.
+#
+# Triggers (A1):
+#   - Automatic: issues opened/edited/reopened/labeled. NO rollout label gate.
+#   - Comment: issue_comment created, only for a plain issue (not a PR), when a
+#     trusted OWNER/MEMBER/COLLABORATOR commenter gives `/plan` exactly or
+#     `/plan` followed by whitespace and optional feedback.
+#
+# The plan is advisory and never blocks issue flow.
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - reopened
+      - labeled
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  issues: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+  REPO: '${{ github.repository }}'
+
+jobs:
+  plan:
+    name: Generate issue plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      # Serialize per issue so rapid edits/comments do not race on the single
+      # marker comment. In-flight runs complete rather than being cancelled.
+      group: 'issue-planner-${{ github.event.issue.number }}'
+      cancel-in-progress: false
+    if: |
+      (github.event_name == 'issues') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.action == 'created' &&
+       github.event.issue.pull_request == null &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR') &&
+       (github.event.comment.body == '/plan' ||
+        startsWith(github.event.comment.body, '/plan ') ||
+        startsWith(toJSON(github.event.comment.body), '"/plan\n') ||
+        startsWith(toJSON(github.event.comment.body), '"/plan\r\n') ||
+        startsWith(toJSON(github.event.comment.body), '"/plan\t')))
+    env:
+      ISSUE_NUMBER: '${{ github.event.issue.number }}'
+      OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+      LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+      LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+      LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}"
+      LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
+      DEBUG_OUTPUT: 'stderr'
+    steps:
+      - name: 'Checkout repository'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: 'Prepare planner workspace'
+        run: |
+          set -euo pipefail
+          mkdir -p planner/issues
+          : > planner/comment.md
+          : > planner/plan.md
+
+      - name: 'Validate required repository variables'
+        run: |
+          set -euo pipefail
+          : "${KEY_VAR_NAME:?KEY_VAR_NAME repository variable is not set}"
+          : "${OPENAI_BASE_URL:?OPENAI_BASE_URL repository variable is not set}"
+          : "${LLXPRT_DEFAULT_MODEL:?LLXPRT_DEFAULT_MODEL repository variable is not set}"
+          : "${LLXPRT_DEFAULT_PROVIDER:?LLXPRT_DEFAULT_PROVIDER repository variable is not set}"
+
+      - name: 'Gather issue metadata'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+        run: |
+          set -euo pipefail
+          gh issue view "${ISSUE_NUMBER}" \
+            --json number,title,url,body,state,labels,assignees \
+            > planner/issue.json
+
+      - name: 'Extract linked references and fetch linked issues'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+        run: |
+          set -euo pipefail
+          # Use the production extractLinkedReferences() helper (handles
+          # fenced-code exclusion and de-dup) so the workflow and tests share
+          # one implementation. Excludes the current issue number.
+          node .github/scripts/issue-planner.mjs \
+            --extract-linked-references planner "${ISSUE_NUMBER}"
+
+          mapfile -t linked_numbers < planner/linked-references.txt
+          for num in "${linked_numbers[@]}"; do
+            if ! gh issue view "${num}" \
+              --json number,title,url,body,state,labels \
+              > "planner/issues/${num}.json" 2>/dev/null; then
+              rm -f "planner/issues/${num}.json"
+              echo "::warning::Skipped unavailable linked issue #${num}."
+            fi
+          done
+
+      - name: 'Precompute related PRs/issues candidates'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+        run: |
+          set -euo pipefail
+          issue_title="$(jq -r '.title' planner/issue.json)"
+          issue_title="${issue_title//\\/ }"
+          issue_title="${issue_title//\"/ }"
+          issue_title="${issue_title//$'\n'/ }"
+          issue_title="${issue_title//$'\r'/ }"
+          search_query="\"${issue_title}\""
+          gh search prs "${search_query}" --repo "${REPO}" \
+            --state merged --limit 10 --json number,title,state,url \
+            | jq -c '[.[] | { kind: "pr", number, title, state, url }]' \
+            > planner/related-prs.json
+          gh search issues "${search_query}" --repo "${REPO}" --limit 10 \
+            --json number,title,state,url \
+            | jq -c --argjson issue_number "${ISSUE_NUMBER}" \
+              '[.[] | select(.number != $issue_number) | { kind: "issue", number, title, state, url }]' \
+            > planner/related-issues.json
+          jq -s 'add' planner/related-prs.json planner/related-issues.json \
+            > planner/related-candidates.json
+
+      - name: 'Extract /plan feedback'
+        env:
+          COMMENT_BODY: '${{ github.event.comment.body }}'
+        run: |
+          set -euo pipefail
+          node .github/scripts/issue-planner.mjs --extract-feedback planner
+
+      - name: 'Render planner context and instructions'
+        run: |
+          set -euo pipefail
+          node .github/scripts/issue-planner.mjs --render-context planner
+          node .github/scripts/issue-planner.mjs --render-instructions planner
+
+      - name: 'Install LLxprt CLI nightly'
+        run: npm install -g @vybestack/llxprt-code@nightly
+
+      - name: 'Check API quota and select optimal key'
+        run: node scripts/ci-quota-check.js
+        env:
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+
+      - name: 'Confine filesystem for planner agent'
+        run: |
+          set -euo pipefail
+          # Enforce filesystem confinement BEFORE the agent runs. The
+          # --allowed-tools syntax does NOT path-restrict writes (CLI
+          # normalization strips parentheses), so this read-only checkout
+          # except planner/ is the actual enforcement.
+          find . \
+            \( -path './.git' -o -path './planner' \) -prune -o \
+            -exec chmod a-w {} +
+          chmod u+w planner
+          remaining_writable="$(
+            find . \
+              \( -path './.git' -o -path './planner' \) -prune -o \
+              \( -perm -u=w -o -perm -g=w -o -perm -o=w \) -print
+          )"
+          if [[ -n "${remaining_writable}" ]]; then
+            printf 'Non-planner paths remain writable:\n%s\n' "${remaining_writable}" >&2
+            exit 1
+          fi
+          echo "Filesystem confined: checkout is read-only except planner/"
+
+      - name: 'Run planner agent'
+        id: planner_agent
+        run: |
+          set -euo pipefail
+          llxprt_log="planner/llxprt.log"
+          context_limit="${LLXPRT_CONTEXT_LIMIT:-200000}"
+
+          initial_prompt="You are planning issue #${ISSUE_NUMBER}. Start by reading planner/planning-instructions.md for your mission and planner/issue-context.md for issue details. Use read/search tools to explore the repository and verify test files, package boundaries, and existing tests. Write the final plan to planner/plan.md."
+
+          set +e
+          llxprt \
+            --provider "${LLXPRT_DEFAULT_PROVIDER}" \
+            --model "${LLXPRT_DEFAULT_MODEL}" \
+            --yolo \
+            --key "${OPENAI_API_KEY}" \
+            --baseurl "${OPENAI_BASE_URL}" \
+            --set modelparam.temperature=0.7 \
+            --set modelparam.max_tokens=16000 \
+            --set context-limit="${context_limit}" \
+            --set shell-replacement=false \
+            --allowed-tools "read_file,read_many_files,list_directory,glob,search_file_content,write_file" \
+            --prompt "${initial_prompt}" 2>&1 | tee "${llxprt_log}"
+          llxprt_status=${PIPESTATUS[0]}
+          set -e
+
+          if [[ ${llxprt_status} -ne 0 ]]; then
+            {
+              echo "<!-- llxprt-issue-plan -->"
+              echo "## LLxprt Issue Planner — infrastructure failure"
+              echo
+              echo "The autonomous planner failed with exit code ${llxprt_status}. Please inspect the workflow logs (Run planner agent section) and re-run once resolved."
+            } > planner/comment.md
+            echo "LLXPRT_EXIT_CODE=${llxprt_status}" >> "$GITHUB_ENV"
+            exit "${llxprt_status}"
+          fi
+
+          if [[ -f planner/plan.md && -s planner/plan.md ]]; then
+            node .github/scripts/issue-planner.mjs --finalize planner
+          else
+            {
+              echo "<!-- llxprt-issue-plan -->"
+              echo "## LLxprt Issue Planner — infrastructure failure"
+              echo
+              echo "The planner agent did not produce planner/plan.md."
+            } > planner/comment.md
+            echo "LLXPRT_EXIT_CODE=1" >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+      - name: 'Clear selected API key'
+        if: always()
+        run: echo 'OPENAI_API_KEY=' >> "$GITHUB_ENV"
+
+      - name: 'Upsert plan comment'
+        id: upsert_comment
+        if: always()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          ISSUE_NUMBER: '${{ env.ISSUE_NUMBER }}'
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { pathToFileURL } = require('url');
+            const helperUrl = pathToFileURL(
+              path.resolve('.github/scripts/issue-planner.mjs'),
+            ).href;
+
+            try {
+              const { ensureCommentBody, reconcilePlanComment } = await import(helperUrl);
+              const number = Number(process.env.ISSUE_NUMBER);
+              if (!Number.isInteger(number) || number <= 0) {
+                throw new Error('No valid issue number resolved for planner upsert.');
+              }
+              let rawBody = '';
+              try {
+                rawBody = fs.readFileSync('planner/comment.md', 'utf8');
+              } catch (error) {
+                if (error.code !== 'ENOENT') throw error;
+              }
+              await reconcilePlanComment({
+                github,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issueNumber: number,
+                body: ensureCommentBody(rawBody),
+              });
+            } catch (error) {
+              core.setFailed(`Failed to reconcile planner comment: ${error.message || error}`);
+            }
+
+      - name: 'Report planner outcome'
+        if: always()
+        env:
+          PLANNER_OUTCOME: '${{ steps.planner_agent.outcome }}'
+          UPSERT_OUTCOME: '${{ steps.upsert_comment.outcome }}'
+        run: |
+          set -euo pipefail
+          if [[ "${PLANNER_OUTCOME}" == 'success' && "${UPSERT_OUTCOME}" == 'success' ]]; then
+            echo "::notice title=LLxprt Issue Planner::Plan posted/updated on issue #${ISSUE_NUMBER}."
+          elif [[ "${PLANNER_OUTCOME}" != 'success' && "${UPSERT_OUTCOME}" == 'success' ]]; then
+            echo "::notice title=LLxprt Issue Planner::Planner failed; an infrastructure-failure comment was posted on issue #${ISSUE_NUMBER}."
+          elif [[ "${PLANNER_OUTCOME}" == 'success' ]]; then
+            echo "::error title=LLxprt Issue Planner::Planner succeeded, but the plan comment post failed for issue #${ISSUE_NUMBER}."
+          else
+            echo "::error title=LLxprt Issue Planner::Planner failed and the failure comment post also failed for issue #${ISSUE_NUMBER}."
+          fi
