@@ -608,32 +608,55 @@ async function runPipeline(reviewDir) {
     console.log('No diffs detected; minimal walkthrough written.');
     return;
   }
-  const summaries = await runMapPhase(reviewDir, artifacts);
-  const themes = await runGroupPhase(reviewDir, artifacts, summaries);
-  const synthesis = await runSynthesisPhases(
-    reviewDir,
-    artifacts,
-    summaries,
-    themes,
-  );
-  const preMergeChecks = await runPreMergeChecksPhase(
-    reviewDir,
-    artifacts,
-    summaries,
-  );
-  const magnitude = computeMagnitude(artifacts.magnitudeInput);
-  const comment = renderWalkthroughComment({
-    releaseNotes: synthesis.releaseNotes,
-    walkthrough: synthesis.walkthrough,
-    themes,
-    sequenceDiagram: synthesis.sequenceDiagram,
-    magnitude,
-    related: synthesis.related,
-    preMergeChecks,
-  });
-  await fs.writeFile(path.join(reviewDir, 'comment.md'), comment);
-  await fs.writeFile(path.join(reviewDir, 'walkthrough.md'), comment);
-  console.log('Walkthrough written to review/comment.md');
+  try {
+    const summaries = await runMapPhase(reviewDir, artifacts);
+    const themes = await runGroupPhase(reviewDir, artifacts, summaries);
+    const synthesis = await runSynthesisPhases(
+      reviewDir,
+      artifacts,
+      summaries,
+      themes,
+    );
+    const preMergeChecks = await runPreMergeChecksPhase(
+      reviewDir,
+      artifacts,
+      summaries,
+    );
+    const magnitude = computeMagnitude(artifacts.magnitudeInput);
+    const comment = renderWalkthroughComment({
+      releaseNotes: synthesis.releaseNotes,
+      walkthrough: synthesis.walkthrough,
+      themes,
+      sequenceDiagram: synthesis.sequenceDiagram,
+      magnitude,
+      related: synthesis.related,
+      preMergeChecks,
+    });
+    await fs.writeFile(path.join(reviewDir, 'comment.md'), comment);
+    await fs.writeFile(path.join(reviewDir, 'walkthrough.md'), comment);
+    console.log('Walkthrough written to review/comment.md');
+  } catch (pipelineError) {
+    console.error(
+      `Pipeline phase failed unexpectedly, writing minimal walkthrough: ${pipelineError.message}`,
+    );
+    const comment = renderWalkthroughComment({
+      releaseNotes: '',
+      walkthrough: buildMinimalWalkthrough(
+        artifacts,
+        artifacts.diffs.map((d) => ({
+          filePath: d.filePath,
+          summary: d.filePath,
+        })),
+      ),
+      themes: [],
+      sequenceDiagram: '',
+      magnitude: computeMagnitude(artifacts.magnitudeInput),
+      related: '',
+      preMergeChecks: null,
+    });
+    await fs.writeFile(path.join(reviewDir, 'comment.md'), comment);
+    await fs.writeFile(path.join(reviewDir, 'walkthrough.md'), comment);
+  }
 }
 
 async function runMapPhase(reviewDir, artifacts) {
