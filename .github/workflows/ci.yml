@@ -701,11 +701,21 @@ jobs:
   #
   # setup-bun is still installed here (pinned via .bun-version) because the LSP
   # service client resolves `bun` through `which` and disables the LSP/MCP
-  # service when bun is absent from PATH. Pinning to .bun-version reconciles the
-  # CI toolchain with dev-docs/bun.md and avoids a floating Bun version.
-  test:
-    name: 'Test (${{ matrix.os }})'
+  # service when bun is absent from PATH. Pinning to .bun-version reconciles
+  # the CI toolchain with dev-docs/bun.md and avoids a floating Bun version.
+  #
+  # Issue #2707: the workspace test suite is sharded into parallel jobs so the
+  # critical path is max(shard) rather than sum(all workspaces). The shard map
+  # lives in scripts/test-shards.ts and is enforced by
+  # scripts/check-test-shards.ts (run below and via `lint:test-shards`). Each
+  # shard is a matrix leg over `os`; the `scripts` shard runs the root script
+  # harness instead of workspace tests.
+  test_shard:
+    name: 'Test (${{ matrix.os }}) [${{ matrix.shard }}]'
     runs-on: '${{ matrix.os }}'
+    # The cli shard is the longest (~12 min pre-cost-reduction); cap so a
+    # hung shard fails instead of occupying a runner for the 6h default.
+    timeout-minutes: 45
     needs:
       - 'lint'
       - 'doc_change_filter'
@@ -723,6 +733,17 @@ jobs:
           - 'macos-latest'
         node-version:
           - '24.x'
+        # Mirrors the canonical shard map in scripts/test-shards.ts. The
+        # completeness guard (scripts/check-test-shards.ts) fails CI if a
+        # workspace is added without being assigned here. The `scripts` shard
+        # runs the root script harness (npm run test:scripts).
+        shard:
+          - 'cli'
+          - 'agents'
+          - 'providers'
+          - 'core'
+          - 'rest'
+          - 'scripts'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -749,8 +770,8 @@ jobs:
       # S6 (#2243): `bun install` resolves dependencies; the root postinstall
       # (scripts/postinstall.cjs) then symlinks Bun's static workspace copies to
       # the real workspace dirs so build/test resolve workspace `dist/` (see
-      # dev-docs/bun.md). Build/test run under Node via `npm run …`
-      # (`npm run test --workspaces` recurses under `bun run`).
+      # dev-docs/bun.md). Per-shard tests run via `bun scripts/test.ts --shard`
+      # which invokes each workspace's `test` script under Vitest through npm.
       - name: 'Install dependencies for testing'
         # Bun re-normalizes `bun.lock` on every install (dev-docs/bun.md);
         # restore the committed lockfile so no downstream step sees a dirty one.
@@ -762,8 +783,18 @@ jobs:
           npm run build
 
       - name: 'Run agents API-surface guard'
+        # Only the agents shard needs this guard (it inspects the agents
+        # package's public API surface). Running it on every shard wastes CI
+        # time on shards that don't exercise the agents package.
+        if: matrix.shard == 'agents'
         run: |-
           npm run lint:agents-api-surface
+
+      - name: 'Verify test shard completeness (issue #2707)'
+        # Fails if any workspace declared in package.json is missing from the
+        # shard map, so adding a package can never silently go untested.
+        run: |-
+          npm run lint:test-shards
 
       - name: 'Limit Vitest forks on Windows'
         if: runner.os == 'Windows'
@@ -773,7 +804,7 @@ jobs:
           echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
           echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
 
-      - name: 'Run tests and generate reports'
+      - name: 'Run shard tests (issue #2707)'
         env:
           # Provider configuration from repository secrets/variables
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
@@ -789,60 +820,102 @@ jobs:
           CI: true
           # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
           VITEST_TEST_TIMEOUT: 15000
-        run: 'npm run test'
+        # The orchestrator expands --shard to the shard's workspaces (or runs
+        # npm run test:scripts for the scripts shard). Each workspace's tests
+        # still run under Vitest, preserving per-package config/reporters.
+        run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Report harness toolchain versions'
         # The assign harness shells out to jq, python3 and bash. Those differ
         # between runner images, which is exactly the class of difference that
         # made the nightly ubuntu-22.04 failure hard to attribute (#2688).
         # Record them so a platform-specific failure can be diagnosed from the
-        # log alone.
+        # log alone. Only needed on the scripts shard (the harness leg).
+        if: matrix.shard == 'scripts'
         run: |-
           echo "bash:    $(bash --version | head -1)"
           echo "jq:      $(jq --version)"
           echo "python3: $(python3 --version)"
 
-      - name: 'Run script harness tests'
-        env:
-          CI: true
-        run: npm run test:scripts
-
       - name: 'Run shell-script behavioral tests (#2606)'
+        # Shell-script tests are not workspace-scoped; run them once on the
+        # scripts shard to avoid duplicating across every leg.
+        if: matrix.shard == 'scripts'
         env:
           CI: true
         run: npm run test:shell
 
       - name: 'Smoke test CLI entry (launcher -> Bun -> TypeScript, no Node)'
+        # The CLI entry is exercised by the cli shard's tests; keep a direct
+        # smoke on the cli shard only to avoid per-leg duplication.
+        if: matrix.shard == 'cli'
         run: './packages/cli/bin/llxprt --version'
 
       - name: 'Wait for file system sync'
         run: 'sleep 2'
 
       - name: 'Publish Test Report (for non-forks)'
+        # The scripts shard runs the root script harness, which has no
+        # per-workspace junit.xml output (scripts/tests/vitest.config.ts does
+        # not configure the junit reporter). Skip it to avoid a "no test
+        # report files found" error.
         if: |-
-          ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && (github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
         with:
-          name: 'Test Results (Node ${{ matrix.node-version }}, ${{ matrix.os }})'
+          name: 'Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }}, ${{ matrix.os }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
 
       - name: 'Upload Test Results Artifact (for forks)'
         if: |-
-          ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/junit.xml'
 
       - name: 'Upload coverage reports'
+        # Only the cli and core shards produce coverage summaries consumed by
+        # post_coverage_comment. Uploading coverage from other shards would
+        # waste storage and compute, so skip them.
         if: |-
-          ${{ always() }}
+          ${{ always() && (matrix.shard == 'cli' || matrix.shard == 'core') }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
+          name: 'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/coverage'
+
+  #
+  # Test: virtual aggregator (issue #2707)
+  #
+  # Mirrors the existing `lint` virtual job: it depends on every shard leg and
+  # only succeeds when all of them do. Keeping the required-check name as
+  # `Test` means branch-protection rules do not need to change — downstream
+  # jobs (post_coverage_comment) and required checks keep gating on a single
+  # name while the real work fans out across the matrix.
+  #
+  # `if: always()` is essential: when a `test_shard` leg fails or is skipped
+  # (e.g. because an upstream `lint` dependency failed), GitHub would
+  # otherwise **skip** this job, and branch protection treats skipped checks
+  # as passing — a silent bypass. The explicit result check converts any
+  # non-success outcome (failure, skipped, cancelled) into a `failure`
+  # conclusion on this required check.
+  test:
+    name: 'Test'
+    needs:
+      - 'test_shard'
+    if: ${{ always() }}
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Check shard results'
+        run: |-
+          if [ "${{ needs.test_shard.result }}" != "success" ]; then
+            echo "::error::Test shards did not all succeed (result: ${{ needs.test_shard.result }})"
+            exit 1
+          fi
+          echo 'All test shards finished!'
 
   secure_store_backend:
     name: 'SecureStore Backend (${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
@@ -1022,19 +1095,32 @@ jobs:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
 
-      - name: 'Download coverage reports artifact'
+      - name: 'Download CLI coverage (cli shard)'
+        # Issue #2707: coverage is now per-shard. The composite action consumes
+        # the cli + core coverage summaries, produced by their respective shards.
+        # continue-on-error is not needed here: post_coverage_comment already
+        # has continue-on-error: true at the job level, so a missing artifact
+        # will fail this step but not block PR merges. The job's own `if`
+        # condition gates on needs.test.result == 'success', which means the
+        # cli/core shards passed and their coverage artifacts exist.
         uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
         with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
-          path: 'coverage_artifact' # Download to a specific directory
+          name: 'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}'
+          path: 'coverage_cli'
+
+      - name: 'Download core coverage (core shard)'
+        uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
+        with:
+          name: 'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}'
+          path: 'coverage_core'
 
       - name: 'Post Coverage Comment using Composite Action'
         uses: './.github/actions/post-coverage-comment' # Path to the composite action directory
         with:
-          cli_json_file: 'coverage_artifact/cli/coverage/coverage-summary.json'
-          core_json_file: 'coverage_artifact/core/coverage/coverage-summary.json'
-          cli_full_text_summary_file: 'coverage_artifact/cli/coverage/full-text-summary.txt'
-          core_full_text_summary_file: 'coverage_artifact/core/coverage/full-text-summary.txt'
+          cli_json_file: 'coverage_cli/packages/cli/coverage/coverage-summary.json'
+          core_json_file: 'coverage_core/packages/core/coverage/coverage-summary.json'
+          cli_full_text_summary_file: 'coverage_cli/packages/cli/coverage/full-text-summary.txt'
+          core_full_text_summary_file: 'coverage_core/packages/core/coverage/full-text-summary.txt'
           node_version: '${{ matrix.node-version }}'
           os: '${{ matrix.os }}'
           github_token: '${{ secrets.GITHUB_TOKEN }}'

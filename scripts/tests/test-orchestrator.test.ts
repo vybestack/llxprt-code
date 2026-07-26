@@ -277,19 +277,24 @@ describe('parseArgs', () => {
   });
 });
 
-describe('orchestrateTests', () => {
-  function createRecordingRunner(): {
-    runner: CommandRunner;
-    commands: Array<{ command: string; cwd: string }>;
-  } {
-    const commands: Array<{ command: string; cwd: string }> = [];
-    const runner: CommandRunner = (command, cwd) => {
-      commands.push({ command, cwd });
-      return { success: true, exitCode: 0 };
-    };
-    return { runner, commands };
-  }
+// Shared recording runner factory used by multiple describe blocks. Defined
+// at module scope so the `orchestrateTests` describe can reuse it without
+// triggering sonarjs/no-identical-functions. The `--shard` describe lives in
+// test-shard-orchestrator.test.ts (split to stay under the 800-line
+// max-lines limit).
+function createRecordingRunner(): {
+  runner: CommandRunner;
+  commands: Array<{ command: string; cwd: string }>;
+} {
+  const commands: Array<{ command: string; cwd: string }> = [];
+  const runner: CommandRunner = (command, cwd) => {
+    commands.push({ command, cwd });
+    return { success: true, exitCode: 0 };
+  };
+  return { runner, commands };
+}
 
+describe('orchestrateTests', () => {
   function createFailingForRunner(
     failCommand: string,
     failCwdSuffix: string,
