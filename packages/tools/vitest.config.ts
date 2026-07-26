@@ -12,6 +12,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { isCoverageEnabled } from '../../vitest.coverage.js';
 
 const isWindows = process.platform === 'win32';
 const isMacCi = process.platform === 'darwin' && process.env.CI === 'true';
@@ -110,7 +111,7 @@ export default defineConfig({
       junit: 'junit.xml',
     },
     coverage: {
-      enabled: true,
+      enabled: isCoverageEnabled,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],

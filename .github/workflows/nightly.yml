@@ -109,6 +109,9 @@ jobs:
           CI: true
           # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
           VITEST_TEST_TIMEOUT: 15000
+          # Windows coverage is never consumed (no post_coverage_comment in
+          # nightly), so skip the instrumentation cost (#2708).
+          LLXPRT_COVERAGE: 'false'
         run: 'npm run test'
 
       - name: 'Run script harness tests (macOS)'
@@ -140,14 +143,6 @@ jobs:
         with:
           name: 'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/junit.xml'
-
-      - name: 'Upload coverage reports'
-        if: |-
-          ${{ always() }}
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
-        with:
-          name: 'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}'
-          path: 'packages/*/coverage'
 
   e2e_full:
     name: 'E2E Full - ${{ matrix.os }} - ${{ matrix.sandbox }}'
