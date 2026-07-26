@@ -435,9 +435,9 @@ export async function startEmbeddedMonitor(
       throw new Error('monitor exited before publishing readiness');
     }
     const ready = JSON.parse(fs.readFileSync(readyPath, 'utf8'));
-    const resource = { child, directory, telemetryPath };
+    const resource = { child, directory, telemetryPath, ready, monitorSha256 };
     activeResources.push(resource);
-    return { ...resource, ready, monitorSha256 };
+    return resource;
   } catch (startupError) {
     const diagnostic = Buffer.concat(stderr).toString().trim();
     let cleanupError;
@@ -469,8 +469,7 @@ export async function startEmbeddedMonitor(
 }
 
 export async function stopEmbeddedMonitor(resource) {
-  resource.child.kill('SIGTERM');
-  await waitFor(() => childHasExited(resource.child));
+  await terminateAndReap(resource.child);
   const telemetry = JSON.parse(fs.readFileSync(resource.telemetryPath, 'utf8'));
   activeResources = activeResources.filter((item) => item !== resource);
   fs.rmSync(resource.directory, { recursive: true, force: true });
@@ -479,8 +478,7 @@ export async function stopEmbeddedMonitor(resource) {
 
 export async function cleanEmbeddedMonitors() {
   for (const resource of activeResources) {
-    resource.child.kill('SIGKILL');
-    await waitFor(() => childHasExited(resource.child)).catch(() => undefined);
+    await terminateAndReap(resource.child);
     fs.rmSync(resource.directory, { recursive: true, force: true });
   }
   activeResources = [];

@@ -25,27 +25,44 @@ function readArtifact(filePath) {
   }
 }
 
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function writeResult(result) {
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   if (argv.length !== 3) {
     process.stderr.write(
       'Usage: ocr-canary-compare-2673.cjs <canary2.json> <canary3.json> <canary4.json>\n',
     );
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
-  const { buildComparison } = await import(
-    path.join(
-      __dirname,
-      '..',
-      'scripts',
-      'tests',
-      'ocr-concurrency-canary-2673-comparator.js',
-    )
-  );
-  const artifacts = argv.map((filePath) => readArtifact(filePath));
-  const result = buildComparison(artifacts);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  process.exit(result.valid ? 0 : 1);
+  try {
+    const { buildComparison } = await import(
+      path.join(
+        __dirname,
+        '..',
+        'scripts',
+        'tests',
+        'ocr-concurrency-canary-2673-comparator.js',
+      )
+    );
+    const artifacts = argv.map((filePath) => readArtifact(filePath));
+    const result = buildComparison(artifacts);
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      throw new Error('Comparator returned an invalid result');
+    }
+    writeResult(result);
+    process.exitCode = result.valid === true ? 0 : 1;
+  } catch (error) {
+    writeResult({ valid: false, errors: [errorMessage(error)] });
+    process.exitCode = 1;
+  }
 }
 
-main();
+void main();

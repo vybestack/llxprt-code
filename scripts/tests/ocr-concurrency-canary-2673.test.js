@@ -636,7 +636,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
             },
           );
         } catch {
-          // The artifact records the command outcome, including signal normalization.
+          // Nonzero and signaled commands are expected here; the timer artifact is the authoritative outcome under test.
         }
         mutateTimingArtifact({ directory, timingPath });
         const timing = readTimingArtifact(timingPath);
