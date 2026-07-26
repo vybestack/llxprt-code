@@ -13,12 +13,12 @@ import type {
 import {
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,
-} from '@vybestack/llxprt-code-tools';
+} from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
 import type { EditorType } from '@vybestack/llxprt-code-core/utils/editor.js';
 import { logToolCall } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ToolCallEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';

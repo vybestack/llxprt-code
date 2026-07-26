@@ -16,10 +16,8 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
-import {
-  SecureStore,
-  type KeyringAdapter,
-} from '@vybestack/llxprt-code-storage';
+import { type KeyringAdapter } from '@vybestack/llxprt-code-storage';
+import { SecureStore } from '@vybestack/llxprt-code-storage';
 
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();

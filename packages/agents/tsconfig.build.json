@@ -7,8 +7,12 @@
       "@vybestack/llxprt-code-auth/*": ["../auth/dist/src/*"],
       "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
+      "@vybestack/llxprt-code-providers": ["../providers/dist/index.d.ts"],
+      "@vybestack/llxprt-code-providers/*": ["../providers/dist/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/dist/index.d.ts"],
-      "@vybestack/llxprt-code-settings/*": ["../settings/dist/src/*"]
+      "@vybestack/llxprt-code-settings/*": ["../settings/dist/src/*"],
+      "@vybestack/llxprt-code-tools": ["../tools/dist/index.d.ts"],
+      "@vybestack/llxprt-code-tools/*": ["../tools/dist/src/*"]
     }
   },
   "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],

@@ -7,7 +7,7 @@
 import { isProviderApiError } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
+import { hasCycleInSchema } from '@vybestack/llxprt-code-tools/tools/tools.js';
 
 /**
  * Enriches schema depth errors with additional context for debugging.

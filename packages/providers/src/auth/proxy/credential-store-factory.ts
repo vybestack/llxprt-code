@@ -23,11 +23,9 @@ import type {
   TokenStore,
   KeyringTokenStore,
 } from '@vybestack/llxprt-code-auth';
-import {
-  ProxyProviderKeyStorage,
-  ProxySocketClient,
-  ProxyTokenStore,
-} from '@vybestack/llxprt-code-auth';
+import { ProxySocketClient } from '@vybestack/llxprt-code-auth';
+import { ProxyProviderKeyStorage } from '@vybestack/llxprt-code-auth/proxy/proxy-provider-key-storage.js';
+import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-store.js';
 import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
 // ProviderKeyStorage now lives in the storage package
 import type {

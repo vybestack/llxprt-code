@@ -12,6 +12,7 @@
       "@vybestack/llxprt-code-providers/auth.js": ["./src/auth/index.ts"],
       "@vybestack/llxprt-code-providers/*": ["./src/*"],
       "@vybestack/llxprt-code-auth": ["../auth/src/index.ts"],
+      "@vybestack/llxprt-code-auth/*": ["../auth/src/*"],
       "@vybestack/llxprt-code-core": ["../core/index.ts"],
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-tools": ["../tools/index.ts"],

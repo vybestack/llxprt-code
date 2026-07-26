@@ -9,10 +9,8 @@ import type * as net from 'node:net';
 import { firstTruthyString } from '../../utils/falsyFallback.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
-import {
-  encodeFrame,
-  sanitizeTokenForProxy,
-} from '@vybestack/llxprt-code-auth';
+import { encodeFrame } from '@vybestack/llxprt-code-auth/proxy/framing.js';
+import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
 import { RefreshCoordinator } from './refresh-coordinator.js';
 import type { ConnectionState } from './credential-proxy-server.js';
 

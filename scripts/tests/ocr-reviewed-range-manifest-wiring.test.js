@@ -435,9 +435,9 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
         'hash step must come after redact step',
       ).toBeGreaterThan(redactIndex);
       expect(
-        hashIndex,
-        'hash step must come before ensure placeholders step',
-      ).toBeLessThan(ensureIndex);
+        ensureIndex,
+        'placeholder recovery must precede telemetry and final hashing',
+      ).toBeLessThan(hashIndex);
     });
 
     it('the hash computation step computes SHA-256 for post-redaction artifacts (C4)', () => {
@@ -544,6 +544,17 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
       const uploadPath = String(uploadStep.with?.path || '');
       expect(uploadPath).toContain('ocr-manifest-hashes.json');
       expect(uploadPath).toContain('ocr-manifest-sha256.txt');
+    });
+
+    it('gates artifact upload on source redaction and valid hashes', () => {
+      const uploadStep = stepNamed(ctx.codeReviewJob, 'Upload OCR artifacts');
+      const condition = String(uploadStep.if);
+      expect(condition).toContain(
+        "steps.redact-ocr-artifacts.outcome == 'success'",
+      );
+      expect(condition).toContain(
+        "steps.ocr-manifest-hashes.outputs.valid == 'true'",
+      );
     });
   });
 });

@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getInternalConfig } from '../../internalConfigAccess.js';
 import {

@@ -115,6 +115,7 @@
     "prepare:package": "bun scripts/prepare-package.ts",
     "release:version": "bun scripts/version.ts",
     "telemetry": "bun scripts/telemetry.ts",
+    "telemetry:ocr:aggregate": "node scripts/aggregate-ocr-telemetry.js",
     "check:lockfile": "bun scripts/check-lockfile.ts",
     "test:issue-2603-smoke": "node scripts/tests/issue-2603-release-install-smoke.cjs",
     "test:issue-2603-benchmark": "node scripts/tests/issue-2603-startup-benchmark.cjs",

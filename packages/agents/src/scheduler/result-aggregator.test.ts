@@ -9,7 +9,7 @@ import { ResultAggregator } from './result-aggregator.js';
 import type { ResultPublishCallbacks } from './result-aggregator.js';
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { DEFAULT_MAX_TOKENS } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 

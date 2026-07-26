@@ -5,12 +5,12 @@
  */
 
 import {
-  CodexDeviceFlow,
-  CodexOAuthTokenSchema,
   type OAuthUIEvent,
   type OAuthUICallback,
-  oauthUIBridge,
 } from '@vybestack/llxprt-code-auth';
+import { CodexDeviceFlow } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
+import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth/types.js';
 import type {
   CodexOAuthToken,
   OAuthToken,
@@ -23,7 +23,7 @@ import {
   shouldLaunchBrowser,
   type BrowserLaunchOptions,
 } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
-import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth';
+import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
 import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import { ClipboardService } from './ClipboardService.js';

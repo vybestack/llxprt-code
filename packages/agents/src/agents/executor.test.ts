@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AgentExecutor } from './executor.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { LSTool } from '@vybestack/llxprt-code-tools';
-import { ReadFileTool } from '@vybestack/llxprt-code-tools';
+import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
 import { ChatSession, StreamEventType } from '../core/chatSession.js';
 import type { FunctionCall } from './types.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';

@@ -7,11 +7,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
+} from '@vybestack/llxprt-code-tools/tools/tools.js';
+import {
   type ToolInvocation,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
