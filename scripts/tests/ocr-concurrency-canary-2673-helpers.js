@@ -75,7 +75,7 @@ export function completeMetadata(overrides = {}) {
     trustedBaseSha: 'a'.repeat(40),
     mergeBaseSha: 'a'.repeat(40),
     headSha: 'b'.repeat(40),
-    concurrency: '2',
+    concurrency: '3',
     expectedOcrVersion: '1.7.16',
     actualOcrVersion: '1.7.16',
     workflowSha: 'c'.repeat(40),
@@ -349,6 +349,7 @@ export function runEmbeddedMetricsScript(versionOutput) {
         metricsScript(),
       ].join('\n'),
     );
+    let execError = null;
     try {
       execFileSync(process.execPath, [scriptPath], {
         cwd: directory,
@@ -359,7 +360,7 @@ export function runEmbeddedMetricsScript(versionOutput) {
           MERGE_BASE_SHA: 'a'.repeat(40),
           HEAD_SHA: 'b'.repeat(40),
           PR_NUMBER: '2610',
-          OCR_CONCURRENCY: '2',
+          OCR_CONCURRENCY: '3',
           EXPECTED_OCR_VERSION: '1.7.16',
           OCR_LLM_MODEL: 'stepfun/step-3.5-flash',
           OCR_LLM_URL: 'https://provider.invalid/v1',
@@ -369,17 +370,20 @@ export function runEmbeddedMetricsScript(versionOutput) {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (error) {
-      const stderr =
-        error && typeof error === 'object' && 'stderr' in error
-          ? String(error.stderr)
-          : '';
-      throw new Error(`Embedded metrics script failed: ${stderr.trim()}`, {
-        cause: error,
-      });
+      execError = error;
     }
-    return JSON.parse(
-      fs.readFileSync(path.join(directory, 'ocr-canary-metrics.json'), 'utf8'),
-    );
+    const artifactPath = path.join(directory, 'ocr-canary-metrics.json');
+    if (!fs.existsSync(artifactPath)) {
+      const stderr =
+        execError && typeof execError === 'object' && 'stderr' in execError
+          ? String(execError.stderr)
+          : '';
+      throw new Error(
+        `Embedded metrics script failed without writing artifact: ${stderr.trim()}`,
+        { cause: execError },
+      );
+    }
+    return JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
   });
 }
 

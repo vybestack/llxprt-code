@@ -34,7 +34,7 @@ on:
         description: 'OCR concurrency (canary experiment, issue #2673)'
         required: true
         type: choice
-        default: '2'
+        default: '3'
         options:
           - '2'
           - '3'
@@ -90,9 +90,9 @@ env:
   NO_COLOR: '1'
   OCR_VERSION: '1.7.16'
   # Issue #2673: workflow_dispatch canaries select OCR concurrency (2, 3, or
-  # 4). All other (automatic/comment) triggers resolve to 2 so default review
-  # behavior is unchanged until the canary experiment decides otherwise.
-  OCR_CONCURRENCY: ${{ github.event_name == 'workflow_dispatch' && inputs.concurrency || '2' }}
+  # 4). All other (automatic/comment) triggers resolve to the evidence-backed
+  # default of 3 (canary 3 showed 43% speedup over 2 with zero 429s/retries).
+  OCR_CONCURRENCY: ${{ github.event_name == 'workflow_dispatch' && inputs.concurrency || '3' }}
 
 jobs:
   mergeability-gate:
@@ -1087,22 +1087,39 @@ jobs:
               path: request.url,
               headers: forwardedHeaders(request.headers, target),
             });
+            let settled = false;
             upstream.on('response', (upstreamResponse) => {
+              settled = true;
               observeResponse(upstreamResponse.statusCode || 0);
               response.writeHead(
                 upstreamResponse.statusCode || 502,
                 filteredHeaders(upstreamResponse.headers),
               );
+              upstreamResponse.on('error', () => {
+                response.destroy();
+              });
               upstreamResponse.pipe(response);
             });
             upstream.once('error', () => {
-              telemetry.upstream_errors += 1;
+              if (!settled) {
+                settled = true;
+                telemetry.upstream_errors += 1;
+              }
               if (!response.headersSent) {
                 response.writeHead(502, { 'content-type': 'text/plain' });
+                response.end('upstream transport error');
+              } else {
+                response.destroy();
               }
-              response.end('upstream transport error');
+              upstream.destroy();
             });
-            request.once('aborted', () => upstream.destroy());
+            request.once('aborted', () => {
+              if (!settled) {
+                settled = true;
+              }
+              upstream.destroy();
+              response.destroy();
+            });
             request.pipe(upstream);
           });
 
@@ -2537,7 +2554,14 @@ jobs:
               return match[1];
             };
             const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
-            const actualOcrVersion = parseOcrVersionOutput(safeRead('ocr-version.txt'));
+            let versionParseError = null;
+            let actualOcrVersion = null;
+            try {
+              actualOcrVersion = parseOcrVersionOutput(safeRead('ocr-version.txt'));
+            } catch (error) {
+              versionParseError = (error && error.message) ||
+                'OCR version output could not be parsed';
+            }
             const runtime = safeJson('ocr-review-runtime.json') || {};
             const configuredSettings = safeJson('ocr-configured-settings.json') || {};
             const commandTiming = safeJson('ocr-command-timing.json');
@@ -2616,6 +2640,13 @@ jobs:
                 canonicalConfigFingerprint: sha256(JSON.stringify(canonicalConfiguration)),
               },
             });
+            if (versionParseError) {
+              metrics.validation_errors = [
+                versionParseError,
+                ...metrics.validation_errors,
+              ];
+              metrics.valid = false;
+            }
             fs.writeFileSync('ocr-canary-metrics.json', JSON.stringify(metrics, null, 2) + '\n');
             if (!metrics.valid) {
               core.setFailed(`OCR canary evidence is invalid: ${metrics.validation_errors.join('; ')}`);

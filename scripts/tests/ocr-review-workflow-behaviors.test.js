@@ -77,15 +77,15 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     );
   });
 
-  it('resolves OCR_CONCURRENCY to 2 for automatic/comment runs and to the dispatch input otherwise (Behavior 2)', () => {
+  it('resolves OCR_CONCURRENCY to 3 for automatic/comment runs and to the dispatch input otherwise (Behavior 2)', () => {
     // Issue #2673: workflow_dispatch canaries may select 2, 3, or 4, while
-    // every other trigger keeps the default of 2 until evidence decides.
+    // every other trigger keeps the evidence-backed default of 3.
     const expression = workflow.env?.OCR_CONCURRENCY;
     expect(expression).toBeTruthy();
-    expect(expression).not.toBe("'2'");
+    expect(expression).not.toBe("'3'");
     expect(expression).toContain("github.event_name == 'workflow_dispatch'");
     expect(expression).toContain('inputs.concurrency');
-    expect(expression).toContain("'2'");
+    expect(expression).toContain("'3'");
   });
 
   it('passes --concurrency to the ocr review command (Behavior 2)', () => {

@@ -17,7 +17,7 @@ concurrency decision from the evidence.
 | Record finding distribution | Metrics count the real OCR result comments by category and severity |
 | Avoid cross-run account contention | Before each dispatch, query active OCR workflow runs and proceed only when none are active; run canaries sequentially |
 | Document a recommendation | Add a comparison document containing run URLs, artifacts, calculations, caveats, and the decision criteria from the issue |
-| Isolate a default change | If evidence supports 3, change only `OCR_CONCURRENCY`'s default expression; do not alter OCR version, model, timeout, rules, or review scope |
+| Isolate a default change | Change only `OCR_CONCURRENCY`'s default expression to the evidence-backed value of 3; `workflow_dispatch` explicit 2/3/4 remains available with declared default 3. Do not alter OCR version, model, timeout, rules, or review scope. |
 
 ## Scope Ledger
 
@@ -25,14 +25,35 @@ concurrency decision from the evidence.
 
 - `.github/workflows/ocr-review.yml`
   - Add a required `workflow_dispatch` concurrency choice with values 2, 3, and 4.
-  - Preserve 2 as the automatic-run fallback until the experiment decides otherwise.
+  - The evidence-backed automatic/fallback default is 3; `workflow_dispatch`
+    explicit 2/3/4 remains available with declared default 3.
   - Wrap only the manual canary review call in a trusted loopback transport monitor and require positive, fully accounted traffic.
   - Record OCR's configured extra-body/language settings separately from the effective environment-resolved endpoint metadata (normalized model, protocol, provider URL hash, and language); the extra body is configured but is not effective for OCR 1.7.16's environment endpoint.
   - Hash the actual OCR config file and fail dispatch preflight if it contains a complete endpoint/provider that could take precedence over environment resolution.
   - Preserve the trusted PR API base SHA and the computed merge-base SHA as distinct evidence.
-  - Emit and separately upload a dispatch-only sanitized `ocr-canary-metrics.json`; invalid evidence remains parseable but fails the canary.
+  - Emit and separately upload a dispatch-only sanitized `ocr-canary-metrics.json`; invalid evidence remains parseable (written with `valid: false` and `validation_errors`, including malformed/missing OCR version provenance) and fails the canary.
+  - Make the loopback monitor handle upstream `response` error and client `aborted` events after headers/partial body safely and exactly once, without crashing or double-counting.
 - `scripts/tests/`
-  - Add behavioral coverage for input validation, fallback behavior, real metrics normalization, counting semantics, malformed external data, and artifact wiring.
+  - Add behavioral coverage for input validation, fallback behavior, real metrics normalization, counting semantics, malformed external data, artifact wiring, malformed/missing OCR version provenance (sanitized artifact), and upstream/aborted monitor event handling.
+- `scripts/tests/ocr-concurrency-canary-2673-comparator.js`
+  - Reusable, tested cross-artifact comparison validator accepting the three
+    canary metrics JSON artifacts. Fails unless exactly concurrencies 2/3/4;
+    all valid; fixed expected PR/head; same trusted base, merge base, workflow
+    SHA, actual OCR version, normalized model, canonical config fingerprint,
+    monitor hash/rule/config provenance; positive traffic; successful clean
+    result; and no malformed/missing retry-header accounting. Exposes wall-time
+    speedups and decision evidence.
+- `scripts/ocr-canary-compare-2673.cjs`
+  - CLI wrapper around the comparator; used to validate the three local
+    artifacts. Does not hardcode general workflow dispatch to PR 2610.
+- `dev-docs/ocr-concurrency-canary-2673.md`
+  - Documents the protocol, isolation checks, run URLs, artifact hashes,
+    full aggregate data, provenance equality, calculations, finding
+    variability, token/model nondeterminism caveat, wall-time primacy, the
+    30-minute per-task OCR timeout vs overall run duration caveat,
+    invalid/excluded runs, and the recommendation to change the
+    automatic/default fallback from 2 to 3 while keeping manual isolated 4
+    available (and why 4 is not the default despite speedup).
 
 ### Explicit non-goals
 
@@ -44,7 +65,14 @@ concurrency decision from the evidence.
 
 ### Scope budget
 
-Target no more than five changed files and no unrelated refactoring.
+The original target of no more than five changed files and no unrelated
+refactoring was exceeded by necessity: the cross-artifact comparator
+(`scripts/tests/ocr-concurrency-canary-2673-comparator.js`), its CLI wrapper
+(`scripts/ocr-canary-compare-2673.cjs`), its test file
+(`scripts/tests/ocr-concurrency-canary-2673-comparator.test.js`), and the
+canary documentation (`dev-docs/ocr-concurrency-canary-2673.md`) are required
+by the issue's acceptance criteria (documented recommendation, reusable
+tested validator). No unrelated refactoring was performed.
 
 ## Fixed Canary Target
 
@@ -58,9 +86,9 @@ from each run and reject the comparison if the base or head differs.
 ### Slice 1 — Manual concurrency selection
 
 1. RED: Add workflow behavior tests requiring a `workflow_dispatch` choice
-   input limited to 2/3/4 and a default/fallback of 2.
+   input limited to 2/3/4 and a default/fallback of 3.
 2. GREEN: Wire the input to `OCR_CONCURRENCY` while leaving non-manual runs at
-   2.
+   3.
 3. REFACTOR only if the expression can be simplified without changing event
    predicates or fork-safety.
 
