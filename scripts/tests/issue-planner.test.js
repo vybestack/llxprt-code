@@ -188,6 +188,14 @@ describe('linked references and generated planning data', () => {
     ).toContain(trailing);
   });
 
+  it.each([
+    [{ title: 'Missing number' }, 'number'],
+    [{ number: 1 }, 'title'],
+    [{ number: 1, title: '   ' }, 'title'],
+  ])('rejects malformed required issue metadata: %s', (issue, field) => {
+    expect(() => buildIssueContext({ issue })).toThrow(field);
+  });
+
   it('documents the linked-reference cap in context and instructions', () => {
     expect(
       buildIssueContext({ issue: { number: 1, title: 'T', body: '' } }),

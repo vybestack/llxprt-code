@@ -25,6 +25,7 @@ const PLAN_COMMAND = '/plan';
 const SMALL_ACCEPTANCE_CRITERIA_THRESHOLD = 5;
 const SMALL_LOC_THRESHOLD = 500;
 const LINKED_REFERENCE_LIMIT = 20;
+const LINKED_ISSUE_SUMMARY_LIMIT = 500;
 const GITHUB_COMMENT_LIMIT = 65_536;
 const RECONCILE_ATTEMPTS = 3;
 const RECONCILE_DELAY_MS = 1_000;
@@ -102,6 +103,12 @@ function extractChecklistItems(body) {
 /** Build the issue-context.md content consumed by the planner agent. */
 export function buildIssueContext(input) {
   const issue = input?.issue ?? {};
+  if (!Number.isInteger(issue.number) || issue.number <= 0) {
+    throw new Error('Issue number must be a positive integer.');
+  }
+  if (typeof issue.title !== 'string' || issue.title.trim().length === 0) {
+    throw new Error('Issue title must be a non-empty string.');
+  }
   const linkedIssues = input?.linkedIssues ?? [];
   const candidates = input?.relatedCandidates ?? [];
   const feedback = input?.feedback ?? null;
@@ -131,7 +138,9 @@ export function buildIssueContext(input) {
     for (const linked of linkedIssues) {
       lines.push(`- #${linked.number}: ${linked.title}`);
       lines.push(`  - State: ${linked.state ?? 'unknown'}`);
-      lines.push(`  - Summary: ${truncate(linked.body, 500) || '(empty)'}`);
+      lines.push(
+        `  - Summary: ${truncate(linked.body, LINKED_ISSUE_SUMMARY_LIMIT) || '(empty)'}`,
+      );
     }
     lines.push('');
   }
