@@ -12,6 +12,8 @@ export interface ContextOverflowErrorParams {
   completionBudget: number;
   truncationFailure?: Error;
   compressionFailure?: Error;
+  toolResponseTruncationAttempted?: boolean;
+  toolResponsesTruncated?: number;
 }
 
 export function buildContextOverflowError({
@@ -22,6 +24,8 @@ export function buildContextOverflowError({
   completionBudget,
   truncationFailure,
   compressionFailure,
+  toolResponseTruncationAttempted,
+  toolResponsesTruncated,
 }: ContextOverflowErrorParams): Error {
   const totalReduction = Math.max(0, initialProjected - finalProjected);
   const tokensStillNeeded = finalProjected - marginAdjustedLimit;
@@ -43,6 +47,11 @@ export function buildContextOverflowError({
   if (truncationFailure !== undefined) {
     parts.push(
       `Truncation fallback failed during hard-limit enforcement: ${String(truncationFailure)}.`,
+    );
+  }
+  if (toolResponseTruncationAttempted === true) {
+    parts.push(
+      `Last-resort tool-response truncation replaced ${toolResponsesTruncated ?? 0} response(s) but could not recover the remaining context budget.`,
     );
   }
   return new Error(parts.join(' '));

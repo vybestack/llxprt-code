@@ -9,11 +9,11 @@ import {
   type ResolvedSubProfile,
 } from '../../LoadBalancingProvider.js';
 import {
-  ProfileManager,
-  isLoadBalancerProfile,
   type LoadBalancerProfile,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';

@@ -191,6 +191,31 @@ describe('policiesCommand', () => {
     expect(result.content).toContain('Priority 1.999: * → ALLOW');
   });
 
+  it('should display a tool name prefix with a trailing wildcard', () => {
+    const mockPolicyEngine = new PolicyEngine({
+      rules: [
+        {
+          toolNamePrefix: 'workspace__',
+          decision: PolicyDecision.ALLOW,
+          priority: 1.5,
+        },
+      ],
+      defaultDecision: PolicyDecision.ASK_USER,
+      nonInteractive: false,
+    });
+    mockContext.services.config = {
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
+    } as unknown as CommandContext['services']['config'];
+
+    assertDefined(policiesCommand.action);
+    const result = policiesCommand.action(
+      mockContext,
+      '',
+    ) as MessageActionReturn;
+
+    expect(result.content).toContain('Priority 1.500: workspace__* → ALLOW');
+  });
+
   it('should display args pattern when present', () => {
     const rules: PolicyRule[] = [
       {

@@ -14,10 +14,11 @@ import {
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act } from 'react';
+import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import { useKeypress } from './useKeypress.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
@@ -68,19 +69,28 @@ vi.mock('../utils/markdownUtilities.js', () => ({
 }));
 
 vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: vi.fn((initial) => {
-    let val = initial;
-    const ref = { current: val };
-    const setVal = vi.fn((updater) => {
-      if (typeof updater === 'function') {
-        val = updater(val);
-      } else {
-        val = updater;
-      }
-      ref.current = val;
-    });
-    return [val, ref, setVal];
-  }),
+  useStateAndRef: <T,>(
+    initial: T,
+  ): [
+    T,
+    React.MutableRefObject<T>,
+    React.Dispatch<React.SetStateAction<T>>,
+  ] => {
+    const [state, setState] = React.useState(initial);
+    const ref = React.useRef(initial);
+    const setStateInternal = React.useCallback(
+      (valueOrUpdater: React.SetStateAction<T>) => {
+        const nextValue =
+          typeof valueOrUpdater === 'function'
+            ? valueOrUpdater(ref.current)
+            : valueOrUpdater;
+        ref.current = nextValue;
+        setState(nextValue);
+      },
+      [],
+    );
+    return [state, ref, setStateInternal];
+  },
 }));
 
 vi.mock('./useLogger.js', () => ({
@@ -225,7 +235,7 @@ describe('useAgentStream', () => {
       client,
       history: [],
       addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-      config: mockConfig,
+      runtime: createStreamRuntimeForTest(mockConfig),
       onDebugMessage: mockOnDebugMessage,
       handleSlashCommand: mockHandleSlashCommand as unknown as (
         cmd: ContractPartListUnion,
@@ -281,7 +291,7 @@ describe('useAgentStream', () => {
           props.client,
           props.history,
           props.addItem,
-          props.config,
+          props.runtime,
           props.loadedSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -289,7 +299,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -335,19 +344,27 @@ describe('useAgentStream', () => {
       });
     };
 
-    it('should cancel an in-progress stream when escape is pressed', async () => {
-      const mockStream = (async function* () {
+    const createControllableStream = () => {
+      let closeStream: () => void;
+      const streamClosed = new Promise<void>((resolve) => {
+        closeStream = resolve;
+      });
+      const stream = (async function* () {
         yield { type: 'content', value: 'Part 1' };
-        // Keep the stream open
-        await new Promise(() => {});
+        await streamClosed;
       })();
-      mockSendMessageStream.mockReturnValue(mockStream);
+      return { stream, closeStream };
+    };
+
+    it('should cancel an in-progress stream when escape is pressed', async () => {
+      const { stream, closeStream } = createControllableStream();
+      mockSendMessageStream.mockReturnValue(stream);
 
       const { result } = renderTestHook();
+      let submission!: Promise<void>;
 
-      // Start a query
       await act(async () => {
-        await result.current.submitQuery('test query');
+        submission = result.current.submitQuery('test query');
       });
 
       // Wait for the first part of the response
@@ -371,23 +388,24 @@ describe('useAgentStream', () => {
 
       // Verify state is reset
       expect(result.current.streamingState).toBe(StreamingState.Idle);
+
+      await act(async () => {
+        closeStream();
+        await submission;
+      });
     });
 
     it('should call onCancelSubmit handler when escape is pressed', async () => {
       const cancelSubmitSpy = vi.fn();
-      const mockStream = (async function* () {
-        yield { type: 'content', value: 'Part 1' };
-        // Keep the stream open
-        await new Promise(() => {});
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
+      const { stream, closeStream } = createControllableStream();
+      mockSendMessageStream.mockReturnValue(stream);
 
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -395,7 +413,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           cancelSubmitSpy,
           () => {},
@@ -404,9 +421,14 @@ describe('useAgentStream', () => {
         ),
       );
 
-      // Start a query
+      let submission!: Promise<void>;
       await act(async () => {
-        await result.current.submitQuery('test query');
+        submission = result.current.submitQuery('test query');
+      });
+
+      // Wait for streaming to start
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
       });
 
       simulateEscapeKeyPress();
@@ -414,22 +436,24 @@ describe('useAgentStream', () => {
       expect(cancelSubmitSpy).toHaveBeenCalled();
       // Normal cancel should NOT request prompt restoration
       expect(cancelSubmitSpy).not.toHaveBeenCalledWith(true);
+
+      await act(async () => {
+        closeStream();
+        await submission;
+      });
     });
 
     it('should call setShellInputFocused(false) when escape is pressed', async () => {
       const setShellInputFocusedSpy = vi.fn();
-      const mockStream = (async function* () {
-        yield { type: 'content', value: 'Part 1' };
-        await new Promise(() => {}); // Keep stream open
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
+      const { stream, closeStream } = createControllableStream();
+      mockSendMessageStream.mockReturnValue(stream);
 
       const { result } = renderHook(() =>
         useAgentStream(
           createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -437,7 +461,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           vi.fn(),
           setShellInputFocusedSpy, // Pass the spy here
@@ -446,14 +469,24 @@ describe('useAgentStream', () => {
         ),
       );
 
-      // Start a query
+      let submission!: Promise<void>;
       await act(async () => {
-        await result.current.submitQuery('test query');
+        submission = result.current.submitQuery('test query');
+      });
+
+      // Wait for streaming to start
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
       });
 
       simulateEscapeKeyPress();
 
       expect(setShellInputFocusedSpy).toHaveBeenCalledWith(false);
+
+      await act(async () => {
+        closeStream();
+        await submission;
+      });
     });
 
     it('should not do anything if escape is pressed when not responding', () => {
@@ -487,9 +520,10 @@ describe('useAgentStream', () => {
       mockSendMessageStream.mockReturnValue(mockStream);
 
       const { result } = renderTestHook();
+      let submission!: Promise<void>;
 
       await act(async () => {
-        await result.current.submitQuery('long running query');
+        submission = result.current.submitQuery('long running query');
       });
 
       await waitFor(() => {
@@ -502,8 +536,7 @@ describe('useAgentStream', () => {
       // Allow the stream to continue
       await act(async () => {
         continueStream();
-        // Wait a bit to see if the second part is processed
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await submission;
       });
 
       // The text should not have been updated with " Canceled"

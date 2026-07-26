@@ -12,6 +12,7 @@ import type {
   ContentPart as Part,
   ToolDeclarations as Tool,
 } from '@vybestack/llxprt-code-tools';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 
 /**
  * Adapts an MCP tool definition to the neutral CallableTool interface so it
@@ -22,6 +23,7 @@ export class McpCallableTool implements CallableTool {
     private readonly client: Client,
     private readonly toolDef: McpTool,
     private readonly timeout: number,
+    private readonly isAuthorized: () => boolean = () => true,
   ) {}
 
   async tool(): Promise<Tool> {
@@ -47,6 +49,9 @@ export class McpCallableTool implements CallableTool {
     }
 
     try {
+      if (!this.isAuthorized()) {
+        throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+      }
       const result = await this.client.callTool(
         {
           name: call.name,
@@ -55,6 +60,9 @@ export class McpCallableTool implements CallableTool {
         undefined,
         { timeout: this.timeout },
       );
+      if (!this.isAuthorized()) {
+        throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
+      }
 
       return [
         {

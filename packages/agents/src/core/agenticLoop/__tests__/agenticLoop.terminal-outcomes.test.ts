@@ -12,7 +12,7 @@ import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/scheduler
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   type ApprovalHandler,

@@ -1,8 +1,6 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import {
-  isInternalSettingKey,
-  isLoadBalancerProfile,
-} from '@vybestack/llxprt-code-settings';
+import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
+import { isInternalSettingKey } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import type {
   Profile,
   ModelParams,

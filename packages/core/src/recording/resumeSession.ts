@@ -30,6 +30,7 @@ import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
+import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
 
 /**
  * Sentinel constant for "resume most recent session".
@@ -138,6 +139,7 @@ function initializeRecordingForResume(
   recording.initializeForResume(
     lockedSession.targetFilePath,
     replayResult.lastSeq,
+    replayResult.metadata.title,
   );
 
   if (
@@ -180,7 +182,7 @@ export async function resumeSession(
   );
 
   if (sessions.length === 0) {
-    return { ok: false, error: 'No sessions found for this project' };
+    return { ok: false, error: RESUME_NO_SESSIONS_FOUND };
   }
 
   // Step 2: Resolve which session to resume

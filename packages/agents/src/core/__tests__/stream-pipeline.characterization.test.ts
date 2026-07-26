@@ -192,6 +192,7 @@ describe('Stream Pipeline Characterization', () => {
             type: StreamEventType.CHUNK,
             value: mockChunk({
               thought: 'Let me think...',
+              isHidden: false,
               text: 'Answer',
               finishReason: 'STOP',
             }),

@@ -103,6 +103,7 @@ export enum CoreEvent {
   ExternalEditorClosed = 'external-editor-closed',
   McpClientUpdate = 'mcp-client-update',
   SettingsChanged = 'settings-changed',
+  FolderTrustChanged = 'folder-trust-changed',
 }
 
 export class CoreEventEmitter extends EventEmitter {
@@ -141,6 +142,27 @@ export class CoreEventEmitter extends EventEmitter {
    */
   emitSettingsChanged(): void {
     this.emit(CoreEvent.SettingsChanged);
+  }
+
+  /**
+   * Notifies subscribers that the effective folder-trust state has changed
+   * during the active session (e.g. via the permissions dialog).
+   */
+  emitFolderTrustChanged(trusted: boolean): void {
+    const failures: unknown[] = [];
+    for (const listener of this.rawListeners(CoreEvent.FolderTrustChanged)) {
+      try {
+        listener.call(this, trusted);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Folder trust listeners failed');
+    }
   }
 
   /**
@@ -185,6 +207,10 @@ export class CoreEventEmitter extends EventEmitter {
   ): this;
   override on(event: CoreEvent.SettingsChanged, listener: () => void): this;
   override on(
+    event: CoreEvent.FolderTrustChanged,
+    listener: (trusted: boolean) => void,
+  ): this;
+  override on(
     event: CoreEvent.McpClientUpdate,
     listener: (payload: McpClientUpdatePayload) => void,
   ): this;
@@ -225,6 +251,10 @@ export class CoreEventEmitter extends EventEmitter {
   ): this;
   override off(event: CoreEvent.SettingsChanged, listener: () => void): this;
   override off(
+    event: CoreEvent.FolderTrustChanged,
+    listener: (trusted: boolean) => void,
+  ): this;
+  override off(
     event: CoreEvent.McpClientUpdate,
     listener: (payload: McpClientUpdatePayload) => void,
   ): this;
@@ -259,6 +289,7 @@ export class CoreEventEmitter extends EventEmitter {
   override emit(event: CoreEvent.Output, payload: OutputPayload): boolean;
   override emit(event: CoreEvent.ExternalEditorClosed): boolean;
   override emit(event: CoreEvent.SettingsChanged): boolean;
+  override emit(event: CoreEvent.FolderTrustChanged, trusted: boolean): boolean;
   override emit(
     event: CoreEvent.McpClientUpdate,
     payload: McpClientUpdatePayload,

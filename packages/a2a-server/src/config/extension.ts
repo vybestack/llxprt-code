@@ -416,7 +416,6 @@ function readOptionalExtensionFields(
  * When `folderTrust` is `false`, workspace extensions are NOT loaded — only
  * user (home) extensions are returned. This matches the CLI behavior where
  * untrusted workspaces cannot contribute extensions.
- *
  * `homeDir` optionally overrides the home directory used to resolve the
  * `.gemini/extensions` compatibility root. Production callers omit it so the
  * real `os.homedir()` is used; tests inject a temp dir to isolate the compat

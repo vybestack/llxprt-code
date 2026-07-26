@@ -5,12 +5,12 @@
  */
 
 import {
-  CodexDeviceFlow,
-  CodexOAuthTokenSchema,
   type OAuthUIEvent,
   type OAuthUICallback,
-  oauthUIBridge,
 } from '@vybestack/llxprt-code-auth';
+import { CodexDeviceFlow } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
+import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth/types.js';
 import type {
   CodexOAuthToken,
   OAuthToken,
@@ -21,8 +21,9 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
+  type BrowserLaunchOptions,
 } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
-import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth';
+import { CODEX_CONFIG } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
 import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import { ClipboardService } from './ClipboardService.js';
@@ -49,6 +50,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   private addItem?: OAuthUICallback;
   private initGuard: InitializationGuard;
   private authInProgress: Promise<CodexOAuthToken> | null = null;
+  private currentAuthBucket?: string;
 
   constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
     this.deviceFlow = new CodexDeviceFlow();
@@ -64,6 +66,14 @@ export class CodexOAuthProvider implements OAuthProvider {
    */
   setAddItem(addItem: OAuthUICallback): void {
     this.addItem = addItem;
+  }
+
+  /**
+   * Set the authentication context so the provider knows which bucket
+   * it is authenticating for. Used to look up browser profile associations.
+   */
+  setAuthContext(ctx: { bucket?: string }): void {
+    this.currentAuthBucket = ctx.bucket;
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -203,7 +213,23 @@ export class CodexOAuthProvider implements OAuthProvider {
     }
 
     this.logger.debug(() => '[FLOW] Opening browser for authentication');
-    await openBrowserSecurely(authUrl);
+    // Look up the browser profile association for this provider+bucket
+    let browserOpts: BrowserLaunchOptions | undefined;
+    try {
+      const assoc = oauthRuntimeBridge.getBrowserProfileAssociation(
+        'codex',
+        this.currentAuthBucket,
+      );
+      if (assoc) {
+        browserOpts = {
+          browser: assoc.browser,
+          profileDirectory: assoc.profileDirectory,
+        };
+      }
+    } catch {
+      // Association lookup failed — fall back to default browser
+    }
+    await openBrowserSecurely(authUrl, browserOpts);
     this.logger.debug(() => '[FLOW] Browser opened');
   }
 

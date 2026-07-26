@@ -141,13 +141,7 @@ interface StreamEventHandlerDeps {
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
-  queuedSubmissionsRef: React.MutableRefObject<
-    Array<{
-      query: AgentRequestInput;
-      options?: { isContinuation: boolean };
-      promptId?: string;
-    }>
-  >;
+  clearSubmissions: () => void;
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >;
@@ -249,7 +243,6 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
     addItem,
     flushPendingHistoryItem,
     pendingHistoryItemRef,
-    queuedSubmissionsRef,
     setIsResponding,
     setPendingHistoryItem,
     setThought,
@@ -282,14 +275,12 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
         userMessageTimestamp,
       );
       setIsResponding(false);
-      queuedSubmissionsRef.current = [];
       setThought(null);
     },
     [
       addItem,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
-      queuedSubmissionsRef,
       setIsResponding,
       setPendingHistoryItem,
       setThought,
@@ -304,7 +295,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
     runtime,
     flushPendingHistoryItem,
     pendingHistoryItemRef,
-    queuedSubmissionsRef,
+    clearSubmissions,
     setPendingHistoryItem,
     setThought,
   } = deps;
@@ -334,7 +325,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
         },
         userMessageTimestamp,
       );
-      if (options?.clearQueue ?? true) queuedSubmissionsRef.current = [];
+      if (options?.clearQueue ?? true) clearSubmissions();
       setThought(null);
     },
     [
@@ -342,7 +333,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
       runtime,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
-      queuedSubmissionsRef,
+      clearSubmissions,
       setPendingHistoryItem,
       setThought,
     ],

@@ -16,10 +16,10 @@
  */
 
 import {
-  mergeRefreshedToken,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-auth';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -231,6 +231,10 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     bucket: string | undefined,
     provider: OAuthProvider,
   ): Promise<void> {
+    // Inform the provider of the current bucket so it can look up the
+    // correct browser profile association before launching the browser.
+    provider.setAuthContext?.({ bucket });
+
     logger.debug(
       () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
     );

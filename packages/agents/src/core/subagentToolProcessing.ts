@@ -19,6 +19,10 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import {
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from './imagePayloadBudget.js';
 import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
@@ -28,11 +32,11 @@ import type {
   AgentRuntimeContext,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   SubagentTerminateMode,
@@ -513,7 +517,31 @@ export async function processFunctionCalls(
     });
   }
 
-  return [iContentFromBlocks(toolResponseBlocks, 'tool')];
+  return [
+    iContentFromBlocks(applyImageBudget(toolResponseBlocks, ctx), 'tool'),
+  ];
+}
+
+function applyImageBudget(
+  toolResponseBlocks: ContentBlock[],
+  ctx: ProcessFunctionCallsContext,
+): ContentBlock[] {
+  const budgetBytes = ctx.config.getImagePayloadBudgetBytes();
+  if (budgetBytes <= 0) {
+    return toolResponseBlocks;
+  }
+  const { blocks: budgeted, omitted } = enforceImageBudget(
+    toolResponseBlocks,
+    budgetBytes,
+  );
+  if (omitted.length > 0) {
+    budgeted.push({ type: 'text', text: buildOmissionFeedback(omitted) });
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId}: omitted ${omitted.length} image(s) due to cumulative image payload budget (${budgetBytes} bytes)`,
+    );
+  }
+  return budgeted;
 }
 
 function pushNonToolCallResponseBlocks(

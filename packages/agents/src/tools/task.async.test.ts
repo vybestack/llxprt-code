@@ -14,7 +14,7 @@ import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 describe('TaskTool', () => {

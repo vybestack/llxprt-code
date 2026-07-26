@@ -12,7 +12,6 @@
 
 import {
   type Config,
-  DebugLogger,
   type MessageBus,
   type RuntimeContentGeneratorFactory,
   type ContentGenerator,
@@ -20,8 +19,9 @@ import {
   type RuntimeTokenizer,
   type RuntimeTokenizerFactory,
   type ProviderRuntimeContext,
-  UNCONFIGURED_PROVIDER,
 } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core/config/models.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';

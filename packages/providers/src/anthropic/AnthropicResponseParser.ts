@@ -28,6 +28,7 @@ export type ResponseParserOptions = {
     isOAuth: boolean,
   ) => unknown;
   cacheLogger: { debug: (fn: () => string) => void };
+  includeThinkingInResponse: boolean;
 };
 
 function parseContentBlocks(
@@ -78,6 +79,7 @@ function parseContentBlocks(
         thought: thinkingContentBlock.thinking,
         sourceField: 'thinking',
         signature: thinkingContentBlock.signature,
+        isHidden: !options.includeThinkingInResponse,
       } as ThinkingBlock);
     } else if (contentBlock.type === 'redacted_thinking') {
       const redactedBlock = contentBlock as {
@@ -89,6 +91,7 @@ function parseContentBlocks(
         thought: '[redacted]',
         sourceField: 'thinking',
         signature: redactedBlock.data,
+        isHidden: !options.includeThinkingInResponse,
       } as ThinkingBlock);
     }
   }

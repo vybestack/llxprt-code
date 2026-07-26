@@ -81,10 +81,18 @@ export function removeMCPStatusChangeListener(
 export function updateMCPServerStatus(
   serverName: string,
   status: MCPServerStatus,
+  failures?: unknown[],
 ): void {
   serverStatuses.set(serverName, status);
   for (const listener of statusChangeListeners) {
-    listener(serverName, status);
+    try {
+      listener(serverName, status);
+    } catch (error) {
+      if (failures === undefined) {
+        throw error;
+      }
+      failures.push(error);
+    }
   }
 }
 

@@ -36,7 +36,7 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   INVALID_TOOL_NAME,
-} from '@vybestack/llxprt-code-tools';
+} from '@vybestack/llxprt-code-tools/formatters/toolNameUtils.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   getToolNameCandidates,

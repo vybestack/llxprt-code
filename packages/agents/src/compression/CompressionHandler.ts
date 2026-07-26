@@ -5,10 +5,13 @@
  */
 
 import path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -28,6 +31,7 @@ import {
   parseCompressionStrategyName,
 } from './compressionStrategyFactory.js';
 import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.js';
+import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
  * @requirement:REQ-DEP-001
@@ -87,6 +91,7 @@ export class CompressionHandler {
   private _suppressDensityDirtyDepth: number = 0;
   private activeTodosProvider?: () => Promise<string | undefined>;
   lastPromptTokenCount: number | null = null;
+  tokenUsageLogger: TokenUsageLogger | null = null;
 
   private logger = new DebugLogger('llxprt:gemini:compression');
 
@@ -580,6 +585,11 @@ export class CompressionHandler {
         this.lastPromptTokenCount = null;
       },
       getRuntimeModel: () => this.runtimeContext.state.model,
+      estimateBlockTokensAsync: async (block: ContentBlock) => {
+        const model = this.runtimeContext.state.model;
+        const wrapped: IContent = { speaker: 'tool', blocks: [block] };
+        return this.historyService.estimateTokensForContents([wrapped], model);
+      },
     });
     await enforcer.enforce(pendingTokens, promptId, provider);
   }

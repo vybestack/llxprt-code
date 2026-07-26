@@ -6,48 +6,30 @@
 
 import { Box, Text } from 'ink';
 import type React from 'react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Colors } from '../colors.js';
 import { theme } from '../semantic-colors.js';
-import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import * as process from 'node:process';
 import * as path from 'node:path';
-import { ExitCodes } from '@vybestack/llxprt-code-core';
+import { DebugLogger, ExitCodes } from '@vybestack/llxprt-code-core';
+import { FolderTrustChoice, buildTrustOptions } from '../trustDialogHelpers.js';
 
-export enum FolderTrustChoice {
-  TRUST_FOLDER = 'trust_folder',
-  TRUST_PARENT = 'trust_parent',
-  DO_NOT_TRUST = 'do_not_trust',
+const debug = DebugLogger.getLogger('llxprt:ui:folder-trust-dialog');
+
+function isFolderTrustChoice(value: unknown): value is FolderTrustChoice {
+  return (
+    typeof value === 'string' &&
+    Object.values(FolderTrustChoice).includes(value as FolderTrustChoice)
+  );
 }
+
+export { FolderTrustChoice };
 
 interface FolderTrustDialogProps {
-  onSelect: (choice: FolderTrustChoice) => void;
-  isRestarting?: boolean;
-}
-
-function buildTrustOptions(
-  currentFolder: string,
-  parentFolder: string,
-): Array<RadioSelectItem<FolderTrustChoice>> {
-  return [
-    {
-      label: 'Trust folder',
-      value: FolderTrustChoice.TRUST_FOLDER,
-      key: `Trust folder (${currentFolder})`,
-    },
-    {
-      label: `Trust parent folder (${parentFolder})`,
-      value: FolderTrustChoice.TRUST_PARENT,
-      key: `Trust parent folder (${parentFolder})`,
-    },
-    {
-      label: "Don't trust",
-      value: FolderTrustChoice.DO_NOT_TRUST,
-      key: "Don't trust",
-    },
-  ];
+  workingDirectory: string;
+  onSelect: (choice: FolderTrustChoice) => void | Promise<void>;
 }
 
 const TrustDialogHeader: React.FC = () => (
@@ -62,11 +44,11 @@ const TrustDialogHeader: React.FC = () => (
   </Box>
 );
 
-interface RestartingMessageProps {
+interface ExitMessageProps {
   exiting: boolean;
 }
 
-const RestartingMessage: React.FC<RestartingMessageProps> = ({ exiting }) => {
+const ExitMessage: React.FC<ExitMessageProps> = ({ exiting }) => {
   if (!exiting) {
     return null;
   }
@@ -80,37 +62,74 @@ const RestartingMessage: React.FC<RestartingMessageProps> = ({ exiting }) => {
   );
 };
 
+function useMountedRef(): React.MutableRefObject<boolean> {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  return mountedRef;
+}
+
 export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
+  workingDirectory,
   onSelect,
-  isRestarting,
 }) => {
   const [exiting, setExiting] = useState(false);
-
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const committingRef = useRef(false);
+  const exitingRef = useRef(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const mountedRef = useMountedRef();
+  useEffect(() => () => clearTimeout(exitTimerRef.current), []);
   useKeypress(
     (key) => {
+      if (committingRef.current || exitingRef.current) return;
       if (key.name === 'escape') {
+        exitingRef.current = true;
         setExiting(true);
-        setTimeout(() => {
+        exitTimerRef.current = setTimeout(() => {
           process.exit(ExitCodes.FATAL_CONFIG_ERROR);
         }, 100);
       }
     },
-    { isActive: isRestarting !== true },
+    { isActive: true },
   );
 
-  useKeypress(
-    (key) => {
-      if (key.name === 'r') {
-        process.exit(ExitCodes.SUCCESS);
+  const handleSelect = useCallback(
+    (choice: FolderTrustChoice) => {
+      if (!isFolderTrustChoice(choice) || committingRef.current) {
+        return;
       }
+      committingRef.current = true;
+      setIsCommitting(true);
+      setErrorMessage(null);
+      void Promise.resolve()
+        .then(() => onSelect(choice))
+        .catch((error: unknown) => {
+          debug.error('Folder trust selection failed', error);
+          if (!mountedRef.current) return;
+          const detail = error instanceof Error ? error.message : String(error);
+          setErrorMessage(`Failed to apply folder trust selection: ${detail}`);
+        })
+        .finally(() => {
+          committingRef.current = false;
+          if (mountedRef.current) {
+            setIsCommitting(false);
+          }
+        });
     },
-    { isActive: isRestarting === true },
+    [mountedRef, onSelect],
   );
-
-  const currentFolder = path.basename(process.cwd());
-  const parentFolder = path.basename(path.dirname(process.cwd()));
-  const options = buildTrustOptions(currentFolder, parentFolder);
-
+  const options = buildTrustOptions(
+    path.basename(workingDirectory),
+    path.basename(path.dirname(workingDirectory)),
+  );
   return (
     <Box flexDirection="column" width="100%">
       <Box
@@ -122,22 +141,14 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         marginRight={1}
       >
         <TrustDialogHeader />
-
         <RadioButtonSelect
           items={options}
-          onSelect={onSelect}
-          isFocused={isRestarting !== true}
+          onSelect={handleSelect}
+          isFocused={!isCommitting}
         />
+        {errorMessage && <Text color={theme.status.error}>{errorMessage}</Text>}
       </Box>
-      {isRestarting === true && (
-        <Box marginLeft={1} marginTop={1}>
-          <Text color={Colors.AccentYellow}>
-            To see changes, llxprt must be restarted. Press r to exit and apply
-            changes now.
-          </Text>
-        </Box>
-      )}
-      <RestartingMessage exiting={exiting} />
+      <ExitMessage exiting={exiting} />
     </Box>
   );
 };
