@@ -64,10 +64,7 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       'secure-store-mode',
     );
 
-    const runTests = stepNamed(
-      testShardJob,
-      'Run shard tests (issue #2707)',
-    );
+    const runTests = stepNamed(testShardJob, 'Run shard tests (issue #2707)');
     expect(runTests.run).toContain('bun scripts/test.ts --shard');
     expect(runTests.env ?? {}).not.toHaveProperty(
       'LLXPRT_SECURE_STORE_FORCE_FALLBACK',
