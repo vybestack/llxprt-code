@@ -47,6 +47,16 @@ function assertJobCheckoutSecurity(steps, quotaName, quotaId) {
   const internalCheckout = stepNamed(steps, 'Checkout PR merge ref (internal)');
 
   expect(quota.id).toBe(quotaId);
+  expect(quota.shell).toBe('bash');
+  expect(quota.run).toContain('node scripts/ci-quota-check.js');
+  expect(quota.run).toContain('awk \'!/^OPENAI_API_KEY=/\' "$GITHUB_ENV"');
+  expect(quota.run).toContain(
+    'grep -Eq \'^selected_key=(primary|secondary)$\' "$GITHUB_OUTPUT"',
+  );
+  expect(quota.run).toContain('[[ "${KEY_VAR_NAME:-}" == *SYNTHETIC* ]]');
+  expect(quota.run).toContain(
+    'echo \'selected_key=primary\' >>"$GITHUB_OUTPUT"',
+  );
 
   // Trusted checkout ref must use base.sha for BOTH PR event types.
   const trustedRef = trustedCheckout.with.ref;
@@ -91,6 +101,8 @@ describe('quota-selected workflow credentials', () => {
       contents: 'read',
       'pull-requests': 'read',
     });
+    expect(hasSecret(workflow.jobs.e2e_linux.env)).toBe(false);
+    expect(hasSecret(workflow.jobs.e2e_mac.env)).toBe(false);
     const cases = [
       {
         steps: workflow.jobs.e2e_linux.steps,
@@ -127,6 +139,11 @@ describe('quota-selected workflow credentials', () => {
       );
       expect(validation.env.OPENAI_API_KEY_2).toBeUndefined();
       expect(tests.env.OPENAI_API_KEY_2).toBeUndefined();
+      expect(testCase.steps.filter(hasSecret)).toEqual([
+        quota,
+        validation,
+        tests,
+      ]);
 
       // Quota must precede validation and test steps.
       expect(testCase.steps.indexOf(quota)).toBeLessThan(

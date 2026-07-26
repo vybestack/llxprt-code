@@ -218,7 +218,29 @@ jobs:
 
       - name: 'Check API quota and select optimal key'
         id: 'quota'
-        run: node scripts/ci-quota-check.js
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          node scripts/ci-quota-check.js
+
+          # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
+          # it before checking out PR code; downstream steps resolve one secret.
+          if [[ -f "$GITHUB_ENV" ]]; then
+            awk '!/^OPENAI_API_KEY=/' "$GITHUB_ENV" >"${GITHUB_ENV}.quota"
+            mv "${GITHUB_ENV}.quota" "$GITHUB_ENV"
+          fi
+
+          if ! grep -Eq '^selected_key=(primary|secondary)$' "$GITHUB_OUTPUT"; then
+            if grep -q '^selected_key=' "$GITHUB_OUTPUT"; then
+              echo 'Trusted quota selector emitted an invalid selected_key' >&2
+              exit 1
+            fi
+            if [[ "${KEY_VAR_NAME:-}" == *SYNTHETIC* ]]; then
+              echo 'Trusted Synthetic quota selector did not emit selected_key' >&2
+              exit 1
+            fi
+            echo 'selected_key=primary' >>"$GITHUB_OUTPUT"
+          fi
         env:
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
@@ -357,7 +379,29 @@ jobs:
 
       - name: 'Check API quota and select optimal key (macOS)'
         id: 'quota_macos'
-        run: node scripts/ci-quota-check.js
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          node scripts/ci-quota-check.js
+
+          # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
+          # it before checking out PR code; downstream steps resolve one secret.
+          if [[ -f "$GITHUB_ENV" ]]; then
+            awk '!/^OPENAI_API_KEY=/' "$GITHUB_ENV" >"${GITHUB_ENV}.quota"
+            mv "${GITHUB_ENV}.quota" "$GITHUB_ENV"
+          fi
+
+          if ! grep -Eq '^selected_key=(primary|secondary)$' "$GITHUB_OUTPUT"; then
+            if grep -q '^selected_key=' "$GITHUB_OUTPUT"; then
+              echo 'Trusted quota selector emitted an invalid selected_key' >&2
+              exit 1
+            fi
+            if [[ "${KEY_VAR_NAME:-}" == *SYNTHETIC* ]]; then
+              echo 'Trusted Synthetic quota selector did not emit selected_key' >&2
+              exit 1
+            fi
+            echo 'selected_key=primary' >>"$GITHUB_OUTPUT"
+          fi
         env:
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
