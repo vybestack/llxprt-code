@@ -851,8 +851,12 @@ jobs:
         run: 'sleep 2'
 
       - name: 'Publish Test Report (for non-forks)'
+        # The scripts shard runs the root script harness, which has no
+        # per-workspace junit.xml output (scripts/tests/vitest.config.ts does
+        # not configure the junit reporter). Skip it to avoid a "no test
+        # report files found" error.
         if: |-
-          ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && (github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
         with:
           name: 'Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
@@ -862,7 +866,7 @@ jobs:
 
       - name: 'Upload Test Results Artifact (for forks)'
         if: |-
-          ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
+          ${{ always() && matrix.shard != 'scripts' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
           name: 'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
