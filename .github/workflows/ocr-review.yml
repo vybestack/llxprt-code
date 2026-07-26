@@ -2522,9 +2522,22 @@ jobs:
                 return null;
               }
             };
+            const parseOcrVersionOutput = (output) => {
+              const lines = output.split('\n');
+              const firstLine = lines[0].endsWith('\r') ? lines[0].slice(0, -1) : lines[0];
+              const match = /^open-code-review v([0-9]+[.][0-9]+[.][0-9]+)(?: [(][a-fA-F0-9]+[)] [A-Za-z0-9._-]+[/][A-Za-z0-9._-]+)?$/.exec(firstLine);
+              const hasAdditionalVersionHeader = lines.slice(1).some((line) =>
+                line.startsWith('open-code-review v')
+              );
+              if (!match || hasAdditionalVersionHeader) {
+                throw new Error(
+                  'OCR version output must begin with exactly one valid open-code-review vX.Y.Z first line'
+                );
+              }
+              return match[1];
+            };
             const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
-            const actualVersionMatch = /\b(\d+\.\d+\.\d+)\b/.exec(safeRead('ocr-version.txt'));
-            const actualOcrVersion = actualVersionMatch ? actualVersionMatch[1] : '';
+            const actualOcrVersion = parseOcrVersionOutput(safeRead('ocr-version.txt'));
             const runtime = safeJson('ocr-review-runtime.json') || {};
             const configuredSettings = safeJson('ocr-configured-settings.json') || {};
             const commandTiming = safeJson('ocr-command-timing.json');

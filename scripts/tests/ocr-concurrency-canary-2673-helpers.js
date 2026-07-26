@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -61,6 +61,11 @@ export const REPRESENTATIVE_TIMING = {
   command_wall_seconds: 25.25,
   exit_code: 0,
 };
+
+export const OBSERVED_OCR_VERSION_OUTPUT =
+  'open-code-review v1.7.16 (a0b49d5b) linux/amd64\n' +
+  'built at: 2026-07-24T15:49:28Z\n' +
+  'https://github.com/alibaba/open-code-review\n';
 
 export function completeMetadata(overrides = {}) {
   return {
@@ -293,6 +298,89 @@ export function runBuild(input) {
     sandbox,
   );
   return sandbox.__RESULT__;
+}
+
+export function runEmbeddedMetricsScript(versionOutput) {
+  return withTempDirectory('ocr-metrics-2673-', (directory) => {
+    const homeDirectory = path.join(directory, 'home');
+    const ocrDirectory = path.join(homeDirectory, '.opencodereview');
+    fs.mkdirSync(ocrDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, 'ocr-result.json'),
+      JSON.stringify(REPRESENTATIVE_RESULT),
+    );
+    fs.writeFileSync(path.join(directory, 'ocr-exit-code.txt'), '0\n');
+    fs.writeFileSync(path.join(directory, 'ocr-version.txt'), versionOutput);
+    fs.writeFileSync(
+      path.join(directory, 'ocr-review-runtime.json'),
+      JSON.stringify({
+        review_timeout_minutes: 30,
+        background_enabled: false,
+        background_context_sha256: null,
+      }),
+    );
+    fs.writeFileSync(
+      path.join(directory, 'ocr-configured-settings.json'),
+      JSON.stringify({ extra_body: '{}', language: 'English' }),
+    );
+    fs.writeFileSync(
+      path.join(directory, 'ocr-command-timing.json'),
+      JSON.stringify(REPRESENTATIVE_TIMING),
+    );
+    fs.writeFileSync(
+      path.join(directory, 'ocr-transport-telemetry.json'),
+      JSON.stringify(REPRESENTATIVE_TELEMETRY),
+    );
+    fs.writeFileSync(
+      path.join(directory, 'ocr-transport-monitor-ready.json'),
+      JSON.stringify({
+        monitor_sha256: REPRESENTATIVE_TELEMETRY.monitor_sha256,
+      }),
+    );
+    fs.writeFileSync(path.join(ocrDirectory, 'rule.json'), '{}\n');
+    fs.writeFileSync(path.join(ocrDirectory, 'config.json'), '{}\n');
+
+    const scriptPath = path.join(directory, 'metrics.cjs');
+    fs.writeFileSync(
+      scriptPath,
+      [
+        "const context = { serverUrl: 'https://github.com', repo: { owner: 'owner', repo: 'repo' }, runId: 123 };",
+        'const core = { setFailed(message) { throw new Error(message); } };',
+        metricsScript(),
+      ].join('\n'),
+    );
+    try {
+      execFileSync(process.execPath, [scriptPath], {
+        cwd: directory,
+        env: {
+          ...process.env,
+          HOME: homeDirectory,
+          TRUSTED_BASE_SHA: 'a'.repeat(40),
+          MERGE_BASE_SHA: 'a'.repeat(40),
+          HEAD_SHA: 'b'.repeat(40),
+          PR_NUMBER: '2610',
+          OCR_CONCURRENCY: '2',
+          EXPECTED_OCR_VERSION: '1.7.16',
+          OCR_LLM_MODEL: 'stepfun/step-3.5-flash',
+          OCR_LLM_URL: 'https://provider.invalid/v1',
+          OCR_USE_ANTHROPIC: 'false',
+          WORKFLOW_SHA: 'c'.repeat(40),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      const stderr =
+        error && typeof error === 'object' && 'stderr' in error
+          ? String(error.stderr)
+          : '';
+      throw new Error(`Embedded metrics script failed: ${stderr.trim()}`, {
+        cause: error,
+      });
+    }
+    return JSON.parse(
+      fs.readFileSync(path.join(directory, 'ocr-canary-metrics.json'), 'utf8'),
+    );
+  });
 }
 
 export async function startEmbeddedMonitor(
