@@ -784,11 +784,9 @@ export class StreamProcessor {
         telemetryContext.promptId,
         usage
           ? {
-              promptTokenCount: usage.promptTokens,
-              candidatesTokenCount: usage.completionTokens,
-              totalTokenCount: usage.totalTokens,
+              promptTokens: usage.promptTokens,
+              cachedTokens: usage.cachedTokens,
               cache_read_input_tokens: usage.cache_read_input_tokens,
-              cache_creation_input_tokens: usage.cache_creation_input_tokens,
             }
           : undefined,
       );

@@ -8,18 +8,16 @@ import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 /**
- * Neutral usage-metadata shape with optional cache fields. Adapted from the
- * former Google `GenerateContentResponseUsageMetadata` so the agents package
- * has zero `@google/genai` dependencies.
+ * Neutral token-usage input for actual-usage recording. Uses UsageStats-style
+ * field names (promptTokens, cachedTokens) rather than Google-shaped keys.
+ *
+ * Cache precedence: `cachedTokens` wins over `cache_read_input_tokens`; when
+ * neither is present the recorded cache total defaults to 0.
  */
-export interface UsageMetadataWithCache {
-  promptTokenCount?: number;
-  candidatesTokenCount?: number;
-  totalTokenCount?: number;
-  cachedContentTokenCount?: number;
+export interface ActualTokenUsageInput {
+  promptTokens?: number;
+  cachedTokens?: number;
   cache_read_input_tokens?: number;
-  cache_creation_input_tokens?: number;
-  toolUsePromptTokenCount?: number;
 }
 
 interface ActualTokenUsageRecorder {
@@ -35,16 +33,15 @@ const logger = new DebugLogger('llxprt:token-usage-actual');
 export async function recordActualTokenUsage(
   usageLogger: ActualTokenUsageRecorder | TokenUsageLogger | null | undefined,
   promptId: string,
-  usage: UsageMetadataWithCache | undefined,
+  usage: ActualTokenUsageInput | undefined,
 ): Promise<void> {
   try {
     if (usageLogger?.isEnabled() !== true) return;
-    if (usage?.promptTokenCount === undefined) return;
+    if (usage?.promptTokens === undefined) return;
 
     await usageLogger.recordActual(promptId, {
-      actualPromptTokens: usage.promptTokenCount,
-      cachedTokens:
-        usage.cachedContentTokenCount ?? usage.cache_read_input_tokens ?? 0,
+      actualPromptTokens: usage.promptTokens,
+      cachedTokens: usage.cachedTokens ?? usage.cache_read_input_tokens ?? 0,
     });
   } catch (error) {
     logger.error(`Failed to record token usage for prompt ${promptId}`, error);

@@ -61,7 +61,7 @@ import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   recordActualTokenUsage,
-  type UsageMetadataWithCache,
+  type ActualTokenUsageInput,
 } from './tokenUsageActualLogger.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
@@ -888,20 +888,18 @@ export class TurnProcessor {
     }
 
     if (promptId !== undefined) {
-      let usageForLogging: UsageMetadataWithCache | undefined;
+      let usageForLogging: ActualTokenUsageInput | undefined;
       if (usage) {
         usageForLogging = {
-          promptTokenCount: usage.promptTokens,
-          candidatesTokenCount: usage.completionTokens,
-          totalTokenCount: usage.totalTokens,
+          promptTokens: usage.promptTokens,
+          cachedTokens: usage.cachedTokens,
           cache_read_input_tokens: usage.cache_read_input_tokens,
-          cache_creation_input_tokens: usage.cache_creation_input_tokens,
         };
       } else if (
         this.lastPromptTokenCount !== null &&
         this.lastPromptTokenCount > 0
       ) {
-        usageForLogging = { promptTokenCount: this.lastPromptTokenCount };
+        usageForLogging = { promptTokens: this.lastPromptTokenCount };
       }
       await recordActualTokenUsage(
         this.compressionHandler.tokenUsageLogger,
