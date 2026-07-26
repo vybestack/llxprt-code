@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-agents",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "LLxprt Code Agents — agent runtime, chat loop, and subagent orchestration",
   "license": "Apache-2.0",
   "repository": {

@@ -283,13 +283,25 @@ function isTransientBackendFailure(error: Error): boolean {
   return true;
 }
 
+/**
+ * Determine whether the aggregate rotation is retryable.
+ *
+ * A load balancer re-attempts the rotation (subject to transport-budget and
+ * backend-eligibility checks), so the aggregate is retryable when AT LEAST ONE
+ * backend failed transiently — that backend may recover on the next pass.
+ * Requiring ALL backends to be transient (the original #2450 design) meant a
+ * single non-transient failure (e.g. a backend bug that surfaces a status-less
+ * error) poisoned the whole rotation and fatally dropped the agent to the
+ * prompt (issue #2712). An all-non-transient aggregate is still correctly
+ * non-retryable (`some()` returns false when no element matches).
+ */
 function computeAggregateRetryable(
   failures: ReadonlyArray<{ readonly error: Error }>,
 ): boolean {
   if (failures.length === 0) {
     return false;
   }
-  return failures.every((f) => isTransientBackendFailure(f.error));
+  return failures.some((f) => isTransientBackendFailure(f.error));
 }
 
 function getHomogeneousValue<T>(

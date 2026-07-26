@@ -21,6 +21,10 @@ function selectedKeyExpression(stepId) {
   return `\${{ steps.${stepId}.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.${stepId}.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}`;
 }
 
+function hasSecret(value) {
+  return /\bsecrets(?:\.|\[)/.test(JSON.stringify(value));
+}
+
 function stepNamed(steps, name) {
   return (
     steps.find((step) => step.name === name) ??
@@ -134,18 +138,33 @@ describe('quota-selected workflow credentials', () => {
     }
   });
 
-  it('maps only the selected PR-review key into the LLxprt invocation', () => {
-    const job = readWorkflow('pr-review.yml').jobs.review;
+  it('maps only the selected PR-review key into the walkthrough invocation', () => {
+    const workflow = readWorkflow('pr-review.yml');
+    const gate = workflow.jobs['mergeability-gate'];
+    const job = workflow.jobs.review;
     const quota = stepNamed(
       job.steps,
       'Check API quota and select optimal key',
     );
-    const review = stepNamed(job.steps, 'Run LLxprt review');
-    expect(quota.id).toBe('quota');
-    expect(review.env.OPENAI_API_KEY).toBe(selectedKeyExpression('quota'));
-    expect(review.env.OPENAI_API_KEY_2).toBeUndefined();
+    const walkthrough = stepNamed(job.steps, 'Run walkthrough pipeline');
+
+    expect(gate.secrets).toBeUndefined();
+    expect(hasSecret(gate)).toBe(false);
     expect(job.env.OPENAI_API_KEY).toBeUndefined();
     expect(job.env.OPENAI_API_KEY_2).toBeUndefined();
-    expect(job.steps.indexOf(quota)).toBeLessThan(job.steps.indexOf(review));
+    expect(hasSecret(job.env)).toBe(false);
+    expect(quota.id).toBe('quota');
+    expect(quota.env).toEqual({
+      KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}',
+      OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}',
+      OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}',
+    });
+    expect(walkthrough.env).toEqual({
+      OPENAI_API_KEY: selectedKeyExpression('quota'),
+    });
+    expect(job.steps.filter(hasSecret)).toEqual([quota, walkthrough]);
+    expect(job.steps.indexOf(quota)).toBeLessThan(
+      job.steps.indexOf(walkthrough),
+    );
   });
 });

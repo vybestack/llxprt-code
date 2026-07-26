@@ -248,37 +248,47 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(counter.value).toBe(3);
   });
 
-  it('classifies a mixed (429 + 400) aggregate as NON-retryable', async () => {
+  it('classifies a mixed (429 + 400) aggregate as RETRYABLE (issue #2712)', async () => {
     const { error, counter } = await captureFailoverError(function* (
       attempt: number,
     ): AsyncGenerator<IContent> {
-      if (attempt <= 2) {
+      if (attempt === 1) {
+        // One backend fails transiently (429).
         throw statusError('rate limited', 429);
       }
+      // Two backends fail permanently (400).
       throw statusError('bad request', 400);
       yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
     }, 'glm-mixed');
 
-    expect(error.isRetryable).toBe(false);
-    expect(isRetryableError(error)).toBe(false);
+    // Only ONE backend failed transiently; the other two failed permanently
+    // (400). Because the load balancer re-attempts the rotation, the single
+    // transient backend may recover on the next pass, so the aggregate is
+    // retryable (issue #2712).
+    expect(error.isRetryable).toBe(true);
+    expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
   });
 
-  it('classifies a mixed (429 + 401 auth) aggregate as NON-retryable', async () => {
+  it('classifies a mixed (429 + 401 auth) aggregate as RETRYABLE (issue #2712)', async () => {
     const { error, counter } = await captureFailoverError(function* (
       attempt: number,
     ): AsyncGenerator<IContent> {
-      if (attempt <= 2) {
+      if (attempt === 1) {
+        // One backend fails transiently (429).
         throw statusError('rate limited', 429);
       }
+      // Two backends fail with auth errors (401), which are non-transient.
       throw statusError('unauthorized', 401);
       yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
     }, 'glm-mixed-auth');
 
-    // A 401 is an auth/config problem, not transient load, so the whole
-    // aggregate is non-retryable.
-    expect(error.isRetryable).toBe(false);
-    expect(isRetryableError(error)).toBe(false);
+    // Only ONE backend failed transiently; the other two are auth/config
+    // errors (non-transient). Because the load balancer re-attempts the
+    // rotation, the single transient backend may recover on the next pass,
+    // so the aggregate is retryable (issue #2712).
+    expect(error.isRetryable).toBe(true);
+    expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
   });
 
@@ -339,23 +349,23 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   });
 
   /**
-   * Blocking regression guard (issue #2450): a MIXED aggregate where one
-   * backend fails transiently at the NETWORK layer (e.g. "socket hang up") and
-   * another fails permanently (HTTP 400). Because the aggregate flattens each
-   * child message into its own `.message`, a naive classifier that scans the
-   * message for network-transient phrases BEFORE consulting the aggregate's own
-   * decision would wrongly retry it. The aggregate is correctly non-retryable,
-   * and `isRetryableError` must honor that despite the leaked "socket hang up"
-   * text.
+   * Regression guard (issue #2712): a MIXED aggregate where one backend fails
+   * transiently at the NETWORK layer (e.g. "socket hang up") and others fail
+   * permanently (HTTP 400). Because the load balancer re-attempts the
+   * rotation, the transient backend may recover, so the aggregate is
+   * retryable. The flattened message still contains the transient phrase;
+   * the authoritative decision comes from the aggregate's `isRetryable`
+   * marker (PRIORITY 0 in core's isRetryableError), not from message scanning.
    */
-  it('classifies a mixed (network-transient + 400) aggregate as NON-retryable despite the transient phrase leaking into the message', async () => {
+  it('classifies a mixed (network-transient + 400) aggregate as RETRYABLE (issue #2712) despite the transient phrase leaking into the message', async () => {
     const { error, counter } = await captureFailoverError(function* (
       attempt: number,
     ): AsyncGenerator<IContent> {
-      if (attempt <= 2) {
+      if (attempt === 1) {
         // A network-transient failure whose message trips the phrase heuristic.
         throw new Error('socket hang up');
       }
+      // Two backends fail permanently (400).
       throw statusError('bad request', 400);
       yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
     }, 'glm-mixed-network-transient');
@@ -366,9 +376,9 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     // assertion is coupled to isNetworkTransientError's phrase heuristic; if
     // that heuristic changes, update the phrase here accordingly.
     expect(isRetryableError(new Error('socket hang up'))).toBe(true);
-    // But the mixed aggregate is authoritatively non-retryable.
-    expect(error.isRetryable).toBe(false);
-    expect(isRetryableError(error)).toBe(false);
+    // The mixed aggregate is retryable because one backend failed transiently.
+    expect(error.isRetryable).toBe(true);
+    expect(isRetryableError(error)).toBe(true);
     expect(counter.value).toBe(3);
   });
 
@@ -399,6 +409,81 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     expect(isRetryableError(error)).toBe(false);
     expect(counter.value).toBe(3);
   });
+
+  /**
+   * Regression guard (issue #2712): a MIXED aggregate where one backend fails
+   * transiently (e.g. "Connection error" / 502 Bad Gateway) and another fails
+   * with a status-less non-transient error (e.g. an OpenAI SDK APIError whose
+   * message is "undefined is not a function" — a backend bug that surfaces no
+   * HTTP status) MUST be classified as retryable. The transient backends may
+   * recover on the next rotation, so a single non-transient failure must not
+   * poison the whole rotation and fatally drop the agent to the prompt.
+   *
+   * This reproduces the issue #2712 failure categories across the shared
+   * three-backend config (zai, makoraglm51, ollamaglm51):
+   *   attempt 1 (zai):          Connection error  (network-transient)
+   *   attempt 2 (makoraglm51):  undefined is not a function  (status-less, non-transient)
+   *   attempt 3 (ollamaglm51):  502 Bad Gateway   (5xx, transient)
+   */
+  it('classifies a mixed aggregate (transient + status-less non-transient) as RETRYABLE (issue #2712)', async () => {
+    const { error, counter } = await captureFailoverError(function* (
+      attempt: number,
+    ): AsyncGenerator<IContent> {
+      if (attempt === 1) {
+        // zai: network-transient connection error (matches TRANSIENT_ERROR_PHRASES).
+        throw new Error('Connection error');
+      }
+      if (attempt === 2) {
+        // makoraglm51: backend-originated status-less error, NOT transient.
+        throw new Error('undefined is not a function');
+      }
+      // ollamaglm51: 502 Bad Gateway (5xx, transient).
+      throw statusError('502 Bad Gateway', 502);
+      yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
+    }, 'glm');
+
+    // Sanity: the non-transient failure in isolation is indeed non-transient.
+    expect(isRetryableError(new Error('undefined is not a function'))).toBe(
+      false,
+    );
+    // But the MIXED aggregate is retryable because the transient backends may
+    // recover on the next rotation.
+    expect(error.isRetryable).toBe(true);
+    expect(isRetryableError(error)).toBe(true);
+    expect(counter.value).toBe(3);
+  });
+
+  /**
+   * Coverage for the 401/403 override in isTransientBackendFailure. These
+   * statuses ARE classified retryable by core's isRetryableError, but the
+   * load balancer intentionally treats them as non-transient (auth/config
+   * problems, not transient load). An all-401 or all-403 aggregate must
+   * therefore be NON-retryable — this guards against accidentally removing
+   * the override, which the mixed tests can no longer catch because the 429
+   * siblings alone satisfy some().
+   */
+  it.each([
+    ['401', 401, 'unauthorized'],
+    ['403', 403, 'forbidden'],
+  ])(
+    'classifies an all-%s aggregate as NON-retryable (auth/config override)',
+    async (_label, status, message) => {
+      const { error, counter } = await captureFailoverError(
+        function* (): AsyncGenerator<IContent> {
+          throw statusError(message, status);
+          yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
+        },
+        'glm-all-auth',
+      );
+
+      // Sanity: core considers 401/403 retryable in isolation, but the load
+      // balancer override must mark them non-transient for aggregation.
+      expect(isRetryableError(statusError(message, status))).toBe(true);
+      expect(error.isRetryable).toBe(false);
+      expect(isRetryableError(error)).toBe(false);
+      expect(counter.value).toBe(3);
+    },
+  );
 
   it('preserves immediate failover-to-next-backend behavior on a single 429 (issue #902 regression guard)', async () => {
     const { provider, counter } = makeFakeProvider(function* (

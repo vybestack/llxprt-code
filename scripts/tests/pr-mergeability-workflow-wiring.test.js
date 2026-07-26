@@ -25,6 +25,8 @@ function loadWorkflow(path) {
   }
 }
 
+const hasSecret = (value) => /\bsecrets(?:\.|\[)/.test(JSON.stringify(value));
+
 const OCR_AUTHORIZATION_PREDICATE = `
   github.event_name == 'workflow_dispatch' ||
   github.event_name == 'pull_request_target' ||
@@ -531,26 +533,24 @@ describe('PR Review mergeability gate wiring (.github/workflows/pr-review.yml)',
     );
   });
 
-  it('keeps provider secrets out of the gate and scopes them to review steps', () => {
-    const hasSecret = (value) =>
-      /\bsecrets(?:\.|\[)/.test(JSON.stringify(value));
+  it('keeps provider secrets out of the gate and scopes them to the quota and walkthrough steps', () => {
     const quotaStep = reviewJob.steps.find(({ id }) => id === 'quota');
-    const runReviewStep = reviewJob.steps.find(({ id }) => id === 'llxprt');
+    const step = reviewJob.steps.find(
+      ({ name }) => name === 'Run walkthrough pipeline',
+    );
 
-    expect(hasSecret([gateJob, reviewJob.env])).toBe(false);
+    expect(hasSecret(gateJob)).toBe(false);
+    expect(hasSecret(reviewJob.env)).toBe(false);
     expect(quotaStep.env).toEqual({
       KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}',
       OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}',
       OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}',
     });
-    expect(runReviewStep.env).toEqual({
+    expect(step.env).toEqual({
       OPENAI_API_KEY:
         "${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}",
     });
-    expect(reviewJob.steps.filter(hasSecret)).toEqual([
-      quotaStep,
-      runReviewStep,
-    ]);
+    expect(reviewJob.steps.filter(hasSecret)).toEqual([quotaStep, step]);
   });
 });
 

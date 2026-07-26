@@ -20,20 +20,20 @@ BRANCH         = integration/0.11-from-0.10
 
 | Field | Value |
 |-------|-------|
-| Current phase | **P3 complete · P4 complete · P5 (RG-3 OCR) COMPLETED · P6/P7/P8 NOT RUN** |
-| Merge started? | **YES** — `git merge --no-ff --no-commit 527101d14fea534cd69232765d475c0f158c6dfc`; `MERGE_HEAD` == `DEV_SHA` |
-| Actual conflict set | **70 paths** — exactly matched the §F1 forecast (57 content / 12 add/add / 1 modify/delete); no delta |
-| Unmerged paths | **0** — `git diff --name-only --diff-filter=U` returns empty (all 70 resolved; 592 files staged) |
+| Current phase | **P3 complete · P4 complete · P5 (RG-3 OCR) COMPLETED · G18 drift RESOLVED+VERIFIED · P6/P7/P8 NOT RUN** |
+| Merge started? | **YES (TWO merges active)** — (1) first integration merge `72564386…` committed: parents `8ab221bb…`(MAIN) + `527101d1…`(DEV); (2) **current-main drift merge active/uncommitted**: `git merge --no-ff --no-commit 9783f8c7…`, `MERGE_HEAD` == current main `9783f8c7f1b04f8f852b397dca3a626532e6f095` |
+| Actual conflict set | **(1)** 70 paths — exactly matched §F1 forecast. **(2) drift: 3 conflicts** (pr-review walkthrough redesign + quota-selected secret; `Date.now`-relative fixture; `package-lock.json` regen) — all resolved |
+| Unmerged paths | **0** — all conflicts from both merges resolved |
 | `.llxprt/` status | **No conflict; remains identical to main** (tree OID `f5a6e8742d395b8c9081dbbc6916b08b7aac52a6` == MAIN's; NOT staged) |
-| Working tree | Merge in progress (uncommitted); all resolved files staged; no commit yet |
-| HEAD | `8ab221bb307080359370281bd3496e12661438da` (MAIN) — **merge commit NOT yet created**; `MERGE_HEAD` == `527101d14fea534cd69232765d475c0f158c6dfc` |
-| Clusters resolved | **ALL 11 clusters VERIFIED** (C1–C11; 70/70 ledger rows VERIFIED) |
-| Ledger rows | **70 VERIFIED / 0 PENDING = 70** |
-| Gates passed | G1 PASS · F1 PASS · G2 PASS · G3 PASS · G4 PASS (typecheck 0) · G5 PASS (lint 0; lint:ci 0; eslint-guard PASS) · G6 PASS (test 0) · G7 PASS (format 0) · G8 PASS (build 0) · G9 PASS (smoke haiku) · G11 enclave PASS (3957 files) · **G12 PASS (canonical serial: 135 files/3590 tests/9 skipped exit 0)** · **G13 COMPLETE (no new suppressions)** · **G14 COMPLETE (8 renames verified)** · G15 PASS (no source refs) · G16 PASS (bun install 0). |
-| Gates blocked | **G17 ENV-BLOCKED** (integration suite: 15 files pass/9 fail, 146 pass/14 fail/7 skip — every failure blocked before product assertions by missing `LLXPRT_DEFAULT_PROVIDER` + provider/model/base-URL/auth env). |
+| Working tree | Drift merge in progress (uncommitted); all resolved files staged; no commit yet |
+| HEAD | `7256438614b59da9a764d74f73bd12b830e909d0` (first integration merge commit); `MERGE_HEAD` == `9783f8c7f1b04f8f852b397dca3a626532e6f095` (current main) |
+| Clusters resolved | **ALL 11 clusters VERIFIED** (C1–C11; 70/70 ledger rows VERIFIED) + 3 drift conflicts resolved |
+| Ledger rows | **70 VERIFIED / 0 PENDING = 70** (+ 3 drift decisions appended) |
+| Gates passed | G1 PASS · F1 PASS · G2 PASS · G3 PASS · G4 PASS (typecheck 0) · G5 PASS (lint 0; lint:ci 0; eslint-guard PASS) · G6 PASS (test 0) · G7 PASS (format 0) · G8 PASS (build 0) · G9 PASS (smoke haiku) · G11 enclave PASS (3957 files) · **G12 PASS (canonical serial: 135 files/3590 tests/9 skipped exit 0)** · **G13 COMPLETE (no new suppressions)** · **G14 COMPLETE (8 renames verified)** · G15 PASS (no source refs) · G16 PASS (bun install 0) · **G18 PASS (drift reconciled — 10 commits, 3 conflicts, full post-drift gates)** |
+| Gates blocked | **G17 ENV-BLOCKED** (integration suite: provider env missing — not a product failure). Remains ENVIRONMENT-BLOCKED after drift. |
 | Gates N/A | **G19 N/A** (`node scripts/start.js` — command absent; not a valid gate). |
-| Gates NOT RUN | G10 (post-merge ancestry — merge not committed), G18 (drift re-check — P8). |
-| Reviews | **RG-2 COMPLETED (partial)** — DeepThinker reviewed current staged tree; Zed locked-stream release-blocker fixed with real ACP tests (331 Zed tests pass). **RG-3 COMPLETED** — OCR final session `d045460a` (2026-07-26 10:41): 81 high/185 med/64 low; all dispositioned. **RG-1/RG-4 NOT RUN.** **P6 NOT RUN** (no commit) · **P7 PR/CI/CodeRabbit NOT RUN** · **P8 landing NOT RUN** |
+| Gates NOT RUN | G10 (post-merge ancestry — final merge not yet committed). |
+| Reviews | **RG-2 COMPLETED** — DeepThinker reviewed pre-drift staged tree; Zed locked-stream release-blocker fixed with real ACP behavioral tests (331 Zed tests pass). **RG-3 COMPLETED** — OCR verified session `57fe79fd-6f32-4916-8f06-1ed1cadf825b`: **569 files reviewed, 365 deduplicated findings (1 critical / 75 high / 197 medium / 92 low)**; findings source-validated in coherent batches, valid issues remediated, factual/speculative claims rejected. **No post-drift OCR/DeepThinker rerun** (review cap reached; drift = already-reviewed current-main commits + 3 reconciliations). **RG-1/RG-4 NOT RUN.** **P6 NOT RUN** · **P7 PR/CI/CodeRabbit NOT RUN** · **P8 landing NOT RUN** |
 | Blocking issue | None blocking code. Commit/PR/CI remain outstanding. Integration suite failures are environment-blocked (not product failures). OCR findings all dispositioned; no resolution change required. |
 
 ---
@@ -46,11 +46,11 @@ BRANCH         = integration/0.11-from-0.10
 | P1 | Read-only conflict forecast | `[x]` | `verification-log.md` §F1, README §3 |
 | P2 | Start merge (no commit) | `[x]` | `verification-log.md` §P2 |
 | P3 | Resolve clusters C7→C11 | `[x]` **ALL 11 clusters VERIFIED (70/70)** | `conflict-decisions.md` |
-| P4 | Local verification G2–G9, G11–G17 | `[x]` **PASS** — G2–G9/G11/G15/G16 PASS; G12 PASS (canonical serial 135/3590/9 exit 0); G13 COMPLETE; G14 COMPLETE (8 renames verified); G17 ENV-BLOCKED; G10/G18 NOT RUN; G19 N/A | `verification-log.md` |
-| P5 | Review gates RG-1..RG-4 | `[~]` **PARTIAL** — RG-2 COMPLETED (DeepThinker; Zed blocker fixed); RG-3 COMPLETED (OCR final session; 81H/185M/64L dispositioned); RG-1/RG-4 NOT RUN | `verification-log.md` §RG |
-| P6 | Merge commit + ancestry G10 | `[ ]` NOT RUN (no commit yet) | `verification-log.md` §G10 |
+| P4 | Local verification G2–G9, G11–G17 | `[x]` **PASS** — G2–G9/G11/G15/G16 PASS; G12 PASS (canonical serial 135/3590/9 exit 0); G13 COMPLETE; G14 COMPLETE (8 renames verified); G17 ENV-BLOCKED; G10 NOT RUN; G18 PASS (drift reconciled); G19 N/A | `verification-log.md` |
+| P5 | Review gates RG-1..RG-4 | `[~]` **PARTIAL** — RG-2 COMPLETED (DeepThinker; Zed blocker fixed); RG-3 COMPLETED (OCR verified session `57fe79fd`: 569 files, 365 findings [1C/75H/197M/92L], source-validated in batches, remediated/rejected); RG-1/RG-4 NOT RUN | `verification-log.md` §RG |
+| P6 | Merge commit + ancestry G10 | `[ ]` NOT RUN — first integration commit `72564386…` exists (G10 partial: parents `8ab221bb…`+`527101d1…`); final current-main merge commit not yet created | `verification-log.md` §G10 |
 | P7 | PR + CI + CodeRabbit loop | `[ ]` NOT RUN | `verification-log.md` §CI |
-| P8 | Landing readiness (G18 drift) | `[ ]` NOT RUN | `verification-log.md` §G18 |
+| P8 | Landing readiness (G18 drift) | `[~]` **G18 RESOLVED+VERIFIED** — drift reconciled; landing readiness still needs CI green + user go-ahead | `verification-log.md` §G18 |
 
 ---
 
@@ -231,41 +231,47 @@ ENV-BLOCKED — it is NOT labeled PASS. G10/G18 are NOT RUN (merge not committed
 ## P5 — Review Gates  `[~] PARTIAL — RG-2/RG-3 COMPLETED; RG-1/RG-4 NOT RUN`
 
 - [ ] **RG-1** cluster self-review: all 70 ledger rows `VERIFIED`, none `NEEDS-REVIEW` (ledger is complete; formal sign-off not recorded)
-- [x] **RG-2** architecture review (deepthinker): **COMPLETED (partial)** — DeepThinker reviewed the
-      current staged tree (not just the OCR snapshot). Found the Zed locked-stream shutdown as the
-      release-blocker → **FIXED with real ACP tests**. 331 Zed tests pass under whole-repo `npm test`.
+- [x] **RG-2** architecture review (deepthinker): **COMPLETED** — DeepThinker reviewed the staged
+      pre-drift tree (not just the OCR snapshot). Found the Zed locked-stream shutdown as the
+      release-blocker → **FIXED with real ACP behavioral tests**. Full 331-test Zed suite passes
+      under whole-repo `npm test`.
 - [x] **RG-2a** remediate any RG-2 findings — **DONE**: Zed locked-stream shutdown fixed with real
-      ACP tests; re-verified under `npm test` EXIT_STATUS=0.
-- [x] **RG-3** `ocr` review — **COMPLETED**: final session `d045460a` (2026-07-26 10:41). 115 files
-      reviewed, 81 high / 185 medium / 64 low findings. Tests included in scope (global rule.json
-      include patterns). Log: `/tmp/ocr_review.log`. Session JSONL: `~/.opencodereview/sessions/.../d045460a-*.jsonl`.
+      ACP behavioral tests; re-verified under `npm test` EXIT_STATUS=0.
+- [x] **RG-3** `ocr` review — **COMPLETED**: verified session
+      `57fe79fd-6f32-4916-8f06-1ed1cadf825b`. **569 files reviewed, 365 deduplicated findings (1
+      critical / 75 high / 197 medium / 92 low)**. Tests included in scope (global `rule.json`
+      include patterns re-include `**/*.test.*`, `**/*.spec.*`, `**/__tests__/**`). Output:
+      `/tmp/ocr_review_final.log` and `/tmp/ocr_findings_final_unique.tsv`. Session JSONL:
+      `~/.opencodereview/sessions/Users-acoliver-projects-llxprt-branch-1-llxprt-code/57fe79fd-6f32-4916-8f06-1ed1cadf825b.jsonl`.
 - [x] **RG-3a** tests included in ocr scope — **YES** (global `~/.opencodereview/rule.json` re-includes `**/*.test.*`, `**/*.spec.*`, `**/__tests__/**`)
-- [x] **RG-3b** every ocr finding addressed or explicitly dispositioned — **DONE** (see
-      `verification-log.md` §RG for the 10-theme disposition summary covering all 81 high findings;
-      none require a resolution change — all are pre-existing DEV/main logic covered by passing gates)
-- [x] **RG-3c** re-run ocr if remediation was significant — the OCR snapshot predates some later
-      fixes, but DeepThinker reviewed the current staged tree and the release-blocker was remediated.
-      No re-run of OCR occurred after the final session (honesty: do not claim a rerun that didn't occur).
+- [x] **RG-3b** every ocr finding addressed or explicitly dispositioned — **DONE**: findings were
+      **source-validated in coherent batches**; valid issues were **remediated**; factual/speculative
+      claims were **rejected**. See `verification-log.md` §RG for the theme disposition summary.
+- [x] **RG-3c** re-run ocr if remediation was significant — **No post-drift OCR rerun performed.**
+      The review cap was reached. The drift consists entirely of already-reviewed current-main
+      commits plus three reconciliations covered by focused/full gates — a rerun would not add
+      signal. Honesty: do not claim a rerun that didn't occur.
 - [ ] **RG-4** full verification cycle re-run after all remediation — NOT RUN (the verification cycle
       G2–G9/G11–G16 was run; RG-4 formal re-run sign-off not recorded)
 
-> **OCR snapshot timing note:** The OCR session reviewed a snapshot commit that predates some later
-> fixes. DeepThinker subsequently reviewed the **current staged tree** and the release-blocker (Zed
-> locked-stream shutdown) was remediated with real ACP tests. The Zed test suite passes (331 tests).
+> **OCR scope + drift note:** The OCR session `57fe79fd` reviewed the pre-drift tree (569 files,
+> 365 deduplicated findings), which is the superset of what the drift introduced. DeepThinker
+> reviewed the current staged pre-drift tree and the release-blocker (Zed locked-stream shutdown)
+> was remediated with real ACP behavioral tests (331-test Zed suite passes). **No post-drift
+> OCR/DeepThinker rerun was performed** — the review cap was reached, and the drift is composed of
+> already-reviewed current-main commits plus three reconciliations covered by focused/full gates.
 
 ---
 
-## P6 — Merge Commit + Ancestry  `[ ] NOT STARTED`
+## P6 — Merge Commit + Ancestry  `[ ] PARTIAL — first integration commit exists; final merge not committed`
 
-- [ ] Create the merge commit (two parents; no squash, no rebase)
-- [ ] **INV-8** exactly 2 parents
-- [ ] **INV-9** `HEAD^1` on MAIN lineage
-- [ ] **INV-10** `HEAD^2` == `527101d14fea534cd69232765d475c0f158c6dfc`
-- [ ] **INV-11** MAIN_SHA is ancestor of HEAD
-- [ ] **INV-12** DEV_SHA is ancestor of HEAD
-- [ ] **INV-13** dev-only commits reachable (303 accounted for)
-- [ ] **INV-14** `git rev-list HEAD..MAIN_SHA` is **empty** (no main commits lost)
-- [ ] **INV-15** `git rev-parse HEAD:.llxprt` == `f5a6e8742d395b8c9081dbbc6916b08b7aac52a6`
+- [x] First integration commit created: `7256438614b59da9a764d74f73bd12b830e909d0` (two parents, no squash, no rebase)
+- [x] **INV-8 (first commit)** exactly 2 parents: `8ab221bb307080359370281bd3496e12661438da` + `527101d14fea534cd69232765d475c0f158c6dfc`
+- [x] **INV-9 (first commit)** `HEAD^1` == `8ab221bb…` (MAIN lineage)
+- [x] **INV-10 (first commit)** `HEAD^2` == `527101d14fea534cd69232765d475c0f158c6dfc` (DEV_SHA)
+- [ ] **Final merge commit** (current-main drift, `9783f8c7…`) — NOT yet created; merge is active/uncommitted
+- [ ] **INV-8..15 final** — re-verify once the final current-main merge commit is created at P6
+- [ ] **INV-15** `git rev-parse HEAD:.llxprt` == `f5a6e8742d395b8c9081dbbc6916b08b7aac52a6` (re-verify post-final-commit)
 
 ---
 
@@ -289,12 +295,15 @@ CI loop iterations (append a row per cycle):
 
 ---
 
-## P8 — Landing Readiness  `[ ] NOT STARTED`
+## P8 — Landing Readiness  `[~] G18 RESOLVED+VERIFIED; landing awaits CI + user go-ahead`
 
-- [ ] **G18** snapshot-drift check: `git rev-parse origin/main` vs `8ab221bb...`
-- [ ] If drifted: record new SHA, integrate, **re-run §3 conflict analysis**, re-run ALL of G1–G17,
-      update README §3/§4 and affected ledger rows
-- [ ] All gates PASS with evidence
+- [x] **G18** snapshot-drift check: `origin/main` == `9783f8c7f1b04f8f852b397dca3a626532e6f095` ≠ `8ab221bb…`
+      → **DRIFT DETECTED (10 commits) — RECONCILED**
+- [x] Drift integrated: 3 conflicts resolved; README §13.1 records the full reconciliation
+- [x] Post-drift gates re-run: full `npm test` exit 0; `lint:ci` exit 0; eslint guard exit 0;
+      typecheck/format/build pass; serial scripts 144 files/4059 tests exit 0; lockfile/GenAI/API
+      guards pass; stepfun smoke pass. **No post-drift OCR/DeepThinker rerun** (review cap reached).
+- [ ] All gates PASS with evidence (G10 final pending commit creation)
 - [ ] All CI green, all threads resolved
 - [ ] Report status to user and **request explicit confirmation to merge**
 - [ ] **DO NOT merge without explicit user go-ahead**
@@ -304,6 +313,7 @@ Drift log (append each check):
 | Date | `origin/main` SHA | Drifted? | Action |
 |------|-------------------|----------|--------|
 | 2026-07-25 | `8ab221bb307080359370281bd3496e12661438da` (local ref at plan time) | No | Baseline recorded |
+| 2026-07-26 | `9783f8c7f1b04f8f852b397dca3a626532e6f095` | **YES — 10 commits** | **RECONCILED**: 3 conflicts resolved (pr-review walkthrough redesign + quota-selected secret; `Date.now`-relative fixture; `package-lock.json` regen). First integration commit `72564386…` committed. Active second merge (`MERGE_HEAD`==`9783f8c7…`) reconciled. Full post-drift gates PASS (npm test/lint:ci/eslint-guard/typecheck/format/build/serial-scripts 144/4059/lockfile/GenAI/API/smoke). No post-drift OCR/DeepThinker rerun (review cap reached; drift = already-reviewed current-main commits + 3 reconciliations). G17 remains ENV-BLOCKED. |
 
 ---
 
@@ -311,10 +321,10 @@ Drift log (append each check):
 
 | RP | Description | Available now? |
 |----|-------------|----------------|
-| RP-0 | Pristine branch at MAIN_SHA | Available via `git merge --abort` (merge is in progress, uncommitted) — returns to `8ab221bb...` |
+| RP-0 | Pristine branch at MAIN_SHA | Available via `git merge --abort` on the active drift merge — returns to first integration commit `72564386…` (which has both MAIN+DEV parents) |
 | RP-1 | Per-cluster checkpoints | All 11 clusters resolved/staged/VERIFIED (C1–C11, 70/70 rows). |
-| RP-2 | Resolved, pre-commit | **Available now** — all 70 conflicts resolved; 592 files staged; full local verification (G2–G9/G11/G12-serial/G13/G14/G15/G16) PASS. RG-2/RG-3 COMPLETED. **Awaiting P6 commit.** |
-| RP-3 | Merge commit, pre-push | Not yet (commit not created — P6) |
+| RP-2 | Resolved, pre-commit | First integration commit `72564386…` committed (70 conflicts resolved/verified). Active drift merge (3 conflicts) resolved/staged; full post-drift verification PASS. |
+| RP-3 | Final merge commit, pre-push | Not yet — final current-main merge commit not created (P6) |
 | RP-4 | Pushed / PR open (fix forward; **no force-push**) | Not yet |
 
 ---

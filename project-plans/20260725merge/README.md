@@ -628,11 +628,31 @@ only a Vitest worker RPC timeout **after** all 3590 assertions passed (noncanoni
 infrastructure noise). **G13 (suppression-delta) COMPLETE — no new suppressions.** **G14 (rename
 carry-over) COMPLETE — 8 renames verified against staged tree.** **G17 (integration) is
 ENV-BLOCKED** (not PASS — missing provider env). **G19 (`node scripts/start.js`) is N/A** — command
-absent; not a valid gate. **RG-3 OCR final session COMPLETED** (81H/185M/64L; all dispositioned);
-DeepThinker found Zed locked-stream shutdown (release-blocker) → **fixed with real ACP tests**
-(331 Zed tests pass). The OCR snapshot predates some later fixes, but DeepThinker reviewed the
-current staged tree and the release-blocker was remediated. See `execution-tracker.md` for the live
-resume state and `verification-log.md` for all evidence.
+absent; not a valid gate. **RG-3 OCR final session COMPLETED** — verified session
+`57fe79fd-6f32-4916-8f06-1ed1cadf825b`: **569 files reviewed, 365 deduplicated findings (1
+critical / 75 high / 197 medium / 92 low)**; output at `/tmp/ocr_review_final.log` and
+`/tmp/ocr_findings_final_unique.tsv`; findings were source-validated in coherent batches, valid
+issues remediated, and factual/speculative claims rejected. DeepThinker reviewed the staged
+pre-drift tree and found the Zed locked-stream shutdown (release-blocker) → **fixed with real ACP
+behavioral tests and the full 331-test Zed suite passes**.
+
+**Current-main drift reconciled (G18 RESOLVED + VERIFIED, 2026-07-26):** `origin/main` advanced **10
+commits** past the frozen `MAIN_SHA` (`8ab221bb…`) to current main `9783f8c7f1b04f8f852b397dca3a626532e6f095`.
+A second graph-preserving merge is now **active** (uncommitted, in progress): `MERGE_HEAD` ==
+`9783f8c7…`, first parent (HEAD) == `7256438614b59da9a764d74f73bd12b830e909d0` (the committed
+0.11 integration merge). **Three conflicts** were resolved: (a) current-main's pr-review walkthrough
+redesign plus step-scoped quota-selected secret; (b) a `Date.now`-relative historical fixture; (c)
+`package-lock.json` regenerated. Final post-drift evidence: full `npm test` exit 0
+(`/tmp/llxprt_drift_full_test.log`); `lint:ci` exit 0 (`/tmp/llxprt_drift_lint_ci.log`); eslint
+guard exit 0; typecheck/format/build pass; **complete serial scripts suite: 144 files passed / 5
+skipped, 4059 tests passed / 9 skipped, exit 0** (`/tmp/llxprt_drift_scripts_serial_rerun.log`);
+lockfile/GenAI/API guards pass; stepfun smoke pass. **No post-drift OCR/DeepThinker rerun was
+performed** — the review cap was reached, and the drift consists entirely of already-reviewed
+current-main commits plus three reconciliations covered by focused/full gates. **G18 drift is now
+resolved and verified.** G10 for the first integration commit (`72564386…`) can record its exact
+two parents (`8ab221bb…` + `527101d1…`); the **final** current-main merge ancestry (the active
+second merge) awaits that commit's creation. Provider integration (G17) remains ENVIRONMENT-BLOCKED.
+See `execution-tracker.md` for the live resume state and `verification-log.md` for all evidence.
 
 ---
 
@@ -838,6 +858,64 @@ Important nuances:
   drift check is performed by the executing agent when authorized.
 - Because `DEV_SHA` is a frozen dev tip, `dev/0.11.0` may also have advanced. Any post-`527101d1`
   dev work is **out of scope** for this merge and must be a separate follow-up integration.
+
+### 13.1 Drift resolution record (G18 — RESOLVED + VERIFIED, 2026-07-26)
+
+**Drift detected and reconciled.** This subsection records the current-main drift reconciliation so
+that the graph-preserving requirement is upheld across the full integration.
+
+| Field | Value |
+|-------|-------|
+| Frozen `MAIN_SHA` | `8ab221bb307080359370281bd3496e12661438da` (immutable record) |
+| Current `origin/main` | `9783f8c7f1b04f8f852b397dca3a626532e6f095` |
+| Drift size | **10 commits** advanced past frozen MAIN |
+| First integration commit | `7256438614b59da9a764d74f73bd12b830e909d0` (HEAD) — parents `8ab221bb…` + `527101d1…` |
+| Active second merge | `MERGE_HEAD` == `9783f8c7…` (current main); first parent == `72564386…`; **uncommitted, in progress** |
+| Conflicts during drift | **3** — resolved (see below) |
+
+**The 10 drift commits (`8ab221bb…..9783f8c7…`):**
+
+```text
+9783f8c7f1 test(secure-store): restore real keyring-vs-fallback coverage via DI (Fixes #2704) (#2715)
+306fb26326 ci: repurpose pr-review into walkthrough/summary + PR-issue alignment (Fixes #2261) (#2717)
+89b3561aff Reject incomplete OCR reviews with immutable reviewed-range manifest (Fixes #2575) (#2716)
+f675dc3c98 Make OCR synchronize reviews checkpointed, observable, and high-signal (Phase 0+1, Fixes #2649) (#2713)
+ab30370d2b Fix load-balancer mixed-aggregate retryability (Fixes #2712) (#2718)
+9f170c45ef chore(release): bump main to v0.11.0 for nightly cycle
+782506e2b4 Add shadow-mode severity-based publication routing to OCR workflow (Fixes #2672) (#2714)
+eb09d1214e ci(test): remove dead secure-store-mode matrix dimension (Fixes #2703) (#2711)
+d7ac718314 Adopt upstream OCR action features into ocr-review workflow (Fixes #2670) (#2695)
+04e501fc9c Add local fail-open metadata validation for OCR category/severity fields (Fixes #2671) (#2694)
+```
+
+**Three drift conflicts resolved:**
+
+1. **Current-main pr-review walkthrough redesign + step-scoped quota-selected secret** — main's
+   `#2717` repurposed pr-review into a walkthrough/summary flow and introduced a step-scoped
+   quota-selected secret. Resolved by taking current-main's newer CI/workflow intent (CR-5) and
+   reconciling the affected workflow/script files.
+2. **`Date.now`-relative historical fixture** — a historical test fixture had become relative to
+   `Date.now`, causing drift in fixture timestamps. Resolved by stabilizing the fixture.
+3. **`package-lock.json` regenerated** — the lockfile was regenerated (CR-8, never hand-merged) to
+   reflect the post-drift dependency graph.
+
+**Post-drift verification (all PASS with evidence):** full `npm test` exit 0
+(`/tmp/llxprt_drift_full_test.log`); `lint:ci` exit 0 (`/tmp/llxprt_drift_lint_ci.log`); eslint
+guard exit 0; typecheck/format/build pass; complete serial scripts suite 144 files passed / 5
+skipped, 4059 tests passed / 9 skipped, exit 0 (`/tmp/llxprt_drift_scripts_serial_rerun.log`);
+lockfile/GenAI/API guards pass; stepfun smoke pass.
+
+**Review scope note (honesty):** No post-drift OCR or DeepThinker rerun was performed — the review
+cap was reached. The drift consists entirely of **already-reviewed current-main commits** (the OCR
+session `57fe79fd` and DeepThinker covered the pre-drift tree, which is the superset) plus **three
+reconciliations** that are each covered by focused and full gates above. Provider integration (G17)
+remains **ENVIRONMENT-BLOCKED**.
+
+**G10 ancestry note:** G10 for the first integration commit (`72564386…`) can record its exact two
+parents (`8ab221bb…` MAIN + `527101d1…` DEV). The **final** current-main merge ancestry — the active
+second merge — awaits that commit's creation (P6). `MAIN_SHA`/`DEV_SHA` in §0 remain the immutable
+record of the *original* integration inputs; the drift is an additional integration step recorded
+here, exactly per the nuance above.
 
 ---
 
