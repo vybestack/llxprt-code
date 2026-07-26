@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   makeLoadFunction,
   makeLoadFunctionsTogether,
@@ -34,14 +34,6 @@ const SANDBOX_GLOBALS = {
   Set,
   Map,
 };
-
-let tmpDir;
-beforeAll(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-cov-'));
-});
-afterAll(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
-});
 
 describe('.github/workflows/ocr-review.yml — changed-file coverage verification (issue #2675)', () => {
   const ctx = useWorkflowFixture();

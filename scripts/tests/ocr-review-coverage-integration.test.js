@@ -163,13 +163,10 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       const sandbox = loadFunctionsTogether(
         [
           'normalizeFilePaths',
-          'evidencedPathsFromResult',
-          'readFailuresFromStderr',
           'resolveCoverageThreshold',
           'computeFileCoverage',
           'buildCoverageReport',
           'coverageWarningText',
-          'serializeCoverageReport',
         ],
         {
           REDACTION: '[REDACTED]',
