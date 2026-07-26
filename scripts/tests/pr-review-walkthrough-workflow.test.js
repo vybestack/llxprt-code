@@ -294,7 +294,12 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(step, 'should upload the diagnostics log').toBeTruthy();
       expect(step.if).toBe('failure()');
       expect(step.uses).toContain('actions/upload-artifact@');
-      expect(step.with?.path).toBe('review/walkthrough-error.log');
+      // Issue #2742: the artifact now includes parse-failure diagnostics
+      // (raw LLM responses + metadata) alongside the error log.
+      const artifactPath = step.with?.path;
+      expect(artifactPath).toContain('review/walkthrough-error.log');
+      expect(artifactPath).toContain('review/parse-failure-raw-*.txt');
+      expect(artifactPath).toContain('review/parse-failure-info-*.json');
     });
 
     it('the fallback step runs before the post-comment step', () => {
