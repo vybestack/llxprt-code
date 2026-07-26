@@ -15,7 +15,11 @@ import {
   makeLoadFunctionsTogether,
   useWorkflowFixture,
 } from './ocr-manifest-test-helpers.js';
-import { commandText, stepNamed } from './ocr-review-workflow-helpers.js';
+import {
+  commandText,
+  extractFunctionSource,
+  stepNamed,
+} from './ocr-review-workflow-helpers.js';
 
 const VM_TIMEOUT_MS = 2000;
 const SANDBOX_GLOBALS = {
@@ -97,7 +101,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       expect(ctx.postScript).toContain('readFailuresFromStderr');
     });
 
-    it('never calls core.setFailed for low coverage or read failures', () => {
+    it('coverage block never calls core.setFailed for low coverage or read failures', () => {
       const start = ctx.postScript.indexOf(
         'coverageThreshold = resolveCoverageThreshold',
       );
@@ -447,7 +451,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       }
     });
 
-    it('Redact step emits valid JSON for ocr-coverage-report.json on redaction failure', () => {
+    function runRedactionFailure(fileName) {
       const redactStep = stepNamed(
         ctx.codeReviewJob,
         'Redact OCR diagnostic artifacts',
@@ -466,67 +470,23 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         process: { exitCode: 0 },
       };
       vm.createContext(sandbox);
-      const source = [
-        'const replaceWithRedactionFailure = (fileName, error) => {',
-        '  const code = error && error.code ? error.code : "unknown";',
-        '  const diagnostic = `redaction failed for ${fileName}: ${code}\\n`;',
-        '  try {',
-        '    if (fileName.endsWith(".json")) {',
-        '      fs.writeFileSync(fileName, JSON.stringify({ error: diagnostic.trim() }) + "\\n");',
-        '    } else {',
-        '      fs.writeFileSync(fileName, diagnostic);',
-        '    }',
-        '  } catch (_) {',
-        '    try { fs.rmSync(fileName, { force: true }); } catch (_) { process.exitCode = 1; }',
-        '  }',
-        '};',
-        'replaceWithRedactionFailure("ocr-coverage-report.json", { code: "EACCES" });',
-      ].join('\n');
+      const source = extractFunctionSource(
+        redactScript,
+        'replaceWithRedactionFailure',
+      );
       vm.runInContext(source, sandbox, { timeout: VM_TIMEOUT_MS });
-      expect(() =>
-        JSON.parse(writes['ocr-coverage-report.json']),
-      ).not.toThrow();
-      expect(redactScript).toMatch(/endsWith\(['"]\.json['"]\)/);
+      sandbox.replaceWithRedactionFailure(fileName, { code: 'EACCES' });
+      return writes[fileName];
+    }
+
+    it('Redact step emits valid JSON for ocr-coverage-report.json on redaction failure', () => {
+      const content = runRedactionFailure('ocr-coverage-report.json');
+      expect(() => JSON.parse(content)).not.toThrow();
     });
 
     it('Redact step emits plain-text diagnostic for non-JSON artifacts on failure', () => {
-      const redactStep = stepNamed(
-        ctx.codeReviewJob,
-        'Redact OCR diagnostic artifacts',
-      );
-      const redactScript = commandText(redactStep);
-      const writes = {};
-      const fakeFs = {
-        writeFileSync: (name, content) => {
-          writes[name] = content;
-        },
-        rmSync: () => {},
-      };
-      const sandbox = {
-        ...SANDBOX_GLOBALS,
-        fs: fakeFs,
-        process: { exitCode: 0 },
-      };
-      vm.createContext(sandbox);
-      const source = [
-        'const replaceWithRedactionFailure = (fileName, error) => {',
-        '  const code = error && error.code ? error.code : "unknown";',
-        '  const diagnostic = `redaction failed for ${fileName}: ${code}\\n`;',
-        '  try {',
-        '    if (fileName.endsWith(".json")) {',
-        '      fs.writeFileSync(fileName, JSON.stringify({ error: diagnostic.trim() }) + "\\n");',
-        '    } else {',
-        '      fs.writeFileSync(fileName, diagnostic);',
-        '    }',
-        '  } catch (_) {',
-        '    try { fs.rmSync(fileName, { force: true }); } catch (_) { process.exitCode = 1; }',
-        '  }',
-        '};',
-        'replaceWithRedactionFailure("ocr-result.txt", { code: "EACCES" });',
-      ].join('\n');
-      vm.runInContext(source, sandbox, { timeout: VM_TIMEOUT_MS });
-      expect(writes['ocr-result.txt']).toContain('redaction failed');
-      expect(redactScript).toContain('writeFileSync(fileName, diagnostic)');
+      const content = runRedactionFailure('ocr-result.txt');
+      expect(content).toContain('redaction failed');
     });
   });
 
@@ -702,19 +662,14 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       expect(start, 'post script should define isNoop').toBeGreaterThanOrEqual(
         0,
       );
-      const blockEnd = ctx.postScript.indexOf(
-        'coverageReport.range_mode',
+      const noopBlockEnd = ctx.postScript.indexOf('} else {', start);
+      expect(noopBlockEnd, 'noop block should end before else').toBeGreaterThan(
         start,
       );
-      expect(blockEnd, 'noop block should set range_mode').toBeGreaterThan(
-        start,
-      );
-      const noopBlock = ctx.postScript.slice(
-        start,
-        blockEnd > start ? blockEnd + 30 : undefined,
-      );
+      const noopBlock = ctx.postScript.slice(start, noopBlockEnd);
       expect(noopBlock).toMatch(/evidenceAvailable:\s*false/);
       expect(noopBlock).toMatch(/review_ran/);
+      expect(noopBlock).toMatch(/coverageReport\.range_mode/);
     });
   });
 
@@ -791,19 +746,23 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       // ratio_below_threshold separately so a read-failure-only scenario at
       // 100% coverage does not falsely state "100% is below 90%".
       expect(ctx.postScript).toMatch(/coverageReport\.ratio_below_threshold/);
-      // The threshold warning must NOT be gated on below_threshold (the
-      // combined flag) in the core.warning call.
-      const warningCallPattern =
-        /core\.warning\(`Changed-file coverage[^`]*below the \$\{[^}]*\}% threshold\.`\)/;
-      expect(ctx.postScript).toMatch(warningCallPattern);
-      // Confirm ratio_below_threshold gates the threshold-specific warning
       const scriptGate = ctx.postScript.indexOf(
         'if (coverageReport.ratio_below_threshold)',
       );
-      const scriptBelowThresholdWarning =
-        ctx.postScript.search(warningCallPattern);
+      const warningCall = ctx.postScript.indexOf(
+        'core.warning(`Changed-file coverage',
+        scriptGate,
+      );
+      const nextFailureGate = ctx.postScript.indexOf(
+        'if (coverageReport.has_review_failures)',
+        scriptGate,
+      );
       expect(scriptGate).toBeGreaterThanOrEqual(0);
-      expect(scriptBelowThresholdWarning).toBeGreaterThanOrEqual(0);
+      expect(warningCall).toBeGreaterThan(scriptGate);
+      expect(nextFailureGate).toBeGreaterThan(warningCall);
+      expect(ctx.postScript.slice(warningCall, nextFailureGate)).toContain(
+        'below the ${coverageReport.threshold_percentage}% threshold.',
+      );
     });
   });
 

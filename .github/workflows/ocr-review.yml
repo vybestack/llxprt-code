@@ -3347,7 +3347,7 @@ jobs:
             'ocr-routing-decisions.json',
             'ocr-coverage-report.json',
           ];
-          const replaceWithRedactionFailure = (fileName, error) => {
+          function replaceWithRedactionFailure(fileName, error) {
             const code = error && error.code ? error.code : 'unknown';
             const diagnostic = `redaction failed for ${fileName}: ${code}\n`;
             try {
@@ -3363,7 +3363,7 @@ jobs:
                 process.exitCode = 1;
               }
             }
-          };
+          }
           const redactJsonValue = (value) => {
             if (typeof value === 'string') {
               return redact(value);
