@@ -23,6 +23,9 @@ const recentIso = (daysAgo) =>
 describe('aggregate_evals: per-run exception isolation in historical fetch', () => {
   it('omits a run whose downloader throws while retaining a valid run', async () => {
     const mod = await loadHistoricalModule();
+    // Both timestamps are within the 7-day retention window (1 and 2 days ago).
+    // The day-based recentIso helper is used intentionally; the test only
+    // requires that timestamps fall within the window, not a specific hour.
     const runA = { databaseId: 5000, createdAt: recentIso(1) };
     const runB = { databaseId: 5001, createdAt: recentIso(2) };
     const downloadThrowing = () => {

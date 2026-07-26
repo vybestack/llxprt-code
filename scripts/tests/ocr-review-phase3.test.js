@@ -377,7 +377,8 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
   it('redacts secrets in OCR warnings before persisting (security)', () => {
     const source = readFileSync(BENCH_SCRIPT, 'utf8');
     // Warnings from the OCR output envelope must pass through redact()
-    // before being recorded in experiment results.
-    expect(source).toMatch(/warnings.*map.*redact/);
+    // before being recorded in experiment results. The implementation spans
+    // multiple lines, so use [\s\S] to match across newlines.
+    expect(source).toMatch(/warnings[\s\S]*?map[\s\S]*?redact/);
   });
 });

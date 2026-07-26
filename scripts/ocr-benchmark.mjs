@@ -34,7 +34,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const args = process.argv.slice(2);
@@ -60,7 +61,8 @@ const toSha = getArg('to');
 const label = getArg('label') || 'unspecified';
 const rawConcurrency = getArgList('concurrency');
 const reviewTimeoutRaw = getArg('timeout') || '20';
-const outputFile = getArg('output') || 'ocr-benchmark-results.json';
+const outputArg = getArg('output') || 'ocr-benchmark-results.json';
+const outputFile = resolve(outputArg);
 const processTimeoutMs = Number(getArg('process-timeout-ms')) || 3600000;
 
 if (!fromSha || !toSha) {
@@ -134,7 +136,7 @@ function resolveRef(ref) {
       `Could not resolve git ref '${ref}'. Aborting before any experiments run.\n`,
     );
     process.exit(1);
-    return ''; // unreachable — satisfies consistent-return
+    return ref; // unreachable — satisfies consistent-return
   }
 }
 
@@ -176,7 +178,7 @@ const ocrVersion = (() => {
   } catch {
     process.stderr.write('Could not determine OCR version. Is ocr on PATH?\n');
     process.exit(1);
-    return ''; // unreachable — satisfies consistent-return
+    return 'unknown'; // unreachable — satisfies consistent-return
   }
 })();
 
@@ -186,8 +188,16 @@ const ocrVersion = (() => {
 // benchmark. Fail fast so the operator fixes the environment before spending
 // tokens on incomparable runs.
 const rulesHash = (() => {
-  const rulesPath = (process.env.HOME || '') + '/.opencodereview/rule.json';
-  if (!rulesPath || !existsSync(rulesPath)) {
+  const homeDir = process.env.HOME;
+  if (!homeDir) {
+    process.stderr.write(
+      'HOME environment variable is not set. Cannot locate ~/.opencodereview/rule.json. Set HOME or run on a platform with a home directory.\n',
+    );
+    process.exit(1);
+    return ''; // unreachable — satisfies consistent-return
+  }
+  const rulesPath = homeDir + '/.opencodereview/rule.json';
+  if (!existsSync(rulesPath)) {
     process.stderr.write(
       `OCR rules file not found at ${rulesPath}. Reproducible benchmarks require a committed rules file. Run the OCR workflow once or copy the trusted rule.json into place.
 `,
@@ -238,6 +248,10 @@ function gitDiffStat(from, to) {
       lines: { additions, deletions, total: additions + deletions },
     };
   } catch {
+    process.stderr.write(
+      `Warning: git diff statistics failed for range ${from}..${to}. Scope data for this experiment may be unreliable.
+`,
+    );
     return {
       files: 0,
       paths: [],
@@ -446,6 +460,16 @@ const resultsPayload = {
   cumulative_scope: cumulativeScope,
   experiments,
 };
+
+const outputDir = dirname(outputFile);
+try {
+  mkdirSync(outputDir, { recursive: true });
+} catch (err) {
+  process.stderr.write(
+    `Could not create output directory ${outputDir}: ${err.message}\n`,
+  );
+  process.exit(1);
+}
 
 writeFileSync(outputFile, JSON.stringify(resultsPayload, null, 2) + '\n');
 process.stderr.write(`Results written to ${outputFile}\n`);
