@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored the **`claude-opus-5`** and **`claude-opus-5-latest`** entries, and the `claude-opus-5` case-insensitive rule covering dated snapshots, to the core model-limits catalog (`packages/core/src/core/model-limits.json`). They were dropped during the `dev/0.11.0` → `main` integration, which took the dev branch's catalog wholesale rather than the union of both sides; the dev tip predated Opus 5's addition. Because the restored value (`200000`) equals the catalog `defaultLimit`, `tokenLimit('claude-opus-5')` still returned the correct number by fallthrough, making this a latent regression that would have surfaced only if the default changed. Opus 5's 200K subscription context window is now pinned explicitly again, matching the provider layer and `anthropic.config`, which were unaffected (#2737).
+
 ### Changed
 
 - **Installed command launches Bun directly (issue #2603):** The `llxprt` bin entry is now `packages/cli/bin/llxprt`, a POSIX sh launcher with a valid `#!/bin/sh` shebang (directly execve-compatible). On Windows, the CLI workspace `postinstall` (`packages/cli/scripts/install-native-launchers.cjs`) replaces npm's cmd-shim with native `.cmd` and `.ps1` launchers. No Node process is started on the installed command path. The old Node launcher (`packages/cli/bin/llxprt.cjs`) has been removed. The POSIX launcher validates the Bun executable's native binary magic (ELF/Mach-O) before exec, producing an actionable exit 43 for a corrupt or unusable binary without double-starting Bun. The Windows cmd launcher preserves the child exit code exactly (no errorlevel remapping); the PowerShell launcher wraps the invocation in try/catch to surface launch failures as exit 43 while propagating normal nonzero exits via `$LASTEXITCODE`.
