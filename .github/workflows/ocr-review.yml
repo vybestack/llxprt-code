@@ -1474,7 +1474,7 @@ jobs:
           nohup node ocr-transport-monitor.cjs >/dev/null 2>&1 &
           monitor_pid=$!
           printf '%s\n' "$monitor_pid" > ocr-transport-monitor.pid
-          for _ in $(seq 1 100); do
+          for _ in $(seq 1 300); do
             if [ -s "$READY_PATH" ]; then
               break
             fi

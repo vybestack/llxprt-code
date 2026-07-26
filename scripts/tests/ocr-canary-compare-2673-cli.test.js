@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CANARY_2673_EXPECTED_TARGET,
   buildComparison,
-} from './ocr-concurrency-canary-2673-comparator.js';
+} from '../lib/ocr-concurrency-canary-2673-comparator.js';
 import { withTempDirectory } from './ocr-concurrency-canary-2673-helpers.js';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
@@ -121,6 +121,15 @@ describe('ocr-canary-compare-2673 CLI', () => {
       expect(result.status, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual(expected);
     }));
+
+  it('loads comparison logic from the production scripts boundary', () => {
+    const source = fs.readFileSync(CLI_PATH, 'utf8');
+
+    expect(source).toContain(
+      "path.join(__dirname, 'lib', 'ocr-concurrency-canary-2673-comparator.js')",
+    );
+    expect(source).not.toMatch(/path\.join\(__dirname, ['"]tests['"]/);
+  });
 
   it('emits structured invalid JSON and exits nonzero for invalid evidence', () =>
     withTempDirectory('ocr-compare-cli-invalid-2673-', (directory) => {

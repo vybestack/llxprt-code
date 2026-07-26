@@ -35,7 +35,7 @@ concurrency decision from the evidence.
   - Make the loopback monitor handle upstream `response` error and client `aborted` events after headers/partial body safely and exactly once, without crashing or double-counting.
 - `scripts/tests/`
   - Add behavioral coverage for input validation, fallback behavior, real metrics normalization, counting semantics, malformed external data, artifact wiring, malformed/missing OCR version provenance (sanitized artifact), and upstream/aborted monitor event handling.
-- `scripts/tests/ocr-concurrency-canary-2673-comparator.js`
+- `scripts/lib/ocr-concurrency-canary-2673-comparator.js`
   - Reusable, tested cross-artifact comparison validator accepting the three
     canary metrics JSON artifacts. Fails unless exactly concurrencies 2/3/4;
     all valid; fixed expected PR/head; same trusted base, merge base, workflow
@@ -67,7 +67,7 @@ concurrency decision from the evidence.
 
 The original target of no more than five changed files and no unrelated
 refactoring was exceeded by necessity: the cross-artifact comparator
-(`scripts/tests/ocr-concurrency-canary-2673-comparator.js`), its CLI wrapper
+(`scripts/lib/ocr-concurrency-canary-2673-comparator.js`), its CLI wrapper
 (`scripts/ocr-canary-compare-2673.cjs`), its test file
 (`scripts/tests/ocr-concurrency-canary-2673-comparator.test.js`), and the
 canary documentation (`dev-docs/ocr-concurrency-canary-2673.md`) are required

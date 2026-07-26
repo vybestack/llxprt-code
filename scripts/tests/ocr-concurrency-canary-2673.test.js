@@ -99,6 +99,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
       expect(steps.indexOf(start)).toBeLessThan(steps.indexOf(review));
       expect(steps.indexOf(stop)).toBe(steps.indexOf(review) + 1);
       expect(commandText(start)).toContain("server.listen(0, '127.0.0.1'");
+      expect(commandText(start)).toContain('for _ in $(seq 1 300); do');
       expect(commandText(start)).not.toMatch(/checkout|pr-head|HEAD_SHA/);
     });
 

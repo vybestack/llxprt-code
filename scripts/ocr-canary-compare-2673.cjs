@@ -43,16 +43,18 @@ async function main() {
     return;
   }
   try {
-    const { buildComparison } = await import(
-      path.join(__dirname, 'tests', 'ocr-concurrency-canary-2673-comparator.js')
+    const { buildComparison, isComparisonResult } = await import(
+      path.join(__dirname, 'lib', 'ocr-concurrency-canary-2673-comparator.js')
     );
     const artifacts = argv.map((filePath) => readArtifact(filePath));
     const result = buildComparison(artifacts);
-    if (!result || typeof result !== 'object' || Array.isArray(result)) {
-      throw new Error('Comparator returned an invalid result');
+    if (!isComparisonResult(result)) {
+      throw new Error(
+        'Comparator returned an invalid result: expected boolean valid and string-array errors',
+      );
     }
     writeResult(result);
-    process.exitCode = result.valid === true ? 0 : 1;
+    process.exitCode = result.valid ? 0 : 1;
   } catch (error) {
     writeResult({ valid: false, errors: [errorMessage(error)] });
     process.exitCode = 1;

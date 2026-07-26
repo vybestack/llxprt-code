@@ -31,8 +31,21 @@ const ENDPOINT_STRING_FIELDS = [
   'language',
 ];
 
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isComparisonResult(value) {
+  return (
+    isObject(value) &&
+    typeof value.valid === 'boolean' &&
+    Array.isArray(value.errors) &&
+    value.errors.every((error) => typeof error === 'string')
+  );
+}
+
 function assertIsObject(value, label, errors) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isObject(value)) {
     errors.push(`${label} must be a JSON object`);
     return false;
   }
@@ -321,7 +334,7 @@ function concurrencyEvidence(artifact) {
     ocr_internal_elapsed_seconds: artifact.timing?.ocr_internal_elapsed_seconds,
     total_tokens: artifact.summary?.tokens?.total,
     findings_total: artifact.findings?.total,
-    positive_requests: artifact.transport?.total_requests,
+    total_requests: artifact.transport?.total_requests,
   };
 }
 
@@ -396,6 +409,7 @@ function buildComparison(artifacts) {
 export {
   buildComparison,
   CANARY_2673_EXPECTED_TARGET,
+  isComparisonResult,
   REQUIRED_CONCURRENCIES,
   wallTimeSpeedup,
 };

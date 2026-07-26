@@ -8,9 +8,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildComparison,
   CANARY_2673_EXPECTED_TARGET,
+  isComparisonResult,
   REQUIRED_CONCURRENCIES,
   wallTimeSpeedup,
-} from './ocr-concurrency-canary-2673-comparator.js';
+} from '../lib/ocr-concurrency-canary-2673-comparator.js';
 
 const BASE_PROVENANCE = Object.freeze({
   expected_ocr_version: '1.7.16',
@@ -104,6 +105,13 @@ describe('ocr-concurrency-canary-2673-comparator', () => {
     expect(wallTimeSpeedup(100, -1)).toBeNull();
   });
 
+  it('accepts only the explicit comparator result contract', () => {
+    expect(isComparisonResult({ valid: true, errors: [] })).toBe(true);
+    expect(isComparisonResult({ valid: 'true', errors: [] })).toBe(false);
+    expect(isComparisonResult({ valid: false, errors: 'invalid' })).toBe(false);
+    expect(isComparisonResult({ valid: false, errors: [1] })).toBe(false);
+  });
+
   it('accepts complete, comparable evidence and computes speedups', () => {
     const result = buildComparison(makeArtifacts());
     expect(result.valid).toBe(true);
@@ -113,9 +121,19 @@ describe('ocr-concurrency-canary-2673-comparator', () => {
     );
     expect(result.evidence.head_sha).toBe(CANARY_2673_EXPECTED_TARGET.head_sha);
     expect(result.evidence.provenance_equal).toBe(true);
-    expect(result.evidence.speedups.c3_vs_c2).toBeGreaterThan(0.3);
-    expect(result.evidence.speedups.c4_vs_c3).toBeGreaterThan(0);
-    expect(result.evidence.concurrencies[2].positive_requests).toBe(100);
+    expect(result.evidence.speedups.c3_vs_c2).toBeCloseTo(
+      0.4297886601839534,
+      12,
+    );
+    expect(result.evidence.speedups.c4_vs_c2).toBeCloseTo(
+      0.5578744529417086,
+      12,
+    );
+    expect(result.evidence.speedups.c4_vs_c3).toBeCloseTo(
+      0.22462863120027815,
+      12,
+    );
+    expect(result.evidence.concurrencies[2].total_requests).toBe(100);
   });
 
   it('reports equal provenance independently of non-provenance failures', () => {
