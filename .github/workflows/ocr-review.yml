@@ -1263,7 +1263,7 @@ jobs:
           # unchanged unless the repository variable opts in.
           REVIEW_ARGS=()
           if [ "${OCR_BACKGROUND:-}" = 'true' ]; then
-            BACKGROUND_TEXT=$(printf '---BEGIN BUSINESS CONTEXT---\nPR %s: %s\n\n%s\n---END BUSINESS CONTEXT---' "${PR_NUMBER}" "${PR_TITLE}" "${PR_BODY}")
+            BACKGROUND_TEXT=$(printf -- '---BEGIN BUSINESS CONTEXT---\nPR %s: %s\n\n%s\n---END BUSINESS CONTEXT---' "${PR_NUMBER}" "${PR_TITLE}" "${PR_BODY}")
             if [ -n "${PR_TITLE}" ] || [ -n "${PR_BODY}" ]; then
               REVIEW_ARGS+=(--background "$BACKGROUND_TEXT")
             fi
