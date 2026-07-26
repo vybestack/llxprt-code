@@ -2624,17 +2624,37 @@ jobs:
                 // so the batch failure was fully recovered. Perform a final
                 // re-list to confirm GitHub's observed state matches the
                 // intended posts before clearing the ambiguity flag.
-                try {
-                  const finalKeys = await existingInlineCommentKeys();
-                  const allAccountedFor = inlineToPost.every(
-                    (c) => finalKeys.has(inlineCommentKey(c)),
-                  );
-                  if (failedInline === 0 && allAccountedFor) {
-                    batchPublicationAmbiguous = false;
+                // GitHub's API may have eventual consistency for newly
+                // created review comments, so retry once after a delay.
+                async function reconcileWithRetry() {
+                  for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                      const finalKeys = await existingInlineCommentKeys();
+                      const allAccountedFor = inlineToPost.every(
+                        (c) => finalKeys.has(inlineCommentKey(c)),
+                      );
+                      if (failedInline === 0 && allAccountedFor) {
+                        return true;
+                      }
+                      // If not all accounted for on first attempt, wait and
+                      // retry to allow eventual consistency to settle.
+                      if (attempt === 0) {
+                        await new Promise((r) => setTimeout(r, 3000));
+                      }
+                    } catch (finalListErr) {
+                      core.warning(redactSecretDiagnostics(
+                        `Reconciliation attempt ${attempt + 1} failed: ${finalListErr.message || finalListErr}`,
+                      ));
+                      if (attempt === 0) {
+                        await new Promise((r) => setTimeout(r, 3000));
+                      }
+                    }
                   }
-                } catch (finalListErr) {
+                  return false;
+                }
+                if (!(await reconcileWithRetry())) {
                   core.warning(redactSecretDiagnostics(
-                    `Could not perform final inline reconciliation after fallback; leaving publication ambiguous: ${finalListErr.message || finalListErr}`,
+                    'Could not confirm all inline comments are present after fallback; leaving publication ambiguous.',
                   ));
                 }
               }
