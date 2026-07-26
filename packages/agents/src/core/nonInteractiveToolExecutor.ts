@@ -8,7 +8,7 @@ import {
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core/core/turn.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {

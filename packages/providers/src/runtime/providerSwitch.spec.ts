@@ -5,7 +5,7 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { coreEvents } from '@vybestack/llxprt-code-core';
+import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import { DEFAULT_PRESERVE_EPHEMERALS } from './providerSwitch.js';
 
 vi.mock('./runtimeAccessors.js', () => {

@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {

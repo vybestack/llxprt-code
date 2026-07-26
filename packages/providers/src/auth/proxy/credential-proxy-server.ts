@@ -24,9 +24,9 @@ import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
 import {
   FrameDecoder,
   encodeFrame,
-  sanitizeTokenForProxy,
-  mergeRefreshedToken,
-} from '@vybestack/llxprt-code-auth';
+} from '@vybestack/llxprt-code-auth/proxy/framing.js';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
+import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
 // ProviderKeyStorage now lives in the storage package
 import type { ProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import {

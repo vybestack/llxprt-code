@@ -65,6 +65,156 @@
       "types": "./dist/src/tools/activate-skill.d.ts",
       "bun": "./src/tools/activate-skill.ts",
       "import": "./dist/src/tools/activate-skill.js"
+    },
+    "./types/tool-error.js": {
+      "types": "./dist/src/types/tool-error.d.ts",
+      "bun": "./src/types/tool-error.ts",
+      "import": "./dist/src/types/tool-error.js"
+    },
+    "./types/tool-confirmation-types.js": {
+      "types": "./dist/src/types/tool-confirmation-types.d.ts",
+      "bun": "./src/types/tool-confirmation-types.ts",
+      "import": "./dist/src/types/tool-confirmation-types.js"
+    },
+    "./formatters/toolNameUtils.js": {
+      "types": "./dist/src/formatters/toolNameUtils.d.ts",
+      "bun": "./src/formatters/toolNameUtils.ts",
+      "import": "./dist/src/formatters/toolNameUtils.js"
+    },
+    "./utils/mediaUtils.js": {
+      "types": "./dist/src/utils/mediaUtils.d.ts",
+      "bun": "./src/utils/mediaUtils.ts",
+      "import": "./dist/src/utils/mediaUtils.js"
+    },
+    "./utils/textDelta.js": {
+      "types": "./dist/src/utils/textDelta.d.ts",
+      "bun": "./src/utils/textDelta.ts",
+      "import": "./dist/src/utils/textDelta.js"
+    },
+    "./tools/tools.js": {
+      "types": "./dist/src/tools/tools.d.ts",
+      "bun": "./src/tools/tools.ts",
+      "import": "./dist/src/tools/tools.js"
+    },
+    "./tools/tool-registry.js": {
+      "types": "./dist/src/tools/tool-registry.d.ts",
+      "bun": "./src/tools/tool-registry.ts",
+      "import": "./dist/src/tools/tool-registry.js"
+    },
+    "./tools/apply-patch.js": {
+      "types": "./dist/src/tools/apply-patch.d.ts",
+      "bun": "./src/tools/apply-patch.ts",
+      "import": "./dist/src/tools/apply-patch.js"
+    },
+    "./tools/ast-edit.js": {
+      "types": "./dist/src/tools/ast-edit.d.ts",
+      "bun": "./src/tools/ast-edit.ts",
+      "import": "./dist/src/tools/ast-edit.js"
+    },
+    "./tools/ast-grep.js": {
+      "types": "./dist/src/tools/ast-grep.d.ts",
+      "bun": "./src/tools/ast-grep.ts",
+      "import": "./dist/src/tools/ast-grep.js"
+    },
+    "./tools/codesearch.js": {
+      "types": "./dist/src/tools/codesearch.d.ts",
+      "bun": "./src/tools/codesearch.ts",
+      "import": "./dist/src/tools/codesearch.js"
+    },
+    "./tools/delete_line_range.js": {
+      "types": "./dist/src/tools/delete_line_range.d.ts",
+      "bun": "./src/tools/delete_line_range.ts",
+      "import": "./dist/src/tools/delete_line_range.js"
+    },
+    "./tools/direct-web-fetch.js": {
+      "types": "./dist/src/tools/direct-web-fetch.d.ts",
+      "bun": "./src/tools/direct-web-fetch.ts",
+      "import": "./dist/src/tools/direct-web-fetch.js"
+    },
+    "./tools/edit.js": {
+      "types": "./dist/src/tools/edit.d.ts",
+      "bun": "./src/tools/edit.ts",
+      "import": "./dist/src/tools/edit.js"
+    },
+    "./tools/exa-web-search.js": {
+      "types": "./dist/src/tools/exa-web-search.d.ts",
+      "bun": "./src/tools/exa-web-search.ts",
+      "import": "./dist/src/tools/exa-web-search.js"
+    },
+    "./tools/glob.js": {
+      "types": "./dist/src/tools/glob.d.ts",
+      "bun": "./src/tools/glob.ts",
+      "import": "./dist/src/tools/glob.js"
+    },
+    "./tools/grep.js": {
+      "types": "./dist/src/tools/grep.d.ts",
+      "bun": "./src/tools/grep.ts",
+      "import": "./dist/src/tools/grep.js"
+    },
+    "./tools/insert_at_line.js": {
+      "types": "./dist/src/tools/insert_at_line.d.ts",
+      "bun": "./src/tools/insert_at_line.ts",
+      "import": "./dist/src/tools/insert_at_line.js"
+    },
+    "./tools/ls.js": {
+      "types": "./dist/src/tools/ls.d.ts",
+      "bun": "./src/tools/ls.ts",
+      "import": "./dist/src/tools/ls.js"
+    },
+    "./tools/memoryTool.js": {
+      "types": "./dist/src/tools/memoryTool.d.ts",
+      "bun": "./src/tools/memoryTool.ts",
+      "import": "./dist/src/tools/memoryTool.js"
+    },
+    "./tools/read_line_range.js": {
+      "types": "./dist/src/tools/read_line_range.d.ts",
+      "bun": "./src/tools/read_line_range.ts",
+      "import": "./dist/src/tools/read_line_range.js"
+    },
+    "./tools/read-file.js": {
+      "types": "./dist/src/tools/read-file.d.ts",
+      "bun": "./src/tools/read-file.ts",
+      "import": "./dist/src/tools/read-file.js"
+    },
+    "./tools/read-many-files.js": {
+      "types": "./dist/src/tools/read-many-files.d.ts",
+      "bun": "./src/tools/read-many-files.ts",
+      "import": "./dist/src/tools/read-many-files.js"
+    },
+    "./tools/ripGrep.js": {
+      "types": "./dist/src/tools/ripGrep.d.ts",
+      "bun": "./src/tools/ripGrep.ts",
+      "import": "./dist/src/tools/ripGrep.js"
+    },
+    "./tools/shell.js": {
+      "types": "./dist/src/tools/shell.d.ts",
+      "bun": "./src/tools/shell.ts",
+      "import": "./dist/src/tools/shell.js"
+    },
+    "./tools/structural-analysis.js": {
+      "types": "./dist/src/tools/structural-analysis.d.ts",
+      "bun": "./src/tools/structural-analysis.ts",
+      "import": "./dist/src/tools/structural-analysis.js"
+    },
+    "./tools/todo-pause.js": {
+      "types": "./dist/src/tools/todo-pause.d.ts",
+      "bun": "./src/tools/todo-pause.ts",
+      "import": "./dist/src/tools/todo-pause.js"
+    },
+    "./tools/todo-read.js": {
+      "types": "./dist/src/tools/todo-read.d.ts",
+      "bun": "./src/tools/todo-read.ts",
+      "import": "./dist/src/tools/todo-read.js"
+    },
+    "./tools/todo-write.js": {
+      "types": "./dist/src/tools/todo-write.d.ts",
+      "bun": "./src/tools/todo-write.ts",
+      "import": "./dist/src/tools/todo-write.js"
+    },
+    "./tools/write-file.js": {
+      "types": "./dist/src/tools/write-file.d.ts",
+      "bun": "./src/tools/write-file.ts",
+      "import": "./dist/src/tools/write-file.js"
     }
   },
   "scripts": {

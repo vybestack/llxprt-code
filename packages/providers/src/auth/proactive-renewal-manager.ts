@@ -10,10 +10,8 @@
  * scheduling configuration.
  */
 
-import {
-  mergeRefreshedToken,
-  type OAuthTokenWithExtras,
-} from '@vybestack/llxprt-code-auth';
+import { type OAuthTokenWithExtras } from '@vybestack/llxprt-code-auth';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { OAuthToken, TokenStore, OAuthProvider } from './types.js';
 import {

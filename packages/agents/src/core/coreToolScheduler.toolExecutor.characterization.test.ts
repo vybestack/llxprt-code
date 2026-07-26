@@ -400,5 +400,5 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 });
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';

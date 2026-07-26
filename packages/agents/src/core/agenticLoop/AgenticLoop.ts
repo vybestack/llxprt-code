@@ -46,7 +46,7 @@ import {
   MessageBusType,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import {

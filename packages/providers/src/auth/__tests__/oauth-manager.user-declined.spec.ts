@@ -7,7 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
-import { MessageBus, PolicyEngine } from '@vybestack/llxprt-code-core';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 
 /**

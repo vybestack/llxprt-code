@@ -19,11 +19,9 @@
  */
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import {
-  AnthropicDeviceFlow,
-  CodexDeviceFlow,
-  type OAuthToken,
-} from '@vybestack/llxprt-code-auth';
+import { type OAuthToken } from '@vybestack/llxprt-code-auth';
+import { AnthropicDeviceFlow } from '@vybestack/llxprt-code-auth';
+import { CodexDeviceFlow } from '@vybestack/llxprt-code-auth/flows/codex-device-flow.js';
 import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
 import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import path from 'node:path';

@@ -10,7 +10,7 @@ import {
   resolveAlias,
   SETTINGS_REGISTRY,
   validateSetting,
-} from '@vybestack/llxprt-code-settings';
+} from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 
 export const ephemeralSettingHelp: Record<string, string> = getSettingHelp();
 
