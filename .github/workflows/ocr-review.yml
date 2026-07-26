@@ -1147,7 +1147,7 @@ jobs:
             echo "$changed_tests"
             excluded="$(awk '
               BEGIN { IGNORECASE = 1; in_section = 0 }
-              /^Excluded[[:space:]]+from[[:space:]]+review[[:space:]]*\(/ { in_section = 1; next }
+              /^Excluded([[:space:]]+from[[:space:]]+review)?[[:space:]]*\(/ { in_section = 1; next }
               /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { if (in_section) in_section = 0 }
               in_section { print }
             ' ocr-preview.txt || true)"

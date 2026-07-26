@@ -642,9 +642,9 @@ describe('.github/workflows/ocr-review.yml — changed-file coverage verificatio
         throw new Error('redact boom');
       };
       vm.runInContext(src, sandbox, { timeout: VM_TIMEOUT_MS });
-      const result = sandbox.serializeCoverageReport({ a: 1 });
+      const result = sandbox.serializeCoverageReport({ a: 'secret' });
       expect(() => JSON.parse(result)).not.toThrow();
-      expect(JSON.parse(result)).toEqual({ a: 1 });
+      expect(JSON.parse(result)).toEqual({ a: 'secret' });
     });
 
     it('emits the serialization error report for circular input', () => {
@@ -775,17 +775,15 @@ describe('.github/workflows/ocr-review.yml — changed-file coverage verificatio
       expect(files).not.toContain('scripts/old script.cjs');
     });
 
-    it('recognizes the Excluded from review (N): heading in the excluded parser', () => {
+    it('recognizes the OCR 1.7.16 and legacy excluded headings', () => {
       const previewStep = stepNamed(
         ctx.codeReviewJob,
         'Verify review scope includes changed tests',
       );
       const previewRun = commandText(previewStep);
-      // The excluded awk must match "Excluded from review (" (true 1.7.16
-      // layout), not just "Excluded (". The regex uses POSIX [[:space:]]+
-      // (double brackets) for whitespace between the words.
-      expect(previewRun).toContain('^Excluded[[');
-      expect(previewRun).toContain('[[:space:]]+from[[:space:]]+review');
+      expect(previewRun).toContain(
+        '^Excluded([[:space:]]+from[[:space:]]+review)?[[:space:]]*\\(',
+      );
     });
 
     it('parses excluded files from the Excluded from review section', () => {
@@ -795,10 +793,9 @@ describe('.github/workflows/ocr-review.yml — changed-file coverage verificatio
       );
       const previewRun = commandText(previewStep);
       const excludedAssign = extractExcludedPipeline(previewRun);
-      // The excluded awk must match "Excluded from review (" using POSIX
-      // [[:space:]]+ (double brackets) between words (true 1.7.16 layout).
-      expect(excludedAssign).toContain('^Excluded[[');
-      expect(excludedAssign).toContain('[[:space:]]+from[[:space:]]+review');
+      expect(excludedAssign).toContain(
+        '^Excluded([[:space:]]+from[[:space:]]+review)?[[:space:]]*\\(',
+      );
     });
   });
 });

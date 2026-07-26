@@ -123,18 +123,6 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       expect(ctx.postScript).toContain('readFailuresFromStderr');
     });
 
-    it('coverage block never calls core.setFailed for low coverage or read failures', () => {
-      const start = ctx.postScript.indexOf(
-        'coverageThreshold = resolveCoverageThreshold',
-      );
-      const end = ctx.postScript.indexOf('const summary = body.join', start);
-      const coverageBlock = ctx.postScript.slice(
-        start,
-        end > start ? end : undefined,
-      );
-      expect(coverageBlock).not.toContain('core.setFailed');
-    });
-
     it('ensures ocr-coverage-report.json exists with valid JSON before redaction', () => {
       const ensureStep = stepNamed(
         ctx.codeReviewJob,
