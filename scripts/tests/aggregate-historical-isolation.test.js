@@ -7,6 +7,15 @@
 import { describe, it, expect } from 'vitest';
 import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.js';
 
+// A workflow-run createdAt safely inside the 7-day retention window relative
+// to the current clock (computed at module load). The behavior under test is
+// per-run exception isolation, not retention age, so the run fixtures must not
+// be excluded by fetchHistoricalData's retention filter as the wall clock
+// advances past a hard-coded boundary timestamp.
+const RECENT_RUN_CREATED_AT = new Date(
+  Date.now() - 24 * 60 * 60 * 1000,
+).toISOString();
+
 /**
  * Issue #2605 (per-run exception isolation): Historical retrieval is best
  * effort: a single run that throws during processing (e.g. an unexpected
@@ -60,8 +69,8 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
     // exception escaping processHistoricalRun's internal catch); run B is
     // valid and MUST still be included. This proves the loop isolates per-run
     // exceptions: one bad run cannot abort the remaining runs.
-    const runA = { databaseId: 99001, createdAt: '2026-07-19T02:00:00Z' };
-    const runB = { databaseId: 99002, createdAt: '2026-07-19T02:00:00Z' };
+    const runA = { databaseId: 99001, createdAt: RECENT_RUN_CREATED_AT };
+    const runB = { databaseId: 99002, createdAt: RECENT_RUN_CREATED_AT };
 
     const listRunsPage = () => ({
       runs: [runA, runB],
