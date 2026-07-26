@@ -100,6 +100,7 @@
     "lint:doc-placement": "bun scripts/check-doc-placement.ts",
     "lint:genai-inventory": "bun scripts/genai-import-inventory.ts --check",
     "lint:agents-api-surface": "node scripts/check-agents-api-surface.mjs",
+    "lint:test-shards": "bun scripts/check-test-shards.ts",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write . --ignore-path .gitignore --ignore-path .prettierignore",
     "format:check": "prettier --check .",

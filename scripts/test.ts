@@ -28,6 +28,7 @@
  * Usage:
  *   bun scripts/test.ts                    # run all workspace + script tests
  *   bun scripts/test.ts --workspace core   # run only the core workspace
+ *   bun scripts/test.ts --shard cli        # run the "cli" CI shard (-s works too)
  *   bun scripts/test.ts --skip-scripts     # skip script harness tests
  *   bun scripts/test.ts --skip-pretest     # skip pretest hooks
  *   bun scripts/test.ts --continue-on-error # don't stop on first failure
@@ -42,6 +43,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { propertyValue } from './utils/error-guards.ts';
+import {
+  TEST_SHARDS,
+  SCRIPTS_SHARD_NAME,
+  expandShard,
+  findShard,
+} from './test-shards.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +68,8 @@ export interface WorkspaceInfo {
 
 export interface TestOptions {
   workspaceFilter: string | undefined;
+  /** CI shard name (e.g. "cli", "scripts"). Expands to its workspaces. */
+  shardFilter: string | undefined;
   skipScripts: boolean;
   skipPretest: boolean;
   continueOnError: boolean;
@@ -161,6 +170,7 @@ export function discoverWorkspaces(rootDir: string): WorkspaceInfo[] {
 export function parseArgs(argv: readonly string[]): TestOptions {
   const options: TestOptions = {
     workspaceFilter: undefined,
+    shardFilter: undefined,
     skipScripts: false,
     skipPretest: false,
     continueOnError: false,
@@ -176,6 +186,13 @@ export function parseArgs(argv: readonly string[]): TestOptions {
         options.workspaceFilter = argv[i];
       } else {
         throw new Error('--workspace requires a value');
+      }
+    } else if (arg === '--shard' || arg === '-s') {
+      i++;
+      if (i < argv.length) {
+        options.shardFilter = argv[i];
+      } else {
+        throw new Error('--shard requires a value');
       }
     } else if (arg === '--skip-scripts') {
       options.skipScripts = true;
@@ -284,6 +301,50 @@ function runPhase(
   };
 }
 
+/**
+ * Resolves the effective workspace set and whether the script harness should
+ * run, based on the shard/workspace filter options.
+ *
+ * - If `shardFilter` is set, it takes precedence over `workspaceFilter`. The
+ *   scripts shard runs no workspaces and runs only the script harness; any
+ *   other shard expands to its workspace ids and does NOT run the script
+ *   harness (that is the scripts shard's job).
+ * - Otherwise, if `workspaceFilter` is set, it is applied as before and the
+ *   script harness runs (preserving the legacy `--workspace` behavior).
+ * - Otherwise (no filter), all workspaces and the script harness run.
+ *
+ * Throws if the shard name is unknown (delegating to `expandShard`) so a typo
+ * cannot silently run nothing.
+ */
+function resolveShardOrFilter(
+  options: TestOptions,
+  allWorkspaces: WorkspaceInfo[],
+): { workspaces: WorkspaceInfo[]; runScriptsPhase: boolean } {
+  const { shardFilter, workspaceFilter } = options;
+
+  if (shardFilter !== undefined) {
+    // Validate the shard exists against the canonical map.
+    if (!findShard(TEST_SHARDS, shardFilter)) {
+      throw new Error(
+        `Unknown shard "${shardFilter}". Known shards: ${TEST_SHARDS.map((s) => s.name).join(', ')}.`,
+      );
+    }
+    if (shardFilter === SCRIPTS_SHARD_NAME) {
+      return { workspaces: [], runScriptsPhase: true };
+    }
+    const ids = expandShard(TEST_SHARDS, shardFilter);
+    const matched = allWorkspaces.filter((ws) =>
+      ids.some((id) => matchesFilter(ws, id)),
+    );
+    return { workspaces: matched, runScriptsPhase: false };
+  }
+
+  const workspaces = workspaceFilter
+    ? allWorkspaces.filter((ws) => matchesFilter(ws, workspaceFilter))
+    : allWorkspaces;
+  return { workspaces, runScriptsPhase: true };
+}
+
 export function orchestrateTests(
   rootDir: string,
   options: TestOptions,
@@ -294,10 +355,16 @@ export function orchestrateTests(
 
   const allWorkspaces = discoverWorkspaces(rootDir);
 
-  const { workspaceFilter } = options;
-  const workspaces = workspaceFilter
-    ? allWorkspaces.filter((ws) => matchesFilter(ws, workspaceFilter))
-    : allWorkspaces;
+  // Resolve the effective workspace set and whether scripts should run.
+  // A shard filter overrides the loose --workspace filter: it expands to the
+  // shard's workspaces and ensures the script harness only runs in the
+  // dedicated scripts shard (issue #2707).
+  const resolved = resolveShardOrFilter(options, allWorkspaces);
+  const workspaces = resolved.workspaces;
+  // Scripts run only when: no shard is selected (full/filtered local run), or
+  // the scripts shard is explicitly selected. Individual workspace shards do
+  // not also run the full script harness — that is the scripts shard's job.
+  const runScriptsPhase = resolved.runScriptsPhase;
 
   const failedWorkspaces = new Set<string>();
   const skippedWorkspaces: string[] = [];
@@ -352,7 +419,7 @@ export function orchestrateTests(
   // continue-on-error mode. Checking results (not failedWorkspaces)
   // catches failures in both fail-fast and continue-on-error modes.
   const anyPhaseFailed = results.some((r) => !r.success);
-  if (!anyPhaseFailed) {
+  if (!anyPhaseFailed && runScriptsPhase) {
     runScriptTests(rootDir, options, runner, results);
   }
 
@@ -515,6 +582,9 @@ function main(): void {
     const options = parseArgs(process.argv.slice(2));
 
     console.log('Running Bun-backed test orchestration...');
+    if (options.shardFilter) {
+      console.log(`  Shard: ${options.shardFilter}`);
+    }
     if (options.workspaceFilter) {
       console.log(`  Filter: ${options.workspaceFilter}`);
     }
@@ -529,7 +599,12 @@ function main(): void {
     const summary = orchestrateTests(rootDir, options);
     console.log(formatSummary(summary));
 
-    if (summary.failed > 0) {
+    // Fail on any failed phase, including the script harness. The summary's
+    // `failed` count only tallies workspace outcomes (pretest/test); the
+    // scripts phase is tracked separately in `results`, so a scripts-only
+    // failure (e.g. the dedicated scripts shard) must be checked here.
+    const anyPhaseFailed = summary.results.some((r) => !r.success);
+    if (summary.failed > 0 || anyPhaseFailed) {
       process.exit(1);
     }
   } catch (error) {
