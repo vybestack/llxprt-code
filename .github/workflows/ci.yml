@@ -783,6 +783,10 @@ jobs:
           npm run build
 
       - name: 'Run agents API-surface guard'
+        # Only the agents shard needs this guard (it inspects the agents
+        # package's public API surface). Running it on every shard wastes CI
+        # time on shards that don't exercise the agents package.
+        if: matrix.shard == 'agents'
         run: |-
           npm run lint:agents-api-surface
 
@@ -905,8 +909,8 @@ jobs:
     steps:
       - name: 'Check shard results'
         run: |-
-          if [ "${{ needs.test_shard.result }}" == "failure" ]; then
-            echo "::error::One or more test shards failed"
+          if [ "${{ needs.test_shard.result }}" != "success" ]; then
+            echo "::error::Test shards did not all succeed (result: ${{ needs.test_shard.result }})"
             exit 1
           fi
           echo 'All test shards finished!'
@@ -935,6 +939,11 @@ jobs:
       - name: 'Download CLI coverage (cli shard)'
         # Issue #2707: coverage is now per-shard. The composite action consumes
         # the cli + core coverage summaries, produced by their respective shards.
+        # continue-on-error is not needed here: post_coverage_comment already
+        # has continue-on-error: true at the job level, so a missing artifact
+        # will fail this step but not block PR merges. The job's own `if`
+        # condition gates on needs.test.result == 'success', which means the
+        # cli/core shards passed and their coverage artifacts exist.
         uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
         with:
           name: 'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}'
