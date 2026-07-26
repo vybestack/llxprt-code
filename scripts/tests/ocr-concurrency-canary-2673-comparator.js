@@ -31,13 +31,6 @@ const ENDPOINT_STRING_FIELDS = [
   'language',
 ];
 
-const PROVENANCE_VALUE_FIELDS = [
-  'use_anthropic',
-  'review_timeout_minutes',
-  'background_enabled',
-  'background_context_sha256',
-];
-
 function assertIsObject(value, label, errors) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     errors.push(`${label} must be a JSON object`);
@@ -140,10 +133,52 @@ function compareEndpointField(c2, c3, c4, field, errors) {
   assertEqual(c4.provenance?.effective_endpoint?.[field], value, label, errors);
 }
 
-function compareValueField(c2, c3, c4, field, errors) {
-  const value = c2.provenance?.[field];
-  assertEqual(c3.provenance?.[field], value, `provenance.${field}`, errors);
-  assertEqual(c4.provenance?.[field], value, `provenance.${field}`, errors);
+function assertBoolean(value, label, errors) {
+  if (typeof value !== 'boolean') {
+    errors.push(`${label} must be a boolean`);
+  }
+}
+
+function validateBackgroundProvenance(provenance, errors) {
+  const hash = provenance?.background_context_sha256;
+  if (provenance?.background_enabled === true) {
+    if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) {
+      errors.push(
+        'provenance.background_context_sha256 must be a 64-character lowercase hexadecimal string when background is enabled',
+      );
+    }
+  } else if (provenance?.background_enabled === false && hash !== null) {
+    errors.push(
+      'provenance.background_context_sha256 must be null when background is disabled',
+    );
+  }
+}
+
+function validateValueFields(provenance, errors) {
+  assertBoolean(provenance?.use_anthropic, 'provenance.use_anthropic', errors);
+  if (!isPositiveInteger(provenance?.review_timeout_minutes)) {
+    errors.push('provenance.review_timeout_minutes must be a positive integer');
+  }
+  assertBoolean(
+    provenance?.background_enabled,
+    'provenance.background_enabled',
+    errors,
+  );
+  validateBackgroundProvenance(provenance, errors);
+}
+
+function compareValueFields(c2, c3, c4, errors) {
+  validateValueFields(c2.provenance, errors);
+  for (const field of [
+    'use_anthropic',
+    'review_timeout_minutes',
+    'background_enabled',
+    'background_context_sha256',
+  ]) {
+    const value = c2.provenance?.[field];
+    assertEqual(c3.provenance?.[field], value, `provenance.${field}`, errors);
+    assertEqual(c4.provenance?.[field], value, `provenance.${field}`, errors);
+  }
 }
 
 function compareProvenance(c2, c3, c4, errors) {
@@ -153,9 +188,7 @@ function compareProvenance(c2, c3, c4, errors) {
   for (const field of ENDPOINT_STRING_FIELDS) {
     compareEndpointField(c2, c3, c4, field, errors);
   }
-  for (const field of PROVENANCE_VALUE_FIELDS) {
-    compareValueField(c2, c3, c4, field, errors);
-  }
+  compareValueFields(c2, c3, c4, errors);
 }
 
 function responseCount(transport, label, errors) {

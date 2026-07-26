@@ -265,6 +265,49 @@ describe('ocr-concurrency-canary-2673-comparator', () => {
 
   it.each([
     [
+      'string use_anthropic provenance',
+      (artifact) => (artifact.provenance.use_anthropic = 'false'),
+      /use_anthropic must be a boolean/i,
+    ],
+    [
+      'zero review timeout provenance',
+      (artifact) => (artifact.provenance.review_timeout_minutes = 0),
+      /review_timeout_minutes must be a positive integer/i,
+    ],
+    [
+      'fractional review timeout provenance',
+      (artifact) => (artifact.provenance.review_timeout_minutes = 1.5),
+      /review_timeout_minutes must be a positive integer/i,
+    ],
+    [
+      'string background_enabled provenance',
+      (artifact) => (artifact.provenance.background_enabled = 'true'),
+      /background_enabled must be a boolean/i,
+    ],
+    [
+      'malformed enabled background hash provenance',
+      (artifact) => (artifact.provenance.background_context_sha256 = 'bad'),
+      /background_context_sha256 must be a 64-character lowercase hexadecimal string/i,
+    ],
+    [
+      'non-null disabled background hash provenance',
+      (artifact) => {
+        artifact.provenance.background_enabled = false;
+        artifact.provenance.background_context_sha256 = 'e'.repeat(64);
+      },
+      /background_context_sha256 must be null when background is disabled/i,
+    ],
+  ])('rejects matching malformed %s', (_name, change, expected) => {
+    const artifacts = makeArtifacts();
+    for (const artifact of artifacts) change(artifact);
+    const result = buildComparison(artifacts);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(' ')).toMatch(expected);
+    expect(result.evidence.provenance_equal).toBe(false);
+  });
+
+  it.each([
+    [
       'non-success result',
       (artifact) => (artifact.result.status = 'failed'),
       /status is not success/i,
