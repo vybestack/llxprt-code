@@ -269,8 +269,18 @@ export async function detectFileType(
     return 'svg';
   }
 
+  // mime-db maps the FreeHand family (.fh, .fh4, .fh5, .fh7, .fhc) to
+  // image/x-freehand, but these extensions are commonly shader/source text.
+  // Exclude them from the image short-circuit below so they fall through to
+  // content-based detection (text or binary).
+  const freehandExtensions = ['.fh', '.fh4', '.fh5', '.fh7', '.fhc'];
+
   const lookedUpMimeType = mime.lookup(filePath); // Returns false if not found, or the mime type string
-  if (typeof lookedUpMimeType === 'string' && lookedUpMimeType !== '') {
+  if (
+    typeof lookedUpMimeType === 'string' &&
+    lookedUpMimeType !== '' &&
+    !freehandExtensions.includes(ext)
+  ) {
     if (lookedUpMimeType.startsWith('image/')) {
       return 'image';
     }
