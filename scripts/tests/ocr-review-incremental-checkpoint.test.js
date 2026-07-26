@@ -722,10 +722,10 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
         expect(resolveRangeRun).toContain(`echo "${output}=`);
       }
       expect(resolveRangeRun).toContain(
-        'git diff --numstat "${from_sha}..${to_sha}"',
+        'git diff --numstat --diff-filter=d "${from_sha}..${to_sha}"',
       );
-      expect(resolveRangeRun).not.toContain(
-        'git diff --numstat --diff-filter=d',
+      expect(resolveRangeRun).toContain(
+        'git diff --name-only --diff-filter=d "${from_sha}..${to_sha}"',
       );
     });
 
@@ -745,6 +745,21 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       );
       expect(fetchMarkerSource).toContain("c.user.type === 'Bot'");
       expect(fetchMarkerSource).toContain('c.user.login === botLogin');
+    });
+
+    it('handles getAuthenticated failure gracefully with OCR_BOT_LOGIN fallback', () => {
+      expect(readCheckpointScript).toContain(
+        'core.warning(`Could not resolve authenticated bot login',
+      );
+      expect(readCheckpointScript).toContain("process.env.OCR_BOT_LOGIN || ''");
+      expect(readCheckpointStep.env?.OCR_BOT_LOGIN).toBe(
+        '${{ vars.OCR_BOT_LOGIN }}',
+      );
+    });
+
+    it('uses find() not findLast() for marker comment lookup (symmetric with reconcileMarkerComment)', () => {
+      expect(readCheckpointScript).toContain('comments.find(');
+      expect(readCheckpointScript).not.toContain('findLast(');
     });
 
     it('performs ancestry validation in bash and checks OCR version compatibility', () => {
@@ -799,7 +814,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
 
     it('embeds a new checkpoint only inside the successful advancement gate', () => {
       const gateIndex = postScript.indexOf(
-        'if (shouldAdvanceCheckpoint(checkpointDecision))',
+        'if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id)',
       );
       const embedIndex = postScript.indexOf(
         'embedCheckpointInBody(summary, checkpointAfter)',
@@ -808,6 +823,29 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       expect(gateIndex).toBeGreaterThan(-1);
       expect(embedIndex).toBeGreaterThan(gateIndex);
       expect(postScript.slice(gateIndex, embedIndex)).not.toContain('else if');
+    });
+
+    it('guards checkpoint advancement against null summaryComment', () => {
+      expect(postScript).toContain('&& summaryComment && summaryComment.id');
+    });
+
+    it('writes ocr-metadata.json after checkpoint advancement (not before)', () => {
+      const checkpointAdvanceIndex = postScript.indexOf(
+        'if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id)',
+      );
+      const metadataIndex = postScript.indexOf(
+        "fs.writeFileSync('ocr-metadata.json'",
+      );
+      expect(checkpointAdvanceIndex).toBeGreaterThan(-1);
+      expect(metadataIndex).toBeGreaterThan(checkpointAdvanceIndex);
+    });
+
+    it('wires hash env vars into the Post OCR results step', () => {
+      expect(postStep.env?.OCR_RULES_HASH).toBe('${{ vars.OCR_RULES_HASH }}');
+      expect(postStep.env?.OCR_POLICY_HASH).toBe('${{ vars.OCR_POLICY_HASH }}');
+      expect(postStep.env?.OCR_WORKFLOW_SCHEMA_HASH).toBe(
+        '${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}',
+      );
     });
   });
 });

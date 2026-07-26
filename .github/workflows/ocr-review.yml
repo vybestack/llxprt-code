@@ -538,6 +538,7 @@ jobs:
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         env:
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
         with:
           script: |
             const MARKER = '<!-- llxprt-code-ocr-review -->';
@@ -571,12 +572,18 @@ jobs:
               return match ? deserializeCheckpoint(match[1]) : null;
             }
 
-            const { data: botUser } = await github.rest.users.getAuthenticated();
-            const botLogin = botUser.login || '';
+            let botLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              botLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+              botLogin = process.env.OCR_BOT_LOGIN || '';
+            }
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: number, per_page: 100,
             });
-            const markerComment = comments.findLast((comment) =>
+            const markerComment = comments.find((comment) =>
               comment.user && comment.user.type === 'Bot'
                 && botLogin !== '' && comment.user.login === botLogin
                 && typeof comment.body === 'string' && comment.body.includes(MARKER));
@@ -770,8 +777,8 @@ jobs:
             local from_sha="$1"
             local to_sha="$2"
             local files additions deletions
-            files="$(git diff --name-only "${from_sha}..${to_sha}" | awk 'NF { count += 1 } END { print count + 0 }')"
-            read -r additions deletions < <(git diff --numstat "${from_sha}..${to_sha}" | awk '$1 ~ /^[0-9]+$/ { additions += $1 } $2 ~ /^[0-9]+$/ { deletions += $2 } END { print additions + 0, deletions + 0 }')
+            files="$(git diff --name-only --diff-filter=d "${from_sha}..${to_sha}" | awk 'NF { count += 1 } END { print count + 0 }')"
+            read -r additions deletions < <(git diff --numstat --diff-filter=d "${from_sha}..${to_sha}" | awk '$1 ~ /^[0-9]+$/ { additions += $1 } $2 ~ /^[0-9]+$/ { deletions += $2 } END { print additions + 0, deletions + 0 }')
             printf '%s %s %s\n' "$files" "$additions" "$deletions"
           }
           read -r CUMULATIVE_FILES CUMULATIVE_ADDITIONS CUMULATIVE_DELETIONS < <(range_stats "$MERGE_BASE" "$HEAD_SHA")
@@ -1284,6 +1291,9 @@ jobs:
           EVENT_AFTER: ${{ github.event.after }}
           OCR_VERSION: ${{ env.OCR_VERSION }}
           OCR_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_RULES_HASH: ${{ vars.OCR_RULES_HASH }}
+          OCR_POLICY_HASH: ${{ vars.OCR_POLICY_HASH }}
+          OCR_WORKFLOW_SCHEMA_HASH: ${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}
           OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           # Whether this run is an automatic (pull_request_target) trigger.
@@ -2284,6 +2294,70 @@ jobs:
               resultSource: ocrObservation.result_source,
             };
 
+            // Feature 5 (issue #2670): structured step outputs.
+            const commentsTotal = findings.length + suppressedDuplicateCount;
+            // comments_skipped counts ONLY inline comments skipped by
+            // incremental overlap dedup and exact-key history dedup. Exact
+            // duplicate suppression (suppressedDuplicateCount) is reported
+            // separately in the summary text since it covers all findings,
+            // including lineless ones.
+            const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;
+            core.setOutput('comments_total', String(commentsTotal));
+            core.setOutput('comments_inline', String(postedInline));
+            core.setOutput('comments_skipped', String(commentsSkipped));
+            core.setOutput('comments_failed', String(failedInline));
+            core.setOutput('summary_comment_url', summaryCommentUrl);
+
+            if (!ran) {
+              if (policyFailure) {
+                core.setFailed(`OCR policy failure: ${policyFailure}`);
+              } else {
+                core.warning(`OpenCodeReview failed or produced unparsable output (exit code ${exitCode}).`);
+              }
+            }
+            // Checkpoint advancement is intentionally the LAST state-changing
+            // operation in the posting step. Metadata write, artifact upload,
+            // and summary posting all happen before the checkpoint is advanced.
+            // If any of those fail, checkpointAfter remains checkpointBefore
+            // and the durable checkpoint is not corrupted.
+            if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id) {
+              checkpointAfter = {
+                schema: 1,
+                pr_number: number,
+                head_sha: headSha,
+                base_sha: process.env.API_BASE_SHA,
+                merge_base: process.env.BASE_SHA,
+                reviewed_at: new Date().toISOString(),
+                run_url: runUrl,
+                ocr_version: process.env.OCR_VERSION,
+                ocr_model: process.env.OCR_MODEL || 'unknown',
+                rules_hash: process.env.OCR_RULES_HASH || '',
+                policy_hash: process.env.OCR_POLICY_HASH || '',
+                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+                completion_state: 'complete',
+                range_mode: process.env.RANGE_MODE,
+                selected_files: rangeMetadata.selected.files,
+                completed_files: ocrObservation.completed_files,
+                publication_state: publicationState,
+              };
+              const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
+              try {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: summaryComment.id,
+                  body: checkpointSummary,
+                });
+              } catch (checkpointError) {
+                checkpointAfter = checkpointBefore;
+                publicationState = 'ambiguous';
+                core.warning(redactSecretDiagnostics(`Failed to advance OCR checkpoint: ${checkpointError.message || checkpointError}`));
+              }
+            }
+
+            // Metadata is serialized AFTER checkpoint advancement so the
+            // artifact reflects the final checkpointAfter and publicationState
+            // values, not a stale pre-advancement snapshot.
             const metadata = buildOcrMetadata({
               eventName: process.env.EVENT_NAME,
               eventAction: process.env.EVENT_ACTION,
@@ -2331,67 +2405,6 @@ jobs:
                 ['Terminal state', `${metadata.terminal.completeness_state} / ${metadata.terminal.publication_state}`],
               ])
               .write();
-
-            // Feature 5 (issue #2670): structured step outputs.
-            const commentsTotal = findings.length + suppressedDuplicateCount;
-            // comments_skipped counts ONLY inline comments skipped by
-            // incremental overlap dedup and exact-key history dedup. Exact
-            // duplicate suppression (suppressedDuplicateCount) is reported
-            // separately in the summary text since it covers all findings,
-            // including lineless ones.
-            const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;
-            core.setOutput('comments_total', String(commentsTotal));
-            core.setOutput('comments_inline', String(postedInline));
-            core.setOutput('comments_skipped', String(commentsSkipped));
-            core.setOutput('comments_failed', String(failedInline));
-            core.setOutput('summary_comment_url', summaryCommentUrl);
-
-            if (!ran) {
-              if (policyFailure) {
-                core.setFailed(`OCR policy failure: ${policyFailure}`);
-              } else {
-                core.warning(`OpenCodeReview failed or produced unparsable output (exit code ${exitCode}).`);
-              }
-            }
-            // Checkpoint advancement is intentionally the LAST state-changing
-            // operation in the posting step. Metadata write, artifact upload,
-            // and summary posting all happen before the checkpoint is advanced.
-            // If any of those fail, checkpointAfter remains checkpointBefore
-            // and the durable checkpoint is not corrupted.
-            if (shouldAdvanceCheckpoint(checkpointDecision)) {
-              checkpointAfter = {
-                schema: 1,
-                pr_number: number,
-                head_sha: headSha,
-                base_sha: process.env.API_BASE_SHA,
-                merge_base: process.env.BASE_SHA,
-                reviewed_at: new Date().toISOString(),
-                run_url: runUrl,
-                ocr_version: process.env.OCR_VERSION,
-                ocr_model: process.env.OCR_MODEL || 'unknown',
-                rules_hash: process.env.OCR_RULES_HASH || '',
-                policy_hash: process.env.OCR_POLICY_HASH || '',
-                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
-                completion_state: 'complete',
-                range_mode: process.env.RANGE_MODE,
-                selected_files: rangeMetadata.selected.files,
-                completed_files: ocrObservation.completed_files,
-                publication_state: publicationState,
-              };
-              const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
-              try {
-                await github.rest.issues.updateComment({
-                  owner,
-                  repo,
-                  comment_id: summaryComment.id,
-                  body: checkpointSummary,
-                });
-              } catch (checkpointError) {
-                checkpointAfter = checkpointBefore;
-                publicationState = 'ambiguous';
-                core.warning(redactSecretDiagnostics(`Failed to advance OCR checkpoint: ${checkpointError.message || checkpointError}`));
-              }
-            }
 
       - name: Resolve OCR failure classification
         shell: bash
