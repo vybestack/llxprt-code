@@ -110,7 +110,7 @@ export function aggregateTelemetry(records) {
       sorted.map((record) => record.total_findings),
     ),
     findings_available_runs: sorted.filter(
-      (record) => record.total_findings !== null,
+      (record) => typeof record.total_findings === 'number',
     ).length,
     findings_total_runs: sorted.length,
     categories,
@@ -244,7 +244,7 @@ function fileReadFailureRate(records) {
     return null;
   }
   const totalPreviewed = sumField(records, 'files_previewed');
-  if (totalPreviewed === 0) {
+  if (totalPreviewed === null || totalPreviewed === 0) {
     return null;
   }
   return sumField(records, 'file_read_failure_count') / totalPreviewed;
@@ -453,7 +453,11 @@ function parseArgs(argv) {
       }
     } else if (arg === '--output') {
       const next = argv[i + 1];
-      if (typeof next === 'string' && next.length > 0) {
+      if (
+        typeof next === 'string' &&
+        next.length > 0 &&
+        !next.startsWith('--')
+      ) {
         result.outputPath = next;
         i += 1;
       } else {

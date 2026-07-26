@@ -2887,7 +2887,7 @@ jobs:
             const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;
             core.setOutput('comments_total', String(commentsTotal));
             core.setOutput('comments_inline', String(postedInline));
-            core.setOutput('already_resolved', String(commentsSkipped));
+            core.setOutput('already_resolved', String(skippedOverlapCount));
             core.setOutput('comments_skipped', String(commentsSkipped));
             core.setOutput('comments_failed', String(failedInline));
             core.setOutput('comments_routed_summary', String(routingShadowMode ? wouldRouteToSummary : summaryRouted.length));

@@ -268,6 +268,19 @@ describe('aggregateTelemetry — file_read_failure_rate null semantics', () => {
     ]);
     expect(result.file_read_failure_rate).toBeNull();
   });
+  it('does not claim a rate when every preview count is unavailable', () => {
+    const result = aggregateTelemetry([
+      record({
+        files_previewed: null,
+        files_reviewed: null,
+        reviewed_range_manifest: null,
+        file_read_failures: [],
+        file_read_failure_count: 0,
+        completeness: null,
+      }),
+    ]);
+    expect(result.file_read_failure_rate).toBeNull();
+  });
 });
 
 describe('aggregateTelemetry — trends', () => {
@@ -469,6 +482,11 @@ describe('aggregate-ocr-telemetry.js CLI — contract', () => {
     const written = fs.readFileSync(outPath, 'utf8');
     expect(written).toMatch(/^## OCR Telemetry/);
     expect(() => JSON.parse(written)).toThrow();
+  });
+  it('rejects a flag where --output requires a file path', () => {
+    const result = runCli([tmpDir, '--output', '--format', 'markdown']);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--output requires a file path');
   });
 
   describe('aggregateTelemetry — mixed evidence and epoch ordering', () => {

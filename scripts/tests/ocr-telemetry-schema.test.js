@@ -13,6 +13,7 @@ import {
   isFiniteNonnegativeInteger,
   isFiniteNonnegativeNumber,
   isOwnNumericDistribution,
+  sumDistribution,
 } from '../ocr-telemetry-schema.js';
 
 function validRecord(overrides = {}) {
@@ -134,6 +135,11 @@ describe('isOwnNumericDistribution', () => {
     const distribution = { visible: 1 };
     Object.defineProperty(distribution, 'hidden', { value: -1 });
     expect(isOwnNumericDistribution(distribution)).toBe(false);
+  });
+  it('includes valid non-enumerable own values in distribution totals', () => {
+    const distribution = { visible: 1 };
+    Object.defineProperty(distribution, 'hidden', { value: 2 });
+    expect(sumDistribution(distribution)).toBe(3);
   });
 });
 

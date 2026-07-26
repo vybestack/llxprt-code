@@ -392,8 +392,8 @@ function validateOptionalStructures(record) {
 
 function safeSum(distribution) {
   let total = 0;
-  for (const value of Object.values(distribution)) {
-    total += value;
+  for (const key of Reflect.ownKeys(distribution)) {
+    total += distribution[key];
     if (!Number.isSafeInteger(total)) return null;
   }
   return total;
