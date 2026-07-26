@@ -4,17 +4,15 @@
 
 Every tracked TypeScript file under `packages/**` that imports `@google/genai`, classified to the downstream issue that removes the import (or to the permanent Gemini `enclave`). This file is the baseline the #2352 enforcement ratchet compares against — the count may only ever decrease as migration issues land.
 
-**Total importers:** 29
+**Total importers:** 28
 
 **Per-owner breakdown:**
 
 - `enclave`: 27
-- `#2349`: 1
 - `#2351`: 1
 
 | File                                                                      | Owner   |
 | ------------------------------------------------------------------------- | ------- |
-| `packages/agents/src/core/tokenUsageActualLogger.ts`                      | #2349   |
 | `packages/core/src/code_assist/contentGeneratorAdapters.test.ts`          | enclave |
 | `packages/core/src/code_assist/contentGeneratorAdapters.ts`               | enclave |
 | `packages/core/src/code_assist/converter.test.ts`                         | enclave |
