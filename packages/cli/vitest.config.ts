@@ -10,6 +10,11 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
+import {
+  buildTestGroups,
+  INCLUDE_PATTERNS,
+  BASE_EXCLUDE_PATTERNS,
+} from './vitest.test-groups.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -177,93 +182,96 @@ const isMultiRuntimeGuardrailRun =
   process.argv.includes('--run') &&
   process.argv.includes('provider-multi-runtime');
 
-const baseExcludePatterns = [
-  '**/node_modules/**',
-  '**/dist/**',
-  '**/tmp/**',
-  '**/cypress/**',
-  '**/*.integration.{test,spec}.?(c|m)[jt]s?(x)',
-  // Temporarily exclude ALL React DOM tests that have React 19 compatibility issues
-  // This is a comprehensive exclusion until React 19 compatibility is properly resolved
-  // EXCEPT KeypressContext.test.tsx which we're actively working on for issue #263
-  // EXCEPT ThinkingBlockDisplay.test.tsx for Phase P04
-  '**/test-utils/**/*.test.tsx',
-  '**/ui/App.e2e.test.tsx',
-  '**/ui/App.test.tsx',
-  // App.test.tsx split into cohesive shards (issue #2114, max-lines); all
-  // share the same ink reconciler setup and remain lint-only like the parent.
-  '**/ui/App.context.test.tsx',
-  '**/ui/App.components.test.tsx',
-  '**/ui/App.dialogs.test.tsx',
-  '**/ui/App.behavior.test.tsx',
-  // '**/ui/commands/directoryCommand.test.tsx', // Temporarily enabled for trust gating implementation (9786c4dcf)
-  // React 19 / ink-stub incompatible — ALL ui/components/*.test.tsx render empty in jsdom
-  '**/ui/components/*.test.tsx',
-  '**/ui/components/__tests__/*.test.tsx',
-  // SessionBrowserDialog - ink-testing-library/ink-stub reconciler conflict (issue #1385)
-  // Tests pass individually but fail when run in sequence due to global ink mock
-  '**/ui/components/__tests__/SessionBrowserDialog*.spec.tsx',
-  '**/ui/components/messages/DiffRenderer.test.tsx',
-  // AiMessage/ToolMessage - behavioral tests excluded due to ink-testing-library/ink-stub
-  // incompatibility in CI (renders empty string). Tests pass locally but fail in CI.
-  // Issue #1034 converted them from snapshot to behavioral tests but CI rendering issue remains.
-  '**/ui/components/messages/AiMessage.test.tsx',
-  '**/ui/components/messages/ToolMessage.test.tsx',
-  '**/ui/components/messages/ToolConfirmationMessage.responsive.test.tsx',
-  '**/ui/components/messages/ToolConfirmationMessage.test.tsx',
-  '**/ui/components/messages/ToolGroupMessage.test.tsx',
-  // ThinkingBlockDisplay - ink-testing-library doesn't render styled Text in NO_COLOR mode
-  '**/ui/components/messages/ThinkingBlockDisplay.test.tsx',
-  '**/ui/components/messages/WarningMessage.test.tsx',
-  '**/ui/components/shared/*.test.tsx',
-  '**/ui/components/views/*.test.tsx',
-  '**/ui/containers/*.test.tsx',
-  '**/ui/contexts/SessionContext.test.tsx',
-  '**/ui/hooks/useEditorSettings.test.tsx',
-  '**/ui/hooks/useReverseSearchCompletion.test.tsx',
-  '**/ui/hooks/useAgentStream.integration.test.tsx',
-  '**/ui/hooks/useAgentStream.test.tsx',
-  // useAgentStream.test.tsx split into cohesive shards (issue #2114,
-  // max-lines); all share the same React 19 setup and remain lint-only like
-  // the parent. Exact paths so the runnable dedup/subagent/thinking/ordering
-  // siblings are not matched.
-  '**/ui/hooks/useAgentStream.cancellation.test.tsx',
-  '**/ui/hooks/useAgentStream.usercancel.test.tsx',
-  '**/ui/hooks/useAgentStream.commands.test.tsx',
-  '**/ui/hooks/useAgentStream.approval.test.tsx',
-  '**/ui/hooks/useAgentStream.finished.test.tsx',
-  '**/ui/hooks/useAgentStream.include.test.tsx',
-  '**/ui/hooks/useAgentStream.thought.test.tsx',
-  '**/ui/hooks/useAgentStream.loopdetect.test.tsx',
-  '**/ui/hooks/useAgentStream.hooks.test.tsx',
-  '**/ui/hooks/useAgentStream.mcp.test.tsx',
-  '**/ui/hooks/useKeypress.test.tsx',
-  '**/ui/hooks/usePermissionsModifyTrust.test.tsx',
-  '**/ui/privacy/**/*.test.tsx',
-  '**/ui/utils/**/*.test.tsx',
-  // '**/agentStream.test.tsx', // Temporarily enabled for terminal mode cleanup (ba88707b1 reimplementation)
-  // Exclude UI component tests that may directly import React DOM
-  '**/ui/components/**/*.test.ts',
-  // Temporarily suppress remaining React 19 regressions until the hooks are migrated
-  // EXCEPT useToolScheduler.test.ts which we're actively working on for issue #1055
-  '**/ui/hooks/useEditorSettings.test.ts',
-  '**/ui/hooks/useReverseSearchCompletion.test.ts',
-  '**/ui/hooks/useAgentStream.test.ts',
-  '**/ui/hooks/useAgentStream.integration.test.ts',
-  '**/ui/hooks/useKeypress.test.ts',
-  '**/ui/hooks/usePermissionsModifyTrust.test.ts',
-  // Block the command test that still imports the legacy runtime helpers
-  '**/ui/commands/toolformatCommand.test.ts',
-];
+// Build the three disjoint routing groups from source requirements. The
+// helper discovers the exact same file set using the authoritative
+// include/exclude contract, then splits it into pure-node, react-ink-node,
+// and jsdom groups so the node-majority can skip per-file jsdom environment
+// cost. Group test paths are already normalized package-relative.
+const testGroups = buildTestGroups({
+  multiRuntimeGuardrail: isMultiRuntimeGuardrailRun,
+});
 
-if (isMultiRuntimeGuardrailRun) {
-  const integrationIndex = baseExcludePatterns.indexOf(
-    '**/*.integration.{test,spec}.?(c|m)[jt]s?(x)',
-  );
-  if (integrationIndex >= 0) {
-    baseExcludePatterns.splice(integrationIndex, 1);
-  }
-}
+// Authoritative exclude contract consumed from the helper. When the
+// multi-runtime guardrail argv is present, the integration exclude is removed
+// by the helper's buildExclude and reflected here via re-derivation.
+const INTEGRATION_EXCLUDE = '**/*.integration.{test,spec}.?(c|m)[jt]s?(x)';
+const baseExcludePatterns = isMultiRuntimeGuardrailRun
+  ? BASE_EXCLUDE_PATTERNS.filter((p) => p !== INTEGRATION_EXCLUDE)
+  : BASE_EXCLUDE_PATTERNS;
+
+// Shared Vite-level config that each routing project must carry so workspace
+// source aliases resolve identically to the root. Projects without
+// `extends: true` do not inherit root plugins/resolve, so they re-declare them.
+const projectResolve = {
+  conditions: ['node', 'import', 'module', 'browser', 'default'],
+  extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
+  alias: {
+    'ajv/dist/2020.js': ajv2020Entry,
+    ajv: ajvCjsEntry,
+    fdir: fdirEntry,
+    ink: inkStubPath,
+    'ink-testing-library': inkTestingLibraryPath,
+    [inkTestingLibraryActualPath]: inkTestingLibraryPath,
+    react: resolve(__dirname, '../../node_modules/react'),
+  },
+};
+
+const sharedTestOptions = {
+  exclude: ['**/node_modules/**', '**/dist/**'],
+  globals: true,
+  silent: true,
+  reporters: ['default', 'junit'],
+  outputFile: { junit: 'junit.xml' },
+  poolOptions: {
+    threads: { singleThread: true, maxThreads: 2 },
+  },
+  testTimeout: 30000,
+  hookTimeout: 30000,
+};
+
+// Detect whether this config is being loaded as the primary/invoked config
+// or imported by a sibling config (agentStream, mutation). Sibling configs
+// are always invoked with an explicit config path that differs from this
+// file. When no explicit sibling config path appears in argv, this is the
+// main config invocation and routing projects should be attached.
+const configFlagIndex = process.argv.findIndex(
+  (argument) => argument === '--config' || argument === '-c',
+);
+const separateConfig =
+  configFlagIndex < 0 ? undefined : process.argv[configFlagIndex + 1];
+const inlineConfig = process.argv
+  .find((argument) => argument.startsWith('--config='))
+  ?.slice('--config='.length);
+const explicitConfig = separateConfig ?? inlineConfig;
+const isMainConfig =
+  explicitConfig === undefined ||
+  resolve(process.cwd(), explicitConfig) ===
+    resolve(__dirname, 'vitest.config.ts');
+
+// Routing projects built from typed group objects. Each project carries the
+// workspace alias plugin and resolve config so module resolution works
+// identically to the root.
+const routingProjects = testGroups.map((group) => ({
+  plugins: [workspaceAliasPlugin],
+  resolve: projectResolve,
+  test: {
+    ...sharedTestOptions,
+    name: group.name,
+    environment: group.environment,
+    setupFiles: [group.setupFile],
+    include: group.testFiles,
+    ...(group.environment === 'jsdom'
+      ? {
+          environmentOptions: {
+            jsdom: {
+              resources: 'usable',
+              runScripts: 'dangerously',
+            },
+          },
+        }
+      : {}),
+  },
+}));
 
 export default defineConfig({
   plugins: [workspaceAliasPlugin],
@@ -287,39 +295,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: [
-      '**/*.{test,spec}.?(c|m)[jt]s?(x)',
-      'config.test.ts',
-      // Temporarily include KeypressContext test for issue #263
-      'src/ui/contexts/KeypressContext.test.tsx',
-      'src/ui/contexts/KeypressContext.parsing.test.tsx',
-      // ThinkingBlockDisplay test excluded - ink-testing-library doesn't render styled Text in NO_COLOR mode
-      // Include useAgentStream thinking test for Phase P07
-      'src/ui/hooks/useAgentStream.thinking.test.tsx',
-      'src/ui/hooks/useAgentStream.ordering.test.tsx',
-      // Include useAgentStream dedup test for issue #1040
-      'src/ui/hooks/useAgentStream.dedup.test.tsx',
-      // Include useToolScheduler test for issue #1055 - Phase 2
-      'src/ui/hooks/useToolScheduler.test.ts',
-      // Include OAuthUrlMessage test (migrated from @testing-library/react)
-      'src/ui/components/messages/OAuthUrlMessage.test.tsx',
-      // Include useSlashCompletion extension filtering tests for fa93b56243 reimplementation
-      'src/ui/hooks/useSlashCompletion.extensions.test.tsx',
-      // Include agentStream test for terminal mode cleanup (ba88707b1 reimplementation)
-      'src/agentStream.test.tsx',
-      // Include directoryCommand test for trust gating implementation (9786c4dcf reimplementation)
-      'src/ui/commands/directoryCommand.test.tsx',
-      // Include ProfileChangeMessage test for cleanup-plan ab11b2c27
-      'src/ui/components/messages/ProfileChangeMessage.test.tsx',
-      // Include HistoryItemDisplay test for cleanup-plan ab11b2c27
-      'src/ui/components/HistoryItemDisplay.test.tsx',
-      // Include useTodoContinuation test for issue #1277
-      'src/ui/hooks/useTodoContinuation.spec.ts',
-      // Include HooksList test for audit issue #8
-      'src/ui/components/views/HooksList.test.tsx',
-      // NOTE: ui/components/*.test.tsx are all excluded due to React 19/ink-stub incompatibility.
-      // StatsDisplay, ModelStatsDisplay, etc. must be run individually outside the suite.
-    ],
+    include: INCLUDE_PATTERNS,
     exclude: baseExcludePatterns,
     environment: 'jsdom',
     globals: true,
@@ -343,6 +319,16 @@ export default defineConfig({
         runScripts: 'dangerously',
       },
     },
+    // Three disjoint routing projects split by source requirements. Each
+    // project carries the workspace alias plugin and resolve config so module
+    // resolution works identically to the root. Pure-node files skip the
+    // per-file jsdom environment cost entirely.
+    //
+    // Projects are attached only when this config is the active/invoked
+    // config — not when a sibling config (agentStream, mutation) imports it
+    // via mergeConfig/spread. This prevents test.projects from leaking
+    // through and causing sibling runs to enumerate the full group set.
+    projects: isMainConfig ? routingProjects : undefined,
     coverage: {
       enabled: true,
       provider: 'v8',
