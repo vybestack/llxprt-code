@@ -175,7 +175,7 @@ describe('linked references and generated planning data', () => {
     );
     expect(
       extractLinkedReferences(
-        `owner/repo#999 #1 ${refs}\n\`\`\`\n#888\n\`\`\``,
+        `owner/repo#999 #1 ${refs}\n\`\`\`\n#888\n\`\`\`\n    #777`,
       ),
     ).toEqual(Array.from({ length: 20 }, (_, index) => index + 1));
   });
@@ -275,6 +275,18 @@ describe('real issue-planner CLI entrypoint', () => {
     }
   });
 
+  it('rejects linked-reference mode without a current issue number', () => {
+    const dir = makeTempDir('planner-cli-refs-missing-current-');
+    try {
+      writeJson(dir, 'issue.json', { number: 3, title: 'T', body: '#3 #4' });
+      const result = runCli(['--extract-linked-references', dir]);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toMatch(/current issue/i);
+    } finally {
+      removeTempDir(dir);
+    }
+  });
+
   it('runs context and instruction modes and preserves long issue bodies', () => {
     const dir = makeTempDir('planner-cli-render-');
     try {
@@ -284,6 +296,7 @@ describe('real issue-planner CLI entrypoint', () => {
         title: 'Long issue',
         body: `${'a'.repeat(4100)}${trailing}`,
       });
+      fs.mkdirSync(path.join(dir, 'issues', 'not-a-file.json'));
       const context = runCli(['--render-context', dir]);
       const instructions = runCli(['--render-instructions', dir]);
       expect(context.status, context.stderr).toBe(0);
@@ -294,6 +307,20 @@ describe('real issue-planner CLI entrypoint', () => {
       expect(
         fs.readFileSync(path.join(dir, 'planning-instructions.md'), 'utf8'),
       ).toContain(THRESHOLD_SENTENCE);
+    } finally {
+      removeTempDir(dir);
+    }
+  });
+
+  it('identifies the malformed JSON artifact in CLI errors', () => {
+    const dir = makeTempDir('planner-cli-invalid-json-');
+    try {
+      writeJson(dir, 'issue.json', { number: 8, title: 'T', body: '' });
+      const brokenPath = path.join(dir, 'issues', 'broken.json');
+      fs.writeFileSync(brokenPath, '{');
+      const result = runCli(['--render-context', dir]);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(brokenPath);
     } finally {
       removeTempDir(dir);
     }

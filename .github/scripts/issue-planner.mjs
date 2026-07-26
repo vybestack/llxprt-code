@@ -43,7 +43,9 @@ export function extractLinkedReferences(body) {
   if (typeof body !== 'string' || body.length === 0) {
     return [];
   }
-  const withoutCode = body.replace(/```[\s\S]*?```/g, '');
+  const withoutCode = body
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/^(?: {4}|\t).*$/gm, '');
   const matches = withoutCode.matchAll(/(?:^|[^A-Za-z0-9_./-])#([0-9]+)\b/gm);
   const seen = new Set();
   const result = [];
@@ -401,14 +403,20 @@ export async function reconcilePlanComment({
  * tolerating ENOENT for optional artifacts (item 9).
  */
 async function readOptionalJson(dir, relPath) {
+  const filePath = nodePath.resolve(dir, relPath);
   try {
-    const raw = await fs.readFile(nodePath.join(dir, relPath), 'utf8');
+    const raw = await fs.readFile(filePath, 'utf8');
     return JSON.parse(raw);
   } catch (error) {
     if (error.code === 'ENOENT') {
       return null;
     }
-    throw error;
+    throw new Error(
+      `Failed to read JSON artifact ${filePath}: ${error.message}`,
+      {
+        cause: error,
+      },
+    );
   }
 }
 
@@ -416,7 +424,9 @@ async function readOptionalJson(dir, relPath) {
 async function readOptionalJsonDir(dir, subdir) {
   let entries;
   try {
-    entries = await fs.readdir(nodePath.join(dir, subdir));
+    entries = await fs.readdir(nodePath.join(dir, subdir), {
+      withFileTypes: true,
+    });
   } catch (error) {
     if (error.code === 'ENOENT') {
       return [];
@@ -425,12 +435,12 @@ async function readOptionalJsonDir(dir, subdir) {
   }
   const results = [];
   for (const entry of entries) {
-    if (!entry.endsWith('.json')) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) {
       continue;
     }
     const parsed = await readOptionalJson(
       dir,
-      [subdir, entry].join(nodePath.sep),
+      [subdir, entry.name].join(nodePath.sep),
     );
     if (parsed !== null) {
       results.push(parsed);
@@ -508,15 +518,16 @@ export async function runCli(argv) {
   }
 
   if (mode === '--extract-linked-references') {
+    const exclude = Number.parseInt(currentIssue ?? '', 10);
+    if (!Number.isInteger(exclude) || exclude <= 0) {
+      throw new Error('A positive current issue number is required.');
+    }
     const issue = await readOptionalJson(dir, 'issue.json');
     if (issue === null) {
       throw new Error(`issue.json not found in ${dir}`);
     }
-    const exclude = Number.parseInt(currentIssue ?? '', 10);
     const refs = extractLinkedReferences(issue?.body);
-    const filtered = Number.isNaN(exclude)
-      ? refs
-      : refs.filter((num) => num !== exclude);
+    const filtered = refs.filter((num) => num !== exclude);
     await fs.writeFile(
       nodePath.join(dir, 'linked-references.txt'),
       filtered.map((n) => String(n)).join('\n'),
