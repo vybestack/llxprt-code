@@ -256,35 +256,21 @@ jobs:
         run: |
           set -euo pipefail
           git diff --stat "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/diffstat.txt
-          git diff --name-status "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/changed-files.txt
+          git diff --name-status --no-renames "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/changed-files.txt
           git diff --numstat "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/numstat.txt
           # Keep full diff for agent exploration - agent can selectively read what it needs
           git diff -U3 "${MERGE_BASE}" "${PR_HEAD_SHA}" > review/diff.patch
           grep -Ei '(/tests?/|__tests__|\\.spec\\.|\\.test\\.)' review/changed-files.txt > review/test-files.txt || true
 
-          # Generate per-file diffs for selective exploration
+          # Generate per-file diffs and an authoritative path manifest.
+          # The manifest preserves paths containing legitimate double underscores.
           mkdir -p review/diffs
-          while IFS=$'\t' read -r status filename; do
-            [[ -z "$filename" ]] && continue
-            # Sanitize filename for filesystem (replace / with __)
-            safe_name="${filename//\//__}"
-            if [[ "$status" == "D" ]]; then
-              # Deleted file - show the removal
-              git diff "${MERGE_BASE}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
-            else
-              git diff "${MERGE_BASE}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
-            fi
-          done < review/changed-files.txt
-
-          # Write manifest mapping sanitized diff filenames to original paths.
-          # This is authoritative so paths containing legitimate double
-          # underscores (e.g. src/__tests__/foo.ts) are not corrupted when the
-          # orchestrator reverses the sanitization.
           : > review/diff-manifest.txt
           while IFS=$'\t' read -r status filename; do
             [[ -z "$filename" ]] && continue
             safe_name="${filename//\//__}"
             printf '%s.diff\t%s\n' "${safe_name}" "${filename}" >> review/diff-manifest.txt
+            git diff "${MERGE_BASE}" "${PR_HEAD_SHA}" -- "$filename" > "review/diffs/${safe_name}.diff" 2>/dev/null || true
           done < review/changed-files.txt
 
       - name: 'Build review context'
@@ -388,7 +374,7 @@ jobs:
           # review/comment.md on failure. Redirect stderr to a log artifact
           # only — never into the comment (would leak sanitized secrets or
           # internal diagnostics to the public PR).
-          node scripts/pr-review-walkthrough.mjs 2>review/walkthrough-error.log
+          node scripts/pr-review-walkthrough.mjs 2> >(tee review/walkthrough-error.log >&2)
 
       - name: 'Upload walkthrough diagnostics'
         if: failure()

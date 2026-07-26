@@ -248,6 +248,12 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(run).toContain('safe_name');
       expect(run).toContain('.diff');
     });
+
+    it('disables rename detection and writes the manifest in the diff loop', () => {
+      const run = stepRunText(reviewJob, 'Generate diff artifacts');
+      expect(run).toContain('git diff --name-status --no-renames');
+      expect(run.match(/diff-manifest\.txt/g)).toHaveLength(2);
+    });
   });
 
   describe('walkthrough pipeline failure handling (CRITICAL 1)', () => {
@@ -275,6 +281,12 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(run).toContain('! -s review/comment.md');
       expect(run).toContain('<!-- llxprt-walkthrough -->');
       expect(run).toContain('LLxprt PR Review unavailable');
+    });
+
+    it('tees stderr to both the diagnostics artifact and Actions log', () => {
+      const run = stepRunText(reviewJob, 'Run walkthrough pipeline');
+      expect(run).toContain('tee review/walkthrough-error.log');
+      expect(run).toContain('2> >(tee');
     });
 
     it('uploads the private diagnostics log for post-mortem inspection', () => {

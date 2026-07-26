@@ -391,6 +391,39 @@ export function gateSequenceDiagram(themes, changedFiles) {
 // LLM call wrapper (impure — network/process I/O)
 // ---------------------------------------------------------------------------
 
+const TRANSIENT_ERROR_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENETUNREACH',
+  'ETIMEDOUT',
+]);
+
+export function isRetryableLlxprtError(error) {
+  const code = typeof error?.code === 'string' ? error.code.toUpperCase() : '';
+  if (TRANSIENT_ERROR_CODES.has(code)) {
+    return true;
+  }
+  if (code === 'ENOENT') {
+    return false;
+  }
+  const message = String(error?.message ?? error).toLowerCase();
+  if (
+    /\b(401|403)\b|unauthorized|forbidden|authentication|invalid api key/.test(
+      message,
+    )
+  ) {
+    return false;
+  }
+  return /\b(408|425|429|500|502|503|504|529)\b|rate.?limit|overload|timed?out|temporar|connection reset/.test(
+    message,
+  );
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function runLlxprtPrompt(
   prompt,
   { model, timeoutMs = 120000 } = {},
@@ -398,9 +431,9 @@ export async function runLlxprtPrompt(
   const provider = process.env.LLXPRT_DEFAULT_PROVIDER;
   const apiKey = process.env.OPENAI_API_KEY;
   const baseUrl = process.env.OPENAI_BASE_URL;
-  if (!provider || !apiKey || !baseUrl) {
+  if (!provider || !apiKey || !baseUrl || !model) {
     throw new Error(
-      'Missing required environment: LLXPRT_DEFAULT_PROVIDER, OPENAI_API_KEY, and OPENAI_BASE_URL must all be set',
+      'Missing required configuration: LLXPRT_DEFAULT_PROVIDER, OPENAI_API_KEY, OPENAI_BASE_URL, and a model must all be set',
     );
   }
   const contextLimit = process.env.LLXPRT_CONTEXT_LIMIT || '200000';
@@ -427,9 +460,10 @@ export async function runLlxprtPrompt(
         OPENAI_API_KEY: apiKey,
       });
     } catch (error) {
-      if (attempt === maxRetries) {
+      if (attempt === maxRetries || !isRetryableLlxprtError(error)) {
         throw error;
       }
+      await delay(1000 * 2 ** attempt);
     }
   }
   throw new Error('unreachable');
@@ -484,20 +518,25 @@ function spawnCapturingStdout(command, args, timeoutMs, extraEnv) {
  * not redact `--prompt`). This is belt-and-suspenders for any legacy errors;
  * the API key is now passed via environment variable, not CLI args.
  */
-export function sanitizeErrorMessage(error) {
-  if (!(error instanceof Error)) {
-    return new Error(String(error));
+export function sanitizeErrorMessage(
+  error,
+  secret = process.env.OPENAI_API_KEY,
+) {
+  const source = error instanceof Error ? error : new Error(String(error));
+  const hasSecret = Boolean(secret) && source.message.includes(secret);
+  if (!source.message.includes('--key') && !hasSecret) {
+    return source;
   }
-  if (!error.message.includes('--key')) {
-    return error;
-  }
-  const sanitized = error.message
+  let sanitized = source.message
     .replace(/--key=(?:"[^"]*"|'[^']*'|[^\s]+)/g, '--key=[REDACTED]')
     .replace(/(--key\b)(?:\s+)(?!-)(\S+)/g, '$1 [REDACTED]');
+  if (hasSecret) {
+    sanitized = sanitized.split(secret).join('[REDACTED]');
+  }
   const clean = new Error(sanitized);
   for (const prop of ['code', 'exitCode', 'signal', 'killed']) {
-    if (error[prop] !== undefined) {
-      clean[prop] = error[prop];
+    if (source[prop] !== undefined) {
+      clean[prop] = source[prop];
     }
   }
   return clean;

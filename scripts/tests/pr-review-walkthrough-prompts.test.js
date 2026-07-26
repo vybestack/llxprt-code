@@ -50,7 +50,9 @@ describe('buildMapPrompt', () => {
   it('requests STRICT JSON output with summary, signature, and triage fields', () => {
     const prompt = build();
     expect(prompt).toContain('"signature"');
-    expect(prompt).toMatch(/\{"summary"|"triage"/);
+    expect(prompt).toContain(
+      '{"summary": "...", "signature": "...", "triage": "..."}',
+    );
   });
 
   it('enforces a summary of 100 words or fewer', () => {

@@ -15,6 +15,7 @@ import {
   validateGroupThemes,
   escapeMarkdownTableCell,
   sanitizeErrorMessage,
+  isRetryableLlxprtError,
   parseDiffManifest,
   resolveOriginalPath,
   MAX_DIFF_BYTES,
@@ -649,8 +650,38 @@ describe('sanitizeErrorMessage (CRITICAL 1)', () => {
     const sanitized = sanitizeErrorMessage(new Error('cmd --key'));
     expect(sanitized.message).toBe('cmd --key');
   });
+
+  it('redacts an explicitly supplied literal key value', () => {
+    const sanitized = sanitizeErrorMessage(
+      new Error('provider echoed literal-secret in stderr'),
+      'literal-secret',
+    );
+    expect(sanitized.message).toContain('[REDACTED]');
+    expect(sanitized.message).not.toContain('literal-secret');
+  });
 });
 
+describe('isRetryableLlxprtError', () => {
+  it('retries rate limits and transient network failures', () => {
+    expect(isRetryableLlxprtError(new Error('HTTP 429 rate limit'))).toBe(true);
+    expect(
+      isRetryableLlxprtError(
+        Object.assign(new Error('reset'), { code: 'ECONNRESET' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('does not retry authentication or missing-binary failures', () => {
+    expect(isRetryableLlxprtError(new Error('HTTP 401 unauthorized'))).toBe(
+      false,
+    );
+    expect(
+      isRetryableLlxprtError(
+        Object.assign(new Error('missing'), { code: 'ENOENT' }),
+      ),
+    ).toBe(false);
+  });
+});
 describe('parseDiffManifest and resolveOriginalPath (HIGH 3)', () => {
   it('resolveOriginalPath uses manifest mapping when available', () => {
     const manifest = new Map([
