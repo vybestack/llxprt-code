@@ -828,6 +828,8 @@ jobs:
           : > ocr-policy-failure.txt
           : > ocr-selected-files.txt
           : > ocr-status.txt
+          : > ocr-preview-attempted.txt
+          : > ocr-preview-succeeded.txt
           : > ocr-reviewed-range-manifest.json
           : > ocr-manifest-hashes.json
           : > ocr-manifest-sha256.txt
@@ -839,7 +841,14 @@ jobs:
           mark_policy_failure() {
             echo "$1" > ocr-policy-failure.txt
           }
+          write_unavailable_coverage_report() {
+            cat > ocr-coverage-report.json <<'JSON'
+          {"schema_version":"1.0.0","counts":{"preview":0,"evidenced":0,"covered":0,"preview_only":0,"unexpected":0,"read_failures":0,"failed_preview":0},"coverage":{"ratio":1,"percentage":100},"preview_files":[],"evidenced_files":[],"covered_files":[],"preview_only_files":[],"unexpected_files":[],"failed_preview_files":[],"read_failure_files":[],"threshold_percentage":90,"ratio_below_threshold":false,"has_review_failures":false,"below_threshold":false,"evidence_available":false}
+          JSON
+          }
           EOF
+          . ./ocr-workflow-helpers.sh
+          write_unavailable_coverage_report
 
       - name: Install OpenCodeReview
         shell: bash
@@ -1058,6 +1067,7 @@ jobs:
         env:
           BASE_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
@@ -1066,6 +1076,10 @@ jobs:
           set -euo pipefail
           if [ -s ocr-exit-code.txt ]; then
             echo "::warning::Skipping OCR preview because an earlier OCR setup/configuration failure was recorded."
+            exit 0
+          fi
+          if [ "${RANGE_MODE:-}" = "noop" ]; then
+            echo "No-op range (same head); skipping OCR preview."
             exit 0
           fi
           echo "preview" > ocr-phase.txt
@@ -1124,13 +1138,16 @@ jobs:
             -e 's/^\[[^]]*\][[:space:]]*//' \
             -e 's/^"\(.*\)"$/\1/' \
             -e "s/^'\(.*\)'$/\1/" \
-            | grep -v '^[[:space:]]*$' > ocr-selected-files.txt || true
+            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
+            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
+            | grep -v '^[[:space:]]*$' \
+            | awk '!seen[$0]++' > ocr-selected-files.txt || true
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
             echo "$changed_tests"
             excluded="$(awk '
               BEGIN { IGNORECASE = 1; in_section = 0 }
-              /^Excluded[[:space:]]*\(/ { in_section = 1; next }
+              /^Excluded([[:space:]]+from[[:space:]]+review)?[[:space:]]*\(/ { in_section = 1; next }
               /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { if (in_section) in_section = 0 }
               in_section { print }
             ' ocr-preview.txt || true)"
@@ -1404,6 +1421,8 @@ jobs:
           OCR_ROUTING_SHADOW_MODE: ${{ vars.OCR_ROUTING_SHADOW_MODE }}
           # Fallback bot login for dedup when getAuthenticated() fails.
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
+          # Issue #2675: configurable coverage threshold (0..100, default 90).
+          OCR_COVERAGE_THRESHOLD: ${{ vars.OCR_COVERAGE_THRESHOLD }}
         with:
           script: |
             const fs = require('fs');
@@ -1713,7 +1732,8 @@ jobs:
             }
 
             function parseFindings(raw) {
-              const trimmed = raw.trim();
+              const ansiStripped = String(raw || '').replace(/\x1b\[[0-9;?<>=]*[A-Za-z]/g, '');
+              const trimmed = ansiStripped.trim();
               if (!trimmed) {
                 markInfrastructureFailure('parse', 'OCR output was empty or unusable');
                 return null;
@@ -2258,6 +2278,224 @@ jobs:
               return failedFiles;
             }
 
+            // Issue #2675: changed-file coverage verification. The preview
+            // produces the "Will review" file list (ocr-selected-files.txt);
+            // the review JSON provides evidence (finding paths). These pure
+            // functions cross-reference the two sets to detect silent review
+            // gaps. They are robust to malformed external OCR JSON and stderr
+            // because OCR output is external input. OCR 1.7.16 tool_calls is
+            // aggregate { total, by_tool } with no file paths, so it cannot
+            // identify individual files for coverage.
+
+            function normalizeFilePaths(paths) {
+              if (!Array.isArray(paths)) {
+                return [];
+              }
+              const seen = new Set();
+              const result = [];
+              for (const raw of paths) {
+                const trimmed = String(raw ?? '').trim();
+                if (trimmed.length === 0) {
+                  continue;
+                }
+                if (!seen.has(trimmed)) {
+                  seen.add(trimmed);
+                  result.push(trimmed);
+                }
+              }
+              return result;
+            }
+
+            function evidencedPathsFromResult(result) {
+              if (!result) {
+                return [];
+              }
+              let findings;
+              if (Array.isArray(result)) {
+                findings = result;
+              } else if (typeof result === 'string') {
+                return [];
+              } else if (typeof result === 'object' && Array.isArray(result.comments)) {
+                findings = result.comments;
+              } else if (typeof result === 'object' && Array.isArray(result.findings)) {
+                findings = result.findings;
+              } else {
+                return [];
+              }
+              const acc = [];
+              const seen = new Set();
+              for (const finding of findings) {
+                if (!finding || typeof finding !== 'object') {
+                  continue;
+                }
+                const path = typeof finding.path === 'string'
+                  ? finding.path.trim()
+                  : (typeof finding.file === 'string' ? finding.file.trim() : '');
+                if (path && !seen.has(path)) {
+                  seen.add(path);
+                  acc.push(path);
+                }
+              }
+              return acc;
+            }
+
+            function readFailuresFromStderr(stderr) {
+              const text = String(stderr ?? '');
+              if (!text) {
+                return [];
+              }
+              const acc = [];
+              const seen = new Set();
+              const lines = text.split(String.fromCharCode(10));
+              const pattern = /file_read\s+failed:\s+file\s+"([^"]+)"\s+not\s+found/i;
+              for (const line of lines) {
+                const match = pattern.exec(line);
+                if (match) {
+                  const filePath = match[1].trim();
+                  if (filePath && !seen.has(filePath)) {
+                    seen.add(filePath);
+                    acc.push(filePath);
+                  }
+                }
+              }
+              return acc;
+            }
+
+            function resolveCoverageThreshold(raw) {
+              if (raw === null || raw === undefined || String(raw).trim() === '') {
+                return 90;
+              }
+              const num = Number(raw);
+              if (Number.isFinite(num) && num >= 0 && num <= 100) {
+                return num;
+              }
+              return 90;
+            }
+
+            function computeFileCoverage(params) {
+              const previewFiles = normalizeFilePaths(params.previewFiles);
+              const evidencedFiles = normalizeFilePaths(params.evidencedFiles);
+              const readFailureFiles = normalizeFilePaths(params.readFailureFiles);
+              const previewSet = new Set(previewFiles);
+              const evidencedSet = new Set(evidencedFiles);
+              const readFailureSet = new Set(readFailureFiles);
+              const unexpectedFiles = evidencedFiles.filter((f) => !previewSet.has(f));
+              const coveredFiles = previewFiles.filter(
+                (f) => evidencedSet.has(f) && !readFailureSet.has(f),
+              );
+              const failedPreviewFiles = previewFiles.filter((f) => readFailureSet.has(f));
+              const previewOnlyFiles = previewFiles.filter(
+                (f) => !evidencedSet.has(f) && !readFailureSet.has(f),
+              );
+              const ratio = previewFiles.length === 0
+                ? 1
+                : coveredFiles.length / previewFiles.length;
+              const percentage = Math.min(100, Math.round(ratio * 100));
+              return {
+                counts: {
+                  preview: previewFiles.length,
+                  evidenced: evidencedFiles.length,
+                  covered: coveredFiles.length,
+                  preview_only: previewOnlyFiles.length,
+                  unexpected: unexpectedFiles.length,
+                  read_failures: readFailureFiles.length,
+                  failed_preview: failedPreviewFiles.length,
+                },
+                coverage: {
+                  ratio,
+                  percentage,
+                },
+                previewFiles,
+                evidencedFiles,
+                coveredFiles,
+                previewOnlyFiles,
+                unexpectedFiles,
+                failedPreviewFiles,
+                readFailureFiles,
+              };
+            }
+
+            function buildCoverageReport(params) {
+              const thresholdPercentage = resolveCoverageThreshold(params.thresholdPercentage);
+              const coverage = computeFileCoverage({
+                previewFiles: params.previewFiles,
+                evidencedFiles: params.evidencedFiles,
+                readFailureFiles: params.readFailureFiles,
+              });
+              const ratioBelowThreshold = coverage.coverage.ratio < thresholdPercentage / 100;
+              const hasReviewFailures = coverage.counts.read_failures > 0;
+              const belowThreshold = ratioBelowThreshold || hasReviewFailures;
+              const evidenceAvailable = params.evidenceAvailable !== false;
+              return {
+                schema_version: '1.0.0',
+                counts: coverage.counts,
+                coverage: coverage.coverage,
+                preview_files: coverage.previewFiles,
+                evidenced_files: coverage.evidencedFiles,
+                covered_files: coverage.coveredFiles,
+                preview_only_files: coverage.previewOnlyFiles,
+                unexpected_files: coverage.unexpectedFiles,
+                failed_preview_files: coverage.failedPreviewFiles,
+                read_failure_files: coverage.readFailureFiles,
+                threshold_percentage: thresholdPercentage,
+                ratio_below_threshold: ratioBelowThreshold,
+                has_review_failures: hasReviewFailures,
+                below_threshold: belowThreshold,
+                evidence_available: evidenceAvailable,
+              };
+            }
+
+            function coverageWarningText(report) {
+              if (!report || !report.below_threshold) {
+                return '';
+              }
+              const counts = report.counts || {};
+              const preview = Number.isFinite(counts.preview) ? counts.preview : 0;
+              const covered = Number.isFinite(counts.covered) ? counts.covered : 0;
+              const readFailures = Number.isFinite(counts.read_failures) ? counts.read_failures : 0;
+              const threshold = Number.isFinite(report.threshold_percentage)
+                ? report.threshold_percentage
+                : 90;
+              const parts = [];
+              if (report.ratio_below_threshold) {
+                parts.push(`WARNING: Changed-file coverage ${covered}/${preview} preview files covered is below the ${threshold}% threshold.`);
+              }
+              if (report.has_review_failures) {
+                parts.push(`WARNING: ${readFailures} file read/review failure(s) detected.`);
+              }
+              return parts.join(' ');
+            }
+
+            function serializeCoverageReport(report) {
+              // Redact structured JSON string values BEFORE serializing so a
+              // credential-like filename (e.g. "Authorization: Bearer ...ts")
+              // never corrupts the JSON structure. Redacting the serialized
+              // string with raw regex can consume structural characters and
+              // produce invalid JSON.
+              const redactJsonValue = (value) => {
+                if (typeof value === 'string') {
+                  return redactSecretDiagnostics(value);
+                }
+                if (Array.isArray(value)) {
+                  return value.map(redactJsonValue);
+                }
+                if (value && typeof value === 'object') {
+                  const result = {};
+                  for (const [key, val] of Object.entries(value)) {
+                    result[key] = redactJsonValue(val);
+                  }
+                  return result;
+                }
+                return value;
+              };
+              try {
+                const redacted = redactJsonValue(report);
+                return JSON.stringify(redacted, null, 2);
+              } catch (_) {
+                return JSON.stringify({ error: 'coverage report serialization failed' }, null, 2);
+              }
+            }
+
             function buildStatusLine(params) {
               if (!params.ran) {
                 if (params.policyFailure) {
@@ -2721,6 +2959,75 @@ jobs:
             if (isAutomatic) {
               autoReviewCount += 1;
             }
+
+            // Issue #2675: changed-file coverage verification. Cross-reference
+            // the preview file list with evidence from the OCR result JSON
+            // (finding paths) and file_read failures from stderr (and structured
+            // subtask_error warnings). Compute a coverage report, emit it to
+            // the artifact, log it, and add a warning to the sticky summary when
+            // coverage is below the configurable threshold (default 90%) or
+            // read failures exist. This never fails the workflow.
+            const coverageThreshold = resolveCoverageThreshold(process.env.OCR_COVERAGE_THRESHOLD);
+            let coverageReport;
+            const isNoop = process.env.RANGE_MODE === 'noop';
+            if (isNoop) {
+              // No-op: same head, nothing to review. Do not claim any
+              // meaningful coverage. Evidence is unavailable and the review
+              // did not run.
+              coverageReport = buildCoverageReport({
+                previewFiles: [],
+                evidencedFiles: [],
+                readFailureFiles: [],
+                thresholdPercentage: coverageThreshold,
+                evidenceAvailable: false,
+              });
+              coverageReport.review_ran = false;
+              coverageReport.review_skipped = true;
+              coverageReport.range_mode = process.env.RANGE_MODE || '';
+            } else {
+              const ocrStderrRaw = readTrimmed('ocr-stderr.log', '');
+              const evidencedFiles = evidencedPathsFromResult(parsedOcrResult);
+              const stderrReadFailures = readFailuresFromStderr(ocrStderrRaw);
+              const structuredFailures = parsedOcrResult ? failedFilesFromResult(parsedOcrResult) : [];
+              const readFailureFiles = normalizeFilePaths([
+                ...stderrReadFailures,
+                ...structuredFailures,
+              ]);
+              coverageReport = buildCoverageReport({
+                previewFiles: selectedFilesList,
+                evidencedFiles,
+                readFailureFiles,
+                thresholdPercentage: coverageThreshold,
+                evidenceAvailable: ran,
+              });
+              coverageReport.review_ran = ran;
+              coverageReport.range_mode = process.env.RANGE_MODE || '';
+            }
+            try {
+              const serializedCoverage = serializeCoverageReport(coverageReport);
+              fs.writeFileSync('ocr-coverage-report.json', serializedCoverage);
+              core.info(`OCR coverage: ${coverageReport.coverage.percentage}% (${coverageReport.counts.covered}/${coverageReport.counts.preview} preview files covered)`);
+              // Gate the threshold warning on ratio_below_threshold so a
+              // read/review failure at 100% coverage does not state
+              // "100% is below 90%".
+              if (coverageReport.ratio_below_threshold) {
+                core.warning(`Changed-file coverage ${coverageReport.coverage.percentage}% is below the ${coverageReport.threshold_percentage}% threshold.`);
+              }
+              // Emit a separate truthful warning for read/review failures,
+              // independent of whether the ratio is below threshold.
+              if (coverageReport.has_review_failures) {
+                core.warning(`${coverageReport.counts.read_failures} file read/review failure(s) detected.`);
+              }
+            } catch (coverageWriteErr) {
+              core.warning(`Failed to write ocr-coverage-report.json: ${coverageWriteErr.message || coverageWriteErr}`);
+              // A coverage report write failure is an infrastructure issue
+              // so the downstream classification records it.
+              markInfrastructureFailure('coverage', `coverage report persistence failed: ${coverageWriteErr.message || coverageWriteErr}`);
+            }
+            const coverageWarning = coverageWarningText(coverageReport);
+            if (coverageWarning) {
+              body.push(`- ${coverageWarning}`);
+            }
             body.push(`\n<!-- ocr-auto-count:${autoReviewCount} -->`);
             const summary = body.join('\n');
 
@@ -3005,6 +3312,39 @@ jobs:
               ])
               .write();
 
+      - name: Ensure valid OCR coverage report
+        # Runs before classification so a missing/invalid/placeholder
+        # report records an infrastructure diagnostic that the
+        # classification step can see. A placeholder upload after a green
+        # classification must not be possible.
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          . ./ocr-workflow-helpers.sh
+          if [ ! -s ocr-coverage-report.json ]; then
+            write_unavailable_coverage_report
+            echo "::warning::ocr-coverage-report.json was missing or empty; wrote unavailable-evidence placeholder before redaction."
+            echo "phase=coverage; reason=ocr-coverage-report.json was missing or empty before classification" >> ocr-infrastructure-failure.txt
+          else
+            if ! node -e '
+              const fs = require("fs");
+              const raw = fs.readFileSync("ocr-coverage-report.json", "utf8");
+              try {
+                const data = JSON.parse(raw);
+                if (!data || typeof data !== "object" || Array.isArray(data)) {
+                  process.exit(1);
+                }
+              } catch (_) {
+                process.exit(1);
+              }
+            '; then
+              write_unavailable_coverage_report
+              echo "::warning::ocr-coverage-report.json was invalid JSON; wrote unavailable-evidence placeholder before redaction."
+              echo "phase=coverage; reason=ocr-coverage-report.json was invalid JSON before classification" >> ocr-infrastructure-failure.txt
+            fi
+          fi
+
       - name: Resolve OCR failure classification
         shell: bash
         id: ocr-classification
@@ -3067,6 +3407,7 @@ jobs:
             ocr-status.txt \
             ocr-preview-attempted.txt \
             ocr-preview-succeeded.txt \
+            ocr-coverage-report.json \
             ocr-reviewed-range-manifest.json \
             ocr-manifest-hashes.json \
             ocr-manifest-sha256.txt \
@@ -3087,13 +3428,15 @@ jobs:
         id: ocr-evidence
         shell: bash
         if: always()
+        env:
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
         run: |
           set -euo pipefail
           preview_attempted="false"
           preview_succeeded="false"
           [ "$(cat ocr-preview-attempted.txt 2>/dev/null || true)" = "true" ] && preview_attempted="true"
           [ "$(cat ocr-preview-succeeded.txt 2>/dev/null || true)" = "true" ] && preview_succeeded="true"
-          if [ "$preview_attempted" != "true" ] || [ "$preview_succeeded" != "true" ]; then
+          if [ "${RANGE_MODE:-}" != "noop" ] && { [ "$preview_attempted" != "true" ] || [ "$preview_succeeded" != "true" ]; }; then
             echo "phase=preview; reason=OCR preview evidence was unavailable or unsuccessful" >> ocr-infrastructure-failure.txt
           fi
           echo "preview_attempted=${preview_attempted}" >> "$GITHUB_OUTPUT"
@@ -3138,25 +3481,53 @@ jobs:
             'ocr-preview-attempted.txt', 'ocr-preview-succeeded.txt',
             'ocr-reviewed-range-manifest.json', 'ocr-manifest-hashes.json',
             'ocr-manifest-sha256.txt', 'ocr-routing-decisions.json',
+            'ocr-coverage-report.json',
           ];
-          const failClosed = (fileName, error) => {
-            const code = error?.code || 'unknown';
+          function replaceWithRedactionFailure(fileName, error) {
+            const code = error && error.code ? error.code : 'unknown';
+            const diagnostic = `redaction failed for ${fileName}: ${code}\n`;
             try {
-              fs.writeFileSync(fileName, `redaction failed for ${fileName}: ${code}\n`);
+              if (fileName.endsWith('.json')) {
+                fs.writeFileSync(fileName, JSON.stringify({ error: diagnostic.trim() }) + '\n');
+              } else {
+                fs.writeFileSync(fileName, diagnostic);
+              }
             } catch (_) {
               try { fs.rmSync(fileName, { force: true }); } catch (_) { /* upload is gated */ }
             }
             process.exitCode = 1;
+          }
+          const redactJsonValue = (value) => {
+            if (typeof value === 'string') return redact(value);
+            if (Array.isArray(value)) return value.map(redactJsonValue);
+            if (value && typeof value === 'object') {
+              const result = {};
+              for (const [key, val] of Object.entries(value)) result[key] = redactJsonValue(val);
+              return result;
+            }
+            return value;
           };
           for (const fileName of artifacts) {
             try {
               const original = fs.readFileSync(fileName, 'utf8');
               fs.writeFileSync(fileName, '[REDACTION-PENDING]\n');
+              let structuredRedaction = null;
+              if (fileName.endsWith('.json')) {
+                try {
+                  structuredRedaction = JSON.stringify(redactJsonValue(JSON.parse(original)), null, 2);
+                } catch (_) {
+                  structuredRedaction = null;
+                }
+              }
               const temporary = `${fileName}.redacting`;
-              fs.writeFileSync(temporary, redact(original));
+              if (structuredRedaction === null) {
+                fs.writeFileSync(temporary, redact(original));
+              } else {
+                fs.writeFileSync(temporary, structuredRedaction);
+              }
               fs.renameSync(temporary, fileName);
             } catch (error) {
-              if (error?.code !== 'ENOENT') failClosed(fileName, error);
+              if (error?.code !== 'ENOENT') replaceWithRedactionFailure(fileName, error);
             }
           }
           NODE
@@ -3330,7 +3701,7 @@ jobs:
             'ocr-preview-stderr.log', 'ocr-exit-code.txt', 'ocr-phase.txt',
             'ocr-selected-files.txt', 'ocr-status.txt',
             'ocr-infrastructure-failure.txt', 'ocr-policy-failure.txt',
-            'ocr-telemetry.json',
+            'ocr-telemetry.json', 'ocr-coverage-report.json',
           ];
           const hashes = {};
           for (const name of hashableArtifacts) {
@@ -3416,6 +3787,7 @@ jobs:
             ocr-manifest-hashes.json
             ocr-manifest-sha256.txt
             ocr-routing-decisions.json
+            ocr-coverage-report.json
           if-no-files-found: error
 
       - name: Resolve final OCR classification
