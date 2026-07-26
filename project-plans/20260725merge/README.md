@@ -638,21 +638,40 @@ behavioral tests and the full 331-test Zed suite passes**.
 
 **Current-main drift reconciled (G18 RESOLVED + VERIFIED, 2026-07-26):** `origin/main` advanced **10
 commits** past the frozen `MAIN_SHA` (`8ab221bb…`) to current main `9783f8c7f1b04f8f852b397dca3a626532e6f095`.
-A second graph-preserving merge is now **active** (uncommitted, in progress): `MERGE_HEAD` ==
-`9783f8c7…`, first parent (HEAD) == `7256438614b59da9a764d74f73bd12b830e909d0` (the committed
-0.11 integration merge). **Three conflicts** were resolved: (a) current-main's pr-review walkthrough
-redesign plus step-scoped quota-selected secret; (b) a `Date.now`-relative historical fixture; (c)
-`package-lock.json` regenerated. Final post-drift evidence: full `npm test` exit 0
-(`/tmp/llxprt_drift_full_test.log`); `lint:ci` exit 0 (`/tmp/llxprt_drift_lint_ci.log`); eslint
-guard exit 0; typecheck/format/build pass; **complete serial scripts suite: 144 files passed / 5
-skipped, 4059 tests passed / 9 skipped, exit 0** (`/tmp/llxprt_drift_scripts_serial_rerun.log`);
-lockfile/GenAI/API guards pass; stepfun smoke pass. **No post-drift OCR/DeepThinker rerun was
-performed** — the review cap was reached, and the drift consists entirely of already-reviewed
-current-main commits plus three reconciliations covered by focused/full gates. **G18 drift is now
-resolved and verified.** G10 for the first integration commit (`72564386…`) can record its exact
-two parents (`8ab221bb…` + `527101d1…`); the **final** current-main merge ancestry (the active
-second merge) awaits that commit's creation. Provider integration (G17) remains ENVIRONMENT-BLOCKED.
-See `execution-tracker.md` for the live resume state and `verification-log.md` for all evidence.
+A second graph-preserving merge was committed (first parent == `7256438614b59da9a764d74f73bd12b830e909d0`,
+the 0.11 integration merge; second parent == `9783f8c7…`). **Three conflicts** were resolved: (a)
+current-main's pr-review walkthrough redesign plus step-scoped quota-selected secret; (b) a
+`Date.now`-relative historical fixture; (c) `package-lock.json` regenerated. Final post-drift
+evidence: full `npm test` exit 0 (`/tmp/llxprt_drift_full_test.log`); `lint:ci` exit 0
+(`/tmp/llxprt_drift_lint_ci.log`); eslint guard exit 0; typecheck/format/build pass; **complete
+serial scripts suite: 144 files passed / 5 skipped, 4059 tests passed / 9 skipped, exit 0**
+(`/tmp/llxprt_drift_scripts_serial_rerun.log`); lockfile/GenAI/API guards pass; stepfun smoke
+pass. **No post-drift OCR/DeepThinker rerun was performed** — the review cap was reached, and the
+drift consists entirely of already-reviewed current-main commits plus three reconciliations
+covered by focused/full gates. **G18 drift is now resolved and verified.** G10 for the first
+integration commit (`72564386…`) records its exact two parents (`8ab221bb…` + `527101d1…`); the
+final current-main merge ancestry is committed (two-parent graph preserved). Provider integration
+(G17) remains ENVIRONMENT-BLOCKED.
+
+**Post-PR CI remediation (P7 COMPLETE, 2026-07-26):** PR **2736** was created on
+`integration/0.11-from-0.10` → base `main`. **CodeRabbit was automatically skipped** ("Review
+skipped: 581 files exceed the limit of 300"; **0 threads** — no threads to triage). Four CI
+remediation commits were appended **forward** (no ancestry rewrite): `3489dc716d` (E2E quota
+compatibility bridge — all three E2E jobs passed), `f8cd1ef094` (neutralize token usage logging —
+agents-neutral gate satisfied, no allowlist/suppression), `84154ccfdf` (regenerate
+genai-import-baseline 29→28 importers), `e14ecce133` (CodeQL alerts 177+178 remediated — linear
+scan for ReDoS + HMAC-SHA256 for kimi cache keying, with new behavioral tests). The
+windows-installed-command failure was classified **transient** (one `spawnSync ETIMEDOUT` during
+`npm global install`; smoke inputs unchanged except an `@agentclientprotocol/sdk` bump correctly
+resolved in `package-lock.json`; same workflow succeeded on other branches; explicit re-run of
+the identical commit succeeded — not a code defect). See §13.2 for the full remediation record.
+Final local verification on the current tree (HEAD `e14ecce133`): `npm run test` EXIT_STATUS=0,
+`lint:ci` exit 0, `typecheck` exit 0, `format` exit 0 (no working-tree changes), `build` exit 0,
+`lint:genai-inventory` exit 0, `check:lockfile` exit 0, `lint:eslint-guard` exit 0, smoke exit 0
+returning a haiku. Local `gate:agents-neutral` exits 127 solely because `tsx` is not resolvable
+locally (the same gate passes in CI) — a local tooling artifact, not a gate failure. G17 remains
+ENVIRONMENT-BLOCKED. See `execution-tracker.md` for the live resume state and
+`verification-log.md` (§CI, §P7-FINAL) for all evidence.
 
 ---
 
@@ -916,6 +935,59 @@ parents (`8ab221bb…` MAIN + `527101d1…` DEV). The **final** current-main mer
 second merge — awaits that commit's creation (P6). `MAIN_SHA`/`DEV_SHA` in §0 remain the immutable
 record of the *original* integration inputs; the drift is an additional integration step recorded
 here, exactly per the nuance above.
+
+---
+
+## 13.2 Post-PR CI remediation phase (PR 2736 — COMPLETE, 2026-07-26)
+
+After the merge was committed and pushed, PR **2736** (`integration/0.11-from-0.10` → base `main`)
+entered the P7 CI loop. **CodeRabbit was automatically skipped** ("Review skipped: 581 files exceed
+the limit of 300"; **0 threads** — no threads to triage). Four CI remediation commits were appended
+**forward** on `integration/0.11-from-0.10` (no ancestry rewrite, no squash, no rebase). The
+immutable SHA records in §0 are unchanged.
+
+### CI remediation commits (in order)
+
+| # | SHA | Subject | Root cause | Fix | Outcome |
+|---|-----|---------|------------|-----|---------|
+| 1 | `3489dc716d` | Preserve trusted E2E quota selection across base versions | The trusted quota selector checks out base SHA `9783f8c7…`, whose `scripts/ci-quota-check.js` writes `OPENAI_API_KEY` to `GITHUB_ENV` but never emits `selected_key` to `GITHUB_OUTPUT`, while `e2e.yml` reads only `steps.quota.outputs.selected_key`. Affected: Linux sandbox none, Linux sandbox docker, macOS. | Compatibility bridge in **both** quota steps (`quota` + `quota_macos`) in `e2e.yml`: scrub `OPENAI_API_KEY` from `GITHUB_ENV` before untrusted checkout; accept valid `primary`/`secondary`; emit `selected_key=primary` only for legacy non-Synthetic; fail closed otherwise. Plus `scripts/tests/workflow-quota-selection.test.js`. | All three E2E jobs **PASSED** |
+| 2 | `f8cd1ef094` | Neutralize internal token usage logging | The newly merged full agents-neutral gate detected Gemini-shaped usage keys (`promptTokenCount`, `candidatesTokenCount`, `totalTokenCount`, `cachedContentTokenCount`) in frozen dev code in `StreamProcessor.ts`, `TurnProcessor.ts`, `tokenUsageActualLogger.ts`. | Replaced `UsageMetadataWithCache` with a **neutral** `ActualTokenUsageInput` contract (`promptTokens`, `cachedTokens`, `cache_read_input_tokens`); updated both callers; rewrote logger tests test-first with explicit cache precedence coverage. **No allowlist entry and no suppression added.** | agents-neutral gate **PASS** |
+| 3 | `84154ccfdf` | Update the GenAI import inventory | The neutralization removed the last non-enclave importer. | `dev-docs/genai-import-baseline.md` regenerated **29 → 28** importers; `#2349` owner row (`tokenUsageActualLogger.ts`) removed. Regenerated with the documented generator, not hand-edited. | genai-inventory gate **PASS** |
+| 4 | `e14ecce133` | Harden credential-write parsing and upload cache keying | Two CodeQL high-severity alerts on dev-origin code never previously scanned against main. | **Alert 178** (`js/polynomial-redos` in `destructive-commands.ts`): replaced the `dd of=` regex with a deterministic linear scan `extractDdOutputOperand`, behavior identical across 34 edge cases, pathological case ~56–62s → ~19ms; new ReDoS timing-budget test. **Alert 177** (`js/insufficient-password-hash` in `kimiFileUpload.ts`): replaced bare SHA-256 with **HMAC-SHA256** (api key as key material + fixed domain-separation label), preserving cache key composition and namespacing; new cache-key distinctness/stability tests. **No suppression added.** | CodeQL alerts **PASS** |
+
+### windows-installed-command — transient (not a code defect)
+
+| Field | Value |
+|-------|-------|
+| Failure mode | One failure with `spawnSync ETIMEDOUT` during `npm global install` |
+| Smoke inputs | Confirmed **unchanged** relative to current main, except an `@agentclientprotocol/sdk` bump correctly resolved in `package-lock.json` |
+| Cross-branch evidence | The same workflow **succeeded repeatedly** on other recent branches |
+| Re-run result | An explicit re-run of the **identical commit** **succeeded** |
+| Classification | **Transient registry or runner timeout** — with the evidence above, **not a code defect** |
+
+### Final local verification on the current tree (HEAD `e14ecce133`) · PASS
+
+| Gate | Command | Result | Status |
+|------|---------|--------|--------|
+| G6 | `npm run test` | **EXIT_STATUS=0** | **PASS** |
+| G5 | `npm run lint:ci` | exit 0 | **PASS** |
+| G4 | `npm run typecheck` | exit 0 | **PASS** |
+| G7 | `npm run format` | exit 0, **no resulting working-tree changes** | **PASS** |
+| G8 | `npm run build` | exit 0 | **PASS** |
+| G11 | `npm run lint:genai-inventory` | exit 0 | **PASS** |
+| G16 | `npm run check:lockfile` | exit 0 | **PASS** |
+| G11 | `npm run lint:eslint-guard` | exit 0 | **PASS** |
+| G9 | `bun scripts/start.ts --profile-load stepfun-37 "write me a haiku and nothing else"` | exit 0, returned a haiku | **PASS** |
+
+**Local tooling artifact (not a gate failure):** `npm run gate:agents-neutral` exits 127 locally
+solely because `tsx` is not resolvable locally; the same gate passes in CI. This is a local tooling
+artifact, **not a gate failure** — it is not listed as PASS above.
+
+**Provider-backed integration suite (G17):** remains **ENVIRONMENT-BLOCKED** — not PASS, not a
+product failure.
+
+> **No gate is claimed PASS that is not listed here.** G17 remains ENV-BLOCKED. The local
+> `gate:agents-neutral` 127 is a local tooling artifact, not a gate PASS.
 
 ---
 
