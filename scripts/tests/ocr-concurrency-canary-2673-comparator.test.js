@@ -45,10 +45,10 @@ function makeArtifact(concurrency, commandWallSeconds) {
       url: `https://github.com/vybestack/llxprt-code/actions/runs/${concurrency}`,
       id: String(concurrency),
     },
-    pull_request: CANARY_2673_EXPECTED_TARGET.pullRequest,
+    pull_request: CANARY_2673_EXPECTED_TARGET.pull_request,
     trusted_checkout_base_sha: 'be8f36c6e1c7f7d3a90a5955e7eab80906d695d6',
     merge_base_sha: 'be8f36c6e1c7f7d3a90a5955e7eab80906d695d6',
-    head_sha: CANARY_2673_EXPECTED_TARGET.headSha,
+    head_sha: CANARY_2673_EXPECTED_TARGET.head_sha,
     concurrency,
     result: { status: 'success', warning_count: 0, exit_code: 0 },
     timing: {
@@ -109,9 +109,9 @@ describe('ocr-concurrency-canary-2673-comparator', () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.evidence.pull_request).toBe(
-      CANARY_2673_EXPECTED_TARGET.pullRequest,
+      CANARY_2673_EXPECTED_TARGET.pull_request,
     );
-    expect(result.evidence.head_sha).toBe(CANARY_2673_EXPECTED_TARGET.headSha);
+    expect(result.evidence.head_sha).toBe(CANARY_2673_EXPECTED_TARGET.head_sha);
     expect(result.evidence.provenance_equal).toBe(true);
     expect(result.evidence.speedups.c3_vs_c2).toBeGreaterThan(0.3);
     expect(result.evidence.speedups.c4_vs_c3).toBeGreaterThan(0);
@@ -331,8 +331,8 @@ describe('issue 2673 comparison constants', () => {
 
   it('pins the experiment target independently of artifact contents', () => {
     expect(CANARY_2673_EXPECTED_TARGET).toEqual({
-      pullRequest: '2610',
-      headSha: 'cdd6a6cbd7169894d2ad67c7cb8fc5520d86d4d8',
+      pull_request: '2610',
+      head_sha: 'cdd6a6cbd7169894d2ad67c7cb8fc5520d86d4d8',
     });
   });
 });

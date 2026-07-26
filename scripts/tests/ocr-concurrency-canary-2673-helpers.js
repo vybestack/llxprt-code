@@ -182,6 +182,7 @@ export function proxyRequest(
       url,
       {
         method: 'POST',
+        timeout: 3000,
         headers: {
           authorization,
           'content-type': 'application/json',
@@ -202,6 +203,9 @@ export function proxyRequest(
         );
       },
     );
+    request.once('timeout', () => {
+      request.destroy(new Error('proxy request timed out'));
+    });
     request.once('error', reject);
     request.end(body);
   });
@@ -301,6 +305,7 @@ export function runBuild(input) {
 }
 
 export function runEmbeddedMetricsScript(versionOutput) {
+  const metadata = completeMetadata();
   return withTempDirectory('ocr-metrics-2673-', (directory) => {
     const homeDirectory = path.join(directory, 'home');
     const ocrDirectory = path.join(homeDirectory, '.opencodereview');
@@ -356,16 +361,16 @@ export function runEmbeddedMetricsScript(versionOutput) {
         env: {
           ...process.env,
           HOME: homeDirectory,
-          TRUSTED_BASE_SHA: 'a'.repeat(40),
-          MERGE_BASE_SHA: 'a'.repeat(40),
-          HEAD_SHA: 'b'.repeat(40),
-          PR_NUMBER: '2610',
-          OCR_CONCURRENCY: '3',
-          EXPECTED_OCR_VERSION: '1.7.16',
-          OCR_LLM_MODEL: 'stepfun/step-3.5-flash',
+          TRUSTED_BASE_SHA: metadata.trustedBaseSha,
+          MERGE_BASE_SHA: metadata.mergeBaseSha,
+          HEAD_SHA: metadata.headSha,
+          PR_NUMBER: metadata.prNumber,
+          OCR_CONCURRENCY: metadata.concurrency,
+          EXPECTED_OCR_VERSION: metadata.expectedOcrVersion,
+          OCR_LLM_MODEL: metadata.normalizedModel,
           OCR_LLM_URL: 'https://provider.invalid/v1',
-          OCR_USE_ANTHROPIC: 'false',
-          WORKFLOW_SHA: 'c'.repeat(40),
+          OCR_USE_ANTHROPIC: String(metadata.useAnthropic),
+          WORKFLOW_SHA: metadata.workflowSha,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });

@@ -6,8 +6,8 @@
 
 const REQUIRED_CONCURRENCIES = [2, 3, 4];
 const CANARY_2673_EXPECTED_TARGET = Object.freeze({
-  pullRequest: '2610',
-  headSha: 'cdd6a6cbd7169894d2ad67c7cb8fc5520d86d4d8',
+  pull_request: '2610',
+  head_sha: 'cdd6a6cbd7169894d2ad67c7cb8fc5520d86d4d8',
 });
 
 const PROVENANCE_STRING_FIELDS = [
@@ -83,11 +83,12 @@ function validateArtifactShapes(artifacts, errors) {
     if (artifact.valid !== true) {
       errors.push(`artifact[${index}] is not valid evidence`);
     }
-    if (
-      !Array.isArray(artifact.validation_errors) ||
-      artifact.validation_errors.length !== 0
-    ) {
-      errors.push(`artifact[${index}] has validation errors`);
+    if (!Array.isArray(artifact.validation_errors)) {
+      errors.push(`artifact[${index}] validation_errors must be an array`);
+    } else if (artifact.validation_errors.length !== 0) {
+      errors.push(
+        `artifact[${index}] has validation errors: ${artifact.validation_errors.join('; ')}`,
+      );
     }
   }
 }
@@ -247,7 +248,7 @@ function validateRunEvidence(label, artifact, errors) {
 function validateTarget(c2, c3, c4, errors) {
   assertEqual(
     c2.pull_request,
-    CANARY_2673_EXPECTED_TARGET.pullRequest,
+    CANARY_2673_EXPECTED_TARGET.pull_request,
     'pull_request target',
     errors,
   );
@@ -255,7 +256,7 @@ function validateTarget(c2, c3, c4, errors) {
   assertEqual(c4.pull_request, c2.pull_request, 'pull_request', errors);
   assertEqual(
     c2.head_sha,
-    CANARY_2673_EXPECTED_TARGET.headSha,
+    CANARY_2673_EXPECTED_TARGET.head_sha,
     'head_sha target',
     errors,
   );

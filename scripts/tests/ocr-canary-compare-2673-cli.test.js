@@ -49,10 +49,10 @@ function makeArtifact(concurrency, commandWallSeconds) {
       url: `https://github.com/vybestack/llxprt-code/actions/runs/${concurrency}`,
       id: String(concurrency),
     },
-    pull_request: CANARY_2673_EXPECTED_TARGET.pullRequest,
+    pull_request: CANARY_2673_EXPECTED_TARGET.pull_request,
     trusted_checkout_base_sha: 'be8f36c6e1c7f7d3a90a5955e7eab80906d695d6',
     merge_base_sha: 'be8f36c6e1c7f7d3a90a5955e7eab80906d695d6',
-    head_sha: CANARY_2673_EXPECTED_TARGET.headSha,
+    head_sha: CANARY_2673_EXPECTED_TARGET.head_sha,
     concurrency,
     result: { status: 'success', warning_count: 0, exit_code: 0 },
     timing: {
