@@ -600,10 +600,21 @@ describe('.github/workflows/ocr-review.yml', () => {
   });
 
   it('creates non-telemetry placeholders before producing telemetry', () => {
+    const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
     const placeholderRun = commandText(
       stepNamed(codeReviewJob, 'Ensure OCR artifact placeholders exist'),
     );
-    expect(placeholderRun).toContain('ocr-routing-decisions.json');
+    const coverageEnsureRun = commandText(
+      stepNamed(codeReviewJob, 'Ensure valid OCR coverage report'),
+    );
+    const uploadPath = uploadStep.with?.path ?? '';
+    for (const artifact of uploadPath.trim().split(/\s+/)) {
+      if (artifact === 'ocr-coverage-report.json') {
+        expect(coverageEnsureRun).toContain(artifact);
+      } else {
+        expect(placeholderRun).toContain(artifact);
+      }
+    }
     expect(placeholderRun).not.toContain('ocr-telemetry.json');
   });
 

@@ -34,63 +34,96 @@ function allRunCommands(job) {
 
 describe('Issue #2147: SecureStore backend coverage is separated from full CI suite', () => {
   let workflow;
-  let testJob;
+  let testShardJob;
+  let testAggregatorJob;
   let secureStoreJob;
 
   beforeAll(() => {
     workflow = loadCiWorkflow();
-    testJob = workflow.jobs?.test;
+    // Issue #2707: the old single `test` job is now a `test_shard` matrix job
+    // plus a virtual `test` aggregator that gates branch protection.
+    testShardJob = workflow.jobs?.test_shard;
+    testAggregatorJob = workflow.jobs?.test;
     secureStoreJob = workflow.jobs?.secure_store_backend;
   });
 
-  it('runs the full test suite once per OS under normal keyring behavior', () => {
-    expect(testJob, 'ci.yml must contain the full-suite test job').toBeTruthy();
-    expect(testJob.name).toBe('Test (${{ matrix.os }})');
-    expect(testJob.strategy?.matrix?.os).toEqual([
+  it('runs the full test suite once per OS per shard under normal keyring behavior', () => {
+    expect(
+      testShardJob,
+      'ci.yml must contain the test_shard matrix job',
+    ).toBeTruthy();
+    expect(testShardJob.name).toBe(
+      'Test (${{ matrix.os }}) [${{ matrix.shard }}]',
+    );
+    expect(testShardJob.strategy?.matrix?.os).toEqual([
       'ubuntu-latest',
       'macos-latest',
     ]);
-    expect(testJob.strategy?.matrix?.['node-version']).toEqual(['24.x']);
-    expect(testJob.strategy?.matrix).not.toHaveProperty('secure-store-mode');
+    expect(testShardJob.strategy?.matrix?.['node-version']).toEqual(['24.x']);
+    expect(testShardJob.strategy?.matrix).not.toHaveProperty(
+      'secure-store-mode',
+    );
 
-    const runTests = stepNamed(testJob, 'Run tests and generate reports');
-    expect(runTests.run).toBe('npm run test');
+    const runTests = stepNamed(testShardJob, 'Run shard tests (issue #2707)');
+    expect(runTests.run).toContain('bun scripts/test.ts --shard');
     expect(runTests.env ?? {}).not.toHaveProperty(
       'LLXPRT_SECURE_STORE_FORCE_FALLBACK',
     );
 
+    // The virtual aggregator job preserves the `Test` required-check name.
+    expect(
+      testAggregatorJob,
+      'ci.yml must contain the virtual Test aggregator job',
+    ).toBeTruthy();
+    expect(testAggregatorJob.name).toBe('Test');
+
     const forkArtifact = stepNamed(
-      testJob,
+      testShardJob,
       'Upload Test Results Artifact (for forks)',
     );
     expect(forkArtifact.with?.name).toBe(
-      'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}',
+      'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
     );
 
-    const coverageArtifact = stepNamed(testJob, 'Upload coverage reports');
+    // Coverage is uploaded only from cli and core shards (issue #2707).
+    const coverageArtifact = stepNamed(testShardJob, 'Upload coverage reports');
+    expect(coverageArtifact.if).toContain("matrix.shard == 'cli'");
+    expect(coverageArtifact.if).toContain("matrix.shard == 'core'");
     expect(coverageArtifact.with?.name).toBe(
-      'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}',
+      'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
     );
 
-    const report = stepNamed(testJob, 'Publish Test Report (for non-forks)');
-    expect(report.with?.name).toBe(
-      'Test Results (Node ${{ matrix.node-version }}, ${{ matrix.os }})',
+    const report = stepNamed(
+      testShardJob,
+      'Publish Test Report (for non-forks)',
     );
+    expect(report.if).toContain("matrix.shard != 'scripts'");
+    expect(report.with?.name).toContain('${{ matrix.shard }}');
   });
 
-  it('keeps coverage comment downloads aligned to the full-suite artifact name', () => {
+  it('keeps coverage comment downloads aligned to the per-shard artifact names', () => {
     const postCoverage = workflow.jobs?.post_coverage_comment;
     expect(
       postCoverage,
       'ci.yml must contain post_coverage_comment',
     ).toBeTruthy();
 
-    const download = stepNamed(
+    // Issue #2707: coverage is now per-shard. post_coverage_comment downloads
+    // the cli and core shard artifacts separately.
+    const downloadCli = stepNamed(
       postCoverage,
-      'Download coverage reports artifact',
+      'Download CLI coverage (cli shard)',
     );
-    expect(download.with?.name).toBe(
-      'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}',
+    expect(downloadCli.with?.name).toBe(
+      'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}',
+    );
+
+    const downloadCore = stepNamed(
+      postCoverage,
+      'Download core coverage (core shard)',
+    );
+    expect(downloadCore.with?.name).toBe(
+      'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}',
     );
   });
 
