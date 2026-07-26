@@ -13,7 +13,10 @@ vi.mock('./local-oauth-callback.js', () => ({
 }));
 
 import * as secureBrowserModule from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
-import { OAuthError, OAuthErrorType } from '@vybestack/llxprt-code-auth';
+import {
+  OAuthError,
+  OAuthErrorType,
+} from '@vybestack/llxprt-code-auth/oauth-errors.js';
 import type {
   DeviceCodeResponse,
   OAuthToken,

@@ -11,7 +11,8 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core';
-import { DebugLogger, coreEvents } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { IProvider } from '../IProvider.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import {

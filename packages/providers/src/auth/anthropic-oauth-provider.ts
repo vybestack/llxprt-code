@@ -11,16 +11,18 @@
 import type { OAuthProvider } from './types.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import {
-  AnthropicDeviceFlow,
+  type OAuthUICallback,
+  type OAuthUIEvent,
+} from '@vybestack/llxprt-code-auth';
+import { AnthropicDeviceFlow } from '@vybestack/llxprt-code-auth';
+import {
   OAuthError,
   OAuthErrorFactory,
   OAuthErrorType,
   GracefulErrorHandler,
   RetryHandler,
-  type OAuthUICallback,
-  type OAuthUIEvent,
-  oauthUIBridge,
-} from '@vybestack/llxprt-code-auth';
+} from '@vybestack/llxprt-code-auth/oauth-errors.js';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth/oauth-ui-bridge.js';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,

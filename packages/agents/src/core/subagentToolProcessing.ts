@@ -28,11 +28,11 @@ import type {
   AgentRuntimeContext,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
   SubagentTerminateMode,

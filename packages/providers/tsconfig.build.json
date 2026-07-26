@@ -6,7 +6,9 @@
       "@vybestack/llxprt-code-providers": ["./index.ts"],
       "@vybestack/llxprt-code-providers/*": ["./src/*"],
       "@vybestack/llxprt-code-core": ["../core/dist/index.d.ts"],
-      "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"]
+      "@vybestack/llxprt-code-core/*": ["../core/dist/src/*"],
+      "@vybestack/llxprt-code-auth": ["../auth/dist/index.d.ts"],
+      "@vybestack/llxprt-code-auth/*": ["../auth/dist/src/*"]
     }
   },
   "include": [

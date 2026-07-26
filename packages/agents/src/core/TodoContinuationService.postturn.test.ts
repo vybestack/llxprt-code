@@ -13,7 +13,8 @@ import {
 import { AgentEventType, type ToolCallResponseInfo } from './turn.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ToolErrorType, type Todo } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { type Todo } from '@vybestack/llxprt-code-tools';
 
 // Mock TodoStore so persisted todo state doesn't hit the filesystem
 const {

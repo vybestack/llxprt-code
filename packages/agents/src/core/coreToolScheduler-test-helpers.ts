@@ -20,6 +20,8 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
+} from '@vybestack/llxprt-code-tools/tools/tools.js';
+import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,

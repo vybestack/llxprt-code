@@ -9,7 +9,10 @@
  * Extracted from the four CLI OAuth providers to eliminate DRY violations.
  */
 
-import { OAuthError, OAuthErrorFactory } from '@vybestack/llxprt-code-auth';
+import {
+  OAuthError,
+  OAuthErrorFactory,
+} from '@vybestack/llxprt-code-auth/oauth-errors.js';
 import type { OAuthToken } from '@vybestack/llxprt-code-auth';
 
 /**

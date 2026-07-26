@@ -16,10 +16,10 @@
  */
 
 import {
-  mergeRefreshedToken,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-auth';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';

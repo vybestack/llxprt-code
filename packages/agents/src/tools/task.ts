@@ -9,8 +9,8 @@ import {
   BaseToolInvocation,
   Kind,
   type ToolResult,
-  createStreamNormalizer,
 } from '@vybestack/llxprt-code-tools';
+import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   SubagentOrchestrator,

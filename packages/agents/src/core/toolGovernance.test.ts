@@ -13,7 +13,7 @@ import {
   type ToolGovernanceConfig,
   type ToolGovernance,
 } from './toolGovernance.js';
-import { INVALID_TOOL_NAME } from '@vybestack/llxprt-code-tools';
+import { INVALID_TOOL_NAME } from '@vybestack/llxprt-code-tools/formatters/toolNameUtils.js';
 
 function createMockConfig(options: {
   ephemerals?: Record<string, unknown>;

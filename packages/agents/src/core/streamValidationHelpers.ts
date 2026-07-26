@@ -10,7 +10,7 @@ import {
   InvalidStreamError,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isStructuredError } from '@vybestack/llxprt-code-core/utils/quotaErrorDetection.js';
-import { hasCycleInSchema } from '@vybestack/llxprt-code-tools';
+import { hasCycleInSchema } from '@vybestack/llxprt-code-tools/tools/tools.js';
 import { convertBlocksToParts } from './MessageConverter.js';
 import { isMissingFinishReason } from './streamResponseHelpers.js';
 import type { ConversationManager } from './ConversationManager.js';

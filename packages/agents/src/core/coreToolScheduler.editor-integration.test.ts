@@ -48,15 +48,15 @@ import {
   type PolicyRule,
 } from '@vybestack/llxprt-code-core/policy/types.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
+import { EditTool } from '@vybestack/llxprt-code-tools/tools/edit.js';
+import { WriteFileTool } from '@vybestack/llxprt-code-tools/tools/write-file.js';
+import { InsertAtLineTool } from '@vybestack/llxprt-code-tools/tools/insert_at_line.js';
+import { DeleteLineRangeTool } from '@vybestack/llxprt-code-tools/tools/delete_line_range.js';
+import { ApplyPatchTool } from '@vybestack/llxprt-code-tools/tools/apply-patch.js';
+import { ASTEditTool } from '@vybestack/llxprt-code-tools/tools/ast-edit.js';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import {
-  ToolRegistry,
-  EditTool,
-  WriteFileTool,
-  InsertAtLineTool,
-  DeleteLineRangeTool,
-  ApplyPatchTool,
-  ASTEditTool,
-  ToolConfirmationOutcome,
   type ToolRegistry as ToolRegistryType,
   type IToolHost,
 } from '@vybestack/llxprt-code-tools';
