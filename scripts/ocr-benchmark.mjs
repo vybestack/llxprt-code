@@ -123,6 +123,18 @@ if (!ocrModel) {
   );
   process.exit(1);
 }
+if (!process.env.OCR_LLM_URL) {
+  process.stderr.write(
+    'OCR_LLM_URL is not set. The ocr review CLI requires it to connect to the provider.\n',
+  );
+  process.exit(1);
+}
+if (!process.env.OCR_LLM_TOKEN) {
+  process.stderr.write(
+    'OCR_LLM_TOKEN is not set. The ocr review CLI requires it for authentication.\n',
+  );
+  process.exit(1);
+}
 
 // Phase 3 (deepthinker #6): resolve refs to immutable commit IDs so branch
 // movements between experiments cannot silently change the range.
@@ -222,13 +234,13 @@ function gitDiffStat(from, to) {
   try {
     const output = execFileSync(
       'git',
-      ['diff', '--name-only', '--diff-filter=d', `${from}..${to}`],
+      ['diff', '--name-only', '--diff-filter=ACMRTUXB', `${from}..${to}`],
       { encoding: 'utf8' },
     );
     const files = output.trim().split('\n').filter(Boolean);
     const numstat = execFileSync(
       'git',
-      ['diff', '--numstat', '--diff-filter=d', `${from}..${to}`],
+      ['diff', '--numstat', '--diff-filter=ACMRTUXB', `${from}..${to}`],
       { encoding: 'utf8' },
     );
     let additions = 0;
@@ -410,6 +422,7 @@ function runOcrReview(from, to, concurrency) {
     elapsed,
     parseStatus: parsed.parseStatus,
     findingCount: parsed.findings.length,
+    findings: parsed.findings,
     tokens: parsed.tokens,
     completedFiles: parsed.completedFiles,
     selectedFiles: parsed.selectedFiles,
@@ -440,6 +453,7 @@ for (const concurrency of concurrencyValues) {
     cumulative_files: cumulativeScope.files,
     cumulative_lines: cumulativeScope.lines,
     finding_count: result.findingCount,
+    findings: result.findings,
     completed_files: result.completedFiles,
     selected_files: result.selectedFiles,
     elapsed_ms: result.elapsed,

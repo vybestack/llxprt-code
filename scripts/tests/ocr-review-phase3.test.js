@@ -237,7 +237,7 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
     const source = readFileSync(BENCH_SCRIPT, 'utf8');
     expect(source).toContain('gitDiffStat');
     expect(source).toContain('--name-only');
-    expect(source).toContain('--diff-filter=d');
+    expect(source).toContain('--diff-filter=ACMRTUXB');
     expect(source).toContain('--numstat');
     expect(source).toContain('additions');
     expect(source).toContain('deletions');

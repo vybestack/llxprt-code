@@ -119,6 +119,17 @@ describe('.github/workflows/ocr-review.yml — Phase 2 inline comment sorting, c
     cachedSeverityRank = sandbox.__EXPOSED__.severityRank;
     cachedSortInlineComments = sandbox.__EXPOSED__.sortInlineComments;
     cachedFindingFingerprint = sandbox.__EXPOSED__.findingFingerprint;
+    if (
+      !cachedSeverityRank ||
+      !cachedSortInlineComments ||
+      !cachedFindingFingerprint
+    ) {
+      throw new Error(
+        'Failed to extract expected functions from workflow postScript. ' +
+          'Check that severityRank, sortInlineComments, and findingFingerprint ' +
+          'are defined in the workflow YAML.',
+      );
+    }
     return {
       severityRank: cachedSeverityRank,
       sortInlineComments: cachedSortInlineComments,
