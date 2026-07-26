@@ -610,8 +610,15 @@ describe('.github/workflows/ocr-review.yml', () => {
     const placeholderRun = commandText(
       stepNamed(codeReviewJob, 'Ensure OCR artifact placeholders exist'),
     );
+    const coverageEnsureRun = commandText(
+      stepNamed(codeReviewJob, 'Ensure valid OCR coverage report'),
+    );
     for (const artifact of uploadStep.with?.path.trim().split(/\s+/) ?? []) {
-      expect(placeholderRun).toContain(artifact);
+      if (artifact === 'ocr-coverage-report.json') {
+        expect(coverageEnsureRun).toContain(artifact);
+      } else {
+        expect(placeholderRun).toContain(artifact);
+      }
     }
   });
 
