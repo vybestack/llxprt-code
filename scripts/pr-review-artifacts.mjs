@@ -6,7 +6,28 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { mapWithConcurrency } from './pr-review-walkthrough.mjs';
+
+async function readWithConcurrency(items, concurrencyLimit, asyncFn) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = await asyncFn(items[index]);
+      } catch (error) {
+        results[index] = {
+          error: error instanceof Error ? error.message : String(error),
+          filePath: items[index],
+        };
+      }
+    }
+  };
+  const workerCount = Math.min(concurrencyLimit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
 
 export async function readArtifacts(reviewDir) {
   const prPath = path.join(reviewDir, 'pr.json');
@@ -31,7 +52,7 @@ async function readIssueFiles(reviewDir) {
   const issuesDir = path.join(reviewDir, 'issues');
   const files = await fs.readdir(issuesDir).catch(() => []);
   const issueFiles = files.filter((file) => file.endsWith('.json'));
-  const results = await mapWithConcurrency(issueFiles, 8, async (file) => ({
+  const results = await readWithConcurrency(issueFiles, 8, async (file) => ({
     filePath: file,
     issue: JSON.parse(await fs.readFile(path.join(issuesDir, file), 'utf8')),
   }));
@@ -50,7 +71,7 @@ async function readDiffFiles(reviewDir) {
   const manifest = await parseDiffManifest(manifestPath);
   const files = await fs.readdir(diffsDir).catch(() => []);
   const diffFiles = files.filter((file) => file.endsWith('.diff'));
-  const results = await mapWithConcurrency(diffFiles, 8, async (file) => ({
+  const results = await readWithConcurrency(diffFiles, 8, async (file) => ({
     filePath: file,
     diff: {
       filePath: resolveOriginalPath(file, manifest),

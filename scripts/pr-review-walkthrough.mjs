@@ -642,7 +642,6 @@ async function runPipeline(reviewDir) {
     const comment = renderWalkthroughComment({
       releaseNotes: '',
       walkthrough: buildMinimalWalkthrough(
-        artifacts,
         artifacts.diffs.map((d) => ({
           filePath: d.filePath,
           summary: d.filePath,
@@ -788,7 +787,7 @@ async function runSynthesisPhases(reviewDir, artifacts, summaries, themes) {
       `Synthesis phase failed, producing minimal walkthrough: ${error.message}`,
     );
     return {
-      walkthrough: buildMinimalWalkthrough(artifacts, summaries),
+      walkthrough: buildMinimalWalkthrough(summaries),
       releaseNotes: '',
       sequenceDiagram: '',
       related: '',
@@ -819,7 +818,7 @@ async function buildSynthesisTail(
   };
 }
 
-function buildMinimalWalkthrough(artifacts, summaries) {
+function buildMinimalWalkthrough(summaries) {
   const fileList = summaries
     .map((s) => `- \`${s.filePath}\`: ${s.summary}`)
     .join('\n');

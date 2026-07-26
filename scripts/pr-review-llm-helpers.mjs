@@ -153,11 +153,10 @@ export async function saveParseFailureArtifact(
     `parse-failure-raw-${phase}-${suffix}.txt`,
   );
   const infoPath = path.join(reviewDir, `parse-failure-info-${suffix}.json`);
-  const writes = [
-    fs
-      .mkdir(reviewDir, { recursive: true })
-      .then(() => fs.writeFile(rawPath, String(rawResponse ?? ''))),
-    fs.writeFile(
+  try {
+    await fs.mkdir(reviewDir, { recursive: true });
+    await fs.writeFile(rawPath, String(rawResponse ?? ''));
+    await fs.writeFile(
       infoPath,
       JSON.stringify(
         {
@@ -169,12 +168,11 @@ export async function saveParseFailureArtifact(
         null,
         2,
       ),
-    ),
-  ];
-  await Promise.all(writes).catch((writeError) => {
+    );
+  } catch (writeError) {
     console.error(
       `[pr-review] failed to write parse-failure artifact for phase ${phase}:`,
       writeError,
     );
-  });
+  }
 }
