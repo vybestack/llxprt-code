@@ -824,6 +824,12 @@ jobs:
           CI: true
           # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
           VITEST_TEST_TIMEOUT: 15000
+          # Compute coverage only on the cli+core shards on ubuntu-latest —
+          # the exact legs whose coverage artifacts post_coverage_comment
+          # downloads. All other shard/os combinations waste instrumentation
+          # time since their coverage is never consumed (#2708). Default-on
+          # so local runs keep the signal; the env var is only set in CI.
+          LLXPRT_COVERAGE: ${{ (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' && 'true' || 'false' }}
         # The orchestrator expands --shard to the shard's workspaces (or runs
         # npm run test:scripts for the scripts shard). Each workspace's tests
         # still run under Vitest, preserving per-package config/reporters.
@@ -881,11 +887,12 @@ jobs:
           path: 'packages/*/junit.xml'
 
       - name: 'Upload coverage reports'
-        # Only the cli and core shards produce coverage summaries consumed by
-        # post_coverage_comment. Uploading coverage from other shards would
-        # waste storage and compute, so skip them.
+        # Only the cli and core shards on ubuntu-latest produce coverage
+        # summaries consumed by post_coverage_comment. Coverage is disabled on
+        # all other shard/os combinations (#2708), so uploading from them
+        # would waste storage and compute.
         if: |-
-          ${{ always() && (matrix.shard == 'cli' || matrix.shard == 'core') }}
+          ${{ always() && (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' }}
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
           name: 'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'

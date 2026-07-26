@@ -9,7 +9,9 @@ import {
   tokenLimit,
   DEFAULT_TOKEN_LIMIT,
   resolveEffectiveContextLimit,
+  resolveOrderedRuleFromCatalog,
 } from './tokenLimits.js';
+import catalogData from './model-limits.json' with { type: 'json' };
 
 describe('tokenLimit', () => {
   describe('Gemini models', () => {
@@ -81,6 +83,29 @@ describe('tokenLimit', () => {
 
     it('should return 200K limit for a claude-opus-5 dated snapshot', () => {
       expect(tokenLimit('claude-opus-5-20260724')).toBe(200_000);
+    });
+
+    // The three assertions above cannot fail while defaultLimit is also
+    // 200_000: they pass via fallthrough even with the catalog entries
+    // missing, which is how #2737 went undetected. These pin the catalog
+    // itself so a dropped entry fails regardless of the default.
+    it('declares claude-opus-5 independently of defaultLimit', () => {
+      expect(catalogData.exactLimits['claude-opus-5']).toBe(200_000);
+    });
+
+    it('declares claude-opus-5-latest independently of defaultLimit', () => {
+      expect(catalogData.exactLimits['claude-opus-5-latest']).toBe(200_000);
+    });
+
+    it('resolves a dated claude-opus-5 snapshot through an ordered rule', () => {
+      // Returns undefined rather than defaultLimit when no rule matches.
+      expect(
+        resolveOrderedRuleFromCatalog(
+          catalogData,
+          'claude-opus-5-20260724',
+          '',
+        ),
+      ).toBe(200_000);
     });
 
     it('should return 200K (auth default) limit for claude-opus-4-7', () => {

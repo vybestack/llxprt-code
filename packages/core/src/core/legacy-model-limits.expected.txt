@@ -17,6 +17,8 @@
     "gemini-2.5-flash-lite": 1048576,
     "gemini-2.0-flash": 1048576,
     "gemini-2.0-flash-preview-image-generation": 32000,
+    "claude-opus-5": 200000,
+    "claude-opus-5-latest": 200000,
     "claude-opus-4-8": 200000,
     "claude-opus-4-7": 200000,
     "claude-opus-4-6": 200000,
@@ -78,6 +80,11 @@
     {
       "type": "substringCaseInsensitive",
       "substring": "claude-sonnet-5",
+      "limit": 200000
+    },
+    {
+      "type": "substringCaseInsensitive",
+      "substring": "claude-opus-5",
       "limit": 200000
     },
     {
