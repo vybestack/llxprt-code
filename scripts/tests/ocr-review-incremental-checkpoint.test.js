@@ -21,20 +21,30 @@ function loadFunctions(script, functionNames) {
     Array,
     Boolean,
     Buffer,
+    console: { log: () => {}, warn: () => {}, error: () => {} },
+    Error,
     JSON,
     Math,
     Number,
     Object,
     Set,
     String,
+    undefined,
   };
   const sources = functionNames.map((name) =>
     extractFunctionSource(script, name),
   );
-  vm.runInNewContext(
-    `${sources.join('\n')}\n__FUNCTIONS__ = { ${functionNames.join(', ')} };`,
-    sandbox,
-  );
+  try {
+    vm.runInNewContext(
+      `${sources.join('\n')}\n__FUNCTIONS__ = { ${functionNames.join(', ')} };`,
+      sandbox,
+    );
+  } catch (err) {
+    throw new Error(
+      `Failed to load functions [${functionNames.join(', ')}]: ${err.message}`,
+      { cause: err },
+    );
+  }
   return sandbox.__FUNCTIONS__;
 }
 

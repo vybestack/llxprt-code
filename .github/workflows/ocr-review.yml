@@ -2009,7 +2009,6 @@ jobs:
                 // Fallback: post each inline comment individually, with a cap to avoid secondary rate limits.
                 try {
                   existingInlineKeys = await existingInlineCommentKeys();
-                  batchPublicationAmbiguous = false;
                 } catch (listErr) {
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
@@ -2062,6 +2061,11 @@ jobs:
                       body: fallbackBody,
                     });
                   }
+                }
+                // All individual fallback posts completed without errors,
+                // so the batch failure was fully recovered.
+                if (failedInline === 0) {
+                  batchPublicationAmbiguous = false;
                 }
               }
               }
