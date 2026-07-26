@@ -5,7 +5,7 @@
  */
 
 const REQUIRED_CONCURRENCIES = [2, 3, 4];
-const EXPECTED_TARGET = Object.freeze({
+const CANARY_2673_EXPECTED_TARGET = Object.freeze({
   pullRequest: '2610',
   headSha: 'cdd6a6cbd7169894d2ad67c7cb8fc5520d86d4d8',
 });
@@ -209,7 +209,7 @@ function validateTransport(label, artifact, errors) {
   );
   if (observedResponses !== null) {
     assertEqual(
-      observedResponses + (transport.upstream_errors ?? 0),
+      observedResponses + transport.upstream_errors,
       transport.total_requests,
       `${label} transport request accounting`,
       errors,
@@ -247,13 +247,18 @@ function validateRunEvidence(label, artifact, errors) {
 function validateTarget(c2, c3, c4, errors) {
   assertEqual(
     c2.pull_request,
-    EXPECTED_TARGET.pullRequest,
+    CANARY_2673_EXPECTED_TARGET.pullRequest,
     'pull_request target',
     errors,
   );
   assertEqual(c3.pull_request, c2.pull_request, 'pull_request', errors);
   assertEqual(c4.pull_request, c2.pull_request, 'pull_request', errors);
-  assertEqual(c2.head_sha, EXPECTED_TARGET.headSha, 'head_sha target', errors);
+  assertEqual(
+    c2.head_sha,
+    CANARY_2673_EXPECTED_TARGET.headSha,
+    'head_sha target',
+    errors,
+  );
   assertEqual(c3.head_sha, c2.head_sha, 'head_sha', errors);
   assertEqual(c4.head_sha, c2.head_sha, 'head_sha', errors);
 }
@@ -320,7 +325,9 @@ function buildComparison(artifacts) {
   const c4 = byConcurrency.get(4);
   validateTarget(c2, c3, c4, errors);
   compareReviewRange(c2, c3, c4, errors);
+  const errorsBeforeProvenance = errors.length;
   compareProvenance(c2, c3, c4, errors);
+  const provenanceEqual = errors.length === errorsBeforeProvenance;
   validateRunEvidence('c2', c2, errors);
   validateRunEvidence('c3', c3, errors);
   validateRunEvidence('c4', c4, errors);
@@ -333,7 +340,7 @@ function buildComparison(artifacts) {
       head_sha: c2.head_sha,
       trusted_checkout_base_sha: c2.trusted_checkout_base_sha,
       merge_base_sha: c2.merge_base_sha,
-      provenance_equal: errors.length === 0,
+      provenance_equal: provenanceEqual,
       concurrencies: {
         2: concurrencyEvidence(c2),
         3: concurrencyEvidence(c3),
@@ -346,7 +353,7 @@ function buildComparison(artifacts) {
 
 export {
   buildComparison,
-  EXPECTED_TARGET,
+  CANARY_2673_EXPECTED_TARGET,
   REQUIRED_CONCURRENCIES,
   wallTimeSpeedup,
 };

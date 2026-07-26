@@ -469,17 +469,30 @@ export async function startEmbeddedMonitor(
 }
 
 export async function stopEmbeddedMonitor(resource) {
-  await terminateAndReap(resource.child);
-  const telemetry = JSON.parse(fs.readFileSync(resource.telemetryPath, 'utf8'));
-  activeResources = activeResources.filter((item) => item !== resource);
-  fs.rmSync(resource.directory, { recursive: true, force: true });
+  let telemetry;
+  try {
+    await terminateAndReap(resource.child);
+    telemetry = JSON.parse(fs.readFileSync(resource.telemetryPath, 'utf8'));
+  } finally {
+    activeResources = activeResources.filter((item) => item !== resource);
+    fs.rmSync(resource.directory, { recursive: true, force: true });
+  }
   return telemetry;
 }
 
 export async function cleanEmbeddedMonitors() {
+  const failures = [];
   for (const resource of activeResources) {
-    await terminateAndReap(resource.child);
-    fs.rmSync(resource.directory, { recursive: true, force: true });
+    try {
+      await terminateAndReap(resource.child);
+    } catch (error) {
+      failures.push(error);
+    } finally {
+      fs.rmSync(resource.directory, { recursive: true, force: true });
+    }
   }
   activeResources = [];
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'monitor cleanup failed');
+  }
 }

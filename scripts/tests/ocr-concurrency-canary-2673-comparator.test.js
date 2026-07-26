@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildComparison,
-  EXPECTED_TARGET,
+  CANARY_2673_EXPECTED_TARGET,
   REQUIRED_CONCURRENCIES,
   wallTimeSpeedup,
 } from './ocr-concurrency-canary-2673-comparator.js';
@@ -45,10 +45,10 @@ function makeArtifact(concurrency, commandWallSeconds) {
       url: `https://github.com/vybestack/llxprt-code/actions/runs/${concurrency}`,
       id: String(concurrency),
     },
-    pull_request: EXPECTED_TARGET.pullRequest,
+    pull_request: CANARY_2673_EXPECTED_TARGET.pullRequest,
     trusted_checkout_base_sha: 'be8f36c6e1c7f7d3a90a5955e7eab80906d695d6',
     merge_base_sha: 'be8f36c6e1c7f7d3a90a5955e7eab80906d695d6',
-    head_sha: EXPECTED_TARGET.headSha,
+    head_sha: CANARY_2673_EXPECTED_TARGET.headSha,
     concurrency,
     result: { status: 'success', warning_count: 0, exit_code: 0 },
     timing: {
@@ -108,11 +108,34 @@ describe('ocr-concurrency-canary-2673-comparator', () => {
     const result = buildComparison(makeArtifacts());
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
-    expect(result.evidence.pull_request).toBe(EXPECTED_TARGET.pullRequest);
-    expect(result.evidence.head_sha).toBe(EXPECTED_TARGET.headSha);
+    expect(result.evidence.pull_request).toBe(
+      CANARY_2673_EXPECTED_TARGET.pullRequest,
+    );
+    expect(result.evidence.head_sha).toBe(CANARY_2673_EXPECTED_TARGET.headSha);
+    expect(result.evidence.provenance_equal).toBe(true);
     expect(result.evidence.speedups.c3_vs_c2).toBeGreaterThan(0.3);
     expect(result.evidence.speedups.c4_vs_c3).toBeGreaterThan(0);
     expect(result.evidence.concurrencies[2].positive_requests).toBe(100);
+  });
+
+  it('reports equal provenance independently of non-provenance failures', () => {
+    const result = buildComparison(
+      changeArtifact(1, (artifact) => {
+        artifact.transport.http_429_responses = 1;
+      }),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.evidence.provenance_equal).toBe(true);
+  });
+
+  it('reports unequal provenance when a provenance field differs', () => {
+    const result = buildComparison(
+      changeArtifact(1, (artifact) => {
+        artifact.provenance.actual_ocr_version = '1.7.15';
+      }),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.evidence.provenance_equal).toBe(false);
   });
 
   it.each([
@@ -307,7 +330,7 @@ describe('issue 2673 comparison constants', () => {
   });
 
   it('pins the experiment target independently of artifact contents', () => {
-    expect(EXPECTED_TARGET).toEqual({
+    expect(CANARY_2673_EXPECTED_TARGET).toEqual({
       pullRequest: '2610',
       headSha: 'cdd6a6cbd7169894d2ad67c7cb8fc5520d86d4d8',
     });
