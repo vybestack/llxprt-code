@@ -583,7 +583,10 @@ describe('.github/workflows/ocr-review.yml', () => {
 
   it('uploads diagnostics and telemetry only after their respective validation', () => {
     const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
-    const telemetryUploadStep = stepNamed(codeReviewJob, 'Upload OCR telemetry');
+    const telemetryUploadStep = stepNamed(
+      codeReviewJob,
+      'Upload OCR telemetry',
+    );
     expect(String(uploadStep.if)).toContain(
       'steps.ocr-telemetry-validation.outputs.valid',
     );
