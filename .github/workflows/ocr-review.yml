@@ -1700,7 +1700,6 @@ jobs:
             let parsedOcrResult = null;
             let rawFindingCount = 0;
             let schemaInvalidCount = 0;
-            let overflowFindingCount = 0;
             const overflowRouted = [];
             const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
             const exitCode = readExitCode('ocr-exit-code.txt');
@@ -2571,7 +2570,6 @@ jobs:
                   const overflowPairs = pairsToPost.slice(effectiveCap);
                   pairsToPost = pairsToPost.slice(0, effectiveCap);
                   for (const pair of overflowPairs) {
-                    overflowFindingCount += 1;
                     overflowRouted.push(pair.finding);
                   }
                 }
@@ -2619,7 +2617,6 @@ jobs:
                     core.warning(redactSecretDiagnostics(`Failed to post inline comment on ${c.path}:${c.line}: ${commentErr.message || commentErr}`));
                     failedInline += 1;
                     // Failed individual posts also preserve metadata.
-                    overflowFindingCount += 1;
                     overflowRouted.push(p.finding);
                   }
                 }
@@ -3107,7 +3104,7 @@ jobs:
                 inline_overflow: overflowRouted.length,
                 inline: postedInline,
                 summary: lineless.length,
-                overflow: overflowFindingCount,
+                overflow: overflowRouted.length,
                 failed: failedInline,
                 severity_distribution: severityDistribution,
                 category_distribution: categoryDistribution,

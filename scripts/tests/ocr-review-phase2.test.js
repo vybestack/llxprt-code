@@ -570,7 +570,7 @@ describe('.github/workflows/ocr-review.yml — Phase 2 inline comment sorting, c
     it('applies a proactive inline comment cap with overflow to summary', () => {
       expect(postScript).toContain('INLINE_COMMENT_CAP');
       expect(postScript).toContain('OCR_INLINE_COMMENT_CAP');
-      expect(postScript).toContain('overflowFindingCount += 1');
+      expect(postScript).toContain('overflowRouted.push(');
     });
 
     it('does not re-cap in the fallback loop (pairsToPost is already capped)', () => {

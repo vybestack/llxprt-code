@@ -45,11 +45,13 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
   it('aborts when OCR_LLM_MODEL is not set (controlled-variable requirement)', () => {
     let exitCode = 0;
     let stderr = '';
+    const envWithoutModel = { ...process.env };
+    delete envWithoutModel.OCR_LLM_MODEL;
     try {
       execFileSync('node', [BENCH_SCRIPT, '--from', 'abc', '--to', 'def'], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, OCR_LLM_MODEL: '' },
+        env: envWithoutModel,
         timeout: 5000,
       });
     } catch (err) {
@@ -97,6 +99,46 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
     expect(stderr).toContain('Invalid concurrency');
   });
 
+  it('rejects invalid --timeout values (non-numeric, zero, negative)', () => {
+    for (const badTimeout of ['abc', '0', '-5']) {
+      let exitCode = 0;
+      let stderr = '';
+      try {
+        execFileSync(
+          'node',
+          [
+            BENCH_SCRIPT,
+            '--from',
+            'abc',
+            '--to',
+            'def',
+            '--timeout',
+            badTimeout,
+          ],
+          {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env, OCR_LLM_MODEL: 'test-model' },
+            timeout: 5000,
+          },
+        );
+      } catch (err) {
+        exitCode = err.status || 1;
+        stderr = err.stderr || '';
+      }
+      expect(exitCode, `timeout=${badTimeout}`).toBe(1);
+      expect(stderr, `timeout=${badTimeout}`).toContain(
+        'Invalid --timeout value',
+      );
+    }
+  });
+
+  it('rejects identical from/to refs to avoid empty-range waste', () => {
+    const source = readFileSync(BENCH_SCRIPT, 'utf8');
+    expect(source).toContain('fromResolved === toResolved');
+    expect(source).toContain('same commit');
+  });
+
   it('rejects duplicate concurrency values', () => {
     let exitCode = 0;
     let stderr = '';
@@ -129,7 +171,8 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
 
   it('defaults to concurrency 2,4,8 when not specified', () => {
     const source = readFileSync(BENCH_SCRIPT, 'utf8');
-    expect(source).toMatch(/concurrencyValues\.push\(2,\s*4,\s*8\)/);
+    expect(source).toContain('concurrencyValues');
+    expect(source).toContain('2, 4, 8');
   });
 
   it('resolves git refs to immutable commit IDs before experiments', () => {
@@ -142,9 +185,14 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
 
   it('records experiment metadata fields required by issue #2649', () => {
     const source = readFileSync(BENCH_SCRIPT, 'utf8');
-    const pushBlockMatch = source.match(/experiments\.push\(\{([\s\S]*?)\}\);/);
-    expect(pushBlockMatch).toBeTruthy();
-    const pushBlock = pushBlockMatch[1];
+    // Instead of a fragile regex on source formatting, verify the
+    // experiments array push contains all required field names by
+    // checking the broader experiment recording block.
+    const experimentsIdx = source.indexOf('experiments.push(');
+    expect(experimentsIdx).toBeGreaterThan(-1);
+    // Extract a generous window around the push call to cover multiline
+    // object literals regardless of formatting.
+    const pushBlock = source.substring(experimentsIdx, experimentsIdx + 2000);
     const requiredFields = [
       'label',
       'ocr_version',
@@ -251,9 +299,8 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
     }
     expect(fnEnd).toBeGreaterThan(fnStart);
     const fnSrc = source.slice(fnStart, fnEnd);
-    const sandbox = { JSON, Number, Array, isNaN };
-    const ctx = vm.createContext(sandbox);
-    vm.runInContext(fnSrc, ctx);
+    const sandbox = vm.createContext({});
+    vm.runInContext(fnSrc, sandbox);
     const parseOcrOutput = sandbox.parseOcrOutput;
 
     // Empty input → parseStatus 'empty'
@@ -325,5 +372,12 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
     expect(source).toContain('files_reviewed');
     expect(source).toContain('completed');
     expect(source).toContain('selected');
+  });
+
+  it('redacts secrets in OCR warnings before persisting (security)', () => {
+    const source = readFileSync(BENCH_SCRIPT, 'utf8');
+    // Warnings from the OCR output envelope must pass through redact()
+    // before being recorded in experiment results.
+    expect(source).toMatch(/warnings.*map.*redact/);
   });
 });

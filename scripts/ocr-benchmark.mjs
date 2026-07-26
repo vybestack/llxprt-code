@@ -59,7 +59,7 @@ const fromSha = getArg('from');
 const toSha = getArg('to');
 const label = getArg('label') || 'unspecified';
 const rawConcurrency = getArgList('concurrency');
-const reviewTimeout = getArg('timeout') || '20';
+const reviewTimeoutRaw = getArg('timeout') || '20';
 const outputFile = getArg('output') || 'ocr-benchmark-results.json';
 const processTimeoutMs = Number(getArg('process-timeout-ms')) || 3600000;
 
@@ -70,6 +70,18 @@ if (!fromSha || !toSha) {
   );
   process.exit(1);
 }
+
+// Validate the review timeout as a positive integer, consistent with
+// concurrency validation. A non-numeric, zero, or negative value would
+// produce an invalid OCR CLI argument.
+const reviewTimeoutNum = Number(reviewTimeoutRaw);
+if (!Number.isInteger(reviewTimeoutNum) || reviewTimeoutNum <= 0) {
+  process.stderr.write(
+    `Invalid --timeout value '${reviewTimeoutRaw}': must be a positive integer.\n`,
+  );
+  process.exit(1);
+}
+const reviewTimeout = String(reviewTimeoutNum);
 
 // Phase 3 (deepthinker #10): validate concurrency values immediately and
 // reject malformed input rather than silently defaulting. Convert to
@@ -128,6 +140,15 @@ function resolveRef(ref) {
 
 const fromResolved = resolveRef(fromSha);
 const toResolved = resolveRef(toSha);
+
+// Guard against identical refs: an empty range would waste OCR compute
+// and tokens while still recording a 'successful' experiment.
+if (fromResolved === toResolved) {
+  process.stderr.write(
+    `Invalid git range: from and to resolve to the same commit (${fromResolved}). The benchmark requires a non-empty forward range.\n`,
+  );
+  process.exit(1);
+}
 
 // Phase 3 (OCR finding): validate that 'from' is an ancestor of 'to' so the
 // git range is well-formed. An invalid range would produce empty diffs or
@@ -197,7 +218,7 @@ function gitDiffStat(from, to) {
     const files = output.trim().split('\n').filter(Boolean);
     const numstat = execFileSync(
       'git',
-      ['diff', '--numstat', `${from}..${to}`],
+      ['diff', '--numstat', '--diff-filter=d', `${from}..${to}`],
       { encoding: 'utf8' },
     );
     let additions = 0;
@@ -276,7 +297,9 @@ function parseOcrOutput(stdout) {
     cache: summary.cache_tokens || summary.cache || 0,
     total: summary.total_tokens || summary.total || 0,
   };
-  const warnings = Array.isArray(parsed?.warnings) ? parsed.warnings : [];
+  const warnings = Array.isArray(parsed?.warnings)
+    ? parsed.warnings.map((w) => redact(String(w)))
+    : [];
   const completedFiles = summary.files_reviewed?.completed || 0;
   const selectedFiles = summary.files_reviewed?.selected || 0;
   return {
