@@ -46,6 +46,12 @@ const createMockResourceRegistry = (): ResourceRegistry =>
   }) as unknown as ResourceRegistry;
 import type { TransportWithInternals } from './mcpClientTestHelpers.js';
 
+async function expectPending(promise: Promise<unknown>): Promise<void> {
+  expect(await Promise.race([promise, Promise.resolve('pending')])).toBe(
+    'pending',
+  );
+}
+
 describe('connectToMcpServer with OAuth', () => {
   let mockedClient: ClientLib.Client;
   let workspaceContext: WorkspaceContext;
@@ -92,7 +98,205 @@ describe('connectToMcpServer with OAuth', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+  });
+
+  it('awaits cleanup for an already-aborted connection', async () => {
+    const transport = { close: vi.fn().mockResolvedValue(undefined) };
+    let releaseClientClose: (() => void) | undefined;
+    vi.mocked(mockedClient.close).mockReturnValue(
+      new Promise<void>((resolve) => {
+        releaseClientClose = resolve;
+      }),
+    );
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    const controller = new AbortController();
+    controller.abort();
+
+    const connection = connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      { command: 'test-command' },
+      false,
+      workspaceContext,
+      controller.signal,
+    );
+    const outcome = connection.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await vi.waitFor(() => expect(mockedClient.close).toHaveBeenCalledOnce());
+
+    await expectPending(outcome);
+    releaseClientClose?.();
+    await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+    expect(transport.close).toHaveBeenCalledOnce();
+    expect(mockedClient.close).toHaveBeenCalledOnce();
+  });
+
+  it('preserves the connection failure when transport cleanup also fails', async () => {
+    const transport = {
+      close: vi.fn().mockRejectedValue(new Error('transport cleanup failed')),
+    };
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    vi.mocked(mockedClient.connect).mockRejectedValue(
+      new Error('primary connection failure'),
+    );
+
+    await expect(
+      connectToMcpServer(
+        '0.0.1',
+        'test-server',
+        { command: 'test-command' },
+        false,
+        workspaceContext,
+      ),
+    ).rejects.toThrow('primary connection failure');
+    expect(transport.close).toHaveBeenCalledOnce();
+  });
+
+  it('awaits transport cleanup and preserves one AbortError when connect is cancelled', async () => {
+    let releaseTransportClose: (() => void) | undefined;
+    const transport = {
+      close: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          releaseTransportClose = resolve;
+        }),
+      ),
+    };
+    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    let rejectConnect: ((error: Error) => void) | undefined;
+    let notifyConnectStarted: (() => void) | undefined;
+    const connectStarted = new Promise<void>((resolve) => {
+      notifyConnectStarted = resolve;
+    });
+    vi.mocked(mockedClient.connect).mockImplementation(() => {
+      notifyConnectStarted?.();
+      return new Promise<void>((_resolve, reject) => {
+        rejectConnect = reject;
+      });
+    });
+    const controller = new AbortController();
+
+    const connection = connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      { command: 'test-command' },
+      false,
+      workspaceContext,
+      controller.signal,
+    );
+    const outcome = connection.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await connectStarted;
+    controller.abort();
+    rejectConnect?.(new Error('connect failed'));
+    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+
+    await expectPending(outcome);
+    releaseTransportClose?.();
+    const failure = await outcome;
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).toMatchObject({
+      name: 'AbortError',
+      cause: expect.objectContaining({ message: 'connect failed' }),
+    });
+    expect(transport.close).toHaveBeenCalledOnce();
+  });
+
+  it('awaits cleanup when connect resolves after cancellation', async () => {
+    let releaseTransportClose: (() => void) | undefined;
+    const transport = {
+      close: vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => {
+          releaseTransportClose = resolve;
+        }),
+      ),
+    };
+    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    let resolveConnect: (() => void) | undefined;
+    let notifyConnectStarted: (() => void) | undefined;
+    const connectStarted = new Promise<void>((resolve) => {
+      notifyConnectStarted = resolve;
+    });
+    vi.mocked(mockedClient.connect).mockImplementation(() => {
+      notifyConnectStarted?.();
+      return new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      });
+    });
+    const controller = new AbortController();
+
+    const outcome = connectToMcpServer(
+      '0.0.1',
+      'test-server',
+      { command: 'test-command' },
+      false,
+      workspaceContext,
+      controller.signal,
+    ).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    await connectStarted;
+    controller.abort();
+    resolveConnect?.();
+    await vi.waitFor(() => expect(transport.close).toHaveBeenCalledOnce());
+
+    await expectPending(outcome);
+    releaseTransportClose?.();
+    const failure = await outcome;
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).toMatchObject({ name: 'AbortError' });
+    expect(transport.close).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a connection failure when cleanup aborts the same handshake', async () => {
+    const controller = new AbortController();
+    const transport = {
+      close: vi.fn().mockImplementation(async () => {
+        controller.abort();
+      }),
+    };
+    vi.mocked(mockedClient.close).mockResolvedValue(undefined);
+    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
+      transport as unknown as SdkClientStdioLib.StdioClientTransport,
+    );
+    const connectionFailure = new Error('connect failed');
+    vi.mocked(mockedClient.connect).mockRejectedValueOnce(connectionFailure);
+
+    let failure: unknown;
+    try {
+      await connectToMcpServer(
+        '0.0.1',
+        'test-server',
+        { command: 'test-command' },
+        false,
+        workspaceContext,
+        controller.signal,
+      );
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).toMatchObject({
+      name: 'AbortError',
+      cause: connectionFailure,
+    });
   });
 
   it('should handle automatic OAuth flow on 401 with stored token', async () => {
@@ -159,7 +363,6 @@ describe('connectToMcpServer with OAuth', () => {
     // Note: createTransportWithOAuth is not directly exported, but we can test
     // its behavior through connectToMcpServer and retryWithOAuth
 
-    // EXPECTED TO PASS: httpUrl uses HTTP transport (retryWithOAuth hardcodes HTTP)
     it('should use HTTP transport for httpUrl config', async () => {
       const serverUrl = 'http://test-server.com/http';
 
@@ -183,12 +386,9 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       );
 
-      // Passes because retryWithOAuth uses HTTP for httpUrl
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
-    // EXPECTED TO PASS (accidentally): retryWithOAuth hardcodes HTTP for url
-    // This test passes but for the WRONG reason - it should respect type field
     it('should use HTTP transport for url without type (default)', async () => {
       const serverUrl = 'http://test-server.com/mcp';
 
@@ -212,40 +412,38 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       );
 
-      // Passes accidentally: retryWithOAuth hardcodes HTTP (should use createTransportWithOAuth)
       expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
     });
 
-    // EXPECTED TO PASS (accidentally): retryWithOAuth ignores type field
-    // This test passes but for the WRONG reason - should honor type:http explicitly
-    it('should use HTTP transport for url + type:http', async () => {
-      const serverUrl = 'http://test-server.com/http';
+    it.each(['http', 'streamable-http'] as const)(
+      'should use HTTP transport for url + type:%s',
+      async (type) => {
+        const serverUrl = 'http://test-server.com/mcp';
 
-      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
-        new Error('401 Unauthorized'),
-      );
+        vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+          new Error('401 Unauthorized'),
+        );
 
-      let capturedTransport: TransportWithInternals | undefined;
-      vi.mocked(mockedClient.connect).mockImplementationOnce(
-        async (transport) => {
-          capturedTransport = transport;
-          return Promise.resolve();
-        },
-      );
+        let capturedTransport: TransportWithInternals | undefined;
+        vi.mocked(mockedClient.connect).mockImplementationOnce(
+          async (transport) => {
+            capturedTransport = transport;
+            return Promise.resolve();
+          },
+        );
 
-      await connectToMcpServer(
-        '0.0.1',
-        'test-server',
-        { url: serverUrl, type: 'http' },
-        false,
-        workspaceContext,
-      );
+        await connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: serverUrl, type },
+          false,
+          workspaceContext,
+        );
 
-      // Passes accidentally: retryWithOAuth hardcodes HTTP (ignores type field)
-      expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
-    });
+        expect(capturedTransport).toBeInstanceOf(StreamableHTTPClientTransport);
+      },
+    );
 
-    // EXPECTED TO FAIL: type:sse not respected in createTransportWithOAuth
     it('should use SSE transport for url + type:sse', async () => {
       const serverUrl = 'http://test-server.com/sse';
 
@@ -269,17 +467,28 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
       );
 
-      // WILL FAIL: createTransportWithOAuth ignores type:sse, uses HTTP
       expect(capturedTransport).toBeInstanceOf(SSEClientTransport);
     });
 
-    // EXPECTED TO FAIL: currently returns null, should throw error
-    it('should throw error when neither url nor httpUrl configured', async () => {
+    it('should throw error when no transport configuration is provided', async () => {
+      // Empty config causes createTransport to throw "Invalid configuration"
+      // before the client.connect mock is ever reached
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          {}, // No url, httpUrl, or command
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/Invalid configuration/);
+    });
+
+    it('should throw error for command-based config when connect fails with 401 (no OAuth retry for stdio)', async () => {
       vi.mocked(mockedClient.connect).mockRejectedValueOnce(
         new Error('401 Unauthorized'),
       );
 
-      // WILL FAIL: current code returns null and continues, should throw
       await expect(
         connectToMcpServer(
           '0.0.1',
@@ -292,14 +501,9 @@ describe('connectToMcpServer with OAuth', () => {
     });
   });
 
-  // Phase C+D: State machine and hygiene tests (RED phase)
+  // Phase C+D: State machine and hygiene tests
   describe('connectToMcpServer state machine behavior', () => {
-    // EXPECTED TO PASS: 401 + stored token retry is already tested above
-
-    // EXPECTED TO PASS: 401 + no token is already tested above
-
     // Test non-401 error + url + no type -> SSE fallback attempted
-    // This may already be covered; checking if SSE fallback happens
     it('should attempt SSE fallback on non-401 error with url (no type)', async () => {
       const serverUrl = 'http://test-server.com/mcp';
       const mockTransport = { close: vi.fn() };
@@ -600,6 +804,77 @@ describe('connectToMcpServer with OAuth', () => {
       ).rejects.toThrow(/status 404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('deprecated SSE endpoint detection', () => {
+    const SSE_DEPRECATED_URL = 'http://test-server.com/sse';
+    const SSE_REPLACEMENT_URL = 'https://mcp.test-server.com/mcp';
+
+    it('should surface actionable error when SSE is no longer supported', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error(`SSE is no longer supported. use ${SSE_REPLACEMENT_URL}`),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: SSE_DEPRECATED_URL, type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/no longer supported/);
+    });
+
+    it('should include the suggested replacement URL in the error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error(`SSE is no longer supported. use ${SSE_REPLACEMENT_URL}`),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: SSE_DEPRECATED_URL, type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/https:\/\/mcp\.test-server\.com\/mcp/);
+    });
+
+    it('should recommend streamable-http type in the error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('SSE is no longer supported. use http://example.com/mcp'),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { url: 'http://example.com/sse', type: 'sse' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(/streamable-http/);
+    });
+
+    it('does not reinterpret a stdio process error as an SSE endpoint configuration error', async () => {
+      vi.mocked(mockedClient.connect).mockRejectedValueOnce(
+        new Error('SSE is no longer supported in this subprocess'),
+      );
+
+      await expect(
+        connectToMcpServer(
+          '0.0.1',
+          'test-server',
+          { command: 'test-command' },
+          false,
+          workspaceContext,
+        ),
+      ).rejects.toThrow(
+        /Connection failed for 'test-server': SSE is no longer supported/,
+      );
     });
   });
 

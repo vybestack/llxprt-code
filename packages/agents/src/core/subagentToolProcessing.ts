@@ -19,6 +19,10 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import {
+  enforceImageBudget,
+  buildOmissionFeedback,
+} from './imagePayloadBudget.js';
 import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
@@ -513,7 +517,31 @@ export async function processFunctionCalls(
     });
   }
 
-  return [iContentFromBlocks(toolResponseBlocks, 'tool')];
+  return [
+    iContentFromBlocks(applyImageBudget(toolResponseBlocks, ctx), 'tool'),
+  ];
+}
+
+function applyImageBudget(
+  toolResponseBlocks: ContentBlock[],
+  ctx: ProcessFunctionCallsContext,
+): ContentBlock[] {
+  const budgetBytes = ctx.config.getImagePayloadBudgetBytes();
+  if (budgetBytes <= 0) {
+    return toolResponseBlocks;
+  }
+  const { blocks: budgeted, omitted } = enforceImageBudget(
+    toolResponseBlocks,
+    budgetBytes,
+  );
+  if (omitted.length > 0) {
+    budgeted.push({ type: 'text', text: buildOmissionFeedback(omitted) });
+    ctx.logger.warn(
+      () =>
+        `Subagent ${ctx.subagentId}: omitted ${omitted.length} image(s) due to cumulative image payload budget (${budgetBytes} bytes)`,
+    );
+  }
+  return budgeted;
 }
 
 function pushNonToolCallResponseBlocks(

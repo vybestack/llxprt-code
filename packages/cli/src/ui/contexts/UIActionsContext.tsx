@@ -28,6 +28,7 @@ export interface UIActions {
 
   // Input actions
   handleUserInputSubmit: (value: string) => void;
+  handleSteer: (text: string) => boolean;
   handleClearScreen: () => void;
 
   // Theme dialog
@@ -95,7 +96,7 @@ export interface UIActions {
   exitToolsDialog: () => void;
 
   // Folder trust dialog
-  handleFolderTrustSelect: (choice: FolderTrustChoice) => void;
+  handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;
 
   // Welcome onboarding
   welcomeActions: {

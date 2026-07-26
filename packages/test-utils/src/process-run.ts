@@ -7,6 +7,13 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { env } from 'node:process';
 import type { Writable } from 'node:stream';
+import {
+  detectQuotaSignal,
+  formatQuotaError,
+  getQuotaGuardTrip,
+  isQuotaGuardActive,
+  tripQuotaGuard,
+} from './quota-guard.js';
 
 /**
  * Structured capture of the most recent process run, available for diagnosis
@@ -74,10 +81,6 @@ function signalProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   } catch {
     // The child may have exited between the timeout and the fallback signal.
   }
-}
-
-function createTimeoutError(timeoutMs: number): Error {
-  return new Error(`TestRig.run() timed out after ${timeoutMs}ms`);
 }
 
 function captureRun(
@@ -161,6 +164,130 @@ export interface RunContext {
 }
 
 /**
+ * Whether this run uses fake responses (and therefore must NOT be observed by
+ * the quota guard).
+ *
+ * Runs backed by fake responses never touch a real provider, so quota/
+ * rate-limit detection is meaningless for them and could produce false trips
+ * from fixture text. Applicability is read from the child environment when the
+ * caller supplies one, otherwise from `process.env` (the child inherits it).
+ */
+function usesFakeResponses(ctx: RunContext): boolean {
+  const fakeResponses =
+    ctx.childEnv !== undefined
+      ? ctx.childEnv['LLXPRT_FAKE_RESPONSES']
+      : process.env['LLXPRT_FAKE_RESPONSES'];
+  return fakeResponses !== undefined && fakeResponses !== '';
+}
+
+/**
+ * Whether the E2E quota guard should observe this run.
+ *
+ * Two independent conditions must both hold:
+ *   1. The run is NOT fake-response-backed (see {@link usesFakeResponses}).
+ *   2. The shared guard is globally active ({@link isQuotaGuardActive}) — i.e.
+ *      a sentinel state dir is configured and `LLXPRT_QUOTA_GUARD_DISABLED` is
+ *      not `true`.
+ *
+ * Folding the global predicate in here means that with the guard disabled,
+ * `tripQuotaGuard` (which no-ops) is never even reached and, crucially, the
+ * failure-classification paths keep the ORIGINAL exit/timeout error instead of
+ * relabelling it `[QUOTA/RATE-LIMIT]`. Reusing the guard's own predicate keeps
+ * this in lockstep with the sentinel rather than re-deriving disabled-state.
+ */
+function guardApplies(ctx: RunContext): boolean {
+  return !usesFakeResponses(ctx) && isQuotaGuardActive();
+}
+
+/**
+ * Pre-spawn short-circuit: once the guard has tripped, refuse to launch any
+ * further real-provider CLI runs. Returns the rejection error, or `null` when
+ * the run may proceed.
+ */
+function preSpawnGuardError(ctx: RunContext): Error | null {
+  if (!guardApplies(ctx)) {
+    return null;
+  }
+  const trip = getQuotaGuardTrip();
+  if (trip === null) {
+    return null;
+  }
+  return new Error(
+    `E2E quota guard tripped — refusing to start CLI run: ${trip.reason}`,
+  );
+}
+
+/**
+ * Scan accumulated child output for a quota/rate-limit signal, tripping the
+ * guard on the first match. Returns the reason when a signal is present and
+ * the guard applies, otherwise `null`.
+ */
+function detectAndTripQuota(
+  ctx: RunContext,
+  accumulator: StreamAccumulator,
+): string | null {
+  if (!guardApplies(ctx)) {
+    return null;
+  }
+  const reason = detectQuotaSignal(
+    `${accumulator.stdout}\n${accumulator.stderr}`,
+  );
+  if (reason === null) {
+    return null;
+  }
+  tripQuotaGuard(reason);
+  return reason;
+}
+
+/**
+ * Build the rejection error for a non-zero exit, upgrading it to a labelled
+ * quota error (and tripping the guard) when the output looks like a provider
+ * quota/rate-limit wall.
+ *
+ * Node's `close` event reports EITHER a numeric exit `code` (with `signal`
+ * `null`) or a `signal` name (with `code` `null`) when the child was terminated
+ * by a signal. The message distinguishes the two so a signal-killed child reads
+ * as "terminated by signal SIGTERM" rather than a misleading
+ * "exited with code null".
+ */
+function buildExitFailureError(
+  ctx: RunContext,
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  accumulator: StreamAccumulator,
+): Error {
+  const detail =
+    code !== null
+      ? `Process exited with code ${code}`
+      : `Process terminated by signal ${signal ?? 'unknown'}`;
+  const baseMessage = `${detail}:\n${accumulator.stderr}`;
+  const reason = detectAndTripQuota(ctx, accumulator);
+  if (reason !== null) {
+    return new Error(formatQuotaError(reason, baseMessage));
+  }
+  return new Error(baseMessage);
+}
+
+/**
+ * Build the rejection error for a timed-out run, upgrading it to a labelled
+ * quota error (and tripping the guard) when the accumulated output looks like
+ * a provider quota/rate-limit wall.
+ */
+function buildTimeoutError(
+  ctx: RunContext,
+  timeoutMs: number,
+  accumulator: StreamAccumulator,
+): Error {
+  const reason = detectAndTripQuota(ctx, accumulator);
+  if (reason !== null) {
+    return new Error(
+      formatQuotaError(reason, `TestRig.run() timed out after ${timeoutMs}ms`),
+    );
+  }
+  return new Error(`TestRig.run() timed out after ${timeoutMs}ms`);
+}
+
+/**
  * Spawn a child process for `TestRig.run` / `runCommand` and resolve with the
  * captured stdout. Mirrors output when verbose mode is enabled and reports the
  * structured raw capture before resolving or rejecting.
@@ -172,6 +299,11 @@ export function spawnRun(
   transform: (stdout: string) => string,
   onCapture?: RunCaptureHandler,
 ): Promise<string> {
+  const preSpawnError = preSpawnGuardError(ctx);
+  if (preSpawnError !== null) {
+    return Promise.reject(preSpawnError);
+  }
+
   const { onStdout, onStderr, accumulator } = createStreamHandlers();
 
   const child = spawn(ctx.command, ctx.commandArgs, {
@@ -196,49 +328,49 @@ export function spawnRun(
       );
     });
 
-    child.once('close', (code: number | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      const captureFailure = captureRun(accumulator, code, false, onCapture);
-      if (captureFailure !== null) {
-        const processError =
-          code === 0
-            ? null
-            : new Error(
-                `Process exited with code ${code}:\n${accumulator.stderr}`,
-              );
-        reject(
-          processError === null
-            ? captureFailure.error
-            : captureErrorOr(captureFailure, processError),
-        );
-        return;
-      }
+    child.once(
+      'close',
+      (code: number | null, signal: NodeJS.Signals | null) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        const captureFailure = captureRun(accumulator, code, false, onCapture);
+        if (captureFailure !== null) {
+          const processError =
+            code === 0
+              ? null
+              : buildExitFailureError(ctx, code, signal, accumulator);
+          reject(
+            processError === null
+              ? captureFailure.error
+              : captureErrorOr(captureFailure, processError),
+          );
+          return;
+        }
 
-      if (code === 0) {
-        const transformed = transform(accumulator.stdout);
-        resolve(
-          maybeAppendStderr(transformed, accumulator.stderr, isJsonOutput),
-        );
-      } else {
-        reject(
-          new Error(`Process exited with code ${code}:\n${accumulator.stderr}`),
-        );
-      }
-    });
+        if (code === 0) {
+          const transformed = transform(accumulator.stdout);
+          resolve(
+            maybeAppendStderr(transformed, accumulator.stderr, isJsonOutput),
+          );
+        } else {
+          reject(buildExitFailureError(ctx, code, signal, accumulator));
+        }
+      },
+    );
 
     pipeStdin(child, options);
   });
 }
 
 interface CloseRunContext {
+  readonly ctx: RunContext;
   readonly accumulator: StreamAccumulator;
   readonly onCapture: RunCaptureHandler | undefined;
-  readonly timeoutError: Error;
   readonly transform: (stdout: string) => string;
   readonly isJsonOutput: boolean;
+  readonly timeoutMs: number;
   readonly resolve: (value: string) => void;
   readonly reject: (reason?: unknown) => void;
 }
@@ -246,6 +378,7 @@ interface CloseRunContext {
 function settleClosedRun(
   context: CloseRunContext,
   code: number | null,
+  signal: NodeJS.Signals | null,
   didTimeout: boolean,
 ): void {
   const captureFailure = captureRun(
@@ -256,10 +389,17 @@ function settleClosedRun(
   );
   let processError: Error | null = null;
   if (didTimeout) {
-    processError = context.timeoutError;
+    processError = buildTimeoutError(
+      context.ctx,
+      context.timeoutMs,
+      context.accumulator,
+    );
   } else if (code !== 0) {
-    processError = new Error(
-      `Process exited with code ${code}:\n${context.accumulator.stderr}`,
+    processError = buildExitFailureError(
+      context.ctx,
+      code,
+      signal,
+      context.accumulator,
     );
   }
   if (captureFailure !== null) {
@@ -299,6 +439,11 @@ export function spawnRunWithTimeout(
   timeoutMs: number,
   onCapture?: RunCaptureHandler,
 ): Promise<string> {
+  const preSpawnError = preSpawnGuardError(ctx);
+  if (preSpawnError !== null) {
+    return Promise.reject(preSpawnError);
+  }
+
   const { onStdout, onStderr, accumulator } = createStreamHandlers();
 
   const child = spawn(ctx.command, ctx.commandArgs, {
@@ -312,69 +457,123 @@ export function spawnRunWithTimeout(
   child.stderr.on('data', onStderr);
 
   return new Promise<string>((resolve, reject) => {
-    let settled = false;
-    let didTimeout = false;
-    const timers: NodeJS.Timeout[] = [];
-    const timeoutError = createTimeoutError(timeoutMs);
-    const settleTimedOut = (): void => {
-      if (!settled) {
-        settled = true;
-        reject(
-          captureErrorOr(
-            captureRun(accumulator, null, true, onCapture),
-            timeoutError,
-          ),
-        );
-      }
-    };
-    const forceKill = (): void => {
-      signalProcess(child, 'SIGKILL');
-      timers.push(setTimeout(settleTimedOut, FORCE_KILL_CLOSE_GRACE_MS));
-    };
-    timers.push(
-      setTimeout(() => {
-        didTimeout = true;
-        signalProcess(child, 'SIGTERM');
-        timers.push(setTimeout(forceKill, TERMINATION_GRACE_MS));
-      }, timeoutMs),
-    );
-    child.once('error', (error) => {
-      if (!settled) {
-        settled = true;
-        if (!didTimeout) {
-          clearRunTimers(timers);
-        }
-        const runError = didTimeout ? timeoutError : error;
-        reject(
-          captureErrorOr(
-            captureRun(accumulator, null, didTimeout, onCapture),
-            runError,
-          ),
-        );
-      }
-    });
-
-    const closeContext: CloseRunContext = {
+    runTimeoutLifecycle(
+      child,
+      ctx,
+      options,
+      timeoutMs,
       accumulator,
       onCapture,
-      timeoutError,
       transform,
       isJsonOutput,
       resolve,
       reject,
-    };
-    child.once('close', (code: number | null) => {
-      if (!settled) {
-        settled = true;
-        clearRunTimers(timers);
-        settleClosedRun(closeContext, code, didTimeout);
-      }
-    });
-
-    pipeStdin(child, options);
+    );
   });
 }
 
+/**
+ * Manage the timeout/error/close lifecycle for a {@link spawnRunWithTimeout}
+ * child. Extracted to keep {@link spawnRunWithTimeout} within lint line limits.
+ */
+function runTimeoutLifecycle(
+  child: ChildProcess,
+  ctx: RunContext,
+  options: RunOptions,
+  timeoutMs: number,
+  accumulator: StreamAccumulator,
+  onCapture: RunCaptureHandler | undefined,
+  transform: (stdout: string) => string,
+  isJsonOutput: boolean,
+  resolve: (value: string) => void,
+  reject: (reason?: unknown) => void,
+): void {
+  let settled = false;
+  let didTimeout = false;
+  const timers: NodeJS.Timeout[] = [];
+  const settleTimedOut = (): void => {
+    if (!settled) {
+      settled = true;
+      reject(
+        captureErrorOr(
+          captureRun(accumulator, null, true, onCapture),
+          buildTimeoutError(ctx, timeoutMs, accumulator),
+        ),
+      );
+    }
+  };
+  const forceKill = (): void => {
+    signalProcess(child, 'SIGKILL');
+    timers.push(setTimeout(settleTimedOut, FORCE_KILL_CLOSE_GRACE_MS));
+  };
+  timers.push(
+    setTimeout(() => {
+      didTimeout = true;
+      signalProcess(child, 'SIGTERM');
+      timers.push(setTimeout(forceKill, TERMINATION_GRACE_MS));
+    }, timeoutMs),
+  );
+  child.once('error', (error) => {
+    if (!settled) {
+      settled = true;
+      if (!didTimeout) {
+        clearRunTimers(timers);
+      }
+      reject(
+        childErrorOrQuota(
+          ctx,
+          timeoutMs,
+          error,
+          didTimeout,
+          accumulator,
+          onCapture,
+        ),
+      );
+    }
+  });
+
+  const closeContext: CloseRunContext = {
+    ctx,
+    accumulator,
+    onCapture,
+    transform,
+    isJsonOutput,
+    timeoutMs,
+    resolve,
+    reject,
+  };
+  child.once('close', (code: number | null, signal: NodeJS.Signals | null) => {
+    if (!settled) {
+      settled = true;
+      clearRunTimers(timers);
+      settleClosedRun(closeContext, code, signal, didTimeout);
+    }
+  });
+
+  pipeStdin(child, options);
+}
+
+/**
+ * Build the rejection value for a child 'error' event, upgrading it to a
+ * labelled quota timeout error when the error arrives after the timeout fired.
+ * Extracted from {@link runTimeoutLifecycle} to keep it within lint limits.
+ */
+function childErrorOrQuota(
+  ctx: RunContext,
+  timeoutMs: number,
+  error: Error,
+  didTimeout: boolean,
+  accumulator: StreamAccumulator,
+  onCapture: RunCaptureHandler | undefined,
+): unknown {
+  const runError = didTimeout
+    ? buildTimeoutError(ctx, timeoutMs, accumulator)
+    : error;
+  return captureErrorOr(
+    captureRun(accumulator, null, didTimeout, onCapture),
+    runError,
+  );
+}
 function maybeAppendStderr(
   result: string,
   stderr: string,

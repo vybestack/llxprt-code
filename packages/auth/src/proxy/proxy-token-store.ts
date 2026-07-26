@@ -20,8 +20,8 @@ import { ProxySocketClient } from './proxy-socket-client.js';
 export class ProxyTokenStore implements TokenStore {
   private readonly client: ProxySocketClient;
 
-  constructor(socketPath: string) {
-    this.client = new ProxySocketClient(socketPath);
+  constructor(socketPath: string, capabilityToken?: string) {
+    this.client = new ProxySocketClient(socketPath, capabilityToken);
   }
 
   async getToken(

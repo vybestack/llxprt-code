@@ -392,6 +392,19 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
       };
     },
   },
+  {
+    key: 'token-usage-log',
+    category: 'cli-behavior',
+    description:
+      'Log estimate-vs-actual token usage per turn to a per-session JSONL file (counts only, no prompt text)',
+    type: 'boolean',
+    default: true,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Enable per-turn token usage logging' },
+      { value: 'false', description: 'Disable per-turn token usage logging' },
+    ],
+  },
 ];
 
 function validateTaskMaxAsync(value: unknown): ValidationResult {

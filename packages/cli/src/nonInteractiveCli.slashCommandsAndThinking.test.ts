@@ -164,6 +164,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         getActiveProviderName: vi.fn().mockReturnValue('openai'),
       }),
       getOutputFormat: vi.fn().mockReturnValue('text'),
+      getQuiet: vi.fn().mockReturnValue(false),
       getFolderTrust: vi.fn().mockReturnValue(false),
       isTrustedFolder: vi.fn().mockReturnValue(false),
       getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),

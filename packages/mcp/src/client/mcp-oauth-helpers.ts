@@ -27,6 +27,35 @@ import { hasNetworkTransport } from './mcp-discovery-helpers.js';
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
 /**
+ * Per-server in-flight OAuth guard. Prevents duplicate concurrent browser
+ * OAuth flows for the same server, which would otherwise each open a new
+ * browser tab. The guard is scoped to interactive browser authentication only
+ * (the `handleAutomaticOAuth` path); silent token read/refresh in
+ * `getValidToken()` is unaffected.
+ *
+ * The key includes the server URL so that concurrent requests for different
+ * URLs do not cross-contaminate each other. The www-authenticate header is
+ * intentionally excluded because OAuth servers emit dynamic challenge fields
+ * (realm, scope, nonce) that vary between requests for the same server,
+ * which would prevent dedup if included.
+ */
+const inFlightAuthentications = new Map<string, Promise<boolean>>();
+
+/**
+ * Server-side message fragments signalling that the SSE transport has been
+ * deprecated in favour of Streamable HTTP (e.g. Webflow's `/sse` -> `/mcp`
+ * migration). Multiple variants are matched to be robust across different
+ * server implementations.
+ */
+const SSE_DEPRECATION_SIGNALS = [
+  'sse is no longer supported',
+  'sse endpoint is no longer supported',
+  'the sse transport has been deprecated',
+  'sse transport is no longer supported',
+  'sse is deprecated',
+];
+
+/**
  * Returns a non-empty array of scopes, treating empty/missing as no scopes.
  */
 function resolveScopes(scopes: string[] | undefined): string[] {
@@ -76,10 +105,167 @@ export function extractWWWAuthenticateHeader(
   return null;
 }
 
+function extractUrlAt(errorString: string, urlStart: number): string {
+  let urlEnd = errorString.length;
+  for (let i = urlStart; i < errorString.length; i++) {
+    if (errorString.charCodeAt(i) <= 32) {
+      urlEnd = i;
+      break;
+    }
+  }
+
+  const url = errorString.slice(urlStart, urlEnd);
+  const hasQueryOrFragment = url.includes('?') || url.includes('#');
+  let trimmedLength = url.length;
+  while (trimmedLength > 0) {
+    const lastCharacter = url.charAt(trimmedLength - 1);
+    if (
+      '.;:!?)]"\''.includes(lastCharacter) ||
+      (!hasQueryOrFragment && lastCharacter === ',')
+    ) {
+      trimmedLength--;
+    } else {
+      break;
+    }
+  }
+  return url.slice(0, trimmedLength);
+}
+
+function findUrlStarts(lower: string, start: number): number[] {
+  const starts: number[] = [];
+  let cursor = start;
+  while (cursor < lower.length) {
+    const httpIndex = lower.indexOf('http://', cursor);
+    const httpsIndex = lower.indexOf('https://', cursor);
+    const candidates = [httpIndex, httpsIndex].filter((index) => index !== -1);
+    if (candidates.length === 0) break;
+    const urlStart = Math.min(...candidates);
+    starts.push(urlStart);
+    cursor = urlStart + 1;
+  }
+  return starts;
+}
+
+/**
+ * Detect deprecated SSE endpoint rejections (e.g. "SSE is no longer
+ * supported, use https://mcp.example.com/mcp") and extract the suggested
+ * replacement URL if present.
+ *
+ * @returns The suggested replacement URL, or an empty string if the
+ * deprecation signal was detected but no URL was embedded, or null if no
+ * deprecation signal was found.
+ */
+export function detectDeprecatedSSEEndpoint(
+  errorString: string,
+): string | null {
+  const lower = errorString.toLowerCase();
+
+  let signalEnd = -1;
+  for (const signal of SSE_DEPRECATION_SIGNALS) {
+    const idx = lower.indexOf(signal);
+    if (idx !== -1) {
+      signalEnd = Math.max(signalEnd, idx + signal.length);
+    }
+  }
+  if (signalEnd === -1) return null;
+
+  const urls = findUrlStarts(lower, signalEnd)
+    .map((urlStart) => extractUrlAt(errorString, urlStart))
+    .map((url) => {
+      try {
+        return { raw: url, parsed: new URL(url) };
+      } catch {
+        return undefined;
+      }
+    })
+    .filter((url) => url !== undefined);
+  if (urls.length === 0) return '';
+  return (
+    urls.find(({ parsed }) => {
+      const pathname = parsed.pathname.endsWith('/')
+        ? parsed.pathname.slice(0, -1)
+        : parsed.pathname;
+      return pathname.endsWith('/mcp');
+    })?.raw ?? urls[0].raw
+  );
+}
+
+/**
+ * Timeout for in-flight OAuth flows. If the user never completes the browser
+ * authentication, the guard entry is cleaned up after this period so that
+ * subsequent attempts can start a fresh flow rather than awaiting a promise
+ * that will never settle.
+ */
+const OAUTH_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
+
 /**
  * Handle automatic OAuth discovery and authentication for a server.
+ * Concurrent calls for the same server name reuse a single in-progress
+ * authentication flow to avoid opening multiple browser tabs. If the flow
+ * does not settle within {@link OAUTH_FLOW_TIMEOUT_MS}, the guard entry is
+ * evicted so subsequent attempts can start a fresh flow.
+ *
+ * Note: if the timeout wins the race, the underlying browser OAuth flow
+ * (`doHandleAutomaticOAuth`) is not cancelled — browser-based flows cannot
+ * be reliably aborted from the Node.js side. The timed-out flow may still
+ * complete in the background, but the in-flight guard is cleared so a
+ * fresh attempt can proceed.
  */
 export async function handleAutomaticOAuth(
+  mcpServerName: string,
+  mcpServerConfig: MCPServerConfig,
+  wwwAuthenticate: string,
+): Promise<boolean> {
+  const guardKey = JSON.stringify([
+    mcpServerName,
+    mcpServerConfig.httpUrl ?? mcpServerConfig.url ?? '',
+  ]);
+  const existing = inFlightAuthentications.get(guardKey);
+  if (existing) {
+    debugLogger.log(
+      `'${mcpServerName}' OAuth already in progress, reusing existing flow`,
+    );
+    return existing;
+  }
+
+  const authPromise = doHandleAutomaticOAuth(
+    mcpServerName,
+    mcpServerConfig,
+    wwwAuthenticate,
+  );
+
+  // Mutable holder so the timeout closure (defined below) can check
+  // promise identity without referencing `raced` before it is declared.
+  const promiseRef: { current: Promise<boolean> | undefined } = {
+    current: undefined,
+  };
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<boolean>((resolve) => {
+    timeoutId = setTimeout(() => {
+      debugLogger.warn(
+        `OAuth flow for '${mcpServerName}' timed out after ${OAUTH_FLOW_TIMEOUT_MS}ms, clearing in-flight guard`,
+      );
+      if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
+        inFlightAuthentications.delete(guardKey);
+      }
+      resolve(false);
+    }, OAUTH_FLOW_TIMEOUT_MS);
+  });
+
+  const raced = Promise.race([authPromise, timeoutPromise]).finally(() => {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
+      inFlightAuthentications.delete(guardKey);
+    }
+  });
+
+  promiseRef.current = raced;
+  inFlightAuthentications.set(guardKey, raced);
+  return raced;
+}
+
+async function doHandleAutomaticOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,

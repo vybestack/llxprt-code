@@ -14,90 +14,24 @@ import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import type {
+  DispatchResult,
+  DispatchState,
+  FunctionCallState,
+  ReasoningDeltaSource,
+  ResponsesApiError,
+  ResponsesEvent,
+} from './parseResponsesStreamTypes.js';
+import {
+  appendReasoningDelta,
+  allocateReasoningStreamId,
+  closeReasoningStream,
+  chooseVisibleReasoningText,
+  shouldEmitReasoningDelta,
+  updateReasoningDeltaState,
+} from './parseResponsesStreamReasoning.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
-
-interface ResponsesApiError {
-  message?: string;
-  type?: string;
-  code?: string;
-}
-
-// Types for Responses API events
-interface ResponsesEvent {
-  type: string;
-  sequence_number?: number;
-  output_index?: number;
-  delta?: string;
-  text?: string;
-  content_index?: number;
-  summary_index?: number;
-  item?: {
-    id: string;
-    type: string;
-    status?: string;
-    arguments?: string;
-    call_id?: string;
-    name?: string;
-    summary?: Array<{ type: string; text?: string }>;
-    content?: Array<{ type: string; text?: string }>;
-    encrypted_content?: string;
-  };
-  item_id?: string;
-  arguments?: string;
-  /** Top-level error payload (for `error` event type). */
-  error?: ResponsesApiError;
-  response?: {
-    id: string;
-    object: string;
-    model: string;
-    status: string;
-    /** Error payload for `response.failed` events. */
-    error?: ResponsesApiError;
-    /** Reason metadata for `response.incomplete` events. */
-    incomplete_details?: { reason?: string };
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-      input_tokens_details?: {
-        cached_tokens?: number;
-      };
-    };
-  };
-}
-
-// Track function calls as they are built up
-interface FunctionCallState {
-  id: string;
-  call_id?: string;
-  name: string;
-  arguments: string;
-}
-
-interface DispatchState {
-  hasEmittedVisibleThinking: boolean;
-  reasoningText: string;
-  reasoningSummaryText: string;
-}
-
-interface DispatchResult extends DispatchState {
-  lastLoggedType: string | undefined;
-}
-
-function appendReasoningDelta(current: string, delta: string): string {
-  if (!delta) {
-    return current;
-  }
-  if (!current) {
-    return delta;
-  }
-  const lastChar = current[current.length - 1];
-  const nextChar = delta[0];
-  const needsSpace =
-    /[\w)]/.test(lastChar) && /[\w(]/.test(nextChar) && !/\s/.test(nextChar);
-  return needsSpace ? `${current} ${delta}` : `${current}${delta}`;
-}
 
 /**
  * Options for parseResponsesStream.
@@ -109,12 +43,11 @@ export interface ParseResponsesStreamOptions {
    * Defaults to true.
    */
   includeThinkingInResponse?: boolean;
+  /** Marks response IDs emitted by requests whose results were stored. */
+  responsesStored?: boolean;
   /**
-   * Optional provider-neutral liveness listener (issue #2607). Invoked for
-   * successfully parsed lifecycle SSE events (e.g. response.created,
-   * response.in_progress) that evidence transport/provider activation even
-   * when they yield no semantic IContent. Malformed data and [DONE] do not
-   * count. Listener failures are swallowed so parsing is never broken.
+   * Reports every successfully parsed SSE event as transport/provider liveness.
+   * Malformed data and the [DONE] sentinel do not count.
    */
   onStreamLiveness?: StreamLivenessListener;
 }
@@ -131,14 +64,13 @@ function* handleTextDelta(event: ResponsesEvent): Generator<IContent> {
   }
 }
 
-/**
- * Yield a thinking block, tracking emitted state to prevent duplicates.
- */
 function* yieldThinkingBlock(
   thoughtText: string,
   includeThinkingInResponse: boolean,
   shouldHide: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  streamId: string | undefined,
+  streamStatus?: 'delta' | 'complete',
 ): Generator<IContent> {
   yield {
     speaker: 'ai',
@@ -148,10 +80,15 @@ function* yieldThinkingBlock(
         thought: thoughtText,
         sourceField: 'reasoning_content',
         isHidden: shouldHide,
+        ...(streamId !== undefined && streamStatus !== undefined
+          ? { streamId, streamStatus }
+          : {}),
       },
     ],
   };
-  emittedThoughts.set(thoughtText, { hasEncrypted: false });
+  if (streamStatus !== 'delta') {
+    emittedThoughts.set(thoughtText, { hasEncrypted: false });
+  }
 }
 
 /**
@@ -174,6 +111,7 @@ function* handleReasoningDone(
       includeThinkingInResponse,
       !includeThinkingInResponse,
       emittedThoughts,
+      undefined,
     );
     return {
       hasEmittedVisibleThinking: true,
@@ -385,62 +323,30 @@ function createTerminalStreamError(
   });
 }
 
+function getIncompleteReason(
+  event: ResponsesEvent,
+  terminalReason: string,
+): string | undefined {
+  return terminalReason === 'incomplete'
+    ? event.response?.incomplete_details?.reason
+    : undefined;
+}
+
 /**
  * Handle response.completed / response.done / response.incomplete events.
  */
 function* handleResponseCompleted(
   event: ResponsesEvent,
-  reasoningText: string,
-  reasoningSummaryText: string,
+  state: DispatchState,
   includeThinkingInResponse: boolean,
-  hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
-): Generator<
-  IContent,
-  {
-    hasEmittedVisibleThinking: boolean;
-    reasoningCleared: string;
-    summaryCleared: string;
-  }
-> {
-  let newHasEmitted = hasEmittedVisibleThinking;
+  responsesStored: boolean,
+): Generator<IContent, DispatchState> {
+  let nextState = state;
+  let newHasEmitted = state.hasEmittedVisibleThinking;
 
-  // Fallback: emit any remaining reasoning
-  const remainingReasoning = reasoningText.trim();
-  if (
-    remainingReasoning &&
-    !emittedThoughts.has(remainingReasoning) &&
-    !newHasEmitted
-  ) {
-    yield* yieldThinkingBlock(
-      remainingReasoning,
-      includeThinkingInResponse,
-      !includeThinkingInResponse,
-      emittedThoughts,
-    );
-    newHasEmitted = true;
-  }
-  const remainingSummary = reasoningSummaryText.trim();
-  if (
-    remainingSummary &&
-    !emittedThoughts.has(remainingSummary) &&
-    !newHasEmitted
-  ) {
-    yield* yieldThinkingBlock(
-      remainingSummary,
-      includeThinkingInResponse,
-      !includeThinkingInResponse,
-      emittedThoughts,
-    );
-    newHasEmitted = true;
-  }
-
-  // Usage data
   const terminalReason = event.response?.status ?? 'completed';
-  const incompleteReason =
-    terminalReason === 'incomplete'
-      ? event.response?.incomplete_details?.reason
-      : undefined;
+  const incompleteReason = getIncompleteReason(event, terminalReason);
 
   // Defensive: some implementations send failure via response.completed with
   // status "failed" rather than a standalone response.failed event.
@@ -451,18 +357,56 @@ function* handleResponseCompleted(
     );
   }
 
-  if (event.response?.usage) {
+  const remainingReasoning = state.reasoningText.trim();
+  const remainingSummary = state.reasoningSummaryText.trim();
+  const terminalThought = chooseVisibleReasoningText(
+    state.visibleReasoningSource,
+    remainingReasoning,
+    remainingSummary,
+  );
+
+  if (terminalThought && nextState.currentReasoningStreamId !== undefined) {
+    const allocated = allocateReasoningStreamId(nextState);
+    nextState = allocated.state;
+    if (nextState.lastEmittedReasoningDelta !== undefined) {
+      emittedThoughts.delete(nextState.lastEmittedReasoningDelta);
+    }
+    yield* yieldThinkingBlock(
+      terminalThought,
+      includeThinkingInResponse,
+      !includeThinkingInResponse,
+      emittedThoughts,
+      allocated.streamId,
+      'complete',
+    );
+    nextState = closeReasoningStream(nextState);
+    newHasEmitted = true;
+  } else if (nextState.currentReasoningStreamId !== undefined) {
+    if (nextState.lastEmittedReasoningDelta !== undefined) {
+      emittedThoughts.delete(nextState.lastEmittedReasoningDelta);
+    }
+    nextState = closeReasoningStream(nextState);
+  }
+
+  const responseId = event.response?.id;
+  if (event.response?.usage || responseId) {
     yield {
       speaker: 'ai',
       blocks: [],
       metadata: {
-        usage: {
-          promptTokens: event.response.usage.input_tokens,
-          completionTokens: event.response.usage.output_tokens,
-          totalTokens: event.response.usage.total_tokens,
-          cachedTokens:
-            event.response.usage.input_tokens_details?.cached_tokens ?? 0,
-        },
+        ...(event.response?.usage
+          ? {
+              usage: {
+                promptTokens: event.response.usage.input_tokens,
+                completionTokens: event.response.usage.output_tokens,
+                totalTokens: event.response.usage.total_tokens,
+                cachedTokens:
+                  event.response.usage.input_tokens_details?.cached_tokens ?? 0,
+              },
+            }
+          : {}),
+        ...(responseId ? { id: responseId } : {}),
+        ...(responsesStored ? { responsesStored: true } : {}),
         stopReason: mapFinishReasonToStopReason(terminalReason),
         finishReason: terminalReason,
         ...(incompleteReason ? { incompleteReason } : {}),
@@ -471,9 +415,10 @@ function* handleResponseCompleted(
   }
 
   return {
+    ...nextState,
     hasEmittedVisibleThinking: newHasEmitted,
-    reasoningCleared: '',
-    summaryCleared: '',
+    reasoningText: '',
+    reasoningSummaryText: '',
   };
 }
 
@@ -507,27 +452,79 @@ function logSseEvent(
   return newLastLoggedType;
 }
 
-/**
- * Handle the switch dispatch for a single SSE event type.
- */
-function handleReasoningDeltaEvent(
+function* emitReasoningDelta(
+  text: string,
+  state: DispatchState,
+  includeThinkingInResponse: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent, DispatchState> {
+  const allocated = allocateReasoningStreamId(state);
+  if (state.lastEmittedReasoningDelta !== undefined) {
+    emittedThoughts.delete(state.lastEmittedReasoningDelta);
+  }
+  yield* yieldThinkingBlock(
+    text,
+    includeThinkingInResponse,
+    !includeThinkingInResponse,
+    emittedThoughts,
+    allocated.streamId,
+    'delta',
+  );
+  emittedThoughts.set(text, { hasEncrypted: false });
+  return allocated.state;
+}
+
+function* handleReasoningDeltaEvent(
   event: ResponsesEvent,
   state: DispatchState,
-): DispatchState {
+  includeThinkingInResponse: boolean,
+  emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+): Generator<IContent, DispatchState> {
   if (event.type === 'response.reasoning_text.delta' && event.delta) {
-    return {
-      ...state,
-      reasoningText: appendReasoningDelta(state.reasoningText, event.delta),
-    };
+    const text = appendReasoningDelta(state.reasoningText, event.delta);
+    const shouldEmitDelta = shouldEmitReasoningDelta(
+      'reasoning_text',
+      text,
+      state,
+    );
+    const nextState = shouldEmitDelta
+      ? yield* emitReasoningDelta(
+          text,
+          state,
+          includeThinkingInResponse,
+          emittedThoughts,
+        )
+      : state;
+    return updateReasoningDeltaState(
+      'reasoning_text',
+      text,
+      shouldEmitDelta,
+      state,
+      nextState,
+    );
   }
   if (event.type === 'response.reasoning_summary_text.delta' && event.delta) {
-    return {
-      ...state,
-      reasoningSummaryText: appendReasoningDelta(
-        state.reasoningSummaryText,
-        event.delta,
-      ),
-    };
+    const text = appendReasoningDelta(state.reasoningSummaryText, event.delta);
+    const shouldEmitDelta = shouldEmitReasoningDelta(
+      'reasoning_summary_text',
+      text,
+      state,
+    );
+    const nextState = shouldEmitDelta
+      ? yield* emitReasoningDelta(
+          text,
+          state,
+          includeThinkingInResponse,
+          emittedThoughts,
+        )
+      : state;
+    return updateReasoningDeltaState(
+      'reasoning_summary_text',
+      text,
+      shouldEmitDelta,
+      state,
+      nextState,
+    );
   }
   return state;
 }
@@ -538,10 +535,36 @@ function* handleReasoningDoneEvent(
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
 ): Generator<IContent, DispatchState> {
-  const source =
-    event.type === 'response.reasoning_text.done'
-      ? state.reasoningText
-      : state.reasoningSummaryText;
+  const isReasoningText = event.type === 'response.reasoning_text.done';
+  const source = isReasoningText
+    ? state.reasoningText
+    : state.reasoningSummaryText;
+  const sourceKind: ReasoningDeltaSource = isReasoningText
+    ? 'reasoning_text'
+    : 'reasoning_summary_text';
+  const content = (event.text ?? source).trim();
+
+  if (content && state.visibleReasoningSource === sourceKind) {
+    const allocated = allocateReasoningStreamId(state);
+    if (state.lastEmittedReasoningDelta !== undefined) {
+      emittedThoughts.delete(state.lastEmittedReasoningDelta);
+    }
+    yield* yieldThinkingBlock(
+      content,
+      includeThinkingInResponse,
+      !includeThinkingInResponse,
+      emittedThoughts,
+      allocated.streamId,
+      'complete',
+    );
+    return {
+      ...closeReasoningStream(allocated.state),
+      hasEmittedVisibleThinking: true,
+      reasoningText: isReasoningText ? '' : state.reasoningText,
+      reasoningSummaryText: isReasoningText ? state.reasoningSummaryText : '',
+    };
+  }
+
   const result = yield* handleReasoningDone(
     event,
     source,
@@ -549,16 +572,17 @@ function* handleReasoningDoneEvent(
     state.hasEmittedVisibleThinking,
     emittedThoughts,
   );
+  // A non-matching done event must not close another source's active stream;
+  // response.completed is the cross-source catch-all closer.
   return {
+    ...state,
     hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
-    reasoningText:
-      event.type === 'response.reasoning_text.done'
-        ? result.reasoningCleared
-        : state.reasoningText,
-    reasoningSummaryText:
-      event.type === 'response.reasoning_summary_text.done'
-        ? result.reasoningCleared
-        : state.reasoningSummaryText,
+    reasoningText: isReasoningText
+      ? result.reasoningCleared
+      : state.reasoningText,
+    reasoningSummaryText: isReasoningText
+      ? state.reasoningSummaryText
+      : result.reasoningCleared,
   };
 }
 
@@ -570,16 +594,43 @@ function* handleOutputItemDoneEvent(
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
 ): Generator<IContent, DispatchState> {
   if (event.item?.type === 'reasoning') {
+    let stateForItem = state;
+    if (state.currentReasoningStreamId !== undefined) {
+      const terminalThought = chooseVisibleReasoningText(
+        state.visibleReasoningSource,
+        state.reasoningText.trim(),
+        state.reasoningSummaryText.trim(),
+      );
+      if (state.lastEmittedReasoningDelta !== undefined) {
+        emittedThoughts.delete(state.lastEmittedReasoningDelta);
+      }
+      if (terminalThought) {
+        const allocated = allocateReasoningStreamId(state);
+        yield* yieldThinkingBlock(
+          terminalThought,
+          includeThinkingInResponse,
+          !includeThinkingInResponse,
+          emittedThoughts,
+          allocated.streamId,
+          'complete',
+        );
+        stateForItem = closeReasoningStream(allocated.state);
+      } else {
+        stateForItem = closeReasoningStream(state);
+      }
+    }
     const result = yield* handleReasoningItem(
       event,
       includeThinkingInResponse,
-      state.hasEmittedVisibleThinking,
+      stateForItem.hasEmittedVisibleThinking,
       emittedThoughts,
     );
     return {
+      ...closeReasoningStream(stateForItem),
       hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
       reasoningText: result.reasoningCleared,
       reasoningSummaryText: result.summaryCleared,
+      visibleReasoningSource: undefined,
     };
   }
 
@@ -594,44 +645,37 @@ function* handleCompletedEvent(
   state: DispatchState,
   includeThinkingInResponse: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
 ): Generator<IContent, DispatchState> {
-  const result = yield* handleResponseCompleted(
+  return yield* handleResponseCompleted(
     event,
-    state.reasoningText,
-    state.reasoningSummaryText,
+    state,
     includeThinkingInResponse,
-    state.hasEmittedVisibleThinking,
     emittedThoughts,
+    responsesStored,
   );
-  return {
-    hasEmittedVisibleThinking: result.hasEmittedVisibleThinking,
-    reasoningText: result.reasoningCleared,
-    reasoningSummaryText: result.summaryCleared,
-  };
 }
 
 function* dispatchEventCases(
   event: ResponsesEvent,
-  reasoningText: string,
-  reasoningSummaryText: string,
+  state: DispatchState,
   functionCalls: Map<string, FunctionCallState>,
   includeThinkingInResponse: boolean,
-  hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
 ): Generator<IContent, DispatchState> {
-  let state: DispatchState = {
-    hasEmittedVisibleThinking,
-    reasoningText,
-    reasoningSummaryText,
-  };
-
   switch (event.type) {
     case 'response.output_text.delta':
       yield* handleTextDelta(event);
       break;
     case 'response.reasoning_text.delta':
     case 'response.reasoning_summary_text.delta':
-      state = handleReasoningDeltaEvent(event, state);
+      state = yield* handleReasoningDeltaEvent(
+        event,
+        state,
+        includeThinkingInResponse,
+        emittedThoughts,
+      );
       break;
     case 'response.reasoning_text.done':
     case 'response.reasoning_summary_text.done':
@@ -666,6 +710,7 @@ function* dispatchEventCases(
         state,
         includeThinkingInResponse,
         emittedThoughts,
+        responsesStored,
       );
       break;
     case 'response.failed':
@@ -684,8 +729,7 @@ function* dispatchEventCases(
 
 /**
  * Notifies the optional liveness listener for any successfully parsed SSE
- * event. Every successfully JSON-parsed event proves the transport is alive.
- * Listener failures are swallowed so parsing is never broken.
+ * event. Listener failures must not break stream parsing.
  */
 function notifyStreamLiveness(
   listener: StreamLivenessListener | undefined,
@@ -697,7 +741,7 @@ function notifyStreamLiveness(
   try {
     listener({ sourceEvent: event.type, sseObserved: true });
   } catch {
-    // A throwing listener must never break stream parsing.
+    // The watchdog callback is observational and cannot own parser failure.
   }
 }
 
@@ -706,24 +750,24 @@ function notifyStreamLiveness(
  */
 function* dispatchEvent(
   event: ResponsesEvent,
-  reasoningText: string,
-  reasoningSummaryText: string,
+  state: DispatchState,
   functionCalls: Map<string, FunctionCallState>,
   includeThinkingInResponse: boolean,
-  hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
+  responsesStored: boolean,
+  onStreamLiveness: StreamLivenessListener | undefined,
   lastLoggedType: string | undefined,
 ): Generator<IContent, DispatchResult> {
   const newLastLoggedType = logSseEvent(event, lastLoggedType);
+  notifyStreamLiveness(onStreamLiveness, event);
 
   const result: DispatchState = yield* dispatchEventCases(
     event,
-    reasoningText,
-    reasoningSummaryText,
+    state,
     functionCalls,
     includeThinkingInResponse,
-    hasEmittedVisibleThinking,
     emittedThoughts,
+    responsesStored,
   );
 
   return {
@@ -739,14 +783,13 @@ function* dispatchEvent(
  */
 async function* tryDispatchEvent(
   data: string,
-  reasoningText: string,
-  reasoningSummaryText: string,
+  state: DispatchState,
   functionCalls: Map<string, FunctionCallState>,
   includeThinkingInResponse: boolean,
-  hasEmittedVisibleThinking: boolean,
   emittedThoughts: Map<string, { hasEncrypted: boolean }>,
-  lastLoggedType: string | undefined,
+  responsesStored: boolean,
   onStreamLiveness: StreamLivenessListener | undefined,
+  lastLoggedType: string | undefined,
 ): AsyncGenerator<IContent, DispatchResult> {
   let event: ResponsesEvent;
   try {
@@ -754,23 +797,19 @@ async function* tryDispatchEvent(
   } catch {
     // Skip malformed JSON events: return unchanged state
     return {
-      hasEmittedVisibleThinking,
-      reasoningText,
-      reasoningSummaryText,
+      ...state,
       lastLoggedType,
     };
   }
 
-  notifyStreamLiveness(onStreamLiveness, event);
-
   return yield* dispatchEvent(
     event,
-    reasoningText,
-    reasoningSummaryText,
+    state,
     functionCalls,
     includeThinkingInResponse,
-    hasEmittedVisibleThinking,
     emittedThoughts,
+    responsesStored,
+    onStreamLiveness,
     lastLoggedType,
   );
 }
@@ -779,18 +818,24 @@ export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
   options: ParseResponsesStreamOptions = {},
 ): AsyncIterableIterator<IContent> {
-  const { includeThinkingInResponse = true, onStreamLiveness } = options;
+  const {
+    includeThinkingInResponse = true,
+    responsesStored = false,
+    onStreamLiveness,
+  } = options;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   const functionCalls = new Map<string, FunctionCallState>();
-  let reasoningText = '';
-  let reasoningSummaryText = '';
+  let state: DispatchState = {
+    hasEmittedVisibleThinking: false,
+    reasoningText: '',
+    reasoningSummaryText: '',
+    nextReasoningStreamIndex: 0,
+  };
 
   // Track emitted thinking content to prevent duplicates (fixes #922).
   const emittedThoughts = new Map<string, { hasEncrypted: boolean }>();
-
-  let hasEmittedVisibleThinking = false;
 
   let lastLoggedType: string | undefined;
 
@@ -819,18 +864,15 @@ export async function* parseResponsesStream(
       for (const data of dataLines) {
         const dispatchState: DispatchResult = yield* tryDispatchEvent(
           data,
-          reasoningText,
-          reasoningSummaryText,
+          state,
           functionCalls,
           includeThinkingInResponse,
-          hasEmittedVisibleThinking,
           emittedThoughts,
-          lastLoggedType,
+          responsesStored,
           onStreamLiveness,
+          lastLoggedType,
         );
-        hasEmittedVisibleThinking = dispatchState.hasEmittedVisibleThinking;
-        reasoningText = dispatchState.reasoningText;
-        reasoningSummaryText = dispatchState.reasoningSummaryText;
+        state = dispatchState;
         lastLoggedType = dispatchState.lastLoggedType;
       }
     }

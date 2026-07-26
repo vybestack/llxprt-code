@@ -92,7 +92,8 @@ function resolveTrustAndIdeContext(
 
   // Trust uses originalSettings (not profile-merged) — security critical
   const folderTrust = originalSettings.folderTrust ?? false;
-  const trustedFolder = isWorkspaceTrusted(originalSettings) ?? false;
+  const trustedFolder =
+    isWorkspaceTrusted(originalSettings, input.cwd) ?? false;
 
   return { debugMode, memoryImportFormat, ideMode, folderTrust, trustedFolder };
 }

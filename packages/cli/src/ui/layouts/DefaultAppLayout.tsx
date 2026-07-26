@@ -224,6 +224,8 @@ function buildMainControlsProps(
     history: uiState.history,
     inputWidth: uiState.inputWidth,
     isTodoPanelCollapsed: uiState.isTodoPanelCollapsed,
+    isQueuedMessagesPanelCollapsed: uiState.isQueuedMessagesPanelCollapsed,
+    queuedSubmissions: uiState.queuedSubmissions,
     showTodoPanelSetting: layoutSettings.showTodoPanelSetting,
     dialogsVisible: hasActiveDialog(uiState),
     hideContextSummary: layoutSettings.hideContextSummary,

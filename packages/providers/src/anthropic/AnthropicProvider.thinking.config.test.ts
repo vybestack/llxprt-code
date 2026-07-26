@@ -768,7 +768,9 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       );
       expect(thinkingChunks.length).toBeGreaterThan(0);
 
-      const thinkingBlock = thinkingChunks[0].blocks.find(
+      // #1723: signature is on the last thinking chunk (from content_block_stop)
+      const lastThinkingChunk = thinkingChunks[thinkingChunks.length - 1];
+      const thinkingBlock = lastThinkingChunk.blocks.find(
         (b) => b.type === 'thinking',
       ) as ThinkingBlock;
       expect(thinkingBlock.signature).toBe(mockSignature);

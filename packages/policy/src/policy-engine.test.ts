@@ -217,6 +217,32 @@ describe('PolicyEngine', () => {
         ).toBe(PolicyDecision.DENY);
       });
 
+      it('matches explicit generated prefixes without interpreting exact stars', () => {
+        const engine = new PolicyEngine({
+          rules: [
+            {
+              toolNamePrefix: 'generated-server__',
+              decision: PolicyDecision.ALLOW,
+            },
+            {
+              toolName: 'exact-server__*',
+              decision: PolicyDecision.DENY,
+            },
+          ],
+          defaultDecision: PolicyDecision.ASK_USER,
+        });
+
+        expect(engine.evaluate('generated-server__tool', {})).toBe(
+          PolicyDecision.ALLOW,
+        );
+        expect(engine.evaluate('exact-server__tool', {})).toBe(
+          PolicyDecision.ASK_USER,
+        );
+        expect(engine.evaluate('exact-server__*', {})).toBe(
+          PolicyDecision.DENY,
+        );
+      });
+
       it('denies built-in tools when serverName is provided', () => {
         const engine = new PolicyEngine({
           rules: [{ decision: PolicyDecision.ALLOW }],
@@ -667,6 +693,119 @@ describe('PolicyEngine', () => {
         command: 'npm test || echo failed',
       });
       expect(result).toBe(PolicyDecision.ALLOW);
+    });
+  });
+
+  describe('removeRulesBySource', () => {
+    it('removes all rules matching the given source', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'trusted-server__tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.2,
+            source: 'Settings (MCP Trusted)',
+          },
+          {
+            toolName: 'other-tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+            source: 'Settings (Tools Allowed)',
+          },
+        ],
+        defaultDecision: PolicyDecision.ASK_USER,
+      });
+
+      expect(
+        engine.evaluate('trusted-server__tool', {}, 'trusted-server'),
+      ).toBe(PolicyDecision.ALLOW);
+
+      engine.removeRulesBySource('Settings (MCP Trusted)');
+
+      expect(
+        engine.evaluate('trusted-server__tool', {}, 'trusted-server'),
+      ).toBe(PolicyDecision.ASK_USER);
+    });
+
+    it('does not remove rules from other sources', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'trusted-server__tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.2,
+            source: 'Settings (MCP Trusted)',
+          },
+          {
+            toolName: 'allowed-tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+            source: 'Settings (Tools Allowed)',
+          },
+        ],
+        defaultDecision: PolicyDecision.ASK_USER,
+      });
+
+      engine.removeRulesBySource('Settings (MCP Trusted)');
+
+      expect(engine.evaluate('allowed-tool', {})).toBe(PolicyDecision.ALLOW);
+    });
+
+    it('preserves rules without a source', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'unsourced-tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+          },
+        ],
+      });
+
+      engine.removeRulesBySource('Settings (MCP Trusted)');
+
+      expect(engine.evaluate('unsourced-tool', {})).toBe(PolicyDecision.ALLOW);
+      expect(engine.getRules()).toHaveLength(1);
+    });
+
+    it('is a no-op when no rules match the source', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'allowed-tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+            source: 'Settings (Tools Allowed)',
+          },
+        ],
+      });
+
+      engine.removeRulesBySource('Nonexistent Source');
+
+      expect(engine.getRules()).toHaveLength(1);
+    });
+
+    it('removes multiple rules with the same source', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'server-a__tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.2,
+            source: 'Settings (MCP Trusted)',
+          },
+          {
+            toolName: 'server-b__tool',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.2,
+            source: 'Settings (MCP Trusted)',
+          },
+        ],
+      });
+
+      engine.removeRulesBySource('Settings (MCP Trusted)');
+
+      expect(engine.getRules()).toHaveLength(0);
     });
   });
 });

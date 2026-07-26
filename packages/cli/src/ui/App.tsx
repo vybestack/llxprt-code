@@ -25,6 +25,7 @@ import { RuntimeContextProvider } from './contexts/RuntimeContext.js';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
 import { ScrollProvider } from './contexts/ScrollProvider.js';
+import { ShellCommandDisplayProvider } from './contexts/ShellCommandDisplayContext.js';
 import { inkRenderOptions } from './inkRenderOptions.js';
 import { isMouseEventsEnabled } from './mouseEventsEnabled.js';
 import { appReducer, initialAppState } from './reducers/appReducer.js';
@@ -79,19 +80,25 @@ export const AppWrapper = (props: AppProps) => {
         <ScrollProvider>
           <SessionStatsProvider>
             <VimModeProvider settings={props.settings}>
-              <ToolCallProvider
-                sessionId={props.uiRuntime.session.getSessionId()}
+              <ShellCommandDisplayProvider
+                alwaysDisplayFullShellCommand={
+                  props.settings.merged.ui.alwaysDisplayFullShellCommand ?? true
+                }
               >
-                <TodoProvider
+                <ToolCallProvider
                   sessionId={props.uiRuntime.session.getSessionId()}
                 >
-                  <RuntimeContextProvider agent={props.agent}>
-                    <OverflowProvider>
-                      <AppWithState {...props} />
-                    </OverflowProvider>
-                  </RuntimeContextProvider>
-                </TodoProvider>
-              </ToolCallProvider>
+                  <TodoProvider
+                    sessionId={props.uiRuntime.session.getSessionId()}
+                  >
+                    <RuntimeContextProvider agent={props.agent}>
+                      <OverflowProvider>
+                        <AppWithState {...props} />
+                      </OverflowProvider>
+                    </RuntimeContextProvider>
+                  </TodoProvider>
+                </ToolCallProvider>
+              </ShellCommandDisplayProvider>
             </VimModeProvider>
           </SessionStatsProvider>
         </ScrollProvider>

@@ -34,6 +34,7 @@ import {
   useStreamingState,
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
+import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 export interface AgentStreamOrchestrationDeps {
@@ -71,6 +72,7 @@ export interface AgentStreamOrchestrationResult {
   interactiveRuntimeReady: boolean;
   cancelOngoingRequest: () => void;
   activeShellPtyId: number | null;
+  queuedSubmissions: readonly QueuedSubmission[];
 }
 
 interface ToolSchedulerState {
@@ -123,7 +125,7 @@ export function useAgentStreamOrchestration(
     st.setPendingHistoryItem,
     args.onCancelSubmit,
     st.setIsResponding,
-    st.queuedSubmissionsRef,
+    args.setShellInputFocused,
     cancelRunningAsyncTasks,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
@@ -304,6 +306,7 @@ function buildResult(
     interactiveRuntimeReady: scheduler.interactiveRuntimeReady,
     cancelOngoingRequest,
     activeShellPtyId: shell.activeShellPtyId,
+    queuedSubmissions: st.queuedSubmissions,
   };
 }
 
@@ -341,6 +344,12 @@ function buildSubmitQueryDeps({
     thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,
     queuedSubmissionsRef: st.queuedSubmissionsRef,
+    enqueueSubmission: st.enqueueSubmission,
+    requeueSubmission: st.requeueSubmission,
+    dequeueSubmission: st.dequeueSubmission,
+    clearSubmissions: st.clearSubmissions,
+    tryReserveDrain: st.tryReserveDrain,
+    releaseDrain: st.releaseDrain,
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     setInitError: st.setInitError,

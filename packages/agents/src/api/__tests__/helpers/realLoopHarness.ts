@@ -41,7 +41,10 @@ import {
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import {
+  ApprovalMode,
+  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+} from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
 import type {
   AgentClientContract,
@@ -214,6 +217,7 @@ function createTestConfig(opts: {
     getSessionId: () => 'p10-harness-session',
     getUsageStatisticsEnabled: () => false,
     getDebugMode: () => false,
+    getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
     getApprovalMode: () => ApprovalMode.DEFAULT,
     getEphemeralSettings: () => ({}),
     getEphemeralSetting: () => undefined,

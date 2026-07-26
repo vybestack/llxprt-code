@@ -11,7 +11,6 @@ import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
 import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
-import { useIdeTrustListener } from '../../../hooks/useIdeTrustListener.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
 import { useOAuthOrchestration } from '../../../hooks/useOAuthOrchestration.js';
@@ -27,7 +26,6 @@ import { useDisplayPreferences } from './useDisplayPreferences.js';
 import { useModelTracking } from './useModelTracking.js';
 import { useIdeContextBridge } from './useIdeContextBridge.js';
 import { useQueueErrorTimeout } from './useQueueErrorTimeout.js';
-import { useIdeRestartHotkey } from './useIdeRestartHotkey.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 import { useModelRuntimeSync } from './useModelRuntimeSync.js';
 import { useAppEventHandlers } from './useAppEventHandlers.js';
@@ -73,7 +71,6 @@ function useDialogsState() {
     IdeContext | undefined
   >();
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
-  const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
@@ -115,8 +112,6 @@ function useDialogsState() {
     setIdeContextState,
     showEscapePrompt,
     setShowEscapePrompt,
-    showIdeRestartPrompt,
-    setShowIdeRestartPrompt,
     isProcessing,
     setIsProcessing,
     embeddedShellFocused,
@@ -183,16 +178,11 @@ function useIdeTrustEffect(
   config: AppDialogsParams['config'],
   st: ReturnType<typeof useDialogsState>,
 ) {
-  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
-  useEffect(() => {
-    if (ideNeedsRestart) st.setShowIdeRestartPrompt(true);
-  }, [ideNeedsRestart, st]);
   useQueueErrorTimeout({
     queueErrorMessage: st.queueErrorMessage,
     setQueueErrorMessage: st.setQueueErrorMessage,
     timeoutMs: QUEUE_ERROR_DISPLAY_DURATION_MS,
   });
-  useIdeRestartHotkey({ isActive: st.showIdeRestartPrompt });
 }
 
 function useDialogsAuthProviders(
@@ -280,11 +270,10 @@ function useDialogsAuth(
   const { config, settings, appState, addItem } = p;
   const theme = useThemeCommand(settings, appState, addItem);
   const settingsCmd = useSettingsCommand();
-  const folderTrust = useFolderTrust(settings, addItem);
+  const folderTrust = useFolderTrust(settings, addItem, config);
   const welcome = useWelcomeOnboarding({
     settings,
-    isFolderTrustComplete:
-      !folderTrust.isFolderTrustDialogOpen && !folderTrust.isRestarting,
+    isFolderTrustComplete: !folderTrust.isFolderTrustDialogOpen,
     agent: p.agent,
   });
   useIdeTrustEffect(config, st);
@@ -309,7 +298,6 @@ function useDialogsAuth(
     closeSettingsDialog: settingsCmd.closeSettingsDialog,
     isFolderTrustDialogOpen: folderTrust.isFolderTrustDialogOpen,
     handleFolderTrustSelect: folderTrust.handleFolderTrustSelect,
-    isRestarting: folderTrust.isRestarting,
     isWelcomeDialogOpen: welcome.showWelcome,
     welcomeState: welcome.state,
     welcomeActions: welcome.actions,

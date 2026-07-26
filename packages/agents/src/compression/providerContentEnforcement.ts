@@ -20,6 +20,10 @@ import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeMarginAdjustedLimit,
 } from './contextLimitPolicy.js';
+import {
+  truncateOversizedToolResponsesUnified,
+  type UnifiedTruncationResult,
+} from './toolResultTruncator.js';
 
 type CompletionSettingsService = { get: (key: string) => unknown };
 
@@ -177,12 +181,48 @@ export class ProviderContentEnforcer {
     ) {
       return truncationResult.contents;
     }
+
+    let toolTruncationResult: UnifiedTruncationResult;
+    try {
+      toolTruncationResult = await this.truncateToolResponsesUnified(
+        pendingContents,
+        limits.marginAdjustedLimit,
+        limits.completionBudget,
+        model,
+      );
+    } catch (error) {
+      const toolTruncationFailure = this.normalizeError(error);
+      this.deps.logger.warn(
+        () =>
+          '[CompressionHandler] Unified tool-response truncation failed during last-resort enforcement',
+        toolTruncationFailure,
+      );
+      throw this.buildOverflowError(
+        limits.limit,
+        limits.completionBudget,
+        limits.marginAdjustedLimit,
+        initialProjected,
+        this.withToolTruncationFailure(truncationResult, toolTruncationFailure),
+        0,
+      );
+    }
+
+    if (toolTruncationResult.success) {
+      return this.recomposeProviderContents(
+        toolTruncationResult.transformedPending ?? pendingContents,
+      );
+    }
+
     throw this.buildOverflowError(
       limits.limit,
       limits.completionBudget,
       limits.marginAdjustedLimit,
       initialProjected,
-      truncationResult,
+      {
+        ...truncationResult,
+        projected: toolTruncationResult.projected,
+      },
+      toolTruncationResult.replacedCount,
     );
   }
 
@@ -192,6 +232,7 @@ export class ProviderContentEnforcer {
     marginAdjustedLimit: number,
     initialProjected: number,
     truncationResult: OverflowReductionResult,
+    toolResponsesTruncated?: number,
   ): Error {
     return buildContextOverflowError({
       limit,
@@ -201,7 +242,32 @@ export class ProviderContentEnforcer {
       completionBudget,
       truncationFailure: truncationResult.truncationFailure,
       compressionFailure: truncationResult.compressionFailure,
+      ...(toolResponsesTruncated !== undefined
+        ? {
+            toolResponseTruncationAttempted: true,
+            toolResponsesTruncated,
+          }
+        : {}),
     });
+  }
+
+  private withToolTruncationFailure(
+    truncationResult: OverflowReductionResult,
+    toolTruncationFailure: Error,
+  ): OverflowReductionResult {
+    if (truncationResult.truncationFailure === undefined) {
+      return {
+        ...truncationResult,
+        truncationFailure: toolTruncationFailure,
+      };
+    }
+    return {
+      ...truncationResult,
+      truncationFailure: new Error(
+        `${truncationResult.truncationFailure.message}; unified tool-response truncation failed: ${toolTruncationFailure.message}`,
+        { cause: toolTruncationFailure },
+      ),
+    };
   }
 
   /**
@@ -232,6 +298,48 @@ export class ProviderContentEnforcer {
       throw result.compressionFailure;
     }
     return result.contents;
+  }
+
+  private async truncateToolResponsesUnified(
+    pendingContents: IContent[],
+    marginAdjustedLimit: number,
+    completionBudget: number,
+    model: string,
+  ): Promise<UnifiedTruncationResult> {
+    this.deps.logger.warn(
+      () =>
+        '[CompressionHandler] Provider payload still over limit after fallback, attempting last-resort unified tool-response truncation',
+      { marginAdjustedLimit, completionBudget, model },
+    );
+
+    return truncateOversizedToolResponsesUnified(
+      {
+        historyService: this.deps.historyService,
+        logger: this.deps.logger,
+        pendingContents,
+        estimateBlockTokensAsync: async (block) =>
+          this.deps.historyService.estimateTokensForContents(
+            [{ speaker: 'tool', blocks: [block] }],
+            model,
+          ),
+        computeProjected: async (workingPending) => {
+          const recomposed = this.recomposeProviderContents([
+            ...workingPending,
+          ]);
+          return this.estimateProviderProjection(
+            recomposed,
+            completionBudget,
+            model,
+            'post-tool-response-truncation',
+          );
+        },
+        resetBaseline: () => {
+          // Provider projection is recomputed from the assembled payload.
+        },
+        getRuntimeModel: () => model,
+      },
+      marginAdjustedLimit,
+    );
   }
 
   private resolveModel(provider?: IProvider): string {

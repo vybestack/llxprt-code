@@ -128,6 +128,13 @@ const coreMocks = vi.hoisted(() => {
     },
     addMCPStatusChangeListener: vi.fn(),
     removeMCPStatusChangeListener: vi.fn(),
+    coreEvents: {
+      on: vi.fn(),
+      off: vi.fn(),
+    },
+    CoreEvent: {
+      FolderTrustChanged: 'folder-trust-changed',
+    },
   };
 });
 

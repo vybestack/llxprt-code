@@ -11,6 +11,7 @@ import type { Settings } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import { USER_SETTINGS_PATH } from './paths.js';
 import { mergeSettings } from './settingsMerge.js';
+import { formatConfigFileErrors } from './configError.js';
 import {
   migrateHooksConfig,
   migrateLegacyInteractiveShellSetting,
@@ -100,12 +101,11 @@ function loadOptionalSettingsFile(
   }
 }
 
-function resolveRealWorkspaceDir(workspaceDir: string): string {
-  const resolvedWorkspaceDir = path.resolve(workspaceDir);
+function resolveRealWorkspaceDir(workspaceDir: string): string | undefined {
   try {
-    return fs.realpathSync(resolvedWorkspaceDir);
+    return fs.realpathSync(path.resolve(workspaceDir));
   } catch {
-    return resolvedWorkspaceDir;
+    return undefined;
   }
 }
 
@@ -115,7 +115,7 @@ function loadSettingsFiles(
 ): {
   settings: SettingsState;
   errors: SettingsError[];
-  realWorkspaceDir: string;
+  realWorkspaceDir: string | undefined;
   realHomeDir: string;
 } {
   const errors: SettingsError[] = [];
@@ -133,7 +133,7 @@ function loadSettingsFiles(
     legacyTheme: true,
   });
   const workspace =
-    realWorkspaceDir === realHomeDir
+    realWorkspaceDir === undefined || realWorkspaceDir === realHomeDir
       ? {}
       : loadOptionalSettingsFile(paths.workspace, errors, {
           legacyTheme: true,
@@ -156,7 +156,10 @@ function shouldCheckFolderTrust(settings: SettingsState): boolean {
   return folderTrustFeature && folderTrustEnabled;
 }
 
-function resolveTrustedState(settings: SettingsState): boolean {
+function resolveTrustedState(
+  settings: SettingsState,
+  workspaceDir: string | undefined,
+): boolean {
   const tempSettingsForTrust = mergeSettings(
     settings.system,
     settings.systemDefaults,
@@ -164,9 +167,12 @@ function resolveTrustedState(settings: SettingsState): boolean {
     settings.workspace,
     true,
   );
-  return shouldCheckFolderTrust(settings)
-    ? (isWorkspaceTrusted(tempSettingsForTrust) ?? true)
-    : true;
+  if (!shouldCheckFolderTrust(settings)) {
+    return true;
+  }
+  return workspaceDir === undefined
+    ? false
+    : (isWorkspaceTrusted(tempSettingsForTrust, workspaceDir) ?? false);
 }
 
 function loadEnvironmentAndResolveSettings(
@@ -193,12 +199,7 @@ function throwSettingsErrors(errors: SettingsError[]): void {
   if (errors.length === 0) {
     return;
   }
-  const errorMessages = errors.map(
-    (error) => `Error in ${error.path}: ${error.message}`,
-  );
-  throw new FatalConfigError(
-    `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
-  );
+  throw new FatalConfigError(formatConfigFileErrors(errors));
 }
 
 function migrateLoadedSettings(settings: SettingsState): void {
@@ -237,7 +238,10 @@ export function loadSettings(
     workspace: new Storage(workspaceDir).getWorkspaceSettingsPath(),
   };
   const loaded = loadSettingsFiles(workspaceDir, paths);
-  const isTrusted = resolveTrustedState(loaded.settings);
+  const isTrusted = resolveTrustedState(
+    loaded.settings,
+    loaded.realWorkspaceDir,
+  );
   const settings = loadEnvironmentAndResolveSettings(
     loaded.settings,
     isTrusted,

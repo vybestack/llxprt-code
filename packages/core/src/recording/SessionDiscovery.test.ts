@@ -54,6 +54,7 @@ function makeConfig(
     projectHash: overrides.projectHash ?? PROJECT_HASH,
     chatsDir,
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
+    cwd: overrides.cwd ?? '/test/workspace',
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
   };
@@ -265,6 +266,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       expect(sessions[0].sessionId).toBe(sessionId);
       expect(sessions[0].provider).toBe('google');
       expect(sessions[0].model).toBe('gemini-3');
+      expect(sessions[0].cwd).toBe('/test/workspace');
       expect(sessions[0].projectHash).toBe(PROJECT_HASH);
       expect(sessions[0].filePath).toBeTruthy();
       expect(sessions[0].lastModified).toBeInstanceOf(Date);
