@@ -507,8 +507,10 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       );
       expect(postScript).toContain('let skippedExactHistoryCount = 0;');
       expect(postScript).toContain('beforeExactFilter');
+      // Phase 2 (#2649): the exact-history count is computed from the
+      // pairsToPost array (now that inline comments carry finding refs).
       expect(postScript).toContain(
-        'skippedExactHistoryCount = beforeExactFilter - inlineToPost.length;',
+        'skippedExactHistoryCount = beforeExactFilter - pairsToPost.length;',
       );
       // The old mixing formula must be gone.
       expect(postScript).not.toContain(
