@@ -812,12 +812,61 @@ function matchesCredentialWriteWithCanonical(
     return canonical.argTokens.some(isCredentialTargetExpression);
   }
   if (canonical.name === 'dd') {
-    const outputOperand = rawSegment.match(/(?:^|\s)of=(\$\([^)]*\)|\S+)/);
+    const outputOperand = extractDdOutputOperand(rawSegment);
     return (
-      outputOperand !== null && isCredentialTargetExpression(outputOperand[1])
+      outputOperand !== null && isCredentialTargetExpression(outputOperand)
     );
   }
   return false;
+}
+
+/**
+ * Extracts the first `of=` operand from a raw dd segment using a deterministic
+ * linear scan, replacing the polynomial-backtracking regex
+ * `/(?:^|\s)of=(\$\([^)]*\)|\S+)/`. Locates the first `of=` at string start or
+ * immediately preceded by a whitespace character, then captures the operand:
+ * if it begins with `$(` the capture extends through the first closing paren
+ * inclusive; otherwise it captures the maximal run of non-whitespace characters.
+ * Returns the captured operand or null when no boundary-respecting `of=` exists.
+ */
+function extractDdOutputOperand(rawSegment: string): string | null {
+  const needle = 'of=';
+  let searchFrom = 0;
+  while (searchFrom + needle.length <= rawSegment.length) {
+    const matchAt = rawSegment.indexOf(needle, searchFrom);
+    if (matchAt === -1) {
+      return null;
+    }
+    searchFrom = matchAt + 1;
+    const atBoundary =
+      matchAt === 0 || isWhitespaceChar(rawSegment[matchAt - 1]);
+    const operandStart = matchAt + needle.length;
+    const hasOperand =
+      atBoundary &&
+      operandStart < rawSegment.length &&
+      !isWhitespaceChar(rawSegment[operandStart]);
+    if (
+      hasOperand &&
+      rawSegment[operandStart] === '$' &&
+      rawSegment[operandStart + 1] === '('
+    ) {
+      const close = rawSegment.indexOf(')', operandStart + 2);
+      if (close !== -1) {
+        return rawSegment.slice(operandStart, close + 1);
+      }
+    }
+    if (hasOperand) {
+      let operandEnd = operandStart + 1;
+      while (
+        operandEnd < rawSegment.length &&
+        !isWhitespaceChar(rawSegment[operandEnd])
+      ) {
+        operandEnd++;
+      }
+      return rawSegment.slice(operandStart, operandEnd);
+    }
+  }
+  return null;
 }
 
 function isCredentialTargetExpression(target: string): boolean {

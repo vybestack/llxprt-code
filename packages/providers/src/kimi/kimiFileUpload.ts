@@ -6,7 +6,7 @@
 
 import type OpenAI from 'openai';
 import { toFile } from 'openai';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -86,21 +86,31 @@ export interface KimiFileUploadResult {
 }
 
 /**
+ * Fixed domain-separation label used as the HMAC message. The credential is
+ * used as the HMAC key material; the label exists only to bind this derivation
+ * to the upload-cache-namespacing use case.
+ */
+const CACHE_KEY_CREDENTIAL_LABEL = 'llxprt-kimi-upload-cache-key';
+
+/**
  * Build a stable cache key from a media block's content so that repeated
  * turns referencing the same document are not re-uploaded.
  *
- * The key includes the endpoint and a one-way digest of the API credential because
- * Moonshot file ids are scoped to an account. The complete payload is hashed so
- * distinct files cannot alias merely because their length and edges match.
+ * The key includes the endpoint and a keyed derivation of the API credential
+ * (HMAC-SHA256 with the api key as the key and a fixed domain-separation label
+ * as the message) because Moonshot file ids are scoped to an account. The
+ * credential is used as HMAC key material for cache namespacing only; it is not
+ * stored or persisted. The complete payload is hashed so distinct files cannot
+ * alias merely because their length and edges match.
  */
 function buildCacheKey(client: OpenAI, block: MediaBlock): string {
   const hash = createHash('sha256');
-  const credentialDigest = createHash('sha256')
-    .update(client.apiKey)
+  const credentialToken = createHmac('sha256', client.apiKey)
+    .update(CACHE_KEY_CREDENTIAL_LABEL)
     .digest('hex');
   hash.update(client.baseURL);
   hash.update('\0');
-  hash.update(credentialDigest);
+  hash.update(credentialToken);
   hash.update('\0');
   hash.update(block.mimeType);
   hash.update('\0');

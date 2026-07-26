@@ -347,3 +347,92 @@ describe('createBoundedCache', () => {
     expect(cache.has('x')).toBe(false);
   });
 });
+
+describe('CodeQL js/insufficient-password-hash: HMAC-derived cache key namespacing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function clientWith(
+    apiKey: string,
+    baseURL = 'https://api.moonshot.ai/v1',
+  ): Parameters<typeof uploadKimiFiles>[0] {
+    const filesCreate = vi.fn(async () => ({
+      id: `file-${Math.random().toString(36).slice(2, 10)}`,
+      bytes: 10,
+    }));
+    return {
+      apiKey,
+      baseURL,
+      files: { create: filesCreate },
+    } as unknown as Parameters<typeof uploadKimiFiles>[0];
+  }
+
+  it('distinct api keys yield distinct cache keys (no cross-account aliasing)', async () => {
+    const cache = createBoundedCache<string>(10);
+    const block = makePdfBlock('SAMECONTENT', 'report.pdf');
+
+    await uploadKimiFiles(clientWith('account-a'), [block], cache);
+    await uploadKimiFiles(clientWith('account-b'), [block], cache);
+
+    // Two uploads means the cache keys differed by credential, so the second
+    // was not served from the first's cache entry.
+    expect(cache.size).toBe(2);
+  });
+
+  it('identical inputs yield a stable key (dedup across turns)', async () => {
+    const cache = createBoundedCache<string>(10);
+    const block = makePdfBlock('SAMECONTENT', 'report.pdf');
+
+    const first = await uploadKimiFiles(
+      clientWith('account-a'),
+      [block],
+      cache,
+    );
+    const second = await uploadKimiFiles(
+      clientWith('account-a'),
+      [block],
+      cache,
+    );
+
+    // Stable key => second turn reuses the cached file id (only one upload).
+    expect(first[0].fileId).toBe(second[0].fileId);
+    expect(first[0].fileId).not.toBeUndefined();
+    expect(cache.size).toBe(1);
+  });
+
+  it('distinct file payloads never collide even with the same credential', async () => {
+    const cache = createBoundedCache<string>(10);
+
+    await uploadKimiFiles(
+      clientWith('account-a'),
+      [makePdfBlock('PAYLOAD-ONE', 'a.pdf')],
+      cache,
+    );
+    await uploadKimiFiles(
+      clientWith('account-a'),
+      [makePdfBlock('PAYLOAD-TWO', 'b.pdf')],
+      cache,
+    );
+
+    // Different content => different cache key => two distinct entries.
+    expect(cache.size).toBe(2);
+  });
+
+  it('a single-character change in the payload produces a distinct cache key', async () => {
+    const cache = createBoundedCache<string>(10);
+
+    await uploadKimiFiles(
+      clientWith('account-a'),
+      [makePdfBlock('PAYLOAD-X', 'a.pdf')],
+      cache,
+    );
+    await uploadKimiFiles(
+      clientWith('account-a'),
+      [makePdfBlock('PAYLOAD-Y', 'a.pdf')],
+      cache,
+    );
+
+    expect(cache.size).toBe(2);
+  });
+});
