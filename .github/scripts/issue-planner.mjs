@@ -485,7 +485,7 @@ export async function runCli(argv) {
 
   if (mode === '--extract-feedback') {
     const feedback = extractPlanFeedback(process.env.COMMENT_BODY ?? '');
-    await fs.writeFile(dir, feedback ?? '');
+    await fs.writeFile(nodePath.join(dir, 'feedback.txt'), feedback ?? '');
     return;
   }
 

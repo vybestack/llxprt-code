@@ -291,15 +291,16 @@ describe('real issue-planner CLI entrypoint', () => {
     }
   });
 
-  it('runs feedback mode using COMMENT_BODY', () => {
+  it('runs feedback mode using the shared planner directory contract', () => {
     const dir = makeTempDir('planner-cli-feedback-');
     try {
-      const output = path.join(dir, 'feedback.txt');
-      const result = runCli(['--extract-feedback', output], {
+      const result = runCli(['--extract-feedback', dir], {
         env: { COMMENT_BODY: '/plan retain this feedback' },
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(fs.readFileSync(output, 'utf8')).toBe('retain this feedback');
+      expect(fs.readFileSync(path.join(dir, 'feedback.txt'), 'utf8')).toBe(
+        'retain this feedback',
+      );
     } finally {
       removeTempDir(dir);
     }
@@ -438,7 +439,7 @@ describe('.github/workflows/issue-planner.yml', () => {
     expect(planJob.env).not.toHaveProperty('OPENAI_API_KEY');
     expect(planJob.env).not.toHaveProperty('COMMENT_BODY');
     const secretSteps = planJob.steps.filter((step) =>
-      JSON.stringify(step.env ?? {}).includes('secrets[vars.KEY_VAR_NAME'),
+      JSON.stringify(step).includes('secrets'),
     );
     expect(secretSteps).toHaveLength(1);
     expect(commandText(secretSteps[0])).toContain('ci-quota-check.js');

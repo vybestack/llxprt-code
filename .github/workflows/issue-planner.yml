@@ -146,7 +146,7 @@ jobs:
           COMMENT_BODY: '${{ github.event.comment.body }}'
         run: |
           set -euo pipefail
-          node .github/scripts/issue-planner.mjs --extract-feedback planner/feedback.txt
+          node .github/scripts/issue-planner.mjs --extract-feedback planner
 
       - name: 'Render planner context and instructions'
         run: |
