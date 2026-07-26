@@ -848,7 +848,13 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       expect(metadataIndex).toBeGreaterThan(checkpointAdvanceIndex);
     });
 
-    it('wires hash env vars into the Post OCR results step', () => {
+    it('wires trusted base and hash env vars into range resolution and posting', () => {
+      expect(resolveRangeStep.env?.API_BASE_SHA).toBe(
+        '${{ steps.pr-context.outputs.trusted_base_sha }}',
+      );
+      expect(postStep.env?.API_BASE_SHA).toBe(
+        '${{ steps.pr-context.outputs.trusted_base_sha }}',
+      );
       expect(postStep.env?.OCR_RULES_HASH).toBe('${{ vars.OCR_RULES_HASH }}');
       expect(postStep.env?.OCR_POLICY_HASH).toBe('${{ vars.OCR_POLICY_HASH }}');
       expect(postStep.env?.OCR_WORKFLOW_SCHEMA_HASH).toBe(

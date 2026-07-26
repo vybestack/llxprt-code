@@ -68,6 +68,10 @@ function isPositiveInteger(value) {
   return Number.isInteger(value) && value > 0;
 }
 
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
 function wallTimeSpeedup(baseline, candidate) {
   if (!isPositiveFiniteNumber(baseline) || !isPositiveFiniteNumber(candidate)) {
     return null;
@@ -208,7 +212,11 @@ function validateTransport(label, artifact, errors) {
     `${label} transport.responses_by_status`,
     errors,
   );
-  if (observedResponses !== null) {
+  if (
+    observedResponses !== null &&
+    isNonNegativeInteger(transport.upstream_errors) &&
+    isNonNegativeInteger(transport.total_requests)
+  ) {
     assertEqual(
       observedResponses + transport.upstream_errors,
       transport.total_requests,

@@ -630,7 +630,7 @@ jobs:
           EVENT_ACTION: ${{ github.event.action }}
           MERGE_BASE: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          API_BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          API_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
           OCR_VERSION: ${{ env.OCR_VERSION }}
           CHECKPOINT_FOUND: ${{ steps.read-checkpoint.outputs.CHECKPOINT_FOUND }}
           CHECKPOINT_VALID: ${{ steps.read-checkpoint.outputs.CHECKPOINT_VALID }}
@@ -1749,7 +1749,7 @@ jobs:
           BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          API_BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          API_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
           API_HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
           FROM_SHA: ${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}
           RANGE_MODE: ${{ github.event_name == 'workflow_dispatch' && 'full' || steps.resolve-range.outputs.RANGE_MODE }}

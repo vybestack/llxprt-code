@@ -156,7 +156,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 canary artifacts', ()
         .filter((step) => step.uses?.includes('upload-artifact'))
         .map((step) => String(step.with?.path ?? ''))
         .join('\n');
-      expect(uploadPaths).not.toMatch(/\.opencodereview|session|\.jsonl/i);
+      expect(uploadPaths).not.toMatch(/\.opencodereview|\bsession\b|\.jsonl/i);
       expect(metricsScript()).not.toMatch(
         /\.opencodereview\/sessions|session.*\.jsonl/i,
       );

@@ -16,6 +16,10 @@ import {
   runEmbeddedMetricsScript,
 } from './ocr-concurrency-canary-2673-helpers.js';
 
+function expectSanitized(metrics) {
+  expect(metrics).not.toHaveProperty('raw_result');
+}
+
 describe('normalized canary evidence', () => {
   it('executes the embedded metrics script against the observed OCR version artifact', () => {
     expect(OBSERVED_OCR_VERSION_OUTPUT).toMatch(
@@ -24,7 +28,7 @@ describe('normalized canary evidence', () => {
     const metrics = runEmbeddedMetricsScript(OBSERVED_OCR_VERSION_OUTPUT);
     expect(metrics.valid).toBe(true);
     expect(metrics.validation_errors).toEqual([]);
-    expect(metrics).not.toHaveProperty('raw_result');
+    expectSanitized(metrics);
     expect(metrics.provenance.actual_ocr_version).toBe('1.7.16');
     expect(metrics.provenance.canonical_config_fingerprint).toMatch(
       /^[0-9a-f]{64}$/,
@@ -48,13 +52,13 @@ describe('normalized canary evidence', () => {
     expect(metrics.validation_errors.join(' ')).toMatch(/OCR version output/i);
     expect(metrics.schema_version).toBe(1);
     expect(metrics.transport).toBeTypeOf('object');
-    expect(metrics).not.toHaveProperty('raw_result');
+    expectSanitized(metrics);
   });
 
   it('records authoritative safe transport aggregates and complete provenance', () => {
     const metrics = runBuild(buildInput());
     expect(metrics.valid).toBe(true);
-    expect(metrics).not.toHaveProperty('raw_result');
+    expectSanitized(metrics);
     expect(metrics.transport).toEqual(REPRESENTATIVE_TELEMETRY);
     expect(metrics.result).toEqual({
       status: 'success',
@@ -169,7 +173,7 @@ describe('normalized canary evidence', () => {
         new RegExp(error, 'i'),
       );
       expect(metrics.transport).toEqual(REPRESENTATIVE_TELEMETRY);
-      expect(metrics).not.toHaveProperty('raw_result');
+      expectSanitized(metrics);
     },
   );
 
