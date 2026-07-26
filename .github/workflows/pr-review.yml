@@ -266,7 +266,7 @@ jobs:
           # The manifest preserves paths containing legitimate double underscores.
           mkdir -p review/diffs
           : > review/diff-manifest.txt
-          while IFS=$'\t' read -r status filename; do
+          while IFS=$'\t' read -r _ filename; do
             [[ -z "$filename" ]] && continue
             safe_name="${filename//\//__}"
             printf '%s.diff\t%s\n' "${safe_name}" "${filename}" >> review/diff-manifest.txt
