@@ -399,10 +399,6 @@ function safeSum(distribution) {
   return total;
 }
 
-function validateFailureReconciliation(record) {
-  return validateFailureLists(record);
-}
-
 function validateLifecycleReconciliation(record) {
   if (
     record.marker_state.infrastructure_failure !==
@@ -539,7 +535,7 @@ function validateCrossTotals(record) {
 
 export function validateReconciliation(record) {
   const basicError =
-    validateFailureReconciliation(record) ||
+    validateFailureLists(record) ||
     validateLifecycleReconciliation(record) ||
     validateCountReconciliation(record);
   if (basicError || record.total_findings === null) return basicError;

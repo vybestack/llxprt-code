@@ -360,7 +360,9 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
       .filter((run) => run.includes('ocr-infrastructure-failure.txt'));
     expect(laterWriters.length).toBeGreaterThan(0);
     for (const run of laterWriters) {
-      expect(run).not.toMatch(/(^|[^>])> ocr-infrastructure-failure\.txt/m);
+      expect(run).not.toMatch(
+        /(^|[^>])>(?!>)\s*ocr-infrastructure-failure\.txt/m,
+      );
     }
   });
 

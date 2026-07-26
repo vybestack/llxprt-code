@@ -150,7 +150,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(validateReconciliation(telemetry)).toBeNull();
     const summary = fs.readFileSync(summaryPath, 'utf8');
     expect(summary).toContain('OCR Telemetry');
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('no-changed-tests / noop: emits valid telemetry with zero findings', () => {
@@ -200,7 +199,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(telemetry.files_reviewed).toBe(0);
     expect(telemetry.files_previewed).toBe(0);
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('OCR nonzero exit (infrastructure failure): emits valid degraded record', () => {
@@ -236,7 +234,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(telemetry.infrastructure_failure).toBe(true);
     expect(telemetry.post_state).toBe('failed');
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('Post failure / missing outputs: still emits valid record with post_state', () => {
@@ -263,7 +260,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
       'Post OCR results outputs were unavailable',
     );
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('corrupt ocr-metadata.json: emits valid record, does not throw', () => {
@@ -283,7 +279,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(result.status).toBe(0);
     const telemetry = readEmittedTelemetry(run);
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('zero-byte artifacts: emits valid record', () => {
@@ -317,7 +312,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(telemetry.infrastructure_failure).toBe(true);
     expect(telemetry.errors.length).toBeGreaterThan(0);
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('missing PR/SHA (null sha): emits valid record with sha null', () => {
@@ -328,7 +322,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     const telemetry = readEmittedTelemetry(run);
     expect(telemetry.sha).toBeNull();
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('missing workflow context emits a schema-valid record with truthful nulls', () => {
@@ -347,7 +340,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(telemetry.total_findings).toBeNull();
     expect(telemetry.errors).toContain('OCR metadata artifact was unavailable');
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('derives read failures only from explicit read-specific evidence', () => {
@@ -368,7 +360,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
       'unreadable.ts',
       'logic.ts',
     ]);
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('writes schema-valid telemetry atomically on success', () => {
@@ -384,7 +375,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(
       fs.readdirSync(run).filter((name) => name.includes('.writing-')),
     ).toEqual([]);
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('removes the temporary telemetry file when atomic rename fails', () => {
@@ -413,7 +403,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     const aggregation = JSON.parse(result.stdout);
     expect(aggregation.runs).toBe(1);
     expect(aggregation.total_findings).toBe(2);
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('completed_with_warnings reflected in files_reviewed', () => {
@@ -424,7 +413,6 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     const telemetry = readEmittedTelemetry(run);
     expect(telemetry.files_reviewed).toBe(3);
     expect(validateTelemetryRecord(telemetry)).toBeNull();
-    fs.rmSync(run, { recursive: true, force: true });
   });
 
   it('redacts escaped and embedded secret substrings atomically', () => {
@@ -458,9 +446,8 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
       'https://model.test/?credential=[REDACTED]&mode=diagnostic',
     );
     expect(validateTelemetryRecord(redacted)).toBeNull();
-    expect(fs.existsSync(`${telemetryPath}.redacting-${result.pid}`)).toBe(
-      false,
-    );
-    fs.rmSync(run, { recursive: true, force: true });
+    expect(
+      fs.readdirSync(run).filter((name) => name.includes('.redacting-')),
+    ).toEqual([]);
   });
 });

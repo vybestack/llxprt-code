@@ -153,7 +153,7 @@ function atomicWriteFile(target, content, operation) {
   temporarySequence += 1;
   const temporary = `${target}.${operation}-${process.pid}-${temporarySequence}`;
   try {
-    writeFileSync(temporary, content);
+    writeFileSync(temporary, content, { flag: 'wx' });
     renameSync(temporary, target);
   } catch (error) {
     rmSync(temporary, { force: true });

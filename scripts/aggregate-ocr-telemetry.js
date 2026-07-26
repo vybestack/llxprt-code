@@ -37,6 +37,8 @@ import {
 export { validateTelemetryRecord, isPlainObject };
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const DECIMAL_DIGITS_PATTERN = /^\d+$/;
+const LEADING_ZERO_PATTERN = /^0+(?=\d)/;
 
 /**
  * Compare two records for deterministic time-series ordering using a single
@@ -62,9 +64,9 @@ function compareByTime(a, b) {
 function numericStringCompare(a, b) {
   const left = String(a ?? '');
   const right = String(b ?? '');
-  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
-    const normalizedLeft = left.replace(/^0+(?=\d)/, '');
-    const normalizedRight = right.replace(/^0+(?=\d)/, '');
+  if (DECIMAL_DIGITS_PATTERN.test(left) && DECIMAL_DIGITS_PATTERN.test(right)) {
+    const normalizedLeft = left.replace(LEADING_ZERO_PATTERN, '');
+    const normalizedRight = right.replace(LEADING_ZERO_PATTERN, '');
     return (
       normalizedLeft.length - normalizedRight.length ||
       normalizedLeft.localeCompare(normalizedRight) ||
@@ -272,12 +274,12 @@ function findingsTrendEntry(record) {
   return entry;
 }
 
-function categoryTrendEntry(record) {
+function distributionTrendEntry(record, sourceField, outputField) {
   const entry = {
     run_id: record.run_id,
     run_attempt: record.run_attempt,
-    categories:
-      record.findings === null ? null : safeCopy(record.findings.by_category),
+    [outputField]:
+      record.findings === null ? null : safeCopy(record.findings[sourceField]),
   };
   if (typeof record.generated_at === 'string') {
     entry.generated_at = record.generated_at;
@@ -285,17 +287,12 @@ function categoryTrendEntry(record) {
   return entry;
 }
 
+function categoryTrendEntry(record) {
+  return distributionTrendEntry(record, 'by_category', 'categories');
+}
+
 function severityTrendEntry(record) {
-  const entry = {
-    run_id: record.run_id,
-    run_attempt: record.run_attempt,
-    severities:
-      record.findings === null ? null : safeCopy(record.findings.by_severity),
-  };
-  if (typeof record.generated_at === 'string') {
-    entry.generated_at = record.generated_at;
-  }
-  return entry;
+  return distributionTrendEntry(record, 'by_severity', 'severities');
 }
 
 function safeCopy(distribution) {
