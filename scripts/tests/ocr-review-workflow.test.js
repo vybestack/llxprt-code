@@ -314,7 +314,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Skipping OCR preview because an earlier OCR setup/configuration failure was recorded.',
       'echo "preview" > ocr-phase.txt',
       'command -v ocr',
-      'ocr review --preview --from "$MERGE_BASE_SHA" --to "$HEAD_SHA"',
+      'ocr review --preview --from "$FROM_SHA" --to "$HEAD_SHA"',
       'echo "::warning::Could not verify OCR preview scope for changed test files."',
       'echo "$status" > ocr-exit-code.txt',
       'mark_infrastructure_failure "preview" "OCR preview command failed"',
@@ -346,7 +346,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       '"**/__tests__/**"',
       '"**/tests/**"',
       '"**/test/**"',
-      'git diff --name-only --diff-filter=d "${MERGE_BASE_SHA}..${HEAD_SHA}"',
+      'git diff --name-only --diff-filter=d "${FROM_SHA}..${HEAD_SHA}"',
     ]);
   });
 

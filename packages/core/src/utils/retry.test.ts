@@ -1001,10 +1001,13 @@ describe('isRetryableError - self-classifying aggregate marker (issue #2450)', (
 
   it('aggregate isRetryable === false is AUTHORITATIVE even when its flattened message contains a network-transient phrase', () => {
     // Regression guard (issue #2450): the aggregate message flattens child
-    // messages. A mixed aggregate (one network-transient backend + one
-    // permanent failure) is correctly non-retryable, and must NOT be rescued
-    // by the message-based network-transient heuristic seeing the sibling's
-    // "socket hang up" text.
+    // messages. This test directly constructs an aggregate with
+    // isRetryable === false to prove PRIORITY 0 honors that marker regardless
+    // of message content — the message-based network-transient heuristic must
+    // NOT override the aggregate's own precomputed decision, even when the
+    // flattened message contains a transient phrase like "socket hang up".
+    // (Note: the load balancer's actual mixed-aggregate policy is tested in the
+    // providers package; this test isolates the core PRIORITY 0 mechanism.)
     const error = makeAggregate(
       false,
       'zai: socket hang up; makoraglm51: bad request (status: 400)',

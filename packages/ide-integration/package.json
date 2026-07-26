@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-ide-integration",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "LLxprt Code IDE Integration — IDE detection, IDE companion client, and LSP service client",
   "license": "Apache-2.0",
   "repository": {

@@ -71,7 +71,10 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
       const reviewRun = commandText(reviewStep);
       expect(workflow.env?.OCR_VERSION).toBe('1.7.16');
       expect(reviewStep.env?.OCR_LLM_MODEL).toBe('${{ vars.OCR_LLM_MODEL }}');
-      expect(reviewRun).toContain('--from "$MERGE_BASE_SHA"');
+      expect(reviewStep.env?.FROM_SHA).toBe(
+        "${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}",
+      );
+      expect(reviewRun).toContain('--from "$FROM_SHA"');
       expect(reviewRun).toContain('--to "$HEAD_SHA"');
       expect(reviewRun).toContain('--timeout "$REVIEW_TIMEOUT"');
       expect(reviewRun).toContain('--concurrency "$OCR_CONCURRENCY"');
