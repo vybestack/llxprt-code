@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-telemetry",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "LLxprt Code Telemetry — debug logging, OpenTelemetry instrumentation, and metrics",
   "license": "Apache-2.0",
   "repository": {
