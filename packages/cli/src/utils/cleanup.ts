@@ -10,7 +10,6 @@ import { ShellExecutionService } from '@vybestack/llxprt-code-core';
 import { FileOutput } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
-  __resetCleanupStateForTesting,
   beginCleanup,
   drainAsyncCleanups,
   drainSyncCleanups,
