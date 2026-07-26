@@ -631,7 +631,7 @@ describe('.github/workflows/ocr-review.yml — changed-file coverage verificatio
       expect(() => JSON.parse(result)).not.toThrow();
     });
 
-    it('emits valid JSON when redaction throws (fallback)', () => {
+    it('emits only a safe error when redaction throws', () => {
       const sandbox = { ...SANDBOX_GLOBALS };
       vm.createContext(sandbox);
       const src = extractFunctionSource(
@@ -643,8 +643,10 @@ describe('.github/workflows/ocr-review.yml — changed-file coverage verificatio
       };
       vm.runInContext(src, sandbox, { timeout: VM_TIMEOUT_MS });
       const result = sandbox.serializeCoverageReport({ a: 'secret' });
-      expect(() => JSON.parse(result)).not.toThrow();
-      expect(JSON.parse(result)).toEqual({ a: 'secret' });
+      expect(JSON.parse(result)).toEqual({
+        error: 'coverage report serialization failed',
+      });
+      expect(result).not.toContain('secret');
     });
 
     it('emits the serialization error report for circular input', () => {

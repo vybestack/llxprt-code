@@ -2492,13 +2492,7 @@ jobs:
                 const redacted = redactJsonValue(report);
                 return JSON.stringify(redacted, null, 2);
               } catch (_) {
-                // Redaction failed; preserve valid JSON by falling back to
-                // the unredacted report rather than corrupting it.
-                try {
-                  return JSON.stringify(report, null, 2);
-                } catch (_) {
-                  return JSON.stringify({ error: 'coverage report serialization failed' }, null, 2);
-                }
+                return JSON.stringify({ error: 'coverage report serialization failed' }, null, 2);
               }
             }
 
