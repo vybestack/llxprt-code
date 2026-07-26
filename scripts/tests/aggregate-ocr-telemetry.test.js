@@ -393,6 +393,18 @@ describe('discoverTelemetryRecords — recursive discovery', () => {
     expect(() => discoverTelemetryRecords(tmpDir)).toThrow(/malformed/i);
     fs.rmSync(path.join(bad, 'ocr-telemetry.json'), { force: true });
   });
+  it('identifies the path of malformed JSON', () => {
+    const bad = path.join(tmpDir, 'invalid-json');
+    const telemetryPath = path.join(bad, 'ocr-telemetry.json');
+    fs.mkdirSync(bad, { recursive: true });
+    fs.writeFileSync(telemetryPath, '{invalid');
+    expect(() => discoverTelemetryRecords(tmpDir)).toThrow(telemetryPath);
+    fs.rmSync(telemetryPath, { force: true });
+  });
+  it('identifies a directory that cannot be discovered', () => {
+    const missing = path.join(tmpDir, 'missing');
+    expect(() => discoverTelemetryRecords(missing)).toThrow(missing);
+  });
 });
 
 describe('aggregate-ocr-telemetry.js CLI — contract', () => {

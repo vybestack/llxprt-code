@@ -147,8 +147,8 @@ describe('validateTelemetryRecord — core shape', () => {
   it('rejects incomplete records and unknown fields', () => {
     const missing = validRecord();
     delete missing.errors;
-    expect(validateTelemetryRecord(missing)).toMatch(
-      /errors|required|complete/i,
+    expect(validateTelemetryRecord(missing)).toContain(
+      'record is incomplete; missing field: errors',
     );
     expect(validateTelemetryRecord(validRecord({ unexpected: true }))).toMatch(
       /unexpected|unknown|complete/i,
@@ -259,6 +259,13 @@ describe('validateTelemetryRecord — core shape', () => {
     expect(
       validateTelemetryRecord(validRecord({ generated_at: 'not-a-date' })),
     ).toMatch(/generated_at/i);
+  });
+  it('accepts an ISO-8601 timestamp with a compact numeric offset', () => {
+    expect(
+      validateTelemetryRecord(
+        validRecord({ generated_at: '2026-07-25T23:09:35+0530' }),
+      ),
+    ).toBeNull();
   });
   it('rejects negative wall_clock_seconds', () => {
     expect(
@@ -381,6 +388,22 @@ describe('validateReconciliation — invariants', () => {
     };
     expect(validateReconciliation(record)).toMatch(/cross|category_severity/i);
   });
+  it('reports category-distribution overflow explicitly', () => {
+    const record = validRecord({
+      total_findings: Number.MAX_SAFE_INTEGER,
+      findings: {
+        by_category: { bug: Number.MAX_SAFE_INTEGER, style: 1 },
+        by_severity: { high: Number.MAX_SAFE_INTEGER },
+        by_category_severity: {
+          bug: { high: Number.MAX_SAFE_INTEGER },
+          style: { high: 1 },
+        },
+      },
+    });
+    expect(validateReconciliation(record)).toBe(
+      'findings.by_category sum exceeds safe integer range',
+    );
+  });
   it('fails when file_read_failure_count != file_read_failures.length', () => {
     const record = validRecord({
       file_read_failures: ['a', 'b'],
@@ -432,7 +455,7 @@ describe('validateTelemetryRecord — strict lifecycle and reconciliation', () =
     expect(validateTelemetryRecord(extraSeverity)).toMatch(/cross severity/i);
   });
 
-  it('rejects token totals that omit cache usage', () => {
+  it('accepts OCR totals that include cached tokens within input/output', () => {
     expect(
       validateTelemetryRecord(
         validRecord({
@@ -442,6 +465,22 @@ describe('validateTelemetryRecord — strict lifecycle and reconciliation', () =
             cache_read: 3,
             cache_write: 2,
             total: 15,
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('rejects token totals that differ from input plus output', () => {
+    expect(
+      validateTelemetryRecord(
+        validRecord({
+          tokens: {
+            input: 10,
+            output: 5,
+            cache_read: 3,
+            cache_write: 2,
+            total: 20,
           },
         }),
       ),

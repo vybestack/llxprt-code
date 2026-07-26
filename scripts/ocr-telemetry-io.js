@@ -8,6 +8,7 @@ import {
   appendFileSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -146,6 +147,20 @@ function copyWithRedactedStrings(value, secrets) {
   return copy;
 }
 
+let temporarySequence = 0;
+
+function atomicWriteFile(target, content, operation) {
+  temporarySequence += 1;
+  const temporary = `${target}.${operation}-${process.pid}-${temporarySequence}`;
+  try {
+    writeFileSync(temporary, content);
+    renameSync(temporary, target);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
+}
+
 export function redactTelemetryFile(path, secrets) {
   const record = validateTelemetryFile(path);
   const usableSecrets = secrets.filter(
@@ -153,9 +168,7 @@ export function redactTelemetryFile(path, secrets) {
   );
   const redacted = copyWithRedactedStrings(record, usableSecrets);
   assertValid(redacted);
-  const temporary = `${path}.redacting-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify(redacted, null, 2)}\n`);
-  renameSync(temporary, path);
+  atomicWriteFile(path, `${JSON.stringify(redacted, null, 2)}\n`, 'redacting');
 }
 
 export function writeTelemetryArtifacts(record, markdown, options = {}) {
@@ -163,9 +176,7 @@ export function writeTelemetryArtifacts(record, markdown, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const env = options.env ?? process.env;
   const target = join(cwd, 'ocr-telemetry.json');
-  const temporary = `${target}.tmp-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`);
-  renameSync(temporary, target);
+  atomicWriteFile(target, `${JSON.stringify(record, null, 2)}\n`, 'writing');
   if (env.GITHUB_STEP_SUMMARY) {
     appendFileSync(env.GITHUB_STEP_SUMMARY, markdown);
   }

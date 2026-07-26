@@ -375,12 +375,25 @@ function renderAggregationMarkdown(stats) {
 }
 
 function readJson(path) {
-  const content = readFileSync(path, 'utf8');
+  let content;
+  try {
+    content = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new Error(`unable to read telemetry record at ${path}`, {
+      cause: error,
+    });
+  }
   const trimmed = content.trim();
   if (trimmed.length === 0) {
     return null;
   }
-  return JSON.parse(trimmed);
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    throw new Error(`malformed JSON in telemetry record at ${path}`, {
+      cause: error,
+    });
+  }
 }
 
 function isTelemetryEntry(entry) {
@@ -394,7 +407,14 @@ function isTelemetryEntry(entry) {
  * @returns {Array<object>}
  */
 export function discoverTelemetryRecords(rootPath) {
-  const entries = readdirSync(rootPath, { withFileTypes: true });
+  let entries;
+  try {
+    entries = readdirSync(rootPath, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(`unable to discover telemetry records under ${rootPath}`, {
+      cause: error,
+    });
+  }
   const records = [];
   for (const entry of entries) {
     const fullPath = join(rootPath, entry.name);

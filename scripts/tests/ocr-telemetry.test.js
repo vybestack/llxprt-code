@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  buildGuaranteedTelemetry,
   buildTelemetry,
   crossDistribution,
   elapsedToSeconds,
@@ -31,7 +32,7 @@ function baseMetadata(overrides = {}) {
         cache_read: 50,
         cache_write: 25,
         cache: 75,
-        total: 475,
+        total: 400,
       },
     },
     range: {
@@ -309,10 +310,14 @@ describe('buildTelemetry — file_read_failures semantics', () => {
 });
 
 describe('buildTelemetry — already_resolved semantics', () => {
-  it('emits already_resolved null (not aliased to comments_skipped)', () => {
-    const telemetry = buildTelemetry(baseInput());
-    expect(telemetry.already_resolved).toBeNull();
-    expect(telemetry.already_posted_or_skipped_dedup).toBe(1);
+  it('emits the explicit prior-head dedup count independently from comments_skipped', () => {
+    const telemetry = buildTelemetry(
+      baseInput({
+        context: baseContext({ alreadyResolved: 2, commentsSkipped: 3 }),
+      }),
+    );
+    expect(telemetry.already_resolved).toBe(2);
+    expect(telemetry.comments_skipped).toBe(3);
   });
 });
 
@@ -348,6 +353,48 @@ describe('validateTelemetryInput — fail-fast validation', () => {
     ).toMatch(/run_id/i);
   });
 });
+describe('buildGuaranteedTelemetry — malformed input fallback', () => {
+  it('returns a schema-valid failed record for malformed identity and lifecycle context', () => {
+    const telemetry = buildGuaranteedTelemetry(
+      baseInput({
+        context: baseContext({
+          runId: '',
+          runAttempt: 'invalid',
+          prNumber: -1,
+          sha: 'not-a-sha',
+          generatedAt: 'not-a-timestamp',
+          telemetryState: 'invalid',
+          postState: 'invalid',
+          artifactState: 'invalid',
+          hashState: 'invalid',
+        }),
+        errors: [null, '', 'source failure'],
+      }),
+      { error: new Error('fallback failure') },
+    );
+
+    expect(validateTelemetryRecord(telemetry)).toBeNull();
+    expect(telemetry).toMatchObject({
+      run_id: 'unavailable',
+      run_attempt: null,
+      pr_number: null,
+      sha: null,
+      telemetry_state: 'failed',
+      post_state: 'failed',
+      artifact_state: 'failed',
+      hash_state: 'failed',
+      infrastructure_failure: true,
+    });
+    expect(telemetry.errors).toContain('fallback failure');
+  });
+
+  it('returns a schema-valid failed record when the input is missing', () => {
+    const telemetry = buildGuaranteedTelemetry(null);
+
+    expect(validateTelemetryRecord(telemetry)).toBeNull();
+    expect(telemetry.errors.length).toBeGreaterThan(0);
+  });
+});
 
 describe('renderTelemetryMarkdown', () => {
   it('renders a compact deterministic summary', () => {
@@ -368,6 +415,23 @@ describe('renderTelemetryMarkdown', () => {
     );
     const markdown = renderTelemetryMarkdown(telemetry);
     expect(markdown).toContain('| wall-clock / CLI elapsed (s) | n/a / n/a |');
+  });
+  it('escapes Markdown-sensitive identity values', () => {
+    const telemetry = buildTelemetry(
+      baseInput({ context: baseContext({ runId: 'run`\n## injected' }) }),
+    );
+    const markdown = renderTelemetryMarkdown(telemetry);
+
+    expect(markdown).toContain('run `run&#96;&#10;## injected`');
+    expect(markdown).not.toContain('run`\n## injected');
+  });
+  it('renders already-resolved publication volume', () => {
+    const telemetry = buildTelemetry(
+      baseInput({ context: baseContext({ alreadyResolved: 2 }) }),
+    );
+    const markdown = renderTelemetryMarkdown(telemetry);
+
+    expect(markdown).toContain('| already resolved | 2 |');
   });
 });
 

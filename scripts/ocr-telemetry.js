@@ -418,26 +418,62 @@ export function buildTelemetry(input) {
 
 export function buildGuaranteedTelemetry(input, options = {}) {
   const source = isPlainObject(input) ? input : {};
-  const extraErrors =
+  const context = isPlainObject(source.context) ? source.context : {};
+  const sourceErrors = Array.isArray(source.errors) ? source.errors : [];
+  const optionErrors =
     options.error === undefined
       ? []
       : [String(options.error?.message ?? options.error)];
-  const record = buildRecord({
-    ...source,
-    errors: [
-      ...(Array.isArray(source.errors) ? source.errors : []),
-      ...extraErrors,
-    ],
-  });
-  const validationError = validateTelemetryRecord(record);
-  if (validationError) {
-    throw new Error(`Guaranteed telemetry is invalid: ${validationError}`);
+  const errors = [...sourceErrors, ...optionErrors].filter(
+    (error) => typeof error === 'string' && error.trim().length > 0,
+  );
+  const candidate = buildRecord({ ...source, errors });
+  const candidateError = validateTelemetryRecord(candidate);
+  if (!candidateError) {
+    return candidate;
   }
-  return record;
+
+  const sha = nullableString(context.sha);
+  const fallback = buildRecord({
+    metadata: null,
+    manifest: null,
+    routingDecisions: null,
+    errors: [...errors, candidateError, 'Telemetry fallback emitted'],
+    context: {
+      runId: nullableString(context.runId) ?? 'unavailable',
+      runAttempt: normalizeRunAttempt(context.runAttempt),
+      prNumber: nullableCount(context.prNumber),
+      sha: sha && /^[0-9a-f]{40}$/.test(sha) ? sha : null,
+      generatedAt: normalizeTimestamp(context.generatedAt),
+      infrastructureFailure: true,
+      policyFailure: Boolean(context.policyFailure),
+      telemetryState: 'failed',
+      postState: 'failed',
+      artifactState: 'failed',
+      hashState: 'failed',
+      postOutcome: 'failed',
+      previewAttempted: false,
+    },
+  });
+  const fallbackError = validateTelemetryRecord(fallback);
+  if (fallbackError) {
+    throw new Error(`Telemetry fallback is invalid: ${fallbackError}`);
+  }
+  return fallback;
 }
 
 function display(value) {
   return value === null ? 'n/a' : String(value);
+}
+
+function markdownCodeValue(value) {
+  return display(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('`', '&#96;')
+    .replaceAll('\r', '&#13;')
+    .replaceAll('\n', '&#10;');
 }
 
 function distributionText(distribution) {
@@ -466,13 +502,14 @@ export function renderTelemetryMarkdown(telemetry) {
   return [
     '## OCR Telemetry',
     '',
-    `PR #${display(telemetry.pr_number)} · run \`${display(telemetry.run_id)}\` · sha \`${telemetry.sha?.slice(0, 8) ?? 'n/a'}\``,
+    `PR #${display(telemetry.pr_number)} · run \`${markdownCodeValue(telemetry.run_id)}\` · sha \`${markdownCodeValue(telemetry.sha?.slice(0, 8) ?? null)}\``,
     '',
     '| metric | value |',
     '| --- | --- |',
     `| total findings | ${display(telemetry.total_findings)} |`,
     `| files previewed / reviewed | ${display(telemetry.files_previewed)} / ${display(telemetry.files_reviewed)} |`,
     `| file-read / per-file failures | ${display(telemetry.file_read_failure_count)} / ${display(telemetry.per_file_review_failure_count)} |`,
+    `| already resolved | ${display(telemetry.already_resolved)} |`,
     `| publication inline / summary / skipped / failed / total | ${display(telemetry.inline_posted)} / ${display(telemetry.comments_routed_summary)} / ${display(telemetry.comments_skipped)} / ${display(telemetry.comments_failed)} / ${display(telemetry.comments_total)} |`,
     `| publication state | ${display(telemetry.publication_state)} |`,
     `| tokens | ${tokenText} |`,

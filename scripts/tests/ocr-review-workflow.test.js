@@ -581,8 +581,9 @@ describe('.github/workflows/ocr-review.yml', () => {
     );
   });
 
-  it('uploads artifacts only after telemetry validation', () => {
+  it('uploads diagnostics and telemetry only after their respective validation', () => {
     const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
+    const telemetryUploadStep = stepNamed(codeReviewJob, 'Upload OCR telemetry');
     expect(String(uploadStep.if)).toContain(
       'steps.ocr-telemetry-validation.outputs.valid',
     );
@@ -590,8 +591,9 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(uploadStep.with?.path).toContain('ocr-preflight.txt');
     expect(uploadStep.with?.path).toContain('ocr-infrastructure-failure.txt');
     expect(uploadStep.with?.path).toContain('ocr-policy-failure.txt');
-    expect(uploadStep.with?.path).toContain('ocr-telemetry.json');
-    expect(uploadStep.with?.['if-no-files-found']).toBe('error');
+    expect(uploadStep.with?.path).not.toContain('ocr-telemetry.json');
+    expect(telemetryUploadStep.with?.path).toBe('ocr-telemetry.json');
+    expect(telemetryUploadStep.with?.['if-no-files-found']).toBe('error');
   });
 
   it('creates non-telemetry placeholders before producing telemetry', () => {

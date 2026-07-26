@@ -103,8 +103,10 @@ function exactKeys(value, expected, name) {
     (key) => !Object.prototype.hasOwnProperty.call(value, key),
   );
   const unexpected = actual.filter((key) => !expected.includes(key));
-  if (missing.length > 0)
-    return `${name} is incomplete; missing ${missing.join(', ')}`;
+  if (missing.length > 0) {
+    const noun = missing.length === 1 ? 'field' : 'fields';
+    return `${name} is incomplete; missing ${noun}: ${missing.join(', ')}`;
+  }
   if (unexpected.length > 0) {
     return `${name} contains unknown fields: ${unexpected.join(', ')}`;
   }
@@ -153,7 +155,7 @@ function enumError(value, name, nullable = false) {
 function isCalendarExactIsoTimestamp(value) {
   if (typeof value !== 'string') return false;
   const match =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|([+-])(\d{2}):?(\d{2}))$/.exec(
       value,
     );
   if (!match) return false;
@@ -215,6 +217,11 @@ function validateOcr(ocr) {
   );
 }
 
+const FAILURE_LIST_FIELDS = [
+  ['file_read_failures', 'file_read_failure_count'],
+  ['per_file_review_failures', 'per_file_review_failure_count'],
+];
+
 function validateFailureList(list, count, listName, countName) {
   if (list === null || count === null) {
     return list === null && count === null
@@ -229,6 +236,19 @@ function validateFailureList(list, count, listName, countName) {
   return list.length === count
     ? null
     : `${countName} must equal ${listName}.length`;
+}
+
+function validateFailureLists(record) {
+  for (const [listName, countName] of FAILURE_LIST_FIELDS) {
+    const error = validateFailureList(
+      record[listName],
+      record[countName],
+      listName,
+      countName,
+    );
+    if (error) return error;
+  }
+  return null;
 }
 
 function validateMetrics(record) {
@@ -253,20 +273,7 @@ function validateMetrics(record) {
     const error = nullableCountError(record[field], field);
     if (error) return error;
   }
-  return (
-    validateFailureList(
-      record.file_read_failures,
-      record.file_read_failure_count,
-      'file_read_failures',
-      'file_read_failure_count',
-    ) ||
-    validateFailureList(
-      record.per_file_review_failures,
-      record.per_file_review_failure_count,
-      'per_file_review_failures',
-      'per_file_review_failure_count',
-    )
-  );
+  return validateFailureLists(record);
 }
 
 function validateFindings(record) {
@@ -330,11 +337,10 @@ function validateTokens(tokens) {
       return `tokens.${field} must be a safe nonnegative integer`;
     }
   }
-  const expected =
-    tokens.input + tokens.output + tokens.cache_read + tokens.cache_write;
+  const expected = tokens.input + tokens.output;
   return Number.isSafeInteger(expected) && tokens.total === expected
     ? null
-    : 'tokens.total must equal input + output + cache_read + cache_write';
+    : 'tokens.total must equal input + output';
 }
 
 function validateLifecycle(record) {
@@ -394,20 +400,7 @@ function safeSum(distribution) {
 }
 
 function validateFailureReconciliation(record) {
-  return (
-    validateFailureList(
-      record.file_read_failures,
-      record.file_read_failure_count,
-      'file_read_failures',
-      'file_read_failure_count',
-    ) ||
-    validateFailureList(
-      record.per_file_review_failures,
-      record.per_file_review_failure_count,
-      'per_file_review_failures',
-      'per_file_review_failure_count',
-    )
-  );
+  return validateFailureLists(record);
 }
 
 function validateLifecycleReconciliation(record) {
@@ -505,6 +498,12 @@ function validateCrossTotals(record) {
   if (coverageError) return coverageError;
   const categorySum = safeSum(categories);
   const severitySum = safeSum(severities);
+  if (categorySum === null) {
+    return 'findings.by_category sum exceeds safe integer range';
+  }
+  if (severitySum === null) {
+    return 'findings.by_severity sum exceeds safe integer range';
+  }
   if (categorySum !== record.total_findings) {
     return `findings.by_category sum (${categorySum}) must equal total_findings (${record.total_findings})`;
   }
@@ -516,7 +515,11 @@ function validateCrossTotals(record) {
     severityKeys.map((key) => [key, 0]),
   );
   for (const category of Object.keys(categories)) {
-    if (safeSum(cross[category]) !== categories[category]) {
+    const crossCategorySum = safeSum(cross[category]);
+    if (crossCategorySum === null) {
+      return 'findings.by_category_severity sum exceeds safe integer range';
+    }
+    if (crossCategorySum !== categories[category]) {
       return `cross category ${category} must equal by_category`;
     }
     for (const severity of severityKeys) {

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -305,11 +305,12 @@ if (${JSON.stringify(mode)} === 'rename') fs.renameSync = function (from, to, ..
       );
     }
     const output = path.join(directory, 'github-output.txt');
-    execFileSync(
-      'bash',
-      ['-c', commandText(stepNamed(codeReviewJob, 'Capture OCR wall-clock'))],
-      { cwd: directory, env: { ...process.env, GITHUB_OUTPUT: output } },
+    const result = runShell(
+      commandText(stepNamed(codeReviewJob, 'Capture OCR wall-clock')),
+      directory,
+      { GITHUB_OUTPUT: output },
     );
+    expect(result.status).toBe(0);
     const value = fs
       .readFileSync(output, 'utf8')
       .match(/^wall_clock_seconds=(.*)$/m)?.[1];

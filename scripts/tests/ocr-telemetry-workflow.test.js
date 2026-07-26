@@ -16,18 +16,14 @@ import {
 describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () => {
   let workflow;
   let codeReviewJob;
-  let _postScript;
-  let initialClassificationStep;
-  let _initialClassificationRun;
   let telemetryStep;
   let telemetryRun;
-  let redactStep;
-  let _redactRun;
   let placeholderStep;
   let placeholderRun;
   let hashStep;
   let _hashRun;
   let uploadStep;
+  let telemetryUploadStep;
   let wallClockStep;
   let _wallClockRun;
   let filesReviewedStep;
@@ -39,19 +35,11 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
     workflow = yaml.load(readRootFile(WORKFLOW_PATH));
     codeReviewJob = workflow.jobs?.['code-review'];
     expect(codeReviewJob).toBeTruthy();
-    _postScript = commandText(stepNamed(codeReviewJob, 'Post OCR results'));
-    initialClassificationStep = stepNamed(
-      codeReviewJob,
-      'Resolve OCR failure classification',
-    );
-    _initialClassificationRun = commandText(initialClassificationStep);
     telemetryStep = stepNamed(
       codeReviewJob,
       'Emit OCR telemetry (issue #2676)',
     );
     telemetryRun = commandText(telemetryStep);
-    redactStep = stepNamed(codeReviewJob, 'Redact OCR diagnostic artifacts');
-    _redactRun = commandText(redactStep);
     placeholderStep = stepNamed(
       codeReviewJob,
       'Ensure OCR artifact placeholders exist',
@@ -63,6 +51,7 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
     );
     _hashRun = commandText(hashStep);
     uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
+    telemetryUploadStep = stepNamed(codeReviewJob, 'Upload OCR telemetry');
   });
 
   describe('step ordering and id', () => {
@@ -76,13 +65,15 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
       expect(telemetryIndex).toBeGreaterThan(classificationIndex);
     });
 
-    it('places final classification after telemetry validation and upload', () => {
+    it('places final classification after telemetry validation and uploads', () => {
       const names = codeReviewJob.steps.map((step) => step.name);
       const validationIndex = names.indexOf('Validate redacted OCR telemetry');
+      const telemetryUploadIndex = names.indexOf('Upload OCR telemetry');
       const uploadIndex = names.indexOf('Upload OCR artifacts');
       const finalIndex = names.indexOf('Resolve final OCR classification');
       expect(validationIndex).toBeGreaterThan(-1);
       expect(finalIndex).toBeGreaterThan(validationIndex);
+      expect(finalIndex).toBeGreaterThan(telemetryUploadIndex);
       expect(finalIndex).toBeGreaterThan(uploadIndex);
     });
 
@@ -115,10 +106,12 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
         'Ensure OCR artifact placeholders exist',
       );
       const validationIndex = names.indexOf('Validate redacted OCR telemetry');
+      const telemetryUploadIndex = names.indexOf('Upload OCR telemetry');
       const uploadIndex = names.indexOf('Upload OCR artifacts');
       expect(placeholderIndex).toBeLessThan(telemetryIndex);
       expect(validationIndex).toBeGreaterThan(telemetryIndex);
-      expect(uploadIndex).toBeGreaterThan(validationIndex);
+      expect(telemetryUploadIndex).toBeGreaterThan(validationIndex);
+      expect(uploadIndex).toBeGreaterThan(telemetryUploadIndex);
     });
   });
 
@@ -167,8 +160,10 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
       );
     });
 
-    it('does NOT alias comments_skipped as already_resolved', () => {
-      expect(telemetryStep.env).not.toHaveProperty('OCR_ALREADY_RESOLVED');
+    it('passes the explicit prior-head dedup count as already_resolved', () => {
+      expect(telemetryStep.env?.OCR_ALREADY_RESOLVED).toBe(
+        '${{ steps.post-ocr-results.outputs.already_resolved }}',
+      );
     });
 
     it('passes classification flags and output counters', () => {
@@ -220,8 +215,13 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
       expect(placeholderRun).not.toContain('ocr-telemetry.json');
     });
 
-    it('includes ocr-telemetry.json in the upload artifact path', () => {
-      expect(uploadStep.with?.path).toContain('ocr-telemetry.json');
+    it('uploads telemetry independently from source diagnostic gating', () => {
+      expect(telemetryUploadStep.if).toBe(
+        "${{ always() && steps.ocr-telemetry-validation.outputs.valid == 'true' }}",
+      );
+      expect(telemetryUploadStep.with?.name).toContain('ocr-telemetry');
+      expect(telemetryUploadStep.with?.path).toBe('ocr-telemetry.json');
+      expect(uploadStep.with?.path).not.toContain('ocr-telemetry.json');
     });
   });
 
@@ -302,7 +302,7 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
 
   it('hashes telemetry before reading the finalized manifest for its self-hash', () => {
     expect(_hashRun).toMatch(
-      /hashableArtifacts\s*=\s*\[[\s\S]*ocr-telemetry\.json[\s\S]*\];/,
+      /hashableArtifacts\s*=\s*\[[^\]]*ocr-telemetry\.json[^\]]*\];/,
     );
     expect(_hashRun.indexOf('ocr-telemetry.json')).toBeLessThan(
       _hashRun.indexOf('const manifestContent'),
@@ -346,6 +346,22 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
       // ocr-telemetry.json before invoking the producer.
       expect(telemetryRun).not.toMatch(/: > ocr-telemetry\.json/);
     });
+  });
+
+  it('preserves infrastructure diagnostics after initialization', () => {
+    const initializeRun = commandText(
+      stepNamed(codeReviewJob, 'Initialize OCR artifact files'),
+    );
+    expect(initializeRun).toContain(': > ocr-infrastructure-failure.txt');
+
+    const laterWriters = codeReviewJob.steps
+      .filter((step) => step.name !== 'Initialize OCR artifact files')
+      .map((step) => commandText(step))
+      .filter((run) => run.includes('ocr-infrastructure-failure.txt'));
+    expect(laterWriters.length).toBeGreaterThan(0);
+    for (const run of laterWriters) {
+      expect(run).not.toMatch(/(^|[^>])> ocr-infrastructure-failure\.txt/m);
+    }
   });
 
   describe('ocr-selected-files.txt captured for all review runs', () => {

@@ -421,6 +421,7 @@ jobs:
       # Feature 5 (issue #2670): structured comment-count outputs.
       comments_total: ${{ steps.post-ocr-results.outputs.comments_total }}
       comments_inline: ${{ steps.post-ocr-results.outputs.comments_inline }}
+      already_resolved: ${{ steps.post-ocr-results.outputs.already_resolved }}
       comments_skipped: ${{ steps.post-ocr-results.outputs.comments_skipped }}
       comments_failed: ${{ steps.post-ocr-results.outputs.comments_failed }}
       comments_routed_summary: ${{ steps.post-ocr-results.outputs.comments_routed_summary }}
@@ -833,7 +834,7 @@ jobs:
           : > ocr-routing-decisions.json
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
-            echo "phase=$1; reason=$2" > ocr-infrastructure-failure.txt
+            echo "phase=$1; reason=$2" >> ocr-infrastructure-failure.txt
           }
           mark_policy_failure() {
             echo "$1" > ocr-policy-failure.txt
@@ -848,7 +849,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=install; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=install; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -927,7 +928,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=config; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=config; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           if ! command -v ocr >/dev/null 2>&1; then
@@ -979,7 +980,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=validate; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=validate; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           missing=0
@@ -1021,7 +1022,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=llm-preflight; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=llm-preflight; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           if ! command -v ocr >/dev/null 2>&1; then
@@ -1073,7 +1074,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=preview; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=preview; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           changed_tests="$(
@@ -1240,7 +1241,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=review; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=review; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           if ! command -v ocr >/dev/null 2>&1; then
@@ -2886,6 +2887,7 @@ jobs:
             const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;
             core.setOutput('comments_total', String(commentsTotal));
             core.setOutput('comments_inline', String(postedInline));
+            core.setOutput('already_resolved', String(commentsSkipped));
             core.setOutput('comments_skipped', String(commentsSkipped));
             core.setOutput('comments_failed', String(failedInline));
             core.setOutput('comments_routed_summary', String(routingShadowMode ? wouldRouteToSummary : summaryRouted.length));
@@ -3217,6 +3219,7 @@ jobs:
           OCR_FILE_READ_FAILURES: ${{ steps.post-ocr-results.outputs.file_read_failures }}
           OCR_PER_FILE_REVIEW_FAILURES: ${{ steps.post-ocr-results.outputs.per_file_review_failures }}
           OCR_INLINE_POSTED: ${{ steps.post-ocr-results.outputs.comments_inline }}
+          OCR_ALREADY_RESOLVED: ${{ steps.post-ocr-results.outputs.already_resolved }}
           OCR_ALREADY_POSTED_OR_SKIPPED_DEDUP: ${{ steps.post-ocr-results.outputs.comments_skipped }}
           OCR_COMMENTS_SKIPPED: ${{ steps.post-ocr-results.outputs.comments_skipped }}
           OCR_COMMENTS_FAILED: ${{ steps.post-ocr-results.outputs.comments_failed }}
@@ -3379,6 +3382,15 @@ jobs:
           fi
           echo "valid=true" >> "$GITHUB_OUTPUT"
 
+      - name: Upload OCR telemetry
+        id: upload-ocr-telemetry
+        if: ${{ always() && steps.ocr-telemetry-validation.outputs.valid == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: ocr-telemetry-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ocr-telemetry.json
+          if-no-files-found: error
+
       - name: Upload OCR artifacts
         id: upload-ocr-artifacts
         if: ${{ always() && steps.redact-ocr-artifacts.outcome == 'success' && steps.ocr-telemetry-validation.outputs.valid == 'true' && steps.ocr-manifest-hashes.outputs.valid == 'true' }}
@@ -3404,7 +3416,6 @@ jobs:
             ocr-manifest-hashes.json
             ocr-manifest-sha256.txt
             ocr-routing-decisions.json
-            ocr-telemetry.json
           if-no-files-found: error
 
       - name: Resolve final OCR classification

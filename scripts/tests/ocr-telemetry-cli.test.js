@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   validateTelemetryRecord,
   validateReconciliation,
@@ -22,9 +22,22 @@ const AGGREGATOR_SCRIPT = path.join(
   'aggregate-ocr-telemetry.js',
 );
 
+const temporaryDirectories = new Set();
+
 function makeTmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-telemetry-cli-'));
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'ocr-telemetry-cli-'),
+  );
+  temporaryDirectories.add(directory);
+  return directory;
 }
+
+afterEach(() => {
+  for (const directory of temporaryDirectories) {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+  temporaryDirectories.clear();
+});
 
 function writeJson(dir, name, obj) {
   fs.writeFileSync(path.join(dir, name), `${JSON.stringify(obj, null, 2)}\n`);
@@ -92,7 +105,7 @@ function successArtifacts(dir) {
         output: 100,
         cache_read: 50,
         cache_write: 25,
-        total: 475,
+        total: 400,
       },
     },
     terminal: {
@@ -113,15 +126,6 @@ function successArtifacts(dir) {
 }
 
 describe('ocr-telemetry.js CLI — real behavioral runs', () => {
-  let dir;
-
-  beforeAll(() => {
-    dir = makeTmpDir();
-  });
-  afterAll(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
   it('normal success: emits nonempty schema-valid telemetry with summary', () => {
     const run = makeTmpDir();
     successArtifacts(run);
@@ -367,7 +371,7 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     fs.rmSync(run, { recursive: true, force: true });
   });
 
-  it('atomic write: no partial/zero-byte telemetry.json left on failure path', () => {
+  it('writes schema-valid telemetry atomically on success', () => {
     const run = makeTmpDir();
     successArtifacts(run);
     const result = runCli(run, baseEnv());
@@ -377,8 +381,23 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(stat.size).toBeGreaterThan(0);
     const raw = fs.readFileSync(telemetryPath, 'utf8');
     expect(() => JSON.parse(raw)).not.toThrow();
-    expect(fs.existsSync(path.join(run, 'ocr-telemetry.json.tmp'))).toBe(false);
+    expect(
+      fs.readdirSync(run).filter((name) => name.includes('.writing-')),
+    ).toEqual([]);
     fs.rmSync(run, { recursive: true, force: true });
+  });
+
+  it('removes the temporary telemetry file when atomic rename fails', () => {
+    const run = makeTmpDir();
+    successArtifacts(run);
+    fs.mkdirSync(path.join(run, 'ocr-telemetry.json'));
+
+    const result = runCli(run, baseEnv());
+
+    expect(result.status).not.toBe(0);
+    expect(
+      fs.readdirSync(run).filter((name) => name.includes('.writing-')),
+    ).toEqual([]);
   });
 
   it('producer output aggregates end-to-end through the real aggregator CLI', () => {
