@@ -384,6 +384,7 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
 
     const result = runCli(run, baseEnv());
 
+    expect(result.status).not.toBeNull();
     expect(result.status).not.toBe(0);
     expect(
       fs.readdirSync(run).filter((name) => name.includes('.writing-')),
@@ -405,7 +406,7 @@ describe('ocr-telemetry.js CLI — real behavioral runs', () => {
     expect(aggregation.total_findings).toBe(2);
   });
 
-  it('completed_with_warnings reflected in files_reviewed', () => {
+  it('passes OCR_FILES_REVIEWED through to telemetry', () => {
     const run = makeTmpDir();
     successArtifacts(run);
     const result = runCli(run, baseEnv({ OCR_FILES_REVIEWED: '3' }));

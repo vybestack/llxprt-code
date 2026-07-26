@@ -292,12 +292,14 @@ function resolveFilesEvidence(context, manifestSummary, errors) {
 }
 
 function identityFields(context) {
-  const parsedPrNumber = nullableCount(context.prNumber);
+  const normalizedPrNumber = nullableCount(context.prNumber);
   return {
     run_id: nullableString(context.runId),
     run_attempt: normalizeRunAttempt(context.runAttempt),
     pr_number:
-      parsedPrNumber !== null && parsedPrNumber > 0 ? parsedPrNumber : null,
+      normalizedPrNumber !== null && normalizedPrNumber > 0
+        ? normalizedPrNumber
+        : null,
     sha: nullableString(context.sha),
     generated_at: normalizeTimestamp(context.generatedAt),
   };

@@ -235,7 +235,7 @@ describe('buildTelemetry — files_reviewed from result summary', () => {
     );
     expect(telemetry.files_reviewed).toBe(5);
   });
-  it('includes completed_with_warnings in files_reviewed', () => {
+  it('preserves files_reviewed from context', () => {
     const telemetry = buildTelemetry(
       baseInput({ context: baseContext({ filesReviewed: 6 }) }),
     );
