@@ -73,9 +73,7 @@ function createFailingSecureStore(
  * has no on-disk artifacts). Both satisfy ISecureStore, so the backend
  * conformance describe.each verifies KeyringTokenStore against both shapes.
  */
-function createFileBackedSecureStore(dir: string): ISecureStore & {
-  readonly baseDir: string;
-} {
+function createFileBackedSecureStore(dir: string): ISecureStore {
   // Reversible filename encoding so the original key (including the ':'
   // separator KeyringTokenStore relies on) round-trips through list(),
   // mirroring how the real SecureStore fallback decodes filenames back to keys.
@@ -84,7 +82,6 @@ function createFileBackedSecureStore(dir: string): ISecureStore & {
     decodeURIComponent(name.slice(0, -4));
   const resolve = (key: string): string => path.join(dir, encodeKey(key));
   return {
-    baseDir: dir,
     get: async (key) => {
       try {
         return await fs.readFile(resolve(key), 'utf8');

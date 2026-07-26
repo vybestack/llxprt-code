@@ -104,6 +104,34 @@ async function createTempFallbackDir(): Promise<string> {
 // without touching the global machine-secret cache or the real keychain.
 const NULL_MACHINE_SECRET_LOADER = async (): Promise<Buffer | null> => null;
 
+// Mode-specific keyring loaders. `presentLoader` returns a fresh in-memory
+// mock each call (per-store isolation); `absentLoader` simulates a host with
+// no keyring backend. Used at call sites so per-mode intent stays obvious.
+const presentLoader = async (): Promise<KeyringAdapter | null> =>
+  createMockKeyring();
+const absentLoader = async (): Promise<KeyringAdapter | null> => null;
+
+/**
+ * Factory that constructs a SecureStore wired for dual-mode testing. Always
+ * injects NULL_MACHINE_SECRET_LOADER so fallback writes produce deterministic
+ * v1 envelopes without touching the global machine-secret cache or the real
+ * keychain. The mode-specific `keyringLoader` and `fallbackPolicy` are passed
+ * explicitly to keep per-mode intent obvious at every call site.
+ */
+function createStore(
+  serviceName: string,
+  fallbackDir: string,
+  keyringLoader: () => Promise<KeyringAdapter | null>,
+  fallbackPolicy: 'allow' | 'deny',
+): SecureStore {
+  return new SecureStore(serviceName, {
+    fallbackDir,
+    keyringLoader,
+    fallbackPolicy,
+    machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
+  });
+}
+
 // ─── Shared Contract (both modes) ────────────────────────────────────────────
 
 interface ContractMode {
@@ -121,12 +149,12 @@ const SHARED_CONTRACT_MODES: readonly ContractMode[] = [
   {
     mode: 'keyring-present',
     fallbackPolicy: 'deny',
-    makeLoader: () => async () => createMockKeyring(),
+    makeLoader: () => presentLoader,
   },
   {
     mode: 'keyring-absent',
     fallbackPolicy: 'allow',
-    makeLoader: () => async () => null,
+    makeLoader: () => absentLoader,
   },
 ];
 
@@ -146,24 +174,24 @@ describe.each(SHARED_CONTRACT_MODES)(
     });
 
     it('round-trips a value via get/set', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       await store.set('round-trip', 'secret-value');
       expect(await store.get('round-trip')).toBe('secret-value');
     });
 
     it('overwrites a previous value on re-set', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       await store.set('overwrite', 'first');
       await store.set('overwrite', 'second');
@@ -171,12 +199,12 @@ describe.each(SHARED_CONTRACT_MODES)(
     });
 
     it('isolates independent keys', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       await store.set('a', '1');
       await store.set('b', '2');
@@ -185,35 +213,35 @@ describe.each(SHARED_CONTRACT_MODES)(
     });
 
     it('delete() returns true for an existing key', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       await store.set('delete-me', 'val');
       expect(await store.delete('delete-me')).toBe(true);
     });
 
     it('delete() returns false for a nonexistent key', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       expect(await store.delete('never-set')).toBe(false);
     });
 
     it('list() includes set keys', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       await store.set('alpha', '1');
       await store.set('beta', '2');
@@ -222,12 +250,12 @@ describe.each(SHARED_CONTRACT_MODES)(
     });
 
     it('has() returns true for a set key and false otherwise', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       await store.set('present', 'val');
       expect(await store.has('present')).toBe(true);
@@ -235,12 +263,12 @@ describe.each(SHARED_CONTRACT_MODES)(
     });
 
     it('get() returns null for a key that was never set', async () => {
-      const store = new SecureStore('dual-service', {
-        keyringLoader: makeLoader(),
-        fallbackDir: tempDir,
+      const store = createStore(
+        'dual-service',
+        tempDir,
+        makeLoader(),
         fallbackPolicy,
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      );
 
       expect(await store.get('nonexistent')).toBeNull();
     });
@@ -263,12 +291,12 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
   });
 
   it('keyring-absent mode writes an encrypted .enc artifact', async () => {
-    const fallbackStore = new SecureStore('diverge', {
-      keyringLoader: async () => null,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const fallbackStore = createStore(
+      'diverge',
+      tempDir,
+      absentLoader,
+      'allow',
+    );
 
     await fallbackStore.set('fallback-only', 'fb');
 
@@ -286,12 +314,12 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
   it.skipIf(process.platform === 'linux')(
     'keyring-present mode leaves no .enc fallback artifact (non-Linux)',
     async () => {
-      const keyringStore = new SecureStore('diverge', {
-        keyringLoader: async () => createMockKeyring(),
-        fallbackDir: tempDir,
-        fallbackPolicy: 'allow',
-        machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-      });
+      const keyringStore = createStore(
+        'diverge',
+        tempDir,
+        presentLoader,
+        'allow',
+      );
 
       await keyringStore.set('keyring-only-no-artifact', 'kr');
 
@@ -301,13 +329,58 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
     },
   );
 
+  // Deterministic Linux-only counterpart to the skipIf test above: on Linux a
+  // successful keyring write with fallbackPolicy 'allow' ALSO keeps an
+  // encrypted backup copy in the fallback dir. Asserts the .enc backup is
+  // created, is encrypted (no cleartext), and is decryptable by a separate
+  // keyring-absent SecureStore sharing the same fallback dir.
+  it.runIf(process.platform === 'linux')(
+    'Linux: keyring-present + fallbackPolicy allow creates an encrypted .enc backup that is decryptable cross-store',
+    async () => {
+      const secret = 'linux-keyring-backup-plaintext';
+      const backupKey = 'linux-backup-key';
+
+      // keyring-present + allow → triggers the Linux backup-after-success path.
+      const keyringStore = createStore(
+        'diverge',
+        tempDir,
+        presentLoader,
+        'allow',
+      );
+      await keyringStore.set(backupKey, secret);
+
+      // The backup .enc artifact must exist alongside the keyring write.
+      const files = await fs.readdir(tempDir);
+      const encFiles = files.filter((f) => f.endsWith('.enc'));
+      expect(encFiles).toContain(`${backupKey}.enc`);
+
+      // The backup must be encrypted — cleartext must not appear on disk.
+      const raw = await fs.readFile(
+        path.join(tempDir, `${backupKey}.enc`),
+        'utf8',
+      );
+      expect(raw).not.toContain(secret);
+
+      // A separate keyring-absent SecureStore sharing the fallback dir must be
+      // able to decrypt the backup (proves it is a well-formed envelope, not a
+      // stray artifact). This is the cross-store decryptability contract.
+      const readerStore = createStore(
+        'diverge',
+        tempDir,
+        absentLoader,
+        'allow',
+      );
+      expect(await readerStore.get(backupKey)).toBe(secret);
+    },
+  );
+
   it('keyring-absent write produces an encrypted envelope (cleartext absent, AES-256-GCM)', async () => {
-    const fallbackStore = new SecureStore('diverge', {
-      keyringLoader: async () => null,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const fallbackStore = createStore(
+      'diverge',
+      tempDir,
+      absentLoader,
+      'allow',
+    );
 
     const secret = 'super-secret-plaintext-token';
     await fallbackStore.set('envelope-key', secret);
@@ -333,17 +406,13 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
   });
 
   it("fallbackPolicy 'deny' + absent keyring throws UNAVAILABLE", async () => {
-    const store = new SecureStore('diverge', {
-      keyringLoader: async () => null,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'deny',
-    });
+    const store = createStore('diverge', tempDir, absentLoader, 'deny');
 
     let err: unknown;
     try {
       await store.set('denied', 'val');
-    } catch (__caught) {
-      err = __caught;
+    } catch (caught) {
+      err = caught;
     }
     expect(err).toBeDefined();
     expect(err).toBeInstanceOf(SecureStoreError);
@@ -352,21 +421,21 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
 
   it('delete() removes a fallback-only artifact via a keyring-present store (OR-semantics)', async () => {
     // Write via fallback only.
-    const fallbackStore = new SecureStore('diverge', {
-      keyringLoader: async () => null,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const fallbackStore = createStore(
+      'diverge',
+      tempDir,
+      absentLoader,
+      'allow',
+    );
     await fallbackStore.set('or-delete', 'fb-val');
 
     // The keyring-present store has an empty keyring but shares the fallback dir.
-    const keyringStore = new SecureStore('diverge', {
-      keyringLoader: async () => createMockKeyring(),
-      fallbackDir: tempDir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const keyringStore = createStore(
+      'diverge',
+      tempDir,
+      presentLoader,
+      'allow',
+    );
 
     // delete() tries keyring (nothing there) AND fallback file — returns true.
     expect(await keyringStore.delete('or-delete')).toBe(true);
@@ -379,33 +448,33 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
     // 'a' lives only in the keyring. fallbackPolicy 'deny' ensures no fallback
     // artifact is written for 'a' on any platform (including Linux, which
     // otherwise writes an encrypted backup after a keyring success).
-    const keyringStore = new SecureStore('diverge', {
-      keyringLoader: async () => mockKeyring,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'deny',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const keyringStore = createStore(
+      'diverge',
+      tempDir,
+      async () => mockKeyring,
+      'deny',
+    );
     await keyringStore.set('a', 'kr-val');
 
     // 'b' lives only in the fallback file (written by an absent-keyring store).
-    const fallbackStore = new SecureStore('diverge', {
-      keyringLoader: async () => null,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const fallbackStore = createStore(
+      'diverge',
+      tempDir,
+      absentLoader,
+      'allow',
+    );
     await fallbackStore.set('b', 'fb-val');
 
     // A merge-capable store (keyring present + fallback allowed) sees BOTH:
     // keyring account 'a' + fallback filename 'b'. `mergeStore` reuses the
     // populated `mockKeyring` (shared with `keyringStore`) so that 'a' is
     // present in the keyring, while 'b' exists only as a fallback artifact.
-    const mergeStore = new SecureStore('diverge', {
-      keyringLoader: async () => mockKeyring,
-      fallbackDir: tempDir,
-      fallbackPolicy: 'allow',
-      machineSecretLoader: NULL_MACHINE_SECRET_LOADER,
-    });
+    const mergeStore = createStore(
+      'diverge',
+      tempDir,
+      async () => mockKeyring,
+      'allow',
+    );
     const keys = await mergeStore.list();
     expect(keys).toStrictEqual(['a', 'b']);
 

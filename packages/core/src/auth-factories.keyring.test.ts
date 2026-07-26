@@ -241,8 +241,17 @@ describe('core-factory keyring-primary OAuth (issue2704 #1)', () => {
     };
     await tokenStore.saveToken('anthropic', token);
 
-    // The legacy tree under the faked HOME must not exist.
+    // The legacy tree under the faked HOME must not exist. Capture the
+    // rejection and assert on the errno code rather than matching an
+    // error-message string fragment, which is brittle across Node versions.
     const legacyDir = path.join(fakeHome, '.llxprt');
-    await expect(fs.stat(legacyDir)).rejects.toThrow('ENOENT');
+    let statError: unknown;
+    try {
+      await fs.stat(legacyDir);
+    } catch (error) {
+      statError = error;
+    }
+    expect(statError).toBeDefined();
+    expect((statError as NodeJS.ErrnoException).code).toBe('ENOENT');
   });
 });
