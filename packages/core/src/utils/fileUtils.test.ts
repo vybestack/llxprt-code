@@ -285,6 +285,32 @@ describe('fileUtils', () => {
       expect(await detectFileType('image.icon.svg')).toBe('svg');
     });
 
+    it.each([
+      { ext: '.fh', file: 'shader.fh' },
+      { ext: '.fh4', file: 'shader.fh4' },
+      { ext: '.fh5', file: 'shader.fh5' },
+      { ext: '.fh7', file: 'shader.fh7' },
+      { ext: '.fhc', file: 'shader.fhc' },
+    ])(
+      'should classify text $ext as text, not image, despite image/x-freehand mime (#2719)',
+      async ({ file }) => {
+        const fhPath = path.join(tempRootDir, file);
+        actualNodeFs.writeFileSync(fhPath, '// fragment shader text\n');
+        mockMimeLookup.mockReturnValueOnce('image/x-freehand');
+        expect(await detectFileType(fhPath)).toBe('text');
+      },
+    );
+
+    it('should classify binary .fh content as binary, not image (#2719)', async () => {
+      const fhPath = path.join(tempRootDir, 'binary.fh');
+      actualNodeFs.writeFileSync(
+        fhPath,
+        Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]),
+      );
+      mockMimeLookup.mockReturnValueOnce('image/x-freehand');
+      expect(await detectFileType(fhPath)).toBe('binary');
+    });
+
     it('should use isBinaryFile for unknown extensions and detect as binary', async () => {
       mockMimeLookup.mockReturnValueOnce(false); // Unknown mime type
       // Create a file that isBinaryFile will identify as binary
