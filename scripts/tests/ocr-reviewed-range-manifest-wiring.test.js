@@ -80,6 +80,26 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
       expect(hashes['nonexistent.txt']).toBeNull();
     });
 
+    it('returns null when a file cannot be read', () => {
+      const fakeFs = {
+        readFileSync: () => {
+          const error = new Error('EACCES: denied');
+          error.code = 'EACCES';
+          throw error;
+        },
+      };
+      const fn = loadFunction('computeArtifactHashes', {
+        require: (mod) => {
+          if (mod === 'crypto') return crypto;
+          if (mod === 'fs') return fakeFs;
+          throw new Error(`unknown module: ${mod}`);
+        },
+        fs: fakeFs,
+      });
+      const hashes = fn(['restricted.txt']);
+      expect(hashes['restricted.txt']).toBeNull();
+    });
+
     it('hashes multiple files independently', () => {
       const fakeFs = makeFakeFs({
         'a.txt': 'content-a',
@@ -277,32 +297,6 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
   // YAML wiring
   // -----------------------------------------------------------------------
   describe('YAML wiring', () => {
-    it('defines function buildReviewedRangeManifest(params)', () => {
-      expect(ctx.postScript).toContain(
-        'function buildReviewedRangeManifest(params)',
-      );
-    });
-
-    it('defines function resolveCompleteness', () => {
-      expect(ctx.postScript).toContain('function resolveCompleteness(');
-    });
-
-    it('defines function computeCoverage', () => {
-      expect(ctx.postScript).toContain('function computeCoverage(');
-    });
-
-    it('defines function computeArtifactHashes', () => {
-      expect(ctx.postScript).toContain('function computeArtifactHashes(');
-    });
-
-    it('defines function serializeManifest', () => {
-      expect(ctx.postScript).toContain('function serializeManifest(');
-    });
-
-    it('defines function buildStatusLine', () => {
-      expect(ctx.postScript).toContain('function buildStatusLine(');
-    });
-
     it('writes the manifest to ocr-reviewed-range-manifest.json', () => {
       expect(ctx.postScript).toContain('ocr-reviewed-range-manifest.json');
     });

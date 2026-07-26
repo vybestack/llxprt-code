@@ -696,7 +696,7 @@ describe('.github/workflows/ocr-review.yml — reviewed-range manifest functions
     it('does not mutate the input params object', () => {
       const params = { ...BASE_MANIFEST_PARAMS };
       const snapshot = JSON.parse(JSON.stringify(params));
-      buildManifest();
+      buildManifest(params);
       expect(params).toEqual(snapshot);
     });
   });

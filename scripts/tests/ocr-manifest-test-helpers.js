@@ -88,7 +88,13 @@ export function makeLoadFunction(ctx) {
       ...sandboxGlobals,
     };
     vm.createContext(sandbox);
-    vm.runInContext(source, sandbox, { timeout: VM_TIMEOUT_MS });
+    try {
+      vm.runInContext(source, sandbox, { timeout: VM_TIMEOUT_MS });
+    } catch (error) {
+      throw new Error(`Failed to load workflow function ${funcName}`, {
+        cause: error,
+      });
+    }
     const fn = sandbox[funcName];
     expect(typeof fn, `${funcName} should be defined after vm execution`).toBe(
       'function',
@@ -107,9 +113,16 @@ export function makeLoadFunctionsTogether(ctx) {
       ...sandboxGlobals,
     };
     vm.createContext(sandbox);
-    vm.runInContext(sources.join('\n'), sandbox, {
-      timeout: VM_TIMEOUT_MS,
-    });
+    try {
+      vm.runInContext(sources.join('\n'), sandbox, {
+        timeout: VM_TIMEOUT_MS,
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to load workflow functions ${funcNames.join(', ')}`,
+        { cause: error },
+      );
+    }
     for (const name of funcNames) {
       expect(
         typeof sandbox[name],
