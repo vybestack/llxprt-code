@@ -86,7 +86,16 @@ behavior outside this matrix requires user approval before implementation.
 | Routing contract                               | `packages/cli/vitest.test-groups.ts`, `packages/cli/vitest.test-groups.test.ts`                                                | Done                   |
 | Setup split                                    | `packages/cli/test-setup-base.ts`, `packages/cli/test-setup.ts`                                                                | Done                   |
 | Project wiring                                 | `packages/cli/vitest.config.ts`                                                                                                | Done                   |
-| Cleanup state extraction (Finding 8 expansion) | `packages/cli/src/utils/cleanup-state.ts` (new), `packages/cli/src/utils/cleanup.ts`, `packages/cli/src/utils/cleanup.test.ts` | In progress (approved) |
+| Cleanup state extraction (Finding 8 expansion) | `packages/cli/src/utils/cleanup-state.ts` (new), `packages/cli/src/utils/cleanup.ts`, `packages/cli/src/utils/cleanup.test.ts` | Done (approved)        |
+| CI mock compatibility                          | `packages/cli/src/ui/__tests__/AppContainer.mount.test.tsx`                                                                    | Done (approved)        |
+
+### Scope expansion approval (CI mock compatibility)
+
+User approved adding `packages/cli/src/ui/__tests__/AppContainer.mount.test.tsx`
+after both supported-platform CI jobs reproduced the incomplete `node:process`
+mock. The existing mock omits `cwd`, while the routed React/Ink project loads
+core manifest discovery that calls `process.cwd()`. The bounded fix preserves
+real process behavior for `cwd` while retaining mocked `exit` and `env`.
 
 ### Scope expansion approval (Finding 8)
 
