@@ -831,7 +831,6 @@ jobs:
           : > ocr-manifest-hashes.json
           : > ocr-manifest-sha256.txt
           : > ocr-routing-decisions.json
-          echo '{"schema_version":"1.0.0","counts":{"preview":0,"evidenced":0,"covered":0,"preview_only":0,"unexpected":0,"read_failures":0,"failed_preview":0},"coverage":{"ratio":1,"percentage":100},"preview_files":[],"evidenced_files":[],"covered_files":[],"preview_only_files":[],"unexpected_files":[],"failed_preview_files":[],"read_failure_files":[],"threshold_percentage":90,"ratio_below_threshold":false,"has_review_failures":false,"below_threshold":false,"evidence_available":false}' > ocr-coverage-report.json
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
             echo "phase=$1; reason=$2" > ocr-infrastructure-failure.txt
@@ -839,7 +838,14 @@ jobs:
           mark_policy_failure() {
             echo "$1" > ocr-policy-failure.txt
           }
+          write_unavailable_coverage_report() {
+            cat > ocr-coverage-report.json <<'JSON'
+          {"schema_version":"1.0.0","counts":{"preview":0,"evidenced":0,"covered":0,"preview_only":0,"unexpected":0,"read_failures":0,"failed_preview":0},"coverage":{"ratio":1,"percentage":100},"preview_files":[],"evidenced_files":[],"covered_files":[],"preview_only_files":[],"unexpected_files":[],"failed_preview_files":[],"read_failure_files":[],"threshold_percentage":90,"ratio_below_threshold":false,"has_review_failures":false,"below_threshold":false,"evidence_available":false}
+          JSON
+          }
           EOF
+          . ./ocr-workflow-helpers.sh
+          write_unavailable_coverage_report
 
       - name: Install OpenCodeReview
         shell: bash
@@ -2895,7 +2901,6 @@ jobs:
             if (isAutomatic) {
               autoReviewCount += 1;
             }
-            body.push(`\n<!-- ocr-auto-count:${autoReviewCount} -->`);
 
             // Issue #2675: changed-file coverage verification. Cross-reference
             // the preview file list with evidence from the OCR result JSON
@@ -2965,6 +2970,7 @@ jobs:
             if (coverageWarning) {
               body.push(`- ${coverageWarning}`);
             }
+            body.push(`\n<!-- ocr-auto-count:${autoReviewCount} -->`);
             const summary = body.join('\n');
 
             async function fetchMarkerComments() {
@@ -3242,10 +3248,11 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
+          . ./ocr-workflow-helpers.sh
           if [ ! -s ocr-coverage-report.json ]; then
-            echo '{"schema_version":"1.0.0","counts":{"preview":0,"evidenced":0,"covered":0,"preview_only":0,"unexpected":0,"read_failures":0,"failed_preview":0},"coverage":{"ratio":1,"percentage":100},"preview_files":[],"evidenced_files":[],"covered_files":[],"preview_only_files":[],"unexpected_files":[],"failed_preview_files":[],"read_failure_files":[],"threshold_percentage":90,"ratio_below_threshold":false,"has_review_failures":false,"below_threshold":false,"evidence_available":false}' > ocr-coverage-report.json
+            write_unavailable_coverage_report
             echo "::warning::ocr-coverage-report.json was missing or empty; wrote unavailable-evidence placeholder before redaction."
-            echo "phase=coverage; reason=ocr-coverage-report.json was missing or empty before classification" > ocr-infrastructure-failure.txt
+            echo "phase=coverage; reason=ocr-coverage-report.json was missing or empty before classification" >> ocr-infrastructure-failure.txt
           else
             if ! node -e '
               const fs = require("fs");
@@ -3259,9 +3266,9 @@ jobs:
                 process.exit(1);
               }
             '; then
-              echo '{"schema_version":"1.0.0","counts":{"preview":0,"evidenced":0,"covered":0,"preview_only":0,"unexpected":0,"read_failures":0,"failed_preview":0},"coverage":{"ratio":1,"percentage":100},"preview_files":[],"evidenced_files":[],"covered_files":[],"preview_only_files":[],"unexpected_files":[],"failed_preview_files":[],"read_failure_files":[],"threshold_percentage":90,"ratio_below_threshold":false,"has_review_failures":false,"below_threshold":false,"evidence_available":false}' > ocr-coverage-report.json
+              write_unavailable_coverage_report
               echo "::warning::ocr-coverage-report.json was invalid JSON; wrote unavailable-evidence placeholder before redaction."
-              echo "phase=coverage; reason=ocr-coverage-report.json was invalid JSON before classification" > ocr-infrastructure-failure.txt
+              echo "phase=coverage; reason=ocr-coverage-report.json was invalid JSON before classification" >> ocr-infrastructure-failure.txt
             fi
           fi
 

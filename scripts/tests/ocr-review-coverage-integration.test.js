@@ -47,6 +47,17 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
   const ctx = useWorkflowFixture();
   const loadFunctionsTogether = makeLoadFunctionsTogether(ctx);
 
+  function initializeArtifacts(directory) {
+    const initStep = stepNamed(
+      ctx.codeReviewJob,
+      'Initialize OCR artifact files',
+    );
+    execFileSync('bash', ['-c', commandText(initStep)], {
+      cwd: directory,
+      encoding: 'utf8',
+    });
+  }
+
   describe('YAML wiring', () => {
     it('wires RANGE_MODE into the preview step env', () => {
       const previewStep = stepNamed(
@@ -209,6 +220,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
     it('hash matches uploaded bytes after a complete lifecycle (normal case)', () => {
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-hash-life-'));
       try {
+        initializeArtifacts(sub);
         const report = {
           schema_version: '1.0.0',
           counts: { preview: 2, covered: 1 },
@@ -268,6 +280,8 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
     it('hash integrity holds when coverage report was missing (ensure creates it first)', () => {
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-hash-missing-'));
       try {
+        initializeArtifacts(sub);
+        fs.rmSync(path.join(sub, 'ocr-coverage-report.json'));
         const ensureStep = stepNamed(
           ctx.codeReviewJob,
           'Ensure valid OCR coverage report',
@@ -389,62 +403,84 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
   });
 
   describe('valid JSON placeholder and fallback', () => {
-    it('initializes ocr-coverage-report.json with valid JSON', () => {
-      const initStep = stepNamed(
-        ctx.codeReviewJob,
-        'Initialize OCR artifact files',
-      );
-      const initRun = commandText(initStep);
-      const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-init-'));
-      try {
-        execFileSync('bash', ['-c', initRun], { cwd: sub, encoding: 'utf8' });
-        const content = fs.readFileSync(
-          path.join(sub, 'ocr-coverage-report.json'),
+    function readCoverageReport(directory) {
+      return JSON.parse(
+        fs.readFileSync(
+          path.join(directory, 'ocr-coverage-report.json'),
           'utf8',
-        );
-        expect(() => JSON.parse(content)).not.toThrow();
-      } finally {
-        fs.rmSync(sub, { recursive: true, force: true });
-      }
-    });
+        ),
+      );
+    }
 
-    it('Ensure valid OCR coverage report creates a valid JSON file when missing', () => {
+    function runEnsure(directory) {
       const ensureStep = stepNamed(
         ctx.codeReviewJob,
         'Ensure valid OCR coverage report',
       );
-      const ensureRun = commandText(ensureStep);
-      const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-ensure-'));
+      execFileSync('bash', ['-c', commandText(ensureStep)], {
+        cwd: directory,
+        encoding: 'utf8',
+      });
+    }
+
+    it('uses the same unavailable-evidence placeholder during initialization and missing-report recovery', () => {
+      const initialized = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-init-'));
+      const recovered = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-ensure-'));
       try {
-        execFileSync('bash', ['-c', ensureRun], { cwd: sub, encoding: 'utf8' });
-        const content = fs.readFileSync(
-          path.join(sub, 'ocr-coverage-report.json'),
-          'utf8',
+        initializeArtifacts(initialized);
+        initializeArtifacts(recovered);
+        fs.rmSync(path.join(recovered, 'ocr-coverage-report.json'));
+        runEnsure(recovered);
+        expect(readCoverageReport(recovered)).toEqual(
+          readCoverageReport(initialized),
         );
-        expect(() => JSON.parse(content)).not.toThrow();
+        expect(readCoverageReport(recovered).evidence_available).toBe(false);
       } finally {
-        fs.rmSync(sub, { recursive: true, force: true });
+        fs.rmSync(initialized, { recursive: true, force: true });
+        fs.rmSync(recovered, { recursive: true, force: true });
       }
     });
 
-    it('Ensure valid OCR coverage report replaces invalid JSON with a valid placeholder', () => {
-      const ensureStep = stepNamed(
-        ctx.codeReviewJob,
-        'Ensure valid OCR coverage report',
-      );
-      const ensureRun = commandText(ensureStep);
-      const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-ensure-'));
+    it('Ensure valid OCR coverage report replaces invalid JSON with the shared placeholder', () => {
+      const initialized = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-init-'));
+      const recovered = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-ensure-'));
       try {
+        initializeArtifacts(initialized);
+        initializeArtifacts(recovered);
         fs.writeFileSync(
-          path.join(sub, 'ocr-coverage-report.json'),
+          path.join(recovered, 'ocr-coverage-report.json'),
           'NOT VALID JSON{{{',
         );
-        execFileSync('bash', ['-c', ensureRun], { cwd: sub, encoding: 'utf8' });
-        const content = fs.readFileSync(
-          path.join(sub, 'ocr-coverage-report.json'),
+        runEnsure(recovered);
+        expect(readCoverageReport(recovered)).toEqual(
+          readCoverageReport(initialized),
+        );
+      } finally {
+        fs.rmSync(initialized, { recursive: true, force: true });
+        fs.rmSync(recovered, { recursive: true, force: true });
+      }
+    });
+
+    it('preserves an earlier infrastructure diagnostic when report recovery adds coverage context', () => {
+      const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-ensure-'));
+      try {
+        initializeArtifacts(sub);
+        fs.rmSync(path.join(sub, 'ocr-coverage-report.json'));
+        fs.writeFileSync(
+          path.join(sub, 'ocr-infrastructure-failure.txt'),
+          'phase=review; reason=provider unavailable\n',
+        );
+        runEnsure(sub);
+        const diagnostic = fs.readFileSync(
+          path.join(sub, 'ocr-infrastructure-failure.txt'),
           'utf8',
         );
-        expect(() => JSON.parse(content)).not.toThrow();
+        expect(diagnostic).toContain(
+          'phase=review; reason=provider unavailable',
+        );
+        expect(diagnostic).toContain(
+          'phase=coverage; reason=ocr-coverage-report.json was missing or empty before classification',
+        );
       } finally {
         fs.rmSync(sub, { recursive: true, force: true });
       }
@@ -534,6 +570,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
     it('full lifecycle: serialize → validate → redact → hash stays consistent', () => {
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-cred-life-'));
       try {
+        initializeArtifacts(sub);
         const { serializeCoverageReport } = loadSerializer();
         const report = {
           schema_version: '1.0.0',
@@ -762,6 +799,18 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       expect(ctx.postScript.slice(warningCall, nextFailureGate)).toContain(
         'below the ${coverageReport.threshold_percentage}% threshold.',
       );
+    });
+
+    it('keeps the auto-review metadata comment after the coverage warning', () => {
+      const warningPush = ctx.postScript.indexOf(
+        'body.push(`- ${coverageWarning}`)',
+      );
+      const autoCountPush = ctx.postScript.indexOf(
+        'body.push(`\\n<!-- ocr-auto-count:${autoReviewCount} -->`)',
+        warningPush,
+      );
+      expect(warningPush).toBeGreaterThanOrEqual(0);
+      expect(autoCountPush).toBeGreaterThan(warningPush);
     });
   });
 
