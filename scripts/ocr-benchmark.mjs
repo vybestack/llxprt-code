@@ -64,11 +64,12 @@ const reviewTimeoutRaw = getArg('timeout') || '20';
 const outputArg = getArg('output') || 'ocr-benchmark-results.json';
 const outputFile = resolve(outputArg);
 const processTimeoutMsRaw = getArg('process-timeout-ms');
+const processTimeoutMsNum = Number(processTimeoutMsRaw);
 const processTimeoutMs =
   processTimeoutMsRaw &&
-  Number.isInteger(Number(processTimeoutMsRaw)) &&
-  Number(processTimeoutMsRaw) > 0
-    ? Number(processTimeoutMsRaw)
+  Number.isInteger(processTimeoutMsNum) &&
+  processTimeoutMsNum > 0
+    ? processTimeoutMsNum
     : 3600000;
 
 if (!fromSha || !toSha) {
