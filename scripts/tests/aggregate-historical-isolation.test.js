@@ -7,6 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.js';
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const recentIso = (daysAgo) =>
+  new Date(Date.now() - daysAgo * MS_PER_DAY).toISOString();
+
 /**
  * Issue #2605 (per-run exception isolation): Historical retrieval is best
  * effort: a single run that throws during processing (e.g. an unexpected
@@ -19,8 +23,8 @@ import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.js';
 describe('aggregate_evals: per-run exception isolation in historical fetch', () => {
   it('omits a run whose downloader throws while retaining a valid run', async () => {
     const mod = await loadHistoricalModule();
-    const runA = { databaseId: 5000, createdAt: '2026-07-19T02:00:00Z' };
-    const runB = { databaseId: 5001, createdAt: '2026-07-18T02:00:00Z' };
+    const runA = { databaseId: 5000, createdAt: recentIso(1) };
+    const runB = { databaseId: 5001, createdAt: recentIso(2) };
     const downloadThrowing = () => {
       throw new Error('unexpected filesystem explosion');
     };
@@ -47,7 +51,7 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
     // Must not throw — the exception must be caught and the run omitted.
     expect(() =>
       mod.processHistoricalRun(
-        { databaseId: 4242, createdAt: '2026-07-19T02:00:00Z' },
+        { databaseId: 4242, createdAt: recentIso(1) },
         throwingDownload,
       ),
     ).not.toThrow();
@@ -60,8 +64,8 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
     // exception escaping processHistoricalRun's internal catch); run B is
     // valid and MUST still be included. This proves the loop isolates per-run
     // exceptions: one bad run cannot abort the remaining runs.
-    const runA = { databaseId: 99001, createdAt: '2026-07-19T02:00:00Z' };
-    const runB = { databaseId: 99002, createdAt: '2026-07-19T02:00:00Z' };
+    const runA = { databaseId: 99001, createdAt: recentIso(1) };
+    const runB = { databaseId: 99002, createdAt: recentIso(1) };
 
     const listRunsPage = () => ({
       runs: [runA, runB],
