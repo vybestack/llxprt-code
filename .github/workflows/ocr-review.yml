@@ -30,6 +30,15 @@ on:
         description: 'Pull request number to review'
         required: true
         type: string
+      concurrency:
+        description: 'OCR concurrency (canary experiment, issue #2673)'
+        required: true
+        type: choice
+        default: '2'
+        options:
+          - '2'
+          - '3'
+          - '4'
 
 permissions:
   contents: read
@@ -80,7 +89,10 @@ env:
   # scope guard) always see plain text.
   NO_COLOR: '1'
   OCR_VERSION: '1.7.16'
-  OCR_CONCURRENCY: '2'
+  # Issue #2673: workflow_dispatch canaries select OCR concurrency (2, 3, or
+  # 4). All other (automatic/comment) triggers resolve to 2 so default review
+  # behavior is unchanged until the canary experiment decides otherwise.
+  OCR_CONCURRENCY: ${{ github.event_name == 'workflow_dispatch' && inputs.concurrency || '2' }}
 
 jobs:
   mergeability-gate:
@@ -452,7 +464,7 @@ jobs:
             });
             core.setOutput('number', String(number));
             core.setOutput('base_ref', pr.base.ref);
-            core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('trusted_base_sha', pr.base.sha);
             core.setOutput('head_sha', pr.head.sha);
             // Business context for the LLM (Feature 1, issue #2670). The body
             // is truncated to keep the command-line length bounded.
@@ -465,7 +477,7 @@ jobs:
         # PR head) so the working tree never reflects PR-supplied files.
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
         with:
-          ref: ${{ steps.pr-context.outputs.base_sha }}
+          ref: ${{ steps.pr-context.outputs.trusted_base_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -474,7 +486,7 @@ jobs:
         env:
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
-          BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          TRUSTED_BASE_SHA: ${{ steps.pr-context.outputs.trusted_base_sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -515,12 +527,12 @@ jobs:
             exit 1
           fi
           unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 AUTH_B64
-          if ! git cat-file -e "${BASE_SHA}^{commit}"; then
-            echo "::error::Base SHA ${BASE_SHA} is missing after trusted checkout. It may no longer be reachable from origin."
+          if ! git cat-file -e "${TRUSTED_BASE_SHA}^{commit}"; then
+            echo "::error::Trusted base SHA ${TRUSTED_BASE_SHA} is missing after trusted checkout. It may no longer be reachable from origin."
             exit 1
           fi
 
-          BASE_SHA="$(git merge-base "${BASE_SHA}" pr-head)"
+          MERGE_BASE_SHA="$(git merge-base "${TRUSTED_BASE_SHA}" pr-head)"
           FETCHED_HEAD="$(git rev-parse pr-head)"
           if [ "${FETCHED_HEAD}" != "${HEAD_SHA}" ]; then
             echo "::error::PR head changed between API resolution and fetch (expected ${HEAD_SHA}, got ${FETCHED_HEAD}). Re-run to review the latest push."
@@ -529,7 +541,8 @@ jobs:
           cleanup_git_auth
           trap - EXIT INT TERM HUP
           {
-            echo "BASE_SHA=${BASE_SHA}"
+            echo "TRUSTED_BASE_SHA=${TRUSTED_BASE_SHA}"
+            echo "MERGE_BASE_SHA=${MERGE_BASE_SHA}"
             echo "HEAD_SHA=${HEAD_SHA}"
           } >> "$GITHUB_ENV"
 
@@ -634,6 +647,8 @@ jobs:
         env:
           OCR_LLM_EXTRA_BODY: ${{ vars.OCR_LLM_EXTRA_BODY }}
           OCR_REVIEW_LANGUAGE: ${{ vars.OCR_REVIEW_LANGUAGE }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           if [ -s ocr-exit-code.txt ]; then
@@ -677,6 +692,43 @@ jobs:
             echo "1" > ocr-exit-code.txt
             mark_infrastructure_failure "config" "OCR review language configuration failed"
             exit 0
+          fi
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            export OCR_CONFIG_PATH="${HOME}/.opencodereview/config.json"
+            if [ ! -s "$OCR_CONFIG_PATH" ]; then
+              echo "::error::Fresh OCR configuration file is missing."
+              exit 1
+            fi
+            cat > ocr-config-endpoint-preflight.cjs <<'PREFLIGHT'
+          'use strict';
+
+          const fs = require('fs');
+          const configPath = process.env.OCR_CONFIG_PATH;
+          const environmentUrl = process.env.OCR_LLM_URL;
+          if (typeof environmentUrl !== 'string' || environmentUrl.length === 0) {
+            throw new Error('environment endpoint is missing');
+          }
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const llm = config && typeof config === 'object' && !Array.isArray(config)
+            ? config.llm : null;
+          const endpointKeys = ['url', 'base_url', 'baseURL', 'endpoint', 'api_base'];
+          const configuredEndpoint = llm && typeof llm === 'object' && !Array.isArray(llm)
+            ? endpointKeys.some((key) => typeof llm[key] === 'string' && llm[key].length > 0)
+            : false;
+          const configuredProvider = llm && typeof llm === 'object' && !Array.isArray(llm) &&
+            typeof llm.provider === 'string' && llm.provider.length > 0;
+          if (configuredEndpoint || configuredProvider) {
+            throw new Error('OCR config contains an endpoint/provider that could override environment resolution');
+          }
+          PREFLIGHT
+            node ocr-config-endpoint-preflight.cjs
+            CONFIGURED_EXTRA_BODY="$EXTRA_BODY" CONFIGURED_LANGUAGE="$LANGUAGE" node <<'NODE'
+          const fs = require('fs');
+          fs.writeFileSync('ocr-configured-settings.json', JSON.stringify({
+            extra_body: process.env.CONFIGURED_EXTRA_BODY,
+            language: process.env.CONFIGURED_LANGUAGE,
+          }));
+          NODE
           fi
 
       - name: Validate OCR configuration
@@ -772,7 +824,7 @@ jobs:
       - name: Verify review scope includes changed tests
         shell: bash
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -794,7 +846,7 @@ jobs:
             exit 0
           fi
           changed_tests="$(
-            git diff --name-only --diff-filter=d "${BASE_SHA}..${HEAD_SHA}" \
+            git diff --name-only --diff-filter=d "${MERGE_BASE_SHA}..${HEAD_SHA}" \
               | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
               || true
           )"
@@ -809,7 +861,7 @@ jobs:
               exit 0
             fi
             set +e
-            ocr review --preview --from "$BASE_SHA" --to "$HEAD_SHA" \
+            ocr review --preview --from "$MERGE_BASE_SHA" --to "$HEAD_SHA" \
               > ocr-preview.txt 2> ocr-preview-stderr.log
             status=$?
             set -e
@@ -886,17 +938,257 @@ jobs:
             fi
           fi
 
+      - name: Start OCR transport monitor
+        id: ocr-transport-monitor
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          TARGET_URL: ${{ vars.OCR_LLM_URL }}
+        run: |
+          set -euo pipefail
+          if [ -s ocr-exit-code.txt ]; then
+            echo "::error::Cannot start OCR transport monitor after a failed preflight."
+            exit 1
+          fi
+          cat > ocr-transport-monitor.cjs <<'MONITOR'
+          'use strict';
+
+          const fs = require('fs');
+          const http = require('http');
+          const https = require('https');
+
+          const telemetryPath = process.env.TELEMETRY_PATH;
+          const readyPath = process.env.READY_PATH;
+          const monitorSha256 = process.env.MONITOR_SHA256;
+          const hopByHopHeaders = new Set([
+            'connection', 'keep-alive', 'proxy-authenticate',
+            'proxy-authorization', 'te', 'trailer',
+            'transfer-encoding', 'upgrade',
+          ]);
+          const sockets = new Set();
+          const responsesByStatus = {};
+          const telemetry = {
+            schema_version: 1,
+            monitor_sha256: monitorSha256,
+            bind_address: '127.0.0.1',
+            target_protocol: '',
+            shutdown_signal: null,
+            shutdown_complete: false,
+            total_requests: 0,
+            upstream_errors: 0,
+            responses_by_status: responsesByStatus,
+            http_429_responses: 0,
+            retry_events: 0,
+            retry_count_header_missing: 0,
+            retry_count_header_malformed: 0,
+          };
+
+          function atomicWriteJson(filePath, value) {
+            if (typeof filePath !== 'string' || filePath.length === 0) {
+              throw new Error('output path is required');
+            }
+            const temporaryPath = `${filePath}.${process.pid}.tmp`;
+            fs.writeFileSync(temporaryPath, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+            fs.renameSync(temporaryPath, filePath);
+          }
+
+          function connectionNamedHeaders(headers) {
+            const raw = headers.connection;
+            const values = Array.isArray(raw) ? raw : [raw];
+            const names = new Set();
+            for (const value of values) {
+              if (typeof value !== 'string') {
+                continue;
+              }
+              for (const name of value.split(',')) {
+                const normalized = name.trim().toLowerCase();
+                if (normalized.length > 0) {
+                  names.add(normalized);
+                }
+              }
+            }
+            return names;
+          }
+
+          function filteredHeaders(headers, additionalExcluded = []) {
+            const excluded = new Set([
+              ...hopByHopHeaders,
+              ...connectionNamedHeaders(headers),
+              ...additionalExcluded,
+            ]);
+            return Object.fromEntries(Object.entries(headers).filter(
+              ([name]) => !excluded.has(name.toLowerCase()),
+            ));
+          }
+
+          function forwardedHeaders(headers, target) {
+            return {
+              ...filteredHeaders(headers, ['host']),
+              host: target.host,
+            };
+          }
+
+          function observeRetryHeader(headers) {
+            const raw = headers['x-stainless-retry-count'];
+            if (raw === undefined) {
+              telemetry.retry_count_header_missing += 1;
+              return;
+            }
+            if (typeof raw !== 'string' || !/^(?:0|[1-9][0-9]*)$/.test(raw)) {
+              telemetry.retry_count_header_malformed += 1;
+              return;
+            }
+            if (raw !== '0') {
+              telemetry.retry_events += 1;
+            }
+          }
+
+          function observeResponse(statusCode) {
+            const status = String(statusCode);
+            responsesByStatus[status] = (responsesByStatus[status] || 0) + 1;
+            if (statusCode === 429) {
+              telemetry.http_429_responses += 1;
+            }
+          }
+
+          function validatedTarget(rawTarget) {
+            if (typeof rawTarget !== 'string' || rawTarget.trim() !== rawTarget || rawTarget.length === 0) {
+              throw new Error('target URL is required');
+            }
+            const target = new URL(rawTarget);
+            if ((target.protocol !== 'http:' && target.protocol !== 'https:') ||
+                target.username || target.password || target.hash || !target.hostname) {
+              throw new Error('target URL is invalid');
+            }
+            return target;
+          }
+
+          let target;
+          try {
+            target = validatedTarget(process.env.TARGET_URL);
+            if (!/^[a-f0-9]{64}$/.test(monitorSha256 || '')) {
+              throw new Error('monitor hash is invalid');
+            }
+            telemetry.target_protocol = target.protocol;
+          } catch (_) {
+            process.stderr.write('transport monitor startup failed\n');
+            process.exit(1);
+          }
+
+          const server = http.createServer((request, response) => {
+            telemetry.total_requests += 1;
+            observeRetryHeader(request.headers);
+            const transport = target.protocol === 'https:' ? https : http;
+            const upstream = transport.request({
+              protocol: target.protocol,
+              hostname: target.hostname,
+              port: target.port || undefined,
+              method: request.method,
+              path: request.url,
+              headers: forwardedHeaders(request.headers, target),
+            });
+            upstream.on('response', (upstreamResponse) => {
+              observeResponse(upstreamResponse.statusCode || 0);
+              response.writeHead(
+                upstreamResponse.statusCode || 502,
+                filteredHeaders(upstreamResponse.headers),
+              );
+              upstreamResponse.pipe(response);
+            });
+            upstream.once('error', () => {
+              telemetry.upstream_errors += 1;
+              if (!response.headersSent) {
+                response.writeHead(502, { 'content-type': 'text/plain' });
+              }
+              response.end('upstream transport error');
+            });
+            request.once('aborted', () => upstream.destroy());
+            request.pipe(upstream);
+          });
+
+          server.on('connection', (socket) => {
+            sockets.add(socket);
+            socket.once('close', () => sockets.delete(socket));
+          });
+          server.once('error', () => {
+            process.stderr.write('transport monitor server failed\n');
+            process.exit(1);
+          });
+
+          let stopping = false;
+          process.on('SIGTERM', () => {
+            if (stopping) {
+              return;
+            }
+            stopping = true;
+            telemetry.shutdown_signal = 'SIGTERM';
+            server.close(() => {
+              telemetry.shutdown_complete = true;
+              atomicWriteJson(telemetryPath, telemetry);
+              process.exit(0);
+            });
+            if (typeof server.closeIdleConnections === 'function') {
+              server.closeIdleConnections();
+            }
+            for (const socket of sockets) {
+              socket.destroy();
+            }
+            setTimeout(() => {
+              atomicWriteJson(telemetryPath, telemetry);
+              process.exit(1);
+            }, 5000).unref();
+          });
+
+          server.listen(0, '127.0.0.1', () => {
+            const address = server.address();
+            if (!address || typeof address === 'string') {
+              process.exit(1);
+            }
+            const proxyUrl = new URL(target.pathname + target.search, `http://127.0.0.1:${address.port}`);
+            atomicWriteJson(readyPath, {
+              schema_version: 1,
+              bind_address: '127.0.0.1',
+              monitor_sha256: monitorSha256,
+              proxy_url: proxyUrl.toString(),
+            });
+          });
+          MONITOR
+          monitor_sha256="$(shasum -a 256 ocr-transport-monitor.cjs | awk '{print $1}')"
+          export READY_PATH="$PWD/ocr-transport-monitor-ready.json"
+          export TELEMETRY_PATH="$PWD/ocr-transport-telemetry.json"
+          export MONITOR_SHA256="$monitor_sha256"
+          nohup node ocr-transport-monitor.cjs >/dev/null 2>&1 &
+          monitor_pid=$!
+          printf '%s\n' "$monitor_pid" > ocr-transport-monitor.pid
+          for _ in $(seq 1 100); do
+            if [ -s "$READY_PATH" ]; then
+              break
+            fi
+            if ! kill -0 "$monitor_pid" 2>/dev/null; then
+              echo "::error::OCR transport monitor exited during startup."
+              exit 1
+            fi
+            sleep 0.1
+          done
+          PROXY_URL="$(node -e "const r=require(process.env.READY_PATH); if(r.bind_address!=='127.0.0.1'||r.monitor_sha256!==process.env.MONITOR_SHA256||!String(r.proxy_url||'').startsWith('http://127.0.0.1:'))process.exit(1); process.stdout.write(r.proxy_url)")"
+          if [ -z "$PROXY_URL" ]; then
+            echo "::error::OCR transport monitor did not publish valid readiness."
+            exit 1
+          fi
+          echo "proxy_url=$PROXY_URL" >> "$GITHUB_OUTPUT"
+
       - name: Run OpenCodeReview
         shell: bash
         # Full merge-base..head diff. Parse failures are handled distinctly
         # in the posting step (OCR failed vs. no findings).
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
-          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+          OCR_LLM_URL: ${{ github.event_name == 'workflow_dispatch' && steps.ocr-transport-monitor.outputs.proxy_url || vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
           OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          EVENT_NAME: ${{ github.event_name }}
           # Feature 1 (issue #2670): business context for the LLM.
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           PR_TITLE: ${{ steps.pr-context.outputs.pr_title }}
@@ -941,16 +1233,91 @@ jobs:
               REVIEW_ARGS+=(--background "$BACKGROUND_TEXT")
             fi
           fi
-          ocr review \
-            --from "$BASE_SHA" \
-            --to "$HEAD_SHA" \
-            --format json \
-            --audience agent \
-            --timeout "$REVIEW_TIMEOUT" \
-            --concurrency "$OCR_CONCURRENCY" \
-            "${REVIEW_ARGS[@]}" \
-            > ocr-stdout.raw 2> ocr-stderr.log
-          status=$?
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            export RESOLVED_REVIEW_TIMEOUT="$REVIEW_TIMEOUT"
+            if [ "${#REVIEW_ARGS[@]}" -gt 0 ]; then
+              export RESOLVED_BACKGROUND_ENABLED=true
+              export RESOLVED_BACKGROUND_CONTEXT="$BACKGROUND_TEXT"
+            else
+              export RESOLVED_BACKGROUND_ENABLED=false
+              unset RESOLVED_BACKGROUND_CONTEXT
+            fi
+            node <<'NODE'
+          const crypto = require('crypto');
+          const fs = require('fs');
+          const enabled = process.env.RESOLVED_BACKGROUND_ENABLED === 'true';
+          fs.writeFileSync('ocr-review-runtime.json', JSON.stringify({
+            review_timeout_minutes: process.env.RESOLVED_REVIEW_TIMEOUT,
+            background_enabled: enabled,
+            background_context_sha256: enabled
+              ? crypto.createHash('sha256').update(process.env.RESOLVED_BACKGROUND_CONTEXT).digest('hex')
+              : null,
+          }));
+          NODE
+          fi
+          cat > ocr-command-timer.cjs <<'TIMER'
+          'use strict';
+
+          const fs = require('fs');
+          const { spawnSync } = require('child_process');
+          const [command, ...args] = process.argv.slice(2);
+          const timingPath = process.env.OCR_TIMING_PATH;
+          const stdoutPath = process.env.OCR_STDOUT_PATH;
+          const stderrPath = process.env.OCR_STDERR_PATH;
+          if (!command || !timingPath || !stdoutPath || !stderrPath) {
+            process.exit(125);
+          }
+          const stdoutFd = fs.openSync(stdoutPath, 'w', 0o600);
+          const stderrFd = fs.openSync(stderrPath, 'w', 0o600);
+          const startedAt = process.hrtime.bigint();
+          const result = spawnSync(command, args, {
+            env: process.env,
+            stdio: ['ignore', stdoutFd, stderrFd],
+          });
+          const elapsedNanoseconds = process.hrtime.bigint() - startedAt;
+          fs.closeSync(stdoutFd);
+          fs.closeSync(stderrFd);
+          const exitCode = Number.isInteger(result.status) ? result.status : 125;
+          if (result.error) {
+            fs.appendFileSync(stderrPath, `OCR command launch failed: ${result.error.message}\n`);
+          } else if (result.signal) {
+            fs.appendFileSync(stderrPath, `OCR command terminated by signal ${result.signal}\n`);
+          }
+          const timing = {
+            schema_version: 1,
+            command_wall_seconds: Number(elapsedNanoseconds) / 1e9,
+            exit_code: exitCode,
+          };
+          const temporaryPath = `${timingPath}.${process.pid}.tmp`;
+          fs.writeFileSync(temporaryPath, `${JSON.stringify(timing)}\n`, { mode: 0o600 });
+          fs.renameSync(temporaryPath, timingPath);
+          process.exit(exitCode);
+          TIMER
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            export OCR_TIMING_PATH="$PWD/ocr-command-timing.json"
+            export OCR_STDOUT_PATH="$PWD/ocr-stdout.raw"
+            export OCR_STDERR_PATH="$PWD/ocr-stderr.log"
+            node ocr-command-timer.cjs ocr review \
+              --from "$MERGE_BASE_SHA" \
+              --to "$HEAD_SHA" \
+              --format json \
+              --audience agent \
+              --timeout "$REVIEW_TIMEOUT" \
+              --concurrency "$OCR_CONCURRENCY" \
+              "${REVIEW_ARGS[@]}"
+            status=$?
+          else
+            ocr review \
+              --from "$MERGE_BASE_SHA" \
+              --to "$HEAD_SHA" \
+              --format json \
+              --audience agent \
+              --timeout "$REVIEW_TIMEOUT" \
+              --concurrency "$OCR_CONCURRENCY" \
+              "${REVIEW_ARGS[@]}" \
+              > ocr-stdout.raw 2> ocr-stderr.log
+            status=$?
+          fi
           if ! cp ocr-stdout.raw ocr-result.json; then
             : > ocr-result.json
           fi
@@ -972,12 +1339,65 @@ jobs:
           fi
           exit 0
 
+      - name: Stop OCR transport monitor
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s ocr-transport-monitor.pid ]; then
+            echo "::error::OCR transport monitor PID is missing."
+            exit 1
+          fi
+          monitor_pid="$(cat ocr-transport-monitor.pid)"
+          case "$monitor_pid" in
+            ''|*[!0-9]*)
+              echo "::error::OCR transport monitor PID is invalid."
+              exit 1
+              ;;
+          esac
+          if ! kill -0 "$monitor_pid" 2>/dev/null; then
+            echo "::error::OCR transport monitor was not running at teardown."
+            exit 1
+          fi
+          kill -TERM "$monitor_pid"
+          for _ in $(seq 1 100); do
+            if ! kill -0 "$monitor_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.1
+          done
+          if kill -0 "$monitor_pid" 2>/dev/null; then
+            echo "::error::OCR transport monitor did not stop cleanly."
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('fs');
+          const telemetry = JSON.parse(fs.readFileSync('ocr-transport-telemetry.json', 'utf8'));
+          const responseCount = telemetry.responses_by_status &&
+            typeof telemetry.responses_by_status === 'object' &&
+            !Array.isArray(telemetry.responses_by_status)
+            ? Object.values(telemetry.responses_by_status).reduce((sum, count) => sum + count, 0)
+            : -1;
+          if (telemetry.schema_version !== 1 ||
+              telemetry.bind_address !== '127.0.0.1' ||
+              telemetry.shutdown_signal !== 'SIGTERM' ||
+              telemetry.shutdown_complete !== true ||
+              !/^[a-f0-9]{64}$/.test(telemetry.monitor_sha256 || '') ||
+              !Number.isInteger(telemetry.total_requests) || telemetry.total_requests <= 0 ||
+              !Number.isInteger(telemetry.upstream_errors) || telemetry.upstream_errors < 0 ||
+              responseCount + telemetry.upstream_errors !== telemetry.total_requests ||
+              telemetry.retry_count_header_missing !== 0 ||
+              telemetry.retry_count_header_malformed !== 0) {
+            throw new Error('OCR transport monitor telemetry is invalid');
+          }
+          NODE
+
       - name: Post OCR results
         id: post-ocr-results
         if: always()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           # Whether this run is an automatic (pull_request_target) trigger.
@@ -1579,7 +1999,7 @@ jobs:
               `## OpenCodeReview — PR #${number}`,
               '',
               `- Reviewed head SHA: \`${headSha}\``,
-              `- Merge base: \`${process.env.BASE_SHA}\``,
+              `- Merge base: \`${process.env.MERGE_BASE_SHA}\``,
               `- OCR version: \`${ocrVersion}\``,
               `- Phase: \`${diagnosticPhase}\``,
               `- Exit code: \`${exitCode}\``,
@@ -1756,6 +2176,438 @@ jobs:
               }
             }
 
+      - name: Build OCR canary metrics
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          TRUSTED_BASE_SHA: ${{ env.TRUSTED_BASE_SHA }}
+          MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
+          HEAD_SHA: ${{ env.HEAD_SHA }}
+          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
+          EXPECTED_OCR_VERSION: ${{ env.OCR_VERSION }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+          OCR_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        with:
+          script: |
+            const crypto = require('crypto');
+            const fs = require('fs');
+
+            function buildCanaryMetrics(input) {
+              const errors = [];
+              const meta = input && input.metadata && typeof input.metadata === 'object' &&
+                !Array.isArray(input.metadata) ? input.metadata : {};
+              const requiredStrings = [
+                'runUrl', 'runId', 'prNumber', 'trustedBaseSha', 'mergeBaseSha',
+                'headSha', 'expectedOcrVersion', 'actualOcrVersion', 'workflowSha',
+                'endpointResolutionSource', 'normalizedModel', 'protocol', 'language',
+                'ruleJsonSha256', 'providerUrlSha256', 'configuredOcrSettingsSha256',
+                'ocrConfigFileSha256', 'monitorSha256', 'audience', 'format',
+                'canonicalConfigFingerprint',
+              ];
+              for (const key of requiredStrings) {
+                if (typeof meta[key] !== 'string' || meta[key].length === 0) {
+                  errors.push(`metadata ${key} is required`);
+                }
+              }
+              for (const key of ['trustedBaseSha', 'mergeBaseSha', 'headSha', 'workflowSha']) {
+                if (typeof meta[key] === 'string' && !/^[a-fA-F0-9]{40}$/.test(meta[key])) {
+                  errors.push(`metadata ${key} must be an exact 40-character Git SHA`);
+                }
+              }
+              if (meta.trustedBaseSha !== meta.mergeBaseSha) {
+                errors.push('trusted checkout base SHA must equal merge-base SHA for comparable canaries');
+              }
+              for (const key of [
+                'ruleJsonSha256', 'providerUrlSha256', 'configuredOcrSettingsSha256',
+                'ocrConfigFileSha256', 'monitorSha256', 'canonicalConfigFingerprint',
+              ]) {
+                if (typeof meta[key] === 'string' && !/^[a-f0-9]{64}$/.test(meta[key])) {
+                  errors.push(`metadata ${key} must be a SHA-256 value`);
+                }
+              }
+              if (meta.actualOcrVersion !== meta.expectedOcrVersion) {
+                errors.push('actual OCR version does not match the expected OCR pin');
+              }
+              if (meta.endpointResolutionSource !== 'environment') {
+                errors.push('effective endpoint resolution source must be environment');
+              }
+              if (meta.protocol !== 'openai' && meta.protocol !== 'anthropic') {
+                errors.push('effective endpoint protocol is invalid');
+              }
+              const concurrency = Number(meta.concurrency);
+              if (![2, 3, 4].includes(concurrency)) {
+                errors.push('concurrency must be 2, 3, or 4');
+              }
+              const reviewTimeoutMinutes = Number(meta.reviewTimeoutMinutes);
+              if (!Number.isInteger(reviewTimeoutMinutes) || reviewTimeoutMinutes <= 0) {
+                errors.push('resolved review timeout must be a positive integer');
+              }
+              if (typeof meta.useAnthropic !== 'boolean') {
+                errors.push('useAnthropic must be boolean');
+              }
+              if (typeof meta.backgroundEnabled !== 'boolean') {
+                errors.push('backgroundEnabled must be boolean');
+              } else if (meta.backgroundEnabled) {
+                if (!/^[a-f0-9]{64}$/.test(meta.backgroundContextSha256 || '')) {
+                  errors.push('enabled background context requires a SHA-256 value');
+                }
+              } else if (meta.backgroundContextSha256 !== null) {
+                errors.push('disabled background context hash must be null');
+              }
+
+              const exitCodeText = input && typeof input.exitCodeText === 'string'
+                ? input.exitCodeText : '';
+              const parsedExitCode = /^-?[0-9]+$/.test(exitCodeText.trim())
+                ? Number(exitCodeText.trim()) : null;
+              const exactZeroExit = /^0\n?$/.test(exitCodeText);
+              if (!exactZeroExit) {
+                errors.push('OCR exit code must be exactly zero');
+              }
+
+              const timingInput = input && input.commandTiming;
+              let commandWallSeconds = null;
+              if (timingInput && typeof timingInput === 'object' && !Array.isArray(timingInput)) {
+                commandWallSeconds = timingInput.command_wall_seconds;
+                if (timingInput.schema_version !== 1 ||
+                    typeof commandWallSeconds !== 'number' ||
+                    !Number.isFinite(commandWallSeconds) || commandWallSeconds < 0) {
+                  errors.push('OCR command wall timing is invalid');
+                }
+                if (!Number.isInteger(timingInput.exit_code) || timingInput.exit_code !== parsedExitCode) {
+                  errors.push('OCR command timing exit code disagrees with review exit code');
+                }
+              } else {
+                errors.push('OCR command timing is missing');
+              }
+
+              const transportInput = input && input.transportTelemetry;
+              let transport = null;
+              if (transportInput && typeof transportInput === 'object' && !Array.isArray(transportInput)) {
+                const distribution = {};
+                if (transportInput.responses_by_status &&
+                    typeof transportInput.responses_by_status === 'object' &&
+                    !Array.isArray(transportInput.responses_by_status)) {
+                  for (const [status, count] of Object.entries(transportInput.responses_by_status)) {
+                    if (/^[1-5][0-9]{2}$/.test(status) && Number.isInteger(count) && count >= 0) {
+                      distribution[status] = count;
+                    } else {
+                      errors.push('transport status distribution is invalid');
+                    }
+                  }
+                } else {
+                  errors.push('transport status distribution is missing');
+                }
+                transport = {
+                  schema_version: transportInput.schema_version,
+                  monitor_sha256: transportInput.monitor_sha256,
+                  bind_address: transportInput.bind_address,
+                  target_protocol: transportInput.target_protocol,
+                  shutdown_signal: transportInput.shutdown_signal,
+                  shutdown_complete: transportInput.shutdown_complete,
+                  total_requests: transportInput.total_requests,
+                  upstream_errors: transportInput.upstream_errors,
+                  responses_by_status: distribution,
+                  http_429_responses: transportInput.http_429_responses,
+                  retry_events: transportInput.retry_events,
+                  retry_count_header_missing: transportInput.retry_count_header_missing,
+                  retry_count_header_malformed: transportInput.retry_count_header_malformed,
+                };
+                const counters = [
+                  transport.total_requests, transport.upstream_errors,
+                  transport.http_429_responses, transport.retry_events,
+                  transport.retry_count_header_missing,
+                  transport.retry_count_header_malformed,
+                ];
+                if (counters.some((value) => !Number.isInteger(value) || value < 0)) {
+                  errors.push('transport counters are invalid');
+                }
+                if (transport.schema_version !== 1 ||
+                    transport.bind_address !== '127.0.0.1' ||
+                    (transport.target_protocol !== 'http:' && transport.target_protocol !== 'https:') ||
+                    transport.shutdown_signal !== 'SIGTERM' ||
+                    transport.shutdown_complete !== true ||
+                    transport.monitor_sha256 !== meta.monitorSha256) {
+                  errors.push('transport monitor startup, shutdown, or provenance is invalid');
+                }
+                if (transport.total_requests === 0) {
+                  errors.push('transport must observe positive monitored traffic');
+                }
+                if (transport.retry_count_header_missing !== 0 ||
+                    transport.retry_count_header_malformed !== 0) {
+                  errors.push('transport retry-count headers are missing or malformed');
+                }
+                if ((distribution['429'] || 0) !== transport.http_429_responses) {
+                  errors.push('transport 429 count disagrees with status distribution');
+                }
+                const responseCount = Object.values(distribution).reduce(
+                  (total, count) => total + count,
+                  0,
+                );
+                if (Number.isInteger(transport.total_requests) &&
+                    Number.isInteger(transport.upstream_errors) &&
+                    responseCount + transport.upstream_errors !== transport.total_requests) {
+                  errors.push('transport request count disagrees with response and error aggregates');
+                }
+              } else {
+                errors.push('transport telemetry is missing');
+              }
+
+              const trimmedResult = input && typeof input.resultText === 'string'
+                ? input.resultText.trim() : '';
+              let parsed = null;
+              if (trimmedResult.length === 0) {
+                errors.push('OCR result is empty');
+              } else {
+                try {
+                  parsed = JSON.parse(trimmedResult);
+                } catch (_) {
+                  errors.push('OCR result is not valid JSON');
+                }
+              }
+              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                if (trimmedResult.length > 0 && errors.every((error) => error !== 'OCR result is not valid JSON')) {
+                  errors.push('OCR result must be an object');
+                }
+                parsed = null;
+              }
+              const status = parsed && typeof parsed.status === 'string' ? parsed.status : null;
+              if (status !== 'success') {
+                errors.push('OCR result status must be success');
+              }
+              let warningCount = null;
+              if (parsed) {
+                if (parsed.warnings === undefined) {
+                  warningCount = 0;
+                } else if (Array.isArray(parsed.warnings)) {
+                  warningCount = parsed.warnings.length;
+                } else {
+                  errors.push('OCR result warnings must be an array when present');
+                }
+              }
+              if (warningCount !== null && warningCount !== 0) {
+                errors.push('OCR result contains warnings');
+              }
+
+              let summaryOutput = null;
+              let findingsOutput = null;
+              let internalElapsed = null;
+              let internalElapsedSeconds = null;
+              if (parsed) {
+                const summary = parsed.summary;
+                const comments = parsed.comments;
+                if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+                  errors.push('OCR result summary is missing');
+                }
+                if (!Array.isArray(comments)) {
+                  errors.push('OCR result comments array is missing');
+                }
+                if (summary && typeof summary === 'object' && Array.isArray(comments)) {
+                  if (!Number.isInteger(summary.comments) || summary.comments !== comments.length) {
+                    errors.push('OCR summary comment count does not match comments length');
+                  }
+                  const numericValues = [
+                    summary.files_reviewed, summary.total_tokens,
+                    summary.input_tokens, summary.output_tokens,
+                    summary.cache_read_tokens ?? 0, summary.cache_write_tokens ?? 0,
+                  ];
+                  if (numericValues.some((value) => !Number.isInteger(value) || value < 0)) {
+                    errors.push('OCR summary counters are invalid');
+                  }
+                  const elapsedMatch = typeof summary.elapsed === 'string'
+                    ? /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?$/i.exec(summary.elapsed)
+                    : null;
+                  if (!elapsedMatch || !elapsedMatch.slice(1).some((part) => part !== undefined)) {
+                    errors.push('OCR summary elapsed is invalid');
+                  } else {
+                    internalElapsed = summary.elapsed;
+                    internalElapsedSeconds = Number(elapsedMatch[1] || 0) * 3600 +
+                      Number(elapsedMatch[2] || 0) * 60 + Number(elapsedMatch[3] || 0);
+                  }
+                  if (numericValues.every((value) => Number.isInteger(value) && value >= 0)) {
+                    summaryOutput = {
+                      files_reviewed: summary.files_reviewed,
+                      tokens: {
+                        total: summary.total_tokens,
+                        input: summary.input_tokens,
+                        output: summary.output_tokens,
+                        cache_read: summary.cache_read_tokens ?? 0,
+                        cache_write: summary.cache_write_tokens ?? 0,
+                      },
+                    };
+                  }
+                  if (comments.every((comment) => comment && typeof comment === 'object' && !Array.isArray(comment))) {
+                    const tally = (field) => {
+                      const counts = new Map();
+                      for (const comment of comments) {
+                        const raw = comment[field];
+                        const bucket = typeof raw === 'string' && raw.length > 0 ? raw : 'unknown';
+                        counts.set(bucket, (counts.get(bucket) || 0) + 1);
+                      }
+                      return Object.fromEntries(counts);
+                    };
+                    findingsOutput = {
+                      total: comments.length,
+                      by_category: tally('category'),
+                      by_severity: tally('severity'),
+                    };
+                  } else {
+                    errors.push('OCR comments must contain objects');
+                  }
+                }
+              }
+
+              return {
+                schema_version: 1,
+                valid: errors.length === 0,
+                validation_errors: errors,
+                run: { url: meta.runUrl || null, id: meta.runId || null },
+                pull_request: meta.prNumber || null,
+                trusted_checkout_base_sha: meta.trustedBaseSha || null,
+                merge_base_sha: meta.mergeBaseSha || null,
+                head_sha: meta.headSha || null,
+                concurrency: Number.isInteger(concurrency) ? concurrency : null,
+                result: {
+                  status,
+                  warning_count: warningCount,
+                  exit_code: parsedExitCode,
+                },
+                timing: {
+                  command_wall_seconds: commandWallSeconds,
+                  ocr_internal_elapsed: internalElapsed,
+                  ocr_internal_elapsed_seconds: internalElapsedSeconds,
+                },
+                provenance: {
+                  expected_ocr_version: meta.expectedOcrVersion || null,
+                  actual_ocr_version: meta.actualOcrVersion || null,
+                  workflow_sha: meta.workflowSha || null,
+                  effective_endpoint: {
+                    resolution_source: meta.endpointResolutionSource || null,
+                    normalized_model: meta.normalizedModel || null,
+                    protocol: meta.protocol || null,
+                    provider_url_sha256: meta.providerUrlSha256 || null,
+                    language: meta.language || null,
+                  },
+                  configured_ocr_settings_sha256: meta.configuredOcrSettingsSha256 || null,
+                  ocr_config_file_sha256: meta.ocrConfigFileSha256 || null,
+                  use_anthropic: typeof meta.useAnthropic === 'boolean' ? meta.useAnthropic : null,
+                  review_timeout_minutes: Number.isInteger(reviewTimeoutMinutes) ? reviewTimeoutMinutes : null,
+                  rule_json_sha256: meta.ruleJsonSha256 || null,
+                  background_enabled: typeof meta.backgroundEnabled === 'boolean' ? meta.backgroundEnabled : null,
+                  background_context_sha256: meta.backgroundContextSha256 ?? null,
+                  monitor_sha256: meta.monitorSha256 || null,
+                  audience: meta.audience || null,
+                  format: meta.format || null,
+                  canonical_config_fingerprint: meta.canonicalConfigFingerprint || null,
+                },
+                summary: summaryOutput,
+                findings: findingsOutput,
+                transport,
+              };
+            }
+
+            const safeRead = (fileName) => {
+              try {
+                return fs.readFileSync(fileName, 'utf8');
+              } catch (_) {
+                return '';
+              }
+            };
+            const safeJson = (fileName) => {
+              try {
+                return JSON.parse(fs.readFileSync(fileName, 'utf8'));
+              } catch (_) {
+                return null;
+              }
+            };
+            const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+            const actualVersionMatch = /\b(\d+\.\d+\.\d+)\b/.exec(safeRead('ocr-version.txt'));
+            const actualOcrVersion = actualVersionMatch ? actualVersionMatch[1] : '';
+            const runtime = safeJson('ocr-review-runtime.json') || {};
+            const configuredSettings = safeJson('ocr-configured-settings.json') || {};
+            const commandTiming = safeJson('ocr-command-timing.json');
+            const transportTelemetry = safeJson('ocr-transport-telemetry.json');
+            const ready = safeJson('ocr-transport-monitor-ready.json') || {};
+            const useAnthropic = String(process.env.OCR_USE_ANTHROPIC || '').toLowerCase() === 'true';
+            const normalizedModel = String(process.env.OCR_LLM_MODEL || '').trim();
+            const configuredOcrSettingsSha256 = sha256(JSON.stringify({
+              extra_body: configuredSettings.extra_body,
+              language: configuredSettings.language,
+            }));
+            const hashFile = (fileName) => {
+              try {
+                return sha256(fs.readFileSync(fileName));
+              } catch (_) {
+                return '';
+              }
+            };
+            const ruleJsonSha256 = hashFile(`${process.env.HOME}/.opencodereview/rule.json`);
+            const ocrConfigFileSha256 = hashFile(`${process.env.HOME}/.opencodereview/config.json`);
+            const canonicalConfiguration = {
+              expected_ocr_version: process.env.EXPECTED_OCR_VERSION || '',
+              actual_ocr_version: actualOcrVersion,
+              workflow_sha: process.env.WORKFLOW_SHA || '',
+              trusted_checkout_base_sha: process.env.TRUSTED_BASE_SHA || '',
+              merge_base_sha: process.env.MERGE_BASE_SHA || '',
+              effective_endpoint: {
+                resolution_source: 'environment',
+                normalized_model: normalizedModel,
+                protocol: useAnthropic ? 'anthropic' : 'openai',
+                provider_url_sha256: sha256(process.env.OCR_LLM_URL || ''),
+                language: configuredSettings.language,
+              },
+              configured_ocr_settings_sha256: configuredOcrSettingsSha256,
+              ocr_config_file_sha256: ocrConfigFileSha256,
+              use_anthropic: useAnthropic,
+              review_timeout_minutes: runtime.review_timeout_minutes,
+              rule_json_sha256: ruleJsonSha256,
+              background_enabled: runtime.background_enabled,
+              background_context_sha256: runtime.background_context_sha256 ?? null,
+              monitor_sha256: transportTelemetry?.monitor_sha256 || ready.monitor_sha256 || '',
+              audience: 'agent',
+              format: 'json',
+            };
+            const metrics = buildCanaryMetrics({
+              resultText: safeRead('ocr-result.json'),
+              exitCodeText: safeRead('ocr-exit-code.txt'),
+              commandTiming,
+              transportTelemetry,
+              metadata: {
+                runUrl: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                runId: String(context.runId),
+                prNumber: process.env.PR_NUMBER || '',
+                trustedBaseSha: canonicalConfiguration.trusted_checkout_base_sha,
+                mergeBaseSha: canonicalConfiguration.merge_base_sha,
+                headSha: process.env.HEAD_SHA || '',
+                concurrency: process.env.OCR_CONCURRENCY || '',
+                expectedOcrVersion: canonicalConfiguration.expected_ocr_version,
+                actualOcrVersion: canonicalConfiguration.actual_ocr_version,
+                workflowSha: canonicalConfiguration.workflow_sha,
+                endpointResolutionSource: canonicalConfiguration.effective_endpoint.resolution_source,
+                normalizedModel: canonicalConfiguration.effective_endpoint.normalized_model,
+                protocol: canonicalConfiguration.effective_endpoint.protocol,
+                language: canonicalConfiguration.effective_endpoint.language,
+                useAnthropic: canonicalConfiguration.use_anthropic,
+                reviewTimeoutMinutes: canonicalConfiguration.review_timeout_minutes,
+                ruleJsonSha256: canonicalConfiguration.rule_json_sha256,
+                providerUrlSha256: canonicalConfiguration.effective_endpoint.provider_url_sha256,
+                configuredOcrSettingsSha256: canonicalConfiguration.configured_ocr_settings_sha256,
+                ocrConfigFileSha256: canonicalConfiguration.ocr_config_file_sha256,
+                backgroundEnabled: canonicalConfiguration.background_enabled,
+                backgroundContextSha256: canonicalConfiguration.background_context_sha256,
+                monitorSha256: canonicalConfiguration.monitor_sha256,
+                audience: canonicalConfiguration.audience,
+                format: canonicalConfiguration.format,
+                canonicalConfigFingerprint: sha256(JSON.stringify(canonicalConfiguration)),
+              },
+            });
+            fs.writeFileSync('ocr-canary-metrics.json', JSON.stringify(metrics, null, 2) + '\n');
+            if (!metrics.valid) {
+              core.setFailed(`OCR canary evidence is invalid: ${metrics.validation_errors.join('; ')}`);
+            }
+
       - name: Resolve OCR failure classification
         shell: bash
         id: ocr-classification
@@ -1815,9 +2667,19 @@ jobs:
             'ocr-infrastructure-failure.txt',
             'ocr-policy-failure.txt',
           ];
+          if (fs.existsSync('ocr-canary-metrics.json')) {
+            diagnosticArtifacts.push('ocr-canary-metrics.json');
+          }
           const replaceWithRedactionFailure = (fileName, error) => {
             const code = error && error.code ? error.code : 'unknown';
-            const diagnostic = `redaction failed for ${fileName}: ${code}\n`;
+            const diagnostic = fileName === 'ocr-canary-metrics.json'
+              ? JSON.stringify({
+                  schema_version: 1,
+                  valid: false,
+                  validation_errors: [`artifact redaction failed: ${code}`],
+                  transport: null,
+                }, null, 2) + '\n'
+              : `redaction failed for ${fileName}: ${code}\n`;
             try {
               fs.writeFileSync(fileName, diagnostic);
             } catch (_) {
@@ -1904,6 +2766,39 @@ jobs:
             ocr-infrastructure-failure.txt
             ocr-policy-failure.txt
           if-no-files-found: warn
+
+      - name: Validate final OCR canary artifact
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const fileName = 'ocr-canary-metrics.json';
+          if (!fs.existsSync(fileName)) {
+            throw new Error('OCR canary artifact is missing');
+          }
+          const content = fs.readFileSync(fileName, 'utf8');
+          if (content.includes('[REDACTED')) {
+            throw new Error('OCR canary artifact contains redaction replacement text');
+          }
+          let parsed;
+          try {
+            parsed = JSON.parse(content);
+          } catch (_) {
+            throw new Error('OCR canary artifact is corrupted');
+          }
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.valid !== true) {
+            throw new Error('OCR canary artifact is not valid evidence');
+          }
+          NODE
+
+      - name: Upload OCR canary artifact
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: ocr-concurrency-canary
+          path: ocr-canary-metrics.json
+          if-no-files-found: error
 
       - name: Clean up scoped safe.directory
         shell: bash
