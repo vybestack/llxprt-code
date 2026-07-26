@@ -574,7 +574,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
             output_tokens: 100,
             cache_read_tokens: 50,
             cache_write_tokens: 25,
-            total_tokens: 475,
+            total_tokens: 400,
             elapsed: '46m31s',
           },
           warnings: [{ type: 'info', message: 'notice' }],
@@ -588,7 +588,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
           cache_read: 50,
           cache_write: 25,
           cache: 75,
-          total: 475,
+          total: 400,
         },
         warnings: [{ type: 'info', message: 'notice' }],
         completion_state: 'complete',
@@ -648,7 +648,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
           cache_read: 50,
           cache_write: 25,
           cache: 75,
-          total: 475,
+          total: 400,
         },
         findings: {
           raw: 75,
@@ -692,7 +692,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
         cache_read: 50,
         cache_write: 25,
         cache: 75,
-        total: 475,
+        total: 400,
       });
       expect(metadata.findings.raw).toBe(75);
       expect(metadata.findings.severity_distribution.high).toBe(4);
