@@ -227,7 +227,7 @@ describe('cleanup', () => {
     expect(secondSyncRan).toBe(true);
   });
 
-  it('should run async callbacks registered during async draining (drain-until-empty)', async () => {
+  it('should drain callbacks registered via registerCleanup during async draining', async () => {
     const executionOrder: string[] = [];
 
     registerCleanup(async () => {
