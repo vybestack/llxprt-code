@@ -75,7 +75,7 @@ if (ReactInternals) {
 
 afterEach(async () => {
   cleanupInkRenders();
-  // Base afterEach (process listeners, DebugLogger, cleanup-state, provider
-  // runtime context) is registered by test-setup-base.ts via its own
-  // afterEach and runs independently.
+  // Base cleanup is registered before this hook by test-setup-base.ts. Vitest
+  // executes afterEach hooks in reverse registration order, so Ink teardown
+  // completes before the shared process and runtime state are reset.
 });
