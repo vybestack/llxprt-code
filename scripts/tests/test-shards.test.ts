@@ -147,7 +147,7 @@ describe('validateShardCoverage', () => {
   it('ignores the scripts shard for coverage', () => {
     const shards: ShardDefinition[] = [
       ...baseShards,
-      { name: 'scripts', workspaces: [], isScriptsShard: true },
+      { name: SCRIPTS_SHARD_NAME, workspaces: [], isScriptsShard: true },
     ];
     const result = validateShardCoverage(shards, ['pkg-a', 'pkg-b']);
     expect(result.ok).toBe(true);

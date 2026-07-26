@@ -32,8 +32,9 @@ afterAll(() => {
     const dir = fixtures.pop()!;
     try {
       rmSync(dir, { recursive: true, force: true });
-    } catch {
-      // Best-effort cleanup.
+    } catch (err) {
+      // Best-effort cleanup; surface the path so a failed cleanup is diagnosable.
+      console.warn(`Failed to clean up fixture ${dir}: ${err}`);
     }
   }
 });

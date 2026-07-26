@@ -896,10 +896,12 @@ jobs:
   # jobs (post_coverage_comment) and required checks keep gating on a single
   # name while the real work fans out across the matrix.
   #
-  # `if: always()` is essential: when a `test_shard` leg fails, GitHub would
+  # `if: always()` is essential: when a `test_shard` leg fails or is skipped
+  # (e.g. because an upstream `lint` dependency failed), GitHub would
   # otherwise **skip** this job, and branch protection treats skipped checks
-  # as passing — a silent bypass. The explicit result check converts a shard
-  # failure into a `failure` conclusion on this required check.
+  # as passing — a silent bypass. The explicit result check converts any
+  # non-success outcome (failure, skipped, cancelled) into a `failure`
+  # conclusion on this required check.
   test:
     name: 'Test'
     needs:
