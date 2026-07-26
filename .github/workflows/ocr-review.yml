@@ -425,6 +425,7 @@ jobs:
       comments_failed: ${{ steps.post-ocr-results.outputs.comments_failed }}
       comments_routed_summary: ${{ steps.post-ocr-results.outputs.comments_routed_summary }}
       summary_comment_url: ${{ steps.post-ocr-results.outputs.summary_comment_url }}
+      completeness: ${{ steps.ocr-classification.outputs.completeness }}
     # The code-review job runs only when the mergeability gate and the
     # auto-review gate both permit it.
     needs:
@@ -824,6 +825,11 @@ jobs:
           : > ocr-phase.txt
           : > ocr-infrastructure-failure.txt
           : > ocr-policy-failure.txt
+          : > ocr-selected-files.txt
+          : > ocr-status.txt
+          : > ocr-reviewed-range-manifest.json
+          : > ocr-manifest-hashes.json
+          : > ocr-manifest-sha256.txt
           : > ocr-routing-decisions.json
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
@@ -1108,6 +1114,15 @@ jobs:
               /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { in_section = 0 }
               in_section { print }
             ' ocr-preview.txt || true)"
+            # Issue #2575: persist the selected (Will review) file list for
+            # the reviewed-range manifest. Extract one path per line,
+            # stripping bullet markers, checkboxes, and surrounding quotes.
+            printf '%s\n' "$reviewed" | sed -e 's/^[[:space:]]*//' \
+              -e 's/^[-*][[:space:]]*//' \
+              -e 's/^\[[^]]*\][[:space:]]*//' \
+              -e 's/^"\(.*\)"$/\1/' \
+              -e "s/^'\(.*\)'$/\1/" \
+              | grep -v '^[[:space:]]*$' > ocr-selected-files.txt || true
             excluded="$(awk '
               BEGIN { IGNORECASE = 1; in_section = 0 }
               /^Excluded[[:space:]]*\(/ { in_section = 1; next }
@@ -1256,6 +1271,21 @@ jobs:
           if ! cp ocr-stdout.raw ocr-result.json; then
             : > ocr-result.json
           fi
+          # Issue #2575: capture the upstream OCR JSON status field (e.g.
+          # "success" vs "completed_with_errors") so the manifest can
+          # classify partial coverage correctly.
+          ocr_status=""
+          if [ -s ocr-result.json ]; then
+            ocr_status="$(node -e '
+              try {
+                const data = JSON.parse(require("fs").readFileSync("ocr-result.json", "utf8"));
+                if (data && typeof data === "object" && typeof data.status === "string") {
+                  process.stdout.write(data.status);
+                }
+              } catch (_) { /* best-effort; empty status means unknown */ }
+            ' 2>/dev/null || true)"
+          fi
+          printf '%s' "$ocr_status" > ocr-status.txt
           echo "$status" > ocr-exit-code.txt
           if [ "$status" -ne 0 ]; then
             if grep -Eqi "429|rate limit" ocr-stderr.log; then
@@ -1952,6 +1982,245 @@ jobs:
                   body: comment.body,
                 })));
             }
+
+            // Issue #2575: reviewed-range manifest for completeness tracking.
+            // A partial OCR run must never be mistaken for complete coverage.
+
+            function resolveCompleteness(params) {
+              const skipped = params.skipped === true;
+              if (skipped) {
+                return 'skipped';
+              }
+              // C1: exitCode must be a valid non-negative integer. NaN/missing
+              // or negative values mean we cannot trust the OCR result, so
+              // treat them as failures rather than silently coercing to 0.
+              const rawExitCode = params.ocrExitCode;
+              if (!Number.isInteger(rawExitCode) || rawExitCode < 0) {
+                return 'failed';
+              }
+              if (rawExitCode !== 0) {
+                return 'failed';
+              }
+              // C1: fail-closed. Only recognized success statuses ("success"
+              // or "completed") can ever yield "complete". Every other value
+              // (including empty/null/unknown) yields "partial" because we
+              // lack positive proof of completeness.
+              const status = typeof params.ocrStatus === 'string' ? params.ocrStatus : '';
+              if (status !== 'success' && status !== 'completed') {
+                return 'partial';
+              }
+              // C3: set-based completeness. Normalize (trim), deduplicate,
+              // then verify that every selected file is covered.
+              const normalize = (arr) =>
+                Array.isArray(arr)
+                  ? [...new Set(arr.map((p) => String(p || '').trim()).filter((p) => p.length > 0))]
+                  : [];
+              const selectedSet = normalize(params.selectedFiles);
+              const completedSet = normalize(params.completedFiles);
+              const failedSet = normalize(params.failedFiles);
+              const reusedSet = normalize(params.reusedFiles);
+              // C10: a waiver only counts if it has a non-empty trimmed
+              // reason AND its path is in the failed set (C3: a waiver for
+              // a file that didn't fail is irrelevant).
+              const rawWaived = Array.isArray(params.waivedFiles) ? params.waivedFiles : [];
+              const failedLookup = new Set(failedSet);
+              const validWaiverPaths = new Set();
+              for (const entry of rawWaived) {
+                let pathStr = '';
+                let reasonStr = '';
+                if (typeof entry === 'string') {
+                  pathStr = entry.trim();
+                } else if (entry && typeof entry === 'object') {
+                  pathStr = String(entry.path || '').trim();
+                  reasonStr = String(entry.reason || '').trim();
+                } else {
+                  pathStr = String(entry || '').trim();
+                }
+                if (pathStr.length > 0 && reasonStr.length > 0 && failedLookup.has(pathStr)) {
+                  validWaiverPaths.add(pathStr);
+                }
+              }
+              const resolvedSet = new Set([
+                ...completedSet,
+                ...reusedSet,
+                ...validWaiverPaths,
+              ]);
+              // Every selected file must be resolved.
+              for (const sel of selectedSet) {
+                if (!resolvedSet.has(sel)) {
+                  return 'partial';
+                }
+              }
+              // C3: no unresolved failed files (a failed file not covered by
+              // a valid waiver). A file in both completed and failed is
+              // considered resolved (completed wins).
+              for (const failedPath of failedSet) {
+                if (!resolvedSet.has(failedPath) && !validWaiverPaths.has(failedPath)) {
+                  return 'partial';
+                }
+              }
+              // C3: no completed files outside the selected set (prevents
+              // an inflated completed set from masking a missing selected
+              // file).
+              const selectedLookup = new Set(selectedSet);
+              for (const completedPath of completedSet) {
+                if (!selectedLookup.has(completedPath)) {
+                  return 'partial';
+                }
+              }
+              return 'complete';
+            }
+
+            function computeCoverage(params) {
+              const selected = Number(params.selected) || 0;
+              const completed = Number(params.completed) || 0;
+              const ratio = selected === 0 ? 1 : completed / selected;
+              return { completed, selected, ratio: String(ratio) };
+            }
+
+            // Issue #2575: computeArtifactHashes is retained for testability
+            // and local CLI parity. The production hash computation runs in
+            // the dedicated "Compute reviewed-range manifest hashes" step
+            // (post-redaction), but this function is exercised by tests and
+            // serves as the canonical implementation.
+            function computeArtifactHashes(fileNames) {
+              const hashModule = typeof require === 'function' ? require('crypto') : crypto;
+              const fileSystem = typeof require === 'function' ? require('fs') : fs;
+              const hashes = {};
+              for (const fileName of fileNames) {
+                try {
+                  const content = fileSystem.readFileSync(fileName, 'utf8');
+                  const hash = hashModule.createHash('sha256').update(content).digest('hex');
+                  hashes[fileName] = `sha256:${hash}`;
+                } catch (_) {
+                  hashes[fileName] = null;
+                }
+              }
+              return hashes;
+            }
+
+            function buildReviewedRangeManifest(params) {
+              const selectedFiles = Array.isArray(params.selectedFiles) ? params.selectedFiles : [];
+              const rawCompletedFiles = Array.isArray(params.completedFiles) ? params.completedFiles : [];
+              const failedFiles = Array.isArray(params.failedFiles) ? params.failedFiles : [];
+              const reusedFiles = Array.isArray(params.reusedFiles) ? params.reusedFiles : [];
+              const rawWaivedFiles = Array.isArray(params.waivedFiles) ? params.waivedFiles : [];
+              const waivedFiles = rawWaivedFiles.map((entry) => {
+                if (typeof entry === 'string') {
+                  return { path: entry, reason: '' };
+                }
+                if (entry && typeof entry === 'object') {
+                  return { path: String(entry.path || ''), reason: String(entry.reason || '') };
+                }
+                return { path: String(entry), reason: '' };
+              });
+              const validWaivers = waivedFiles.filter((w) => w.path && w.reason.trim().length > 0);
+              // C2: completed_with_errors must not mark all selected files as
+              // completed. When the upstream OCR status indicates partial
+              // failure, we cannot trust that any specific file completed.
+              const ocrStatus = params.ocrStatus || '';
+              const isPartialStatus = ocrStatus === 'completed_with_errors';
+              const completedFiles = isPartialStatus ? [] : rawCompletedFiles;
+              const completeness = resolveCompleteness({
+                ocrExitCode: Number(params.ocrExitCode) || 0,
+                ocrStatus: params.ocrStatus || null,
+                selectedFiles,
+                completedFiles,
+                failedFiles,
+                reusedFiles,
+                waivedFiles,
+                skipped: params.skipped === true,
+              });
+              const coverage = computeCoverage({
+                completed: completedFiles.length,
+                selected: selectedFiles.length,
+              });
+              return {
+                schema_version: '1.0.0',
+                repository: params.repository || '',
+                pr_number: Number(params.prNumber) || 0,
+                head_sha: params.headSha || '',
+                merge_base_sha: params.mergeBaseSha || '',
+                trigger: params.trigger || '',
+                run_id: params.runId || '',
+                run_attempt: params.runAttempt || '',
+                ocr_version: params.ocrVersion || 'unknown',
+                ocr_session_id: params.ocrSessionId || '',
+                ocr_parent_session_id: params.ocrParentSessionId || '',
+                provider_model: params.providerModel || '',
+                concurrency: Number(params.concurrency) || 0,
+                rule_config_hash: params.ruleConfigHash || '',
+                selected_files: selectedFiles,
+                completed_files: completedFiles,
+                failed_files: failedFiles,
+                reused_files: reusedFiles,
+                waived_files: waivedFiles,
+                completeness,
+                coverage,
+                ocr_status: params.ocrStatus || '',
+                artifact_hashes: params.artifactHashes || {},
+              };
+            }
+
+            function serializeManifest(manifest) {
+              const json = JSON.stringify(manifest, null, 2);
+              return redactSecretDiagnostics(json);
+            }
+
+            function resultEnvelopeFromRaw(raw) {
+              try {
+                const parsed = JSON.parse(String(raw || '').trim());
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                  ? parsed
+                  : null;
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function failedFilesFromResult(envelope) {
+              const warnings = envelope && Array.isArray(envelope.warnings)
+                ? envelope.warnings
+                : [];
+              const failedFiles = [];
+              const seen = new Set();
+              for (const warning of warnings) {
+                if (!warning || warning.type !== 'subtask_error') {
+                  continue;
+                }
+                const filePath = typeof warning.file === 'string'
+                  ? warning.file.trim()
+                  : '';
+                if (filePath && !seen.has(filePath)) {
+                  seen.add(filePath);
+                  failedFiles.push(filePath);
+                }
+              }
+              return failedFiles;
+            }
+
+            function buildStatusLine(params) {
+              if (!params.ran) {
+                if (params.policyFailure) {
+                  return `OCR policy failure: ${params.policyFailure}`;
+                }
+                return 'OCR failed to run or parse output.';
+              }
+              if (params.completeness !== 'complete') {
+                const coverage = params.coverage || { completed: 0, selected: 0 };
+                const failedCount = Array.isArray(params.failedFiles)
+                  ? params.failedFiles.length
+                  : 0;
+                const findingNote = params.findingsCount > 0
+                  ? `; ${params.findingsCount} finding(s) (${params.postedInline} posted inline).`
+                  : '.';
+                return `Partial review: ${coverage.completed} of ${coverage.selected} files completed (${failedCount} failed)${findingNote}`;
+              }
+              if (params.findingsCount === 0) {
+                return 'No findings.';
+              }
+              return `${params.findingsCount} finding(s) (${params.postedInline} posted inline).`;
+            }
             if (policyFailure) {
               ran = false;
               core.warning('Skipping OCR output parsing because OCR policy failure was recorded.');
@@ -2205,18 +2474,51 @@ jobs:
             // Build the sticky summary, including lineless findings.
             const artifactLine =
               'Artifacts: `ocr-review-output` contains raw JSON, stdout, stderr, preview, phase, and exit-code diagnostics.';
-            let statusLine;
-            if (!ran) {
-              statusLine = policyFailure
-                ? `OCR policy failure: ${policyFailure}`
-                : 'OCR failed to run or parse output.';
-            } else if (process.env.RANGE_MODE === 'noop') {
-              statusLine = 'Same head; no new changes to review.';
-            } else if (findings.length === 0) {
-              statusLine = 'No findings.';
-            } else {
-              statusLine = `${findings.length} finding(s) (${postedInline} posted inline).`;
-            }
+            // Issue #2575: build the reviewed-range manifest for completeness
+            // tracking. The manifest records selected/completed/failed/waived
+            // file sets and a terminal completeness state.
+            const ocrStatusValue = readTrimmed('ocr-status.txt', '') || '';
+            const selectedFilesContent = readTrimmed('ocr-selected-files.txt', '');
+            const selectedFilesList = selectedFilesContent
+              ? selectedFilesContent.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0)
+              : [];
+            // C2: completedFiles must only be set to all selected files when
+            // the OCR status is a recognized success AND exit code is 0.
+            // For completed_with_errors we do not know which files actually
+            // completed, so leave completedFiles empty (conservative).
+            const manifestCompletedFiles =
+              ran && (ocrStatusValue === 'success' || ocrStatusValue === 'completed') && exitCode === 0
+                ? selectedFilesList
+                : [];
+            const manifestFailedFiles = failedFilesFromResult(parsedOcrResult);
+            // C7: isSkipped heuristic removed. When the post step runs, the
+            // review was NOT skipped (the gate let it through). Missing
+            // evidence is "failed"/"partial", never inferred as "skipped".
+            const manifestCompleteness = resolveCompleteness({
+              ocrExitCode: exitCode,
+              ocrStatus: ocrStatusValue || null,
+              selectedFiles: selectedFilesList,
+              completedFiles: manifestCompletedFiles,
+              failedFiles: manifestFailedFiles,
+              reusedFiles: [],
+              waivedFiles: [],
+              skipped: false,
+            });
+            const manifestCoverage = computeCoverage({
+              completed: manifestCompletedFiles.length,
+              selected: selectedFilesList.length,
+            });
+            const statusLine = process.env.RANGE_MODE === 'noop'
+              ? 'Same head; no new changes to review.'
+              : buildStatusLine({
+                  ran,
+                  findingsCount: findings.length,
+                  postedInline,
+                  completeness: manifestCompleteness,
+                  coverage: manifestCoverage,
+                  failedFiles: manifestFailedFiles,
+                  policyFailure,
+                });
             const infrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
             const rangeMetadataRaw = readTrimmed('ocr-range-metadata.json', '');
             const rangeMetadata = rangeMetadataRaw
@@ -2451,6 +2753,48 @@ jobs:
               core.warning(redactSecretDiagnostics(`Failed to post OCR sticky summary; continuing without failing the workflow: ${summaryError.message || summaryError}`));
             }
 
+            // Issue #2575: persist the reviewed-range manifest.
+            // Artifact hashes are computed AFTER redaction in the dedicated
+            // "Compute reviewed-range manifest hashes" step; here we just
+            // write the manifest with placeholder empty hashes.
+            const manifest = buildReviewedRangeManifest({
+              repository: `${owner}/${repo}`,
+              prNumber: number,
+              headSha,
+              mergeBaseSha: process.env.BASE_SHA || '',
+              trigger: process.env.GITHUB_EVENT_NAME || '',
+              runId: String(context.runId || ''),
+              runAttempt: String(process.env.GITHUB_RUN_ATTEMPT || '1'),
+              ocrVersion,
+              ocrSessionId: process.env.OCR_SESSION_ID || '',
+              ocrParentSessionId: process.env.OCR_PARENT_SESSION_ID || '',
+              providerModel: readTrimmed('ocr-preflight.txt', '').split(String.fromCharCode(10))[0] || '',
+              concurrency: Number(process.env.OCR_CONCURRENCY) || 0,
+              ruleConfigHash: process.env.OCR_RULE_CONFIG_HASH || '',
+              selectedFiles: selectedFilesList,
+              completedFiles: manifestCompletedFiles,
+              failedFiles: manifestFailedFiles,
+              reusedFiles: [],
+              waivedFiles: [],
+              ocrExitCode: exitCode,
+              ocrStatus: ocrStatusValue,
+              skipped: false,
+              artifactHashes: {},
+            });
+            try {
+              const serialized = serializeManifest(manifest);
+              fs.writeFileSync('ocr-reviewed-range-manifest.json', serialized);
+            } catch (manifestErr) {
+              // C9: a manifest persistence failure must not be silently
+              // swallowed. Record it as an infrastructure failure so the
+              // downstream classification and notifier pick it up.
+              core.warning(redactSecretDiagnostics(`Failed to write reviewed-range manifest: ${manifestErr.message || manifestErr}`));
+              const infraMessage = 'phase=manifest; reason=reviewed-range manifest persistence failed: '
+                + redactSecretDiagnostics(String(manifestErr.message || manifestErr))
+                + String.fromCharCode(10);
+              fs.writeFileSync(INFRA_FAILURE_FILE, infraMessage);
+              fs.writeFileSync('ocr-phase.txt', 'manifest\n');
+            }
             const checkpointDecision = {
               ran,
               exitCode,
@@ -2593,6 +2937,21 @@ jobs:
           else
             echo "infrastructure_failure=false" >> "$GITHUB_OUTPUT"
           fi
+          # C8: extract completeness from the reviewed-range manifest so the
+          # record-ocr-outcome job can distinguish partial/failed reviews
+          # from complete successes.
+          completeness="unknown"
+          if [ -s ocr-reviewed-range-manifest.json ]; then
+            completeness="$(node -e '
+              try {
+                const data = JSON.parse(require("fs").readFileSync("ocr-reviewed-range-manifest.json", "utf8"));
+                if (data && typeof data === "object" && typeof data.completeness === "string") {
+                  process.stdout.write(data.completeness);
+                }
+              } catch (_) { /* best-effort */ }
+            ' 2>/dev/null || true)"
+          fi
+          echo "completeness=${completeness}" >> "$GITHUB_OUTPUT"
 
       - name: Redact OCR diagnostic artifacts
         shell: bash
@@ -2636,6 +2995,11 @@ jobs:
             'ocr-phase.txt',
             'ocr-infrastructure-failure.txt',
             'ocr-policy-failure.txt',
+            'ocr-selected-files.txt',
+            'ocr-status.txt',
+            'ocr-reviewed-range-manifest.json',
+            'ocr-manifest-hashes.json',
+            'ocr-manifest-sha256.txt',
             'ocr-routing-decisions.json',
           ];
           const replaceWithRedactionFailure = (fileName, error) => {
@@ -2667,6 +3031,67 @@ jobs:
             }
           }
           NODE
+      - name: Compute reviewed-range manifest hashes
+        # C4/C5/C6: compute SHA-256 hashes of post-redaction artifacts.
+        # This runs AFTER "Redact OCR diagnostic artifacts" so the hashes
+        # describe the actual (redacted) bytes that are uploaded. The
+        # manifest itself is hashed last (after its artifact_hashes field
+        # is filled) and written to a detached ocr-manifest-sha256.txt.
+        shell: bash
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          // C5/C6: all diagnostic artifacts are hashed, including status
+          // and failure markers.
+          const hashableArtifacts = [
+            'ocr-result.json',
+            'ocr-stdout.raw',
+            'ocr-stderr.log',
+            'ocr-preflight.txt',
+            'ocr-version.txt',
+            'ocr-preview.txt',
+            'ocr-preview-stderr.log',
+            'ocr-exit-code.txt',
+            'ocr-phase.txt',
+            'ocr-selected-files.txt',
+            'ocr-status.txt',
+            'ocr-infrastructure-failure.txt',
+            'ocr-policy-failure.txt',
+          ];
+          const hashes = {};
+          for (const name of hashableArtifacts) {
+            try {
+              const content = fs.readFileSync(name, 'utf8');
+              const hash = crypto.createHash('sha256').update(content).digest('hex');
+              hashes[name] = `sha256:${hash}`;
+            } catch (_) {
+              hashes[name] = null;
+            }
+          }
+          // Write the per-artifact hashes.
+          fs.writeFileSync('ocr-manifest-hashes.json', JSON.stringify(hashes, null, 2));
+          // Re-read the manifest, inject the post-redaction hashes, and
+          // re-serialize so the manifest itself carries verified hashes.
+          try {
+            const manifestRaw = fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8');
+            const manifest = JSON.parse(manifestRaw);
+            manifest.artifact_hashes = hashes;
+            fs.writeFileSync('ocr-reviewed-range-manifest.json', JSON.stringify(manifest, null, 2));
+          } catch (manifestErr) {
+            process.stderr.write('Could not update manifest artifact_hashes: ' + (manifestErr.message || manifestErr) + String.fromCharCode(10));
+          }
+          // Hash the manifest LAST (after its own hashes are filled in) and
+          // write the detached manifest hash.
+          try {
+            const manifestContent = fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8');
+            const manifestHash = crypto.createHash('sha256').update(manifestContent).digest('hex');
+            fs.writeFileSync('ocr-manifest-sha256.txt', 'sha256:' + manifestHash + String.fromCharCode(10));
+          } catch (manifestErr) {
+            process.stderr.write('Could not compute manifest hash: ' + (manifestErr.message || manifestErr) + String.fromCharCode(10));
+          }
+          NODE
       - name: Ensure OCR artifact placeholders exist
         shell: bash
         if: always()
@@ -2686,6 +3111,11 @@ jobs:
             ocr-phase.txt \
             ocr-infrastructure-failure.txt \
             ocr-policy-failure.txt \
+            ocr-selected-files.txt \
+            ocr-status.txt \
+            ocr-reviewed-range-manifest.json \
+            ocr-manifest-hashes.json \
+            ocr-manifest-sha256.txt \
             ocr-routing-decisions.json; do
             if [ ! -e "$file_name" ]; then
               : > "$file_name"
@@ -2729,6 +3159,11 @@ jobs:
             ocr-phase.txt
             ocr-infrastructure-failure.txt
             ocr-policy-failure.txt
+            ocr-selected-files.txt
+            ocr-status.txt
+            ocr-reviewed-range-manifest.json
+            ocr-manifest-hashes.json
+            ocr-manifest-sha256.txt
             ocr-routing-decisions.json
           if-no-files-found: warn
 
@@ -2767,11 +3202,23 @@ jobs:
         shell: bash
         run: echo 'Non-blocking OCR infrastructure failure recorded.'
 
+      - name: 'Record OCR outcome: partial'
+        if: >-
+          ${{ needs.code-review.result == 'success' &&
+              needs.code-review.outputs.policy_failure != 'true' &&
+              needs.code-review.outputs.infrastructure_failure != 'true' &&
+              (needs.code-review.outputs.completeness == 'partial' ||
+               needs.code-review.outputs.completeness == 'failed') }}
+        shell: bash
+        run: echo 'Partial/incomplete OCR review recorded — not all selected files completed.'
+
       - name: 'Record OCR outcome: success'
         if: >-
           ${{ needs.code-review.result == 'success' &&
               needs.code-review.outputs.policy_failure != 'true' &&
-              needs.code-review.outputs.infrastructure_failure != 'true' }}
+              needs.code-review.outputs.infrastructure_failure != 'true' &&
+              needs.code-review.outputs.completeness != 'partial' &&
+              needs.code-review.outputs.completeness != 'failed' }}
         shell: bash
         run: echo 'Successful OCR review recorded.'
 
