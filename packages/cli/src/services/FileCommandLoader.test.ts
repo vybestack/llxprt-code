@@ -6,11 +6,22 @@
 
 import * as glob from 'glob';
 import * as path from 'node:path';
-import type { Config } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import mock from 'mock-fs';
-import { FileCommandLoader } from './FileCommandLoader.js';
-import { assert, vi } from 'vitest';
+import {
+  FileCommandLoader,
+  FILE_COMMANDS_UNTRUSTED_MESSAGE,
+  type FileCommandRuntime,
+} from './FileCommandLoader.js';
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
 import { ShellProcessor } from './prompt-processors/shellProcessor.js';
@@ -108,8 +119,9 @@ describe('FileCommandLoader', () => {
     const command = commands[0];
     expect(command).toBeDefined();
     expect(command.name).toBe('test');
+    assert(command.action, 'Expected command action');
 
-    const result = await command.action?.(
+    const result = await command.action(
       createMockCommandContext({
         invocation: {
           raw: '/test',
@@ -142,7 +154,7 @@ describe('FileCommandLoader', () => {
         }),
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(1);
@@ -168,7 +180,7 @@ describe('FileCommandLoader', () => {
         },
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(1);
@@ -210,7 +222,7 @@ describe('FileCommandLoader', () => {
       getExtensions: vi.fn(() => []),
       getFolderTrust: vi.fn(() => false),
       isTrustedFolder: vi.fn(() => false),
-    } as unknown as Config;
+    } satisfies FileCommandRuntime;
     const loader = new FileCommandLoader(mockConfig);
     const commands = await loader.loadCommands(signal);
     expect(commands).toHaveLength(1);
@@ -255,7 +267,7 @@ describe('FileCommandLoader', () => {
       getExtensions: vi.fn(() => []),
       getFolderTrust: vi.fn(() => false),
       isTrustedFolder: vi.fn(() => false),
-    } as unknown as Config;
+    } satisfies FileCommandRuntime;
     const loader = new FileCommandLoader(mockConfig);
     const commands = await loader.loadCommands(signal);
 
@@ -407,7 +419,7 @@ describe('FileCommandLoader', () => {
         },
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).not.toHaveBeenCalled();
@@ -422,7 +434,7 @@ describe('FileCommandLoader', () => {
         },
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).toHaveBeenCalledTimes(1);
@@ -437,7 +449,7 @@ describe('FileCommandLoader', () => {
         },
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).toHaveBeenCalledTimes(1);
@@ -452,7 +464,7 @@ describe('FileCommandLoader', () => {
         },
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).toHaveBeenCalledTimes(1);
@@ -501,7 +513,7 @@ describe('FileCommandLoader', () => {
         ]),
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
-      } as unknown as Config;
+      } satisfies FileCommandRuntime;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
 
@@ -554,7 +566,7 @@ describe('FileCommandLoader', () => {
         ]),
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
-      } as unknown as Config;
+      } satisfies FileCommandRuntime;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
 
@@ -669,7 +681,7 @@ describe('FileCommandLoader', () => {
         ]),
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
-      } as unknown as Config;
+      } satisfies FileCommandRuntime;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
 
@@ -707,7 +719,7 @@ describe('FileCommandLoader', () => {
         ]),
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
-      } as unknown as Config;
+      } satisfies FileCommandRuntime;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
       expect(commands).toHaveLength(0);
@@ -741,7 +753,7 @@ describe('FileCommandLoader', () => {
         ]),
         getFolderTrust: vi.fn(() => false),
         isTrustedFolder: vi.fn(() => false),
-      } as unknown as Config;
+      } satisfies FileCommandRuntime;
       const loader = new FileCommandLoader(mockConfig);
       const commands = await loader.loadCommands(signal);
 
@@ -753,8 +765,9 @@ describe('FileCommandLoader', () => {
       const nestedCmd = commands.find((cmd) => cmd.name === 'b:c');
       expect(nestedCmd?.extensionName).toBe('a');
       expect(nestedCmd?.description).toMatch(/^\[a\]/);
-      expect(nestedCmd).toBeDefined();
-      const result = await nestedCmd!.action?.(
+      assert(nestedCmd, 'Expected nested command');
+      assert(nestedCmd.action, 'Expected nested command action');
+      const result = await nestedCmd.action(
         createMockCommandContext({
           invocation: {
             raw: '/b:c',
@@ -779,12 +792,12 @@ describe('FileCommandLoader', () => {
         },
       });
 
-      const loader = new FileCommandLoader(null as unknown as Config);
+      const loader = new FileCommandLoader(null);
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'shorthand');
-      expect(command).toBeDefined();
+      assert(command, 'Expected shorthand command');
 
-      const result = await command!.action?.(
+      const result = await command.action?.(
         createMockCommandContext({
           invocation: {
             raw: '/shorthand do something cool',
@@ -797,6 +810,66 @@ describe('FileCommandLoader', () => {
       expect(result?.type).toBe('submit_prompt');
       assert(result?.type === 'submit_prompt', 'Incorrect action type');
       expect(result.content).toBe('The user wants to: do something cool');
+    });
+  });
+
+  describe('live folder trust', () => {
+    function setupLiveTrust(initialTrust: boolean) {
+      const userCommandsDir = Storage.getUserCommandsDir();
+      mock({
+        [userCommandsDir]: {
+          'live.toml': 'prompt = "Live prompt"',
+        },
+      });
+      let trusted = initialTrust;
+      const config = {
+        getProjectRoot: () => process.cwd(),
+        getExtensions: () => [],
+        getFolderTrust: () => true,
+        isTrustedFolder: () => trusted,
+      } satisfies FileCommandRuntime;
+      return {
+        loader: new FileCommandLoader(config),
+        setTrusted: (value: boolean) => {
+          trusted = value;
+        },
+      };
+    }
+
+    it('gains and revokes file commands from the same loader without an external event', async () => {
+      const { loader, setTrusted } = setupLiveTrust(false);
+
+      expect(await loader.loadCommands(signal)).toStrictEqual([]);
+
+      setTrusted(true);
+      expect(await loader.loadCommands(signal)).toHaveLength(1);
+
+      setTrusted(false);
+      expect(await loader.loadCommands(signal)).toStrictEqual([]);
+    });
+
+    it('blocks execution synchronously when trust is revoked after loading', async () => {
+      const { loader, setTrusted } = setupLiveTrust(true);
+      const [command] = await loader.loadCommands(signal);
+      expect(command).toBeDefined();
+
+      setTrusted(false);
+      const result = await command.action(
+        createMockCommandContext({
+          invocation: {
+            raw: '/secure',
+            name: 'secure',
+            args: '',
+          },
+        }),
+        '',
+      );
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: FILE_COMMANDS_UNTRUSTED_MESSAGE,
+      });
     });
   });
 });

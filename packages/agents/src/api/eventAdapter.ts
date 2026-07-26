@@ -19,7 +19,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ThoughtSummary } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type {
   ToolCall,
   CompletedToolCall,

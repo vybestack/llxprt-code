@@ -1,4 +1,4 @@
-import { SETTINGS_REGISTRY } from '@vybestack/llxprt-code-settings';
+import { SETTINGS_REGISTRY } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 
 /**
  * Set of all provider-config keys (canonical + aliases) derived from the

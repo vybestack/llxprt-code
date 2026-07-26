@@ -36,7 +36,7 @@ import type {
   SettingsService,
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings';
+import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import { type OAuthManager } from '../auth/index.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';

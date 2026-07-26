@@ -31,7 +31,7 @@ import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import { BaseProvider, type BaseProviderConfig } from '../BaseProvider.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
+import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth/types.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import {
   getErrorStatus,

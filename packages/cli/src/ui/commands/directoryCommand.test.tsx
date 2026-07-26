@@ -255,6 +255,38 @@ describe('directoryCommand', () => {
       );
     });
 
+    it('should reject a target directory when trust cannot be resolved', async () => {
+      const unresolvedPath = path.normalize('/home/user/missing-project');
+      const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
+        isPathTrusted: vi.fn().mockReturnValue(undefined),
+      };
+      vi.mocked(trustedFoldersModule.loadTrustedFolders).mockReturnValue(
+        mockLoadedTrustedFolders as LoadedTrustedFolders,
+      );
+      mockConfig = {
+        ...mockConfig,
+        getFolderTrust: vi.fn().mockReturnValue(true),
+      } as unknown as Config;
+      mockContext = {
+        ...mockContext,
+        services: {
+          ...mockContext.services,
+          config: mockConfig,
+        },
+      };
+
+      await addCommand.action!(mockContext, unresolvedPath);
+
+      expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalled();
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: expect.stringContaining('not trusted'),
+        }),
+        expect.any(Number),
+      );
+    });
+
     it('should allow trusted directory and keep existing success flow', async () => {
       const trustedPath = path.normalize('/home/user/trusted-project');
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {

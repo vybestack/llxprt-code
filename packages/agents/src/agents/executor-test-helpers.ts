@@ -10,8 +10,8 @@ import type { AgentDefinition, OutputConfig } from './types.js';
 import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { LSTool } from '@vybestack/llxprt-code-tools';
-import { ReadFileTool } from '@vybestack/llxprt-code-tools';
+import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
 import { CoreToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolHostAdapter.js';
 import {
   StreamEventType,

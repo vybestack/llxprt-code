@@ -15,10 +15,8 @@
 
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
-import {
-  mergeRefreshedToken,
-  sanitizeTokenForProxy,
-} from '@vybestack/llxprt-code-auth';
+import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
+import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

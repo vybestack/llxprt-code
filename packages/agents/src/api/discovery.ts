@@ -27,31 +27,29 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  LSTool,
-  ReadFileTool,
-  GrepTool,
-  GlobTool,
-  EditTool,
-  ASTEditTool,
-  WriteFileTool,
-  ReadManyFilesTool,
-  ReadLineRangeTool,
-  ASTReadFileTool,
-  AstGrepTool,
-  StructuralAnalysisTool,
-  DeleteLineRangeTool,
-  InsertAtLineTool,
-  ApplyPatchTool,
-  ShellTool,
-  MemoryTool,
-  ExaWebSearchTool,
-  TodoWrite,
-  TodoRead,
-  TodoPause,
-  CodeSearchTool,
-  DirectWebFetchTool,
-} from '@vybestack/llxprt-code-tools';
+import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
+import { GrepTool } from '@vybestack/llxprt-code-tools/tools/grep.js';
+import { GlobTool } from '@vybestack/llxprt-code-tools/tools/glob.js';
+import { EditTool } from '@vybestack/llxprt-code-tools/tools/edit.js';
+import { ASTEditTool } from '@vybestack/llxprt-code-tools/tools/ast-edit.js';
+import { WriteFileTool } from '@vybestack/llxprt-code-tools/tools/write-file.js';
+import { ReadManyFilesTool } from '@vybestack/llxprt-code-tools/tools/read-many-files.js';
+import { ReadLineRangeTool } from '@vybestack/llxprt-code-tools/tools/read_line_range.js';
+import { ASTReadFileTool } from '@vybestack/llxprt-code-tools/tools/ast-edit.js';
+import { AstGrepTool } from '@vybestack/llxprt-code-tools/tools/ast-grep.js';
+import { StructuralAnalysisTool } from '@vybestack/llxprt-code-tools/tools/structural-analysis.js';
+import { DeleteLineRangeTool } from '@vybestack/llxprt-code-tools/tools/delete_line_range.js';
+import { InsertAtLineTool } from '@vybestack/llxprt-code-tools/tools/insert_at_line.js';
+import { ApplyPatchTool } from '@vybestack/llxprt-code-tools/tools/apply-patch.js';
+import { ShellTool } from '@vybestack/llxprt-code-tools/tools/shell.js';
+import { MemoryTool } from '@vybestack/llxprt-code-tools/tools/memoryTool.js';
+import { ExaWebSearchTool } from '@vybestack/llxprt-code-tools/tools/exa-web-search.js';
+import { TodoWrite } from '@vybestack/llxprt-code-tools/tools/todo-write.js';
+import { TodoRead } from '@vybestack/llxprt-code-tools/tools/todo-read.js';
+import { TodoPause } from '@vybestack/llxprt-code-tools/tools/todo-pause.js';
+import { CodeSearchTool } from '@vybestack/llxprt-code-tools/tools/codesearch.js';
+import { DirectWebFetchTool } from '@vybestack/llxprt-code-tools/tools/direct-web-fetch.js';
 import type { ProviderInfo, ToolInfo } from './agent.js';
 
 /**

@@ -18,6 +18,8 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
+} from '@vybestack/llxprt-code-tools/tools/tools.js';
+import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
@@ -25,7 +27,7 @@ import {
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-policy';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { ContextAwareTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';

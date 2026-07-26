@@ -58,6 +58,17 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
     });
   }
 
+  function prepareMainTelemetryArtifacts(directory) {
+    fs.writeFileSync(
+      path.join(directory, 'ocr-telemetry.json'),
+      '{"schema":1}\n',
+    );
+    fs.writeFileSync(
+      path.join(directory, 'ocr-reviewed-range-manifest.json'),
+      '{"artifact_hashes":{}}\n',
+    );
+  }
+
   describe('YAML wiring', () => {
     it('wires RANGE_MODE into the preview step env', () => {
       const previewStep = stepNamed(
@@ -221,6 +232,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-hash-life-'));
       try {
         initializeArtifacts(sub);
+        prepareMainTelemetryArtifacts(sub);
         const report = {
           schema_version: '1.0.0',
           counts: { preview: 2, covered: 1 },
@@ -247,6 +259,10 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         execFileSync('bash', ['-c', commandText(hashStep)], {
           cwd: sub,
           encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: path.join(sub, 'github-output.txt'),
+          },
         });
 
         const placeholderStep = stepNamed(
@@ -256,6 +272,10 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         execFileSync('bash', ['-c', commandText(placeholderStep)], {
           cwd: sub,
           encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: path.join(sub, 'github-output.txt'),
+          },
         });
 
         const finalBytes = fs.readFileSync(
@@ -281,6 +301,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-hash-missing-'));
       try {
         initializeArtifacts(sub);
+        prepareMainTelemetryArtifacts(sub);
         fs.rmSync(path.join(sub, 'ocr-coverage-report.json'));
         const ensureStep = stepNamed(
           ctx.codeReviewJob,
@@ -304,6 +325,10 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         execFileSync('bash', ['-c', commandText(hashStep)], {
           cwd: sub,
           encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: path.join(sub, 'github-output.txt'),
+          },
         });
 
         const placeholderStep = stepNamed(
@@ -313,6 +338,10 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         execFileSync('bash', ['-c', commandText(placeholderStep)], {
           cwd: sub,
           encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: path.join(sub, 'github-output.txt'),
+          },
         });
 
         const finalBytes = fs.readFileSync(
@@ -571,6 +600,7 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-cred-life-'));
       try {
         initializeArtifacts(sub);
+        prepareMainTelemetryArtifacts(sub);
         const { serializeCoverageReport } = loadSerializer();
         const report = {
           schema_version: '1.0.0',
@@ -623,6 +653,10 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
         execFileSync('bash', ['-c', commandText(hashStep)], {
           cwd: sub,
           encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: path.join(sub, 'github-output.txt'),
+          },
         });
 
         // The final report must be valid JSON after redaction

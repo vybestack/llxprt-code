@@ -76,6 +76,7 @@ function createBaseFakeAgent(gen: () => AsyncIterable<AgentEvent>): Agent {
     async *stream() {
       yield* gen();
     },
+    injectSteer: () => {},
     getProvider: () => 'test',
     async setProvider() {},
     getProviderStatus: () => ({

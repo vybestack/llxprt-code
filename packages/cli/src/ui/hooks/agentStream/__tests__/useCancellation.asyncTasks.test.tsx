@@ -43,7 +43,6 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
     const abortControllerRef = { current: new AbortController() };
     const turnCancelledRef = { current: false };
     const pendingHistoryItemRef = { current: null };
-    const queuedSubmissionsRef = { current: [] };
     const addedItems: HistoryItemWithoutId[] = [];
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -63,11 +62,11 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
             addedItems.push(item);
             return addedItems.length;
           },
-          () => {},
-          () => {},
-          () => {},
-          queuedSubmissionsRef,
-          cancelRunningAsyncTasks,
+          () => {}, // setPendingHistoryItem
+          () => {}, // onCancelSubmit
+          () => {}, // setIsResponding
+          () => {}, // setShellInputFocused
+          cancelRunningAsyncTasks, // cancelRunningAsyncTasks
         ),
       { wrapper },
     );
@@ -119,7 +118,6 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
     const newTurnAbortRef = { current: new AbortController() };
     const turnCancelledRef = { current: false };
     const pendingHistoryItemRef = { current: null };
-    const queuedSubmissionsRef = { current: [] };
     const addedItems: HistoryItemWithoutId[] = [];
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -139,11 +137,11 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
             addedItems.push(item);
             return addedItems.length;
           },
-          () => {},
-          () => {},
-          () => {},
-          queuedSubmissionsRef,
-          cancelRunningAsyncTasks,
+          () => {}, // setPendingHistoryItem
+          () => {}, // onCancelSubmit
+          () => {}, // setIsResponding
+          () => {}, // setShellInputFocused
+          cancelRunningAsyncTasks, // cancelRunningAsyncTasks
         ),
       { wrapper },
     );

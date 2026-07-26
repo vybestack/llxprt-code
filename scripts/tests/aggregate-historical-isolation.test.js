@@ -60,8 +60,14 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
     // exception escaping processHistoricalRun's internal catch); run B is
     // valid and MUST still be included. This proves the loop isolates per-run
     // exceptions: one bad run cannot abort the remaining runs.
-    const runA = { databaseId: 99001, createdAt: '2026-07-19T02:00:00Z' };
-    const runB = { databaseId: 99002, createdAt: '2026-07-19T02:00:00Z' };
+    //
+    // fetchHistoricalData filters by Date.now() internally against the 7-day
+    // retention window, so timestamps must be derived from the current time
+    // (not fixed past dates that eventually fall outside the window).
+    const recentIso = (hoursAgo) =>
+      new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
+    const runA = { databaseId: 99001, createdAt: recentIso(1) };
+    const runB = { databaseId: 99002, createdAt: recentIso(2) };
 
     const listRunsPage = () => ({
       runs: [runA, runB],

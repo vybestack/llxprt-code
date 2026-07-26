@@ -17,7 +17,7 @@
  * No reverse tests (no `.not.toThrow()`) except for idempotency cases.
  */
 
-import { describe, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi, afterEach } from 'vitest';
 import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import { HookSystem } from '../hookSystem.js';
@@ -406,6 +406,26 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
       expect(disposeSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
     },
   );
+
+  /**
+   * @requirement DELTA-HEVT-004
+   * @given HookSystem is initialized then disposed
+   * @when fire* methods or initialize() are called after dispose
+   * @then all operations reject (terminal state is enforced)
+   */
+  it('enforces terminal state: fire* and initialize reject after dispose', async () => {
+    const system = new HookSystem(makeConfig());
+    await system.initialize();
+    system.dispose();
+
+    await expect(system.initialize()).rejects.toThrow(/disposed/i);
+    await expect(system.fireBeforeToolEvent('TestTool', {})).rejects.toThrow(
+      /HookEventHandler/,
+    );
+    await expect(
+      system.fireSessionStartEvent({ source: SessionStartSource.Startup }),
+    ).rejects.toThrow(/HookEventHandler/);
+  });
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P04

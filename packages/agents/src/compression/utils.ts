@@ -39,7 +39,7 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
  * media classification owned by core while supporting provider-injected
  * MediaBlock flows.
  */
-import { classifyMediaBlock } from '@vybestack/llxprt-code-tools';
+import { classifyMediaBlock } from '@vybestack/llxprt-code-tools/utils/mediaUtils.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';

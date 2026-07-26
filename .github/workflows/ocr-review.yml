@@ -416,16 +416,17 @@ jobs:
     # this output lets downstream jobs distinguish a completed OCR review from a
     # review that could not run because of provider, install, or script issues.
     outputs:
-      infrastructure_failure: ${{ steps.ocr-classification.outputs.infrastructure_failure }}
-      policy_failure: ${{ steps.ocr-classification.outputs.policy_failure }}
+      infrastructure_failure: ${{ steps.ocr-final-classification.outputs.infrastructure_failure }}
+      policy_failure: ${{ steps.ocr-final-classification.outputs.policy_failure }}
       # Feature 5 (issue #2670): structured comment-count outputs.
       comments_total: ${{ steps.post-ocr-results.outputs.comments_total }}
       comments_inline: ${{ steps.post-ocr-results.outputs.comments_inline }}
+      already_resolved: ${{ steps.post-ocr-results.outputs.already_resolved }}
       comments_skipped: ${{ steps.post-ocr-results.outputs.comments_skipped }}
       comments_failed: ${{ steps.post-ocr-results.outputs.comments_failed }}
       comments_routed_summary: ${{ steps.post-ocr-results.outputs.comments_routed_summary }}
       summary_comment_url: ${{ steps.post-ocr-results.outputs.summary_comment_url }}
-      completeness: ${{ steps.ocr-classification.outputs.completeness }}
+      completeness: ${{ steps.ocr-final-classification.outputs.completeness }}
     # The code-review job runs only when the mergeability gate and the
     # auto-review gate both permit it.
     needs:
@@ -827,13 +828,15 @@ jobs:
           : > ocr-policy-failure.txt
           : > ocr-selected-files.txt
           : > ocr-status.txt
+          : > ocr-preview-attempted.txt
+          : > ocr-preview-succeeded.txt
           : > ocr-reviewed-range-manifest.json
           : > ocr-manifest-hashes.json
           : > ocr-manifest-sha256.txt
           : > ocr-routing-decisions.json
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
-            echo "phase=$1; reason=$2" > ocr-infrastructure-failure.txt
+            echo "phase=$1; reason=$2" >> ocr-infrastructure-failure.txt
           }
           mark_policy_failure() {
             echo "$1" > ocr-policy-failure.txt
@@ -855,7 +858,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=install; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=install; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           OCR_PREFIX="${RUNNER_TEMP}/ocr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -934,7 +937,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=config; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=config; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           if ! command -v ocr >/dev/null 2>&1; then
@@ -986,7 +989,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=validate; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=validate; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           missing=0
@@ -1028,7 +1031,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=llm-preflight; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=llm-preflight; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           if ! command -v ocr >/dev/null 2>&1; then
@@ -1085,9 +1088,15 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=preview; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=preview; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
+          changed_tests="$(
+            git diff --name-only --diff-filter=d "${BASE_SHA}..${HEAD_SHA}" \
+              | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
+              || true
+          )"
+          echo "true" > ocr-preview-attempted.txt
           if ! command -v ocr >/dev/null 2>&1; then
             echo "::warning::OpenCodeReview command is unavailable before preview."
             echo "OpenCodeReview command is unavailable before preview." >> ocr-preview-stderr.log
@@ -1112,17 +1121,18 @@ jobs:
             mark_infrastructure_failure "preview" "OCR preview normalization failed"
             exit 0
           fi
+          if ! grep -Eq '^Will review[[:space:]]*\([0-9]+\):' ocr-preview.txt; then
+            echo "1" > ocr-exit-code.txt
+            mark_infrastructure_failure "preview" "OCR preview output was malformed"
+            exit 0
+          fi
+          echo "true" > ocr-preview-succeeded.txt
           reviewed="$(awk '
             BEGIN { IGNORECASE = 1; in_section = 0 }
             /^Will review[[:space:]]*\(/ { in_section = 1; next }
             /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { in_section = 0 }
             in_section { print }
           ' ocr-preview.txt || true)"
-          # Issue #2575 / #2675: persist the selected (Will review) file list
-          # for the reviewed-range manifest AND coverage verification. Extract
-          # one path per line, stripping bullet markers, checkboxes, and
-          # surrounding quotes. This runs for every non-noop review so the
-          # coverage cross-reference has a preview baseline.
           printf '%s\n' "$reviewed" | sed -e 's/^[[:space:]]*//' \
             -e 's/^[-*][[:space:]]*//' \
             -e 's/^\[[^]]*\][[:space:]]*//' \
@@ -1132,25 +1142,15 @@ jobs:
             -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
             | grep -v '^[[:space:]]*$' \
             | awk '!seen[$0]++' > ocr-selected-files.txt || true
-          excluded="$(awk '
-            BEGIN { IGNORECASE = 1; in_section = 0 }
-            /^Excluded[[:space:]]+from[[:space:]]+review[[:space:]]*\(/ { in_section = 1; next }
-            /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { if (in_section) in_section = 0 }
-            in_section { print }
-          ' ocr-preview.txt || true)"
-          # Issue #2675: changed-test policy checks are retained. When changed
-          # test/spec files exist, verify they appear in the reviewed set and
-          # are not excluded. This policy gate is independent of the preview
-          # execution above, which now always populates ocr-selected-files.txt
-          # for non-noop reviews.
-          changed_tests="$(
-            git diff --name-only --diff-filter=d "${BASE_SHA}..${HEAD_SHA}" \
-              | grep -Ei '(^|/)(__tests__|tests?)/.*\.(ts|tsx|js|jsx|mjs|cjs)$|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$' \
-              || true
-          )"
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
             echo "$changed_tests"
+            excluded="$(awk '
+              BEGIN { IGNORECASE = 1; in_section = 0 }
+              /^Excluded[[:space:]]+from[[:space:]]+review[[:space:]]*\(/ { in_section = 1; next }
+              /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { if (in_section) in_section = 0 }
+              in_section { print }
+            ' ocr-preview.txt || true)"
             missing=""
             excluded_tests=""
             path_in_section() {
@@ -1225,6 +1225,11 @@ jobs:
             echo "::warning::Skipping OCR review because an earlier OCR setup/configuration/preview failure was recorded."
             exit 0
           fi
+          # Issue #2676: capture the authoritative wall-clock start for the OCR
+          # invocation under both success and failure paths. Written as epoch
+          # seconds so the Capture OCR wall-clock step can compute a finite,
+          # nonnegative duration.
+          node -e 'process.stdout.write(String(Date.now()))' > ocr_wall_clock_start.txt
           if [ "$RANGE_MODE" = "noop" ]; then
             cat > ocr-result.json <<'EOF'
           {
@@ -1253,7 +1258,7 @@ jobs:
           if ! . ./ocr-workflow-helpers.sh; then
             echo "::warning::Could not load OCR workflow helper script."
             echo "127" > ocr-exit-code.txt
-            echo "phase=review; reason=OCR workflow helper script could not be loaded" > ocr-infrastructure-failure.txt
+            echo "phase=review; reason=OCR workflow helper script could not be loaded" >> ocr-infrastructure-failure.txt
             exit 0
           fi
           if ! command -v ocr >/dev/null 2>&1; then
@@ -1325,6 +1330,55 @@ jobs:
             fi
           fi
           exit 0
+
+      - name: Capture OCR wall-clock
+        # Issue #2676: compute the authoritative wall-clock duration of the
+        # OCR invocation from the start marker captured in the Run
+        # OpenCodeReview step. Runs under always() so a nonzero-exit OCR run
+        # that started still yields a finite, nonnegative wall_clock_seconds.
+        id: ocr-wall-clock
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          wall_clock_seconds=""
+          if [ -s ocr_wall_clock_start.txt ]; then
+            start="$(cat ocr_wall_clock_start.txt)"
+            if [[ "$start" =~ ^[0-9]+$ ]]; then
+              wall_clock_seconds="$(node -e '
+                const start = Number(process.argv[1]);
+                const elapsed = (Date.now() - start) / 1000;
+                if (Number.isSafeInteger(start) && Number.isFinite(elapsed) && elapsed >= 0) {
+                  process.stdout.write(String(elapsed));
+                }
+              ' "$start")"
+            fi
+          fi
+          echo "wall_clock_seconds=${wall_clock_seconds}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract OCR files_reviewed
+        # Issue #2676: extract the validated summary.files_reviewed count from
+        # the OCR result envelope so the telemetry files_reviewed reflects the
+        # OCR result (including completed_with_warnings) rather than the
+        # conservative reviewed-range manifest completed set.
+        id: ocr-files-reviewed
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          files_reviewed=""
+          if [ -s ocr-result.json ]; then
+            files_reviewed="$(node -e '
+              try {
+                const data = JSON.parse(require("fs").readFileSync("ocr-result.json", "utf8"));
+                const n = data && typeof data === "object" ? data.summary?.files_reviewed : undefined;
+                if (Number.isInteger(n) && n >= 0) {
+                  process.stdout.write(String(n));
+                }
+              } catch (_) { /* unavailable */ }
+            ' 2>/dev/null || true)"
+          fi
+          echo "files_reviewed=${files_reviewed}" >> "$GITHUB_OUTPUT"
 
       - name: Post OCR results
         id: post-ocr-results
@@ -2740,6 +2794,16 @@ jobs:
                 ? selectedFilesList
                 : [];
             const manifestFailedFiles = failedFilesFromResult(parsedOcrResult);
+            const readFailureFiles = manifestFailedFiles.filter((filePath) => {
+              const warnings = Array.isArray(parsedOcrResult?.warnings)
+                ? parsedOcrResult.warnings
+                : [];
+              return warnings.some((warning) => {
+                if (!warning || warning.file !== filePath) return false;
+                const evidence = String(warning.message || warning.error || warning.reason || '');
+                return /\b(?:read|reading|readFile|ENOENT|EACCES)\b/i.test(evidence);
+              });
+            });
             // C7: isSkipped heuristic removed. When the post step runs, the
             // review was NOT skipped (the gate let it through). Missing
             // evidence is "failed"/"partial", never inferred as "skipped".
@@ -3136,10 +3200,25 @@ jobs:
             const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;
             core.setOutput('comments_total', String(commentsTotal));
             core.setOutput('comments_inline', String(postedInline));
+            core.setOutput('already_resolved', String(skippedOverlapCount));
             core.setOutput('comments_skipped', String(commentsSkipped));
             core.setOutput('comments_failed', String(failedInline));
             core.setOutput('comments_routed_summary', String(routingShadowMode ? wouldRouteToSummary : summaryRouted.length));
+            core.setOutput('per_file_review_failures', manifestFailedFiles.join('\n'));
+            core.setOutput('file_read_failures', readFailureFiles.length > 0 ? readFailureFiles.join('\n') : '');
             core.setOutput('summary_comment_url', summaryCommentUrl);
+            // Issue #2676: expose the Post OCR results lifecycle state so the
+            // telemetry record can truthfully distinguish posted/noop/failed
+            // post outcomes. Derived from ran + range mode, not invented.
+            let postState = 'posted';
+            if (process.env.RANGE_MODE === 'noop') {
+              postState = 'noop';
+            } else if (!ran) {
+              postState = policyFailure ? 'policy-failed' : 'failed';
+            } else if (failedInline > 0) {
+              postState = 'partial';
+            }
+            core.setOutput('post_state', postState);
 
             if (!ran) {
               if (policyFailure) {
@@ -3303,8 +3382,74 @@ jobs:
             ' 2>/dev/null || true)"
           fi
           echo "completeness=${completeness}" >> "$GITHUB_OUTPUT"
+      - name: Capture OCR telemetry timestamp
+        id: ocr-generated-at
+        shell: bash
+        if: always()
+        run: |
+          echo "generated_at=$(node -e 'process.stdout.write(new Date().toISOString())')" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure OCR artifact placeholders exist
+        id: ocr-artifact-state
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          missing=""
+          for file_name in \
+            ocr-result.json \
+            ocr-metadata.json \
+            ocr-stdout.raw \
+            ocr-stderr.log \
+            ocr-preflight.txt \
+            ocr-version.txt \
+            ocr-preview.txt \
+            ocr-preview-stderr.log \
+            ocr-exit-code.txt \
+            ocr-phase.txt \
+            ocr-infrastructure-failure.txt \
+            ocr-policy-failure.txt \
+            ocr-selected-files.txt \
+            ocr-status.txt \
+            ocr-preview-attempted.txt \
+            ocr-preview-succeeded.txt \
+            ocr-coverage-report.json \
+            ocr-reviewed-range-manifest.json \
+            ocr-manifest-hashes.json \
+            ocr-manifest-sha256.txt \
+            ocr-routing-decisions.json; do
+            if [ ! -e "$file_name" ]; then
+              : > "$file_name"
+              missing="${missing}${file_name}"$'\n'
+            fi
+          done
+          artifact_state="prepared"
+          if [ -n "$missing" ]; then
+            artifact_state="failed"
+            echo "phase=artifact; reason=OCR artifact placeholders were missing before telemetry" >> ocr-infrastructure-failure.txt
+          fi
+          echo "artifact_state=${artifact_state}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve OCR production evidence
+        id: ocr-evidence
+        shell: bash
+        if: always()
+        env:
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+        run: |
+          set -euo pipefail
+          preview_attempted="false"
+          preview_succeeded="false"
+          [ "$(cat ocr-preview-attempted.txt 2>/dev/null || true)" = "true" ] && preview_attempted="true"
+          [ "$(cat ocr-preview-succeeded.txt 2>/dev/null || true)" = "true" ] && preview_succeeded="true"
+          if [ "${RANGE_MODE:-}" != "noop" ] && { [ "$preview_attempted" != "true" ] || [ "$preview_succeeded" != "true" ]; }; then
+            echo "phase=preview; reason=OCR preview evidence was unavailable or unsuccessful" >> ocr-infrastructure-failure.txt
+          fi
+          echo "preview_attempted=${preview_attempted}" >> "$GITHUB_OUTPUT"
+          echo "preview_succeeded=${preview_succeeded}" >> "$GITHUB_OUTPUT"
 
       - name: Redact OCR diagnostic artifacts
+        id: redact-ocr-artifacts
         shell: bash
         if: always()
         env:
@@ -3333,25 +3478,15 @@ jobs:
               .replace(/\b(token\s*[=:]\s*)([A-Za-z0-9_./+=:@-]{16,})/gi, `$1${REDACTION}`)
               .replace(/\b(secret\s*[=:]\s*)([A-Za-z0-9_./+=:@-]{16,})/gi, `$1${REDACTION}`);
           };
-          const diagnosticArtifacts = [
-            'ocr-result.json',
-            'ocr-metadata.json',
-            'ocr-stdout.raw',
-            'ocr-stderr.log',
-            'ocr-preflight.txt',
-            'ocr-version.txt',
-            'ocr-preview.txt',
-            'ocr-preview-stderr.log',
-            'ocr-exit-code.txt',
-            'ocr-phase.txt',
-            'ocr-infrastructure-failure.txt',
-            'ocr-policy-failure.txt',
-            'ocr-selected-files.txt',
-            'ocr-status.txt',
-            'ocr-reviewed-range-manifest.json',
-            'ocr-manifest-hashes.json',
-            'ocr-manifest-sha256.txt',
-            'ocr-routing-decisions.json',
+          const artifacts = [
+            'ocr-result.json', 'ocr-metadata.json', 'ocr-stdout.raw',
+            'ocr-stderr.log', 'ocr-preflight.txt', 'ocr-version.txt',
+            'ocr-preview.txt', 'ocr-preview-stderr.log', 'ocr-exit-code.txt',
+            'ocr-phase.txt', 'ocr-infrastructure-failure.txt',
+            'ocr-policy-failure.txt', 'ocr-selected-files.txt', 'ocr-status.txt',
+            'ocr-preview-attempted.txt', 'ocr-preview-succeeded.txt',
+            'ocr-reviewed-range-manifest.json', 'ocr-manifest-hashes.json',
+            'ocr-manifest-sha256.txt', 'ocr-routing-decisions.json',
             'ocr-coverage-report.json',
           ];
           function replaceWithRedactionFailure(fileName, error) {
@@ -3364,173 +3499,278 @@ jobs:
                 fs.writeFileSync(fileName, diagnostic);
               }
             } catch (_) {
-              try {
-                fs.rmSync(fileName, { force: true });
-              } catch (_) {
-                process.exitCode = 1;
-              }
+              try { fs.rmSync(fileName, { force: true }); } catch (_) { /* upload is gated */ }
             }
+            process.exitCode = 1;
           }
           const redactJsonValue = (value) => {
-            if (typeof value === 'string') {
-              return redact(value);
-            }
-            if (Array.isArray(value)) {
-              return value.map(redactJsonValue);
-            }
+            if (typeof value === 'string') return redact(value);
+            if (Array.isArray(value)) return value.map(redactJsonValue);
             if (value && typeof value === 'object') {
               const result = {};
-              for (const [key, val] of Object.entries(value)) {
-                result[key] = redactJsonValue(val);
-              }
+              for (const [key, val] of Object.entries(value)) result[key] = redactJsonValue(val);
               return result;
             }
             return value;
           };
-          const REDACTED_PENDING = '[REDACTED-PENDING]';
-          for (const fileName of diagnosticArtifacts) {
+          for (const fileName of artifacts) {
             try {
-              const originalContent = fs.readFileSync(fileName, 'utf8');
-              fs.writeFileSync(fileName, REDACTED_PENDING);
-              // For JSON artifacts, parse → redact string values → reserialize
-              // so a credential-like filename never corrupts the JSON structure.
-              // Raw regex redaction over the serialized string can consume
-              // structural characters and produce invalid JSON.
-              let redactedContent;
+              const original = fs.readFileSync(fileName, 'utf8');
+              fs.writeFileSync(fileName, '[REDACTION-PENDING]\n');
+              let structuredRedaction = null;
               if (fileName.endsWith('.json')) {
                 try {
-                  const parsed = JSON.parse(originalContent);
-                  redactedContent = JSON.stringify(redactJsonValue(parsed), null, 2);
+                  structuredRedaction = JSON.stringify(redactJsonValue(JSON.parse(original)), null, 2);
                 } catch (_) {
-                  // Not valid JSON; fall back to raw redaction (best-effort).
-                  redactedContent = redact(originalContent);
+                  structuredRedaction = null;
                 }
+              }
+              const temporary = `${fileName}.redacting`;
+              if (structuredRedaction === null) {
+                fs.writeFileSync(temporary, redact(original));
               } else {
-                redactedContent = redact(originalContent);
+                fs.writeFileSync(temporary, structuredRedaction);
               }
-              const tempFile = `${fileName}.redacting`;
-              fs.writeFileSync(tempFile, redactedContent);
-              fs.renameSync(tempFile, fileName);
+              fs.renameSync(temporary, fileName);
             } catch (error) {
-              if (error && error.code !== 'ENOENT') {
-                replaceWithRedactionFailure(fileName, error);
-              }
+              if (error?.code !== 'ENOENT') replaceWithRedactionFailure(fileName, error);
             }
           }
           NODE
-      - name: Compute reviewed-range manifest hashes
-        # C4/C5/C6: compute SHA-256 hashes of post-redaction artifacts.
-        # This runs AFTER "Redact OCR diagnostic artifacts" so the hashes
-        # describe the actual (redacted) bytes that are uploaded. The
-        # manifest itself is hashed last (after its artifact_hashes field
-        # is filled) and written to a detached ocr-manifest-sha256.txt.
-        shell: bash
-        if: always()
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const crypto = require('crypto');
-          // C5/C6: all diagnostic artifacts are hashed, including status
-          // and failure markers.
-          const hashableArtifacts = [
-            'ocr-result.json',
-            'ocr-stdout.raw',
-            'ocr-stderr.log',
-            'ocr-preflight.txt',
-            'ocr-version.txt',
-            'ocr-preview.txt',
-            'ocr-preview-stderr.log',
-            'ocr-exit-code.txt',
-            'ocr-phase.txt',
-            'ocr-selected-files.txt',
-            'ocr-status.txt',
-            'ocr-infrastructure-failure.txt',
-            'ocr-policy-failure.txt',
-            'ocr-coverage-report.json',
-          ];
-          const hashes = {};
-          for (const name of hashableArtifacts) {
-            try {
-              const content = fs.readFileSync(name, 'utf8');
-              const hash = crypto.createHash('sha256').update(content).digest('hex');
-              hashes[name] = `sha256:${hash}`;
-            } catch (_) {
-              hashes[name] = null;
-            }
-          }
-          // Write the per-artifact hashes.
-          fs.writeFileSync('ocr-manifest-hashes.json', JSON.stringify(hashes, null, 2));
-          // Re-read the manifest, inject the post-redaction hashes, and
-          // re-serialize so the manifest itself carries verified hashes.
-          try {
-            const manifestRaw = fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8');
-            const manifest = JSON.parse(manifestRaw);
-            manifest.artifact_hashes = hashes;
-            fs.writeFileSync('ocr-reviewed-range-manifest.json', JSON.stringify(manifest, null, 2));
-          } catch (manifestErr) {
-            process.stderr.write('Could not update manifest artifact_hashes: ' + (manifestErr.message || manifestErr) + String.fromCharCode(10));
-          }
-          // Hash the manifest LAST (after its own hashes are filled in) and
-          // write the detached manifest hash.
-          try {
-            const manifestContent = fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8');
-            const manifestHash = crypto.createHash('sha256').update(manifestContent).digest('hex');
-            fs.writeFileSync('ocr-manifest-sha256.txt', 'sha256:' + manifestHash + String.fromCharCode(10));
-          } catch (manifestErr) {
-            process.stderr.write('Could not compute manifest hash: ' + (manifestErr.message || manifestErr) + String.fromCharCode(10));
-          }
-          NODE
-      - name: Ensure OCR artifact placeholders exist
+
+      - name: Resolve OCR telemetry classification
+        id: ocr-telemetry-classification
         shell: bash
         if: always()
         run: |
           set -euo pipefail
-          missing=""
-          for file_name in \
-            ocr-result.json \
-            ocr-metadata.json \
-            ocr-stdout.raw \
-            ocr-stderr.log \
-            ocr-preflight.txt \
-            ocr-version.txt \
-            ocr-preview.txt \
-            ocr-preview-stderr.log \
-            ocr-exit-code.txt \
-            ocr-phase.txt \
-            ocr-infrastructure-failure.txt \
-            ocr-policy-failure.txt \
-            ocr-selected-files.txt \
-            ocr-status.txt \
-            ocr-reviewed-range-manifest.json \
-            ocr-manifest-hashes.json \
-            ocr-manifest-sha256.txt \
-            ocr-routing-decisions.json; do
-            if [ ! -e "$file_name" ]; then
-              : > "$file_name"
-              missing="${missing}${file_name}"$'\n'
-            fi
-          done
-          if [ -n "$missing" ]; then
-            echo "::warning::OCR artifact placeholders were missing before upload:"
-            echo "$missing"
-            if [ ! -s ocr-exit-code.txt ]; then
-              echo "127" > ocr-exit-code.txt
-            fi
-            if [ ! -s ocr-phase.txt ]; then
-              echo "artifact" > ocr-phase.txt
-            fi
-            if [ ! -s ocr-infrastructure-failure.txt ]; then
-              echo "phase=artifact; reason=OCR artifact placeholders were missing before upload" > ocr-infrastructure-failure.txt
-            fi
+          policy_failure="false"
+          infrastructure_failure="false"
+          [ -s ocr-policy-failure.txt ] && policy_failure="true"
+          [ -s ocr-infrastructure-failure.txt ] && infrastructure_failure="true"
+          post_state="${{ steps.post-ocr-results.outputs.post_state }}"
+          post_outcome="${{ steps.post-ocr-results.outcome }}"
+          artifact_state="${{ steps.ocr-artifact-state.outputs.artifact_state }}"
+          source_redaction_state="prepared"
+          if [ "$post_outcome" != "success" ] || [ -z "$post_state" ] || [ "$post_state" = "failed" ]; then
+            post_state="failed"
+            infrastructure_failure="true"
           fi
-          for critical_artifact in ocr-exit-code.txt ocr-phase.txt; do
-            if [ ! -s "$critical_artifact" ]; then
-              echo "::warning::Critical OCR artifact $critical_artifact is empty before upload."
-            fi
-          done
+          if [ "$post_state" = "policy-failed" ]; then policy_failure="true"; infrastructure_failure="true"; fi
+          if [ "${{ steps.redact-ocr-artifacts.outcome }}" != "success" ]; then
+            source_redaction_state="failed"
+            artifact_state="failed"
+            infrastructure_failure="true"
+            echo "phase=artifact; reason=OCR artifact redaction failed" >> ocr-infrastructure-failure.txt
+          fi
+          {
+            echo "policy_failure=${policy_failure}"
+            echo "infrastructure_failure=${infrastructure_failure}"
+            echo "post_state=${post_state:-missing}"
+            echo "post_outcome=${post_outcome:-missing}"
+            echo "source_redaction_state=${source_redaction_state}"
+            echo "artifact_state=${artifact_state:-failed}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 'Emit OCR telemetry (issue #2676)'
+        id: emit-ocr-telemetry
+        shell: bash
+        if: always()
+        env:
+          OCR_RUN_ID: ${{ github.run_id }}
+          OCR_RUN_ATTEMPT: ${{ github.run_attempt }}
+          OCR_PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_SHA: ${{ env.HEAD_SHA }}
+          OCR_GENERATED_AT: ${{ steps.ocr-generated-at.outputs.generated_at }}
+          OCR_WALL_CLOCK_SECONDS: ${{ steps.ocr-wall-clock.outputs.wall_clock_seconds }}
+          OCR_FILES_REVIEWED: ${{ steps.ocr-files-reviewed.outputs.files_reviewed }}
+          OCR_POST_STATE: ${{ steps.ocr-telemetry-classification.outputs.post_state }}
+          OCR_POST_OUTCOME: ${{ steps.ocr-telemetry-classification.outputs.post_outcome }}
+          OCR_SOURCE_REDACTION_STATE: ${{ steps.ocr-telemetry-classification.outputs.source_redaction_state }}
+          OCR_ARTIFACT_STATE: ${{ steps.ocr-telemetry-classification.outputs.artifact_state }}
+          OCR_HASH_STATE: prepared
+          OCR_INFRASTRUCTURE_FAILURE: ${{ steps.ocr-telemetry-classification.outputs.infrastructure_failure }}
+          OCR_POLICY_FAILURE: ${{ steps.ocr-telemetry-classification.outputs.policy_failure }}
+          OCR_PREVIEW_ATTEMPTED: ${{ steps.ocr-evidence.outputs.preview_attempted }}
+          OCR_PREVIEW_SUCCEEDED: ${{ steps.ocr-evidence.outputs.preview_succeeded }}
+          OCR_FILE_READ_FAILURES: ${{ steps.post-ocr-results.outputs.file_read_failures }}
+          OCR_PER_FILE_REVIEW_FAILURES: ${{ steps.post-ocr-results.outputs.per_file_review_failures }}
+          OCR_INLINE_POSTED: ${{ steps.post-ocr-results.outputs.comments_inline }}
+          OCR_ALREADY_RESOLVED: ${{ steps.post-ocr-results.outputs.already_resolved }}
+          OCR_ALREADY_POSTED_OR_SKIPPED_DEDUP: ${{ steps.post-ocr-results.outputs.comments_skipped }}
+          OCR_COMMENTS_SKIPPED: ${{ steps.post-ocr-results.outputs.comments_skipped }}
+          OCR_COMMENTS_FAILED: ${{ steps.post-ocr-results.outputs.comments_failed }}
+          OCR_COMMENTS_ROUTED_SUMMARY: ${{ steps.post-ocr-results.outputs.comments_routed_summary }}
+          OCR_COMMENTS_TOTAL: ${{ steps.post-ocr-results.outputs.comments_total }}
+        run: |
+          set -euo pipefail
+          export GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-$RUNNER_TEMP/ocr-step-summary.md}"
+          if node scripts/ocr-telemetry.js; then
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "phase=telemetry; reason=OCR telemetry producer failed" >> ocr-infrastructure-failure.txt
+          if node scripts/ocr-telemetry.js --failure "OCR telemetry producer failed"; then
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node <<'NODE'
+          const fs = require('fs');
+          const count = (value) => /^\d+$/.test(value || '') && Number.isSafeInteger(Number(value))
+            ? Number(value)
+            : null;
+          const record = {
+            schema: 1, schema_name: 'ocr-telemetry',
+            run_id: process.env.OCR_RUN_ID || null,
+            run_attempt: process.env.OCR_RUN_ATTEMPT || null,
+            pr_number: count(process.env.OCR_PR_NUMBER),
+            sha: /^[0-9a-f]{40}$/.test(process.env.OCR_SHA || '') ? process.env.OCR_SHA : null,
+            generated_at: process.env.OCR_GENERATED_AT || new Date().toISOString(),
+            ocr: { version: null, model: null, concurrency: null },
+            wall_clock_seconds: null, cli_elapsed_seconds: null,
+            files_previewed: null, files_reviewed: null,
+            file_read_failures: null, file_read_failure_count: null,
+            per_file_review_failures: null, per_file_review_failure_count: null,
+            total_findings: null, findings: null, inline_posted: null,
+            already_resolved: null, already_posted_or_skipped_dedup: null,
+            comments_skipped: null, comments_failed: null,
+            comments_routed_summary: null, comments_total: null,
+            infrastructure_failure: true,
+            policy_failure: process.env.OCR_POLICY_FAILURE === 'true',
+            completeness: null, publication_state: null,
+            reviewed_range_manifest: null, tokens: null,
+            telemetry_state: 'failed',
+            post_state: ['posted', 'partial', 'noop', 'failed', 'policy-failed', 'missing'].includes(process.env.OCR_POST_STATE)
+              ? process.env.OCR_POST_STATE : 'missing',
+            artifact_state: 'failed', hash_state: 'unavailable',
+            marker_state: {
+              infrastructure_failure: true,
+              policy_failure: process.env.OCR_POLICY_FAILURE === 'true',
+            },
+            errors: ['OCR telemetry producer unavailable'],
+          };
+          const required = ['schema', 'schema_name', 'generated_at', 'telemetry_state', 'errors'];
+          if (!required.every((key) => Object.prototype.hasOwnProperty.call(record, key)) ||
+              record.schema_name !== 'ocr-telemetry' || !Array.isArray(record.errors)) {
+            throw new Error('independent fallback telemetry self-validation failed');
+          }
+          const target = 'ocr-telemetry.json';
+          const temporary = `${target}.fallback-${process.pid}`;
+          fs.writeFileSync(temporary, `${JSON.stringify(record, null, 2)}\n`);
+          fs.renameSync(temporary, target);
+          NODE
+          echo "generated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate redacted OCR telemetry
+        id: ocr-telemetry-validation
+        shell: bash
+        if: always()
+        env:
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
+          OCR_RUN_ID: ${{ github.run_id }}
+          OCR_RUN_ATTEMPT: ${{ github.run_attempt }}
+          OCR_PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_SHA: ${{ env.HEAD_SHA }}
+          OCR_GENERATED_AT: ${{ steps.ocr-generated-at.outputs.generated_at }}
+          OCR_WALL_CLOCK_SECONDS: ${{ steps.ocr-wall-clock.outputs.wall_clock_seconds }}
+          OCR_FILES_REVIEWED: ${{ steps.ocr-files-reviewed.outputs.files_reviewed }}
+          OCR_POST_STATE: ${{ steps.ocr-telemetry-classification.outputs.post_state }}
+          OCR_ARTIFACT_STATE: ${{ steps.ocr-telemetry-classification.outputs.artifact_state }}
+          OCR_INFRASTRUCTURE_FAILURE: 'true'
+          OCR_POLICY_FAILURE: ${{ steps.ocr-telemetry-classification.outputs.policy_failure }}
+          OCR_TELEMETRY_STATE: failed
+        run: |
+          set -euo pipefail
+          if ! node scripts/ocr-telemetry.js --redact ocr-telemetry.json || \
+             ! node scripts/ocr-telemetry.js --validate ocr-telemetry.json; then
+            echo "phase=telemetry; reason=post-redaction telemetry validation failed" >> ocr-infrastructure-failure.txt
+            node scripts/ocr-telemetry.js --failure "post-redaction telemetry validation failed"
+            node scripts/ocr-telemetry.js --redact ocr-telemetry.json
+            node scripts/ocr-telemetry.js --validate ocr-telemetry.json
+          fi
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+
+      - name: Compute reviewed-range manifest hashes
+        id: ocr-manifest-hashes
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          echo "valid=false" >> "$GITHUB_OUTPUT"
+          if ! node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const hashableArtifacts = [
+            'ocr-result.json', 'ocr-stdout.raw', 'ocr-stderr.log',
+            'ocr-preflight.txt', 'ocr-version.txt', 'ocr-preview.txt',
+            'ocr-preview-stderr.log', 'ocr-exit-code.txt', 'ocr-phase.txt',
+            'ocr-selected-files.txt', 'ocr-status.txt',
+            'ocr-infrastructure-failure.txt', 'ocr-policy-failure.txt',
+            'ocr-telemetry.json', 'ocr-coverage-report.json',
+          ];
+          const hashes = {};
+          for (const name of hashableArtifacts) {
+            const content = fs.readFileSync(name);
+            hashes[name] = `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
+          }
+          const hashesTemporary = `ocr-manifest-hashes.json.tmp-${process.pid}`;
+          fs.writeFileSync(hashesTemporary, `${JSON.stringify(hashes, null, 2)}\n`);
+          fs.renameSync(hashesTemporary, 'ocr-manifest-hashes.json');
+          const manifest = JSON.parse(fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8'));
+          manifest.artifact_hashes = hashes;
+          const manifestTemporary = `ocr-reviewed-range-manifest.json.tmp-${process.pid}`;
+          fs.writeFileSync(manifestTemporary, `${JSON.stringify(manifest, null, 2)}\n`);
+          fs.renameSync(manifestTemporary, 'ocr-reviewed-range-manifest.json');
+          // Hash the manifest LAST (after its artifact hashes are final). The
+          // detached hash is intentionally not included in its own input set.
+          const manifestContent = fs.readFileSync('ocr-reviewed-range-manifest.json');
+          const hash = crypto.createHash('sha256').update(manifestContent).digest('hex');
+          const detachedTemporary = `ocr-manifest-sha256.txt.tmp-${process.pid}`;
+          fs.writeFileSync(detachedTemporary, `sha256:${hash}\n`);
+          fs.renameSync(detachedTemporary, 'ocr-manifest-sha256.txt');
+          NODE
+          then
+            echo "phase=manifest; reason=manifest hash preparation failed" >> ocr-infrastructure-failure.txt
+            node -e '
+              const fs = require("fs");
+              try {
+                const record = JSON.parse(fs.readFileSync("ocr-telemetry.json", "utf8"));
+                record.infrastructure_failure = true;
+                record.telemetry_state = "failed";
+                record.artifact_state = "failed";
+                record.hash_state = "failed";
+                record.marker_state = {
+                  infrastructure_failure: true,
+                  policy_failure: record.policy_failure === true,
+                };
+                record.errors = [...new Set([
+                  ...(Array.isArray(record.errors) ? record.errors : []),
+                  "OCR manifest hash preparation failed",
+                ])];
+                const temporary = "ocr-telemetry.json.hash-failure-" + process.pid;
+                fs.writeFileSync(temporary, JSON.stringify(record, null, 2) + "\n");
+                fs.renameSync(temporary, "ocr-telemetry.json");
+              } catch (_) {
+                // Upload remains gated off even if the local telemetry repair fails.
+              }
+            '
+            exit 1
+          fi
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload OCR telemetry
+        id: upload-ocr-telemetry
+        if: ${{ always() && steps.ocr-telemetry-validation.outputs.valid == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: ocr-telemetry-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ocr-telemetry.json
+          if-no-files-found: error
 
       - name: Upload OCR artifacts
-        if: always()
+        id: upload-ocr-artifacts
+        if: ${{ always() && steps.redact-ocr-artifacts.outcome == 'success' && steps.ocr-telemetry-validation.outputs.valid == 'true' && steps.ocr-manifest-hashes.outputs.valid == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         with:
           name: ocr-review-output
@@ -3554,7 +3794,48 @@ jobs:
             ocr-manifest-sha256.txt
             ocr-routing-decisions.json
             ocr-coverage-report.json
-          if-no-files-found: warn
+          if-no-files-found: error
+
+      - name: Resolve final OCR classification
+        id: ocr-final-classification
+        shell: bash
+        if: always()
+        run: |
+          set -euo pipefail
+          policy_failure="false"
+          infrastructure_failure="false"
+          [ -s ocr-policy-failure.txt ] && policy_failure="true"
+          [ -s ocr-infrastructure-failure.txt ] && infrastructure_failure="true"
+          post_outcome="${{ steps.post-ocr-results.outcome }}"
+          post_state="${{ steps.post-ocr-results.outputs.post_state }}"
+          source_redaction_outcome="${{ steps.redact-ocr-artifacts.outcome }}"
+          telemetry_valid="${{ steps.ocr-telemetry-validation.outputs.valid }}"
+          hash_valid="${{ steps.ocr-manifest-hashes.outputs.valid }}"
+          upload_outcome="${{ steps.upload-ocr-artifacts.outcome }}"
+          telemetry_state="complete"
+          hash_state="prepared"
+          upload_state="uploaded"
+          if [ "$post_outcome" != "success" ] || [ -z "$post_state" ] || [ "$post_state" = "failed" ]; then
+            post_state="failed"
+            infrastructure_failure="true"
+          fi
+          if [ "$post_state" = "policy-failed" ]; then policy_failure="true"; infrastructure_failure="true"; fi
+          if [ "$source_redaction_outcome" != "success" ]; then infrastructure_failure="true"; fi
+          if [ "$telemetry_valid" != "true" ]; then telemetry_state="failed"; infrastructure_failure="true"; fi
+          if [ "$hash_valid" != "true" ]; then hash_state="failed"; infrastructure_failure="true"; fi
+          if [ "$upload_outcome" != "success" ]; then upload_state="failed"; infrastructure_failure="true"; fi
+          completeness="${{ steps.ocr-classification.outputs.completeness }}"
+          # Upload outcome is only knowable after upload and therefore belongs
+          # in final job outputs, not the already-serialized artifact telemetry.
+          {
+            echo "policy_failure=${policy_failure}"
+            echo "infrastructure_failure=${infrastructure_failure}"
+            echo "completeness=${completeness:-unknown}"
+            echo "post_state=${post_state:-missing}"
+            echo "telemetry_state=${telemetry_state}"
+            echo "hash_state=${hash_state}"
+            echo "upload_state=${upload_state}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Clean up scoped safe.directory
         shell: bash

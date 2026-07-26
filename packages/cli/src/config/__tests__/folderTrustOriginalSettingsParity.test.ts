@@ -115,8 +115,9 @@ vi.mock('../profileBootstrap.js', async () => {
   };
 });
 
-/** Track what settings object isWorkspaceTrusted was called with */
+/** Track what settings object and working directory isWorkspaceTrusted was called with */
 let capturedTrustCheckSettings: Settings | undefined;
+let capturedTrustCheckWorkingDirectory: string | undefined;
 
 const runtimeSettingsState = vi.hoisted(() => ({
   context: null as {
@@ -295,18 +296,12 @@ function makeExtMgr() {
   );
 }
 
-async function runConfig(settings: Settings) {
+async function runConfig(settings: Settings, cwd: string = process.cwd()) {
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
-    settings,
-    [],
-    makeExtMgr(),
-    'test-session',
-    argv,
-    undefined,
-    { settingsService: runtimeSettingsService },
-  );
+  return loadCliConfig(settings, [], makeExtMgr(), 'test-session', argv, cwd, {
+    settingsService: runtimeSettingsService,
+  });
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
@@ -317,6 +312,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   beforeEach(() => {
     vi.resetAllMocks();
     capturedTrustCheckSettings = undefined;
+    capturedTrustCheckWorkingDirectory = undefined;
     vi.mocked(os.homedir).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
@@ -328,11 +324,14 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     runtimeSettingsState.oauthManager = null;
 
     // Capture the settings object passed to isWorkspaceTrusted
-    vi.mocked(isWorkspaceTrusted).mockImplementation((s: Settings) => {
-      capturedTrustCheckSettings = s;
-      // Return the original trust value from the captured settings
-      return !(s.folderTrust === false);
-    });
+    vi.mocked(isWorkspaceTrusted).mockImplementation(
+      (s: Settings, workingDirectory?: string) => {
+        capturedTrustCheckSettings = s;
+        capturedTrustCheckWorkingDirectory = workingDirectory;
+        // Return the original trust value from the captured settings
+        return !(s.folderTrust === false);
+      },
+    );
   });
 
   afterEach(() => {
@@ -350,6 +349,28 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     expect(isWorkspaceTrusted).toHaveBeenCalled();
     // The settings passed to isWorkspaceTrusted must be the exact original object
     expect(capturedTrustCheckSettings).toBe(originalSettings);
+  });
+  it('evaluates startup trust for the supplied cwd rather than process.cwd()', async () => {
+    const configuredCwd = path.resolve(path.sep, 'home', 'user', 'project');
+    vi.spyOn(process, 'cwd').mockReturnValue(
+      path.resolve(path.sep, 'home', 'user', 'untrusted-process-cwd'),
+    );
+    vi.mocked(isWorkspaceTrusted).mockImplementation(
+      (_settings, workingDirectory) => {
+        capturedTrustCheckWorkingDirectory = workingDirectory;
+        return workingDirectory === configuredCwd;
+      },
+    );
+
+    process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
+    const config = await runConfig({ folderTrust: true }, configuredCwd);
+
+    expect(capturedTrustCheckWorkingDirectory).toBe(configuredCwd);
+    expect(isWorkspaceTrusted).toHaveBeenCalledWith(
+      expect.anything(),
+      configuredCwd,
+    );
+    expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
 
   it('folder untrusted (via isWorkspaceTrusted returning false) → approval forced to DEFAULT', async () => {

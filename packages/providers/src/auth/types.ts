@@ -92,6 +92,14 @@ export interface OAuthProvider {
    * into the manager's private provider registry.
    */
   setAddItem?(callback: OAuthUICallback): void;
+
+  /**
+   * Optional method to set the authentication context (e.g. the bucket name)
+   * before {@link initiateAuth} is called. This allows providers to know
+   * which bucket they are authenticating for, so they can look up the
+   * correct browser profile association for the OAuth browser launch.
+   */
+  setAuthContext?(ctx: { bucket?: string }): void;
 }
 
 /**

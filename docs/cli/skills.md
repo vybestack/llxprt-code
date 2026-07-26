@@ -37,17 +37,41 @@ the full instructions and resources required to complete the task using the
 
 ## Skill Discovery Tiers
 
-LLxprt Code discovers skills from three primary locations:
+LLxprt Code discovers user-installable skills from three tiers:
 
 1.  **Workspace Skills** (`.llxprt/skills/`): Workspace-specific skills that are
     typically committed to version control and shared with the team.
-2.  **User Skills** (`<config>/skills/`, see [Application Directories](../reference/application-directories.md)): Personal skills available across all
-    your workspaces.
+2.  **User Skills** (`<config>/skills/`, see
+    [Application Directories](../reference/application-directories.md)):
+    Personal skills available across all your workspaces. By default, this is
+    `~/.config/llxprt-code/skills/` on Linux,
+    `~/Library/Preferences/llxprt-code/skills/` on macOS, and
+    `%APPDATA%\llxprt-code\Config\skills` on Windows.
 3.  **Extension Skills**: Skills bundled within installed
     [extensions](../extension.md).
 
 **Precedence:** If multiple skills share the same name, higher-precedence
-locations override lower ones: **Workspace > User > Extension**.
+locations override lower ones: **Workspace > User > Extension > Built-in**.
+
+### Cross-tool `.agents/skills/` standard
+
+In addition to the LLxprt-specific workspace and user locations above, LLxprt
+Code also discovers skills from the cross-tool
+[Agent Skills](https://agentskills.io) open standard locations:
+
+- **Workspace**: `.agents/skills/`
+- **User**: `~/.agents/skills/`
+
+This enables interoperability with other tools that install skills into the
+`.agents/skills/` standard directory, such as `npx skills add`.
+
+Within the same tier, `.agents/skills/` **takes precedence over** the
+LLxprt-specific skills location. The overall tier precedence (Workspace > User >
+Extension > Built-in) is preserved regardless of which location each skill comes from.
+
+Because `.agents/skills/` is shared across tools and can override a same-named
+LLxprt-specific skill, only install skills from trusted sources and review
+changes made to this directory by other tools.
 
 ## Managing Skills
 

@@ -35,11 +35,32 @@ const sandboxSources = {
 
 const sandboxSource = Object.values(sandboxSources).join('\n');
 
+/** Extracts a function's source text (including declaration) by finding the
+ *  next function declaration boundary (handles both `function` and `async
+ *  function`). NOTE: This assumes no nested function declarations exist
+ *  within the target body — currently true for all callers. */
+function extractFunctionBody(source: string, fnName: string): string {
+  const start = source.indexOf(`function ${fnName}(`);
+  if (start === -1) {
+    throw new Error(
+      `extractFunctionBody: function "${fnName}" not found in source`,
+    );
+  }
+  const nextFn = source
+    .slice(start)
+    .search(/\n(?:export )?(?:async )?function /);
+  // When no next function is found, return the remainder of the file from
+  // start (substring with undefined end). This is the desired fallback for
+  // the last function in the file.
+  const end = nextFn === -1 ? undefined : start + nextFn;
+  return source.substring(start, end);
+}
+
 describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R25.1: Proxy Server Created Before Container', () => {
     it('imports createAndStartProxy from sandbox-proxy-lifecycle', () => {
       expect(sandboxSource).toContain(
-        "import {\n  createAndStartProxy,\n  stopProxy,\n  getProxySocketPath,\n} from '@vybestack/llxprt-code-providers/auth.js';",
+        "import {\n  createAndStartProxy,\n  stopProxy,\n  getProxySocketPath,\n  getProxyCapabilityToken,\n} from '@vybestack/llxprt-code-providers/auth.js';",
       );
     });
 
@@ -106,11 +127,9 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
     });
 
     it('wraps createAndStartProxy in try-catch', () => {
-      // Verify the pattern: try { credentialProxyHandle = await createAndStartProxy
-      const pattern = testRegex(
-        'try\\s*\\{\\s*credentialProxyHandle\\s*=\\s*await\\s+createAndStartProxy',
+      expect(sandboxSource).toMatch(
+        /try\s*\{[\s\S]{0,300}?await\s+createAndStartProxy[\s\S]*?\}\s*catch/,
       );
-      expect(sandboxSource).toMatch(pattern);
     });
   });
 
@@ -155,7 +174,7 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
   describe('R3.6: Env Var Passed to Container', () => {
     it('passes LLXPRT_CREDENTIAL_SOCKET via --env', () => {
       expect(sandboxSource).toContain(
-        "args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`)",
+        "args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${effectiveSocketPath}`)",
       );
     });
 
@@ -163,6 +182,73 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(sandboxSource).toContain(
         'const socketPath = getProxySocketPath()',
       );
+    });
+
+    it('passes LLXPRT_CAPABILITY_TOKEN via --env-file', () => {
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'pushCapabilityEnvFile',
+      );
+      expect(fnSection.length).toBeGreaterThan(0);
+      expect(fnSection).toContain("args.push('--env-file', envFile)");
+      expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
+    });
+
+    it('does NOT pass LLXPRT_CAPABILITY_TOKEN via --env (avoids exposing in process args)', () => {
+      // Check the ENTIRE source so the invariant holds regardless of
+      // which function pushes the token.
+      // Match within a single string literal (exclude quotes/newlines) so the
+      // regex doesn't cross from --env for socket path to LLXPRT_CAPABILITY_TOKEN
+      // in the --env-file section on a different line.
+      expect(sandboxSource).not.toMatch(
+        /['"]--env['"]\s*,\s*[`'"][^'"\r\n`]*LLXPRT_CAPABILITY_TOKEN/,
+      );
+      expect(sandboxSource).not.toMatch(
+        /['"]-e['"]\s*,\s*[`'"][^'"\r\n`]*LLXPRT_CAPABILITY_TOKEN/,
+      );
+    });
+
+    it('writes capability token to a temp env file with restrictive permissions', () => {
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'pushCapabilityEnvFile',
+      );
+      expect(fnSection.length).toBeGreaterThan(0);
+      expect(fnSection).toContain('fs.openSync');
+      expect(fnSection).toContain('0o600');
+      expect(fnSection).toContain('LLXPRT_CAPABILITY_TOKEN');
+      expect(fnSection).toContain('return undefined');
+    });
+
+    it('returns early when capability token is undefined', () => {
+      expect(sandboxSource).toContain(
+        'if (capabilityToken === undefined) return undefined',
+      );
+    });
+
+    it('pushCapabilityEnvFile returns cleanup wrapper', () => {
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'pushCapabilityEnvFile',
+      );
+      expect(fnSection.length).toBeGreaterThan(0);
+      expect(fnSection).toContain('unlinkSync');
+      expect(fnSection).toContain('return');
+    });
+
+    it('uses getProxyCapabilityToken to get the capability token', () => {
+      expect(sandboxSource).toContain(
+        'const capabilityToken = getProxyCapabilityToken()',
+      );
+    });
+
+    it('registers env file cleanup in setupCredentialProxy', () => {
+      // The refactored setupCredentialProxy has a single
+      // pushCapabilityEnvFile call after platform-specific setup.
+      const callCount = (
+        sandboxSource.match(/=\s*pushCapabilityEnvFile\(args/g) ?? []
+      ).length;
+      expect(callCount).toBe(1);
     });
   });
 
@@ -187,6 +273,24 @@ describe('Credential Proxy Integration - sandbox.ts', () => {
       expect(cleanupSection).toContain(
         "process.on('SIGTERM', stopCredentialProxy)",
       );
+    });
+
+    it('calls composed cleanup before nullifying on sandbox close', () => {
+      // Structural assertion: verifies lexical ordering in source, not
+      // runtime behavior. A separate E2E test would be needed for that.
+      const fnSection = extractFunctionBody(
+        sandboxSource,
+        'wireCleanupHandlers',
+      );
+      expect(fnSection.length).toBeGreaterThan(0);
+      // Verify cleanup is called BEFORE nullifying
+      const cleanupIdx = fnSection.indexOf('credentialProxyBridgeCleanup()');
+      const nullifyIdx = fnSection.indexOf(
+        'setCredentialProxyBridgeCleanup(undefined)',
+      );
+      expect(cleanupIdx).toBeGreaterThan(-1);
+      expect(nullifyIdx).toBeGreaterThan(-1);
+      expect(cleanupIdx).toBeLessThan(nullifyIdx);
     });
 
     it('adds cleanup on sandbox process close', () => {

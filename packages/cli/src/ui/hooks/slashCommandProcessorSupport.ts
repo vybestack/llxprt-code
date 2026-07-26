@@ -15,6 +15,8 @@ import {
   removeMCPStatusChangeListener,
 } from '@vybestack/llxprt-code-mcp';
 import {
+  CoreEvent,
+  coreEvents,
   GitService,
   IdeClient,
   Logger,
@@ -265,11 +267,13 @@ function subscribeToExternalCommandChanges(
     client.addStatusChangeListener(listener);
   });
   addMCPStatusChangeListener(listener);
+  coreEvents.on(CoreEvent.FolderTrustChanged, listener);
   return () => {
     void IdeClient.getInstance().then((client) => {
       client.removeStatusChangeListener(listener);
     });
     removeMCPStatusChangeListener(listener);
+    coreEvents.off(CoreEvent.FolderTrustChanged, listener);
   };
 }
 

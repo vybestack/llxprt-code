@@ -78,7 +78,7 @@ function parseEnvEntries(
 
 function createHttpServerConfig(
   commandOrUrl: string,
-  type: 'sse' | 'http',
+  type: 'sse' | 'http' | 'streamable-http',
   headers: Record<string, string> | undefined,
   options: SharedServerOptions,
 ): Partial<MCPServerConfig> {
@@ -117,7 +117,11 @@ function createServerConfig(
     excludeTools: options.excludeTools,
   };
   const headers = parseHeaderEntries(options.header);
-  if (options.transport === 'sse' || options.transport === 'http') {
+  if (
+    options.transport === 'sse' ||
+    options.transport === 'http' ||
+    options.transport === 'streamable-http'
+  ) {
     return createHttpServerConfig(
       commandOrUrl,
       options.transport,
@@ -216,10 +220,10 @@ export const addCommand: CommandModule = {
       })
       .option('transport', {
         alias: ['t', 'type'],
-        describe: 'Transport type (stdio, sse, http)',
+        describe: 'Transport type (stdio, sse, http, streamable-http)',
         type: 'string',
         default: 'stdio',
-        choices: ['stdio', 'sse', 'http'],
+        choices: ['stdio', 'sse', 'http', 'streamable-http'],
       })
       .option('env', {
         alias: 'e',

@@ -28,6 +28,9 @@ export interface PolicyRule {
    */
   toolName?: string;
 
+  /** Explicit prefix matcher used by generated policy rules. */
+  toolNamePrefix?: string;
+
   /**
    * Pattern to match against tool arguments.
    * Can be used for more fine-grained control.

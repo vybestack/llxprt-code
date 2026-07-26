@@ -37,7 +37,7 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-} from '@vybestack/llxprt-code-tools';
+} from '@vybestack/llxprt-code-tools/tools/tools.js';
 import type { ToolResult, IToolMessageBus } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {

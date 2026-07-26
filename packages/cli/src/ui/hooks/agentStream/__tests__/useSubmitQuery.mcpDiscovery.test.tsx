@@ -31,6 +31,7 @@ import {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import type { QueuedSubmission } from '../types.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -153,6 +154,20 @@ function renderUseSubmitQuery(
     thinkingBlocksRef: { current: [] },
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
+    enqueueSubmission: vi.fn((sub: QueuedSubmission) =>
+      hookDeps.queuedSubmissionsRef.current.push(sub),
+    ),
+    requeueSubmission: vi.fn((sub: QueuedSubmission) =>
+      hookDeps.queuedSubmissionsRef.current.unshift(sub),
+    ),
+    dequeueSubmission: vi.fn(() =>
+      hookDeps.queuedSubmissionsRef.current.shift(),
+    ),
+    clearSubmissions: vi.fn(() => {
+      hookDeps.queuedSubmissionsRef.current = [];
+    }),
+    tryReserveDrain: vi.fn(() => true),
+    releaseDrain: vi.fn(),
     setPendingHistoryItem: vi.fn(),
     setIsResponding: deps.setIsResponding,
     setInitError: vi.fn(),

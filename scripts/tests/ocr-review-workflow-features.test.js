@@ -505,6 +505,9 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       expect(postScript).toContain(
         'const commentsSkipped = skippedOverlapCount + skippedExactHistoryCount;',
       );
+      expect(postScript).toContain(
+        "core.setOutput('already_resolved', String(skippedOverlapCount));",
+      );
       expect(postScript).toContain('let skippedExactHistoryCount = 0;');
       expect(postScript).toContain('beforeExactFilter');
       expect(postScript).toContain(

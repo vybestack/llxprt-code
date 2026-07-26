@@ -18,15 +18,17 @@ import { Storage } from '@vybestack/llxprt-code-settings';
  */
 
 import {
-  Config,
   type KeyringTokenStore,
-  MessageBus,
-  flushRuntimeAuthScope,
-  peekActiveProviderRuntimeContext,
   type RuntimeAuthScopeFlushResult,
-  SubagentManager,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  flushRuntimeAuthScope,
+  peekActiveProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import {
   clearSettingsProviderRuntimeContext,

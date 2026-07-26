@@ -51,6 +51,7 @@ export {
   getAnthropicUsageInfo,
   getAllAnthropicUsageInfo,
   getAllCodexUsageInfo,
+  getAllCodexRateLimitResetCredits,
   getHigherPriorityAuth,
 } from './provider-usage-info.js';
 
@@ -73,6 +74,7 @@ export {
   createAndStartProxy,
   stopProxy,
   getProxySocketPath,
+  getProxyCapabilityToken,
 } from './proxy/sandbox-proxy-lifecycle.js';
 export type {
   SandboxProxyConfig,
@@ -85,3 +87,13 @@ export type {
 // isolated runtimes) can consult oauthEnabledProviders and shared-keychain
 // tokens.
 export { createFileOAuthSettingsProvider } from './file-oauth-settings.js';
+
+// ─── Browser Profile Association Store ───────────────────────────────────────
+export { BrowserProfileAssociationStore } from './browser-profile-association-store.js';
+export type {
+  BrowserProfileAssociation,
+  AssociationStoreFs,
+} from './browser-profile-association-store.js';
+
+// ─── Browser Profile Association Store Singleton (runtime layer) ─────────────
+export { getBrowserProfileAssociationStore } from '../runtime/browser-profile-association-store-instance.js';

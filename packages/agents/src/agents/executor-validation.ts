@@ -5,15 +5,13 @@
  */
 
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import {
-  GlobTool,
-  GrepTool,
-  LSTool,
-  ReadFileTool,
-  ReadManyFilesTool,
-  RipGrepTool,
-  MemoryTool,
-} from '@vybestack/llxprt-code-tools';
+import { GlobTool } from '@vybestack/llxprt-code-tools/tools/glob.js';
+import { GrepTool } from '@vybestack/llxprt-code-tools/tools/grep.js';
+import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
+import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
+import { ReadManyFilesTool } from '@vybestack/llxprt-code-tools/tools/read-many-files.js';
+import { RipGrepTool } from '@vybestack/llxprt-code-tools/tools/ripGrep.js';
+import { MemoryTool } from '@vybestack/llxprt-code-tools/tools/memoryTool.js';
 
 /**
  * Tools that are currently approved for non-interactive execution while

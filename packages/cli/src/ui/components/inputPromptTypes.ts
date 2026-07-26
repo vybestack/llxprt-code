@@ -14,6 +14,12 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 export interface InputPromptProps {
   buffer: TextBuffer;
   onSubmit: (value: string) => void;
+  /**
+   * Optional steer callback: during streaming, Ctrl+Enter injects the text
+   * into the active agent loop at the next tool-call boundary. Returns true
+   * if consumed (agent is streaming), false to fall through to newline.
+   */
+  onSteer?: (text: string) => boolean;
   userMessages: readonly string[];
   onClearScreen: () => void;
   config: CliUiRuntime;

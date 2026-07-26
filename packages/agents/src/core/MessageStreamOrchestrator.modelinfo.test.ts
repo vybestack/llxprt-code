@@ -34,8 +34,29 @@ import {
   buildEffectiveModelIdentity,
   type EffectiveModelIdentity,
 } from './modelInfoHelpers.js';
+import {
+  TokenUsageLogger,
+  type PendingTokenEstimate,
+} from './TokenUsageLogger.js';
 
 const mockTurnRun = vi.fn();
+
+class RecordingTokenUsageLogger extends TokenUsageLogger {
+  readonly estimates: Array<
+    Omit<PendingTokenEstimate, 'ts' | 'promptId'> & { promptId: string }
+  > = [];
+
+  constructor() {
+    super(true, undefined);
+  }
+
+  override recordEstimate(
+    promptId: string,
+    data: Omit<PendingTokenEstimate, 'ts' | 'promptId'>,
+  ): void {
+    this.estimates.push({ promptId, ...data });
+  }
+}
 
 vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
   const tokenLimit = vi.fn(
@@ -89,11 +110,13 @@ interface BuildOptions {
   /** Override the stream produced by Turn.run */
   turnStream?: AsyncGenerator<ServerAgentStreamEvent>;
   identityProvider?: () => EffectiveModelIdentity;
+  estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
 }
 
 function buildOrchestrator(options: BuildOptions = {}): {
   orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
   state: HarnessState;
+  tokenUsageLogger: RecordingTokenUsageLogger;
 } {
   const state: HarnessState = {
     identity: {
@@ -105,10 +128,13 @@ function buildOrchestrator(options: BuildOptions = {}): {
     contextLimit: options.contextLimit,
   };
 
+  const tokenUsageLogger = new RecordingTokenUsageLogger();
   const mockChat = {
     getLastPromptTokenCount: vi.fn().mockReturnValue(100),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
+    getTokenUsageLogger: () => tokenUsageLogger,
+    estimatePendingTokens: options.estimatePendingTokens,
   };
 
   const config = {
@@ -219,6 +245,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
   return {
     orchestrator: new MessageStreamOrchestrator(deps),
     state,
+    tokenUsageLogger,
   };
 }
 
@@ -434,6 +461,32 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.providerName).toBe('codex');
     expect(infos[0]?.model).toBe('gpt-5.6-sol');
     expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
+  });
+
+  it('records token estimates with the identity routed at the start of the turn', async () => {
+    let identity: EffectiveModelIdentity = {
+      providerName: 'codex',
+      model: 'gpt-5.6-sol',
+    };
+    const { orchestrator, tokenUsageLogger } = buildOrchestrator({
+      identityProvider: () => identity,
+      estimatePendingTokens: async () => {
+        identity = {
+          providerName: 'gemini',
+          model: 'gemini-2.5-pro',
+        };
+        return 42;
+      },
+    });
+
+    await collectModelInfos(orchestrator, 'prompt-token-identity');
+
+    expect(tokenUsageLogger.estimates[0]).toMatchObject({
+      promptId: 'prompt-token-identity',
+      provider: 'codex',
+      model: 'gpt-5.6-sol',
+      estimatedTokens: 42,
+    });
   });
 });
 
