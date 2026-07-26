@@ -125,10 +125,16 @@ describe('runner image consistency (#2688)', () => {
     );
 
     const releaseRunner = release.jobs?.release?.['runs-on'];
-    const ciOsList = ci.jobs?.test?.strategy?.matrix?.os ?? [];
+    // The sharded test job is `test_shard` (issue #2707); the virtual `test`
+    // aggregator has no matrix. Fall back to `test` for compatibility with
+    // workflows that have not yet adopted sharding.
+    const testJob =
+      ci.jobs?.test_shard?.strategy?.matrix?.os ??
+      ci.jobs?.test?.strategy?.matrix?.os ??
+      [];
 
     expect(releaseRunner).toBe('ubuntu-latest');
-    expect(ciOsList).toContain(releaseRunner);
+    expect(testJob).toContain(releaseRunner);
   });
 
   it('exercises every referenced runner image in more than one workflow', () => {
