@@ -32,10 +32,8 @@ function allStepNames(job) {
   return job.steps.map((step) => step.name);
 }
 
-function allRunText(job) {
-  return job.steps
-    .map((step) => String(step.run ?? step.with?.script ?? ''))
-    .join('\n');
+function allStepText(job) {
+  return JSON.stringify(job.steps);
 }
 
 describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', () => {
@@ -146,14 +144,14 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     }
 
     it('does not reference Ready/Needs-Work verdict logic', () => {
-      const combined = allRunText(reviewJob);
+      const combined = allStepText(reviewJob);
       const normalized = normalize(combined);
       expect(normalized).not.toMatch(/verdict\s*==\s*.?needs_work/);
       expect(normalized).not.toContain('needs_work');
     });
 
     it('does not reference the luther remediate label logic', () => {
-      const combined = allRunText(reviewJob);
+      const combined = allStepText(reviewJob);
       expect(normalize(combined)).not.toContain('luther remediate');
     });
 
