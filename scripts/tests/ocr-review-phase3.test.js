@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 
 // Phase 3 (issue #2649): Tests for the OCR benchmark harness script.
 // These tests verify the script's CLI interface, output format, and
@@ -168,9 +169,11 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
     ];
     for (const field of requiredFields) {
       // Fields can appear as either `field:` (full property) or `field,`
-      // (shorthand property). Accept either form.
+      // (shorthand property). Accept either form. Escape the field name for
+      // regex safety even though current field names are alphanumeric.
+      const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const asFull = pushBlock.includes(`${field}:`);
-      const asShorthand = new RegExp(`\\b${field}\\b,`).test(pushBlock);
+      const asShorthand = new RegExp(`\\b${escaped}\\b,`).test(pushBlock);
       expect(asFull || asShorthand).toBe(true);
     }
   });
@@ -227,13 +230,65 @@ describe('scripts/ocr-benchmark.mjs — Phase 3 benchmark harness (#2649)', () =
     expect(source).toContain('rule.json');
   });
 
-  it('distinguishes empty, malformed, and unsupported OCR output envelopes', () => {
+  it('distinguishes empty, malformed, and unsupported OCR output envelopes (behavioral)', () => {
     const source = readFileSync(BENCH_SCRIPT, 'utf8');
-    expect(source).toContain('parseStatus');
-    expect(source).toContain("'empty'");
-    expect(source).toContain("'malformed'");
-    expect(source).toContain("'unsupported-envelope'");
-    expect(source).toContain("'ok'");
+    // Extract the parseOcrOutput function and run it against real inputs so
+    // the test proves actual parsing behavior, not just string presence.
+    const fnStart = source.indexOf('function parseOcrOutput(');
+    expect(fnStart).toBeGreaterThan(-1);
+    const bodyStart = source.indexOf('{', fnStart);
+    let depth = 0;
+    let fnEnd = -1;
+    for (let i = bodyStart; i < source.length; i += 1) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          fnEnd = i + 1;
+          break;
+        }
+      }
+    }
+    expect(fnEnd).toBeGreaterThan(fnStart);
+    const fnSrc = source.slice(fnStart, fnEnd);
+    const sandbox = { JSON, Number, Array, isNaN };
+    const ctx = vm.createContext(sandbox);
+    vm.runInContext(fnSrc, ctx);
+    const parseOcrOutput = sandbox.parseOcrOutput;
+
+    // Empty input → parseStatus 'empty'
+    expect(parseOcrOutput('').parseStatus).toBe('empty');
+
+    // Malformed JSON → parseStatus 'malformed'
+    expect(parseOcrOutput('not json').parseStatus).toBe('malformed');
+
+    // Unsupported envelope (object without comments) → 'unsupported-envelope'
+    expect(
+      parseOcrOutput(JSON.stringify({ status: 'success' })).parseStatus,
+    ).toBe('unsupported-envelope');
+
+    // Valid bare array → 'ok' with findings
+    const arrResult = parseOcrOutput(
+      JSON.stringify([{ path: 'a.ts', content: 'x' }]),
+    );
+    expect(arrResult.parseStatus).toBe('ok');
+    expect(arrResult.findings).toHaveLength(1);
+
+    // Valid envelope with comments → 'ok'
+    const envResult = parseOcrOutput(
+      JSON.stringify({
+        summary: {
+          total_tokens: 100,
+          files_reviewed: { completed: 3, selected: 5 },
+        },
+        comments: [{ path: 'b.ts' }],
+      }),
+    );
+    expect(envResult.parseStatus).toBe('ok');
+    expect(envResult.findings).toHaveLength(1);
+    expect(envResult.tokens.total).toBe(100);
+    expect(envResult.completedFiles).toBe(3);
+    expect(envResult.selectedFiles).toBe(5);
   });
 
   it('parses stderr/stdout on non-zero exit codes (not just on success)', () => {

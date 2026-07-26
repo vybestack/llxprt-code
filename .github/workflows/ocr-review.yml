@@ -2263,16 +2263,11 @@ jobs:
                 } catch (listErr) {
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
-                const MAX_INLINE_FALLBACK = effectiveCap;
-                for (const [index, p] of pairsToPost.entries()) {
+                // pairsToPost was already capped to effectiveCap before the
+                // batch attempt, so the fallback loop does not need a second
+                // overflow check — every remaining pair is within the cap.
+                for (const p of pairsToPost) {
                   const c = p.comment;
-                  if (index >= MAX_INLINE_FALLBACK) {
-                    // Phase 2: fallback overflow preserves the original finding
-                    // object so structured metadata is retained in the summary.
-                    overflowFindingCount += 1;
-                    overflowRouted.push(p.finding);
-                    continue;
-                  }
                   if (existingInlineKeys.has(inlineCommentKey(c))) {
                     core.warning(`Skipping duplicate OCR inline comment on ${c.path}:${c.line} after batch post uncertainty.`);
                     skippedExactHistoryCount += 1;
@@ -2680,7 +2675,8 @@ jobs:
                 raw: rawFindingCount,
                 duplicate: suppressedDuplicateCount,
                 schema_invalid: schemaInvalidCount,
-                policy_tiered: summaryRouted.length + overflowRouted.length,
+                policy_tiered: summaryRouted.length,
+                inline_overflow: overflowRouted.length,
                 inline: postedInline,
                 summary: lineless.length,
                 overflow: overflowFindingCount,

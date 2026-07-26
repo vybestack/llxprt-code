@@ -15,7 +15,7 @@ import {
   stepNamed,
 } from './ocr-review-workflow-helpers.js';
 
-// Security note: The vm.runInNewContext calls in this suite execute JavaScript
+// Security note: The vm.runInContext calls in this suite execute JavaScript
 // extracted from the trusted, version-controlled ocr-review.yml workflow via
 // extractFunctionSource. This is trusted repository content (not user/PR input)
 // and the workflow helper is read from the checked-out HEAD.
@@ -29,6 +29,8 @@ const REQUIRED_FUNCTION_NAMES = [
   'severityRank',
   'sortInlineComments',
   'findingFingerprint',
+  'effectiveCategory',
+  'effectiveSeverity',
 ];
 
 describe('.github/workflows/ocr-review.yml — Phase 2 inline comment sorting, capping, and fingerprints (#2649)', () => {
@@ -299,7 +301,9 @@ describe('.github/workflows/ocr-review.yml — Phase 2 inline comment sorting, c
         { comment: { path: 'a.ts', line: 1, _severity: 'high' }, finding: {} },
       ];
       const snapshot = [...original];
-      sortInlineComments(original);
+      const result = sortInlineComments(original);
+      // Returns a distinct array instance
+      expect(result).not.toBe(original);
       // Original array order preserved
       expect(original[0].comment.path).toBe(snapshot[0].comment.path);
       expect(original[1].comment.path).toBe(snapshot[1].comment.path);
@@ -569,11 +573,12 @@ describe('.github/workflows/ocr-review.yml — Phase 2 inline comment sorting, c
       expect(postScript).toContain('overflowFindingCount += 1');
     });
 
-    it('uses effectiveCap for the fallback cap too (not hardcoded 50)', () => {
-      // The fallback MAX_INLINE_FALLBACK must use effectiveCap so the cap
-      // is consistent between batch and fallback paths.
-      expect(postScript).toContain('const MAX_INLINE_FALLBACK = effectiveCap;');
-      expect(postScript).not.toContain('const MAX_INLINE_FALLBACK = 50;');
+    it('does not re-cap in the fallback loop (pairsToPost is already capped)', () => {
+      // The fallback loop iterates over pairsToPost, which was already
+      // sliced to effectiveCap before posting. There is no separate
+      // MAX_INLINE_FALLBACK cap — the batch/fallback paths share the same
+      // pre-sliced candidate set.
+      expect(postScript).not.toContain('MAX_INLINE_FALLBACK');
     });
 
     it('attaches _severity to inline comments for sorting', () => {

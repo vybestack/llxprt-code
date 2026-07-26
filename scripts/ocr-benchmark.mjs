@@ -129,6 +129,26 @@ function resolveRef(ref) {
 const fromResolved = resolveRef(fromSha);
 const toResolved = resolveRef(toSha);
 
+// Phase 3 (OCR finding): validate that 'from' is an ancestor of 'to' so the
+// git range is well-formed. An invalid range would produce empty diffs or
+// cross-branch noise, undermining the controlled-experiment design.
+try {
+  execFileSync(
+    'git',
+    ['merge-base', '--is-ancestor', fromResolved, toResolved],
+    {
+      encoding: 'utf8',
+      stdio: 'ignore',
+    },
+  );
+} catch {
+  process.stderr.write(
+    `Invalid git range: '${fromSha}' (${fromResolved}) is not an ancestor of '${toSha}' (${toResolved}). The benchmark requires a forward merge-base-to-head range.
+`,
+  );
+  process.exit(1);
+}
+
 const ocrVersion = (() => {
   try {
     return execFileSync('ocr', ['version'], { encoding: 'utf8' }).trim();
@@ -139,14 +159,31 @@ const ocrVersion = (() => {
   }
 })();
 
+// Phase 3 (deepthinker #6): hash the OCR rules file so experiments can be
+// compared across runs. Unlike a missing model, a missing rules file means
+// OCR would use its built-in defaults — an uncontrolled variable for a
+// benchmark. Fail fast so the operator fixes the environment before spending
+// tokens on incomparable runs.
 const rulesHash = (() => {
+  const rulesPath = (process.env.HOME || '') + '/.opencodereview/rule.json';
+  if (!rulesPath || !existsSync(rulesPath)) {
+    process.stderr.write(
+      `OCR rules file not found at ${rulesPath}. Reproducible benchmarks require a committed rules file. Run the OCR workflow once or copy the trusted rule.json into place.
+`,
+    );
+    process.exit(1);
+    return ''; // unreachable — satisfies consistent-return
+  }
   try {
-    const rulesPath = process.env.HOME + '/.opencodereview/rule.json';
-    if (!existsSync(rulesPath)) return '';
     const content = readFileSync(rulesPath, 'utf8');
     return createHash('sha256').update(content).digest('hex').slice(0, 16);
-  } catch {
-    return '';
+  } catch (err) {
+    process.stderr.write(
+      `Could not read OCR rules file at ${rulesPath}: ${err.message}
+`,
+    );
+    process.exit(1);
+    return ''; // unreachable — satisfies consistent-return
   }
 })();
 
@@ -310,15 +347,23 @@ function runOcrReview(from, to, concurrency) {
         encoding: 'utf8',
         env,
         timeout: processTimeoutMs,
-        maxBuffer: 50 * 1024 * 1024,
+        maxBuffer: 64 * 1024 * 1024,
       },
     );
   } catch (err) {
     exitCode = err.status || 1;
     timedOut = err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT';
-    stdout = typeof err.stdout === 'string' ? err.stdout : '';
-    stderr =
-      typeof err.stderr === 'string' ? err.stderr : String(err.message || err);
+    if (err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      stderr = `OCR review output exceeded the 64MB maxBuffer. This indicates an abnormally large review payload. Narrow the git range or increase maxBuffer in the harness.
+`;
+      stdout = typeof err.stdout === 'string' ? err.stdout : '';
+    } else {
+      stdout = typeof err.stdout === 'string' ? err.stdout : '';
+      stderr =
+        typeof err.stderr === 'string'
+          ? err.stderr
+          : String(err.message || err);
+    }
   }
   const elapsed = Date.now() - startTime;
   const parsed = parseOcrOutput(stdout);
