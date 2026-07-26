@@ -118,6 +118,39 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
     });
   });
 
+  describe('OCR result coverage metadata', () => {
+    it('parses an object envelope without changing array fallback behavior', () => {
+      const fn = loadFunction('resultEnvelopeFromRaw');
+      expect(fn('{"status":"success","comments":[]}')).toEqual({
+        status: 'success',
+        comments: [],
+      });
+    });
+
+    it('returns null for output that is not a JSON object envelope', () => {
+      const fn = loadFunction('resultEnvelopeFromRaw');
+      expect(fn('progress\n[]')).toBeNull();
+    });
+
+    it('extracts unique failed paths from OCR subtask errors', () => {
+      const fn = loadFunction('failedFilesFromResult');
+      const result = fn({
+        warnings: [
+          { type: 'subtask_error', file: 'src/a.ts', message: 'timeout' },
+          { type: 'warning', file: 'src/b.ts', message: 'large file' },
+          { type: 'subtask_error', file: 'src/a.ts', message: 'retry failed' },
+          { type: 'subtask_error', file: ' src/c.ts ', message: 'error' },
+        ],
+      });
+      expect(result).toEqual(['src/a.ts', 'src/c.ts']);
+    });
+
+    it('returns no failed paths when the OCR envelope has no warnings', () => {
+      const fn = loadFunction('failedFilesFromResult');
+      expect(fn(null)).toEqual([]);
+    });
+  });
+
   // -----------------------------------------------------------------------
   // serializeManifest (redaction)
   // -----------------------------------------------------------------------
