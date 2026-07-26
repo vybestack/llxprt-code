@@ -647,12 +647,14 @@ describe('.github/workflows/ocr-review.yml — changed-file coverage verificatio
       expect(JSON.parse(result)).toEqual({ a: 1 });
     });
 
-    it('emits valid JSON when JSON.stringify throws (circular)', () => {
+    it('emits the serialization error report for circular input', () => {
       const serialize = loadSerializer();
       const circular = { self: null };
       circular.self = circular;
       const result = serialize(circular);
-      expect(() => JSON.parse(result)).not.toThrow();
+      expect(JSON.parse(result)).toEqual({
+        error: 'coverage report serialization failed',
+      });
     });
   });
 

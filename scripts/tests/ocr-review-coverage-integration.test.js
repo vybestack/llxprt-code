@@ -326,7 +326,6 @@ describe('.github/workflows/ocr-review.yml — coverage integration & lifecycle 
       return loadFunctionsTogether(
         [
           'normalizeFilePaths',
-          'evidencedPathsFromResult',
           'readFailuresFromStderr',
           'failedFilesFromResult',
           'resolveCoverageThreshold',
