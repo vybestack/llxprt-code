@@ -90,6 +90,7 @@ const calculateTotal = (items: Item[]): number => {
 - **It**: Specific behavior in plain English
 - **Arrange-Act-Assert**: Clear test sections
 - **Single Assertion**: One behavior per test
+- **DRY setup**: Never copy-paste identical beforeEach/afterEach setup boilerplate (e.g., temp-dir creation, cleanup) across every describe block. Extract a shared helper that wires the lifecycle hooks (e.g., a `useTempDir()` helper that registers beforeEach/afterEach internally and returns a lazy accessor). Repeating 5+ lines of identical setup in N describe blocks is a maintenance hazard: any future change must be applied in N places, and the noise hides what each test actually does. One line of shared setup per describe block is the target.
 
 ### What to Test
 
@@ -101,10 +102,11 @@ const calculateTotal = (items: Item[]): number => {
 
 ### What NOT to Test
 
-❌ Implementation details
-❌ Private methods
-❌ Third-party libraries
-❌ Mock interactions
+- Implementation details
+- Private methods
+- Third-party libraries
+- Mock interactions
+- Erroneous behavior — never write a passing test that asserts incorrect behavior, even if that is what the code currently does. If you discover a bug while writing tests, do NOT enshrine it as specification. Instead: (1) file an issue or ask the user, (2) write a failing test that asserts the CORRECT behavior, (3) fix the production code so the test passes. A test suite that encodes bugs as passing tests is worse than no tests — it actively prevents future fixes by making the correct behavior look like a regression.
 
 ## Code Patterns
 

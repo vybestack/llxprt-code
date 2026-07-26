@@ -49,6 +49,14 @@ type GeneratedSettingsSchema = {
       minimum?: number;
       maximum?: number;
     };
+    ui?: {
+      properties?: {
+        alwaysDisplayFullShellCommand?: {
+          type?: string;
+          default?: boolean;
+        };
+      };
+    };
   };
   $defs: {
     ModelConfig: {
@@ -271,6 +279,26 @@ describe('SettingsSchema', () => {
       expect(
         SETTINGS_SCHEMA.ui.properties.autoConfigureMaxOldSpaceSize.showInDialog,
       ).toBe(true);
+    });
+
+    it('defines the full shell command display setting contract', () => {
+      expect(
+        SETTINGS_SCHEMA.ui.properties.alwaysDisplayFullShellCommand,
+      ).toMatchObject({
+        type: 'boolean',
+        label: 'Always Display Full Shell Command',
+        category: 'UI',
+        requiresRestart: false,
+        default: true,
+        showInDialog: true,
+      });
+    });
+
+    it('publishes the full shell command default in the generated schema', () => {
+      expect(
+        parsedGeneratedSchema.properties.ui?.properties
+          ?.alwaysDisplayFullShellCommand,
+      ).toMatchObject({ type: 'boolean', default: true });
     });
 
     describe('ui.maxHeapSizeMB', () => {

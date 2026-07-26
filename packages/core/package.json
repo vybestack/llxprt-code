@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-core",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "LLxprt Code Core",
   "license": "Apache-2.0",
   "repository": {
@@ -354,6 +354,10 @@
     "./tools-adapters/CoreMessageBusAdapter.js": {
       "bun": "./src/tools-adapters/CoreMessageBusAdapter.ts",
       "import": "./dist/src/tools-adapters/CoreMessageBusAdapter.js"
+    },
+    "./tools-adapters/CoreShellToolHostAdapter.js": {
+      "bun": "./src/tools-adapters/CoreShellToolHostAdapter.ts",
+      "import": "./dist/src/tools-adapters/CoreShellToolHostAdapter.js"
     },
     "./tools-adapters/CoreToolRegistryHostAdapter.js": {
       "bun": "./src/tools-adapters/CoreToolRegistryHostAdapter.ts",

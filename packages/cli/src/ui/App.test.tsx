@@ -254,7 +254,6 @@ vi.mock('./hooks/useFolderTrust', () => ({
   useFolderTrust: vi.fn(() => ({
     isFolderTrustDialogOpen: false,
     handleFolderTrustSelect: vi.fn(),
-    isRestarting: false,
   })),
 }));
 
@@ -263,9 +262,7 @@ vi.mock('./hooks/useFocus', () => ({
 }));
 
 vi.mock('./hooks/useIdeTrustListener', () => ({
-  useIdeTrustListener: vi.fn(() => ({
-    needsRestart: false,
-  })),
+  useIdeTrustListener: vi.fn(() => ({})),
 }));
 
 vi.mock('./hooks/useLogger', () => ({

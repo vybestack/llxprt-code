@@ -63,9 +63,9 @@ export function extractToolResultText(
 }
 
 export function extractTextFromPartList(
-  llmContent: string | ContentBlock[] | IContent | undefined,
+  llmContent: string | ContentBlock[] | IContent | null | undefined,
 ): string | null {
-  if (llmContent === undefined) {
+  if (llmContent === undefined || llmContent === null) {
     return null;
   }
 

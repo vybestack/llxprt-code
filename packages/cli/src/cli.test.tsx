@@ -562,6 +562,7 @@ describe('cli.tsx main function', () => {
       nobrowser: undefined,
       listSessions: undefined,
       deleteSession: undefined,
+      quiet: undefined,
     });
 
     const originalIsTTY = process.stdin.isTTY;
@@ -714,6 +715,7 @@ describe('cli.tsx main function', () => {
       nobrowser: undefined,
       listSessions: undefined,
       deleteSession: undefined,
+      quiet: undefined,
     });
 
     const originalIsTTY = process.stdin.isTTY;

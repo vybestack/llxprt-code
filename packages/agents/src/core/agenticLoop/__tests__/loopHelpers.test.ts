@@ -9,7 +9,9 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { filterEagerlyRecordedToolResponses } from '../../streamResponseHelpers.js';
+import { buildToolResponses } from '../loopHelpers.js';
 
 const alreadyRecordedResponse: ContentBlock = {
   type: 'tool_response',
@@ -147,5 +149,111 @@ describe('filterEagerlyRecordedToolResponses', () => {
 
     expect(result.content).toBeNull();
     expect(result.matchedCallIds).toStrictEqual(['toolu_already_recorded']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildToolResponses image budget enforcement (issue #2169)
+// ---------------------------------------------------------------------------
+
+function makeImageToolCall(
+  callId: string,
+  base64Data: string,
+  mimeType = 'image/png',
+): CompletedToolCall {
+  return {
+    request: {
+      callId,
+      name: 'read_file',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'test',
+    },
+    status: 'success',
+    response: {
+      callId,
+      responseParts: [
+        {
+          type: 'tool_response',
+          callId,
+          toolName: 'read_file',
+          result: { output: 'Binary content provided (1 item(s)).' },
+        },
+        {
+          type: 'media' as const,
+          mimeType,
+          data: base64Data,
+          encoding: 'base64' as const,
+        },
+      ],
+      resultDisplay: 'Read image file',
+      error: undefined,
+      errorType: undefined,
+      agentId: 'main',
+    },
+  } as unknown as CompletedToolCall;
+}
+
+describe('buildToolResponses image budget enforcement', () => {
+  it('passes through all images when under budget', () => {
+    const tools = [
+      makeImageToolCall('call-1', 'A'.repeat(1000)),
+      makeImageToolCall('call-2', 'B'.repeat(1000)),
+    ];
+
+    const blocks = buildToolResponses(tools, 100_000);
+
+    const images = blocks.filter((b) => b.type === 'media');
+    expect(images).toHaveLength(2);
+    expect(
+      blocks.some((b) => b.type === 'text' && b.text.includes('omitted')),
+    ).toBe(false);
+  });
+
+  it('omits images that exceed the cumulative budget', () => {
+    const tools = [
+      makeImageToolCall('call-1', 'A'.repeat(5000)),
+      makeImageToolCall('call-2', 'B'.repeat(5000)),
+      makeImageToolCall('call-3', 'C'.repeat(5000)),
+    ];
+
+    const blocks = buildToolResponses(tools, 11_000);
+
+    const images = blocks.filter((b) => b.type === 'media');
+    expect(images).toHaveLength(2);
+    const feedbackBlock = blocks.find(
+      (b) => b.type === 'text' && b.text.includes('omitted'),
+    );
+    expect(feedbackBlock).toBeDefined();
+    expect(feedbackBlock!.type === 'text' && feedbackBlock.text).toContain(
+      '1 image(s)',
+    );
+    expect(feedbackBlock!.type === 'text' && feedbackBlock.text).toContain(
+      'read_file',
+    );
+  });
+
+  it('retains all tool_response blocks even when images are omitted', () => {
+    const tools = [
+      makeImageToolCall('call-1', 'A'.repeat(100_000)),
+      makeImageToolCall('call-2', 'B'.repeat(100_000)),
+    ];
+
+    const blocks = buildToolResponses(tools, 50_000);
+
+    const responses = blocks.filter((b) => b.type === 'tool_response');
+    expect(responses).toHaveLength(2);
+  });
+
+  it('skips budget enforcement when budgetBytes is 0', () => {
+    const tools = [
+      makeImageToolCall('call-1', 'A'.repeat(500_000)),
+      makeImageToolCall('call-2', 'B'.repeat(500_000)),
+    ];
+
+    const blocks = buildToolResponses(tools, 0);
+
+    const images = blocks.filter((b) => b.type === 'media');
+    expect(images).toHaveLength(2);
   });
 });

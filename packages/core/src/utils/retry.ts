@@ -245,14 +245,13 @@ export function isNetworkTransientError(error: unknown): boolean {
 export function isRetryableError(error: Error | unknown): boolean {
   // PRIORITY 0: Self-classifying aggregate errors (e.g. the load balancer
   // LoadBalancerFailoverError). An aggregate-of-failures has already computed
-  // its own retryability from EACH underlying backend failure, so it is
+  // its own retryability from its underlying backend failures, so it is
   // authoritative. Its human-readable message flattens the child messages,
   // which means the message-based heuristics below (network-transient, overload)
   // would otherwise re-interpret a sibling backend's text and override the
-  // precise per-child decision (e.g. a mixed "socket hang up" + HTTP 400
-  // aggregate must NOT be retried). Identified structurally — a `failures`
+  // precise per-child decision. Identified structurally — a `failures`
   // array plus a boolean `isRetryable` — so core does not import from
-  // providers. (issue #2450)
+  // providers. (issue #2450, updated #2712)
   if (
     typeof error === 'object' &&
     error !== null &&

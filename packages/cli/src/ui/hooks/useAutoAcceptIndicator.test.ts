@@ -12,7 +12,7 @@ import { act } from 'react';
 import { useAutoAcceptIndicator } from './useAutoAcceptIndicator.js';
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { ApprovalMode, coreEvents } from '@vybestack/llxprt-code-core';
 import type { Key } from './useKeypress.js';
 import { useKeypress } from './useKeypress.js';
 import { MessageType } from '../types.js';
@@ -236,6 +236,38 @@ describe('useAutoAcceptIndicator', () => {
     // hook re-renders, the indicator reflects the new mode. The exact number
     // of getApprovalMode reads is an implementation detail (React render/effect
     // timing) and is not asserted here.
+    expect(result.current).toBe(ApprovalMode.AUTO_EDIT);
+  });
+
+  it('clears the indicator unconditionally when an untrusted event follows the mode downgrade', () => {
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
+    const { result } = renderHook(() =>
+      useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
+    );
+
+    agentStub.setApprovalMode(ApprovalMode.DEFAULT);
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
+    act(() => {
+      coreEvents.emitFolderTrustChanged(false);
+    });
+
+    expect(result.current).toBe(ApprovalMode.DEFAULT);
+  });
+
+  it('restores the agent approval mode when folder trust is regained', () => {
+    agentStub.getApprovalMode.mockReturnValue(ApprovalMode.AUTO_EDIT);
+    const { result } = renderHook(() =>
+      useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
+    );
+
+    act(() => {
+      coreEvents.emitFolderTrustChanged(false);
+    });
+    expect(result.current).toBe(ApprovalMode.DEFAULT);
+
+    act(() => {
+      coreEvents.emitFolderTrustChanged(true);
+    });
     expect(result.current).toBe(ApprovalMode.AUTO_EDIT);
   });
 

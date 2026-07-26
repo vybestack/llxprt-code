@@ -22,7 +22,12 @@ import {
   resetFactorySingletons,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
-import { createAndStartProxy, stopProxy } from '../sandbox-proxy-lifecycle.js';
+import {
+  createAndStartProxy,
+  stopProxy,
+  getProxySocketPath,
+  getProxyCapabilityToken,
+} from '../sandbox-proxy-lifecycle.js';
 
 const isWindows = process.platform === 'win32';
 
@@ -245,6 +250,45 @@ describe('proxy integration (phase 31)', () => {
     await stopProxy();
     await expect(handle.stop()).resolves.toBeUndefined();
   });
+
+  it('generates and exposes a capability token after proxy start', async () => {
+    // @scenario Lifecycle should generate a per-session capability token.
+    await createAndStartProxy({
+      socketPath: path.join(tmpDir, 'capability-token.sock'),
+    });
+    const token = getProxyCapabilityToken();
+    expect(typeof token).toBe('string');
+    expect(token).toMatch(/^[0-9a-f]{64}$/); // 32 bytes hex-encoded
+    expect(getProxySocketPath()).toBeDefined();
+    await stopProxy();
+  });
+
+  it('clears capability token after proxy stop', async () => {
+    // @scenario Lifecycle should clear the capability token on stop.
+    await createAndStartProxy({
+      socketPath: path.join(tmpDir, 'capability-token-clear.sock'),
+    });
+    expect(getProxyCapabilityToken()).toBeDefined();
+    await stopProxy();
+    expect(getProxyCapabilityToken()).toBeUndefined();
+  });
+
+  it.skipIf(isWindows)(
+    'clears capability token when start() fails',
+    async () => {
+      // @scenario If serverInstance.start() throws (e.g. socket path under a
+      // regular file), the capability token must be cleared to prevent a stale
+      // token from being reused by a subsequent proxy session.
+      const blockingFile = path.join(tmpDir, 'blocking-file');
+      fs.writeFileSync(blockingFile, '');
+      await expect(
+        createAndStartProxy({
+          socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
+        }),
+      ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
+      expect(getProxyCapabilityToken()).toBeUndefined();
+    },
+  );
 
   it.skipIf(isWindows)(
     'creates socket file on server start and removes it on server stop',

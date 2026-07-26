@@ -14,7 +14,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  EphemeralSettings,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import {
   getCliRuntimeContext,
   setCliRuntimeContext,
@@ -51,7 +54,7 @@ export interface PostConfigInput {
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
   readonly settings: Settings;
-  readonly profileSettingsWithTools: Settings;
+  readonly profileSettingsWithTools: Settings & EphemeralSettings;
   readonly profileLoadResult: ProfileLoadResult;
   readonly providerModelResult: ProviderModelResult;
   readonly defaultDisabledTools: readonly string[];
@@ -152,7 +155,11 @@ interface ProfileEphemeralSettingsInput {
   readonly bootstrapArgs: Pick<BootstrapProfileArgs, 'profileJson'>;
   readonly argv: Pick<CliArgs, 'provider'>;
   readonly settings: StreamTimeoutSettingsInput;
-  readonly profileSettingsWithTools: StreamTimeoutSettingsInput;
+  // profileSettingsWithTools carries both the public JSON settings and the
+  // ephemeral tool-governance keys (e.g. 'tools.allowed') that
+  // applyGlobalAndProfileEphemeralSettings forwards to applyToolPolicies.
+  readonly profileSettingsWithTools: StreamTimeoutSettingsInput &
+    EphemeralSettings;
   readonly profileLoadResult: Pick<ProfileLoadResult, 'profileToLoad'>;
 }
 
@@ -472,9 +479,9 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
       : (profileSettingsWithTools.allowedTools ?? []),
   );
 
-  const profileAllowedTools = buildNormalizedToolSet(
-    config.getEphemeralSetting('tools.allowed'),
-  );
+  const rawProfileAllowedTools = profileSettingsWithTools['tools.allowed'];
+  const profileAllowedExplicit = Array.isArray(rawProfileAllowedTools);
+  const profileAllowedTools = buildNormalizedToolSet(rawProfileAllowedTools);
 
   const applyPolicy = (allowedSet: Set<string> | undefined): void => {
     if (allowedSet === undefined) {
@@ -491,7 +498,7 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
 
   if (interactive !== true && experimentalAcp !== true) {
     if (approvalMode === ApprovalMode.YOLO) {
-      if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+      if (profileAllowedExplicit || explicitAllowedTools.size > 0) {
         const finalAllowed = new Set(profileAllowedTools);
         explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
         applyPolicy(finalAllowed);
@@ -507,16 +514,15 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
         baseAllowed.add(EDIT_TOOL_NAME);
       }
 
-      const finalAllowed =
-        profileAllowedTools.size > 0
-          ? new Set(
-              [...baseAllowed].filter((tool) => profileAllowedTools.has(tool)),
-            )
-          : baseAllowed;
+      const finalAllowed = profileAllowedExplicit
+        ? new Set(
+            [...baseAllowed].filter((tool) => profileAllowedTools.has(tool)),
+          )
+        : baseAllowed;
 
       applyPolicy(finalAllowed);
     }
-  } else if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+  } else if (profileAllowedExplicit || explicitAllowedTools.size > 0) {
     const finalAllowed = new Set(profileAllowedTools);
     explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
     applyPolicy(finalAllowed);

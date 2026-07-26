@@ -18,6 +18,7 @@ import { type Settings } from './settings.js';
 export async function createPolicyEngineConfig(
   settings: Settings,
   approvalMode: ApprovalMode,
+  trustedFolder = true,
 ): Promise<PolicyEngineConfig> {
   // Explicitly construct PolicySettings from Settings to ensure type safety
   // and avoid accidental leakage of other settings properties.
@@ -38,7 +39,12 @@ export async function createPolicyEngineConfig(
     mcpServers: settings.mcpServers,
   };
 
-  return createCorePolicyEngineConfig(policySettings, approvalMode);
+  return createCorePolicyEngineConfig(
+    policySettings,
+    approvalMode,
+    undefined,
+    trustedFolder,
+  );
 }
 
 export function createPolicyUpdater(

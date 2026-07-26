@@ -39,9 +39,10 @@ import {
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { getCodeAssistServer } from '@vybestack/llxprt-code-core/code_assist/codeAssist.js';
-import { UserTierId } from '@vybestack/llxprt-code-core/code_assist/types.js';
-import { parseThought } from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
+import {
+  parseThought,
+  type ThoughtSummary,
+} from '@vybestack/llxprt-code-core/utils/thoughtUtils.js';
 import {
   resolveStreamIdleTimeoutMsSource,
   resolveStreamFirstResponseTimeoutMsSource,
@@ -58,12 +59,12 @@ import {
   isAbortSignalActive,
   safeJsonStringify,
 } from './turnJsonUtils.js';
+import { buildCitationEvent } from './turnCitations.js';
 import {
   DEFAULT_AGENT_ID,
   AgentEventType,
   type ToolCallRequestInfo,
   type ServerAgentStreamEvent,
-  type ServerCitationEvent,
   type StructuredError,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 
@@ -197,48 +198,6 @@ export class Turn {
     this.logger = new DebugLogger('llxprt:core:turn');
   }
 
-  /**
-   * Check if citations should be shown for the current user/settings.
-   * Based on the upstream implementation from commit 997136ae.
-   */
-  private shouldShowCitations(): boolean {
-    try {
-      const config = this.chat.getConfig() as
-        | {
-            getSettingsService(): { get(key: string): unknown } | undefined;
-          }
-        | undefined;
-
-      const settingsService = config?.getSettingsService();
-      if (settingsService) {
-        const enabled = settingsService.get('ui.showCitations');
-        if (enabled !== undefined) {
-          return enabled as boolean;
-        }
-      }
-
-      // Fallback: check user tier for code assist server
-      const server = getCodeAssistServer(config as never);
-      return (server && server.userTier !== UserTierId.FREE) ?? false;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Emits a citation event with the given text.
-   * This integrates with llxprt's provider abstraction to work across all providers.
-   */
-  private emitCitation(text: string): ServerCitationEvent | null {
-    if (!this.shouldShowCitations()) {
-      return null;
-    }
-
-    return {
-      type: AgentEventType.Citation,
-      value: text,
-    };
-  }
   private *emitFinishReason(
     opts: EmitFinishReasonOptions,
   ): Generator<ServerAgentStreamEvent> {
@@ -314,61 +273,89 @@ export class Turn {
     traceId: string | undefined,
     cumulativeOutcome: ResponseOutcome,
   ): Generator<ServerAgentStreamEvent> {
-    const allBlocks = chunk.content.blocks;
-    const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
-
     const allowedBlocks = filterBlocksByAllowedTools(
-      allBlocks,
-      allowedToolNames,
+      chunk.content.blocks,
+      chunk.hookRestrictions?.allowedToolNames,
     );
     this.pushFilteredDebugChunk(chunk, allowedBlocks);
 
-    for (const block of allowedBlocks) {
-      if (block.type === 'thinking') {
-        const thought = parseThought(block.thought);
-        yield {
-          type: AgentEventType.Thought,
-          value: thought,
-          traceId,
-        };
-      }
-    }
-
-    const finishReason = chunk.finishReason;
-    const providerStopReason = chunk.rawStopReason;
+    yield* this.emitThoughtContent(allowedBlocks, traceId);
     const text = yield* this.emitTextContent(allowedBlocks, traceId);
-
-    const toolCallBlocks: ToolCallBlock[] = allowedBlocks.filter(
+    const functionCalls = allowedBlocks.filter(
       (block): block is ToolCallBlock => block.type === 'tool_call',
     );
+    yield* this.emitFunctionCallRequests(functionCalls);
+    yield* this.emitChunkCompletion(
+      chunk,
+      allowedBlocks,
+      functionCalls,
+      text,
+      traceId,
+      cumulativeOutcome,
+    );
+  }
 
-    for (const [functionCallIndex, fnCall] of toolCallBlocks.entries()) {
-      const event = this.handlePendingFunctionCall(fnCall, functionCallIndex);
+  private *emitThoughtContent(
+    blocks: ContentBlock[],
+    traceId: string | undefined,
+  ): Generator<ServerAgentStreamEvent> {
+    for (const block of blocks) {
+      if (block.type === 'thinking' && block.isHidden !== true) {
+        const thought: ThoughtSummary = {
+          ...parseThought(block.thought),
+          ...(block.streamId !== undefined ? { streamId: block.streamId } : {}),
+          ...(block.streamStatus !== undefined
+            ? { streamStatus: block.streamStatus }
+            : {}),
+        };
+        yield { type: AgentEventType.Thought, value: thought, traceId };
+      }
+    }
+  }
+
+  private *emitFunctionCallRequests(
+    functionCalls: ToolCallBlock[],
+  ): Generator<ServerAgentStreamEvent> {
+    for (const [functionCallIndex, functionCall] of functionCalls.entries()) {
+      const event = this.handlePendingFunctionCall(
+        functionCall,
+        functionCallIndex,
+      );
       if (event) {
         yield event;
       }
     }
+  }
 
-    if (finishReason !== undefined) {
+  private *emitChunkCompletion(
+    chunk: ModelStreamChunk,
+    allowedBlocks: ContentBlock[],
+    functionCalls: ToolCallBlock[],
+    text: string | undefined,
+    traceId: string | undefined,
+    cumulativeOutcome: ResponseOutcome,
+  ): Generator<ServerAgentStreamEvent> {
+    if (chunk.finishReason !== undefined) {
       yield* this.emitFinishReason({
-        finishReason,
+        finishReason: chunk.finishReason,
         allParts: allowedBlocks,
-        functionCalls: toolCallBlocks,
+        functionCalls,
         text,
         usageMetadata: chunk.usage,
         traceId,
         cumulativeOutcome,
-        stopReason: providerStopReason,
+        stopReason: chunk.rawStopReason,
       });
-    } else {
-      this.logNoFinishReason(
-        allowedBlocks,
-        toolCallBlocks,
-        text,
-        chunk.usage,
-        traceId,
-      );
+      return;
     }
+
+    this.logNoFinishReason(
+      allowedBlocks,
+      functionCalls,
+      text,
+      chunk.usage,
+      traceId,
+    );
   }
 
   private *emitTextContent(
@@ -383,7 +370,8 @@ export class Turn {
       yield { type: AgentEventType.Content, value: text, traceId };
 
       if (text.trim() !== '') {
-        const citationEvent = this.emitCitation(
+        const citationEvent = buildCitationEvent(
+          this.chat.getConfig(),
           'Response may contain information from external sources. Please verify important details independently.',
         );
         if (citationEvent) {

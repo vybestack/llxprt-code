@@ -210,11 +210,15 @@ function createBaseUIState() {
     availableTerminalHeight: 40,
     activeShellPtyId: null,
     embeddedShellFocused: false,
+    isQueuedMessagesPanelCollapsed: false,
+    queuedSubmissions: [],
+    coreMemoryFileCount: 0,
+    currentModelLabel: undefined,
+    contextLimit: undefined,
 
     // dialog flags
     showWorkspaceMigrationDialog: false,
     shouldShowIdePrompt: false,
-    showIdeRestartPrompt: false,
     isFolderTrustDialogOpen: false,
     isWelcomeDialogOpen: false,
     isPermissionsDialogOpen: false,

@@ -147,10 +147,21 @@ function handleSessionStart(
     return undefined;
   }
   const startPayload = payload as unknown as SessionStartPayload;
-  if (!startPayload.sessionId || !startPayload.projectHash) {
+  const requiredStrings = [
+    startPayload.sessionId,
+    startPayload.projectHash,
+    startPayload.provider,
+    startPayload.model,
+    startPayload.startTime,
+  ];
+  if (
+    requiredStrings.some(
+      (value) => typeof value !== 'string' || value.length === 0,
+    )
+  ) {
     return {
       ok: false,
-      error: 'Invalid session_start: missing required fields',
+      error: 'Invalid session_start: missing or malformed required fields',
       warnings: acc.warnings,
     };
   }
@@ -167,6 +178,7 @@ function handleSessionStart(
     provider: startPayload.provider,
     model: startPayload.model,
     workspaceDirs: resolveWorkspaceDirs(startPayload.workspaceDirs),
+    ...(typeof startPayload.cwd === 'string' ? { cwd: startPayload.cwd } : {}),
     startTime: startPayload.startTime,
   };
   return undefined;
@@ -289,6 +301,40 @@ function handleSessionEvent(
   }
 }
 
+/**
+ * @requirement issue #1611: session_metadata — update metadata.title (tri-state).
+ *
+ * The title is tri-state: undefined (field absent) is legacy and does NOT
+ * modify metadata.title; null sets it to null (explicit untitled); string sets
+ * it to that string. Malformed title values (non-string, non-null, non-
+ * undefined) are recorded as malformed.
+ */
+function handleSessionMetadata(
+  payload: Record<string, unknown>,
+  acc: ReplayAccumulators,
+  lineNumber: number,
+): void {
+  if (acc.metadata === null) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: session_metadata before session_start, skipping`,
+    );
+    return;
+  }
+  if (!('title' in payload)) {
+    return;
+  }
+  const title = payload.title;
+  if (title === null || typeof title === 'string') {
+    acc.metadata.title = title;
+  } else if (title !== undefined) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed session_metadata title, skipping`,
+    );
+  }
+}
+
 /** @pseudocode line 126-131: directories_changed — update metadata or record malformed. */
 function handleDirectoriesChanged(
   payload: Record<string, unknown>,
@@ -380,6 +426,9 @@ function dispatchEvent(
       break;
     case 'session_event':
       handleSessionEvent(payload, acc, lineNumber);
+      break;
+    case 'session_metadata':
+      handleSessionMetadata(payload, acc, lineNumber);
       break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);

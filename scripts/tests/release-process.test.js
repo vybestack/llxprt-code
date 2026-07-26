@@ -16,6 +16,25 @@ const NON_NPM_RELEASE_PACKAGES = new Set([
   'llxprt-code-vscode-ide-companion',
 ]);
 
+const CLI_RELEASE_PACKAGES = new Set(['@vybestack/llxprt-code']);
+
+function workspaceInfoEntry(workspacePath) {
+  return {
+    pkgJsonPath: `${workspacePath}/package.json`,
+    version: '1.2.3',
+    workspacePath,
+  };
+}
+
+function testUtilsWorkspaceInfo() {
+  return new Map([
+    [
+      '@vybestack/llxprt-code-test-utils',
+      workspaceInfoEntry('packages/test-utils'),
+    ],
+  ]);
+}
+
 function readRootFile(relPath) {
   return fs.readFileSync(path.join(ROOT, relPath), 'utf-8');
 }
@@ -131,6 +150,32 @@ describe('scripts/version.ts', () => {
 
 describe('.github/workflows/release.yml', () => {
   const releaseYml = readRootFile('.github/workflows/release.yml');
+  const releaseSteps = yaml.load(releaseYml).jobs.release.steps;
+  const stepById = (id) =>
+    releaseSteps.find((s) => s.id === id) ??
+    expect.fail(`missing step id: ${id}`);
+  const stepByName = (name) =>
+    releaseSteps.find((s) => s.name === name) ??
+    expect.fail(`missing step: ${name}`);
+
+  it('selects keys before standard release notes without blocking skipped-test fallback', () => {
+    const quota = stepById('quota');
+    const releaseNotes = stepByName('Generate Release Notes');
+    const quotaIndex = releaseSteps.indexOf(quota);
+    const releaseNotesIndex = releaseSteps.indexOf(releaseNotes);
+    expect(quota.if.replace(/\s+/g, ' ').trim()).toBe(
+      "github.event.inputs.force_skip_tests != 'true' || (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')",
+    );
+    expect(quotaIndex >= 0 && releaseNotesIndex > quotaIndex).toBe(true);
+    expect(quota['continue-on-error']).toBe(
+      "${{ github.event.inputs.force_skip_tests == 'true' }}",
+    );
+    expect(quota.run).toBe('node scripts/ci-quota-check.js');
+    expect(releaseNotes.env.OPENAI_API_KEY).toContain(
+      "steps.quota.outputs.selected_key == 'secondary'",
+    );
+    expect(quota.env.OPENAI_API_KEY).toBe('${{ secrets[vars.KEY_VAR_NAME] }}');
+  });
 
   it('publishes every npm release package', () => {
     for (const packageName of npmReleasePackages()) {
@@ -428,19 +473,17 @@ describe('Dockerfile', () => {
 });
 
 describe('scripts/bind-release-deps.ts', () => {
-  it('derives npm release packages from the same metadata as the tests', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  let bindModule;
 
+  beforeAll(async () => {
+    bindModule = await import(path.join(ROOT, 'scripts/bind-release-deps.ts'));
+  });
+
+  it('derives npm release packages from the same metadata as the tests', () => {
     expect(bindModule.deriveNpmReleasePackages()).toEqual(npmReleasePackages());
   });
 
-  it('derives npm release packages in canonical publish order', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
-
+  it('derives npm release packages in canonical publish order', () => {
     expect(bindModule.deriveNpmReleasePackages()).toEqual([
       '@vybestack/llxprt-code-tools',
       '@vybestack/llxprt-code-storage',
@@ -458,50 +501,18 @@ describe('scripts/bind-release-deps.ts', () => {
     ]);
   });
 
-  it('rewrites publishable workspace file dependencies to exact versions', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  it('rewrites publishable workspace file dependencies to exact versions', () => {
     const workspaceInfo = new Map([
-      [
-        '@vybestack/llxprt-code-core',
-        {
-          pkgJsonPath: 'packages/core/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/core',
-        },
-      ],
-      [
-        '@vybestack/llxprt-code-tools',
-        {
-          pkgJsonPath: 'packages/tools/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/tools',
-        },
-      ],
+      ['@vybestack/llxprt-code-core', workspaceInfoEntry('packages/core')],
+      ['@vybestack/llxprt-code-tools', workspaceInfoEntry('packages/tools')],
       [
         '@vybestack/llxprt-code-providers',
-        {
-          pkgJsonPath: 'packages/providers/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/providers',
-        },
+        workspaceInfoEntry('packages/providers'),
       ],
-      [
-        '@vybestack/llxprt-code-agents',
-        {
-          pkgJsonPath: 'packages/agents/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/agents',
-        },
-      ],
+      ['@vybestack/llxprt-code-agents', workspaceInfoEntry('packages/agents')],
       [
         '@vybestack/llxprt-code-test-utils',
-        {
-          pkgJsonPath: 'packages/test-utils/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/test-utils',
-        },
+        workspaceInfoEntry('packages/test-utils'),
       ],
     ]);
     const deps = {
@@ -532,10 +543,7 @@ describe('scripts/bind-release-deps.ts', () => {
     });
   });
 
-  it('fails verification when npm release packages keep workspace file dependencies', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  it('fails verification when npm release packages keep workspace file dependencies', () => {
     const readPackage = () => ({
       name: '@vybestack/llxprt-code',
       dependencies: {
@@ -546,20 +554,9 @@ describe('scripts/bind-release-deps.ts', () => {
     const workspaceInfo = new Map([
       [
         '@vybestack/llxprt-code-providers',
-        {
-          pkgJsonPath: 'packages/providers/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/providers',
-        },
+        workspaceInfoEntry('packages/providers'),
       ],
-      [
-        '@vybestack/llxprt-code-agents',
-        {
-          pkgJsonPath: 'packages/agents/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/agents',
-        },
-      ],
+      ['@vybestack/llxprt-code-agents', workspaceInfoEntry('packages/agents')],
     ]);
 
     expect(() =>
@@ -572,10 +569,7 @@ describe('scripts/bind-release-deps.ts', () => {
     ).toThrow('workspace file: dependencies');
   });
 
-  it('passes verification when release packages have no workspace file dependencies', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  it('passes verification when release packages have no workspace file dependencies', () => {
     const readPackage = () => ({
       name: '@vybestack/llxprt-code',
       dependencies: {
@@ -587,17 +581,14 @@ describe('scripts/bind-release-deps.ts', () => {
     expect(() =>
       bindModule.verifyNoFileDeps(
         ['packages/cli'],
-        new Set(['@vybestack/llxprt-code']),
+        CLI_RELEASE_PACKAGES,
         new Map(),
         readPackage,
       ),
     ).not.toThrow();
   });
 
-  it('ignores workspace file dependencies in non-release packages', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  it('ignores workspace file dependencies in non-release packages', () => {
     const readPackage = () => ({
       name: '@vybestack/llxprt-code-test-utils',
       dependencies: {
@@ -608,70 +599,44 @@ describe('scripts/bind-release-deps.ts', () => {
     expect(() =>
       bindModule.verifyNoFileDeps(
         ['packages/test-utils'],
-        new Set(['@vybestack/llxprt-code']),
+        CLI_RELEASE_PACKAGES,
         new Map(),
         readPackage,
       ),
     ).not.toThrow();
   });
 
-  it('allows release packages to keep non-NPM release workspaces as dev-only file dependencies', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  it('allows release packages to keep non-NPM release workspaces as dev-only file dependencies', () => {
     const readPackage = () => ({
       name: '@vybestack/llxprt-code',
       devDependencies: {
         '@vybestack/llxprt-code-test-utils': 'file:../test-utils',
       },
     });
-    const workspaceInfo = new Map([
-      [
-        '@vybestack/llxprt-code-test-utils',
-        {
-          pkgJsonPath: 'packages/test-utils/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/test-utils',
-        },
-      ],
-    ]);
 
     expect(() =>
       bindModule.verifyNoFileDeps(
         ['packages/cli'],
-        new Set(['@vybestack/llxprt-code']),
-        workspaceInfo,
+        CLI_RELEASE_PACKAGES,
+        testUtilsWorkspaceInfo(),
         readPackage,
       ),
     ).not.toThrow();
   });
 
-  it('rejects non-NPM release workspaces as production file dependencies in release packages', async () => {
-    const bindModule = await import(
-      path.join(ROOT, 'scripts/bind-release-deps.ts')
-    );
+  it('rejects non-NPM release workspaces as production file dependencies in release packages', () => {
     const readPackage = () => ({
       name: '@vybestack/llxprt-code',
       dependencies: {
         '@vybestack/llxprt-code-test-utils': 'file:../test-utils',
       },
     });
-    const workspaceInfo = new Map([
-      [
-        '@vybestack/llxprt-code-test-utils',
-        {
-          pkgJsonPath: 'packages/test-utils/package.json',
-          version: '1.2.3',
-          workspacePath: 'packages/test-utils',
-        },
-      ],
-    ]);
 
     expect(() =>
       bindModule.verifyNoFileDeps(
         ['packages/cli'],
-        new Set(['@vybestack/llxprt-code']),
-        workspaceInfo,
+        CLI_RELEASE_PACKAGES,
+        testUtilsWorkspaceInfo(),
         readPackage,
       ),
     ).toThrow(

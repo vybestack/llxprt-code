@@ -51,6 +51,7 @@ export interface StreamRuntimeTestOverrides {
   settings?: Partial<StreamRuntime['settings']>;
   scheduler?: Partial<StreamRuntime['scheduler']>;
   asyncTasks?: Partial<StreamRuntime['asyncTasks']>;
+  events?: Partial<StreamRuntime['events']>;
   bucketFailover?: Partial<StreamRuntime['bucketFailover']>;
   checkpoint?: Partial<StreamRuntime['checkpoint']>;
   sessionLimits?: Partial<StreamRuntime['sessionLimits']>;
@@ -490,6 +491,10 @@ export function createStreamRuntimeForTest(
     settings: makeSettingsRuntime(source, overrides.settings),
     scheduler: makeSchedulerRuntime(source, overrides.scheduler),
     asyncTasks: makeAsyncTasksRuntime(source, overrides.asyncTasks),
+    events: {
+      onMcpClientUpdate: () => () => undefined,
+      ...overrides.events,
+    },
     bucketFailover: {
       getBucketFailoverHandler: () =>
         call(

@@ -117,6 +117,42 @@ describe('createSessionScopedConfig', () => {
     expect(baseConfig.setFileSystemService).not.toHaveBeenCalled();
     expect(baseConfig.setProviderManager).not.toHaveBeenCalled();
   });
+
+  it('reconciles direct property set with getter closures so fileSystemService and providerManager stay in sync', () => {
+    const baseFileSystemService = {
+      readTextFile: vi.fn(async () => 'base'),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const replacementFileSystemService = {
+      readTextFile: vi.fn(async () => 'replacement'),
+      writeTextFile: vi.fn(async () => undefined),
+    };
+    const baseProviderManager = { id: 'base' };
+    const replacementProviderManager = { id: 'replacement' };
+    const baseConfig = {
+      getFileSystemService: () => baseFileSystemService,
+      setFileSystemService: vi.fn(),
+      getProviderManager: () => baseProviderManager,
+      setProviderManager: vi.fn(),
+      getTargetDir: () => '/project',
+    } as unknown as Config;
+
+    const scoped = createSessionScopedConfig(
+      baseConfig as unknown as Config,
+      baseFileSystemService,
+    );
+
+    // Direct property assignment (the `set` trap) must update the same backing
+    // store the getter closures read from, so getFileSystemService and
+    // config.fileSystemService = X are reconciled.
+    (scoped as unknown as Record<string, unknown>).fileSystemService =
+      replacementFileSystemService;
+    expect(scoped.getFileSystemService()).toBe(replacementFileSystemService);
+
+    (scoped as unknown as Record<string, unknown>).providerManager =
+      replacementProviderManager;
+    expect(scoped.getProviderManager()).toBe(replacementProviderManager);
+  });
 });
 
 describe('ZedAgent.newSession', () => {
@@ -149,12 +185,14 @@ describe('ZedAgent.newSession', () => {
       getProfileManager: () => undefined,
       getEphemeralSetting: () => undefined,
       getTargetDir: () => '/project',
+      getSessionRecordingService: () => undefined,
     } as unknown as Config;
     const connection = {
       readTextFile: vi.fn(async (_params: { sessionId: string }) => ({
         content: 'client',
       })),
       writeTextFile: vi.fn(async () => undefined),
+      sessionUpdate: vi.fn(async () => undefined),
     };
     const mod = await import('./zedIntegration.js');
     const zedAgent = new mod.ZedAgent(

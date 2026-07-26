@@ -423,7 +423,9 @@ jobs:
       comments_inline: ${{ steps.post-ocr-results.outputs.comments_inline }}
       comments_skipped: ${{ steps.post-ocr-results.outputs.comments_skipped }}
       comments_failed: ${{ steps.post-ocr-results.outputs.comments_failed }}
+      comments_routed_summary: ${{ steps.post-ocr-results.outputs.comments_routed_summary }}
       summary_comment_url: ${{ steps.post-ocr-results.outputs.summary_comment_url }}
+      completeness: ${{ steps.ocr-classification.outputs.completeness }}
     # The code-review job runs only when the mergeability gate and the
     # auto-review gate both permit it.
     needs:
@@ -533,6 +535,281 @@ jobs:
             echo "HEAD_SHA=${HEAD_SHA}"
           } >> "$GITHUB_ENV"
 
+      - name: Read OCR checkpoint
+        id: read-checkpoint
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-context.outputs.number }}
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
+        with:
+          script: |
+            const MARKER = '<!-- llxprt-code-ocr-review -->';
+            const checkpointPattern = /<!--\s*ocr-checkpoint:\s*([\s\S]*?)\s*-->/;
+            const number = Number(process.env.PR_NUMBER);
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            function deserializeCheckpoint(base64) {
+              const normalized = typeof base64 === 'string' ? base64.trim() : '';
+              if (!normalized || normalized.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+                return null;
+              }
+              try {
+                const decoded = Buffer.from(normalized, 'base64').toString('utf8');
+                const canonical = Buffer.from(decoded, 'utf8').toString('base64');
+                if (canonical !== normalized) {
+                  return null;
+                }
+                const checkpoint = JSON.parse(decoded);
+                return checkpoint && typeof checkpoint === 'object' && !Array.isArray(checkpoint)
+                  ? checkpoint
+                  : null;
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function extractCheckpointFromComment(commentBody) {
+              const match = checkpointPattern.exec(String(commentBody || ''));
+              return match ? deserializeCheckpoint(match[1]) : null;
+            }
+
+            let botLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              botLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+              botLogin = process.env.OCR_BOT_LOGIN || '';
+            }
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: number, per_page: 100,
+            });
+            const markerComment = comments.find((comment) =>
+              comment.user && comment.user.type === 'Bot'
+                && botLogin !== '' && comment.user.login === botLogin
+                && typeof comment.body === 'string' && comment.body.includes(MARKER));
+            const encodedMatch = markerComment
+              ? checkpointPattern.exec(markerComment.body)
+              : null;
+            const checkpoint = markerComment
+              ? extractCheckpointFromComment(markerComment.body)
+              : null;
+            const shaPattern = /^[0-9a-f]{40}$/i;
+            core.setOutput('CHECKPOINT_FOUND', String(Boolean(encodedMatch)));
+            core.setOutput('CHECKPOINT_VALID', String(Boolean(checkpoint)));
+            core.setOutput('CHECKPOINT_SCHEMA', String(checkpoint?.schema ?? ''));
+            core.setOutput('CHECKPOINT_HEAD', shaPattern.test(checkpoint?.head_sha || '') ? checkpoint.head_sha : '');
+            core.setOutput('CHECKPOINT_BASE_SHA', shaPattern.test(checkpoint?.base_sha || '') ? checkpoint.base_sha : '');
+            core.setOutput('CHECKPOINT_COMPLETION', String(checkpoint?.completion_state || ''));
+            core.setOutput('CHECKPOINT_VERSION', String(checkpoint?.ocr_version || ''));
+            core.setOutput('CHECKPOINT_MODEL', String(checkpoint?.ocr_model || ''));
+            core.setOutput('CHECKPOINT_RULES_HASH', String(checkpoint?.rules_hash || ''));
+            core.setOutput('CHECKPOINT_POLICY_HASH', String(checkpoint?.policy_hash || ''));
+            core.setOutput('CHECKPOINT_WORKFLOW_SCHEMA_HASH', String(checkpoint?.workflow_schema_hash || ''));
+            core.setOutput('CHECKPOINT_ENCODED', checkpoint && encodedMatch ? encodedMatch[1].trim() : '');
+
+      - name: Resolve review range
+        id: resolve-range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          MERGE_BASE: ${{ env.BASE_SHA }}
+          HEAD_SHA: ${{ env.HEAD_SHA }}
+          API_BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          OCR_VERSION: ${{ env.OCR_VERSION }}
+          CHECKPOINT_FOUND: ${{ steps.read-checkpoint.outputs.CHECKPOINT_FOUND }}
+          CHECKPOINT_VALID: ${{ steps.read-checkpoint.outputs.CHECKPOINT_VALID }}
+          CHECKPOINT_SCHEMA: ${{ steps.read-checkpoint.outputs.CHECKPOINT_SCHEMA }}
+          CHECKPOINT_HEAD: ${{ steps.read-checkpoint.outputs.CHECKPOINT_HEAD }}
+          CHECKPOINT_BASE_SHA: ${{ steps.read-checkpoint.outputs.CHECKPOINT_BASE_SHA }}
+          CHECKPOINT_COMPLETION: ${{ steps.read-checkpoint.outputs.CHECKPOINT_COMPLETION }}
+          CHECKPOINT_VERSION: ${{ steps.read-checkpoint.outputs.CHECKPOINT_VERSION }}
+          CHECKPOINT_MODEL: ${{ steps.read-checkpoint.outputs.CHECKPOINT_MODEL }}
+          CHECKPOINT_RULES_HASH: ${{ steps.read-checkpoint.outputs.CHECKPOINT_RULES_HASH }}
+          CHECKPOINT_POLICY_HASH: ${{ steps.read-checkpoint.outputs.CHECKPOINT_POLICY_HASH }}
+          CHECKPOINT_WORKFLOW_SCHEMA_HASH: ${{ steps.read-checkpoint.outputs.CHECKPOINT_WORKFLOW_SCHEMA_HASH }}
+          OCR_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_RULES_HASH: ${{ vars.OCR_RULES_HASH }}
+          OCR_POLICY_HASH: ${{ vars.OCR_POLICY_HASH }}
+          OCR_WORKFLOW_SCHEMA_HASH: ${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}
+        run: |
+          set -euo pipefail
+          IS_ANCESTOR=false
+          if [ "$EVENT_NAME" = "pull_request_target" ] \
+             && [ "$EVENT_ACTION" = "synchronize" ] \
+             && [ "$CHECKPOINT_VALID" = "true" ] \
+             && [ -n "$CHECKPOINT_HEAD" ]; then
+            if git merge-base --is-ancestor "$CHECKPOINT_HEAD" "$HEAD_SHA"; then
+              IS_ANCESTOR=true
+            fi
+          fi
+          export IS_ANCESTOR
+
+          mapfile -t RANGE_OUTPUT < <(node <<'NODE'
+          function isAncestralCheckpoint(checkpoint, currentHeadSha, baseSha) {
+            return Boolean(
+              checkpoint
+                && typeof checkpoint === 'object'
+                && checkpoint.schema === 1
+                && checkpoint.completion_state === 'complete'
+                && typeof checkpoint.head_sha === 'string'
+                && checkpoint.head_sha.length > 0
+                && typeof currentHeadSha === 'string'
+                && currentHeadSha.length > 0
+                && checkpoint.base_sha === baseSha,
+            );
+          }
+
+          function resolveReviewRange(input) {
+            const checkpoint = input.checkpoint;
+            const checkpointHead = checkpoint?.head_sha || '';
+            const full = (reason = '') => ({
+              FROM_SHA: input.mergeBase,
+              RANGE_MODE: 'full',
+              CHECKPOINT_HEAD: checkpointHead,
+              FALLBACK_REASON: reason,
+              CHECKPOINT_FOUND: Boolean(input.checkpointFound),
+              SAME_HEAD: false,
+            });
+            if (input.eventName !== 'pull_request_target' || input.eventAction !== 'synchronize') {
+              return full();
+            }
+            if (!input.checkpointFound) {
+              return full('checkpoint-missing');
+            }
+            if (!checkpoint) {
+              return full('checkpoint-corrupt');
+            }
+            if (checkpoint.schema !== 1) {
+              return full('checkpoint-schema-mismatch');
+            }
+            if (checkpoint.completion_state !== 'complete') {
+              return full('checkpoint-incomplete');
+            }
+            if (!checkpoint.head_sha) {
+              return full('checkpoint-head-missing');
+            }
+            if (checkpoint.base_sha !== input.baseSha) {
+              return full('base-sha-changed');
+            }
+            if (checkpoint.ocr_version !== input.ocrVersion) {
+              return full('ocr-version-changed');
+            }
+            if (input.ocrModel && checkpoint.ocr_model && checkpoint.ocr_model !== input.ocrModel) {
+              return full('ocr-model-changed');
+            }
+            if (input.rulesHash && checkpoint.rules_hash && checkpoint.rules_hash !== input.rulesHash) {
+              return full('rules-hash-changed');
+            }
+            if (input.policyHash && checkpoint.policy_hash && checkpoint.policy_hash !== input.policyHash) {
+              return full('policy-hash-changed');
+            }
+            if (input.workflowSchemaHash && checkpoint.workflow_schema_hash && checkpoint.workflow_schema_hash !== input.workflowSchemaHash) {
+              return full('workflow-schema-changed');
+            }
+            if (!isAncestralCheckpoint(checkpoint, input.headSha, input.baseSha)) {
+              return full('checkpoint-invalid');
+            }
+            if (checkpoint.head_sha === input.headSha) {
+              return {
+                FROM_SHA: checkpoint.head_sha,
+                RANGE_MODE: 'noop',
+                CHECKPOINT_HEAD: checkpoint.head_sha,
+                FALLBACK_REASON: '',
+                CHECKPOINT_FOUND: true,
+                SAME_HEAD: true,
+              };
+            }
+            if (!input.isAncestor) {
+              return full('checkpoint-not-ancestor');
+            }
+            return {
+              FROM_SHA: checkpoint.head_sha,
+              RANGE_MODE: 'incremental',
+              CHECKPOINT_HEAD: checkpoint.head_sha,
+              FALLBACK_REASON: '',
+              CHECKPOINT_FOUND: true,
+              SAME_HEAD: false,
+            };
+          }
+
+          const checkpoint = process.env.CHECKPOINT_VALID === 'true'
+            ? {
+                schema: Number(process.env.CHECKPOINT_SCHEMA),
+                head_sha: process.env.CHECKPOINT_HEAD,
+                base_sha: process.env.CHECKPOINT_BASE_SHA,
+                completion_state: process.env.CHECKPOINT_COMPLETION,
+                ocr_version: process.env.CHECKPOINT_VERSION,
+                ocr_model: process.env.CHECKPOINT_MODEL || '',
+                rules_hash: process.env.CHECKPOINT_RULES_HASH || '',
+                policy_hash: process.env.CHECKPOINT_POLICY_HASH || '',
+                workflow_schema_hash: process.env.CHECKPOINT_WORKFLOW_SCHEMA_HASH || '',
+              }
+            : null;
+          const result = resolveReviewRange({
+            eventName: process.env.EVENT_NAME,
+            eventAction: process.env.EVENT_ACTION,
+            mergeBase: process.env.MERGE_BASE,
+            headSha: process.env.HEAD_SHA,
+            baseSha: process.env.API_BASE_SHA,
+            ocrVersion: process.env.OCR_VERSION,
+            ocrModel: process.env.OCR_MODEL || '',
+            rulesHash: process.env.OCR_RULES_HASH || '',
+            policyHash: process.env.OCR_POLICY_HASH || '',
+            workflowSchemaHash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+            checkpointFound: process.env.CHECKPOINT_FOUND === 'true',
+            checkpoint,
+            isAncestor: process.env.IS_ANCESTOR === 'true',
+          });
+          for (const key of ['FROM_SHA', 'RANGE_MODE', 'CHECKPOINT_HEAD', 'FALLBACK_REASON', 'CHECKPOINT_FOUND', 'SAME_HEAD']) {
+            console.log(String(result[key]));
+          }
+          NODE
+          )
+          FROM_SHA="${RANGE_OUTPUT[0]}"
+          RANGE_MODE="${RANGE_OUTPUT[1]}"
+          RESOLVED_CHECKPOINT_HEAD="${RANGE_OUTPUT[2]}"
+          FALLBACK_REASON="${RANGE_OUTPUT[3]}"
+          RESOLVED_CHECKPOINT_FOUND="${RANGE_OUTPUT[4]}"
+          SAME_HEAD="${RANGE_OUTPUT[5]}"
+
+          range_stats() {
+            local from_sha="$1"
+            local to_sha="$2"
+            local files additions deletions
+            files="$(git diff --name-only --diff-filter=d "${from_sha}..${to_sha}" | awk 'NF { count += 1 } END { print count + 0 }')"
+            read -r additions deletions < <(git diff --numstat --diff-filter=d "${from_sha}..${to_sha}" | awk '$1 ~ /^[0-9]+$/ { additions += $1 } $2 ~ /^[0-9]+$/ { deletions += $2 } END { print additions + 0, deletions + 0 }')
+            printf '%s %s %s\n' "$files" "$additions" "$deletions"
+          }
+          read -r CUMULATIVE_FILES CUMULATIVE_ADDITIONS CUMULATIVE_DELETIONS < <(range_stats "$MERGE_BASE" "$HEAD_SHA")
+          read -r SELECTED_FILES SELECTED_ADDITIONS SELECTED_DELETIONS < <(range_stats "$FROM_SHA" "$HEAD_SHA")
+          cat > ocr-range-metadata.json <<EOF
+          {
+            "cumulative": {
+              "base_sha": "${MERGE_BASE}",
+              "head_sha": "${HEAD_SHA}",
+              "files": ${CUMULATIVE_FILES},
+              "lines": { "additions": ${CUMULATIVE_ADDITIONS}, "deletions": ${CUMULATIVE_DELETIONS}, "total": $((CUMULATIVE_ADDITIONS + CUMULATIVE_DELETIONS)) }
+            },
+            "selected": {
+              "base_sha": "${FROM_SHA}",
+              "head_sha": "${HEAD_SHA}",
+              "files": ${SELECTED_FILES},
+              "lines": { "additions": ${SELECTED_ADDITIONS}, "deletions": ${SELECTED_DELETIONS}, "total": $((SELECTED_ADDITIONS + SELECTED_DELETIONS)) }
+            }
+          }
+          EOF
+          {
+            echo "FROM_SHA=${FROM_SHA}"
+            echo "RANGE_MODE=${RANGE_MODE}"
+            echo "CHECKPOINT_HEAD=${RESOLVED_CHECKPOINT_HEAD}"
+            echo "FALLBACK_REASON=${FALLBACK_REASON}"
+            echo "CHECKPOINT_FOUND=${RESOLVED_CHECKPOINT_FOUND}"
+            echo "SAME_HEAD=${SAME_HEAD}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Initialize OCR artifact files
         shell: bash
         run: |
@@ -548,6 +825,12 @@ jobs:
           : > ocr-phase.txt
           : > ocr-infrastructure-failure.txt
           : > ocr-policy-failure.txt
+          : > ocr-selected-files.txt
+          : > ocr-status.txt
+          : > ocr-reviewed-range-manifest.json
+          : > ocr-manifest-hashes.json
+          : > ocr-manifest-sha256.txt
+          : > ocr-routing-decisions.json
           cat > ocr-workflow-helpers.sh <<'EOF'
           mark_infrastructure_failure() {
             echo "phase=$1; reason=$2" > ocr-infrastructure-failure.txt
@@ -772,7 +1055,7 @@ jobs:
       - name: Verify review scope includes changed tests
         shell: bash
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          BASE_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -831,6 +1114,15 @@ jobs:
               /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { in_section = 0 }
               in_section { print }
             ' ocr-preview.txt || true)"
+            # Issue #2575: persist the selected (Will review) file list for
+            # the reviewed-range manifest. Extract one path per line,
+            # stripping bullet markers, checkboxes, and surrounding quotes.
+            printf '%s\n' "$reviewed" | sed -e 's/^[[:space:]]*//' \
+              -e 's/^[-*][[:space:]]*//' \
+              -e 's/^\[[^]]*\][[:space:]]*//' \
+              -e 's/^"\(.*\)"$/\1/' \
+              -e "s/^'\(.*\)'$/\1/" \
+              | grep -v '^[[:space:]]*$' > ocr-selected-files.txt || true
             excluded="$(awk '
               BEGIN { IGNORECASE = 1; in_section = 0 }
               /^Excluded[[:space:]]*\(/ { in_section = 1; next }
@@ -888,10 +1180,11 @@ jobs:
 
       - name: Run OpenCodeReview
         shell: bash
-        # Full merge-base..head diff. Parse failures are handled distinctly
-        # in the posting step (OCR failed vs. no findings).
+        # Parse failures are handled distinctly in the posting step
+        # (OCR failed vs. no findings).
         env:
-          BASE_SHA: ${{ env.BASE_SHA }}
+          FROM_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
           OCR_LLM_URL: ${{ vars.OCR_LLM_URL }}
           OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
@@ -908,6 +1201,30 @@ jobs:
           set +e
           if [ -s ocr-exit-code.txt ]; then
             echo "::warning::Skipping OCR review because an earlier OCR setup/configuration/preview failure was recorded."
+            exit 0
+          fi
+          if [ "$RANGE_MODE" = "noop" ]; then
+            cat > ocr-result.json <<'EOF'
+          {
+            "status": "skipped",
+            "message": "Same head; no new changes to review.",
+            "summary": {
+              "files_reviewed": 0,
+              "comments": 0,
+              "total_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0,
+              "elapsed": "0s"
+            },
+            "comments": [],
+            "warnings": []
+          }
+          EOF
+            cp ocr-result.json ocr-stdout.raw
+            echo "0" > ocr-exit-code.txt
+            echo "noop" > ocr-phase.txt
             exit 0
           fi
           echo "review" > ocr-phase.txt
@@ -942,7 +1259,7 @@ jobs:
             fi
           fi
           ocr review \
-            --from "$BASE_SHA" \
+            --from "$FROM_SHA" \
             --to "$HEAD_SHA" \
             --format json \
             --audience agent \
@@ -954,6 +1271,21 @@ jobs:
           if ! cp ocr-stdout.raw ocr-result.json; then
             : > ocr-result.json
           fi
+          # Issue #2575: capture the upstream OCR JSON status field (e.g.
+          # "success" vs "completed_with_errors") so the manifest can
+          # classify partial coverage correctly.
+          ocr_status=""
+          if [ -s ocr-result.json ]; then
+            ocr_status="$(node -e '
+              try {
+                const data = JSON.parse(require("fs").readFileSync("ocr-result.json", "utf8"));
+                if (data && typeof data === "object" && typeof data.status === "string") {
+                  process.stdout.write(data.status);
+                }
+              } catch (_) { /* best-effort; empty status means unknown */ }
+            ' 2>/dev/null || true)"
+          fi
+          printf '%s' "$ocr_status" > ocr-status.txt
           echo "$status" > ocr-exit-code.txt
           if [ "$status" -ne 0 ]; then
             if grep -Eqi "429|rate limit" ocr-stderr.log; then
@@ -979,6 +1311,22 @@ jobs:
         env:
           BASE_SHA: ${{ env.BASE_SHA }}
           HEAD_SHA: ${{ env.HEAD_SHA }}
+          API_BASE_SHA: ${{ steps.pr-context.outputs.base_sha }}
+          API_HEAD_SHA: ${{ steps.pr-context.outputs.head_sha }}
+          FROM_SHA: ${{ steps.resolve-range.outputs.FROM_SHA }}
+          RANGE_MODE: ${{ steps.resolve-range.outputs.RANGE_MODE }}
+          FALLBACK_REASON: ${{ steps.resolve-range.outputs.FALLBACK_REASON }}
+          CHECKPOINT_BEFORE: ${{ steps.read-checkpoint.outputs.CHECKPOINT_ENCODED }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_AFTER: ${{ github.event.after }}
+          OCR_VERSION: ${{ env.OCR_VERSION }}
+          OCR_MODEL: ${{ vars.OCR_LLM_MODEL }}
+          OCR_RULES_HASH: ${{ vars.OCR_RULES_HASH }}
+          OCR_POLICY_HASH: ${{ vars.OCR_POLICY_HASH }}
+          OCR_WORKFLOW_SCHEMA_HASH: ${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}
+          OCR_CONCURRENCY: ${{ env.OCR_CONCURRENCY }}
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           # Whether this run is an automatic (pull_request_target) trigger.
           # Automatic runs increment the auto-review counter; manual runs do not.
@@ -990,6 +1338,11 @@ jobs:
           # Feature 3 (issue #2670): incremental IoU overlap dedup mode.
           OCR_INCREMENTAL: ${{ vars.OCR_INCREMENTAL }}
           OCR_INCREMENTAL_OVERLAP_THRESHOLD: ${{ vars.OCR_INCREMENTAL_OVERLAP_THRESHOLD }}
+          # Issue #2672: severity-based publication routing.
+          # Shadow mode (default 'true') posts all findings inline but logs
+          # routing decisions. Set to 'false' to go live (route low-severity
+          # findings to the sticky summary).
+          OCR_ROUTING_SHADOW_MODE: ${{ vars.OCR_ROUTING_SHADOW_MODE }}
           # Fallback bot login for dedup when getAuthenticated() fails.
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
         with:
@@ -1044,6 +1397,169 @@ jobs:
               } catch (_) {
                 return fallback;
               }
+            }
+
+            function serializeCheckpoint(data) {
+              return Buffer.from(
+                JSON.stringify({ ...data, schema: 1 }),
+                'utf8',
+              ).toString('base64');
+            }
+
+            function deserializeCheckpoint(base64) {
+              const normalized = typeof base64 === 'string' ? base64.trim() : '';
+              if (!normalized || normalized.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+                return null;
+              }
+              try {
+                const decoded = Buffer.from(normalized, 'base64').toString('utf8');
+                if (Buffer.from(decoded, 'utf8').toString('base64') !== normalized) {
+                  return null;
+                }
+                const checkpoint = JSON.parse(decoded);
+                return checkpoint && typeof checkpoint === 'object' && !Array.isArray(checkpoint)
+                  ? checkpoint
+                  : null;
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function extractCheckpointFromComment(commentBody) {
+              const match = /<!--\s*ocr-checkpoint:\s*([A-Za-z0-9+/=]+)\s*-->/.exec(String(commentBody || ''));
+              return match ? deserializeCheckpoint(match[1]) : null;
+            }
+
+            function embedCheckpointInBody(body, checkpointData) {
+              const checkpointComment = `<!-- ocr-checkpoint:${serializeCheckpoint(checkpointData)} -->`;
+              const withoutCheckpoint = String(body || '')
+                .replace(/<!--\s*ocr-checkpoint:[\s\S]*?-->/g, '')
+                .trimEnd();
+              return withoutCheckpoint
+                ? `${withoutCheckpoint}\n${checkpointComment}`
+                : checkpointComment;
+            }
+
+            function isAncestralCheckpoint(checkpoint, currentHeadSha, baseSha) {
+              return Boolean(
+                checkpoint
+                  && typeof checkpoint === 'object'
+                  && checkpoint.schema === 1
+                  && checkpoint.completion_state === 'complete'
+                  && typeof checkpoint.head_sha === 'string'
+                  && checkpoint.head_sha.length > 0
+                  && typeof currentHeadSha === 'string'
+                  && currentHeadSha.length > 0
+                  && checkpoint.base_sha === baseSha,
+              );
+            }
+
+            function shouldAdvanceCheckpoint(decision) {
+              if (!decision.ran
+                || decision.exitCode !== 0
+                || decision.infrastructureFailure
+                || decision.policyFailure
+                || decision.failedFindings !== 0
+                || decision.completionState !== 'complete'
+                || decision.publicationState !== 'complete'
+                || decision.resultSource === 'synthesized') {
+                return false;
+              }
+              const selected = Number(decision.selectedFiles);
+              const completed = Number(decision.completedFiles);
+              if (!Number.isFinite(selected) || selected <= 0) {
+                return false;
+              }
+              return completed >= selected;
+            }
+
+            function completionStateForResult(status, resultSource) {
+              if (resultSource === 'synthesized') {
+                return 'partial';
+              }
+              return ['success', 'completed_with_warnings', 'skipped'].includes(status)
+                ? 'complete'
+                : 'partial';
+            }
+
+            function ocrObservabilityFromResult(result) {
+              const summary = result && typeof result.summary === 'object' && result.summary
+                ? result.summary
+                : {};
+              const cacheRead = Number(summary.cache_read_tokens || 0);
+              const cacheWrite = Number(summary.cache_write_tokens || 0);
+              const resultSource = result && typeof result === 'object'
+                ? (result.resultSource || 'parsed')
+                : 'parsed';
+              return {
+                completed_files: Number(summary.files_reviewed || 0),
+                elapsed: String(summary.elapsed || 'unknown'),
+                tokens: {
+                  input: Number(summary.input_tokens || 0),
+                  output: Number(summary.output_tokens || 0),
+                  cache_read: cacheRead,
+                  cache_write: cacheWrite,
+                  cache: cacheRead + cacheWrite,
+                  total: Number(summary.total_tokens || 0),
+                },
+                warnings: Array.isArray(result?.warnings) ? result.warnings : [],
+                completion_state: completionStateForResult(result?.status, resultSource),
+                result_source: resultSource,
+              };
+            }
+
+            function findingDistribution(findings, fieldName) {
+              const distribution = {};
+              for (const finding of findings) {
+                const rawValue = finding && typeof finding === 'object'
+                  ? finding[fieldName]
+                  : null;
+                const value = typeof rawValue === 'string' && rawValue.length > 0
+                  ? rawValue
+                  : 'unknown';
+                distribution[value] = (distribution[value] || 0) + 1;
+              }
+              return distribution;
+            }
+
+            function buildOcrMetadata(data) {
+              return {
+                schema: 1,
+                event: {
+                  name: data.eventName,
+                  action: data.eventAction,
+                  before: data.eventBefore,
+                  after: data.eventAfter,
+                },
+                api_resolved: {
+                  base_sha: data.apiBaseSha,
+                  head_sha: data.apiHeadSha,
+                },
+                checkpoint: {
+                  before: data.checkpointBefore,
+                  after: data.checkpointAfter,
+                },
+                range: {
+                  mode: data.rangeMode,
+                  fallback_reason: data.fallbackReason,
+                  cumulative: data.cumulative,
+                  selected: data.selected,
+                },
+                ocr: {
+                  version: data.ocrVersion,
+                  model: data.model,
+                  concurrency: data.concurrency,
+                  elapsed: data.elapsed,
+                  tokens: data.tokens,
+                },
+                findings: data.findings,
+                warnings: data.warnings,
+                terminal: {
+                  completeness_state: data.completenessState,
+                  publication_state: data.publicationState,
+                },
+                source_run_url: data.sourceRunUrl,
+              };
             }
 
             function escapeRegExp(value) {
@@ -1118,6 +1634,10 @@ jobs:
 
             let ran = true;
             let findings = [];
+            let parsedOcrResult = null;
+            let rawFindingCount = 0;
+            let schemaInvalidCount = 0;
+            let overflowFindingCount = 0;
             const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
             const exitCode = readExitCode('ocr-exit-code.txt');
             if (exitCode !== 0) {
@@ -1140,9 +1660,14 @@ jobs:
                 return null;
               }
               try {
-                const parsed = findingsFromParsed(JSON.parse(trimmed));
+                const result = JSON.parse(trimmed);
+                const parsed = findingsFromParsed(result);
                 if (!parsed) {
                   markInfrastructureFailure('parse', 'OCR output did not contain a supported findings array');
+                } else {
+                  parsedOcrResult = Array.isArray(result)
+                    ? { status: 'success', comments: result, warnings: [], resultSource: 'synthesized' }
+                    : { ...result, resultSource: result.resultSource || 'parsed' };
                 }
                 return parsed;
               } catch (parseErr) {
@@ -1154,9 +1679,17 @@ jobs:
                   return null;
                 }
                 try {
-                  const parsed = findingsFromParsed(JSON.parse(trimmed.slice(start, end + 1)));
+                  const result = JSON.parse(trimmed.slice(start, end + 1));
+                  const parsed = findingsFromParsed(result);
                   if (!parsed) {
                     markInfrastructureFailure('parse', 'OCR output did not contain a supported findings array');
+                  } else {
+                    parsedOcrResult = {
+                      status: 'success',
+                      comments: parsed,
+                      warnings: [],
+                      resultSource: 'synthesized',
+                    };
                   }
                   return parsed;
                 } catch (innerErr) {
@@ -1233,6 +1766,74 @@ jobs:
               }
 
               return normalized;
+            }
+
+            function effectiveCategory(finding) {
+              if (!finding || typeof finding !== 'object') return 'unknown';
+              if (typeof finding.category === 'string' && finding.category && finding.category !== 'unknown') {
+                return finding.category;
+              }
+              if (typeof finding.originalCategory === 'string' && finding.originalCategory && finding.originalCategory !== 'unknown') {
+                return finding.originalCategory;
+              }
+              return 'unknown';
+            }
+
+            function effectiveSeverity(finding) {
+              if (!finding || typeof finding !== 'object') return 'unknown';
+              if (typeof finding.severity === 'string' && finding.severity && finding.severity !== 'unknown') {
+                return finding.severity;
+              }
+              if (typeof finding.originalSeverity === 'string' && finding.originalSeverity && finding.originalSeverity !== 'unknown') {
+                return finding.originalSeverity;
+              }
+              return 'unknown';
+            }
+
+            function routeFinding(finding) {
+              if (!finding || typeof finding !== 'object' || Array.isArray(finding)) {
+                return { destination: 'inline', reason: 'non-object finding: fail-safe inline' };
+              }
+              const category = effectiveCategory(finding);
+              const severity = effectiveSeverity(finding);
+
+              // Protected categories are always inline regardless of severity.
+              if (category === 'bug' || category === 'security' || category === 'correctness') {
+                return { destination: 'inline', reason: `category '${category}': always inline` };
+              }
+
+              // High/medium severity is always inline regardless of category.
+              if (severity === 'high' || severity === 'medium') {
+                return { destination: 'inline', reason: `severity '${severity}': inline` };
+              }
+
+              // Unknown category defaults to inline (fail-safe).
+              const isKnownCategory = category === 'maintainability' || category === 'test' || category === 'style';
+              if (!isKnownCategory && category !== 'other') {
+                return { destination: 'inline', reason: `category '${category}': fail-safe inline` };
+              }
+
+              // Info severity is routed to summary.
+              if (severity === 'info') {
+                return { destination: 'summary', reason: `severity 'info': routed to summary` };
+              }
+
+              // Known or 'other' category with low severity → summary.
+              if (severity === 'low') {
+                return { destination: 'summary', reason: `category '${category}' severity 'low': routed to summary` };
+              }
+
+              // Remaining unknown severities default to inline (fail-safe).
+              return { destination: 'inline', reason: `category '${category}' severity '${severity}': fail-safe inline` };
+            }
+
+            function categorySeverityLabel(finding) {
+              if (!finding || typeof finding !== 'object') {
+                return '';
+              }
+              const category = effectiveCategory(finding);
+              const severity = effectiveSeverity(finding);
+              return `**[${category}/${severity}]** `;
             }
 
             function escapeMarkdownHtml(value) {
@@ -1381,6 +1982,245 @@ jobs:
                   body: comment.body,
                 })));
             }
+
+            // Issue #2575: reviewed-range manifest for completeness tracking.
+            // A partial OCR run must never be mistaken for complete coverage.
+
+            function resolveCompleteness(params) {
+              const skipped = params.skipped === true;
+              if (skipped) {
+                return 'skipped';
+              }
+              // C1: exitCode must be a valid non-negative integer. NaN/missing
+              // or negative values mean we cannot trust the OCR result, so
+              // treat them as failures rather than silently coercing to 0.
+              const rawExitCode = params.ocrExitCode;
+              if (!Number.isInteger(rawExitCode) || rawExitCode < 0) {
+                return 'failed';
+              }
+              if (rawExitCode !== 0) {
+                return 'failed';
+              }
+              // C1: fail-closed. Only recognized success statuses ("success"
+              // or "completed") can ever yield "complete". Every other value
+              // (including empty/null/unknown) yields "partial" because we
+              // lack positive proof of completeness.
+              const status = typeof params.ocrStatus === 'string' ? params.ocrStatus : '';
+              if (status !== 'success' && status !== 'completed') {
+                return 'partial';
+              }
+              // C3: set-based completeness. Normalize (trim), deduplicate,
+              // then verify that every selected file is covered.
+              const normalize = (arr) =>
+                Array.isArray(arr)
+                  ? [...new Set(arr.map((p) => String(p || '').trim()).filter((p) => p.length > 0))]
+                  : [];
+              const selectedSet = normalize(params.selectedFiles);
+              const completedSet = normalize(params.completedFiles);
+              const failedSet = normalize(params.failedFiles);
+              const reusedSet = normalize(params.reusedFiles);
+              // C10: a waiver only counts if it has a non-empty trimmed
+              // reason AND its path is in the failed set (C3: a waiver for
+              // a file that didn't fail is irrelevant).
+              const rawWaived = Array.isArray(params.waivedFiles) ? params.waivedFiles : [];
+              const failedLookup = new Set(failedSet);
+              const validWaiverPaths = new Set();
+              for (const entry of rawWaived) {
+                let pathStr = '';
+                let reasonStr = '';
+                if (typeof entry === 'string') {
+                  pathStr = entry.trim();
+                } else if (entry && typeof entry === 'object') {
+                  pathStr = String(entry.path || '').trim();
+                  reasonStr = String(entry.reason || '').trim();
+                } else {
+                  pathStr = String(entry || '').trim();
+                }
+                if (pathStr.length > 0 && reasonStr.length > 0 && failedLookup.has(pathStr)) {
+                  validWaiverPaths.add(pathStr);
+                }
+              }
+              const resolvedSet = new Set([
+                ...completedSet,
+                ...reusedSet,
+                ...validWaiverPaths,
+              ]);
+              // Every selected file must be resolved.
+              for (const sel of selectedSet) {
+                if (!resolvedSet.has(sel)) {
+                  return 'partial';
+                }
+              }
+              // C3: no unresolved failed files (a failed file not covered by
+              // a valid waiver). A file in both completed and failed is
+              // considered resolved (completed wins).
+              for (const failedPath of failedSet) {
+                if (!resolvedSet.has(failedPath) && !validWaiverPaths.has(failedPath)) {
+                  return 'partial';
+                }
+              }
+              // C3: no completed files outside the selected set (prevents
+              // an inflated completed set from masking a missing selected
+              // file).
+              const selectedLookup = new Set(selectedSet);
+              for (const completedPath of completedSet) {
+                if (!selectedLookup.has(completedPath)) {
+                  return 'partial';
+                }
+              }
+              return 'complete';
+            }
+
+            function computeCoverage(params) {
+              const selected = Number(params.selected) || 0;
+              const completed = Number(params.completed) || 0;
+              const ratio = selected === 0 ? 1 : completed / selected;
+              return { completed, selected, ratio: String(ratio) };
+            }
+
+            // Issue #2575: computeArtifactHashes is retained for testability
+            // and local CLI parity. The production hash computation runs in
+            // the dedicated "Compute reviewed-range manifest hashes" step
+            // (post-redaction), but this function is exercised by tests and
+            // serves as the canonical implementation.
+            function computeArtifactHashes(fileNames) {
+              const hashModule = typeof require === 'function' ? require('crypto') : crypto;
+              const fileSystem = typeof require === 'function' ? require('fs') : fs;
+              const hashes = {};
+              for (const fileName of fileNames) {
+                try {
+                  const content = fileSystem.readFileSync(fileName, 'utf8');
+                  const hash = hashModule.createHash('sha256').update(content).digest('hex');
+                  hashes[fileName] = `sha256:${hash}`;
+                } catch (_) {
+                  hashes[fileName] = null;
+                }
+              }
+              return hashes;
+            }
+
+            function buildReviewedRangeManifest(params) {
+              const selectedFiles = Array.isArray(params.selectedFiles) ? params.selectedFiles : [];
+              const rawCompletedFiles = Array.isArray(params.completedFiles) ? params.completedFiles : [];
+              const failedFiles = Array.isArray(params.failedFiles) ? params.failedFiles : [];
+              const reusedFiles = Array.isArray(params.reusedFiles) ? params.reusedFiles : [];
+              const rawWaivedFiles = Array.isArray(params.waivedFiles) ? params.waivedFiles : [];
+              const waivedFiles = rawWaivedFiles.map((entry) => {
+                if (typeof entry === 'string') {
+                  return { path: entry, reason: '' };
+                }
+                if (entry && typeof entry === 'object') {
+                  return { path: String(entry.path || ''), reason: String(entry.reason || '') };
+                }
+                return { path: String(entry), reason: '' };
+              });
+              const validWaivers = waivedFiles.filter((w) => w.path && w.reason.trim().length > 0);
+              // C2: completed_with_errors must not mark all selected files as
+              // completed. When the upstream OCR status indicates partial
+              // failure, we cannot trust that any specific file completed.
+              const ocrStatus = params.ocrStatus || '';
+              const isPartialStatus = ocrStatus === 'completed_with_errors';
+              const completedFiles = isPartialStatus ? [] : rawCompletedFiles;
+              const completeness = resolveCompleteness({
+                ocrExitCode: Number(params.ocrExitCode) || 0,
+                ocrStatus: params.ocrStatus || null,
+                selectedFiles,
+                completedFiles,
+                failedFiles,
+                reusedFiles,
+                waivedFiles,
+                skipped: params.skipped === true,
+              });
+              const coverage = computeCoverage({
+                completed: completedFiles.length,
+                selected: selectedFiles.length,
+              });
+              return {
+                schema_version: '1.0.0',
+                repository: params.repository || '',
+                pr_number: Number(params.prNumber) || 0,
+                head_sha: params.headSha || '',
+                merge_base_sha: params.mergeBaseSha || '',
+                trigger: params.trigger || '',
+                run_id: params.runId || '',
+                run_attempt: params.runAttempt || '',
+                ocr_version: params.ocrVersion || 'unknown',
+                ocr_session_id: params.ocrSessionId || '',
+                ocr_parent_session_id: params.ocrParentSessionId || '',
+                provider_model: params.providerModel || '',
+                concurrency: Number(params.concurrency) || 0,
+                rule_config_hash: params.ruleConfigHash || '',
+                selected_files: selectedFiles,
+                completed_files: completedFiles,
+                failed_files: failedFiles,
+                reused_files: reusedFiles,
+                waived_files: waivedFiles,
+                completeness,
+                coverage,
+                ocr_status: params.ocrStatus || '',
+                artifact_hashes: params.artifactHashes || {},
+              };
+            }
+
+            function serializeManifest(manifest) {
+              const json = JSON.stringify(manifest, null, 2);
+              return redactSecretDiagnostics(json);
+            }
+
+            function resultEnvelopeFromRaw(raw) {
+              try {
+                const parsed = JSON.parse(String(raw || '').trim());
+                return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                  ? parsed
+                  : null;
+              } catch (_) {
+                return null;
+              }
+            }
+
+            function failedFilesFromResult(envelope) {
+              const warnings = envelope && Array.isArray(envelope.warnings)
+                ? envelope.warnings
+                : [];
+              const failedFiles = [];
+              const seen = new Set();
+              for (const warning of warnings) {
+                if (!warning || warning.type !== 'subtask_error') {
+                  continue;
+                }
+                const filePath = typeof warning.file === 'string'
+                  ? warning.file.trim()
+                  : '';
+                if (filePath && !seen.has(filePath)) {
+                  seen.add(filePath);
+                  failedFiles.push(filePath);
+                }
+              }
+              return failedFiles;
+            }
+
+            function buildStatusLine(params) {
+              if (!params.ran) {
+                if (params.policyFailure) {
+                  return `OCR policy failure: ${params.policyFailure}`;
+                }
+                return 'OCR failed to run or parse output.';
+              }
+              if (params.completeness !== 'complete') {
+                const coverage = params.coverage || { completed: 0, selected: 0 };
+                const failedCount = Array.isArray(params.failedFiles)
+                  ? params.failedFiles.length
+                  : 0;
+                const findingNote = params.findingsCount > 0
+                  ? `; ${params.findingsCount} finding(s) (${params.postedInline} posted inline).`
+                  : '.';
+                return `Partial review: ${coverage.completed} of ${coverage.selected} files completed (${failedCount} failed)${findingNote}`;
+              }
+              if (params.findingsCount === 0) {
+                return 'No findings.';
+              }
+              return `${params.findingsCount} finding(s) (${params.postedInline} posted inline).`;
+            }
             if (policyFailure) {
               ran = false;
               core.warning('Skipping OCR output parsing because OCR policy failure was recorded.');
@@ -1406,37 +2246,100 @@ jobs:
             // schema drift on findings that share a dedup key (path/lines/body)
             // is still observed. Undocumented or missing values map to 'unknown'
             // with a stderr warning, without suppressing any finding.
+            rawFindingCount = findings.length;
+            schemaInvalidCount = findings.filter((finding) =>
+              finding && typeof finding === 'object' && !Array.isArray(finding)
+                && ((finding.category !== undefined && !KNOWN_CATEGORIES.has(finding.category))
+                  || (finding.severity !== undefined && !KNOWN_SEVERITIES.has(finding.severity)))).length;
             findings = findings.map(validateFindingMetadata);
+            const severityDistribution = findingDistribution(findings, 'severity');
+            const categoryDistribution = findingDistribution(findings, 'category');
+
+            // Issue #2672: compute routing decisions for EVERY finding before
+            // dedup so suppressed duplicates still get artifact records, and a
+            // protected finding (e.g. security/high) that shares a dedup key
+            // with a low-severity finding is still accounted for.
+            const routingShadowMode = process.env.OCR_ROUTING_SHADOW_MODE !== 'false';
+            const allRoutingDecisions = findings.map((f) => {
+              const decision = routeFinding(f);
+              const meta = (f && typeof f === 'object') ? f : {};
+              return {
+                path: typeof meta.path === 'string' ? meta.path : '',
+                start_line: Number.isInteger(meta.start_line) ? meta.start_line : null,
+                end_line: Number.isInteger(meta.end_line) ? meta.end_line : null,
+                category: effectiveCategory(meta),
+                severity: effectiveSeverity(meta),
+                destination: decision.destination,
+                reason: decision.reason,
+              };
+            });
 
             const dedupedFindings = deduplicateFindings(findings);
             let suppressedDuplicateCount = 0;
             suppressedDuplicateCount = dedupedFindings.suppressed;
             findings = dedupedFindings.deduped;
 
-            // Split findings into inline (resolvable file/line) vs. lineless.
+            // Issue #2672: routing decisions for the deduped set. Recomputed
+            // (not sliced from allRoutingDecisions) because dedup may remove
+            // findings from anywhere in the array.
+            const routingDecisions = findings.map((f, i) => {
+              const decision = routeFinding(f);
+              const meta = (f && typeof f === 'object') ? f : {};
+              const hasPosition = meta.path && Number.isInteger(meta.start_line) &&
+                Number.isInteger(meta.end_line) && meta.start_line > 0 && meta.end_line > 0;
+              return {
+                category: effectiveCategory(meta),
+                severity: effectiveSeverity(meta),
+                destination: decision.destination,
+                reason: decision.reason,
+                hasPosition,
+              };
+            });
+            // Only count findings that would actually be held back from
+            // inline posting (line-addressable). Lineless findings always
+            // go to the summary regardless of routing, so including them
+            // would inflate the shadow-mode preview count.
+            const wouldRouteToSummary = routingDecisions.filter(
+              (d) => d.hasPosition && d.destination === 'summary',
+            ).length;
+
+            // Split findings into inline (resolvable file/line), summary-routed,
+            // and lineless. In shadow mode all line-addressable findings go
+            // inline (issue #2672). In go-live mode, findings routed to
+            // 'summary' are held back from inline posting.
             const inline = [];
+            const summaryRouted = [];
             const lineless = [];
             for (const f of findings) {
+              const decision = routeFinding(f);
               if (f && f.path && Number.isInteger(f.start_line) &&
                   Number.isInteger(f.end_line) && f.start_line > 0 && f.end_line > 0) {
-                let startLine = Number(f.start_line);
-                let endLine = Number(f.end_line);
-                if (startLine > endLine) {
-                  [startLine, endLine] = [endLine, startLine];
+                if (!routingShadowMode && decision.destination === 'summary') {
+                  summaryRouted.push(f);
+                } else {
+                  let startLine = Number(f.start_line);
+                  let endLine = Number(f.end_line);
+                  if (startLine > endLine) {
+                    [startLine, endLine] = [endLine, startLine];
+                  }
+                  const rawText = f.content || f.comment || f.message || f.body;
+                  const label = categorySeverityLabel(f);
+                  const rendered = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                  // Insert the label inside the blockquote (after the first
+                  // '> ' prefix) so the first line stays '> **[cat/sev]** text'.
+                  const labeledText = label ? rendered.replace(/^> /, `> ${label}`) : rendered;
+                  const comment = {
+                    path: String(f.path),
+                    line: endLine,
+                    side: 'RIGHT',
+                    body: `${INLINE_MARKER}\n${labeledText}`,
+                  };
+                  if (startLine < endLine) {
+                    comment.start_line = startLine;
+                    comment.start_side = 'RIGHT';
+                  }
+                  inline.push(comment);
                 }
-                const rawText = f.content || f.comment || f.message || f.body;
-                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
-                const comment = {
-                  path: String(f.path),
-                  line: endLine,
-                  side: 'RIGHT',
-                  body: `${INLINE_MARKER}\n${text}`,
-                };
-                if (startLine < endLine) {
-                  comment.start_line = startLine;
-                  comment.start_side = 'RIGHT';
-                }
-                inline.push(comment);
               } else {
                 lineless.push(f && typeof f === 'object' ? f : { body: f || 'Malformed OCR finding' });
               }
@@ -1446,6 +2349,7 @@ jobs:
             let postedInline = 0;
             let failedInline = 0;
             let skippedOverlapCount = 0;
+            let batchPublicationAmbiguous = false;
             let skippedExactHistoryCount = 0;
             // Feature 3 (issue #2670): incremental IoU overlap dedup mode.
             const incrementalEnabled = process.env.OCR_INCREMENTAL === 'true';
@@ -1501,6 +2405,7 @@ jobs:
                 postedInline = inlineToPost.length;
               } catch (batchErr) {
                 core.warning(redactSecretDiagnostics(`Batch review post failed (${inlineToPost.length} comments), falling back to individual posting: ${batchErr.message || batchErr}`));
+                batchPublicationAmbiguous = true;
                 // Fallback: post each inline comment individually, with a cap to avoid secondary rate limits.
                 try {
                   existingInlineKeys = await existingInlineCommentKeys();
@@ -1514,6 +2419,7 @@ jobs:
                       ? `${c.start_line}-${c.line}`
                       : String(c.line);
                     const overflowBody = `${unrenderFindingText(c.body)} (line ${lineRange})`;
+                    overflowFindingCount += 1;
                     lineless.push({
                       path: c.path,
                       comment: overflowBody,
@@ -1556,6 +2462,11 @@ jobs:
                     });
                   }
                 }
+                // All individual fallback posts completed without errors,
+                // so the batch failure was fully recovered.
+                if (failedInline === 0) {
+                  batchPublicationAmbiguous = false;
+                }
               }
               }
             }
@@ -1563,23 +2474,80 @@ jobs:
             // Build the sticky summary, including lineless findings.
             const artifactLine =
               'Artifacts: `ocr-review-output` contains raw JSON, stdout, stderr, preview, phase, and exit-code diagnostics.';
-            let statusLine;
-            if (!ran) {
-              statusLine = policyFailure
-                ? `OCR policy failure: ${policyFailure}`
-                : 'OCR failed to run or parse output.';
-            } else if (findings.length === 0) {
-              statusLine = 'No findings.';
-            } else {
-              statusLine = `${findings.length} finding(s) (${postedInline} posted inline).`;
-            }
+            // Issue #2575: build the reviewed-range manifest for completeness
+            // tracking. The manifest records selected/completed/failed/waived
+            // file sets and a terminal completeness state.
+            const ocrStatusValue = readTrimmed('ocr-status.txt', '') || '';
+            const selectedFilesContent = readTrimmed('ocr-selected-files.txt', '');
+            const selectedFilesList = selectedFilesContent
+              ? selectedFilesContent.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0)
+              : [];
+            // C2: completedFiles must only be set to all selected files when
+            // the OCR status is a recognized success AND exit code is 0.
+            // For completed_with_errors we do not know which files actually
+            // completed, so leave completedFiles empty (conservative).
+            const manifestCompletedFiles =
+              ran && (ocrStatusValue === 'success' || ocrStatusValue === 'completed') && exitCode === 0
+                ? selectedFilesList
+                : [];
+            const manifestFailedFiles = failedFilesFromResult(parsedOcrResult);
+            // C7: isSkipped heuristic removed. When the post step runs, the
+            // review was NOT skipped (the gate let it through). Missing
+            // evidence is "failed"/"partial", never inferred as "skipped".
+            const manifestCompleteness = resolveCompleteness({
+              ocrExitCode: exitCode,
+              ocrStatus: ocrStatusValue || null,
+              selectedFiles: selectedFilesList,
+              completedFiles: manifestCompletedFiles,
+              failedFiles: manifestFailedFiles,
+              reusedFiles: [],
+              waivedFiles: [],
+              skipped: false,
+            });
+            const manifestCoverage = computeCoverage({
+              completed: manifestCompletedFiles.length,
+              selected: selectedFilesList.length,
+            });
+            const statusLine = process.env.RANGE_MODE === 'noop'
+              ? 'Same head; no new changes to review.'
+              : buildStatusLine({
+                  ran,
+                  findingsCount: findings.length,
+                  postedInline,
+                  completeness: manifestCompleteness,
+                  coverage: manifestCoverage,
+                  failedFiles: manifestFailedFiles,
+                  policyFailure,
+                });
             const infrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
+            const rangeMetadataRaw = readTrimmed('ocr-range-metadata.json', '');
+            const rangeMetadata = rangeMetadataRaw
+              ? JSON.parse(rangeMetadataRaw)
+              : {
+                  cumulative: {
+                    base_sha: process.env.BASE_SHA || '',
+                    head_sha: headSha,
+                    files: 0,
+                    lines: { additions: 0, deletions: 0, total: 0 },
+                  },
+                  selected: {
+                    base_sha: process.env.FROM_SHA || '',
+                    head_sha: headSha,
+                    files: 0,
+                    lines: { additions: 0, deletions: 0, total: 0 },
+                  },
+                };
+            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
             let body = [
               MARKER,
               `## OpenCodeReview — PR #${number}`,
               '',
               `- Reviewed head SHA: \`${headSha}\``,
               `- Merge base: \`${process.env.BASE_SHA}\``,
+              `- Range: \`${process.env.RANGE_MODE || 'full'}\` from \`${process.env.FROM_SHA || process.env.BASE_SHA}\``,
+              `- Range fallback: \`${process.env.FALLBACK_REASON || 'none'}\``,
+              `- Scope: selected ${rangeMetadata.selected.files} file(s), +${rangeMetadata.selected.lines.additions}/-${rangeMetadata.selected.lines.deletions}; cumulative ${rangeMetadata.cumulative.files} file(s), +${rangeMetadata.cumulative.lines.additions}/-${rangeMetadata.cumulative.lines.deletions}`,
+              `- Tokens: ${ocrObservation.tokens.total} total (${ocrObservation.tokens.input} input, ${ocrObservation.tokens.output} output, ${ocrObservation.tokens.cache} cache)`,
               `- OCR version: \`${ocrVersion}\``,
               `- Phase: \`${diagnosticPhase}\``,
               `- Exit code: \`${exitCode}\``,
@@ -1615,10 +2583,45 @@ jobs:
               for (const f of lineless) {
                 const item = f && typeof f === 'object' ? f : {};
                 const where = item.path ? `\`${item.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
                 const rawText = item.content || item.comment || item.message || item.body;
                 const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
-                body.push(`- ${where}${text}`);
+                body.push(`- ${where}${label}${text}`);
               }
+            }
+            if (summaryRouted.length > 0) {
+              body.push('', '### Findings routed to summary', '');
+              for (const f of summaryRouted) {
+                const where = f.path ? `\`${f.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
+                const rawText = f.content || f.comment || f.message || f.body;
+                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                body.push(`- ${where}${label}${text}`);
+              }
+            }
+            if (routingShadowMode && wouldRouteToSummary > 0) {
+              body.push('', '### Shadow-mode routing preview (issue #2672)', '');
+              body.push(`- ${wouldRouteToSummary} finding(s) would be routed to this summary instead of inline comments.`);
+              const summaryByCategory = {};
+              for (const d of routingDecisions) {
+                if (d.destination === 'summary') {
+                  const key = `${d.category}/${d.severity}`;
+                  summaryByCategory[key] = (summaryByCategory[key] || 0) + 1;
+                }
+              }
+              for (const [key, count] of Object.entries(summaryByCategory)) {
+                body.push(`  - \`${key}\`: ${count}`);
+              }
+              body.push('- Set repository variable `OCR_ROUTING_SHADOW_MODE=false` to enable live routing.');
+            }
+            // Issue #2672: persist ALL routing decisions (pre-dedup) so every
+            // finding gets an artifact record with its routing reason, even
+            // duplicates that dedup later suppresses.
+            try {
+              const routingJson = JSON.stringify(allRoutingDecisions, null, 2);
+              fs.writeFileSync('ocr-routing-decisions.json', routingJson);
+            } catch (routingWriteErr) {
+              core.warning(`Failed to write ocr-routing-decisions.json: ${routingWriteErr.message || routingWriteErr}`);
             }
             const isAutomatic = process.env.IS_AUTOMATIC === 'true';
 
@@ -1632,7 +2635,9 @@ jobs:
                 owner, repo, issue_number: number, per_page: 100,
               });
               markerComments = allComments.filter((c) =>
-                typeof c.body === 'string' && c.body.includes(MARKER));
+                c.user && c.user.type === 'Bot'
+                  && botLogin !== '' && c.user.login === botLogin
+                  && typeof c.body === 'string' && c.body.includes(MARKER));
             } catch (preFetchErr) {
               core.warning(redactSecretDiagnostics(`Could not list OCR comments for auto-review count: ${preFetchErr.message || preFetchErr}`));
             }
@@ -1655,7 +2660,9 @@ jobs:
                 owner, repo, issue_number: number, per_page: 100,
               });
               return allComments.filter((c) =>
-                typeof c.body === 'string' && c.body.includes(MARKER));
+                c.user && c.user.type === 'Bot'
+                  && botLogin !== '' && c.user.login === botLogin
+                  && typeof c.body === 'string' && c.body.includes(MARKER));
             }
 
             async function reconcileMarkerComment(existingComments) {
@@ -1726,13 +2733,80 @@ jobs:
               }
             }
 
+            const checkpointBefore = deserializeCheckpoint(process.env.CHECKPOINT_BEFORE || '');
+            const summaryWithExistingCheckpoint = process.env.CHECKPOINT_BEFORE
+              ? `${summary}\n<!-- ocr-checkpoint:${process.env.CHECKPOINT_BEFORE} -->`
+              : summary;
+            let checkpointAfter = checkpointBefore;
+            let publicationState = 'ambiguous';
+            let summaryComment = null;
             let summaryCommentUrl = '';
             try {
-              const summaryComment = await createOrUpdateMarkerComment(summary);
+              summaryComment = await createOrUpdateMarkerComment(summaryWithExistingCheckpoint);
               summaryCommentUrl = (summaryComment && summaryComment.html_url) || '';
+              if (batchPublicationAmbiguous) {
+                publicationState = 'ambiguous';
+              } else {
+                publicationState = failedInline === 0 ? 'complete' : 'partial';
+              }
             } catch (summaryError) {
               core.warning(redactSecretDiagnostics(`Failed to post OCR sticky summary; continuing without failing the workflow: ${summaryError.message || summaryError}`));
             }
+
+            // Issue #2575: persist the reviewed-range manifest.
+            // Artifact hashes are computed AFTER redaction in the dedicated
+            // "Compute reviewed-range manifest hashes" step; here we just
+            // write the manifest with placeholder empty hashes.
+            const manifest = buildReviewedRangeManifest({
+              repository: `${owner}/${repo}`,
+              prNumber: number,
+              headSha,
+              mergeBaseSha: process.env.BASE_SHA || '',
+              trigger: process.env.GITHUB_EVENT_NAME || '',
+              runId: String(context.runId || ''),
+              runAttempt: String(process.env.GITHUB_RUN_ATTEMPT || '1'),
+              ocrVersion,
+              ocrSessionId: process.env.OCR_SESSION_ID || '',
+              ocrParentSessionId: process.env.OCR_PARENT_SESSION_ID || '',
+              providerModel: readTrimmed('ocr-preflight.txt', '').split(String.fromCharCode(10))[0] || '',
+              concurrency: Number(process.env.OCR_CONCURRENCY) || 0,
+              ruleConfigHash: process.env.OCR_RULE_CONFIG_HASH || '',
+              selectedFiles: selectedFilesList,
+              completedFiles: manifestCompletedFiles,
+              failedFiles: manifestFailedFiles,
+              reusedFiles: [],
+              waivedFiles: [],
+              ocrExitCode: exitCode,
+              ocrStatus: ocrStatusValue,
+              skipped: false,
+              artifactHashes: {},
+            });
+            try {
+              const serialized = serializeManifest(manifest);
+              fs.writeFileSync('ocr-reviewed-range-manifest.json', serialized);
+            } catch (manifestErr) {
+              // C9: a manifest persistence failure must not be silently
+              // swallowed. Record it as an infrastructure failure so the
+              // downstream classification and notifier pick it up.
+              core.warning(redactSecretDiagnostics(`Failed to write reviewed-range manifest: ${manifestErr.message || manifestErr}`));
+              const infraMessage = 'phase=manifest; reason=reviewed-range manifest persistence failed: '
+                + redactSecretDiagnostics(String(manifestErr.message || manifestErr))
+                + String.fromCharCode(10);
+              fs.writeFileSync(INFRA_FAILURE_FILE, infraMessage);
+              fs.writeFileSync('ocr-phase.txt', 'manifest\n');
+            }
+            const checkpointDecision = {
+              ran,
+              exitCode,
+              infrastructureFailure,
+              policyFailure,
+              failedFindings: failedInline,
+              completionState: ocrObservation.completion_state,
+              publicationState,
+              selectedFiles: rangeMetadata.selected.files,
+              completedFiles: ocrObservation.completed_files,
+              resultSource: ocrObservation.result_source,
+            };
 
             // Feature 5 (issue #2670): structured step outputs.
             const commentsTotal = findings.length + suppressedDuplicateCount;
@@ -1746,6 +2820,7 @@ jobs:
             core.setOutput('comments_inline', String(postedInline));
             core.setOutput('comments_skipped', String(commentsSkipped));
             core.setOutput('comments_failed', String(failedInline));
+            core.setOutput('comments_routed_summary', String(routingShadowMode ? wouldRouteToSummary : summaryRouted.length));
             core.setOutput('summary_comment_url', summaryCommentUrl);
 
             if (!ran) {
@@ -1755,6 +2830,96 @@ jobs:
                 core.warning(`OpenCodeReview failed or produced unparsable output (exit code ${exitCode}).`);
               }
             }
+            // Checkpoint advancement is intentionally the LAST state-changing
+            // operation in the posting step. Metadata write, artifact upload,
+            // and summary posting all happen before the checkpoint is advanced.
+            // If any of those fail, checkpointAfter remains checkpointBefore
+            // and the durable checkpoint is not corrupted.
+            if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id) {
+              checkpointAfter = {
+                schema: 1,
+                pr_number: number,
+                head_sha: headSha,
+                base_sha: process.env.API_BASE_SHA,
+                merge_base: process.env.BASE_SHA,
+                reviewed_at: new Date().toISOString(),
+                run_url: runUrl,
+                ocr_version: process.env.OCR_VERSION,
+                ocr_model: process.env.OCR_MODEL || 'unknown',
+                rules_hash: process.env.OCR_RULES_HASH || '',
+                policy_hash: process.env.OCR_POLICY_HASH || '',
+                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+                completion_state: 'complete',
+                range_mode: process.env.RANGE_MODE,
+                selected_files: rangeMetadata.selected.files,
+                completed_files: ocrObservation.completed_files,
+                publication_state: publicationState,
+              };
+              const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
+              try {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: summaryComment.id,
+                  body: checkpointSummary,
+                });
+              } catch (checkpointError) {
+                checkpointAfter = checkpointBefore;
+                publicationState = 'ambiguous';
+                core.warning(redactSecretDiagnostics(`Failed to advance OCR checkpoint: ${checkpointError.message || checkpointError}`));
+              }
+            }
+
+            // Metadata is serialized AFTER checkpoint advancement so the
+            // artifact reflects the final checkpointAfter and publicationState
+            // values, not a stale pre-advancement snapshot.
+            const metadata = buildOcrMetadata({
+              eventName: process.env.EVENT_NAME,
+              eventAction: process.env.EVENT_ACTION,
+              eventBefore: process.env.EVENT_BEFORE || '',
+              eventAfter: process.env.EVENT_AFTER || '',
+              apiBaseSha: process.env.API_BASE_SHA,
+              apiHeadSha: process.env.API_HEAD_SHA,
+              checkpointBefore,
+              checkpointAfter,
+              rangeMode: process.env.RANGE_MODE,
+              fallbackReason: process.env.FALLBACK_REASON || '',
+              cumulative: rangeMetadata.cumulative,
+              selected: rangeMetadata.selected,
+              ocrVersion: process.env.OCR_VERSION,
+              model: process.env.OCR_MODEL || 'unknown',
+              concurrency: Number(process.env.OCR_CONCURRENCY || 0),
+              elapsed: ocrObservation.elapsed,
+              tokens: ocrObservation.tokens,
+              findings: {
+                raw: rawFindingCount,
+                duplicate: suppressedDuplicateCount,
+                schema_invalid: schemaInvalidCount,
+                policy_tiered: 0,
+                inline: postedInline,
+                summary: lineless.length,
+                overflow: overflowFindingCount,
+                failed: failedInline,
+                severity_distribution: severityDistribution,
+                category_distribution: categoryDistribution,
+              },
+              warnings: ocrObservation.warnings,
+              completenessState: ocrObservation.completion_state,
+              publicationState,
+              sourceRunUrl: runUrl,
+            });
+            fs.writeFileSync('ocr-metadata.json', `${JSON.stringify(metadata, null, 2)}\n`);
+            await core.summary
+              .addHeading('OpenCodeReview observability')
+              .addTable([
+                [{ data: 'Metric', header: true }, { data: 'Value', header: true }],
+                ['Range', `${metadata.range.mode}: ${metadata.range.selected.base_sha}..${metadata.range.selected.head_sha}`],
+                ['Selected scope', `${metadata.range.selected.files} files / ${metadata.range.selected.lines.total} changed lines`],
+                ['Cumulative scope', `${metadata.range.cumulative.files} files / ${metadata.range.cumulative.lines.total} changed lines`],
+                ['Tokens', String(metadata.ocr.tokens.total)],
+                ['Terminal state', `${metadata.terminal.completeness_state} / ${metadata.terminal.publication_state}`],
+              ])
+              .write();
 
       - name: Resolve OCR failure classification
         shell: bash
@@ -1772,6 +2937,21 @@ jobs:
           else
             echo "infrastructure_failure=false" >> "$GITHUB_OUTPUT"
           fi
+          # C8: extract completeness from the reviewed-range manifest so the
+          # record-ocr-outcome job can distinguish partial/failed reviews
+          # from complete successes.
+          completeness="unknown"
+          if [ -s ocr-reviewed-range-manifest.json ]; then
+            completeness="$(node -e '
+              try {
+                const data = JSON.parse(require("fs").readFileSync("ocr-reviewed-range-manifest.json", "utf8"));
+                if (data && typeof data === "object" && typeof data.completeness === "string") {
+                  process.stdout.write(data.completeness);
+                }
+              } catch (_) { /* best-effort */ }
+            ' 2>/dev/null || true)"
+          fi
+          echo "completeness=${completeness}" >> "$GITHUB_OUTPUT"
 
       - name: Redact OCR diagnostic artifacts
         shell: bash
@@ -1804,6 +2984,7 @@ jobs:
           };
           const diagnosticArtifacts = [
             'ocr-result.json',
+            'ocr-metadata.json',
             'ocr-stdout.raw',
             'ocr-stderr.log',
             'ocr-preflight.txt',
@@ -1814,6 +2995,12 @@ jobs:
             'ocr-phase.txt',
             'ocr-infrastructure-failure.txt',
             'ocr-policy-failure.txt',
+            'ocr-selected-files.txt',
+            'ocr-status.txt',
+            'ocr-reviewed-range-manifest.json',
+            'ocr-manifest-hashes.json',
+            'ocr-manifest-sha256.txt',
+            'ocr-routing-decisions.json',
           ];
           const replaceWithRedactionFailure = (fileName, error) => {
             const code = error && error.code ? error.code : 'unknown';
@@ -1844,6 +3031,67 @@ jobs:
             }
           }
           NODE
+      - name: Compute reviewed-range manifest hashes
+        # C4/C5/C6: compute SHA-256 hashes of post-redaction artifacts.
+        # This runs AFTER "Redact OCR diagnostic artifacts" so the hashes
+        # describe the actual (redacted) bytes that are uploaded. The
+        # manifest itself is hashed last (after its artifact_hashes field
+        # is filled) and written to a detached ocr-manifest-sha256.txt.
+        shell: bash
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          // C5/C6: all diagnostic artifacts are hashed, including status
+          // and failure markers.
+          const hashableArtifacts = [
+            'ocr-result.json',
+            'ocr-stdout.raw',
+            'ocr-stderr.log',
+            'ocr-preflight.txt',
+            'ocr-version.txt',
+            'ocr-preview.txt',
+            'ocr-preview-stderr.log',
+            'ocr-exit-code.txt',
+            'ocr-phase.txt',
+            'ocr-selected-files.txt',
+            'ocr-status.txt',
+            'ocr-infrastructure-failure.txt',
+            'ocr-policy-failure.txt',
+          ];
+          const hashes = {};
+          for (const name of hashableArtifacts) {
+            try {
+              const content = fs.readFileSync(name, 'utf8');
+              const hash = crypto.createHash('sha256').update(content).digest('hex');
+              hashes[name] = `sha256:${hash}`;
+            } catch (_) {
+              hashes[name] = null;
+            }
+          }
+          // Write the per-artifact hashes.
+          fs.writeFileSync('ocr-manifest-hashes.json', JSON.stringify(hashes, null, 2));
+          // Re-read the manifest, inject the post-redaction hashes, and
+          // re-serialize so the manifest itself carries verified hashes.
+          try {
+            const manifestRaw = fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8');
+            const manifest = JSON.parse(manifestRaw);
+            manifest.artifact_hashes = hashes;
+            fs.writeFileSync('ocr-reviewed-range-manifest.json', JSON.stringify(manifest, null, 2));
+          } catch (manifestErr) {
+            process.stderr.write('Could not update manifest artifact_hashes: ' + (manifestErr.message || manifestErr) + String.fromCharCode(10));
+          }
+          // Hash the manifest LAST (after its own hashes are filled in) and
+          // write the detached manifest hash.
+          try {
+            const manifestContent = fs.readFileSync('ocr-reviewed-range-manifest.json', 'utf8');
+            const manifestHash = crypto.createHash('sha256').update(manifestContent).digest('hex');
+            fs.writeFileSync('ocr-manifest-sha256.txt', 'sha256:' + manifestHash + String.fromCharCode(10));
+          } catch (manifestErr) {
+            process.stderr.write('Could not compute manifest hash: ' + (manifestErr.message || manifestErr) + String.fromCharCode(10));
+          }
+          NODE
       - name: Ensure OCR artifact placeholders exist
         shell: bash
         if: always()
@@ -1852,6 +3100,7 @@ jobs:
           missing=""
           for file_name in \
             ocr-result.json \
+            ocr-metadata.json \
             ocr-stdout.raw \
             ocr-stderr.log \
             ocr-preflight.txt \
@@ -1861,7 +3110,13 @@ jobs:
             ocr-exit-code.txt \
             ocr-phase.txt \
             ocr-infrastructure-failure.txt \
-            ocr-policy-failure.txt; do
+            ocr-policy-failure.txt \
+            ocr-selected-files.txt \
+            ocr-status.txt \
+            ocr-reviewed-range-manifest.json \
+            ocr-manifest-hashes.json \
+            ocr-manifest-sha256.txt \
+            ocr-routing-decisions.json; do
             if [ ! -e "$file_name" ]; then
               : > "$file_name"
               missing="${missing}${file_name}"$'\n'
@@ -1893,6 +3148,7 @@ jobs:
           name: ocr-review-output
           path: |
             ocr-result.json
+            ocr-metadata.json
             ocr-stdout.raw
             ocr-stderr.log
             ocr-preflight.txt
@@ -1903,6 +3159,12 @@ jobs:
             ocr-phase.txt
             ocr-infrastructure-failure.txt
             ocr-policy-failure.txt
+            ocr-selected-files.txt
+            ocr-status.txt
+            ocr-reviewed-range-manifest.json
+            ocr-manifest-hashes.json
+            ocr-manifest-sha256.txt
+            ocr-routing-decisions.json
           if-no-files-found: warn
 
       - name: Clean up scoped safe.directory
@@ -1940,11 +3202,23 @@ jobs:
         shell: bash
         run: echo 'Non-blocking OCR infrastructure failure recorded.'
 
+      - name: 'Record OCR outcome: partial'
+        if: >-
+          ${{ needs.code-review.result == 'success' &&
+              needs.code-review.outputs.policy_failure != 'true' &&
+              needs.code-review.outputs.infrastructure_failure != 'true' &&
+              (needs.code-review.outputs.completeness == 'partial' ||
+               needs.code-review.outputs.completeness == 'failed') }}
+        shell: bash
+        run: echo 'Partial/incomplete OCR review recorded — not all selected files completed.'
+
       - name: 'Record OCR outcome: success'
         if: >-
           ${{ needs.code-review.result == 'success' &&
               needs.code-review.outputs.policy_failure != 'true' &&
-              needs.code-review.outputs.infrastructure_failure != 'true' }}
+              needs.code-review.outputs.infrastructure_failure != 'true' &&
+              needs.code-review.outputs.completeness != 'partial' &&
+              needs.code-review.outputs.completeness != 'failed' }}
         shell: bash
         run: echo 'Successful OCR review recorded.'
 

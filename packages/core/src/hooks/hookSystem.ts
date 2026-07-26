@@ -53,6 +53,14 @@ export class HookSystem {
   private readonly runner: HookRunner;
   private readonly aggregator: HookAggregator;
   private eventHandler: HookEventHandler | null = null;
+  private initializationPromise: Promise<void> | undefined;
+  private initializationGeneration = 0;
+  private readonly initializationSignals = new Map<
+    number,
+    AbortSignal | undefined
+  >();
+  private lifecycleGeneration = 0;
+  private readonly disposalController = new AbortController();
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -97,22 +105,65 @@ export class HookSystem {
    * @requirement:HOOK-003 - Calls HookRegistry.initialize() to load hooks from config
    * @requirement:HOOK-008 - Called by trigger functions on first event fire
    */
-  async initialize(): Promise<void> {
+  initialize(signal?: AbortSignal): Promise<void> {
+    if (this.lifecycleGeneration > 0) {
+      return Promise.reject(new Error('HookSystem has been disposed.'));
+    }
+    if (signal?.aborted === true) {
+      return Promise.reject(signal.reason);
+    }
+    const generation = ++this.initializationGeneration;
+    this.initializationSignals.set(generation, signal);
+    if (this.initializationPromise !== undefined) {
+      return this.initializationPromise;
+    }
+    const initialization = this.runInitializationGenerations().finally(() => {
+      if (this.initializationPromise === initialization) {
+        this.initializationPromise = undefined;
+      }
+    });
+    this.initializationPromise = initialization;
+    return initialization;
+  }
+
+  private async runInitializationGenerations(): Promise<void> {
+    let completedGeneration = 0;
+    while (completedGeneration < this.initializationGeneration) {
+      const generation = this.initializationGeneration;
+      const requestedSignal = this.initializationSignals.get(generation);
+      const signal = requestedSignal
+        ? AbortSignal.any([requestedSignal, this.disposalController.signal])
+        : this.disposalController.signal;
+      try {
+        await this.initializeGeneration(signal);
+        completedGeneration = generation;
+      } finally {
+        this.deleteInitializationSignalsThrough(generation);
+      }
+    }
+  }
+
+  private deleteInitializationSignalsThrough(generation: number): void {
+    for (const queuedGeneration of this.initializationSignals.keys()) {
+      if (queuedGeneration <= generation) {
+        this.initializationSignals.delete(queuedGeneration);
+      }
+    }
+  }
+
+  private async initializeGeneration(signal?: AbortSignal): Promise<void> {
+    const lifecycleGeneration = this.lifecycleGeneration;
+    if (lifecycleGeneration > 0) {
+      throw new Error('HookSystem has been disposed.');
+    }
+    signal?.throwIfAborted();
     debugLogger.debug('Initializing HookSystem');
-
-    // Dispose old event handler to prevent MessageBus subscription leaks.
-    // LLxprt enhancement: Upstream Gemini doesn't need this because their
-    // HookEventHandler doesn't subscribe to MessageBus. LLxprt added MessageBus
-    // integration in PLAN-20250218-HOOKSYSTEM.P03 (DELTA-HEVT-001).
-    // Without disposal, each re-init creates a new subscription without
-    // unsubscribing the old one, causing memory leaks.
-    this.dispose();
-
-    // Initialize the registry (loads hooks from config)
-    await this.registry.initialize();
-
-    // Create the event handler now that registry is ready,
-    // forwarding injected dependencies per DELTA-HSYS-001
+    this.disposeEventHandler();
+    await this.registry.initialize(signal);
+    if (lifecycleGeneration !== this.lifecycleGeneration) {
+      throw new Error('HookSystem has been disposed.');
+    }
+    signal?.throwIfAborted();
     this.eventHandler = new HookEventHandler(
       this.config,
       this.registry,
@@ -387,6 +438,15 @@ export class HookSystem {
    * @requirement DELTA-HEVT-004
    */
   dispose(): void {
+    this.lifecycleGeneration++;
+    this.initializationGeneration++;
+    this.disposalController.abort(new Error('HookSystem has been disposed.'));
+    this.initializationSignals.clear();
+    this.disposeEventHandler();
+  }
+
+  private disposeEventHandler(): void {
     this.eventHandler?.dispose();
+    this.eventHandler = null;
   }
 }

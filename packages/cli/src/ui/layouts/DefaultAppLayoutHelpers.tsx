@@ -5,22 +5,25 @@
  */
 
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box } from 'ink';
 import type {
   MessageBus,
   IdeContext,
   ThoughtSummary,
+  ApprovalMode,
 } from '@vybestack/llxprt-code-core';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import { StreamingState } from '../types.js';
+import type {
+  StreamingState,
+  HistoryItem,
+  ConsoleMessageItem,
+} from '../types.js';
 import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
-import type { HistoryItem, ConsoleMessageItem } from '../types.js';
+import type { QueuedSubmission } from '../hooks/agentStream/types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
 import type { UIState } from '../contexts/UIStateContext.js';
 import type { UIActions } from '../contexts/UIActionsContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { Colors } from '../colors.js';
 import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { themeManager } from '../themes/theme-manager.js';
 import type { SlashCommand } from '../commands/types.js';
@@ -30,15 +33,11 @@ import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
 import { Notifications } from '../components/Notifications.js';
 import { TodoPanel } from '../components/TodoPanel.js';
+import { QueuedMessagesPanel } from '../components/QueuedMessagesPanel.js';
 import { Footer } from '../components/Footer.js';
 import { DialogManager } from '../components/DialogManager.js';
 import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
-import { Composer } from '../components/Composer.js';
-import { LoadingIndicator } from '../components/LoadingIndicator.js';
-import { AutoAcceptIndicator } from '../components/AutoAcceptIndicator.js';
-import { ShellModeIndicator } from '../components/ShellModeIndicator.js';
-import { ContextSummaryDisplay } from '../components/ContextSummaryDisplay.js';
-import { DetailedMessagesDisplay } from '../components/DetailedMessagesDisplay.js';
+import { InlineContent } from './InlineContent.js';
 
 export type { ScrollableMainContentItem } from './scrollableMainContent.js';
 export {
@@ -52,7 +51,6 @@ export function hasActiveDialog(uiState: UIState): boolean {
   const dialogFlags = [
     uiState.showWorkspaceMigrationDialog,
     uiState.shouldShowIdePrompt,
-    uiState.showIdeRestartPrompt,
     uiState.isFolderTrustDialogOpen,
     uiState.isWelcomeDialogOpen,
     uiState.isPermissionsDialogOpen,
@@ -516,6 +514,8 @@ export interface MainControlsProps {
   history: HistoryItem[];
   inputWidth: number;
   isTodoPanelCollapsed: boolean;
+  isQueuedMessagesPanelCollapsed: boolean;
+  queuedSubmissions: readonly QueuedSubmission[];
   showTodoPanelSetting: boolean;
   dialogsVisible: boolean;
   hideContextSummary: boolean;
@@ -574,6 +574,11 @@ export function MainControls(props: MainControlsProps) {
         showTodoPanelSetting={props.showTodoPanelSetting}
         inputWidth={props.inputWidth}
         isTodoPanelCollapsed={props.isTodoPanelCollapsed}
+      />
+      <QueuedMessagesPanelSection
+        inputWidth={props.inputWidth}
+        isQueuedMessagesPanelCollapsed={props.isQueuedMessagesPanelCollapsed}
+        queuedSubmissions={props.queuedSubmissions}
       />
       <BucketAuthSection dialogsVisible={dialogsVisible} />
       {dialogsVisible ? (
@@ -634,6 +639,27 @@ function TodoPanelSection({
   return <TodoPanel width={inputWidth} collapsed={isTodoPanelCollapsed} />;
 }
 
+function QueuedMessagesPanelSection({
+  inputWidth,
+  isQueuedMessagesPanelCollapsed,
+  queuedSubmissions,
+}: {
+  inputWidth: number;
+  isQueuedMessagesPanelCollapsed: boolean;
+  queuedSubmissions: readonly QueuedSubmission[];
+}) {
+  if (queuedSubmissions.length === 0) {
+    return null;
+  }
+  return (
+    <QueuedMessagesPanel
+      width={inputWidth}
+      collapsed={isQueuedMessagesPanelCollapsed}
+      messages={queuedSubmissions}
+    />
+  );
+}
+
 function BucketAuthSection({ dialogsVisible }: { dialogsVisible: boolean }) {
   return (
     <BucketAuthConfirmation
@@ -641,157 +667,6 @@ function BucketAuthSection({ dialogsVisible }: { dialogsVisible: boolean }) {
         (getCliRuntimeContext() as { messageBus?: MessageBus }).messageBus
       }
       isFocused={!dialogsVisible}
-    />
-  );
-}
-
-export interface InlineContentProps {
-  streamingState: StreamingState;
-  disableLoadingPhrases: boolean;
-  thought: ThoughtSummary | null;
-  currentLoadingPhrase: string | undefined;
-  elapsedTime: number;
-  hideContextSummary: boolean;
-  isNarrow: boolean;
-  ctrlCPressedOnce: boolean;
-  ctrlDPressedOnce: boolean;
-  showEscapePrompt: boolean;
-  ideContextState: IdeContext | undefined;
-  llxprtMdFileCount: number;
-  coreMemoryFileCount: number;
-  contextFileNames: string[];
-  config: SlashCommandRuntime;
-  showToolDescriptions: boolean;
-  showAutoAcceptIndicator: ApprovalMode;
-  shellModeActive: boolean;
-  showErrorDetails: boolean;
-  consoleMessages: ConsoleMessageItem[];
-  constrainHeight: boolean;
-  debugConsoleMaxHeight: number;
-  inputWidth: number;
-  isInputActive: boolean;
-  settings: LoadedSettings;
-  onSuggestionsVisibilityChange: (visible: boolean) => void;
-}
-
-export function InlineContent(props: InlineContentProps) {
-  return (
-    <>
-      <LoadingIndicator
-        thought={
-          props.streamingState === StreamingState.WaitingForConfirmation ||
-          props.disableLoadingPhrases
-            ? undefined
-            : props.thought
-        }
-        currentLoadingPhrase={
-          props.disableLoadingPhrases ? undefined : props.currentLoadingPhrase
-        }
-        elapsedTime={props.elapsedTime}
-      />
-      <StatusBar {...props} />
-      <ErrorConsoleSection {...props} />
-      <ComposerSection {...props} />
-    </>
-  );
-}
-
-function StatusBar(props: InlineContentProps) {
-  return (
-    <Box
-      marginTop={1}
-      display="flex"
-      justifyContent={props.hideContextSummary ? 'flex-start' : 'space-between'}
-      width="100%"
-    >
-      <StatusBarLeft {...props} />
-      <StatusBarRight {...props} />
-    </Box>
-  );
-}
-
-function StatusBarLeftPrompt(props: InlineContentProps) {
-  const transientPrompt = [
-    { active: props.ctrlCPressedOnce, text: 'Press Ctrl+C again to exit.' },
-    { active: props.ctrlDPressedOnce, text: 'Press Ctrl+D again to exit.' },
-  ].find((entry) => entry.active);
-  if (transientPrompt) {
-    return <Text color={Colors.AccentYellow}>{transientPrompt.text}</Text>;
-  }
-  if (props.showEscapePrompt) {
-    return <Text color={Colors.Gray}>Press Esc again to clear.</Text>;
-  }
-  if (!props.hideContextSummary) {
-    return (
-      <ContextSummaryDisplay
-        ideContext={props.ideContextState}
-        llxprtMdFileCount={props.llxprtMdFileCount}
-        coreMemoryFileCount={props.coreMemoryFileCount}
-        contextFileNames={props.contextFileNames}
-        mcpServers={props.config.getMcpServers()}
-        blockedMcpServers={props.config.getBlockedMcpServers()}
-        showToolDescriptions={props.showToolDescriptions}
-      />
-    );
-  }
-  return null;
-}
-
-function StatusBarLeft(props: InlineContentProps) {
-  return (
-    <Box>
-      {process.env.GEMINI_SYSTEM_MD && (
-        <Text color={Colors.AccentRed}>|&#x2310;&#x25A0;_&#x25A0;| </Text>
-      )}
-      <StatusBarLeftPrompt {...props} />
-    </Box>
-  );
-}
-
-function StatusBarRight(props: InlineContentProps) {
-  return (
-    <Box
-      paddingTop={props.isNarrow ? 1 : 0}
-      marginLeft={props.hideContextSummary ? 1 : 2}
-    >
-      {props.showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
-        !props.shellModeActive && (
-          <AutoAcceptIndicator approvalMode={props.showAutoAcceptIndicator} />
-        )}
-      {props.shellModeActive && <ShellModeIndicator />}
-    </Box>
-  );
-}
-
-function ErrorConsoleSection(props: InlineContentProps) {
-  if (!props.showErrorDetails) {
-    return null;
-  }
-  return (
-    <OverflowProvider>
-      <Box flexDirection="column">
-        <DetailedMessagesDisplay
-          messages={props.consoleMessages}
-          maxHeight={
-            props.constrainHeight ? props.debugConsoleMaxHeight : undefined
-          }
-          width={props.inputWidth}
-        />
-        <ShowMoreLines constrainHeight={props.constrainHeight} />
-      </Box>
-    </OverflowProvider>
-  );
-}
-
-function ComposerSection(props: InlineContentProps) {
-  if (!props.isInputActive) {
-    return null;
-  }
-  return (
-    <Composer
-      config={props.config}
-      settings={props.settings}
-      onSuggestionsVisibilityChange={props.onSuggestionsVisibilityChange}
     />
   );
 }

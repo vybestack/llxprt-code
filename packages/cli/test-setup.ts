@@ -17,6 +17,12 @@
 
 import './test-setup-base.js';
 
+// Clear credential-proxy env vars so unit tests don't inherit the host
+// process's proxy configuration (which would skip proactive renewal
+// scheduling, alter token-store behaviour, and change sandbox paths).
+delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+delete process.env.LLXPRT_CAPABILITY_TOKEN;
+
 // Setup for React DOM testing - fix for React 19 internals issue
 import React from 'react';
 import { cleanup as cleanupInkRenders } from 'ink-testing-library';

@@ -10,6 +10,7 @@ import React, { act, createContext, useContext } from 'react';
 import { LoadedSettings, type Settings } from '../config/settings.js';
 import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
+import { ShellCommandDisplayProvider } from '../ui/contexts/ShellCommandDisplayContext.js';
 import { UIStateContext, type UIState } from '../ui/contexts/UIStateContext.js';
 import { StreamingState } from '../ui/types.js';
 
@@ -172,7 +173,15 @@ export const renderWithProviders = (
     <SettingsContext.Provider value={settings}>
       <UIStateContext.Provider value={uiState as UIState}>
         <MockRuntimeContextProvider>
-          <KeypressProvider>{component}</KeypressProvider>
+          <KeypressProvider>
+            <ShellCommandDisplayProvider
+              alwaysDisplayFullShellCommand={
+                settings.merged.ui.alwaysDisplayFullShellCommand ?? true
+              }
+            >
+              {component}
+            </ShellCommandDisplayProvider>
+          </KeypressProvider>
         </MockRuntimeContextProvider>
       </UIStateContext.Provider>
     </SettingsContext.Provider>,

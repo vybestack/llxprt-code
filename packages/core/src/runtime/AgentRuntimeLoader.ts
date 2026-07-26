@@ -109,6 +109,7 @@ function hydrateContentGeneratorConfig(
 
 type ToolGovernance = {
   allowed: Set<string>;
+  allowedExplicit: boolean;
   disabled: Set<string>;
   excluded: Set<string>;
 };
@@ -128,6 +129,7 @@ function buildToolGovernance(
     allowed: new Set(
       (allowedRaw ?? []).map((tool) => normalizeToolName(tool) ?? tool),
     ),
+    allowedExplicit: allowedRaw !== undefined,
     disabled: new Set(
       (disabledRaw ?? []).map((tool) => normalizeToolName(tool) ?? tool),
     ),
@@ -148,7 +150,7 @@ function isToolPermitted(
   if (governance.disabled.has(canonical)) {
     return false;
   }
-  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
+  if (governance.allowedExplicit && !governance.allowed.has(canonical)) {
     return false;
   }
   return true;

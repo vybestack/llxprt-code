@@ -7,6 +7,8 @@
 export type ThoughtSummary = {
   subject: string;
   description: string;
+  streamId?: string;
+  streamStatus?: 'delta' | 'complete';
 };
 
 const START_DELIMITER = '**';

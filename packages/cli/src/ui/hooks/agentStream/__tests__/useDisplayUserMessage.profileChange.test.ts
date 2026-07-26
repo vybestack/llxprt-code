@@ -25,7 +25,6 @@ import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import type { QueuedSubmission } from '../types.js';
 
 describe('useDisplayUserMessage — consolidated profile_change path (issue #1770)', () => {
   const mockConfig = {
@@ -68,7 +67,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         } as React.MutableRefObject<HistoryItemWithoutId | null>,
         thinkingBlocksRef: { current: [] },
         turnCancelledRef: { current: false },
-        queuedSubmissionsRef: { current: [] as QueuedSubmission[] },
+        clearSubmissions: vi.fn(),
         setPendingHistoryItem: vi.fn(),
         setIsResponding: vi.fn(),
         setThought: vi.fn(),
@@ -148,7 +147,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         } as React.MutableRefObject<HistoryItemWithoutId | null>,
         thinkingBlocksRef: { current: [] },
         turnCancelledRef: { current: false },
-        queuedSubmissionsRef: { current: [] as QueuedSubmission[] },
+        clearSubmissions: vi.fn(),
         setPendingHistoryItem: vi.fn(),
         setIsResponding: vi.fn(),
         setThought: vi.fn(),

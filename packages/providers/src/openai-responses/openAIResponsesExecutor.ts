@@ -38,7 +38,6 @@ import {
   type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
@@ -59,6 +58,10 @@ import type {
   OpenAIResponsesRequest,
   ResponsesInputItem,
 } from './OpenAIResponsesTypes.js';
+import {
+  applyStatefulConversation,
+  computeStatefulConversation,
+} from './openAIResponsesStateful.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -98,6 +101,7 @@ interface RequestContext {
   baseURL: string;
   isCodex: boolean;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   request: OpenAIResponsesRequest;
 }
 
@@ -112,8 +116,8 @@ export async function* executeOpenAIResponsesRequest(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  // Prefer the normalized invocation.signal (via getRequestSignal) while
-  // preserving the legacy metadata.abortSignal fallback (issue #2607 Finding 3).
+  // Prefer the normalized invocation.signal while preserving the legacy
+  // metadata.abortSignal fallback.
   const abortSignal = getRequestSignal(options);
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
     options.contents,
@@ -161,8 +165,26 @@ async function buildRequestContext(
     () => options.invocation.userMemory,
   );
   const systemPrompt = await buildSystemPrompt(options, userMemory, deps);
-  const input = buildInput(options, patchedContent, invocationEphemerals, deps);
   const requestOverrides = buildRequestOverrides(options, deps);
+  const explicitUserStore =
+    typeof requestOverrides['store'] === 'boolean'
+      ? requestOverrides['store']
+      : undefined;
+  const stateful = computeStatefulConversation(
+    options,
+    patchedContent,
+    invocationEphemerals,
+    explicitUserStore,
+    isCodex,
+    deps.logger,
+  );
+  const input = buildInput(
+    options,
+    stateful.content,
+    invocationEphemerals,
+    deps,
+    stateful.parentId !== undefined,
+  );
   const requestInput = buildRequestInput(
     input,
     isCodex,
@@ -181,12 +203,20 @@ async function buildRequestContext(
   applyTextVerbosity(request, options, invocationEphemerals, deps);
   applyCodexRequestSettings(request, isCodex, deps);
   applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
+  applyStatefulConversation(
+    request,
+    stateful,
+    explicitUserStore,
+    isCodex,
+    deps.logger,
+  );
   return {
     apiKey,
     baseURL,
     isCodex,
     request,
     includeThinkingInResponse: reasoning.includeThinkingInResponse,
+    responsesStored: request.store === true,
   };
 }
 
@@ -279,6 +309,7 @@ function buildInput(
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
+  serverSideParentActive: boolean = false,
 ): ResponsesInputItem[] {
   const includeReasoningInContextSetting =
     (invocationEphemerals['reasoning.includeInContext'] as
@@ -301,6 +332,7 @@ function buildInput(
     includeReasoningInContext: includeReasoningInContextSetting !== false,
     outputLimiterConfig,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
+    serverSideParentActive,
   });
 }
 
@@ -671,6 +703,7 @@ interface StreamResponsesParams {
   isCodex: boolean;
   request: OpenAIResponsesRequest;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
@@ -699,13 +732,10 @@ async function* streamResponses(
   );
   yield* fetchStreamWithRetries(
     {
+      ...params,
       responsesURL: `${params.baseURL}/responses`,
       headers,
       bodyBlob,
-      abortSignal: params.abortSignal,
-      includeThinkingInResponse: params.includeThinkingInResponse,
-      maxStreamingAttempts: params.maxStreamingAttempts,
-      streamRetryInitialDelayMs: params.streamRetryInitialDelayMs,
       onStreamLiveness: params.normalizedOptions.onStreamLiveness,
     },
     deps,
@@ -718,9 +748,10 @@ interface FetchStreamParams {
   bodyBlob: Blob;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
+  responsesStored: boolean;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
-  onStreamLiveness?: StreamLivenessListener;
+  onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
 }
 
 async function* fetchStreamWithRetries(
@@ -773,7 +804,8 @@ async function* parseSuccessfulResponse(
     bodyBlob: Blob;
     abortSignal?: AbortSignal;
     includeThinkingInResponse: boolean;
-    onStreamLiveness?: StreamLivenessListener;
+    responsesStored: boolean;
+    onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
   },
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
@@ -785,6 +817,7 @@ async function* parseSuccessfulResponse(
 
   const streamOptions: ParseResponsesStreamOptions = {
     includeThinkingInResponse: params.includeThinkingInResponse,
+    responsesStored: params.responsesStored,
     onStreamLiveness: params.onStreamLiveness,
   };
   for await (const message of parseResponsesStream(
@@ -834,8 +867,6 @@ async function handleStreamRetry(
       `Stream retry attempt ${state.streamingAttempt}/${state.maxStreamingAttempts}: Transient error detected, delay ${state.currentDelay}ms before retry. Error: ${String(error)}`,
   );
   const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
-  // Pass the abort signal so an abort during backoff rejects promptly with an
-  // AbortError instead of waiting out the full delay (issue #2607 Finding 3).
   await delay(Math.max(0, state.currentDelay + jitter), abortSignal);
   return Math.min(30000, state.currentDelay * 2);
 }

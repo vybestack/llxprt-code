@@ -37,6 +37,13 @@ export interface LockHandle {
   release(): Promise<void>;
 }
 
+export class SessionLockedError extends Error {
+  constructor() {
+    super('Session is in use by another process');
+    this.name = 'SessionLockedError';
+  }
+}
+
 /** @pseudocode concurrency-lifecycle.md lines 10-134 */
 export class SessionLockManager {
   /** @pseudocode concurrency-lifecycle.md lines 12-14 */
@@ -108,7 +115,7 @@ export class SessionLockManager {
       await fs.writeFile(lockPath, lockContent, { flag: 'wx' });
     } catch (writeErr: unknown) {
       if ((writeErr as NodeJS.ErrnoException).code === 'EEXIST') {
-        throw new Error('Session is in use by another process');
+        throw new SessionLockedError();
       }
       throw writeErr;
     }
@@ -121,7 +128,7 @@ export class SessionLockManager {
   ): Promise<void> {
     const isStale = await SessionLockManager.checkStale(lockPath);
     if (!isStale) {
-      throw new Error('Session is in use by another process');
+      throw new SessionLockedError();
     }
     try {
       await fs.unlink(lockPath);
@@ -135,7 +142,7 @@ export class SessionLockManager {
     } catch (writeErr: unknown) {
       const code = (writeErr as NodeJS.ErrnoException).code;
       if (code === 'EEXIST') {
-        throw new Error('Session is in use by another process');
+        throw new SessionLockedError();
       }
       if (code === 'ENOENT') {
         await SessionLockManager.createLockAfterMkdir(lockPath, lockContent);

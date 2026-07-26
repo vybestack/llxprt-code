@@ -564,6 +564,14 @@ export class AgentImpl implements Agent {
   }
 
   /**
+   * Injects a mid-turn steer message into the active agent loop. Delegates to
+   * the current loop's injectSteer. No-op when no loop is running.
+   */
+  injectSteer(text: string): void {
+    this.deps.loopHolder.current?.injectSteer(text);
+  }
+
+  /**
    * Streams AgentEvents by delegating to the current loop's run().
    * @plan:PLAN-20260617-COREAPI.P15
    * @requirement:REQ-003

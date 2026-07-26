@@ -43,6 +43,7 @@ import type {
   CodeBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GeminiPartExtension } from '@vybestack/llxprt-code-core/llm-types/geminiContent.js';
 import type {
   GroundingInfo,
   GroundingSource,
@@ -54,6 +55,8 @@ import type {
 import { isRecord } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { cleanGeminiSchema } from './geminiSchemaHelpers.js';
 
+type GeminiThoughtPart = Part & Partial<GeminiPartExtension>;
+
 /** Marker key set on a MediaBlock when fileData had no mimeType (lossless round-trip). */
 const FILE_DATA_MARKER = 'gemini.fileData';
 /** Key under which executableCode original-casing language is preserved. */
@@ -62,6 +65,8 @@ const EXECUTABLE_CODE_KEY = 'gemini.executableCode';
 const CODE_EXEC_RESULT_KEY = 'gemini.codeExecutionResult';
 /** Key under which videoMetadata is preserved on a media block. */
 const VIDEO_METADATA_KEY = 'gemini.videoMetadata';
+/** Key under which llxprt thought metadata presence is preserved. */
+const THOUGHT_METADATA_KEY = 'gemini.thoughtMetadata';
 /**
  * Key under which a non-record functionResponse.response (null/array/primitive)
  * is preserved so the round-trip is lossless (mirrors executableCode/fileData).
@@ -90,14 +95,31 @@ function isLanguage(value: unknown): value is Language {
 }
 
 function thoughtPartToBlock(part: Part): ThinkingBlock {
+  const thoughtPart = part as GeminiThoughtPart;
   const block: ThinkingBlock = {
     type: 'thinking',
     thought: part.text ?? '',
-    isHidden: true,
-    sourceField: 'thought',
+    sourceField: thoughtPart.llxprtSourceField ?? 'thought',
   };
+  if (thoughtPart.llxprtThoughtIsHidden !== undefined) {
+    block.isHidden = thoughtPart.llxprtThoughtIsHidden;
+  }
   if (part.thoughtSignature !== undefined) {
     block.signature = part.thoughtSignature;
+  }
+  if (thoughtPart.llxprtThoughtBlockId !== undefined) {
+    block.streamId = thoughtPart.llxprtThoughtBlockId;
+  }
+  if (thoughtPart.llxprtThoughtBlockStatus !== undefined) {
+    block.streamStatus = thoughtPart.llxprtThoughtBlockStatus;
+  }
+  if (
+    thoughtPart.llxprtSourceField !== undefined ||
+    thoughtPart.llxprtThoughtBlockId !== undefined ||
+    thoughtPart.llxprtThoughtBlockStatus !== undefined ||
+    thoughtPart.llxprtThoughtIsHidden !== undefined
+  ) {
+    block.providerMetadata = { [THOUGHT_METADATA_KEY]: true };
   }
   return block;
 }
@@ -300,6 +322,28 @@ function buildCodeExecutionResultPart(block: ToolResponseBlock): Part | null {
   return part;
 }
 
+function applyThinkingMetadata(part: Part, block: ThinkingBlock): Part {
+  const thoughtPart = part as GeminiThoughtPart;
+  const hasRoundTripMetadata =
+    block.providerMetadata?.[THOUGHT_METADATA_KEY] === true;
+  if (
+    block.sourceField !== undefined &&
+    (hasRoundTripMetadata || block.sourceField !== 'thought')
+  ) {
+    thoughtPart.llxprtSourceField = block.sourceField;
+  }
+  if (block.streamId !== undefined) {
+    thoughtPart.llxprtThoughtBlockId = block.streamId;
+  }
+  if (block.streamStatus !== undefined) {
+    thoughtPart.llxprtThoughtBlockStatus = block.streamStatus;
+  }
+  if (block.isHidden !== undefined) {
+    thoughtPart.llxprtThoughtIsHidden = block.isHidden;
+  }
+  return part;
+}
+
 function buildExecutableCodePart(block: CodeBlock): Part | null {
   const meta = block.providerMetadata;
   const preservedRaw = meta ? meta[EXECUTABLE_CODE_KEY] : undefined;
@@ -379,7 +423,7 @@ export function blockToGeminiPart(block: ContentBlock): Part | null {
       if (block.signature !== undefined) {
         part.thoughtSignature = block.signature;
       }
-      return part;
+      return applyThinkingMetadata(part, block);
     }
     default: {
       return null;

@@ -9,7 +9,6 @@ import path from 'path';
 import toml from '@iarna/toml';
 import { glob } from 'glob';
 import { z } from 'zod';
-import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ICommandLoader } from './types.js';
@@ -36,6 +35,21 @@ interface CommandDirectory {
   extensionName?: string;
 }
 
+export interface FileCommandRuntime {
+  readonly storage?: Storage;
+  getProjectRoot(): string;
+  getExtensions(): Array<{
+    name: string;
+    isActive: boolean;
+    path: string;
+  }>;
+  getFolderTrust(): boolean;
+  isTrustedFolder(): boolean;
+}
+
+export const FILE_COMMANDS_UNTRUSTED_MESSAGE =
+  'File-based commands are disabled because this folder is not trusted.';
+
 /**
  * Defines the Zod schema for a command definition file. This serves as the
  * single source of truth for both validation and type inference.
@@ -60,12 +74,8 @@ const TomlCommandDefSchema = z.object({
  */
 export class FileCommandLoader implements ICommandLoader {
   private readonly projectRoot: string;
-  private readonly folderTrustEnabled: boolean;
-  private readonly isTrustedFolder: boolean;
 
-  constructor(private readonly config: CliUiRuntime | null) {
-    this.folderTrustEnabled = config?.getFolderTrust() === true;
-    this.isTrustedFolder = config?.isTrustedFolder() === true;
+  constructor(private readonly config: FileCommandRuntime | null) {
     this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 
@@ -81,7 +91,7 @@ export class FileCommandLoader implements ICommandLoader {
    * @returns A promise that resolves to an array of all loaded SlashCommands.
    */
   async loadCommands(signal: AbortSignal): Promise<SlashCommand[]> {
-    if (this.folderTrustEnabled && !this.isTrustedFolder) {
+    if (!this.canUseFileCommands()) {
       return [];
     }
 
@@ -129,6 +139,15 @@ export class FileCommandLoader implements ICommandLoader {
     }
 
     return allCommands;
+  }
+
+  private canUseFileCommands(): boolean {
+    const config = this.config;
+    return (
+      config == null ||
+      config.getFolderTrust() !== true ||
+      config.isTrustedFolder() === true
+    );
   }
 
   /**
@@ -299,6 +318,14 @@ export class FileCommandLoader implements ICommandLoader {
       context: CommandContext,
       _args: string,
     ): Promise<SlashCommandActionReturn> => {
+      if (!this.canUseFileCommands()) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: FILE_COMMANDS_UNTRUSTED_MESSAGE,
+        };
+      }
+
       if (!context.invocation) {
         debugLogger.error(
           `[FileCommandLoader] Critical error: Command '${baseCommandName}' was executed without invocation context.`,

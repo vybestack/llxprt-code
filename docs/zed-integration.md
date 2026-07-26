@@ -176,6 +176,31 @@ Logs go to LLxprt's [log/state directory](./reference/application-directories.md
 
 **Profile not found** — list profiles with `llxprt` then `/profile list`. Names are case-sensitive.
 
+## Extension Namespace (`llxprt/`)
+
+LLxprt reserves the `llxprt/` prefix for vendor-specific ACP extension methods and notifications. This namespace is documented for future use; no `llxprt/`-prefixed extension methods are implemented yet.
+
+When a concrete use case arrives (e.g. subagent status, memory operations, debug toggles, provider hints), the method name will be `llxprt/<feature>` and will be advertised here. Clients that do not recognize a `llxprt/` method MUST ignore it per the ACP [extensibility](https://agentclientprotocol.com/protocol/extensibility) rules (`_meta` / extension handling).
+
+## Session Metadata
+
+LLxprt emits ACP `session_info_update` notifications carrying:
+
+- **`title`** — a truncated preview of the first user prompt (derived once, consistent with the on-disk session listing).
+- **`updatedAt`** — an ISO 8601 timestamp refreshed after every turn (success, cancel, or error).
+
+This metadata also populates the `listSessions` response so Zed's session sidebar shows descriptive names and freshness without reading the recording files.
+
+When a session has both a durable on-disk recording and live in-memory metadata (e.g. the agent process is still running), `listSessions` merges them: the durable recording's title takes precedence (it is the authoritative first-user-message preview), while `updatedAt` is the newer of the two. A session with no durable recording yet shows the live title and `updatedAt` only.
+
+## Terminal Integration
+
+When the client advertises the `terminal` capability (`terminal: true` in `ClientCapabilities`), LLxprt creates an ACP terminal for each shell tool call via `connection.createTerminal`. This delegates command execution to Zed's native terminal renderer, giving the user live inline output as the command runs.
+
+The terminal is correlated to the originating tool call (by command and working directory) and embedded in the tool call's content as a `terminal` content block. The terminal is released after the tool call completes, and killed and released on cancel or session dispose.
+
+When the terminal capability is absent (or `false`), shell output is captured as text and emitted via the standard `content` content block — the same behavior as non-terminal ACP clients.
+
 ## Related
 
 - [Zed External Agents Documentation](https://zed.dev/docs/ai/external-agents)

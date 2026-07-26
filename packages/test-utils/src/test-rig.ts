@@ -44,6 +44,7 @@ import {
   type RunContext,
   type RunCapture,
 } from './process-run.js';
+import { getQuotaGuardTrip } from './quota-guard.js';
 import type { ParsedLog } from './types.js';
 
 // Re-export public types and helpers so existing importers keep working.
@@ -494,6 +495,21 @@ export class TestRig {
       env: childEnv,
     };
 
+    // Real-provider interactive runs participate in the quota guard: a
+    // fake-responses run never hits a real provider, so its output must not be
+    // scanned for quota signals. Compute applicability once, use it for both
+    // the pre-spawn refusal and the InteractiveRun failure-path detection.
+    const quotaGuardEnabled = this.fakeResponsesPath === undefined;
+
+    if (quotaGuardEnabled) {
+      const trip = getQuotaGuardTrip();
+      if (trip !== null) {
+        throw new Error(
+          `E2E quota guard tripped — refusing to start interactive CLI run: ${trip.reason}`,
+        );
+      }
+    }
+
     // When command is 'bun', use process.execPath (the exact Bun executable
     // when running under Bun) rather than the literal 'bun', which may not be
     // on PATH or may resolve to a different version. This mirrors how the
@@ -504,7 +520,9 @@ export class TestRig {
         : command;
     const ptyProcess = pty.spawn(executable, commandArgs, ptyOptions);
 
-    const run = new InteractiveRun(ptyProcess, this._diagnostics);
+    const run = new InteractiveRun(ptyProcess, this._diagnostics, {
+      quotaGuardEnabled,
+    });
     this._interactiveRuns.push(run);
 
     return waitForInteractiveReady(run);
@@ -623,9 +641,15 @@ async function waitForInteractiveReady(
     200,
   );
 
+  // Failure-only quota check: a quota wall hit at startup means the CLI shows a
+  // 429 (or never responds) and the ready prompt never appears. Trip the guard
+  // and fail fast with the labelled error before the ordinary readiness
+  // assertion, so the rest of the suite skips instead of burning quota.
   if (!isReady) {
-    throw new Error('Interactive LLxprt process did not become ready');
+    run.failFastOnQuota('interactive run never reached readiness');
+    throw new Error('Interactive run never reached readiness');
   }
+
   return run;
 }
 

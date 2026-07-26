@@ -25,6 +25,7 @@ export interface UIActionsParams {
 
   // Input actions
   handleUserInputSubmit: (value: string) => void;
+  handleSteer: (text: string) => boolean;
   handleClearScreen: () => void;
 
   // Theme dialog
@@ -92,7 +93,7 @@ export interface UIActionsParams {
   exitToolsDialog: () => void;
 
   // Folder trust dialog
-  handleFolderTrustSelect: (choice: FolderTrustChoice) => void;
+  handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;
 
   // Welcome onboarding
   welcomeActions: UIActions['welcomeActions'];
@@ -198,6 +199,7 @@ export function buildUIActions(params: UIActionsParams): UIActions {
 
     // Input actions
     handleUserInputSubmit: params.handleUserInputSubmit,
+    handleSteer: params.handleSteer,
     handleClearScreen: params.handleClearScreen,
 
     // Theme dialog

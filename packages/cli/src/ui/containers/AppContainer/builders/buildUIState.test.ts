@@ -84,7 +84,6 @@ const makeParams = (): UIStateParams => ({
   ctrlCPressedOnce: false,
   ctrlDPressedOnce: false,
   showEscapePrompt: false,
-  showIdeRestartPrompt: false,
   quittingMessages: null,
 
   // Display options
@@ -92,6 +91,8 @@ const makeParams = (): UIStateParams => ({
   showErrorDetails: false,
   showToolDescriptions: false,
   isTodoPanelCollapsed: false,
+  isQueuedMessagesPanelCollapsed: false,
+  queuedSubmissions: [],
   isNarrow: false,
   vimModeEnabled: false,
   vimMode: undefined,
@@ -143,7 +144,6 @@ const makeParams = (): UIStateParams => ({
   currentIDE: undefined,
 
   // Trust
-  isRestarting: false,
   isTrustedFolder: false,
 
   // Welcome onboarding

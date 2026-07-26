@@ -81,6 +81,7 @@ function makeUnconfiguredConfig(): Config {
     getIdeMode: vi.fn().mockReturnValue(false),
     getContentGeneratorConfig: vi.fn().mockReturnValue({}),
     getDebugMode: vi.fn().mockReturnValue(false),
+    getQuiet: vi.fn().mockReturnValue(false),
     getProvider: vi.fn().mockReturnValue(undefined),
     getModel: vi.fn().mockReturnValue(PLACEHOLDER_MODEL),
     getProviderManager: vi.fn().mockReturnValue({

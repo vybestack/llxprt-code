@@ -7,9 +7,10 @@
  * @requirement REQ-AUTH-001.1, REQ-TEST-001.1, REQ-TEST-001.3
  *
  * KeyringTokenStore DI behavioral tests.
- * All tests use in-memory ISecureStore test doubles.
- * Assertions are on stored/retrieved token data and observable state,
- * not on mock call counts (no toHaveBeenCalled theater).
+ * Tests use ISecureStore test doubles (in-memory and file-backed) to verify
+ * KeyringTokenStore behavior independently of any concrete SecureStore
+ * implementation. Assertions are on stored/retrieved token data and
+ * observable state, not on mock call counts (no toHaveBeenCalled theater).
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -61,6 +62,66 @@ function createFailingSecureStore(
     },
     has: async () => {
       throw errorFactory('has');
+    },
+  };
+}
+
+/**
+ * File-backed ISecureStore double that simulates durable on-disk persistence:
+ * writes survive across distinct double instances pointing at the same dir
+ * (cross-instance consistency). Distinct from the in-memory Map double (which
+ * has no on-disk artifacts). Both satisfy ISecureStore, so the backend
+ * conformance describe.each verifies KeyringTokenStore against both shapes.
+ */
+function createFileBackedSecureStore(dir: string): ISecureStore {
+  // Reversible filename encoding so the original key (including the ':'
+  // separator KeyringTokenStore relies on) round-trips through list(),
+  // mirroring how the real SecureStore fallback decodes filenames back to keys.
+  const encodeKey = (key: string): string => encodeURIComponent(key) + '.dat';
+  const decodeName = (name: string): string =>
+    decodeURIComponent(name.slice(0, -4));
+  const resolve = (key: string): string => path.join(dir, encodeKey(key));
+  return {
+    get: async (key) => {
+      try {
+        return await fs.readFile(resolve(key), 'utf8');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw err;
+      }
+    },
+    set: async (key, value) => {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(resolve(key), value, 'utf8');
+    },
+    delete: async (key) => {
+      try {
+        await fs.unlink(resolve(key));
+        return true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw err;
+      }
+    },
+    list: async () => {
+      try {
+        const entries = await fs.readdir(dir);
+        return entries
+          .filter((f) => f.endsWith('.dat'))
+          .map((f) => decodeName(f));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+        throw err;
+      }
+    },
+    has: async (key) => {
+      try {
+        await fs.access(resolve(key));
+        return true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw err;
+      }
     },
   };
 }
@@ -556,3 +617,185 @@ describe.sequential('KeyringTokenStore lockDir contract (P8)', () => {
     await tokenStore.releaseAuthLock('gemini');
   });
 });
+
+// ─── ISecureStore backend conformance (in-memory vs file-backed) ────────────
+//
+// KeyringTokenStore consumes any ISecureStore via DI. This suite verifies that
+// KeyringTokenStore behaves correctly regardless of which ISecureStore backend
+// is injected: an in-memory Map double (simulating a keyring-style store with
+// no on-disk artifacts) and a file-backed double (simulating durable on-disk
+// persistence). Both satisfy the ISecureStore contract. This is NOT coverage
+// of the real SecureStore keyring/fallback implementations — that coverage
+// lives in packages/storage and packages/core — but rather confirms
+// KeyringTokenStore's backend-agnostic DI contract.
+
+interface SecureStoreMode {
+  readonly mode: string;
+  readonly makeStore: (dir: string) => ISecureStore;
+}
+
+const DUAL_MODES: readonly SecureStoreMode[] = [
+  {
+    mode: 'in-memory',
+    makeStore: () => createInMemorySecureStore(),
+  },
+  {
+    mode: 'file-backed',
+    makeStore: (dir) => createFileBackedSecureStore(dir),
+  },
+];
+
+describe.sequential.each(DUAL_MODES)(
+  'KeyringTokenStore ISecureStore backend conformance [$mode]',
+  ({ makeStore }) => {
+    // This suite owns its own temp-dir tracker so file-backed stores get
+    // isolated, cleaned-up directories. Sequential execution keeps the
+    // mutable `dirs` array race-free within the suite.
+    const locks = createLockDirTracker();
+    afterEach(() => locks.cleanupLockDirs());
+
+    it('saveToken → getToken round-trips through the injected store', async () => {
+      const store = makeStore(locks.freshLockDir());
+      const tokenStore = new KeyringTokenStore({
+        secureStore: store,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      await tokenStore.saveToken('dual', VALID_TOKEN);
+      const loaded = await tokenStore.getToken('dual');
+      expect(loaded).not.toBeNull();
+      expect(loaded!.access_token).toBe('test-access-token');
+      expect(loaded!.refresh_token).toBe('test-refresh-token');
+      expect(loaded!.token_type).toBe('Bearer');
+      expect(loaded!.scope).toBe('openid profile');
+    });
+
+    it('saveToken overwrites a previous token for the same provider+bucket', async () => {
+      const store = makeStore(locks.freshLockDir());
+      const tokenStore = new KeyringTokenStore({
+        secureStore: store,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      await tokenStore.saveToken('dual', {
+        ...VALID_TOKEN,
+        access_token: 'first',
+      });
+      await tokenStore.saveToken('dual', {
+        ...VALID_TOKEN,
+        access_token: 'second',
+      });
+      const loaded = await tokenStore.getToken('dual');
+      expect(loaded!.access_token).toBe('second');
+    });
+
+    it('removeToken deletes the token; subsequent getToken returns null', async () => {
+      const store = makeStore(locks.freshLockDir());
+      const tokenStore = new KeyringTokenStore({
+        secureStore: store,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      await tokenStore.saveToken('dual', VALID_TOKEN);
+      await tokenStore.removeToken('dual');
+      expect(await tokenStore.getToken('dual')).toBeNull();
+    });
+
+    it('listProviders returns saved providers in sorted order', async () => {
+      const store = makeStore(locks.freshLockDir());
+      const tokenStore = new KeyringTokenStore({
+        secureStore: store,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      await tokenStore.saveToken('gemini', VALID_TOKEN);
+      await tokenStore.saveToken('anthropic', VALID_TOKEN);
+      const providers = await tokenStore.listProviders();
+      expect(providers).toStrictEqual(['anthropic', 'gemini']);
+    });
+
+    it('getToken returns null for invalid JSON in the store', async () => {
+      const store = makeStore(locks.freshLockDir());
+      // Seed corrupt data via the store's own set() (works for both doubles).
+      await store.set('dual:default', 'not-valid-json{{{');
+      const tokenStore = new KeyringTokenStore({
+        secureStore: store,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      expect(await tokenStore.getToken('dual')).toBeNull();
+    });
+
+    it('getToken returns null when the store has no entry', async () => {
+      const store = makeStore(locks.freshLockDir());
+      const tokenStore = new KeyringTokenStore({
+        secureStore: store,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      expect(await tokenStore.getToken('absent')).toBeNull();
+    });
+
+    it('getToken re-throws non-CORRUPT errors from the injected store', async () => {
+      const base = makeStore(locks.freshLockDir());
+      // Override get to throw a DENIED (non-CORRUPT) error.
+      base.get = async () => {
+        const error = new Error('Permission denied') as ISecureStoreError;
+        error.code = 'DENIED';
+        error.remediation = 'Check credentials';
+        throw error;
+      };
+      const tokenStore = new KeyringTokenStore({
+        secureStore: base,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+
+      await expect(tokenStore.getToken('dual')).rejects.toThrow(
+        'Permission denied',
+      );
+    });
+  },
+);
+
+// ─── File-backed persistence (fallback-path distinction) ────────────────────
+//
+// The cross-instance persistence property distinguishes the file-backed double
+// (simulating the encrypted-file fallback's durable on-disk artifacts) from
+// the in-memory Map double (simulating the keyring path). It lives outside the
+// shared describe.each because it is only meaningful for the file-backed store.
+
+describe.sequential(
+  'KeyringTokenStore file-backed cross-instance persistence',
+  () => {
+    const locks = createLockDirTracker();
+    afterEach(() => locks.cleanupLockDirs());
+
+    it('a token saved by one KeyringTokenStore is visible to a second instance backed by the same dir', async () => {
+      const dir = locks.freshLockDir();
+      const writerStore = createFileBackedSecureStore(dir);
+      const writer = new KeyringTokenStore({
+        secureStore: writerStore,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+      await writer.saveToken('persistent', VALID_TOKEN);
+
+      const readerStore = createFileBackedSecureStore(dir);
+      const reader = new KeyringTokenStore({
+        secureStore: readerStore,
+        lockDir: locks.freshLockDir(),
+        logger: createNoOpLogger(),
+      });
+      const loaded = await reader.getToken('persistent');
+      expect(loaded).not.toBeNull();
+      expect(loaded!.access_token).toBe('test-access-token');
+    });
+  },
+);

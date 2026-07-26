@@ -13,6 +13,7 @@ import {
   __resetCleanupStateForTesting,
   registerCleanup,
   registerSyncCleanup,
+  runBestEffortSyncCleanup,
   runExitCleanup,
 } from './cleanup';
 
@@ -22,6 +23,29 @@ describe('cleanup', () => {
   beforeEach(() => {
     // Reset cleanup state between tests
     __resetCleanupStateForTesting();
+  });
+
+  it('should preserve the caller flow when synchronous cleanup throws', () => {
+    expect(() =>
+      runBestEffortSyncCleanup(() => {
+        throw new Error('cleanup failure');
+      }),
+    ).not.toThrow();
+  });
+
+  it('should report synchronous cleanup failures without throwing', () => {
+    let reportedError: unknown;
+
+    runBestEffortSyncCleanup(
+      () => {
+        throw new Error('cleanup failure');
+      },
+      (error) => {
+        reportedError = error;
+      },
+    );
+
+    expect(reportedError).toStrictEqual(new Error('cleanup failure'));
   });
 
   it('should execute registered synchronous cleanup function', async () => {

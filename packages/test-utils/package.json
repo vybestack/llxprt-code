@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-test-utils",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "main": "src/index.ts",
   "license": "Apache-2.0",
@@ -8,10 +8,9 @@
   "scripts": {
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "bun test --path-ignore-patterns dist",
+    "test": "vitest run --config ./vitest.config.ts",
     "typecheck": "tsc --noEmit",
-    "test:ci": "bun test --path-ignore-patterns dist",
-    "test:vitest": "vitest run --config ./vitest.config.ts"
+    "test:ci": "vitest run --config ./vitest.config.ts"
   },
   "dependencies": {
     "@vybestack/llxprt-code-storage": "file:../storage"

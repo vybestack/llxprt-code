@@ -474,7 +474,7 @@ export function buildTestGroups(
 }
 
 /**
- * The expected total selected file count (464 baseline + 1 new test file).
+ * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 465;
+export const SELECTED_FILE_COUNT: number = 502;

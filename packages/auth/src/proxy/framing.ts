@@ -46,15 +46,18 @@ export interface FrameDecoderOptions {
    * callback returns. Use this to close the connection or log the error.
    */
   onPartialFrameTimeout?: () => void;
+  maxFramesPerFeed?: number;
 }
 
 export class FrameDecoder {
   private buffer: Buffer = Buffer.alloc(0);
   private partialFrameTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly onPartialFrameTimeout?: () => void;
+  private readonly maxFramesPerFeed?: number;
 
   constructor(options: FrameDecoderOptions = {}) {
     this.onPartialFrameTimeout = options.onPartialFrameTimeout;
+    this.maxFramesPerFeed = options.maxFramesPerFeed;
   }
 
   feed(chunk: Buffer): Array<Record<string, unknown>> {
@@ -83,6 +86,12 @@ export class FrameDecoder {
         throw new FrameError(`Invalid JSON in frame: ${(e as Error).message}`);
       }
       frames.push(parsed);
+      if (
+        this.maxFramesPerFeed !== undefined &&
+        frames.length > this.maxFramesPerFeed
+      ) {
+        throw new FrameError('Too many frames in one chunk');
+      }
     }
 
     return frames;
