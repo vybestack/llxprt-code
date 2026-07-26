@@ -32,11 +32,6 @@
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import {
-  parseResponsesStream,
-  parseErrorResponse,
-  type ParseResponsesStreamOptions,
-} from '../openai/parseResponsesStream.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -44,8 +39,6 @@ import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/pro
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
-import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -62,6 +55,16 @@ import {
   applyStatefulConversation,
   computeStatefulConversation,
 } from './openAIResponsesStateful.js';
+import {
+  CODEX_WEBSOCKET_BETA_HEADER,
+  streamOverWebSocketOrFallback,
+  type StreamResponseOptions,
+  type WebSocketTransport,
+} from './openAIResponsesWebSocketTransport.js';
+import {
+  streamOverHttp,
+  type StreamResponsesParams,
+} from './openAIResponsesHttpStream.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -94,6 +97,19 @@ export interface ResponsesExecutorDeps {
   readonly getDefaultModel: () => string;
   /** Return the provider instance's global config for tool-output-limiter fallback. */
   readonly getGlobalConfig: () => ToolOutputSettingsProvider | undefined;
+  /**
+   * Returns the package-internal Codex WebSocket transport when the provider
+   * should use WebSockets for this request (Codex mode and not sticky-fallen
+   * back to HTTP). Returns undefined for non-Codex providers or after a
+   * sticky HTTP fallback (issue #2041).
+   */
+  readonly getWebSocketTransport?: () => WebSocketTransport | undefined;
+  /**
+   * Called once when a Codex WebSocket attempt fails before any response
+   * events are exposed, so the provider marks HTTP as the sticky transport
+   * for subsequent requests (issue #2041 A5).
+   */
+  readonly onWebSocketFallback?: () => void;
 }
 
 interface RequestContext {
@@ -658,217 +674,53 @@ function applyPromptCaching(
   if (!isCodex) request.prompt_cache_retention = '24h';
 }
 
-async function buildHeaders(
-  apiKey: string,
-  contentType: string,
-  isCodex: boolean,
-  options: NormalizedGenerateChatOptions,
-  deps: ResponsesExecutorDeps,
-): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
-    'Content-Type': contentType,
-    ...(deps.getCustomHeaders(options) ?? {}),
-  };
-  if (isCodex) await addCodexHeaders(headers, options, deps);
-  return headers;
-}
-
-async function addCodexHeaders(
-  headers: Record<string, string>,
-  options: NormalizedGenerateChatOptions,
-  deps: ResponsesExecutorDeps,
-): Promise<void> {
-  const accountId = await deps.getCodexAccountId();
-  headers['ChatGPT-Account-ID'] = accountId;
-  headers['originator'] = 'codex_cli_rs';
-
-  const sessionId =
-    (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??
-    options.runtime?.runtimeId;
-  if (typeof sessionId === 'string' && sessionId.trim()) {
-    headers['session_id'] = sessionId;
-  }
-
-  const sessionIdForLog = sessionId?.substring(0, 8) ?? 'none';
-  deps.logger.debug(
-    () =>
-      `Codex mode: adding headers for account ${accountId.substring(0, 8)}..., session_id=${sessionIdForLog}...`,
-  );
-}
-
-interface StreamResponsesParams {
-  apiKey: string;
-  baseURL: string;
-  isCodex: boolean;
-  request: OpenAIResponsesRequest;
-  includeThinkingInResponse: boolean;
-  responsesStored: boolean;
-  abortSignal?: AbortSignal;
-  maxStreamingAttempts: number;
-  streamRetryInitialDelayMs: number;
-  normalizedOptions: NormalizedGenerateChatOptions;
-}
-
 async function* streamResponses(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  const contentType = params.isCodex
-    ? 'application/json'
-    : 'application/json; charset=utf-8';
-  const bodyBlob = new Blob([JSON.stringify(params.request)], {
-    type: contentType,
-  });
-  const headers = await buildHeaders(
-    params.apiKey,
-    contentType,
-    params.isCodex,
-    params.normalizedOptions,
-    deps,
-  );
-  deps.logger.debug(
-    () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
-  );
-  yield* fetchStreamWithRetries(
-    {
-      ...params,
-      responsesURL: `${params.baseURL}/responses`,
-      headers,
-      bodyBlob,
-      onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-    },
-    deps,
-  );
-}
-
-interface FetchStreamParams {
-  responsesURL: string;
-  headers: Record<string, string>;
-  bodyBlob: Blob;
-  abortSignal?: AbortSignal;
-  includeThinkingInResponse: boolean;
-  responsesStored: boolean;
-  maxStreamingAttempts: number;
-  streamRetryInitialDelayMs: number;
-  onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
-}
-
-async function* fetchStreamWithRetries(
-  params: FetchStreamParams,
-  deps: ResponsesExecutorDeps,
-): AsyncIterableIterator<IContent> {
-  let streamingAttempt = 0;
-  let currentDelay = params.streamRetryInitialDelayMs;
-
-  while (streamingAttempt < params.maxStreamingAttempts) {
-    streamingAttempt += 1;
-    try {
-      const response = await fetchResponse(params);
-      yield* parseSuccessfulResponse(response, params, deps);
-      return;
-    } catch (error) {
-      currentDelay = await handleStreamRetry(
-        error,
-        {
-          streamingAttempt,
-          maxStreamingAttempts: params.maxStreamingAttempts,
-          currentDelay,
-        },
-        params.abortSignal,
-        deps,
+  // Issue #2041: Codex mode uses WebSockets when a transport is available and
+  // the provider has not sticky-fallen back to HTTP. A pre-event failure falls
+  // back to HTTP once; a failure after partial output fails fast (no replay).
+  if (params.isCodex && deps.getWebSocketTransport !== undefined) {
+    const transport = deps.getWebSocketTransport();
+    if (transport !== undefined) {
+      const headers = await buildWebSocketHandshakeHeaders(params, deps);
+      const streamOptions: StreamResponseOptions = {
+        responsesURL: `${params.baseURL}/responses`,
+        headers,
+        abortSignal: params.abortSignal,
+        includeThinkingInResponse: params.includeThinkingInResponse,
+        responsesStored: params.responsesStored,
+        onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+      };
+      yield* streamOverWebSocketOrFallback(
+        transport,
+        params.request,
+        streamOptions,
+        () => streamOverHttp(params, deps),
+        deps.onWebSocketFallback,
+        deps.logger,
       );
+      return;
     }
   }
+
+  yield* streamOverHttp(params, deps);
 }
 
-async function fetchResponse(params: {
-  responsesURL: string;
-  headers: Record<string, string>;
-  bodyBlob: Blob;
-  abortSignal?: AbortSignal;
-}): Promise<Response> {
-  return fetch(params.responsesURL, {
-    method: 'POST',
-    headers: params.headers,
-    body: params.bodyBlob,
-    signal: params.abortSignal,
-  });
-}
-
-async function* parseSuccessfulResponse(
-  response: Response,
-  params: {
-    responsesURL: string;
-    headers: Record<string, string>;
-    bodyBlob: Blob;
-    abortSignal?: AbortSignal;
-    includeThinkingInResponse: boolean;
-    responsesStored: boolean;
-    onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
-  },
+async function buildWebSocketHandshakeHeaders(
+  params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
-): AsyncIterableIterator<IContent> {
-  if (!response.ok) await throwApiError(response, deps);
-  if (!response.body) {
-    deps.logger.debug(() => 'Response body missing, returning early');
-    return;
-  }
-
-  const streamOptions: ParseResponsesStreamOptions = {
-    includeThinkingInResponse: params.includeThinkingInResponse,
-    responsesStored: params.responsesStored,
-    onStreamLiveness: params.onStreamLiveness,
+): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${params.apiKey}`,
+    ...(deps.getCustomHeaders(params.normalizedOptions) ?? {}),
   };
-  for await (const message of parseResponsesStream(
-    response.body,
-    streamOptions,
-  )) {
-    yield message;
-  }
-}
-
-async function throwApiError(
-  response: Response,
-  deps: ResponsesExecutorDeps,
-): Promise<never> {
-  const errorBody = await response.text();
-  deps.logger.debug(
-    () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
-  );
-  throw parseErrorResponse(response.status, errorBody, deps.providerName);
-}
-
-async function handleStreamRetry(
-  error: unknown,
-  state: {
-    streamingAttempt: number;
-    maxStreamingAttempts: number;
-    currentDelay: number;
-  },
-  abortSignal: AbortSignal | undefined,
-  deps: ResponsesExecutorDeps,
-): Promise<number> {
-  if (error instanceof Error && error.name === 'AbortError') {
-    throw error;
-  }
-  const canRetryStream =
-    deps.shouldRetryOnError(error) || isNetworkTransientError(error);
-  if (!canRetryStream || state.streamingAttempt >= state.maxStreamingAttempts) {
-    deps.logger.debug(
-      () =>
-        `Stream attempt ${state.streamingAttempt}/${state.maxStreamingAttempts} failed (retryable=${canRetryStream}), throwing: ${String(error)}`,
-    );
-    throw error;
-  }
-
-  deps.logger.debug(
-    () =>
-      `Stream retry attempt ${state.streamingAttempt}/${state.maxStreamingAttempts}: Transient error detected, delay ${state.currentDelay}ms before retry. Error: ${String(error)}`,
-  );
-  const jitter = state.currentDelay * 0.3 * (Math.random() * 2 - 1);
-  await delay(Math.max(0, state.currentDelay + jitter), abortSignal);
-  return Math.min(30000, state.currentDelay * 2);
+  headers['ChatGPT-Account-ID'] = await deps.getCodexAccountId();
+  headers['originator'] = 'codex_cli_rs';
+  headers['session_id'] = params.normalizedOptions.invocation.runtimeId;
+  headers['OpenAI-Beta'] = CODEX_WEBSOCKET_BETA_HEADER;
+  return headers;
 }
 
 function injectSyntheticConfigFileRead(

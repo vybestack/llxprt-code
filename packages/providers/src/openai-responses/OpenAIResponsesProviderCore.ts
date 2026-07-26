@@ -21,10 +21,17 @@ import {
   executeOpenAIResponsesRequest,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
+import {
+  createCodexResponsesWebSocketTransport,
+  type WebSocketTransport,
+} from './openAIResponsesWebSocketTransport.js';
 
 export { toOpenAIResponsesWireEffort } from '../openai/openaiModelPolicy.js';
 
 export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
+  private webSocketTransport: WebSocketTransport | undefined;
+  private webSocketStickToHttp = false;
+
   private buildExecutorDeps(): ResponsesExecutorDeps {
     return {
       providerName: this.name,
@@ -38,7 +45,28 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
       getDefaultModel: () => this.getDefaultModel(),
       getGlobalConfig: () => this.globalConfig,
+      getWebSocketTransport: () => this.resolveWebSocketTransport(),
+      onWebSocketFallback: () => {
+        this.webSocketStickToHttp = true;
+      },
     };
+  }
+
+  private resolveWebSocketTransport(): WebSocketTransport | undefined {
+    if (this.webSocketStickToHttp || !this.isCodexMode(this.getBaseURL())) {
+      return undefined;
+    }
+    this.webSocketTransport ??= createCodexResponsesWebSocketTransport({
+      logger: this.logger,
+    });
+    return this.webSocketTransport;
+  }
+
+  override clearState(): void {
+    super.clearState();
+    this.webSocketTransport?.close();
+    this.webSocketTransport = undefined;
+    this.webSocketStickToHttp = false;
   }
 
   protected override async *generateChatCompletionWithOptions(

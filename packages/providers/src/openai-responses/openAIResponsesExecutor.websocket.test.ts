@@ -1,0 +1,277 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Vertical integration tests for the OpenAI Responses executor's WebSocket
+ * selection and fallback behavior (issue #2041, acceptance A1, A5, A7).
+ *
+ * These tests exercise the REAL request builder (executeOpenAIResponsesRequest)
+ * and the REAL Responses event parser. The only network boundary that is
+ * replaced is fetch (HTTP fallback path) and the WebSocket connector factory
+ * (injected transport) — both legitimate I/O edges.
+ */
+
+import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  executeOpenAIResponsesRequest,
+  type ResponsesExecutorDeps,
+} from './openAIResponsesExecutor.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
+
+const getCoreSystemPromptAsyncSpy = vi.hoisted(() =>
+  vi.fn().mockResolvedValue('system prompt'),
+);
+
+vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
+  getCoreSystemPromptAsync: getCoreSystemPromptAsyncSpy,
+}));
+
+const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
+
+function buildNormalizedOptions(
+  overrides: Partial<NormalizedGenerateChatOptions> = {},
+): NormalizedGenerateChatOptions {
+  const settings = new SettingsService();
+  const runtime = createProviderRuntimeContext({
+    settingsService: settings,
+    runtimeId: 'test-runtime',
+  });
+  const config = createRuntimeConfigStub(settings, {});
+  const invocation = createRuntimeInvocationContext({
+    runtime,
+    settings,
+    providerName: 'openai-responses',
+    ephemeralsSnapshot: {},
+    fallbackRuntimeId: 'test-runtime',
+  });
+
+  const base = {
+    contents: [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'Hello' }],
+      },
+    ],
+    settings,
+    config,
+    runtime,
+    invocation,
+    userMemory: undefined,
+    tools: undefined,
+    metadata: {},
+    resolved: {
+      model: 'gpt-5.6-sol',
+      baseURL: CODEX_BASE_URL,
+      authToken: 'test-token',
+    },
+  } as unknown as NormalizedGenerateChatOptions;
+
+  return { ...base, ...overrides };
+}
+
+function buildDeps(
+  overrides: Partial<ResponsesExecutorDeps> = {},
+): ResponsesExecutorDeps {
+  return {
+    providerName: 'openai-responses',
+    logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
+    getProviderBaseURL: () => CODEX_BASE_URL,
+    getCustomHeaders: () => ({ 'X-Provider': 'p' }),
+    isCodexBaseURL: (url) => (url ?? '').includes('backend-api/codex'),
+    getCodexAccountId: async () => 'codex-account',
+    resolveAuthTokenForPrompt: async () => 'codex-token',
+    generateSyntheticCallId: () => 'call_synthetic_test',
+    shouldRetryOnError: () => false,
+    getDefaultModel: () => 'gpt-5.6-sol',
+    getGlobalConfig: () => undefined,
+    ...overrides,
+  };
+}
+
+function encodeSse(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk));
+      }
+      controller.close();
+    },
+  });
+}
+
+async function drain(
+  iterator: AsyncIterableIterator<IContent>,
+): Promise<readonly IContent[]> {
+  const out: IContent[] = [];
+  for await (const chunk of iterator) {
+    out.push(chunk);
+  }
+  return out;
+}
+
+/** Builds an injected WebSocket transport fake that records whether it ran. */
+function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
+  getWebSocketTransport: () => WebSocketTransport | undefined;
+  instances: WebSocketTransport[];
+  streamResponseCalls: number;
+} {
+  const instances: WebSocketTransport[] = [];
+  let streamResponseCalls = 0;
+  let enabled = true;
+  const getWebSocketTransport = (): WebSocketTransport | undefined => {
+    if (!enabled) return undefined;
+    const instance: WebSocketTransport = {
+      isUsable: () => true,
+      async *streamResponse() {
+        streamResponseCalls += 1;
+        if (behavior === 'connect-failure') {
+          throw new TypeError('connect ECONNREFUSED');
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'from websocket' }],
+        };
+      },
+    };
+    instances.push(instance);
+    return instance;
+  };
+  return {
+    getWebSocketTransport,
+    instances,
+    get streamResponseCalls() {
+      return streamResponseCalls;
+    },
+    // Expose a way to disable (simulate sticky fallback) — unused slot kept
+    // for compatibility with closures that disable the transport.
+    ...({
+      disable: () => {
+        enabled = false;
+      },
+    } as unknown as Record<string, never>),
+  };
+}
+
+describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:2041', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('A1: uses the WebSocket transport for Codex mode and yields its events', async () => {
+    const transport = makeRecordingTransport('success');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const options = buildNormalizedOptions();
+    const iterator = executeOpenAIResponsesRequest(
+      options,
+      buildDeps({ getWebSocketTransport: transport.getWebSocketTransport }),
+    );
+    const messages = await drain(iterator);
+
+    expect(transport.instances).toHaveLength(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(messages).toStrictEqual([
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'from websocket' }],
+      },
+    ]);
+  });
+
+  it('A7: uses HTTP fetch (no WebSocket) when not in Codex mode', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      body: encodeSse([
+        'data: {"type":"response.output_text.delta","delta":"Hi"}\n\n',
+        'data: [DONE]\n\n',
+      ]),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const transport = makeRecordingTransport('success');
+
+    const options = buildNormalizedOptions({
+      resolved: {
+        model: 'gpt-5',
+        baseURL: 'https://api.openai.com/v1',
+        authToken: 'test-token',
+      },
+    });
+    const iterator = executeOpenAIResponsesRequest(
+      options,
+      buildDeps({
+        isCodexBaseURL: () => false,
+        getProviderBaseURL: () => 'https://api.openai.com/v1',
+        getWebSocketTransport: transport.getWebSocketTransport,
+      }),
+    );
+    await drain(iterator);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(transport.instances).toHaveLength(0);
+  });
+
+  it('A5: falls back to HTTP once when WebSocket connect fails before events, then sticks to HTTP', async () => {
+    const fallbackBody = (): ReadableStream<Uint8Array> =>
+      encodeSse([
+        'data: {"type":"response.output_text.delta","delta":"fallback"}\n\n',
+        'data: [DONE]\n\n',
+      ]);
+    const fetchSpy = vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve({ ok: true, body: fallbackBody() }),
+      );
+    vi.stubGlobal('fetch', fetchSpy);
+    const transport = makeRecordingTransport('connect-failure');
+
+    // onWebSocketFallback disables the transport so subsequent requests use
+    // HTTP (sticky fallback), mirroring the provider-owned sticky flag.
+    const deps = buildDeps({
+      getWebSocketTransport: () => {
+        if (stickyFallback) return undefined;
+        return transport.getWebSocketTransport();
+      },
+      onWebSocketFallback: () => {
+        stickyFallback = true;
+      },
+    });
+    let stickyFallback = false;
+
+    // First request: WebSocket fails, falls back to HTTP.
+    const first = await drain(
+      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+    );
+    expect(first).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
+    ]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Second request: must NOT retry WebSocket (sticky HTTP fallback).
+    const second = await drain(
+      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+    );
+    expect(second).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
+    ]);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    // The transport was only invoked once (first request), not the second.
+    expect(transport.streamResponseCalls).toBe(1);
+  });
+});
