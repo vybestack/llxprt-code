@@ -22,6 +22,11 @@ import { ToolErrorType } from '../types/tool-error.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { normalizeToolName } from '../formatters/toolNameUtils.js';
+import {
+  buildToolGovernance,
+  isToolBlocked,
+  type ToolGovernance,
+} from '../formatters/toolGovernanceUtils.js';
 
 export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
 
@@ -287,70 +292,16 @@ export class ToolRegistry {
     this.messageBus = messageBus;
   }
 
-  private getToolGovernance(): {
-    allowed: Set<string>;
-    disabled: Set<string>;
-    excluded: Set<string>;
-  } {
-    const rawEphemerals =
-      typeof this.config.getEphemeralSettings === 'function'
-        ? (this.config.getEphemeralSettings() as
-            | Record<string, unknown>
-            | null
-            | undefined
-            | false
-            | 0
-            | '')
-        : undefined;
-
-    const ephemerals: Record<string, unknown> =
-      resolveEphemerals(rawEphemerals);
-
-    const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
-      ? (ephemerals['tools.allowed'] as string[])
-      : [];
-
-    function resolveDisabled(ephemeralsMap: Record<string, unknown>): string[] {
-      if (Array.isArray(ephemeralsMap['tools.disabled'])) {
-        return ephemeralsMap['tools.disabled'] as string[];
-      }
-      if (Array.isArray(ephemeralsMap['disabled-tools'])) {
-        return ephemeralsMap['disabled-tools'] as string[];
-      }
-      return [];
-    }
-
-    const disabledRaw = resolveDisabled(ephemerals);
-    const excludedRaw = this.config.getExcludeTools?.() ?? [];
-
-    return {
-      allowed: new Set(
-        allowedRaw.map((name) => normalizeToolName(name) ?? name),
-      ),
-      disabled: new Set(
-        disabledRaw.map((name) => normalizeToolName(name) ?? name),
-      ),
-      excluded: new Set(
-        excludedRaw.map((name) => normalizeToolName(name) ?? name),
-      ),
-    };
+  private getToolGovernance(): ToolGovernance {
+    return buildToolGovernance({
+      getEphemeralSettings: () =>
+        this.config.getEphemeralSettings?.() ?? undefined,
+      getExcludeTools: () => this.config.getExcludeTools?.(),
+    });
   }
 
-  private isToolActive(
-    toolName: string,
-    governance: ReturnType<ToolRegistry['getToolGovernance']>,
-  ): boolean {
-    const canonical = normalizeToolName(toolName) ?? toolName;
-    if (governance.excluded.has(canonical)) {
-      return false;
-    }
-    if (governance.disabled.has(canonical)) {
-      return false;
-    }
-    if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
-      return false;
-    }
-    return true;
+  private isToolActive(toolName: string, governance: ToolGovernance): boolean {
+    return !isToolBlocked(toolName, governance);
   }
 
   /**
@@ -817,22 +768,4 @@ export class ToolRegistry {
       this.discoveryLock = null;
     }
   }
-}
-
-type EphemeralValue =
-  | Record<string, unknown>
-  | null
-  | undefined
-  | false
-  | 0
-  | '';
-
-function resolveEphemerals(raw: EphemeralValue): Record<string, unknown> {
-  if (raw === null || raw === undefined || raw === false || raw === 0) {
-    return {};
-  }
-  if (raw === '') {
-    return {};
-  }
-  return raw;
 }

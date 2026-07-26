@@ -313,6 +313,14 @@ async function runConfig(settings: Settings, argv: string[] = []) {
   );
 }
 
+function emptyToolInlineProfile(): string {
+  return JSON.stringify({
+    provider: 'openai',
+    model: 'test-model',
+    ephemeralSettings: { 'tools.allowed': [] },
+  });
+}
+
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('toolGovernanceParity: interactive mode', () => {
@@ -369,6 +377,13 @@ describe('toolGovernanceParity: interactive mode', () => {
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
     expect(config.getExcludeTools()).not.toContain(EditTool.Name);
     expect(config.getExcludeTools()).not.toContain(WriteFileTool.Name);
+  });
+
+  it('interactive inline profile preserves an explicit empty allowlist', async () => {
+    process.stdin.isTTY = true;
+    const config = await runConfig({}, ['--profile', emptyToolInlineProfile()]);
+
+    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
   });
 });
 
@@ -581,6 +596,24 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     expect(allowed).toBeUndefined();
   });
 
+  it.each([
+    ['default', []],
+    ['yolo', ['--yolo']],
+  ])(
+    'non-interactive %s inline profile preserves an explicit empty allowlist',
+    async (_mode, modeArgs) => {
+      process.stdin.isTTY = false;
+      const config = await runConfig({}, [
+        '-p',
+        'test',
+        ...modeArgs,
+        '--profile',
+        emptyToolInlineProfile(),
+      ]);
+
+      expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+    },
+  );
   it('READ_ONLY_TOOL_NAMES contains expected read-only tools', () => {
     expect(READ_ONLY_TOOL_NAMES).toContain('read_file');
     expect(READ_ONLY_TOOL_NAMES).toContain('glob');

@@ -55,9 +55,11 @@ export class HookRegistry {
   /**
    * Initialize the registry by processing hooks from config
    */
-  async initialize(): Promise<void> {
+  async initialize(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
     this.entries = [];
     this.processHooksFromConfig();
+    signal?.throwIfAborted();
 
     debugLogger.log(
       `Hook registry initialized with ${this.entries.length} hook entries`,

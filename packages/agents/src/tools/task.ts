@@ -35,6 +35,7 @@ import {
   buildGovernedToolWhitelist,
   filterExcludedFromWhitelist,
   normalizeTaskParams,
+  validateOutputParams,
   type TaskToolInvocationParams,
 } from './taskToolGovernance.js';
 import {
@@ -77,6 +78,8 @@ export interface TaskToolParams {
   toolWhitelist?: string[];
   output_spec?: Record<string, string>;
   outputSpec?: Record<string, string>;
+  expected_outputs?: Record<string, string>;
+  expectedOutputs?: Record<string, string>;
   context?: Record<string, unknown>;
   context_vars?: Record<string, unknown>;
   contextVars?: Record<string, unknown>;
@@ -720,6 +723,81 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 }
 
+// Model-facing schema: only snake_case properties are exposed to the LLM.
+// camelCase aliases (subagentName, expectedOutputs, etc.) exist in
+// TaskToolParams for programmatic callers but are intentionally excluded
+// from the schema — additionalProperties: false enforces this.
+const taskToolSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['subagent_name', 'goal_prompt'],
+  properties: {
+    subagent_name: {
+      type: 'string',
+      description:
+        'Name of the registered subagent to launch. Use the list_subagents tool to discover available subagents (defined via user config, settings, or extensions).',
+    },
+    goal_prompt: {
+      type: 'string',
+      description:
+        'Primary goal or prompt to pass to the subagent. Included as the first behavioural prompt.',
+    },
+    behaviour_prompts: {
+      type: 'array',
+      description:
+        'Additional behavioural prompts to append after the goal prompt.',
+      items: { type: 'string' },
+    },
+    tool_whitelist: {
+      type: 'array',
+      items: { type: 'string' },
+      description:
+        'Restrict the subagent to this explicit list of tools. Tool names must match the registry.',
+    },
+    expected_outputs: {
+      type: 'object',
+      description:
+        'Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
+      additionalProperties: { type: 'string' },
+    },
+    output_spec: {
+      type: 'object',
+      description:
+        'Deprecated alias for expected_outputs. Map each output variable name to a plain string description. Values must be strings, not JSON Schema objects.',
+      additionalProperties: { type: 'string' },
+    },
+    timeout_seconds: {
+      type: 'number',
+      description:
+        'Optional timeout in seconds for the task execution (-1 for unlimited).',
+    },
+    grace_period_seconds: {
+      type: 'number',
+      description:
+        'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
+    },
+    max_turns: {
+      type: 'number',
+      description:
+        'Maximum turns for the subagent. -1 means unlimited (no turn cap). A positive integer caps the run. ' +
+        'Precedence is: explicit task max_turns > selected subagent profile maxTurnsPerPrompt > ' +
+        'current foreground maxTurnsPerPrompt > fallback of 1000 turns. Only the task, profile, and foreground ' +
+        'layers accept -1 for unlimited; the 1000-turn fallback is a fixed constant that does not interpret -1.',
+    },
+    async: {
+      type: 'boolean',
+      description:
+        'If true, launch subagent in background and return immediately. Default: false.',
+    },
+    context: {
+      type: 'object',
+      description:
+        'Optional key/value pairs exposed to the subagent via the execution context.',
+      additionalProperties: true,
+    },
+  },
+} as const;
+
 /**
  * Task tool that launches subagents via SubagentOrchestrator.
  *
@@ -738,70 +816,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       'Task',
       `Launches a named subagent, streams its progress, and returns the emitted variables upon completion. The subagent runs in an isolated runtime and is disposed after it finishes.`,
       Kind.Think,
-      {
-        type: 'object',
-        additionalProperties: false,
-        required: ['subagent_name', 'goal_prompt'],
-        properties: {
-          subagent_name: {
-            type: 'string',
-            description:
-              'Name of the registered subagent to launch (as defined in the configured subagents directory).',
-          },
-          goal_prompt: {
-            type: 'string',
-            description:
-              'Primary goal or prompt to pass to the subagent. Included as the first behavioural prompt.',
-          },
-          behaviour_prompts: {
-            type: 'array',
-            description:
-              'Additional behavioural prompts to append after the goal prompt.',
-            items: { type: 'string' },
-          },
-          tool_whitelist: {
-            type: 'array',
-            items: { type: 'string' },
-            description:
-              'Restrict the subagent to this explicit list of tools. Tool names must match the registry.',
-          },
-          output_spec: {
-            type: 'object',
-            description:
-              'Expected output variables the subagent must emit before completing.',
-            additionalProperties: { type: 'string' },
-          },
-          timeout_seconds: {
-            type: 'number',
-            description:
-              'Optional timeout in seconds for the task execution (-1 for unlimited).',
-          },
-          grace_period_seconds: {
-            type: 'number',
-            description:
-              'Optional grace period in seconds for recovery after a termination condition (TIMEOUT, MAX_TURNS, or protocol violation). Falls back to 60s if not specified or invalid.',
-          },
-          max_turns: {
-            type: 'number',
-            description:
-              'Maximum turns for the subagent. -1 means unlimited (no turn cap). A positive integer caps the run. ' +
-              'Precedence is: explicit task max_turns > selected subagent profile maxTurnsPerPrompt > ' +
-              'current foreground maxTurnsPerPrompt > fallback of 1000 turns. Only the task, profile, and foreground ' +
-              'layers accept -1 for unlimited; the 1000-turn fallback is a fixed constant that does not interpret -1.',
-          },
-          async: {
-            type: 'boolean',
-            description:
-              'If true, launch subagent in background and return immediately. Default: false.',
-          },
-          context: {
-            type: 'object',
-            description:
-              'Optional key/value pairs exposed to the subagent via the execution context.',
-            additionalProperties: true,
-          },
-        },
-      },
+      taskToolSchema,
       true,
       true,
       dependencies.messageBus,
@@ -811,30 +826,24 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: TaskToolParams,
   ): string | null {
-    const subagentName =
-      params.subagent_name ?? params.subagentName ?? params.subagentName;
+    const subagentName = params.subagent_name ?? params.subagentName;
     if (!subagentName || subagentName.trim().length === 0) {
       return 'Task tool requires a subagent_name.';
     }
 
-    const goalPrompt =
-      params.goal_prompt ?? params.goalPrompt ?? params.goalPrompt;
+    const goalPrompt = params.goal_prompt ?? params.goalPrompt;
     if (!goalPrompt || goalPrompt.trim().length === 0) {
       return 'Task tool requires a goal_prompt describing the assignment.';
     }
 
     if (params.max_turns !== undefined) {
       const maxTurns = params.max_turns;
-      if (
-        !Number.isFinite(maxTurns) ||
-        !Number.isInteger(maxTurns) ||
-        (maxTurns !== -1 && maxTurns < 1)
-      ) {
+      if (!Number.isInteger(maxTurns) || (maxTurns !== -1 && maxTurns < 1)) {
         return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
       }
     }
 
-    return null;
+    return validateOutputParams(params);
   }
 
   protected createInvocation(

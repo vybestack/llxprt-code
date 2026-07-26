@@ -144,7 +144,8 @@ const E2E_GATE_PREDICATE = `
       needs.skip_check.outputs.should_skip != 'true' &&
       github.event_name == 'pull_request_target' &&
       github.event.action == 'labeled' &&
-      github.event.label.name == 'maintainer:e2e:ok' }}
+      github.event.label.name == 'maintainer:e2e:ok' &&
+      github.event.pull_request.head.repo.full_name == github.repository }}
 `;
 
 const E2E_DOC_FILTER_PREDICATE = `
@@ -152,7 +153,8 @@ const E2E_DOC_FILTER_PREDICATE = `
       needs.skip_check.outputs.should_skip != 'true' &&
       (github.event_name != 'pull_request_target' ||
        (github.event.action == 'labeled' &&
-        github.event.label.name == 'maintainer:e2e:ok')) }}
+        github.event.label.name == 'maintainer:e2e:ok' &&
+        github.event.pull_request.head.repo.full_name == github.repository)) }}
 `;
 
 function evaluateE2ECondition(condition, context) {
@@ -529,19 +531,26 @@ describe('PR Review mergeability gate wiring (.github/workflows/pr-review.yml)',
     );
   });
 
-  it('gate job does not receive provider secrets; only the review job does', () => {
-    const gateEnv = gateJob.env ?? {};
-    const gateWith = gateJob.with ?? {};
-    const gateSource = normalize(
-      JSON.stringify({ env: gateEnv, with: gateWith }),
-    );
-    expect(gateSource).not.toContain('OPENAI_API_KEY');
-    expect(gateSource).not.toContain('KEY_VAR_NAME');
+  it('keeps provider secrets out of the gate and scopes them to review steps', () => {
+    const hasSecret = (value) =>
+      /\bsecrets(?:\.|\[)/.test(JSON.stringify(value));
+    const quotaStep = reviewJob.steps.find(({ id }) => id === 'quota');
+    const runReviewStep = reviewJob.steps.find(({ id }) => id === 'llxprt');
 
-    // Review job should still have provider secrets
-    const reviewEnv = reviewJob.env ?? {};
-    const reviewEnvStr = JSON.stringify(reviewEnv);
-    expect(reviewEnvStr).toContain('OPENAI_API_KEY');
+    expect(hasSecret([gateJob, reviewJob.env])).toBe(false);
+    expect(quotaStep.env).toEqual({
+      KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}',
+      OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}',
+      OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}',
+    });
+    expect(runReviewStep.env).toEqual({
+      OPENAI_API_KEY:
+        "${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}",
+    });
+    expect(reviewJob.steps.filter(hasSecret)).toEqual([
+      quotaStep,
+      runReviewStep,
+    ]);
   });
 });
 
@@ -624,15 +633,15 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       mac: false,
     },
     {
-      name: 'approved target event with successful true gate',
+      name: 'approved fork target event remains blocked after a successful gate',
       eventName: 'pull_request_target',
       headRepository: 'fork/repo',
       action: 'labeled',
       label: 'maintainer:e2e:ok',
       gateResult: 'success',
       shouldRun: 'true',
-      linux: true,
-      mac: true,
+      linux: false,
+      mac: false,
     },
     {
       name: 'approved internal target event',
@@ -777,6 +786,14 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
     }
   });
   it('requires the exact dependency conjunctions for both E2E jobs', () => {
+    const requiredFragments = [
+      "needs.skip_check.result == 'success'",
+      "needs.e2e_doc_change_filter.result == 'success'",
+      "needs.mergeability-gate.result == 'success'",
+      "needs.mergeability-gate.outputs.should-run == 'true'",
+      'github.event.pull_request.head.repo.full_name == github.repository',
+      "needs.mergeability-gate.result == 'skipped'",
+    ];
     for (const job of [linuxJob, macJob]) {
       expect(job.needs).toEqual([
         'e2e_doc_change_filter',
@@ -784,28 +801,18 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
         'mergeability-gate',
       ]);
       const predicate = normalize(job.if);
-      expect(predicate).toContain(
-        normalize("needs.skip_check.result == 'success'"),
-      );
-      expect(predicate).toContain(
-        normalize("needs.e2e_doc_change_filter.result == 'success'"),
-      );
-      expect(predicate).toContain(
-        normalize("needs.mergeability-gate.result == 'success'"),
-      );
-      expect(predicate).toContain(
-        normalize("needs.mergeability-gate.outputs.should-run == 'true'"),
-      );
-      expect(predicate).toContain(
-        normalize("needs.mergeability-gate.result == 'skipped'"),
-      );
+      for (const fragment of requiredFragments) {
+        expect(predicate).toContain(normalize(fragment));
+      }
       expect(predicate).not.toContain(
         normalize("needs.mergeability-gate.outputs.should-run != 'false'"),
       );
     }
   });
 
-  it('preserves Linux/macOS concurrency, docs-only skip, matrix, continue-on-error', () => {
+  it('bounds Linux/macOS jobs while preserving concurrency, matrix, and continue-on-error', () => {
+    expect(linuxJob['timeout-minutes']).toBe(60);
+    expect(macJob['timeout-minutes']).toBe(60);
     expect(linuxJob.concurrency?.['cancel-in-progress']).toBe(true);
     expect(macJob.concurrency?.['cancel-in-progress']).toBe(true);
     expect(linuxJob.concurrency.group).toContain('${{ matrix.sandbox }}');

@@ -6,11 +6,15 @@
 
 const originalValues = new Map<string, string | undefined>();
 
-export function setEnv(key: string, value: string): void {
+export function setEnv(key: string, value: string | undefined): void {
   if (!originalValues.has(key)) {
     originalValues.set(key, process.env[key]);
   }
-  process.env[key] = value;
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
+  }
 }
 
 export function restoreEnv(): void {

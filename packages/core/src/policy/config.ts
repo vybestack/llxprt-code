@@ -78,13 +78,15 @@ export async function createPolicyEngineConfig(
 export async function createPolicyEngineConfig(
   settings: PolicySettings,
   approvalMode: ApprovalMode,
-  defaultPoliciesDir?: string,
+  defaultPoliciesDir: string | undefined,
+  trustedFolder: boolean,
 ): Promise<PolicyEngineConfig>;
 
 export async function createPolicyEngineConfig(
   configOrSettings: PolicyConfigSource | PolicySettings,
   approvalModeParam?: ApprovalMode,
   defaultPoliciesDir?: string,
+  trustedFolder?: boolean,
 ): Promise<PolicyEngineConfig> {
   const isPolicyConfigSource =
     typeof (configOrSettings as PolicyConfigSource).getApprovalMode ===
@@ -97,6 +99,7 @@ export async function createPolicyEngineConfig(
     configOrSettings as PolicySettings,
     approvalModeParam!,
     defaultPoliciesDir,
+    trustedFolder ?? false,
   );
 }
 
@@ -150,7 +153,8 @@ async function loadUserPolicyRules(
 async function buildSettingsRules(
   settings: PolicySettings,
   approvalMode: ApprovalMode,
-  defaultPoliciesDir?: string,
+  defaultPoliciesDir: string | undefined,
+  trustedFolder: boolean,
 ): Promise<PolicyEngineConfig> {
   const policyDirs = getPolicyDirectories(defaultPoliciesDir);
 
@@ -167,7 +171,9 @@ async function buildSettingsRules(
   addMcpExcludedRules(settings, rules);
   addToolsExcludedRules(settings, rules);
   addToolsAllowedRules(settings, rules);
-  addMcpTrustedRules(settings, rules);
+  if (trustedFolder) {
+    addMcpTrustedRules(settings, rules);
+  }
   addMcpAllowedRules(settings, rules);
 
   return {
@@ -194,7 +200,7 @@ function addMcpExcludedRules(
   if (settings.mcp?.excluded) {
     for (const serverName of settings.mcp.excluded) {
       rules.push({
-        toolName: `${serverName}__*`,
+        toolNamePrefix: `${serverName}__`,
         decision: PolicyDecision.DENY,
         priority: 2.9,
         source: 'Settings (MCP Excluded)',
@@ -293,24 +299,31 @@ function normalizeToolName(toolName: string): string {
   return toolName;
 }
 
+export const MCP_TRUSTED_POLICY_SOURCE = 'Settings (MCP Trusted)';
+
+export function buildMcpTrustedRules(
+  settings: PolicySettings,
+): readonly PolicyRule[] {
+  return Object.entries(settings.mcpServers ?? {}).flatMap(
+    ([serverName, serverConfig]) =>
+      serverConfig.trust === true
+        ? [
+            {
+              toolNamePrefix: `${serverName}__`,
+              decision: PolicyDecision.ALLOW,
+              priority: 2.2,
+              source: MCP_TRUSTED_POLICY_SOURCE,
+            },
+          ]
+        : [],
+  );
+}
+
 function addMcpTrustedRules(
   settings: PolicySettings,
   rules: PolicyRule[],
 ): void {
-  if (settings.mcpServers) {
-    for (const [serverName, serverConfig] of Object.entries(
-      settings.mcpServers,
-    )) {
-      if (serverConfig.trust === true) {
-        rules.push({
-          toolName: `${serverName}__*`,
-          decision: PolicyDecision.ALLOW,
-          priority: 2.2,
-          source: 'Settings (MCP Trusted)',
-        });
-      }
-    }
-  }
+  rules.push(...buildMcpTrustedRules(settings));
 }
 
 function addMcpAllowedRules(
@@ -320,7 +333,7 @@ function addMcpAllowedRules(
   if (settings.mcp?.allowed) {
     for (const serverName of settings.mcp.allowed) {
       rules.push({
-        toolName: `${serverName}__*`,
+        toolNamePrefix: `${serverName}__`,
         decision: PolicyDecision.ALLOW,
         priority: 2.1,
         source: 'Settings (MCP Allowed)',

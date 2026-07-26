@@ -15,20 +15,18 @@ import {
   createFakeAgentFromMockClient,
 } from './useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act } from 'react';
+import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useAgentStream } from './agentStream/index.js';
+import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import type {
   TrackedToolCall,
-  TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import type {
-  AnyDeclarativeTool,
-  AnyToolInvocation,
   Config,
   ContractPartListUnion,
   EditorType,
@@ -66,19 +64,28 @@ vi.mock('../utils/markdownUtilities.js', () => ({
 }));
 
 vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: vi.fn((initial) => {
-    let val = initial;
-    const ref = { current: val };
-    const setVal = vi.fn((updater) => {
-      if (typeof updater === 'function') {
-        val = updater(val);
-      } else {
-        val = updater;
-      }
-      ref.current = val;
-    });
-    return [val, ref, setVal];
-  }),
+  useStateAndRef: <T,>(
+    initial: T,
+  ): [
+    T,
+    React.MutableRefObject<T>,
+    React.Dispatch<React.SetStateAction<T>>,
+  ] => {
+    const [state, setState] = React.useState(initial);
+    const ref = React.useRef(initial);
+    const setStateInternal = React.useCallback(
+      (valueOrUpdater: React.SetStateAction<T>) => {
+        const nextValue =
+          typeof valueOrUpdater === 'function'
+            ? valueOrUpdater(ref.current)
+            : valueOrUpdater;
+        ref.current = nextValue;
+        setState(nextValue);
+      },
+      [],
+    );
+    return [state, ref, setStateInternal];
+  },
 }));
 
 vi.mock('./useLogger.js', () => ({
@@ -223,7 +230,7 @@ describe('useAgentStream', () => {
       client,
       history: [],
       addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
-      config: mockConfig,
+      runtime: createStreamRuntimeForTest(mockConfig),
       onDebugMessage: mockOnDebugMessage,
       handleSlashCommand: mockHandleSlashCommand as unknown as (
         cmd: ContractPartListUnion,
@@ -279,7 +286,7 @@ describe('useAgentStream', () => {
           props.client,
           props.history,
           props.addItem,
-          props.config,
+          props.runtime,
           props.loadedSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -462,7 +469,7 @@ describe('useAgentStream', () => {
           new MockedAgentClientClass(mockConfig),
           [],
           mockAddItem,
-          mockConfig,
+          createStreamRuntimeForTest(mockConfig),
           mockLoadedSettings,
           () => {},
           mockHandleSlashCommand,
@@ -489,106 +496,13 @@ describe('useAgentStream', () => {
     });
   });
 
-  describe('Memory Refresh on save_memory', () => {
-    it('should call performMemoryRefresh when a save_memory tool call completes successfully', async () => {
-      const mockPerformMemoryRefresh = vi.fn();
-      const completedToolCall: TrackedCompletedToolCall = {
-        request: {
-          callId: 'save-mem-call-1',
-          name: 'save_memory',
-          args: { fact: 'test' },
-          isClientInitiated: true,
-          prompt_id: 'prompt-id-6',
-        },
-        status: 'success',
-        displayCleared: false,
-        response: {
-          callId: 'save-mem-call-1',
-          responseParts: [{ text: 'Memory saved' }],
-          resultDisplay: 'Success: Memory saved',
-          error: undefined,
-          errorType: undefined, // FIX: Added missing property
-        },
-        tool: {
-          name: 'save_memory',
-          displayName: 'save_memory',
-          description: 'Saves memory',
-          build: vi.fn(),
-        } as unknown as AnyDeclarativeTool,
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      };
-
-      // Capture the onComplete callback
-      let capturedOnComplete:
-        | ((
-            schedulerId: symbol,
-            completedTools: TrackedToolCall[],
-            metadata: { isPrimary: boolean },
-          ) => Promise<void>)
-        | null = null;
-
-      mockUseReactToolScheduler.mockImplementation((onComplete) => {
-        capturedOnComplete = onComplete;
-        return [
-          [],
-          mockScheduleToolCalls,
-          mockMarkToolsAsDisplayCleared,
-          mockCancelAllToolCalls,
-          0,
-          true,
-        ];
-      });
-
-      renderHook(() =>
-        useAgentStream(
-          new MockedAgentClientClass(mockConfig),
-          [],
-          mockAddItem,
-          mockConfig,
-          mockLoadedSettings,
-          mockOnDebugMessage,
-          mockHandleSlashCommand,
-          false,
-          () => 'vscode' as EditorType,
-          () => {},
-          mockPerformMemoryRefresh,
-          false,
-          () => {},
-          () => {},
-          () => {},
-          80,
-          24,
-        ),
-      );
-
-      // Trigger the onComplete callback with the completed save_memory tool
-      await act(async () => {
-        if (capturedOnComplete) {
-          await capturedOnComplete(
-            Symbol('test-scheduler'),
-            [completedToolCall],
-            {
-              isPrimary: true,
-            },
-          );
-        }
-      });
-
-      await waitFor(() => {
-        expect(mockPerformMemoryRefresh).toHaveBeenCalledTimes(1);
-      });
-    });
-  });
-
   describe('Error Handling', () => {
     it('should call parseAndFormatApiError with the correct model on stream initialization failure', async () => {
       mockParseAndFormatApiError.mockClear();
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield { type: 'content', value: '' };
-          throw mockError;
+          throw new Error('Rate limit exceeded');
         })(),
       );
 
@@ -600,10 +514,10 @@ describe('useAgentStream', () => {
 
       const { result } = renderHook(() =>
         useAgentStream(
-          new MockedAgentClientClass(testConfig),
+          createFakeAgentFromMockClient(new MockedAgentClientClass(testConfig)),
           [],
           mockAddItem,
-          testConfig,
+          createStreamRuntimeForTest(testConfig),
           mockLoadedSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
@@ -611,7 +525,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -631,7 +544,7 @@ describe('useAgentStream', () => {
           'Rate limit exceeded',
           undefined,
           'gemini-2.5-pro',
-          'gemini-2.5-flash',
+          undefined,
         );
       });
     });

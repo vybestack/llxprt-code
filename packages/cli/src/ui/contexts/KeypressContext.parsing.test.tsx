@@ -10,7 +10,7 @@ import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import type { Mock } from 'vitest';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Key } from './KeypressContext.js';
 import {
   KeypressProvider,
@@ -82,6 +82,43 @@ describe('Kitty Sequence Parsing', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  describe('C0 control characters above Ctrl+Z', () => {
+    // Terminals send \x1c-\x1f for Ctrl+\, Ctrl+], Ctrl+^, Ctrl+_.
+    // The parser must recognize these as ctrl key events, not insertable
+    // characters. Without this support, Ctrl+] (the queued-messages panel
+    // toggle) never reaches the keybinding handler.
+    it.each([
+      { seq: '\x1d', expected: { name: ']', ctrl: true } },
+      { seq: '\x1c', expected: { name: '\\', ctrl: true } },
+      { seq: '\x1e', expected: { name: '^', ctrl: true } },
+      { seq: '\x1f', expected: { name: '_', ctrl: true } },
+    ])(
+      'parses Ctrl+$expected.name from C0 control byte',
+      ({ seq, expected }: { seq: string; expected: Partial<Key> }) => {
+        const { keyHandler } = setupKeypressTest();
+
+        act(() => stdin.write(seq));
+
+        expect(keyHandler).toHaveBeenCalledWith(
+          expect.objectContaining(expected),
+        );
+      },
+    );
+
+    it.each([
+      ['Kitty CSI-u', '\x1b[93;5u'],
+      ['xterm modifyOtherKeys', '\x1b[27;5;93~'],
+    ])('parses Ctrl+] from %s', (_protocol, sequence) => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write(sequence));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ name: ']', ctrl: true }),
+      );
+    });
   });
 
   describe('Cross-terminal Alt key handling (simulating macOS)', () => {

@@ -9,8 +9,8 @@ on:
     branches:
       - 'main'
       - 'release/**'
-  # This will run for PRs from forks when the approval label is added.
-  # A new fork head requires a new maintainer approval event.
+  # This supports explicit labeled reruns for internal PRs. Fork target events
+  # never reach the secret-bearing E2E jobs.
   pull_request_target:
     types:
       - 'labeled'
@@ -59,7 +59,8 @@ jobs:
           needs.skip_check.outputs.should_skip != 'true' &&
           github.event_name == 'pull_request_target' &&
           github.event.action == 'labeled' &&
-          github.event.label.name == 'maintainer:e2e:ok' }}
+          github.event.label.name == 'maintainer:e2e:ok' &&
+          github.event.pull_request.head.repo.full_name == github.repository }}
     uses: './.github/workflows/_pr-mergeability-gate.yml'
     with:
       check-mergeability: true
@@ -75,7 +76,8 @@ jobs:
           needs.skip_check.outputs.should_skip != 'true' &&
           (github.event_name != 'pull_request_target' ||
            (github.event.action == 'labeled' &&
-            github.event.label.name == 'maintainer:e2e:ok')) }}
+            github.event.label.name == 'maintainer:e2e:ok' &&
+            github.event.pull_request.head.repo.full_name == github.repository)) }}
     outputs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
@@ -159,6 +161,7 @@ jobs:
       - e2e_doc_change_filter
       - skip_check
       - mergeability-gate
+    timeout-minutes: 60
     concurrency:
       group: >-
         ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-${{ matrix.sandbox }}
@@ -184,6 +187,7 @@ jobs:
           github.event_name == 'pull_request_target' &&
           github.event.action == 'labeled' &&
           github.event.label.name == 'maintainer:e2e:ok' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
           needs.mergeability-gate.result == 'success' &&
           needs.mergeability-gate.outputs.should-run == 'true'
         )
@@ -202,23 +206,39 @@ jobs:
           - sandbox: ${{ github.event_name == 'push' && 'sandbox:docker' || 'NEVER_MATCH' }}
 
     steps:
-      - name: 'Checkout (fork)'
+      - name: 'Checkout trusted quota selector'
         uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
-        if: "github.event_name == 'pull_request_target'"
         with:
-          ref: '${{ github.event.pull_request.head.sha }}'
-          repository: '${{ github.event.pull_request.head.repo.full_name }}'
-
-      - name: 'Checkout (internal)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
-        if: "github.event_name != 'pull_request_target'"
-        with:
-          ref: '${{ github.event.inputs.branch_ref || github.ref }}'
+          ref: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.base.sha || github.event.inputs.branch_ref || github.ref }}
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
         uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '${{ matrix.node-version }}'
+
+      - name: 'Check API quota and select optimal key'
+        id: 'quota'
+        run: node scripts/ci-quota-check.js
+        env:
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+
+      - name: 'Checkout PR head (internal target)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository"
+        with:
+          ref: '${{ github.event.pull_request.head.sha }}'
+          repository: '${{ github.repository }}'
+          persist-credentials: false
+
+      - name: 'Checkout PR merge ref (internal)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request'"
+        with:
+          ref: '${{ github.ref }}'
+          persist-credentials: false
+          clean: false
 
       - name: 'Setup Bun'
         # npm run build below is backed by bun scripts/build.ts and requires
@@ -237,16 +257,10 @@ jobs:
         if: "matrix.sandbox == 'sandbox:docker'"
         uses: 'docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435' # ratchet:docker/setup-buildx-action@v3
 
-      - name: 'Check API quota and select optimal key'
-        run: node scripts/ci-quota-check.js
-        env:
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-
       - name: 'Validate E2E provider environment (Linux)'
         shell: 'bash'
         env:
+          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
           LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
           LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
@@ -261,8 +275,7 @@ jobs:
       - name: 'Run E2E tests'
         env:
           # Provider configuration from repository secrets/variables
-          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
           LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
@@ -299,6 +312,7 @@ jobs:
       - e2e_doc_change_filter
       - skip_check
       - mergeability-gate
+    timeout-minutes: 60
     concurrency:
       group: >-
         ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.branch_ref || github.ref }}-macos
@@ -323,6 +337,7 @@ jobs:
           github.event_name == 'pull_request_target' &&
           github.event.action == 'labeled' &&
           github.event.label.name == 'maintainer:e2e:ok' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
           needs.mergeability-gate.result == 'success' &&
           needs.mergeability-gate.outputs.should-run == 'true'
         )
@@ -330,23 +345,39 @@ jobs:
     runs-on: 'macos-latest'
     continue-on-error: true
     steps:
-      - name: 'Checkout (fork)'
+      - name: 'Checkout trusted quota selector'
         uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
-        if: "github.event_name == 'pull_request_target'"
         with:
-          ref: '${{ github.event.pull_request.head.sha }}'
-          repository: '${{ github.event.pull_request.head.repo.full_name }}'
-
-      - name: 'Checkout (internal)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
-        if: "github.event_name != 'pull_request_target'"
-        with:
-          ref: '${{ github.event.inputs.branch_ref || github.ref }}'
+          ref: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.base.sha || github.event.inputs.branch_ref || github.ref }}
 
       - name: 'Set up Node.js 24.x'
         uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
         with:
           node-version: '24.x'
+
+      - name: 'Check API quota and select optimal key (macOS)'
+        id: 'quota_macos'
+        run: node scripts/ci-quota-check.js
+        env:
+          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+
+      - name: 'Checkout PR head (internal target)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository"
+        with:
+          ref: '${{ github.event.pull_request.head.sha }}'
+          repository: '${{ github.repository }}'
+          persist-credentials: false
+
+      - name: 'Checkout PR merge ref (internal)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request'"
+        with:
+          ref: '${{ github.ref }}'
+          persist-credentials: false
+          clean: false
 
       - name: 'Setup Bun'
         # npm run build below is backed by bun scripts/build.ts and requires
@@ -366,16 +397,10 @@ jobs:
         run: |
           npm cache clean --force
 
-      - name: 'Check API quota and select optimal key (macOS)'
-        run: node scripts/ci-quota-check.js
-        env:
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-
       - name: 'Validate E2E provider environment (macOS)'
         shell: 'bash'
         env:
+          OPENAI_API_KEY: ${{ steps.quota_macos.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota_macos.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
           LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
           LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
@@ -391,8 +416,7 @@ jobs:
         if: "runner.os != 'Windows'"
         env:
           # Provider configuration from repository secrets/variables
-          # OPENAI_API_KEY is set via GITHUB_ENV by quota check step
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          OPENAI_API_KEY: ${{ steps.quota_macos.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota_macos.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
           LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'

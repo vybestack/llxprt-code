@@ -5,13 +5,22 @@
  */
 
 import * as path from 'node:path';
+import * as process from 'node:process';
 import type {
   OpenDialogActionReturn,
   SlashCommand,
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
+import {
+  loadTrustedFolders,
+  resolveLocalWorkspaceTrust,
+  TrustLevel,
+} from '../../config/trustedFolders.js';
+import {
+  combineTrustUpdateFailure,
+  getTrustCommitErrorMessage,
+} from '../trustDialogHelpers.js';
 
 const VALID_TRUST_LEVELS = [
   TrustLevel.TRUST_FOLDER,
@@ -25,6 +34,7 @@ const VALID_TRUST_LEVELS = [
  */
 function parsePermissionsArgs(
   args: string,
+  workingDirectory: string,
 ): { trustLevel: TrustLevel; targetPath: string } | { error: string } {
   const trimmed = args.trim();
 
@@ -68,7 +78,7 @@ function parsePermissionsArgs(
   if (path.isAbsolute(targetPath)) {
     normalizedPath = path.normalize(targetPath);
   } else {
-    normalizedPath = path.resolve(process.cwd(), targetPath);
+    normalizedPath = path.resolve(workingDirectory, targetPath);
   }
 
   return { trustLevel, targetPath: normalizedPath };
@@ -78,8 +88,11 @@ export const permissionsCommand: SlashCommand = {
   name: 'permissions',
   description: 'manage folder trust settings',
   kind: CommandKind.BUILT_IN,
-  action: (_context, args): OpenDialogActionReturn | MessageActionReturn => {
-    const parsed = parsePermissionsArgs(args);
+  action: (context, args) => {
+    const parsed = parsePermissionsArgs(
+      args,
+      context.services.config?.getWorkingDir() ?? process.cwd(),
+    );
 
     // If error is empty string, open dialog (no args case)
     if ('error' in parsed) {
@@ -100,21 +113,65 @@ export const permissionsCommand: SlashCommand = {
     // We have valid trust level and path, modify trust
     const { trustLevel, targetPath } = parsed;
 
-    try {
-      const trustedFolders = loadTrustedFolders();
-      trustedFolders.setValue(targetPath, trustLevel);
-
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Trust level set to ${trustLevel} for: ${targetPath}`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to save trust settings: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
+    return (async (): Promise<OpenDialogActionReturn | MessageActionReturn> => {
+      let trustedFolders: ReturnType<typeof loadTrustedFolders> | undefined;
+      let savedSnapshot:
+        | ReturnType<ReturnType<typeof loadTrustedFolders>['snapshotValue']>
+        | undefined;
+      const config = context.services.config;
+      const previousLiveTrust = config?.isTrustedFolder() ?? false;
+      let failedPhase: 'persistence' | 'live' = 'persistence';
+      try {
+        trustedFolders = loadTrustedFolders();
+        savedSnapshot = trustedFolders.snapshotValue(targetPath);
+        trustedFolders.setValue(targetPath, trustLevel);
+        if (config) {
+          failedPhase = 'live';
+          const cwd = config.getWorkingDir();
+          await config.setTrustedFolderLive(
+            resolveLocalWorkspaceTrust(
+              { folderTrust: config.getFolderTrust() },
+              trustedFolders,
+              cwd,
+            ) ?? false,
+          );
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Trust level set to ${trustLevel} for: ${targetPath}`,
+        };
+      } catch (error) {
+        const rollbackFailures: unknown[] = [];
+        if (trustedFolders !== undefined && savedSnapshot !== undefined) {
+          try {
+            trustedFolders.restoreSnapshot(savedSnapshot);
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError);
+          }
+        }
+        if (config && failedPhase === 'live') {
+          try {
+            await config.setTrustedFolderLive(previousLiveTrust);
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError);
+          }
+        }
+        const failure = combineTrustUpdateFailure(
+          error,
+          rollbackFailures,
+          'Trust update and rollback failed',
+        );
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: getTrustCommitErrorMessage(
+            failedPhase,
+            failure.error,
+            failure.rollbackSucceeded,
+          ),
+        };
+      }
+    })();
   },
 };

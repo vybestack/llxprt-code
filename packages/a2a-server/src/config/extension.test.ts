@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Filesystem-backed behavior tests for the A2A extension loader.
  *
  * These tests exercise the real `loadExtensions` against temp directories

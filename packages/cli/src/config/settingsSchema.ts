@@ -76,8 +76,8 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
       type: {
         type: 'string',
         description:
-          'Transport type. Use "stdio" for local command, "sse" for Server-Sent Events, or "http" for Streamable HTTP.',
-        enum: ['stdio', 'sse', 'http'],
+          'Transport type. Use "stdio" for local command, "sse" for Server-Sent Events, "http" for Streamable HTTP, or "streamable-http" as an alias for "http".',
+        enum: ['stdio', 'sse', 'http', 'streamable-http'],
       },
       timeout: {
         type: 'number',

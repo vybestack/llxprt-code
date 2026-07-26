@@ -37,6 +37,7 @@ import { loggingCommand } from '../ui/commands/loggingCommand.js';
 import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
+import { quotaCommand } from '../ui/commands/quotaCommand.js';
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
@@ -154,34 +155,11 @@ export class BuiltinCommandLoader implements ICommandLoader {
       ...(isDevelopment ? [uiprofileCommand] : []),
       quitCommand,
       restoreCommand(this.config),
+      quotaCommand,
       statsCommand,
       themeCommand,
       toolsCommand,
-      // Determine skills command based on config and admin settings
-      ...((): SlashCommand[] => {
-        if (this.config?.isSkillsSupportEnabled() !== true) {
-          return [];
-        }
-        if (this.config.getSkillManager().isAdminEnabled() === false) {
-          return [
-            {
-              name: 'skills',
-              description: 'Manage skills',
-              kind: CommandKind.BUILT_IN,
-              autoExecute: false,
-              subCommands: [],
-              action: async (
-                _context: CommandContext,
-              ): Promise<MessageActionReturn> => ({
-                type: 'message',
-                messageType: 'error',
-                content: 'Skills are disabled by your admin.',
-              }),
-            },
-          ];
-        }
-        return [skillsCommand];
-      })(),
+      ...this.resolveSkillsCommand(),
       settingsCommand,
       vimCommand,
       providerCommand,
@@ -214,5 +192,35 @@ export class BuiltinCommandLoader implements ICommandLoader {
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
+  }
+
+  /**
+   * Determine skills command based on config and admin settings.
+   * Returns [] when skills support is disabled, a stub error command when
+   * disabled by admin, or [skillsCommand] when enabled.
+   */
+  private resolveSkillsCommand(): SlashCommand[] {
+    if (this.config?.isSkillsSupportEnabled() !== true) {
+      return [];
+    }
+    if (this.config.getSkillManager().isAdminEnabled() === false) {
+      return [
+        {
+          name: 'skills',
+          description: 'Manage skills',
+          kind: CommandKind.BUILT_IN,
+          autoExecute: false,
+          subCommands: [],
+          action: async (
+            _context: CommandContext,
+          ): Promise<MessageActionReturn> => ({
+            type: 'message',
+            messageType: 'error',
+            content: 'Skills are disabled by your admin.',
+          }),
+        },
+      ];
+    }
+    return [skillsCommand];
   }
 }

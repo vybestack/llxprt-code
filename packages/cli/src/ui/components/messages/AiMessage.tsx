@@ -24,6 +24,16 @@ interface AiMessageProps {
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 }
 
+export function getVisibleThinkingBlocks(
+  showThinking: boolean,
+  thinkingBlocks?: ThinkingBlock[],
+): ThinkingBlock[] | undefined {
+  if (!showThinking) {
+    return undefined;
+  }
+  return thinkingBlocks?.filter((block) => block.isHidden !== true);
+}
+
 export const AiMessage: React.FC<AiMessageProps> = ({
   text,
   isPending,
@@ -46,10 +56,13 @@ export const AiMessage: React.FC<AiMessageProps> = ({
   const prefix = ' ';
   const prefixWidth = prefix.length;
 
-  // Don't show thinkingBlocks in pending items - LoadingIndicator shows the
-  // thought subject/description as spinner text during streaming. Only show
-  // thinkingBlocks in committed history items to avoid duplication (fixes #922).
-  const shouldShowThinkingBlocks = showThinking && !isPending;
+  // #1723: Show thinking blocks in BOTH pending and committed items so thinking
+  // content streams in real-time. The LoadingIndicator still shows the transient
+  // thought subject, but the growing thinking block is now visible below it.
+  const visibleThinkingBlocks = getVisibleThinkingBlocks(
+    showThinking,
+    thinkingBlocks,
+  );
 
   return (
     <Box flexDirection="column">
@@ -63,14 +76,13 @@ export const AiMessage: React.FC<AiMessageProps> = ({
           <Text color={Colors.DimComment}>{model}</Text>
         </Box>
       )}
-      {shouldShowThinkingBlocks &&
-        thinkingBlocks?.map((block, index) => (
-          <ThinkingBlockDisplay
-            key={`thinking-${index}`}
-            block={block}
-            visible={true}
-          />
-        ))}
+      {visibleThinkingBlocks?.map((block, index) => (
+        <ThinkingBlockDisplay
+          key={`thinking-${index}`}
+          block={block}
+          visible={true}
+        />
+      ))}
       <Box flexDirection="row">
         <Box width={prefixWidth}>
           <Text

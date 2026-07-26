@@ -179,6 +179,7 @@ export function createIssue1468Fixture(): {
       (mockGetCurrentProfileName() ?? mockSettingsGet() ?? null) as
         | string
         | null,
+    getBrowserProfileAssociation: () => undefined,
   });
 
   const tokenStore = new MockTokenStore();

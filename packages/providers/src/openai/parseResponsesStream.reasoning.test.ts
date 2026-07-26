@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  ThinkingBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 import { parseResponsesStream } from './parseResponsesStream.js';
 
@@ -19,6 +22,12 @@ function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+function collectThinkingBlocks(messages: IContent[]): ThinkingBlock[] {
+  return messages
+    .flatMap((message) => message.blocks)
+    .filter((block): block is ThinkingBlock => block.type === 'thinking');
+}
+
 describe('parseResponsesStream - Reasoning/Thinking Support', () => {
   it('should parse reasoning-only stream with delta and done events', async () => {
     const chunks = [
@@ -34,10 +43,8 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thoughts = messages.flatMap((message) =>
-      message.blocks
-        .filter((block) => block.type === 'thinking')
-        .map((block) => block.thought),
+    const thoughts = collectThinkingBlocks(messages).map(
+      (block) => block.thought,
     );
     const lastThought = thoughts[thoughts.length - 1] ?? '';
     expect(lastThought).toBe(
@@ -121,10 +128,8 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thoughts = messages.flatMap((message) =>
-      message.blocks
-        .filter((block) => block.type === 'thinking')
-        .map((block) => block.thought),
+    const thoughts = collectThinkingBlocks(messages).map(
+      (block) => block.thought,
     );
     const lastThought = thoughts[thoughts.length - 1] ?? '';
     expect(lastThought).toBe('First chunk next');
@@ -162,7 +167,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     });
   });
 
-  it('should emit only one ThinkingBlock when both reasoning_text and reasoning_summary_text are present', async () => {
+  it('should emit only reasoning_text thinking blocks and suppress reasoning_summary_text when both are present', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Raw reasoning."}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
@@ -177,18 +182,18 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(1);
-
-    const thinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(thinkingBlock?.thought).toBe('Raw reasoning.');
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Raw reasoning.',
+      'Raw reasoning.',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'complete',
+    ]);
   });
 
-  it('should NOT emit pyramid-style repeated prefixes', async () => {
+  it('streams reasoning deltas as same-stream incremental thinking updates', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Let"}\n\n',
       'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"me"}\n\n',
@@ -203,16 +208,87 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Let',
+      'Let me',
+      'Let me think',
+      'Let me think',
+    ]);
+    const streamIds = thinkingBlocks.map((block) => block.streamId);
+    expect(new Set(streamIds)).toStrictEqual(
+      new Set(['openai-responses-reasoning:0']),
     );
-    expect(thinkingMessages).toHaveLength(1);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'delta',
+      'delta',
+      'complete',
+    ]);
+  });
 
-    const thoughtText = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    )?.thought;
-    expect(thoughtText).toBe('Let me think');
-    expect(thoughtText).not.toMatch(/Let.*Let/);
+  it('closes active reasoning lifecycle when response completes without done event', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Checking"}\n\n',
+      'data: {"type":"response.completed","sequence_number":2,"response":{"id":"resp_123","object":"response","model":"gpt-5.2","status":"completed"}}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Checking',
+      'Checking',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
+      'openai-responses-reasoning:0',
+      'openai-responses-reasoning:0',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'complete',
+    ]);
+  });
+
+  it('uses a distinct stream id for each reasoning lifecycle', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":2}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":"Second"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":4}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'First',
+      'First',
+      'Second',
+      'Second',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamId)).toStrictEqual([
+      'openai-responses-reasoning:0',
+      'openai-responses-reasoning:0',
+      'openai-responses-reasoning:1',
+      'openai-responses-reasoning:1',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'complete',
+      'delta',
+      'complete',
+    ]);
   });
 
   it('should preserve spacing between summary deltas', async () => {
@@ -230,19 +306,18 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
+    const thoughts = collectThinkingBlocks(messages).map(
+      (block) => block.thought,
     );
-    const thoughts = thinkingMessages.flatMap((message) =>
-      message.blocks
-        .filter((block) => block.type === 'thinking')
-        .map((block) => block.thought),
-    );
-    const lastThought = thoughts[thoughts.length - 1] ?? '';
-    expect(lastThought).toBe('Planning repo inspection');
+    expect(thoughts).toStrictEqual([
+      'Planning',
+      'Planning repo',
+      'Planning repo inspection',
+      'Planning repo inspection',
+    ]);
   });
 
-  it('should NOT yield ThinkingBlock on delta events, only on done', async () => {
+  it('yields ThinkingBlock updates on delta events before done', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
       'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"second"}\n\n',
@@ -256,15 +331,14 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(1);
-
-    const thinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(thinkingBlock?.thought).toBe('First second');
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'First',
+      'First second',
+      'First second',
+    ]);
+    expect(thinkingBlocks[0]?.streamStatus).toBe('delta');
+    expect(thinkingBlocks[2]?.streamStatus).toBe('complete');
   });
 
   it('should not duplicate reasoning when output_item.done follows deltas', async () => {
@@ -281,15 +355,47 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thoughtTexts = messages
-      .flatMap((message) => message.blocks)
-      .filter(
-        (block): block is { type: 'thinking'; thought: string } =>
-          block.type === 'thinking',
-      )
-      .map((block) => block.thought)
-      .filter((thought) => thought.trim().length > 0);
-    expect(thoughtTexts).toStrictEqual(['First second']);
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'First',
+      'First second',
+      'First second',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'delta',
+      'complete',
+    ]);
+  });
+
+  it('should not duplicate hidden reasoning when output_item.done follows hidden deltas', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"First"}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"second"}\n\n',
+      'data: {"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"First second"}]}}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream, {
+      includeThinkingInResponse: false,
+    })) {
+      messages = [...messages, message];
+    }
+
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'First',
+      'First second',
+      'First second',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'delta',
+      'complete',
+    ]);
+    expect(thinkingBlocks.every((block) => block.isHidden === true)).toBe(true);
   });
 
   it('should yield reasoning before response.completed', async () => {
@@ -327,15 +433,15 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(1);
-
-    const thinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(thinkingBlock?.thought).toBe('Summary only.');
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Summary only.',
+      'Summary only.',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      'delta',
+      'complete',
+    ]);
   });
 
   it('should suppress reasoning_summary_text when reasoning_text was already emitted', async () => {
@@ -353,20 +459,17 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(1);
-
-    const thinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(thinkingBlock?.thought).toBe('Full reasoning text');
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Full reasoning text',
+      'Full reasoning text',
+    ]);
   });
 
   it('should suppress reasoning_text when reasoning_summary_text was already emitted', async () => {
     const chunks = [
       'data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"delta":"Summary first"}\n\n',
+
       'data: {"type":"response.reasoning_summary_text.done","sequence_number":2,"text":"Summary first"}\n\n',
       'data: {"type":"response.reasoning_text.delta","sequence_number":3,"delta":"Full text second"}\n\n',
       'data: {"type":"response.reasoning_text.done","sequence_number":4}\n\n',
@@ -379,15 +482,65 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(1);
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Summary first',
+      'Summary first',
+    ]);
+  });
 
-    const thinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(thinkingBlock?.thought).toBe('Summary first');
+  it('does not emit suppressed summary at terminal completion after reasoning_text won', async () => {
+    const chunks = [
+      'data: {"type":"response.reasoning_text.delta","sequence_number":1,"delta":"Full reasoning"}\n\n',
+      'data: {"type":"response.reasoning_summary_text.delta","sequence_number":2,"delta":"Suppressed summary"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":3}\n\n',
+      'data: {"type":"response.completed","sequence_number":4,"response":{"id":"resp_123","object":"response","model":"gpt-5.2","status":"completed"}}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Full reasoning',
+      'Full reasoning',
+    ]);
+    expect(
+      thinkingBlocks.some((block) => block.thought === 'Suppressed summary'),
+    ).toBe(false);
+  });
+
+  it('allows a new reasoning lifecycle after output_item.done closes the prior one', async () => {
+    const chunks = [
+      'data: {"type":"response.output_item.done","sequence_number":1,"item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"First lifecycle"}]}}\n\n',
+      'data: {"type":"response.reasoning_text.delta","sequence_number":2,"delta":"Second"}\n\n',
+      'data: {"type":"response.reasoning_text.done","sequence_number":3}\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    let messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages = [...messages, message];
+    }
+
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'First lifecycle',
+      'Second',
+      'Second',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      undefined,
+      'delta',
+      'complete',
+    ]);
+    expect(thinkingBlocks[1]?.streamId).toBe('openai-responses-reasoning:0');
+    expect(thinkingBlocks[2]?.streamId).toBe('openai-responses-reasoning:0');
   });
 
   it('should re-emit hidden ThinkingBlock with encrypted_content after visible emission', async () => {
@@ -404,26 +557,23 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(2);
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks).toHaveLength(3);
 
-    const firstThinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(firstThinkingBlock?.isHidden).toBe(false);
-    expect(firstThinkingBlock?.thought).toBe('Thinking about this');
+    expect(thinkingBlocks[0]?.isHidden).toBe(false);
+    expect(thinkingBlocks[0]?.thought).toBe('Thinking about this');
+    expect(thinkingBlocks[0]?.streamStatus).toBe('delta');
 
-    const secondThinkingBlock = thinkingMessages[1].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(secondThinkingBlock?.isHidden).toBe(true);
-    expect(secondThinkingBlock?.thought).toBe('Thinking about this');
-    expect(secondThinkingBlock?.encryptedContent).toBe('encrypted_data_here');
+    expect(thinkingBlocks[1]?.isHidden).toBe(false);
+    expect(thinkingBlocks[1]?.thought).toBe('Thinking about this');
+    expect(thinkingBlocks[1]?.streamStatus).toBe('complete');
+
+    expect(thinkingBlocks[2]?.isHidden).toBe(true);
+    expect(thinkingBlocks[2]?.thought).toBe('Thinking about this');
+    expect(thinkingBlocks[2]?.encryptedContent).toBe('encrypted_data_here');
   });
 
-  it('should suppress reasoning_text.done when output_item.done already emitted visible block', async () => {
+  it('treats reasoning_text after output_item.done as a new reasoning lifecycle', async () => {
     const outputItemData =
       '{"type":"response.output_item.done","item":{"type":"reasoning","id":"reasoning_1","summary":[{"type":"summary_text","text":"Visible from output_item"}]}}';
     const chunks = [
@@ -439,15 +589,16 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       messages = [...messages, message];
     }
 
-    const thinkingMessages = messages.filter((m) =>
-      m.blocks.some((block) => block.type === 'thinking'),
-    );
-    expect(thinkingMessages).toHaveLength(1);
-
-    const thinkingBlock = thinkingMessages[0].blocks.find(
-      (block) => block.type === 'thinking',
-    );
-    expect(thinkingBlock?.thought).toBe('Visible from output_item');
-    expect(thinkingBlock?.isHidden).toBe(false);
+    const thinkingBlocks = collectThinkingBlocks(messages);
+    expect(thinkingBlocks.map((block) => block.thought)).toStrictEqual([
+      'Visible from output_item',
+      'Different reasoning text',
+      'Different reasoning text',
+    ]);
+    expect(thinkingBlocks.map((block) => block.streamStatus)).toStrictEqual([
+      undefined,
+      'delta',
+      'complete',
+    ]);
   });
 });
