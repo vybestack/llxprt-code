@@ -63,7 +63,13 @@ const rawConcurrency = getArgList('concurrency');
 const reviewTimeoutRaw = getArg('timeout') || '20';
 const outputArg = getArg('output') || 'ocr-benchmark-results.json';
 const outputFile = resolve(outputArg);
-const processTimeoutMs = Number(getArg('process-timeout-ms')) || 3600000;
+const processTimeoutMsRaw = getArg('process-timeout-ms');
+const processTimeoutMs =
+  processTimeoutMsRaw &&
+  Number.isInteger(Number(processTimeoutMsRaw)) &&
+  Number(processTimeoutMsRaw) > 0
+    ? Number(processTimeoutMsRaw)
+    : 3600000;
 
 if (!fromSha || !toSha) {
   process.stderr.write(
@@ -422,7 +428,15 @@ function runOcrReview(from, to, concurrency) {
     elapsed,
     parseStatus: parsed.parseStatus,
     findingCount: parsed.findings.length,
-    findings: parsed.findings,
+    findings: parsed.findings.map((f) => {
+      if (typeof f === 'string') {
+        return redact(f);
+      }
+      if (f && typeof f === 'object') {
+        return JSON.parse(redact(JSON.stringify(f)));
+      }
+      return f;
+    }),
     tokens: parsed.tokens,
     completedFiles: parsed.completedFiles,
     selectedFiles: parsed.selectedFiles,
