@@ -224,7 +224,9 @@ export class IdeClient {
   private authToken: string | undefined;
   private diffResponses = new Map<string, (result: DiffUpdateResult) => void>();
   private statusListeners = new Set<(state: IDEConnectionState) => void>();
-  private trustChangeListeners = new Set<(isTrusted: boolean) => void>();
+  private trustChangeListeners = new Set<
+    (isTrusted: boolean | undefined) => void
+  >();
 
   /**
    * Monotonically increasing generation counter for collision-free attempt
@@ -283,11 +285,17 @@ export class IdeClient {
     this.statusListeners.delete(listener);
   }
 
-  addTrustChangeListener(listener: (isTrusted: boolean) => void) {
+  /**
+   * Subscribes to effective IDE workspace trust. `undefined` means the IDE trust
+   * state is unavailable or unknown, including after disconnection.
+   */
+  addTrustChangeListener(listener: (isTrusted: boolean | undefined) => void) {
     this.trustChangeListeners.add(listener);
   }
 
-  removeTrustChangeListener(listener: (isTrusted: boolean) => void) {
+  removeTrustChangeListener(
+    listener: (isTrusted: boolean | undefined) => void,
+  ) {
     this.trustChangeListeners.delete(listener);
   }
 
@@ -618,6 +626,11 @@ export class IdeClient {
 
     if (status === IDEConnectionStatus.Disconnected) {
       ideContext.clearIdeContext();
+      if (!isAlreadyDisconnected) {
+        for (const listener of this.trustChangeListeners) {
+          listener(undefined);
+        }
+      }
     }
   }
 

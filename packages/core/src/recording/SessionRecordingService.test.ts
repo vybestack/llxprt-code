@@ -51,6 +51,7 @@ function makeConfig(
     projectHash: overrides.projectHash ?? 'abc123def456',
     chatsDir: overrides.chatsDir ?? '/tmp/test-chats',
     workspaceDirs: overrides.workspaceDirs ?? ['/home/user/project'],
+    cwd: overrides.cwd ?? '/home/user/project/subdir',
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
   };
@@ -1211,6 +1212,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           expect(startPayload.workspaceDirs).toStrictEqual(
             config.workspaceDirs,
           );
+          expect(startPayload.cwd).toBe(config.cwd);
           expect(typeof startPayload.startTime).toBe('string');
           expect(isValidIso8601(startPayload.startTime as string)).toBe(true);
 

@@ -294,6 +294,7 @@ export {
   OUTPUT_UPDATE_INTERVAL_MS,
   type ShellToolParams,
 } from './tools/shell.js';
+export { buildCommandToExecute } from './tools/shell-helpers.js';
 export {
   DISCOVERED_TOOL_PREFIX,
   ToolRegistry,
@@ -428,6 +429,15 @@ export { ASTConfig } from './tools/ast-edit/ast-config.js';
 export { ASTQueryExtractor } from './tools/ast-edit/ast-query-extractor.js';
 export { RepositoryContextProvider } from './tools/ast-edit/repository-context-provider.js';
 export { validateASTSyntax } from './tools/ast-edit/edit-calculator.js';
+export {
+  summarizeAstValidation,
+  computeLineDelta,
+  findEditStartLine,
+  extractErrorLineNumber,
+  formatValidationLineLabel,
+  type AstValidationResult,
+  type AstValidationSummary,
+} from './tools/ast-edit/validation-categorizer.js';
 export {
   detectLanguage,
   extractImports,

@@ -355,6 +355,10 @@
       "bun": "./src/tools-adapters/CoreMessageBusAdapter.ts",
       "import": "./dist/src/tools-adapters/CoreMessageBusAdapter.js"
     },
+    "./tools-adapters/CoreShellToolHostAdapter.js": {
+      "bun": "./src/tools-adapters/CoreShellToolHostAdapter.ts",
+      "import": "./dist/src/tools-adapters/CoreShellToolHostAdapter.js"
+    },
     "./tools-adapters/CoreToolRegistryHostAdapter.js": {
       "bun": "./src/tools-adapters/CoreToolRegistryHostAdapter.ts",
       "import": "./dist/src/tools-adapters/CoreToolRegistryHostAdapter.js"

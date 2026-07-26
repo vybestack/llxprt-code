@@ -133,6 +133,63 @@ priority = 100
       expect(result.errors).toHaveLength(0);
     });
 
+    it('should transform mcpName-only rules to an explicit prefix', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+mcpName = "google-workspace"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]?.toolName).toBeUndefined();
+      expect(result.rules[0]?.toolNamePrefix).toBe('google-workspace__');
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should preserve a user-authored trailing star as an exact tool name', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "google-workspace__*"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]?.toolName).toBe('google-workspace__*');
+      expect(result.rules[0]).not.toHaveProperty('toolNamePrefix');
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should preserve a trailing star as an exact MCP tool name', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+mcpName = "google-workspace"
+toolName = "*"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]?.toolName).toBe('google-workspace__*');
+      expect(result.rules[0]).not.toHaveProperty('toolNamePrefix');
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should preserve a standalone star as an exact tool name', async () => {
+      const result = await runLoadPoliciesFromToml(`
+[[rule]]
+toolName = "*"
+decision = "allow"
+priority = 100
+`);
+
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0]?.toolName).toBe('*');
+      expect(result.rules[0]).not.toHaveProperty('toolNamePrefix');
+      expect(result.errors).toHaveLength(0);
+    });
+
     it('should preserve modes field for dynamic evaluation by PolicyEngine', async () => {
       const result = await runLoadPoliciesFromToml(`
 [[rule]]

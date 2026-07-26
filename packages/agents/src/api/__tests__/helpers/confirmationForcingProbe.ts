@@ -28,7 +28,7 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-} from '@vybestack/llxprt-code-tools';
+} from '@vybestack/llxprt-code-tools/tools/tools.js';
 import type {
   AnyDeclarativeTool,
   AnyToolInvocation,

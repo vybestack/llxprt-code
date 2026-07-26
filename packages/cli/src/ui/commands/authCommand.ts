@@ -18,6 +18,11 @@ import type {
 import { CommandKind } from './types.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  validateProfileDirectory,
+  discoverBrowserProfiles,
+  type DiscoveredBrowserProfile,
+} from '@vybestack/llxprt-code-core';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,
@@ -26,6 +31,7 @@ import {
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
+const BROWSER_PROFILE_ASSOCIATION_BROWSER = 'chrome' as const;
 
 /**
  * Get the OAuth manager instance
@@ -160,6 +166,38 @@ const authCommandSchema: CommandArgumentSchema = [
       },
       {
         kind: 'literal',
+        value: 'create',
+        description: 'Discover browser profiles for bucket association setup',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket',
+            description: 'Bucket name (defaults to default)',
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'profile',
+        description: 'Associate or clear a browser profile for a bucket',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket',
+            description: 'Bucket name',
+            completer: bucketCompleter,
+            next: [
+              {
+                kind: 'value',
+                name: 'selector',
+                description: 'Profile number, directory name, or --clear',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        kind: 'literal',
         value: 'enable',
         description: 'Enable OAuth for provider',
       },
@@ -217,6 +255,46 @@ function formatBucketStatusLine(bucket: BucketStatus): string {
   const expiryDate = new Date(bucket.expiry * 1000);
   const activeStr = bucket.isSessionBucket ? 'active, ' : '';
   return `${marker}- ${bucket.bucket} (${activeStr}expires: ${expiryDate.toLocaleString()})`;
+}
+
+/**
+ * Resolve a profile selector into a directory name (and display name when the
+ * selector is a number matching a discovered profile).
+ *
+ * - A 1-based number resolves against the currently discovered Chrome profiles.
+ * - Any other value is treated as a literal profile directory name and must
+ *   pass the strict allowlist validation (security: prevents command injection).
+ *
+ * Returns undefined when the selector cannot be resolved safely.
+ */
+function resolveProfileSelector(selector: string):
+  | {
+      profileDirectory: string;
+      displayName?: string;
+    }
+  | undefined {
+  const numericMatch = /^(\d+)$/.exec(selector);
+  if (numericMatch) {
+    const index = Number.parseInt(numericMatch[1], 10) - 1;
+    const profiles: DiscoveredBrowserProfile[] = discoverBrowserProfiles(
+      BROWSER_PROFILE_ASSOCIATION_BROWSER,
+    );
+    if (index < 0 || index >= profiles.length) {
+      return undefined;
+    }
+    const profile = profiles[index];
+    return {
+      profileDirectory: profile.directoryName,
+      displayName: profile.displayName,
+    };
+  }
+
+  try {
+    validateProfileDirectory(selector);
+  } catch {
+    return undefined;
+  }
+  return { profileDirectory: selector };
 }
 
 export class AuthCommandExecutor {
@@ -279,16 +357,26 @@ export class AuthCommandExecutor {
       return this.switchBucket(provider, param);
     }
 
-    // Lines 15-17: Handle logout action (NEW) @pseudocode lines 15-17
+    // Handle create action: discover browser profiles for a new bucket
+    if (action === 'create') {
+      const bucket = param && param.length > 0 ? param : 'default';
+      return this.discoverBrowserProfilesForBucket(provider, bucket);
+    }
+
+    // Handle profile action: associate/clear a browser profile for a bucket
+    if (action === 'profile') {
+      const selector = parts[3];
+      return this.manageBrowserProfile(provider, param, selector);
+    }
+
     if (action === 'logout' || action === 'signout') {
       return this.logoutWithBucket(provider, param);
     }
 
-    // Lines 19-24: Invalid action @pseudocode lines 19-24
     return {
       type: 'message',
       messageType: 'error',
-      content: `Invalid action: ${action}. Use enable, disable, login, logout, status, or switch`,
+      content: `Invalid action: ${action}. Use create, disable, enable, login, logout, profile, status, or switch`,
     };
   }
 
@@ -636,6 +724,139 @@ export class AuthCommandExecutor {
         type: 'message',
         messageType: 'error',
         content: `Failed to switch bucket for ${provider}: ${errorMessage}`,
+      };
+    }
+  }
+  /**
+   * Discover available Chrome browser profiles so the user can associate
+   * one with a bucket. The association controls which browser/profile opens
+   * during the OAuth flow for that bucket.
+   */
+  private async discoverBrowserProfilesForBucket(
+    provider: string,
+    bucket: string,
+  ): Promise<MessageActionReturn> {
+    try {
+      const profiles = discoverBrowserProfiles(
+        BROWSER_PROFILE_ASSOCIATION_BROWSER,
+      );
+
+      if (profiles.length === 0) {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content:
+            `No Chrome profiles were detected for ${provider} bucket "${bucket}".\n` +
+            `You can associate a profile manually with:\n` +
+            `  /auth ${provider} profile ${bucket} <profile-directory>`,
+        };
+      }
+
+      const lines: string[] = [
+        `Discovered Chrome profiles for ${provider} bucket "${bucket}":`,
+        '',
+        ...profiles.map(
+          (profile, index) =>
+            `  ${index + 1}: ${profile.displayName} ` +
+            `(profile: ${profile.directoryName})`,
+        ),
+        '',
+        `To associate a profile, run:`,
+        `  /auth ${provider} profile ${bucket} <number-or-directory>`,
+        `Then authenticate with:`,
+        `  /auth ${provider} login ${bucket}`,
+      ];
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: lines.join('\n'),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to discover browser profiles for ${provider}: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Associate (or clear) a browser profile for a provider+bucket.
+   * The selector may be a 1-based number from the discovered list, a literal
+   * profile directory name, or "--clear" to remove the association.
+   */
+  private async manageBrowserProfile(
+    provider: string,
+    bucket: string | undefined,
+    selector: string | undefined,
+  ): Promise<MessageActionReturn> {
+    try {
+      if (!bucket) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Bucket name required for profile command. Usage: /auth <provider> profile <bucket> <number|directory|--clear>',
+        };
+      }
+
+      if (!selector) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `A selector is required. Usage: /auth ${provider} profile ${bucket} <number|directory|--clear>`,
+        };
+      }
+
+      if (selector === '--clear') {
+        this.oauthManager.clearBrowserProfileAssociation(provider, bucket);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Cleared browser profile association for ${provider} bucket "${bucket}"`,
+        };
+      }
+
+      const resolved = resolveProfileSelector(selector);
+
+      if (resolved === undefined) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            `Invalid profile selector: "${selector}". ` +
+            `Use a number from the discovered list or a profile directory name. ` +
+            `Path separators, control characters, and traversal sequences (..) are not allowed.`,
+        };
+      }
+
+      this.oauthManager.setBrowserProfileAssociation(provider, bucket, {
+        browser: BROWSER_PROFILE_ASSOCIATION_BROWSER,
+        profileDirectory: resolved.profileDirectory,
+        ...(resolved.displayName !== undefined
+          ? { displayName: resolved.displayName }
+          : {}),
+      });
+
+      const label =
+        resolved.displayName !== undefined
+          ? `${resolved.displayName} (${resolved.profileDirectory})`
+          : resolved.profileDirectory;
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Associated ${provider} bucket "${bucket}" with Chrome profile: ${label}`,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to set browser profile for ${provider}: ${errorMessage}`,
       };
     }
   }

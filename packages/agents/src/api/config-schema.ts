@@ -172,7 +172,7 @@ export const McpServerConfigSchema = z.object({
   // websocket transport
   tcp: z.string().optional(),
   // transport selector for URL-based servers
-  type: z.enum(['sse', 'http']).optional(),
+  type: z.enum(['sse', 'http', 'streamable-http']).optional(),
   // common
   timeout: z.number().optional(),
   trust: z.boolean().optional(),

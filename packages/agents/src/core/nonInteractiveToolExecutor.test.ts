@@ -18,7 +18,7 @@ import {
   type ToolCallResponseInfo,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type {
   ContentBlock,
   ToolResponseBlock,

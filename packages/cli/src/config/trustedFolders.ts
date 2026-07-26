@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -13,7 +14,9 @@ import {
   getIdeTrust,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Settings } from './settings.js';
+import { formatConfigFileErrors } from './configError.js';
 import { USER_SETTINGS_DIR } from './paths.js';
 
 export const TRUSTED_FOLDERS_FILENAME = 'trustedFolders.json';
@@ -43,6 +46,13 @@ export interface TrustRule {
   trustLevel: TrustLevel;
 }
 
+export interface ResolvedTrustRule {
+  readonly rule: TrustRule;
+  readonly effectivePath: string;
+  readonly trusted: boolean;
+  readonly provenance: 'direct' | 'inherited';
+}
+
 export interface TrustedFoldersError {
   message: string;
   path: string;
@@ -51,6 +61,37 @@ export interface TrustedFoldersError {
 export interface TrustedFoldersFile {
   config: Record<string, TrustLevel>;
   path: string;
+}
+
+export interface TrustedFolderSnapshot {
+  readonly canonicalPath: string;
+  readonly entries: ReadonlyArray<readonly [string, TrustLevel]>;
+}
+
+function resolveCanonicalPath(location: string): string | undefined {
+  try {
+    return fs.realpathSync(path.resolve(location));
+  } catch {
+    return undefined;
+  }
+}
+
+function requireCanonicalPath(location: string): string {
+  const canonicalPath = resolveCanonicalPath(location);
+  if (canonicalPath === undefined) {
+    throw new Error(`Unable to resolve canonical path for "${location}".`);
+  }
+  return canonicalPath;
+}
+
+function restoreConfigInPlace(
+  target: Record<string, TrustLevel>,
+  snapshot: Readonly<Record<string, TrustLevel>>,
+): void {
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+  Object.assign(target, snapshot);
 }
 
 export class LoadedTrustedFolders {
@@ -74,54 +115,142 @@ export class LoadedTrustedFolders {
    * @returns
    */
   isPathTrusted(location: string): boolean | undefined {
-    const trustedPaths: string[] = [];
-    const untrustedPaths: string[] = [];
-
-    for (const rule of this.rules) {
-      switch (rule.trustLevel) {
-        case TrustLevel.TRUST_FOLDER:
-          trustedPaths.push(rule.path);
-          break;
-        case TrustLevel.TRUST_PARENT:
-          trustedPaths.push(path.dirname(rule.path));
-          break;
-        case TrustLevel.DO_NOT_TRUST:
-          untrustedPaths.push(rule.path);
-          break;
-        default:
-          // Do nothing for unknown trust levels.
-          break;
-      }
-    }
-
-    for (const trustedPath of trustedPaths) {
-      if (isWithinRoot(location, trustedPath)) {
-        return true;
-      }
-    }
-
-    for (const untrustedPath of untrustedPaths) {
-      if (path.normalize(location) === path.normalize(untrustedPath)) {
-        return false;
-      }
-    }
-
-    return undefined;
+    return this.resolvePathTrust(location)?.trusted;
   }
 
-  setValue(path: string, trustLevel: TrustLevel): void {
-    const hadOriginalTrustLevel = Object.hasOwn(this.user.config, path);
-    const originalTrustLevel = this.user.config[path];
-    this.user.config[path] = trustLevel;
+  resolvePathTrust(location: string): ResolvedTrustRule | undefined {
+    const resolvedLocation = resolveCanonicalPath(location);
+    if (resolvedLocation === undefined) {
+      return undefined;
+    }
+    const matches = this.rules.flatMap((rule) => {
+      const canonicalRulePath = resolveCanonicalPath(rule.path);
+      if (canonicalRulePath === undefined) {
+        if (rule.trustLevel !== TrustLevel.DO_NOT_TRUST) {
+          return [];
+        }
+        const effectivePath = path.resolve(rule.path);
+        const lexicalLocation = path.resolve(location);
+        if (
+          !isWithinRoot(lexicalLocation, effectivePath) &&
+          !isWithinRoot(resolvedLocation, effectivePath)
+        ) {
+          return [];
+        }
+        return [
+          {
+            rule,
+            effectivePath,
+            trusted: false,
+            provenance:
+              lexicalLocation === effectivePath
+                ? ('direct' as const)
+                : ('inherited' as const),
+          },
+        ];
+      }
+      const effectivePath =
+        rule.trustLevel === TrustLevel.TRUST_PARENT
+          ? path.dirname(canonicalRulePath)
+          : canonicalRulePath;
+      if (!isWithinRoot(resolvedLocation, effectivePath)) {
+        return [];
+      }
+      return [
+        {
+          rule,
+          effectivePath,
+          trusted: rule.trustLevel !== TrustLevel.DO_NOT_TRUST,
+          provenance:
+            resolvedLocation === effectivePath
+              ? ('direct' as const)
+              : ('inherited' as const),
+        },
+      ];
+    });
+
+    // The most specific rule wins; at equal specificity, denial wins so an
+    // ambiguous configuration cannot accidentally grant trust.
+    matches.sort((left, right) => {
+      const specificity =
+        right.effectivePath.length - left.effectivePath.length;
+      return specificity !== 0
+        ? specificity
+        : Number(left.trusted) - Number(right.trusted);
+    });
+    return matches[0];
+  }
+
+  getValue(location: string): TrustLevel | undefined {
+    const canonicalPath = resolveCanonicalPath(location);
+    return canonicalPath === undefined
+      ? undefined
+      : this.user.config[canonicalPath];
+  }
+
+  private aliasesFor(canonicalPath: string): string[] {
+    return Object.keys(this.user.config).filter(
+      (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
+    );
+  }
+
+  snapshotValue(location: string): TrustedFolderSnapshot {
+    const canonicalPath = requireCanonicalPath(location);
+    const aliases = new Set(this.aliasesFor(canonicalPath));
+    return {
+      canonicalPath,
+      entries: Object.entries(this.user.config).filter(([rulePath]) =>
+        aliases.has(rulePath),
+      ),
+    };
+  }
+
+  restoreSnapshot(snapshot: TrustedFolderSnapshot): void {
+    const originalConfig = { ...this.user.config };
+    for (const rulePath of this.aliasesFor(snapshot.canonicalPath)) {
+      delete this.user.config[rulePath];
+    }
+    for (const [rulePath, trustLevel] of snapshot.entries) {
+      this.user.config[rulePath] = trustLevel;
+    }
     try {
       saveTrustedFolders(this.user);
     } catch (e) {
-      // Revert the in-memory change if the save failed.
-      if (!hadOriginalTrustLevel) {
-        delete this.user.config[path];
-      } else {
-        this.user.config[path] = originalTrustLevel;
-      }
+      restoreConfigInPlace(this.user.config, originalConfig);
+      throw e;
+    }
+  }
+
+  setValue(location: string, trustLevel: TrustLevel): void {
+    const canonicalPath = requireCanonicalPath(location);
+    const originalConfig = { ...this.user.config };
+    const aliases = this.aliasesFor(canonicalPath);
+    for (const alias of aliases) {
+      delete this.user.config[alias];
+    }
+    this.user.config[canonicalPath] = trustLevel;
+    try {
+      saveTrustedFolders(this.user);
+    } catch (e) {
+      restoreConfigInPlace(this.user.config, originalConfig);
+      throw e;
+    }
+  }
+
+  deleteValue(location: string): void {
+    const canonicalPath = requireCanonicalPath(location);
+    const originalConfig = { ...this.user.config };
+    const aliases = this.aliasesFor(canonicalPath);
+    if (aliases.length === 0) {
+      return;
+    }
+    for (const alias of aliases) {
+      delete this.user.config[alias];
+    }
+    try {
+      saveTrustedFolders(this.user);
+    } catch (e) {
+      restoreConfigInPlace(this.user.config, originalConfig);
       throw e;
     }
   }
@@ -185,6 +314,50 @@ export function loadTrustedFolders(): LoadedTrustedFolders {
   return loadedTrustedFolders;
 }
 
+function removeTemporaryFile(temporaryPath: string): void {
+  try {
+    fs.unlinkSync(temporaryPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      debugLogger.warn(
+        `Failed to remove trusted folders temporary file ${temporaryPath}:`,
+        error,
+      );
+    }
+  }
+}
+
+function isUnsupportedFileModeError(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) {
+    return false;
+  }
+  return (
+    error.code === 'ENOSYS' ||
+    error.code === 'ENOTSUP' ||
+    error.code === 'EOPNOTSUPP'
+  );
+}
+
+function secureTemporaryFileMode(temporaryPath: string): void {
+  try {
+    fs.chmodSync(temporaryPath, 0o600);
+    const temporaryMode = fs.statSync(temporaryPath).mode & 0o777;
+    if (temporaryMode !== 0o600) {
+      throw new Error(
+        `Trusted folders temporary file has mode ${temporaryMode.toString(8)} instead of 600.`,
+      );
+    }
+  } catch (error) {
+    if (!isUnsupportedFileModeError(error)) {
+      throw error;
+    }
+    debugLogger.warn(
+      `Filesystem for trusted folders does not support POSIX file modes; continuing with the mode requested at file creation for ${temporaryPath}:`,
+      error,
+    );
+  }
+}
+
 export function saveTrustedFolders(
   trustedFoldersFile: TrustedFoldersFile,
 ): void {
@@ -194,11 +367,32 @@ export function saveTrustedFolders(
     fs.mkdirSync(dirPath, { recursive: true });
   }
 
-  fs.writeFileSync(
-    trustedFoldersFile.path,
-    JSON.stringify(trustedFoldersFile.config, null, 2),
-    { encoding: 'utf-8', mode: 0o600 },
+  const temporaryPath = path.join(
+    dirPath,
+    `.${path.basename(trustedFoldersFile.path)}.${process.pid}.${randomUUID()}.tmp`,
   );
+  try {
+    fs.writeFileSync(
+      temporaryPath,
+      JSON.stringify(trustedFoldersFile.config, null, 2),
+      { encoding: 'utf-8', mode: 0o600, flag: 'wx' },
+    );
+    if (process.platform !== 'win32') {
+      secureTemporaryFileMode(temporaryPath);
+    }
+  } catch (error) {
+    removeTemporaryFile(temporaryPath);
+    throw error;
+  }
+
+  // Atomic replacement is the commit point; nothing fallible may follow it on
+  // success. A failed commit still owns the temporary file and must remove it.
+  try {
+    fs.renameSync(temporaryPath, trustedFoldersFile.path);
+  } catch (error) {
+    removeTemporaryFile(temporaryPath);
+    throw error;
+  }
 }
 
 /** Is folder trust feature enabled per the current applied settings */
@@ -208,33 +402,56 @@ export function isFolderTrustEnabled(settings: Settings): boolean {
   return folderTrustSetting;
 }
 
-function getWorkspaceTrustFromLocalConfig(): boolean | undefined {
-  const folders = loadTrustedFolders();
-
-  if (folders.errors.length > 0) {
-    const errorMessages = folders.errors.map(
-      (error) => `Error in ${error.path}: ${error.message}`,
-    );
-    throw new FatalConfigError(
-      `${errorMessages.join('\n')}\nPlease fix the configuration file and try again.`,
-    );
-  }
-
-  return folders.isPathTrusted(process.cwd());
-}
-
-export function isWorkspaceTrusted(settings: Settings): boolean | undefined {
+export function resolveWorkspaceTrust(
+  settings: Settings,
+  trustedFolders: LoadedTrustedFolders,
+  workingDirectory: string,
+  ideTrust: boolean | undefined = getIdeTrust(),
+): boolean | undefined {
   if (!isFolderTrustEnabled(settings)) {
     return true;
   }
+  if (ideTrust !== undefined) {
+    return ideTrust;
+  }
+  return trustedFolders.isPathTrusted(workingDirectory);
+}
 
-  const ideTrust = getIdeTrust();
+export function resolveLocalWorkspaceTrust(
+  settings: Settings,
+  trustedFolders: LoadedTrustedFolders,
+  workingDirectory: string,
+): boolean | undefined {
+  if (!isFolderTrustEnabled(settings)) {
+    return true;
+  }
+  return trustedFolders.isPathTrusted(workingDirectory);
+}
+
+export function isWorkspaceTrusted(
+  settings: Settings,
+  workingDirectory: string = process.cwd(),
+  ideTrust: boolean | undefined = getIdeTrust(),
+): boolean | undefined {
+  if (!isFolderTrustEnabled(settings)) {
+    return true;
+  }
   if (ideTrust !== undefined) {
     return ideTrust;
   }
 
-  // Fall back to the local user configuration
-  return getWorkspaceTrustFromLocalConfig();
+  const trustedFolders = loadTrustedFolders();
+  if (trustedFolders.errors.length > 0) {
+    throw new FatalConfigError(
+      formatConfigFileErrors(trustedFolders.errors, 'configuration file'),
+    );
+  }
+  return resolveWorkspaceTrust(
+    settings,
+    trustedFolders,
+    workingDirectory,
+    ideTrust,
+  );
 }
 
 /**

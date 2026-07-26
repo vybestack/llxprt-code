@@ -218,6 +218,7 @@ function renderEarlyDialogs(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
   terminalWidth: number,
+  config: CliUiRuntime,
 ) {
   if (uiState.showWorkspaceMigrationDialog) {
     return (
@@ -239,8 +240,8 @@ function renderEarlyDialogs(
   if (uiState.isFolderTrustDialogOpen) {
     return (
       <FolderTrustDialog
+        workingDirectory={config.getWorkingDir()}
         onSelect={uiActions.handleFolderTrustSelect}
-        isRestarting={uiState.isRestarting}
       />
     );
   }
@@ -743,6 +744,7 @@ function renderDialogBodySecondHalf(
       <PermissionsModifyTrustDialog
         onExit={uiActions.closePermissionsDialog}
         addItem={addItem}
+        config={config}
       />
     );
   }
@@ -823,7 +825,12 @@ export const DialogManager = ({
   );
 
   // NOTE: IdeTrustChangeDialog not yet ported from upstream
-  const earlyDialog = renderEarlyDialogs(uiState, uiActions, terminalWidth);
+  const earlyDialog = renderEarlyDialogs(
+    uiState,
+    uiActions,
+    terminalWidth,
+    config,
+  );
   if (earlyDialog) return earlyDialog;
 
   return renderDialogBody(uiState, uiActions, settings, config, addItem, state);

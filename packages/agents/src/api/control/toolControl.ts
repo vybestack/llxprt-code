@@ -27,7 +27,7 @@ import type {
   AnyToolInvocation,
   ToolResult,
 } from '@vybestack/llxprt-code-tools';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../config-types.js';
 import type {

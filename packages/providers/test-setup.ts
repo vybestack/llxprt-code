@@ -17,3 +17,9 @@ import { setProviderRuntimeStateFactory } from '@vybestack/llxprt-code-core/runt
 // runtime before registering a SettingsService singleton. Provide an isolated
 // default settings state for those test-only contexts.
 setProviderRuntimeStateFactory(() => new SettingsService());
+
+// Clear credential-proxy env vars so unit tests don't inherit the host
+// process's proxy configuration (which would skip proactive renewal scheduling
+// and alter token-store behaviour).
+delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+delete process.env.LLXPRT_CAPABILITY_TOKEN;

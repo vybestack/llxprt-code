@@ -112,6 +112,18 @@ describe('mcp-client', () => {
         );
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
       });
+
+      it('with type streamable-http uses HTTP transport (alias for http)', async () => {
+        const transport = await createTransport(
+          'test-server',
+          {
+            url: 'http://test-server',
+            type: 'streamable-http',
+          },
+          false,
+        );
+        expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
+      });
     });
 
     it('should connect via command', async () => {

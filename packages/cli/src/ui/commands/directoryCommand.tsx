@@ -41,7 +41,7 @@ function addDirectoriesToWorkspace(
 
     if (trustedFolders) {
       const isTrusted = trustedFolders.isPathTrusted(expandedPath);
-      if (isTrusted === false) {
+      if (isTrusted !== true) {
         errors.push(
           `Directory '${pathToAdd.trim()}' is not trusted. Use the '/permissions' command to change the trust level.`,
         );

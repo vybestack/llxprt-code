@@ -20,12 +20,12 @@ import { firstTruthyString } from './utils/falsyFallback.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
-  AuthPrecedenceResolver,
   type AuthPrecedenceConfig,
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
-import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage/storage/provider-key-storage.js';
+import { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.js';
+import { getProviderKeyStorage } from '@vybestack/llxprt-code-storage';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
 import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';

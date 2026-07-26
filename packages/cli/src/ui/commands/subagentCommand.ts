@@ -14,6 +14,7 @@ import type {
   SlashCommandActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
+import type { CommandArgumentSchema } from './schema/types.js';
 import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -112,6 +113,60 @@ async function saveSubagent(
 }
 
 /**
+ * Shared completer that lists existing subagents as autocomplete suggestions.
+ *
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
+ * @requirement:REQ-002
+ * @requirement:REQ-004
+ */
+const subagentNameCompleter = withFuzzyFilter(async (ctx: CommandContext) => {
+  const manager = ctx.services.subagentManager;
+  if (!manager) {
+    return [];
+  }
+
+  const names = await manager.listSubagents();
+
+  const suggestions = await Promise.all(
+    names.map(async (name) => {
+      try {
+        const details = await manager.loadSubagent(name);
+        return {
+          value: name,
+          description: `Profile: ${details.profile}`,
+        };
+      } catch (error) {
+        logger.warn(
+          () =>
+            `Error loading subagent '${name}' for autocomplete: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return {
+          value: name,
+          description: 'Subagent',
+        };
+      }
+    }),
+  );
+
+  return suggestions;
+});
+
+/**
+ * Schema exposing subagent-name autocomplete for single-argument commands
+ * (`/subagent edit|show|delete <name>`).
+ *
+ * @requirement:REQ-004
+ */
+export const subagentNameSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'name',
+    description: 'Enter subagent name',
+    completer: subagentNameCompleter,
+  },
+];
+
+/**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P08
  * @requirement:REQ-002
  * @requirement:REQ-003
@@ -124,33 +179,7 @@ const subagentSchema = [
     kind: 'value' as const,
     name: 'name',
     description: 'Enter subagent name',
-    completer: withFuzzyFilter(async (ctx: CommandContext) => {
-      const manager = ctx.services.subagentManager;
-      if (!manager) {
-        return [];
-      }
-
-      const names = await manager.listSubagents();
-
-      const suggestions = await Promise.all(
-        names.map(async (name) => {
-          try {
-            const details = await manager.loadSubagent(name);
-            return {
-              value: name,
-              description: `Profile: ${details.profile}`,
-            };
-          } catch {
-            return {
-              value: name,
-              description: 'Subagent',
-            };
-          }
-        }),
-      );
-
-      return suggestions;
-    }),
+    completer: subagentNameCompleter,
   },
   {
     kind: 'value' as const,
@@ -393,6 +422,7 @@ const showCommand: SlashCommand = {
   name: 'show',
   description: 'Show detailed subagent configuration (interactive)',
   kind: CommandKind.BUILT_IN,
+  schema: subagentNameSchema,
   action: async (
     context: CommandContext,
     args: string,
@@ -445,6 +475,7 @@ const deleteCommand: SlashCommand = {
   name: 'delete',
   description: 'Delete a subagent configuration (interactive)',
   kind: CommandKind.BUILT_IN,
+  schema: subagentNameSchema,
   action: async (
     context: CommandContext,
     args: string,
@@ -528,6 +559,7 @@ const editCommand: SlashCommand = {
   name: 'edit',
   description: 'Edit subagent configuration (interactive)',
   kind: CommandKind.BUILT_IN,
+  schema: subagentNameSchema,
   action: async (
     context: CommandContext,
     args: string,

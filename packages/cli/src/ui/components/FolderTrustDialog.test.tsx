@@ -8,12 +8,13 @@
 
 import { ExitCodes } from '@vybestack/llxprt-code-core';
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
-import { act } from 'react';
-import { vi } from 'vitest';
+import { createDeferred } from '../../test-utils/async.js';
+import { act, StrictMode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());
-const mockedCwd = vi.hoisted(() => vi.fn());
+const KITTY_ESCAPE_SEQUENCE = '\u001b[27u';
 
 vi.mock('node:process', async () => {
   const actual =
@@ -21,19 +22,20 @@ vi.mock('node:process', async () => {
   return {
     ...actual,
     exit: mockedExit,
-    cwd: mockedCwd,
   };
 });
 
 describe('FolderTrustDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedCwd.mockReturnValue('/home/user/project');
   });
 
   it('should render the dialog with title and description', () => {
     const { lastFrame } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} />,
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={vi.fn()}
+      />,
     );
 
     expect(lastFrame()).toContain('Do you trust this folder?');
@@ -42,14 +44,29 @@ describe('FolderTrustDialog', () => {
     );
   });
 
+  it('uses the configured working directory for option labels', () => {
+    const { lastFrame } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/configured/workspace/project"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(lastFrame()).toContain('Trust folder (project)');
+    expect(lastFrame()).toContain('Trust parent folder (workspace)');
+  });
+
   it('should display exit message and call process.exit and not call onSelect when escape is pressed', async () => {
     const onSelect = vi.fn();
     const { lastFrame, stdin } = renderWithProviders(
-      <FolderTrustDialog onSelect={onSelect} isRestarting={false} />,
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={onSelect}
+      />,
     );
 
     act(() => {
-      stdin.write('\u001b[27u'); // Press kitty escape key
+      stdin.write(KITTY_ESCAPE_SEQUENCE); // Press kitty escape key
     });
 
     await waitFor(() => {
@@ -63,53 +80,142 @@ describe('FolderTrustDialog', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('should display restart message when isRestarting is true', () => {
-    const { lastFrame } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} isRestarting={true} />,
-    );
+  it('cancels the pending exit when the dialog unmounts', () => {
+    vi.useFakeTimers();
+    try {
+      const { stdin, unmount } = renderWithProviders(
+        <FolderTrustDialog
+          workingDirectory="/home/user/project"
+          onSelect={vi.fn()}
+        />,
+      );
 
-    expect(lastFrame()).toContain('To see changes, llxprt must be restarted');
+      act(() => {
+        stdin.write(KITTY_ESCAPE_SEQUENCE);
+      });
+      unmount();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+
+      expect(mockedExit).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('should call process.exit when "r" is pressed and isRestarting is true', async () => {
+  it('serializes an async selection and ignores Enter and Escape until it settles', async () => {
+    const selection = createDeferred<void>();
+    const onSelect = vi.fn(() => selection.promise);
     const { stdin } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} isRestarting={true} />,
-    );
-
-    stdin.write('r');
-
-    await waitFor(() => {
-      expect(mockedExit).toHaveBeenCalledWith(ExitCodes.SUCCESS);
-    });
-  });
-
-  it('should not call process.exit when "r" is pressed and isRestarting is false', async () => {
-    const { stdin } = renderWithProviders(
-      <FolderTrustDialog onSelect={vi.fn()} isRestarting={false} />,
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={onSelect}
+      />,
     );
 
     act(() => {
-      stdin.write('r');
+      stdin.write('\r');
+      stdin.write('\r');
+      stdin.write(KITTY_ESCAPE_SEQUENCE);
+    });
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+    expect(mockedExit).not.toHaveBeenCalled();
+    selection.resolve();
+    await selection.promise;
+
+    act(() => {
+      stdin.write(KITTY_ESCAPE_SEQUENCE);
+    });
+    await waitFor(() => expect(mockedExit).toHaveBeenCalledOnce());
+  });
+
+  it('allows another selection after StrictMode replays the mount effect', async () => {
+    const selection = createDeferred<void>();
+    const onSelect = vi
+      .fn()
+      .mockReturnValueOnce(selection.promise)
+      .mockResolvedValue(undefined);
+    const { stdin } = renderWithProviders(
+      <StrictMode>
+        <FolderTrustDialog
+          workingDirectory="/home/user/project"
+          onSelect={onSelect}
+        />
+      </StrictMode>,
+    );
+
+    act(() => {
+      stdin.write('\r');
+    });
+    await waitFor(() => expect(onSelect).toHaveBeenCalledOnce());
+
+    selection.resolve();
+    await act(async () => selection.promise);
+    act(() => {
+      stdin.write('\r');
+    });
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows an actionable error when applying the selection fails', async () => {
+    const selection = createDeferred<void>();
+    const { lastFrame, stdin } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={() => selection.promise}
+      />,
+    );
+
+    act(() => {
+      stdin.write('\r');
+    });
+    selection.reject(new Error('disk full'));
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain(
+        'Failed to apply folder trust selection: disk full',
+      );
+    });
+  });
+
+  it('shows an actionable error when applying the selection throws synchronously', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <FolderTrustDialog
+        workingDirectory="/home/user/project"
+        onSelect={() => {
+          throw new Error('synchronous failure');
+        }}
+      />,
+    );
+
+    act(() => {
+      stdin.write('\r');
     });
 
     await waitFor(() => {
-      expect(mockedExit).not.toHaveBeenCalled();
+      expect(lastFrame()).toContain(
+        'Failed to apply folder trust selection: synchronous failure',
+      );
     });
   });
 
   describe('parentFolder display', () => {
     it('should correctly display the parent folder name for a nested directory', () => {
-      mockedCwd.mockReturnValue('/home/user/project');
       const { lastFrame } = renderWithProviders(
-        <FolderTrustDialog onSelect={vi.fn()} />,
+        <FolderTrustDialog
+          workingDirectory="/home/user/project"
+          onSelect={vi.fn()}
+        />,
       );
       expect(lastFrame()).toContain('Trust parent folder (user)');
     });
 
     it('should correctly display an empty parent folder name for a directory directly under root', () => {
-      mockedCwd.mockReturnValue('/project');
       const { lastFrame } = renderWithProviders(
-        <FolderTrustDialog onSelect={vi.fn()} />,
+        <FolderTrustDialog workingDirectory="/project" onSelect={vi.fn()} />,
       );
       expect(lastFrame()).toContain('Trust parent folder ()');
     });

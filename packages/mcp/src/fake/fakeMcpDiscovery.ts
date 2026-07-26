@@ -28,6 +28,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { z } from 'zod';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -40,26 +41,34 @@ import {
   MCPServerStatus,
   updateMCPServerStatus,
 } from '../client/mcp-client.js';
+import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from '../client/mcp-errors.js';
+import { generateMcpToolName } from '../client/mcp-tool.js';
 
-/** A single tool the fake server "serves" to discovery. */
-export interface FakeMcpFixtureTool {
-  readonly name: string;
-  readonly description?: string;
-  readonly enabled?: boolean;
-}
+const FakeMcpFixtureToolSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
 
-/** Per-server fixture entry. */
-export interface FakeMcpFixtureServer {
-  readonly tools?: readonly FakeMcpFixtureTool[];
-  readonly latencyMs?: number;
-  /** When present, discovery for this server fails with this message. */
-  readonly failure?: string;
-}
+const FakeMcpFixtureServerSchema = z
+  .object({
+    tools: z.array(FakeMcpFixtureToolSchema).optional(),
+    latencyMs: z.number().finite().nonnegative().optional(),
+    failure: z.string().optional(),
+  })
+  .strict();
 
-/** The full on-disk fake MCP fixture shape. */
-export interface FakeMcpFixture {
-  readonly servers: Readonly<Record<string, FakeMcpFixtureServer>>;
-}
+const FakeMcpFixtureSchema = z
+  .object({
+    servers: z.record(FakeMcpFixtureServerSchema),
+  })
+  .strict();
+
+export type FakeMcpFixtureTool = z.infer<typeof FakeMcpFixtureToolSchema>;
+export type FakeMcpFixtureServer = z.infer<typeof FakeMcpFixtureServerSchema>;
+export type FakeMcpFixture = z.infer<typeof FakeMcpFixtureSchema>;
 
 /** Outcome of applying fake discovery for a single server. */
 export interface FakeMcpDiscoveryOutcome {
@@ -89,8 +98,14 @@ export function loadFakeMcpFixture(): FakeMcpFixture | undefined {
     return undefined;
   }
   const raw = readFileSync(path, 'utf8');
-  const parsed = JSON.parse(raw) as FakeMcpFixture;
-  return parsed;
+  const parsed: unknown = JSON.parse(raw);
+  const result = FakeMcpFixtureSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `Invalid fake MCP fixture '${path}': ${result.error.message}`,
+    );
+  }
+  return result.data;
 }
 
 /**
@@ -105,11 +120,25 @@ class FakeMcpToolInvocation extends BaseToolInvocation<
   Record<string, unknown>,
   ToolResult
 > {
+  constructor(
+    params: Record<string, unknown>,
+    private readonly isAuthorized: () => boolean,
+  ) {
+    super(params);
+  }
+
   getDescription(): string {
     return 'fake mcp tool invocation';
   }
 
   async execute(): Promise<ToolResult> {
+    if (!isAuthorizedSafely(this.isAuthorized)) {
+      return {
+        llmContent: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+        returnDisplay: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE,
+        error: { message: MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE },
+      };
+    }
     return {
       llmContent: '',
       returnDisplay: '',
@@ -123,10 +152,15 @@ export class FakeMcpTool extends BaseDeclarativeTool<
 > {
   readonly serverName: string;
 
-  constructor(serverName: string, toolName: string, description: string) {
+  constructor(
+    serverName: string,
+    toolName: string,
+    description: string,
+    private readonly isAuthorized: () => boolean,
+  ) {
     super(
-      toolName,
-      toolName,
+      generateMcpToolName(serverName, toolName),
+      `${toolName} (${serverName} MCP Server)`,
       description,
       Kind.Other,
       { type: 'object', properties: {} },
@@ -139,7 +173,7 @@ export class FakeMcpTool extends BaseDeclarativeTool<
   protected createInvocation(
     params: Record<string, unknown>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
-    return new FakeMcpToolInvocation(params);
+    return new FakeMcpToolInvocation(params, this.isAuthorized);
   }
 }
 
@@ -153,48 +187,109 @@ export class FakeMcpTool extends BaseDeclarativeTool<
  * error (DISCONNECTED) state, and returns the failure message so the manager
  * can surface it through the normal discovery-failure path.
  */
+function isAuthorizedSafely(isAuthorized: () => boolean): boolean {
+  try {
+    return isAuthorized();
+  } catch {
+    return false;
+  }
+}
+
+async function waitForLatency(
+  latencyMs: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (latencyMs <= 0 || signal?.aborted === true) return;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timeout = setTimeout(finish, latencyMs);
+    signal?.addEventListener('abort', finish, { once: true });
+    if (signal?.aborted === true) finish();
+  });
+}
+
+function disconnectFakeServer(
+  name: string,
+  toolRegistry: ToolRegistry,
+  failure?: string,
+): FakeMcpDiscoveryOutcome {
+  try {
+    toolRegistry.removeMcpToolsByServer(name);
+  } finally {
+    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+  }
+  return {
+    status: MCPServerStatus.DISCONNECTED,
+    registeredToolNames: [],
+    ...(failure === undefined ? {} : { failure }),
+  };
+}
+
 export async function applyFakeServerDiscovery(
   name: string,
   toolRegistry: ToolRegistry,
   fixture: FakeMcpFixture,
+  isAuthorized: () => boolean,
+  signal?: AbortSignal,
 ): Promise<FakeMcpDiscoveryOutcome> {
+  const hasAuthorization = (): boolean =>
+    signal?.aborted !== true && isAuthorizedSafely(isAuthorized);
+  if (!hasAuthorization()) {
+    return disconnectFakeServer(name, toolRegistry);
+  }
   if (!Object.prototype.hasOwnProperty.call(fixture.servers, name)) {
-    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-    return { status: MCPServerStatus.DISCONNECTED, registeredToolNames: [] };
+    return disconnectFakeServer(name, toolRegistry);
   }
   const server = fixture.servers[name];
 
   updateMCPServerStatus(name, MCPServerStatus.CONNECTING);
+  if (!hasAuthorization()) {
+    return disconnectFakeServer(name, toolRegistry);
+  }
 
-  const latencyMs = server.latencyMs ?? 0;
-  if (latencyMs > 0) {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, latencyMs);
-    });
+  await waitForLatency(server.latencyMs ?? 0, signal);
+  if (!hasAuthorization()) {
+    return disconnectFakeServer(name, toolRegistry);
   }
 
   if (typeof server.failure === 'string') {
-    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
-    return {
-      status: MCPServerStatus.DISCONNECTED,
-      registeredToolNames: [],
-      failure: server.failure,
-    };
+    return disconnectFakeServer(name, toolRegistry, server.failure);
   }
 
   toolRegistry.removeMcpToolsByServer(name);
+  if (!hasAuthorization()) {
+    return disconnectFakeServer(name, toolRegistry);
+  }
   const registeredToolNames: string[] = [];
   for (const tool of server.tools ?? []) {
-    const enabled = tool.enabled ?? true;
-    if (!enabled) {
-      continue;
+    if (tool.enabled === false) continue;
+    if (!hasAuthorization()) {
+      return disconnectFakeServer(name, toolRegistry);
     }
     toolRegistry.registerTool(
-      new FakeMcpTool(name, tool.name, tool.description ?? ''),
+      new FakeMcpTool(
+        name,
+        tool.name,
+        tool.description ?? '',
+        hasAuthorization,
+      ),
     );
-    registeredToolNames.push(tool.name);
+    if (!hasAuthorization()) {
+      return disconnectFakeServer(name, toolRegistry);
+    }
+    registeredToolNames.push(generateMcpToolName(name, tool.name));
   }
 
+  if (!hasAuthorization()) {
+    return disconnectFakeServer(name, toolRegistry);
+  }
   updateMCPServerStatus(name, MCPServerStatus.CONNECTED);
   return {
     status: MCPServerStatus.CONNECTED,

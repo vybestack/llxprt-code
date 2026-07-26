@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -26,6 +26,7 @@ import {
   SubagentTerminateMode,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 describe('subagentToolProcessing', () => {
   // --- Pure helpers ---
@@ -546,7 +547,9 @@ describe('subagentToolProcessing', () => {
           getOrCreateScheduler: vi.fn(),
           disposeScheduler: vi.fn(),
         },
-        config: {} as never,
+        config: {
+          getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+        } as never,
       };
     }
 

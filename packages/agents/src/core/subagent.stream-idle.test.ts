@@ -30,7 +30,7 @@ import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environ
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { DEFAULT_GEMINI_MODEL } from '@vybestack/llxprt-code-core/config/models.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';

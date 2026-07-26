@@ -59,6 +59,10 @@ import {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  recordActualTokenUsage,
+  type ActualTokenUsageInput,
+} from './tokenUsageActualLogger.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 type ToolGroupArray = Array<{
@@ -253,6 +257,7 @@ export class TurnProcessor {
       yield { type: StreamEventType.RETRY };
     }
 
+    let hasYieldedChunk = false;
     try {
       const currentParams = this._applyRetryTemperature(params, attempt);
       const stream = await this.streamProcessor.makeApiCallAndProcessStream(
@@ -261,6 +266,12 @@ export class TurnProcessor {
         userContents,
       );
       for await (const chunk of stream) {
+        hasYieldedChunk ||= chunk.content.blocks.some(
+          (block) =>
+            (block.type === 'text' && block.text.length > 0) ||
+            block.type === 'thinking' ||
+            block.type === 'tool_call',
+        );
         yield wrapChunk(chunk);
       }
       return { error: null, action: 'stop' };
@@ -291,7 +302,10 @@ export class TurnProcessor {
         }
         return { error: null, action: 'stop' };
       }
-      if (shouldRetryStreamAttempt(error, params, attempt)) {
+      if (
+        !hasYieldedChunk &&
+        shouldRetryStreamAttempt(error, params, attempt)
+      ) {
         return { error, action: 'retry' };
       }
       return { error, action: 'stop' };
@@ -785,7 +799,7 @@ export class TurnProcessor {
 
       this._recordOutputContent(response, currentModel, filteredAfcHistory);
 
-      await this._syncTokenCounts(response);
+      await this._syncTokenCounts(response, _prompt_id);
     } finally {
       this.eagerlyRecordedToolResponseCallIds.clear();
     }
@@ -852,7 +866,10 @@ export class TurnProcessor {
     }
   }
 
-  private async _syncTokenCounts(response: ModelOutput): Promise<void> {
+  private async _syncTokenCounts(
+    response: ModelOutput,
+    promptId?: string,
+  ): Promise<void> {
     await this.historyService.waitForTokenUpdates();
     const usage = response.usage;
     if (usage?.promptTokens !== undefined) {
@@ -868,6 +885,27 @@ export class TurnProcessor {
     ) {
       this.historyService.syncTotalTokens(this.lastPromptTokenCount);
       await this.historyService.waitForTokenUpdates();
+    }
+
+    if (promptId !== undefined) {
+      let usageForLogging: ActualTokenUsageInput | undefined;
+      if (usage) {
+        usageForLogging = {
+          promptTokens: usage.promptTokens,
+          cachedTokens: usage.cachedTokens,
+          cache_read_input_tokens: usage.cache_read_input_tokens,
+        };
+      } else if (
+        this.lastPromptTokenCount !== null &&
+        this.lastPromptTokenCount > 0
+      ) {
+        usageForLogging = { promptTokens: this.lastPromptTokenCount };
+      }
+      await recordActualTokenUsage(
+        this.compressionHandler.tokenUsageLogger,
+        promptId,
+        usageForLogging,
+      );
     }
   }
 }

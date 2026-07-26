@@ -43,7 +43,7 @@ import type {
   ToolCall,
   CompletedToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 // ─── Adapter driver (dynamic import → natural RED) ──────────────────────────
 

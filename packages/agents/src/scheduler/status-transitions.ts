@@ -27,7 +27,7 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 /**
  * Common context extracted from a non-terminal tool call for building transitions.

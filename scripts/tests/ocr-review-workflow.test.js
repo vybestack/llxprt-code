@@ -103,10 +103,10 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(workflow.concurrency?.['cancel-in-progress']).toBe(true);
     expect(codeReviewJob['timeout-minutes']).toBe(60);
     expect(codeReviewJob.outputs?.infrastructure_failure).toBe(
-      '${{ steps.ocr-classification.outputs.infrastructure_failure }}',
+      '${{ steps.ocr-final-classification.outputs.infrastructure_failure }}',
     );
     expect(codeReviewJob.outputs?.policy_failure).toBe(
-      '${{ steps.ocr-classification.outputs.policy_failure }}',
+      '${{ steps.ocr-final-classification.outputs.policy_failure }}',
     );
     expect(mergeabilityGateJob.concurrency).toBeUndefined();
     expect(codeReviewJob.concurrency).toBeUndefined();
@@ -581,38 +581,30 @@ describe('.github/workflows/ocr-review.yml', () => {
     );
   });
 
-  it('uploads artifacts without noisy missing-file failures', () => {
+  it('uploads diagnostics and telemetry only after their respective validation', () => {
     const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
-    expect(uploadStep.if).toBe('always()');
+    const telemetryUploadStep = stepNamed(
+      codeReviewJob,
+      'Upload OCR telemetry',
+    );
+    expect(String(uploadStep.if)).toContain(
+      'steps.ocr-telemetry-validation.outputs.valid',
+    );
     expect(uploadStep.with?.path).toContain('ocr-phase.txt');
     expect(uploadStep.with?.path).toContain('ocr-preflight.txt');
     expect(uploadStep.with?.path).toContain('ocr-infrastructure-failure.txt');
     expect(uploadStep.with?.path).toContain('ocr-policy-failure.txt');
-    const redactRun = commandText(
-      stepNamed(codeReviewJob, 'Redact OCR diagnostic artifacts'),
-    );
-    for (const artifact of uploadStep.with?.path.trim().split(/\s+/) ?? []) {
-      expect(redactRun).toContain(`'${artifact}'`);
-    }
-    expectContainsAll(redactRun, [
-      'replaceWithRedactionFailure',
-      'redaction failed for ${fileName}: ${code}',
-      'fs.rmSync(fileName, { force: true });',
-      'process.exitCode = 1;',
-      "if (error && error.code !== 'ENOENT') {",
-    ]);
-    expect(redactRun).not.toContain('throw error');
-    expect(uploadStep.with?.['if-no-files-found']).toBe('warn');
+    expect(uploadStep.with?.path).not.toContain('ocr-telemetry.json');
+    expect(telemetryUploadStep.with?.path).toBe('ocr-telemetry.json');
+    expect(telemetryUploadStep.with?.['if-no-files-found']).toBe('error');
   });
 
-  it('creates placeholders for every uploaded artifact so uploads never fail', () => {
-    const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
+  it('creates non-telemetry placeholders before producing telemetry', () => {
     const placeholderRun = commandText(
       stepNamed(codeReviewJob, 'Ensure OCR artifact placeholders exist'),
     );
-    for (const artifact of uploadStep.with?.path.trim().split(/\s+/) ?? []) {
-      expect(placeholderRun).toContain(artifact);
-    }
+    expect(placeholderRun).toContain('ocr-routing-decisions.json');
+    expect(placeholderRun).not.toContain('ocr-telemetry.json');
   });
 
   it('notifies a deduplicated ci/cd issue only for classified infrastructure errors', () => {

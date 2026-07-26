@@ -130,22 +130,20 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     expect(genericIndex).toBeGreaterThan(allFileIndex);
   });
 
-  it('writes a safe placeholder before redacting artifacts (Behavior 4)', () => {
+  it('redacts artifacts with an atomic temporary-file rename (Behavior 4)', () => {
     const redactRun = commandText(
       stepNamed(codeReviewJob, 'Redact OCR diagnostic artifacts'),
     );
     expectContainsAll(redactRun, [
-      'fs.writeFileSync(fileName, REDACTED_PENDING)',
-      'const tempFile = `${fileName}.redacting`',
-      'fs.writeFileSync(tempFile, redactedContent)',
-      'fs.renameSync(tempFile, fileName)',
+      'const temporary = `${fileName}.redacting`',
+      'fs.writeFileSync(temporary, redact(original))',
+      'fs.renameSync(temporary, fileName)',
     ]);
-    expect(redactRun).toContain('[REDACTED-PENDING]');
-    const placeholderIndex = redactRun.indexOf(
-      'fs.writeFileSync(fileName, REDACTED_PENDING)',
+    const temporaryIndex = redactRun.indexOf(
+      'fs.writeFileSync(temporary, redact(original))',
     );
-    const renameIndex = redactRun.indexOf('fs.renameSync(tempFile, fileName)');
-    expect(renameIndex).toBeGreaterThan(placeholderIndex);
+    const renameIndex = redactRun.indexOf('fs.renameSync(temporary, fileName)');
+    expect(renameIndex).toBeGreaterThan(temporaryIndex);
   });
 
   it('does not retry non-idempotent gh issue writes (Behavior 5)', () => {

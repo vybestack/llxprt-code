@@ -65,6 +65,7 @@ export enum Command {
 
   // Text Input
   SUBMIT = 'submit',
+  STEER = 'steer', // LLXPRT-SPECIFIC: mid-turn steering (Ctrl+Enter while streaming)
   NEWLINE = 'newline',
   OPEN_EXTERNAL_EDITOR = 'openExternalEditor',
   PASTE_CLIPBOARD = 'pasteClipboard',
@@ -73,6 +74,7 @@ export enum Command {
   SHOW_ERROR_DETAILS = 'showErrorDetails',
   TOGGLE_TOOL_DESCRIPTIONS = 'toggleToolDescriptions', // LLXPRT-SPECIFIC
   TOGGLE_TODO_DIALOG = 'toggleTodoDialog', // LLXPRT-SPECIFIC
+  TOGGLE_QUEUED_MESSAGES = 'toggleQueuedMessages', // LLXPRT-SPECIFIC
   SHOW_IDE_CONTEXT_DETAIL = 'showIDEContextDetail',
   TOGGLE_MARKDOWN = 'toggleMarkdown',
   TOGGLE_COPY_MODE = 'toggleCopyMode',
@@ -223,7 +225,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.COLLAPSE_SUGGESTION]: [{ key: 'left' }],
 
   // Text Input
-  // Must also exclude shift to allow shift+enter for newline
+  // Must also exclude shift to allow shift+enter for multi-line input
   [Command.SUBMIT]: [
     {
       key: 'return',
@@ -232,8 +234,11 @@ export const defaultKeyBindings: KeyBindingConfig = {
       shift: false,
     },
   ],
-  // Split into multiple data-driven bindings
-  // Now also includes shift+enter for multi-line input
+  // Mid-turn steering: Ctrl+Enter while the agent is streaming injects the
+  // typed text at the next tool-call boundary. When not streaming, Ctrl+Enter
+  // falls through to NEWLINE (both match the same key; the handler checks
+  // STEER first and only consumes it when streaming).
+  [Command.STEER]: [{ key: 'return', ctrl: true }],
   [Command.NEWLINE]: [
     { key: 'return', ctrl: true },
     { key: 'return', command: true },
@@ -250,6 +255,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
   [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
+  [Command.TOGGLE_QUEUED_MESSAGES]: [{ key: ']', ctrl: true }],
   [Command.SHOW_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.TOGGLE_MARKDOWN]: [{ key: 'm', command: true }],
   [Command.TOGGLE_COPY_MODE]: [{ key: 's', ctrl: true }],
@@ -272,6 +278,17 @@ export const defaultKeyBindings: KeyBindingConfig = {
     { key: '\\', ctrl: true },
   ],
 };
+
+export function getDefaultKeyBindingHint(command: Command): string {
+  const binding = defaultKeyBindings[command][0];
+  const modifiers = [
+    binding.ctrl === true ? 'Ctrl' : undefined,
+    binding.command === true ? 'Cmd' : undefined,
+    binding.shift === true ? 'Shift' : undefined,
+  ].filter((modifier): modifier is string => modifier !== undefined);
+  const key = binding.key ?? binding.sequence ?? '';
+  return [...modifiers, key].join('+');
+}
 
 interface CommandCategory {
   readonly title: string;
@@ -357,6 +374,7 @@ export const commandCategories: readonly CommandCategory[] = [
     title: 'Text Input',
     commands: [
       Command.SUBMIT,
+      Command.STEER,
       Command.NEWLINE,
       Command.OPEN_EXTERNAL_EDITOR,
       Command.PASTE_CLIPBOARD,
@@ -382,6 +400,10 @@ export const commandCategories: readonly CommandCategory[] = [
   {
     title: 'Todo Dialog',
     commands: [Command.TOGGLE_TODO_DIALOG, Command.TOGGLE_TOOL_DESCRIPTIONS],
+  },
+  {
+    title: 'Queued Messages',
+    commands: [Command.TOGGLE_QUEUED_MESSAGES],
   },
   {
     title: 'Mouse',
@@ -452,6 +474,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
 
   // Text Input
   [Command.SUBMIT]: 'Submit the current prompt.',
+  [Command.STEER]:
+    'Steer the active agent mid-turn by injecting input at the next tool-call boundary (only during streaming).',
   [Command.NEWLINE]: 'Insert a newline without submitting.',
   [Command.OPEN_EXTERNAL_EDITOR]:
     'Open the current prompt in an external editor.',
@@ -462,6 +486,8 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
+  [Command.TOGGLE_QUEUED_MESSAGES]:
+    'Toggle the queued messages panel visibility.',
   [Command.SHOW_IDE_CONTEXT_DETAIL]: 'Show IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]: 'Toggle copy mode when in alternate buffer mode.',

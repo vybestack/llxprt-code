@@ -21,6 +21,7 @@ import type {
   SshAgentResult,
 } from './sandbox-ssh.js';
 import type { ContainerSandboxPrepared } from './sandbox-containers.js';
+import { runBestEffortSyncCleanup } from './cleanup.js';
 import {
   buildContainerRunArgs,
   addContainerVolumeMounts,
@@ -36,6 +37,7 @@ import {
   restoreStdinAfterSandbox,
   LOCAL_DEV_SANDBOX_IMAGE_NAME,
 } from './sandbox-containers.js';
+import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import { entrypoint } from './sandbox-entrypoint.js';
 import { ensureSandboxImageIsPresent } from './sandbox-image.js';
 import {
@@ -197,7 +199,12 @@ async function prepareContainerSandbox(
     credentialProxyBridgeResult = cpResult.credentialProxyBridgeResult;
     credentialProxyBridgeCleanup = cpResult.credentialProxyBridgeCleanup;
   } catch (err) {
-    credentialProxyBridgeResult?.cleanup?.();
+    runBestEffortSyncCleanup(credentialProxyBridgeResult?.cleanup);
+    try {
+      await stopProxy();
+    } catch {
+      // best-effort cleanup; the original error is the one we want to throw
+    }
     if (err instanceof FatalSandboxError) {
       throw err;
     }
@@ -242,7 +249,6 @@ async function executeContainerSandbox(
     image,
     workdir,
     portForwardingResult,
-    credentialProxyBridgeResult,
     sshResult,
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
@@ -279,7 +285,7 @@ async function executeContainerSandbox(
     cliConfig,
     sshResult,
     portForwardingResult,
-    credentialProxyBridgeResult,
+    credentialProxyBridgeCleanup,
     (c) => {
       credentialProxyBridgeCleanup = c;
     },

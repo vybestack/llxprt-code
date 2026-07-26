@@ -4,18 +4,16 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import { type ModelProfileInfoPayload } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import {
-  DebugLogger,
-  coreEvents,
-  type ModelProfileInfoPayload,
-} from '@vybestack/llxprt-code-core';
-import {
-  ProfileManager,
   getProfilePersistableKeys,
   isInternalSettingKey,
-  isLoadBalancerProfile,
   resolveAlias,
-} from '@vybestack/llxprt-code-settings';
+} from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import type {
   Profile,
   ModelParams,

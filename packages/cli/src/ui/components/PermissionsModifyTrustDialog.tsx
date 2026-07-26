@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
 import * as path from 'node:path';
 import { Colors } from '../colors.js';
@@ -13,92 +13,45 @@ import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { usePermissionsModifyTrust } from '../hooks/usePermissionsModifyTrust.js';
-import { TrustLevel } from '../../config/trustedFolders.js';
+import { isTrustLevel, type TrustLevel } from '../../config/trustedFolders.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type {
+  PermissionsTrustRuntime,
+  UsePermissionsModifyTrustReturn,
+} from '../hooks/usePermissionsModifyTrust.js';
+import {
+  getLocalTrustLevelDisplay,
+  getTrustLevelDisplay,
+  getWarningMessage,
+  getTrustUpdateDisplay,
+  getTrustCommitErrorMessage,
+  shouldDismissTrustDialog,
+  buildTrustLevelOptions,
+  findInitialTrustOptionIndex,
+} from '../trustDialogHelpers.js';
 
 interface PermissionsModifyTrustDialogProps {
   onExit: () => void;
   addItem: UseHistoryManagerReturn['addItem'];
-  onRestart?: () => void;
+  config?: PermissionsTrustRuntime;
 }
 
-function getTrustLevelDisplay(
-  level: TrustLevel | undefined,
-  isIdeTrusted: boolean | undefined,
-  isParentTrusted: boolean | undefined,
-): string {
-  if (isIdeTrusted === true) {
-    return 'Trusted (via IDE)';
-  }
-  if (isParentTrusted === true && level == null) {
-    return 'Trusted (via parent folder)';
-  }
-  switch (level) {
-    case TrustLevel.TRUST_FOLDER:
-      return 'Trusted';
-    case TrustLevel.TRUST_PARENT:
-      return 'Trust parent';
-    case TrustLevel.DO_NOT_TRUST:
-      return 'Not trusted';
-    default:
-      return 'Not set';
-  }
+interface UpdatedPromptProps {
+  committedTrustLevel: TrustLevel | undefined;
+  effectiveTrustDisplay: string;
 }
 
-function buildOptions(
-  folderName: string,
-  parentFolderName: string,
-): Array<RadioSelectItem<TrustLevel>> {
-  return [
-    {
-      label: `Trust this folder (${folderName})`,
-      value: TrustLevel.TRUST_FOLDER,
-      key: TrustLevel.TRUST_FOLDER,
-    },
-    {
-      label: `Trust parent folder (${parentFolderName})`,
-      value: TrustLevel.TRUST_PARENT,
-      key: TrustLevel.TRUST_PARENT,
-    },
-    {
-      label: "Don't trust",
-      value: TrustLevel.DO_NOT_TRUST,
-      key: TrustLevel.DO_NOT_TRUST,
-    },
-  ];
-}
-
-function getWarningMessage(
-  isIdeTrusted: boolean | undefined,
-  isParentTrusted: boolean | undefined,
-): string | null {
-  if (isIdeTrusted === true) {
-    return 'This folder is trusted via your IDE settings. Changes here will only take effect when not using the IDE.';
-  }
-  if (isParentTrusted === true) {
-    return 'This folder is trusted via a parent folder setting. You can override it with a more specific rule.';
-  }
-  return null;
-}
-
-interface RestartPromptProps {
-  getDisplayText: (level: TrustLevel | undefined) => string;
-  pendingTrustLevel: TrustLevel | undefined;
-  onRestart?: () => void;
-}
-
-const RestartPrompt: React.FC<RestartPromptProps> = ({
-  getDisplayText,
-  pendingTrustLevel,
-  onRestart: _onRestart,
+const UpdatedPrompt: React.FC<UpdatedPromptProps> = ({
+  committedTrustLevel,
+  effectiveTrustDisplay,
 }) => (
   <Box flexDirection="column">
     <Box
       flexDirection="column"
       borderStyle="round"
-      borderColor={Colors.AccentYellow}
+      borderColor={Colors.AccentGreen}
       padding={1}
       width="100%"
       marginLeft={1}
@@ -107,17 +60,16 @@ const RestartPrompt: React.FC<RestartPromptProps> = ({
         Trust level updated
       </Text>
       <Text color={Colors.Comment}>
-        Trust level has been set to:{' '}
+        Saved local fallback:{' '}
         <Text color={Colors.AccentGreen}>
-          {getDisplayText(pendingTrustLevel)}
+          {getLocalTrustLevelDisplay(committedTrustLevel)}
         </Text>
       </Text>
-    </Box>
-    <Box marginLeft={1} marginTop={1}>
-      <Text color={Colors.AccentYellow}>
-        To see changes, llxprt must be restarted. Press &apos;r&apos; to exit
-        and apply changes now, or Esc to continue without restart.
+      <Text color={Colors.Comment}>
+        Effective now:{' '}
+        <Text color={Colors.AccentGreen}>{effectiveTrustDisplay}</Text>
       </Text>
+      <Text color={Colors.Comment}>Press Enter to continue.</Text>
     </Box>
   </Box>
 );
@@ -129,7 +81,8 @@ interface TrustFormProps {
   warningMessage: string | null;
   options: Array<RadioSelectItem<TrustLevel>>;
   initialIndex: number;
-  onSelect: (level: TrustLevel) => void;
+  onSelect: (level: TrustLevel) => void | Promise<void>;
+  isCommitting: boolean;
 }
 
 const TrustForm: React.FC<TrustFormProps> = ({
@@ -140,6 +93,7 @@ const TrustForm: React.FC<TrustFormProps> = ({
   options,
   initialIndex,
   onSelect,
+  isCommitting,
 }) => (
   <Box flexDirection="column">
     <Box
@@ -175,8 +129,12 @@ const TrustForm: React.FC<TrustFormProps> = ({
         <RadioButtonSelect
           items={options}
           initialIndex={initialIndex}
-          onSelect={onSelect}
-          isFocused={true}
+          onSelect={(level) => {
+            if (isTrustLevel(level) && !isCommitting) {
+              void onSelect(level);
+            }
+          }}
+          isFocused={!isCommitting}
         />
       </Box>
     </Box>
@@ -186,83 +144,190 @@ const TrustForm: React.FC<TrustFormProps> = ({
   </Box>
 );
 
+function useTrustFormOptions(
+  workingDirectory: string,
+  parentFolderName: string,
+  currentTrustLevel: TrustLevel | undefined,
+): { options: Array<RadioSelectItem<TrustLevel>>; initialIndex: number } {
+  const folderName = path.basename(workingDirectory);
+  const options = useMemo(
+    () => buildTrustLevelOptions(folderName, parentFolderName),
+    [parentFolderName, folderName],
+  );
+  const initialIndex = useMemo(
+    () => findInitialTrustOptionIndex(options, currentTrustLevel),
+    [currentTrustLevel, options],
+  );
+  return { options, initialIndex };
+}
+
+function recordTrustSelection(
+  addItem: UseHistoryManagerReturn['addItem'],
+  workingDirectory: string,
+  level: TrustLevel,
+  previousTrustLevel: TrustLevel | undefined,
+  displayText: string,
+): boolean {
+  const changed = level !== previousTrustLevel;
+  addItem(
+    {
+      type: MessageType.INFO,
+      text: changed
+        ? `Trust level for ${workingDirectory} set to ${displayText}.`
+        : `Trust level unchanged for ${workingDirectory}`,
+    } as HistoryItemWithoutId,
+    Date.now(),
+  );
+  return changed;
+}
+
+function useTrustSelectionHandler({
+  addItem,
+  commitTrustLevel,
+  onExit,
+  pendingTrustLevel,
+  setIsCommitting,
+  setShowUpdatedPrompt,
+  committingRef,
+  mountedRef,
+  workingDirectory,
+}: {
+  addItem: UseHistoryManagerReturn['addItem'];
+  commitTrustLevel: UsePermissionsModifyTrustReturn['commitTrustLevel'];
+  onExit: () => void;
+  pendingTrustLevel: TrustLevel | undefined;
+  setIsCommitting: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowUpdatedPrompt: React.Dispatch<React.SetStateAction<boolean>>;
+  committingRef: React.MutableRefObject<boolean>;
+  mountedRef: React.MutableRefObject<boolean>;
+  workingDirectory: string;
+}) {
+  return useCallback(
+    async (level: TrustLevel) => {
+      if (committingRef.current) return;
+      committingRef.current = true;
+      setIsCommitting(true);
+      try {
+        const result = await commitTrustLevel(level);
+        if (!mountedRef.current) return;
+        if (!result.success) {
+          addItem(
+            {
+              type: MessageType.ERROR,
+              text: getTrustCommitErrorMessage(
+                result.phase,
+                result.error,
+                result.rollbackSucceeded,
+              ),
+            } as HistoryItemWithoutId,
+            Date.now(),
+          );
+          return;
+        }
+        const changed = recordTrustSelection(
+          addItem,
+          workingDirectory,
+          level,
+          pendingTrustLevel,
+          getLocalTrustLevelDisplay(level),
+        );
+        if (changed) setShowUpdatedPrompt(true);
+        else onExit();
+      } catch (error) {
+        if (!mountedRef.current) return;
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: getTrustCommitErrorMessage('live', error, false),
+          } as HistoryItemWithoutId,
+          Date.now(),
+        );
+      } finally {
+        committingRef.current = false;
+        if (mountedRef.current) setIsCommitting(false);
+      }
+    },
+    [
+      addItem,
+      commitTrustLevel,
+      committingRef,
+      mountedRef,
+      onExit,
+      pendingTrustLevel,
+      setIsCommitting,
+      setShowUpdatedPrompt,
+      workingDirectory,
+    ],
+  );
+}
+
 function useTrustDialogState(
   onExit: () => void,
   addItem: UseHistoryManagerReturn['addItem'],
+  config?: PermissionsTrustRuntime,
 ) {
+  const trust = usePermissionsModifyTrust(config);
   const {
-    currentTrustLevel,
     pendingTrustLevel,
-    commitTrustLevel,
+    effectiveLocalTrustLevel,
     isIdeTrusted,
     isParentTrusted,
-    requiresRestart: _requiresRestart,
+    committedTrustLevel,
+    effectiveTrust,
     workingDirectory,
     parentFolderName,
-  } = usePermissionsModifyTrust();
-
-  const [showRestartPrompt, setShowRestartPrompt] = useState(false);
-
+  } = trust;
+  const [showUpdatedPrompt, setShowUpdatedPrompt] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const committingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const getDisplayText = useCallback(
     (level: TrustLevel | undefined): string =>
       getTrustLevelDisplay(level, isIdeTrusted, isParentTrusted),
     [isIdeTrusted, isParentTrusted],
   );
-
-  const folderName = path.basename(workingDirectory);
-  const options = useMemo(
-    () => buildOptions(folderName, parentFolderName),
-    [parentFolderName, folderName],
+  const { options, initialIndex } = useTrustFormOptions(
+    workingDirectory,
+    parentFolderName,
+    pendingTrustLevel ?? effectiveLocalTrustLevel,
   );
+  const handleSelect = useTrustSelectionHandler({
+    addItem,
+    commitTrustLevel: trust.commitTrustLevel,
+    onExit,
+    pendingTrustLevel,
+    setIsCommitting,
+    setShowUpdatedPrompt,
+    committingRef,
+    mountedRef,
+    workingDirectory,
+  });
 
-  const initialIndex = useMemo(() => {
-    if (currentTrustLevel == null) return 0;
-    const index = options.findIndex((o) => o.value === currentTrustLevel);
-    return index >= 0 ? index : 0;
-  }, [currentTrustLevel, options]);
-
-  const handleSelect = useCallback(
-    (level: TrustLevel) => {
-      commitTrustLevel(level);
-      if (level !== currentTrustLevel) {
-        addItem(
-          {
-            type: MessageType.INFO,
-            text: `Trust level for ${workingDirectory} set to ${getDisplayText(level)}.`,
-          } as HistoryItemWithoutId,
-          Date.now(),
-        );
-        setShowRestartPrompt(true);
-      } else {
-        addItem(
-          {
-            type: MessageType.INFO,
-            text: `Trust level unchanged for ${workingDirectory}`,
-          } as HistoryItemWithoutId,
-          Date.now(),
-        );
-        onExit();
-      }
-    },
-    [
-      commitTrustLevel,
-      currentTrustLevel,
-      addItem,
-      workingDirectory,
-      onExit,
-      getDisplayText,
-    ],
+  const warningMessage = getWarningMessage(
+    isIdeTrusted,
+    isParentTrusted,
+    effectiveLocalTrustLevel,
   );
-
-  const warningMessage = useMemo(
-    () => getWarningMessage(isIdeTrusted, isParentTrusted),
-    [isIdeTrusted, isParentTrusted],
+  const trustUpdateDisplay = getTrustUpdateDisplay(
+    committedTrustLevel,
+    effectiveTrust,
+    isIdeTrusted,
+    isParentTrusted,
   );
 
   return {
-    currentTrustLevel,
-    pendingTrustLevel,
-    showRestartPrompt,
+    effectiveLocalTrustLevel,
+    committedTrustLevel,
+    effectiveTrustDisplay: trustUpdateDisplay.effectiveNow,
+    showUpdatedPrompt,
+    isCommitting,
+    isCommitPending: () => committingRef.current,
     getDisplayText,
     options,
     initialIndex,
@@ -274,27 +339,26 @@ function useTrustDialogState(
 
 export const PermissionsModifyTrustDialog: React.FC<
   PermissionsModifyTrustDialogProps
-> = ({ onExit, addItem, onRestart: _onRestartParam }) => {
-  const state = useTrustDialogState(onExit, addItem);
+> = ({ onExit, addItem, config }) => {
+  const state = useTrustDialogState(onExit, addItem, config);
 
   useKeypress(
     (key) => {
-      if (key.name === 'escape') {
-        onExit();
+      if (state.isCommitPending()) {
+        return;
       }
-      if (key.name === 'r' && state.showRestartPrompt) {
-        _onRestartParam?.();
+      if (shouldDismissTrustDialog(state.showUpdatedPrompt, key.name)) {
+        onExit();
       }
     },
     { isActive: true },
   );
 
-  if (state.showRestartPrompt) {
+  if (state.showUpdatedPrompt) {
     return (
-      <RestartPrompt
-        getDisplayText={state.getDisplayText}
-        pendingTrustLevel={state.pendingTrustLevel}
-        onRestart={_onRestartParam}
+      <UpdatedPrompt
+        committedTrustLevel={state.committedTrustLevel}
+        effectiveTrustDisplay={state.effectiveTrustDisplay}
       />
     );
   }
@@ -302,12 +366,13 @@ export const PermissionsModifyTrustDialog: React.FC<
   return (
     <TrustForm
       workingDirectory={state.workingDirectory}
-      currentTrustLevel={state.currentTrustLevel}
+      currentTrustLevel={state.effectiveLocalTrustLevel}
       getDisplayText={state.getDisplayText}
       warningMessage={state.warningMessage}
       options={state.options}
       initialIndex={state.initialIndex}
       onSelect={state.handleSelect}
+      isCommitting={state.isCommitting}
     />
   );
 };

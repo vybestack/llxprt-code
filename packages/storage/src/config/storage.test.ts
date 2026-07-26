@@ -19,6 +19,7 @@ vi.mock('fs', async (importOriginal) => {
 import {
   Storage,
   LLXPRT_DIR,
+  AGENTS_DIR,
   PROVIDER_ACCOUNTS_FILENAME,
   OAUTH_FILE,
 } from './storage.js';
@@ -463,6 +464,12 @@ describe('Storage – instance (workspace-local) helpers', () => {
     );
   });
 
+  it('getProjectChatsDir is the chats folder directly under the project temp dir (shared writer/prober contract)', () => {
+    expect(storage.getProjectChatsDir()).toBe(
+      path.join(storage.getProjectTempDir(), 'chats'),
+    );
+  });
+
   it('getProjectTempDir is deterministic for a given project root', () => {
     const a = new Storage(projectRoot).getProjectTempDir();
     const b = new Storage(projectRoot).getProjectTempDir();
@@ -778,6 +785,54 @@ describe('Storage.isNonEmptyAbsoluteOverride — override-validity contract', ()
   it('trims surrounding whitespace before checking', () => {
     expect(Storage.isNonEmptyAbsoluteOverride('   /etc/llxprt-code   ')).toBe(
       true,
+    );
+  });
+});
+
+describe('Storage – agents-standard (.agents) paths', () => {
+  // The agents-standard paths are always home-dir-based by design. Set the
+  // LLXPRT_* env overrides to non-home values to PROVE the agents-path
+  // methods do not depend on them.
+  beforeEach(() => {
+    process.env['LLXPRT_CONFIG_HOME'] = '/nonstandard/config';
+    process.env['LLXPRT_DATA_HOME'] = '/nonstandard/data';
+    process.env['LLXPRT_CACHE_HOME'] = '/nonstandard/cache';
+    process.env['LLXPRT_LOG_HOME'] = '/nonstandard/log';
+  });
+
+  afterEach(restoreEnv);
+
+  it('AGENTS_DIR is ".agents"', () => {
+    expect(AGENTS_DIR).toBe('.agents');
+  });
+
+  it('getGlobalAgentsDir returns ~/.agents ignoring env overrides', () => {
+    // Setting LLXPRT_CONFIG_HOME etc. must NOT divert the agents dir; it is
+    // always home-dir-based. The fail-closed guarantee (throws when home dir
+    // is unset or non-absolute, never a tmpdir fallback) is verified in
+    // storage.agentsSecurity.test.ts.
+    expect(Storage.getGlobalAgentsDir()).toBe(
+      path.join(os.homedir(), '.agents'),
+    );
+  });
+
+  it('getUserAgentSkillsDir returns ~/.agents/skills', () => {
+    expect(Storage.getUserAgentSkillsDir()).toBe(
+      path.join(os.homedir(), '.agents', 'skills'),
+    );
+  });
+
+  it('getAgentsDir returns project/.agents for a workspace instance', () => {
+    const projectDir = path.join(os.tmpdir(), 'project');
+    const storage = new Storage(projectDir);
+    expect(storage.getAgentsDir()).toBe(path.join(projectDir, AGENTS_DIR));
+  });
+
+  it('getProjectAgentSkillsDir returns project/.agents/skills for a workspace instance', () => {
+    const projectDir = path.join(os.tmpdir(), 'project');
+    const storage = new Storage(projectDir);
+    expect(storage.getProjectAgentSkillsDir()).toBe(
+      path.join(projectDir, AGENTS_DIR, 'skills'),
     );
   });
 });

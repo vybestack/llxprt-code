@@ -22,6 +22,8 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
+} from '@vybestack/llxprt-code-tools/tools/tools.js';
+import {
   type ToolCallConfirmationDetails,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
@@ -31,7 +33,7 @@ import {
   type ToolConfirmationRequest,
   type ToolPolicyRejection,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 
 const baseConfigParams: ConfigParameters = {
   cwd: '/tmp',

@@ -67,6 +67,7 @@ function mapMockFinishReason(raw: string): ModelStreamChunk['finishReason'] {
 export function mockChunk(opts: {
   text?: string;
   thought?: string;
+  isHidden?: boolean;
   thoughtSignature?: string;
   toolCalls?: Array<{
     id?: string;
@@ -119,6 +120,7 @@ export function mockChunk(opts: {
 
 function buildMockBlocks(opts: {
   thought?: string;
+  isHidden?: boolean;
   thoughtSignature?: string;
   text?: string;
   toolCalls?: Array<{
@@ -137,7 +139,7 @@ function buildMockBlocks(opts: {
     blocks.push({
       type: 'thinking',
       thought: opts.thought,
-      isHidden: true,
+      isHidden: opts.isHidden ?? true,
       sourceField: 'thinking',
       ...(opts.thoughtSignature !== undefined
         ? { signature: opts.thoughtSignature }

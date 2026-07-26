@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
 import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
@@ -460,6 +461,36 @@ describe('Server Config (config.ts)', () => {
       const config = new Config(paramsWithUndefinedRipgrep);
       expect(config.getUseRipgrep()).toBe(false);
     });
+  });
+
+  describe('ImagePayloadBudget Configuration', () => {
+    it('defaults to the conservative image payload budget', () => {
+      const config = new Config(baseParams);
+      expect(config.getImagePayloadBudgetBytes()).toBe(
+        DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+      );
+    });
+
+    it('preserves an explicit zero to disable image budget enforcement', () => {
+      const config = new Config({ ...baseParams, imagePayloadBudgetBytes: 0 });
+      expect(config.getImagePayloadBudgetBytes()).toBe(0);
+    });
+
+    it.each([
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+      1.5,
+      -1,
+    ])(
+      'falls back to the default for invalid value %s',
+      (imagePayloadBudgetBytes) => {
+        const config = new Config({ ...baseParams, imagePayloadBudgetBytes });
+        expect(config.getImagePayloadBudgetBytes()).toBe(
+          DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+        );
+      },
+    );
   });
 
   describe('ContinueOnFailedApiCall Configuration', () => {

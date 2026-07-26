@@ -696,4 +696,25 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.tasks.cancel',
     'Cancelling an async task affects the active run',
   ),
+  // ---- /quota (#2386): Codex rate-limit-reset credit redemption ----
+  runtime(
+    '/quota',
+    'agent.getStats',
+    'Quota status reflects the live provider quota',
+  ),
+  runtime(
+    '/quota status',
+    'agent.getStats',
+    'Quota status reflects the live provider quota',
+  ),
+  runtime(
+    '/quota credits',
+    'agent.getStats',
+    'Reset-credit listing reflects the live provider quota',
+  ),
+  runtime(
+    '/quota reset',
+    'agent.auth',
+    'Redeeming a reset credit mutates the live provider rate-limit window',
+  ),
 ];

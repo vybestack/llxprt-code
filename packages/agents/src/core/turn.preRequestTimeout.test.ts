@@ -9,6 +9,7 @@ import type { ServerAgentStreamEvent, StructuredError } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession, StreamEvent } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
 import { DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -103,13 +104,17 @@ function failsafe(ms: number): { promise: Promise<never>; cancel: () => void } {
   return { promise, cancel: () => clearTimeout(timer) };
 }
 
-type TurnStreamIterator = AsyncIterator<StreamEvent>;
-
 /** A stream whose first .next() never resolves (acquisition resolves fine). */
-function createStreamWithStalledFirstNext(): AsyncGenerator<StreamEvent> {
+function createStreamWithStalledFirstNext(): AsyncGenerator<{
+  type: StreamEventType;
+  value: ModelStreamChunk;
+}> {
   return (async function* () {
     await new Promise<void>(() => {});
-    yield { type: StreamEventType.CHUNK, value: mockChunk({ text: 'never' }) };
+    yield {
+      type: StreamEventType.CHUNK,
+      value: mockChunk({ text: 'never' }),
+    };
   })();
 }
 
@@ -131,25 +136,36 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   });
 
   it('DEFAULT-ON regression: with NO first-response setting/env, a stream whose first .next() never resolves yields terminal StreamIdleTimeout after DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS', async () => {
+    // buildTurn() with NO args: first-response returns undefined → resolver falls to default 300000
     const { turn } = buildTurn();
+
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
+
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
+
     const iterator = turn.run(reqParts, signal);
     const runPromise = (async () => {
       for await (const event of iterator) {
         events.push(event);
       }
     })();
+
+    // Before the default timeout: no events, generator still pending.
     await vi.advanceTimersByTimeAsync(
       DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS - 1,
     );
     await Promise.resolve();
     expect(events).toHaveLength(0);
+
+    // Advance past the default first-response timeout (300000ms). Drain all
+    // pending timers/microtasks so the rejection deterministically propagates
+    // through handleRunError before we await the consumer loop.
     await vi.advanceTimersByTimeAsync(2);
     await vi.runAllTimersAsync();
     await runPromise;
+
     const timeoutEvent = events.find(
       (e) => e.type === AgentEventType.StreamIdleTimeout,
     );
@@ -159,13 +175,15 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
   it('DEFAULT-ON regression (real-timer failsafe): never-resolving first .next() surfaces StreamIdleTimeout under the failsafe deadline', async () => {
     vi.useRealTimers();
+    // Use a tiny env override so the real-timer test finishes quickly while
+    // still proving the DEFAULT-ON path fires (no ephemeral setting needed).
     process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '50';
     const { turn } = buildTurn();
 
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
     const guard = failsafe(2000);
@@ -178,6 +196,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       guard.promise,
     ]);
     guard.cancel();
+
     const timeoutEvent = events.find(
       (e) => e.type === AgentEventType.StreamIdleTimeout,
     );
@@ -186,19 +205,24 @@ describe('Turn - first-response timeout (issue #2379)', () => {
 
   it('never-resolving ACQUISITION (sendMessageStream promise never resolves) with a small explicit first-response timeout → terminal StreamIdleTimeout', async () => {
     const { turn } = buildTurn(20);
+
     mockSendMessageStream.mockReturnValue(new Promise(() => {}));
+
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
+
     const iterator = turn.run(reqParts, signal);
     const runPromise = (async () => {
       for await (const event of iterator) {
         events.push(event);
       }
     })();
+
     await vi.advanceTimersByTimeAsync(25);
     await vi.runAllTimersAsync();
     await runPromise;
+
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeDefined();
@@ -206,20 +230,26 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   });
 
   it('never-resolving FIRST .next() (acquisition resolves, first chunk never arrives) with a small explicit first-response timeout → terminal StreamIdleTimeout', async () => {
+    // This proves the first-response bound covers the first .next(), not just acquisition.
     const { turn } = buildTurn(20);
+
     mockSendMessageStream.mockResolvedValue(createStreamWithStalledFirstNext());
+
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
+
     const iterator = turn.run(reqParts, signal);
     const runPromise = (async () => {
       for await (const event of iterator) {
         events.push(event);
       }
     })();
+
     await vi.advanceTimersByTimeAsync(25);
     await vi.runAllTimersAsync();
     await runPromise;
+
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeDefined();
@@ -501,17 +531,29 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   });
 
   it('resource cleanup: when the timeout wins but the first .next() resolves LATE, the acquired iterator is closed (no provider connection leak)', async () => {
+    // Race edge case: timeoutController.abort() is asynchronous, so the
+    // in-flight first .next() can still resolve successfully a moment AFTER the
+    // timeout has already won the race. The losing (late-resolving) iterator
+    // must be closed via return() so the provider connection is not leaked.
     const { turn } = buildTurn(20);
+
     let releaseFirstNext!: () => void;
     const firstNextGate = new Promise<void>((resolve) => {
       releaseFirstNext = resolve;
     });
+    // Deterministic sync point: the mock's return() resolves this promise, so
+    // the test can await the exact moment cleanup fires instead of polling an
+    // arbitrary number of microtask hops.
     let signalReturnCalled!: () => void;
     const returnCalledPromise = new Promise<void>((resolve) => {
       signalReturnCalled = resolve;
     });
     const cleanup = { returnCalled: false };
-    const leakyIterator: TurnStreamIterator = {
+
+    const leakyIterator: AsyncIterator<{
+      type: StreamEventType;
+      value: ModelStreamChunk;
+    }> = {
       async next() {
         await firstNextGate;
         return {
@@ -531,21 +573,31 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockResolvedValue({
       [Symbol.asyncIterator]: () => leakyIterator,
     });
+
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
+
     const runPromise = (async () => {
       for await (const event of turn.run(reqParts, signal)) {
         events.push(event);
       }
     })();
+
+    // Let the timeout win the race first.
     await vi.advanceTimersByTimeAsync(25);
     await vi.runAllTimersAsync();
     await runPromise;
+
+    // Release the late first .next() so the losing promise resolves AFTER the
+    // timeout already settled the race, then await the deterministic sync point
+    // (bounded by the suite failsafe) so a regression that never closes the
+    // iterator fails loudly instead of passing.
     releaseFirstNext();
     const guard = failsafe(2000);
     await Promise.race([returnCalledPromise, guard.promise]);
     guard.cancel();
+
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeDefined();
@@ -557,7 +609,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   it('invokes iterator return promptly when first next never settles', async () => {
     const { turn } = buildTurn(20);
     let returnCalls = 0;
-    const iterator: TurnStreamIterator = {
+    const iterator: AsyncIterator<{
+      type: StreamEventType;
+      value: ModelStreamChunk;
+    }> = {
       next: () => new Promise(() => {}),
       async return() {
         returnCalls++;
@@ -597,7 +652,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       signalReturnCalled = resolve;
     });
     const cleanup = { returnCalled: false };
-    const iterator: TurnStreamIterator = {
+    const iterator: AsyncIterator<StreamEvent> = {
       next: () => new Promise<IteratorResult<never>>(() => {}),
       async return() {
         cleanup.returnCalled = true;
@@ -609,11 +664,9 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       acquisitionGate.then(() => ({ [Symbol.asyncIterator]: () => iterator })),
     );
     const events: ServerAgentStreamEvent[] = [];
+    const signal = new AbortController().signal;
     const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }] as unknown as Part[],
-        new AbortController().signal,
-      )) {
+      for await (const event of turn.run([{ text: 'Hi' }], signal)) {
         events.push(event);
       }
     })();
@@ -631,7 +684,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   it('first non-semantic RETRY does not disarm first-response guard: never-resolving next() still emits First-response StreamIdleTimeout (issue #2607 finding B)', async () => {
     const { turn } = buildTurn(20, 0);
     let firstNextTaken = false;
-    const iterator: TurnStreamIterator = {
+    const iterator: AsyncIterator<StreamEvent> = {
       next: () => {
         if (!firstNextTaken) {
           firstNextTaken = true;
@@ -650,11 +703,9 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       [Symbol.asyncIterator]: () => iterator,
     });
     const events: ServerAgentStreamEvent[] = [];
+    const signal = new AbortController().signal;
     const runPromise = (async () => {
-      for await (const event of turn.run(
-        [{ text: 'Hi' }] as unknown as Part[],
-        new AbortController().signal,
-      )) {
+      for await (const event of turn.run([{ text: 'Hi' }], signal)) {
         events.push(event);
       }
     })();
@@ -680,7 +731,10 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       status: 504,
       category: 'network',
     });
-    const throwingIterator: TurnStreamIterator = {
+    const throwingIterator: AsyncIterator<{
+      type: StreamEventType;
+      value: ModelStreamChunk;
+    }> = {
       async next(): Promise<never> {
         throw firstNextFailure;
       },
@@ -692,12 +746,17 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockResolvedValue({
       [Symbol.asyncIterator]: () => throwingIterator,
     });
+
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
+
     for await (const event of turn.run(reqParts, signal)) {
       events.push(event);
     }
+
+    // The failing iterator MUST have been closed to release the provider
+    // connection, and the provider error surfaces instead of the cleanup error.
     expect(returnCalled).toBe(true);
     expect(events).toContainEqual({
       type: AgentEventType.Error,
@@ -729,7 +788,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
     for await (const event of turn.run(reqParts, signal)) {
@@ -743,18 +802,30 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   });
 
   it('regression: a HEALTHY stream where the first chunk arrives quickly, then a LATER inter-chunk gap LARGER than the first-response timeout does NOT trip anything (inter-chunk idle is default-off)', async () => {
+    // first-response timeout is tiny (30ms), first chunk arrives at 10ms (before it),
+    // then a later inter-chunk gap of 60ms (> first-response) must NOT trip anything
+    // because the first-response timer is cancelled after the first chunk and the
+    // inter-chunk idle watchdog is default-off (0). This is the key proof that
+    // first-response ≠ inter-chunk.
     vi.useRealTimers();
     const { turn } = buildTurn(30);
+
     const mockResponseStream = (async function* () {
       await new Promise((resolve) => setTimeout(resolve, 10));
-      yield { type: StreamEventType.CHUNK, value: mockChunk({ text: 'Hel' }) };
+      yield {
+        type: StreamEventType.CHUNK,
+        value: mockChunk({ text: 'Hel' }),
+      };
       await new Promise((resolve) => setTimeout(resolve, 60));
-      yield { type: StreamEventType.CHUNK, value: mockChunk({ text: 'lo' }) };
+      yield {
+        type: StreamEventType.CHUNK,
+        value: mockChunk({ text: 'lo' }),
+      };
     })();
     mockSendMessageStream.mockResolvedValue(mockResponseStream);
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
     const guard = failsafe(2000);
@@ -767,6 +838,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       guard.promise,
     ]);
     guard.cancel();
+
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),
     ).toBeUndefined();
@@ -777,16 +849,25 @@ describe('Turn - first-response timeout (issue #2379)', () => {
   });
 
   it('abort: parent signal abort during first-response wait → UserCancelled, not a timeout', async () => {
-    // REAL timers + LARGE first-response timeout (60s) so only parent-abort can
-    // unblock the wait via the provider abortSignal.
+    // Use REAL timers with a LARGE first-response timeout (60s) that cannot fire
+    // within this test, so the ONLY mechanism that can unblock the wait is the
+    // parent-abort propagating through the provider's abortSignal. This gives
+    // the test teeth: if the parent-abort wiring (run() -> timeoutController ->
+    // provider abortSignal) breaks, the wait never settles and the failsafe
+    // trips instead of a spurious pass from the timeout firing.
     vi.useRealTimers();
     const { turn } = buildTurn(60_000);
 
+    // Acquisition resolves; the first .next() only settles when the provided
+    // abortSignal aborts, at which point it rejects with an AbortError — exactly
+    // how a provider reacts to abortSignal cancellation mid-first-response.
     mockSendMessageStream.mockImplementation(
       (params: { config: { abortSignal: AbortSignal } }) => {
         const providerSignal = params.config.abortSignal;
         if (!(providerSignal instanceof AbortSignal)) {
-          throw new Error('sendMessageStream missing config.abortSignal');
+          throw new Error(
+            'Test setup error: sendMessageStream did not receive config.abortSignal',
+          );
         }
         const stream = (async function* () {
           await new Promise<void>((_resolve, reject) => {
@@ -797,9 +878,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
             providerSignal.addEventListener(
               'abort',
               () => reject(new Error('aborted')),
-              {
-                once: true,
-              },
+              { once: true },
             );
           });
           yield {
@@ -812,7 +891,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     );
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const abortController = new AbortController();
 
     const iterator = turn.run(reqParts, abortController.signal);
@@ -822,7 +901,9 @@ describe('Turn - first-response timeout (issue #2379)', () => {
       }
     })();
 
-    // Let the generator reach the first-response wait before aborting.
+    // Let the generator body start and reach the first-response wait (past the
+    // pre-flight signal.aborted check) BEFORE aborting, so the abort is
+    // genuinely observed DURING the wait.
     await new Promise((resolve) => setTimeout(resolve, 10));
     abortController.abort();
 
@@ -845,7 +926,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     mockSendMessageStream.mockReturnValue(new Promise(() => {}));
 
     const events: ServerAgentStreamEvent[] = [];
-    const reqParts: Part[] = [{ text: 'Hi' }];
+    const reqParts = [{ text: 'Hi' }];
     const signal = new AbortController().signal;
 
     const guard = failsafe(2000);
