@@ -80,15 +80,58 @@ function extractJsonObject(rawText) {
       return assertJsonObject(fenced.value, 'Fenced JSON parse');
     }
   }
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const sliced = tryParseJson(text.slice(firstBrace, lastBrace + 1));
-    if (sliced.ok) {
-      return assertJsonObject(sliced.value, 'Brace-slice parse');
+  for (const candidate of findBalancedObjects(text)) {
+    const parsed = tryParseJson(candidate);
+    if (parsed.ok) {
+      return assertJsonObject(parsed.value, 'Balanced-object parse');
     }
   }
-  throw new Error(`Cannot parse JSON from response: ${text.slice(0, 200)}`);
+  throw new Error('Cannot parse JSON from response');
+}
+
+function findBalancedObjects(text) {
+  const candidates = [];
+  for (let start = 0; start < text.length; start += 1) {
+    if (text[start] !== '{') {
+      continue;
+    }
+    const end = findBalancedObjectEnd(text, start);
+    if (end !== -1) {
+      candidates.push(text.slice(start, end + 1));
+      start = end;
+    }
+  }
+  return candidates;
+}
+
+function findBalancedObjectEnd(text, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
 }
 
 function tryParseJson(text) {
@@ -448,10 +491,9 @@ export function sanitizeErrorMessage(error) {
   if (!error.message.includes('--key')) {
     return error;
   }
-  const sanitized = error.message.replace(
-    /(--key\b)(?:\s+)(?!-)(\S+)/g,
-    '$1 [REDACTED]',
-  );
+  const sanitized = error.message
+    .replace(/--key=(?:"[^"]*"|'[^']*'|[^\s]+)/g, '--key=[REDACTED]')
+    .replace(/(--key\b)(?:\s+)(?!-)(\S+)/g, '$1 [REDACTED]');
   const clean = new Error(sanitized);
   for (const prop of ['code', 'exitCode', 'signal', 'killed']) {
     if (error[prop] !== undefined) {
@@ -547,23 +589,12 @@ async function readArtifacts(reviewDir) {
 async function readIssueFiles(reviewDir) {
   const issuesDir = path.join(reviewDir, 'issues');
   const files = await fs.readdir(issuesDir).catch(() => []);
-  const issueFiles = files.filter((f) => f.endsWith('.json'));
-  const settled = await Promise.allSettled(
-    issueFiles.map(async (f) =>
-      JSON.parse(await fs.readFile(path.join(issuesDir, f), 'utf8')),
-    ),
-  );
-  const issues = [];
-  for (let i = 0; i < settled.length; i += 1) {
-    const result = settled[i];
-    if (result.status === 'fulfilled') {
-      issues.push(result.value);
-    } else {
-      console.error(
-        `Failed to read issue file ${issueFiles[i]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
-      );
-    }
-  }
+  const issueFiles = files.filter((file) => file.endsWith('.json'));
+  const results = await mapWithConcurrency(issueFiles, 8, async (file) => ({
+    filePath: file,
+    issue: JSON.parse(await fs.readFile(path.join(issuesDir, file), 'utf8')),
+  }));
+  const issues = collectArtifactReads(results, 'issue');
   if (issueFiles.length > 0 && issues.length === 0) {
     throw new Error(
       `All ${issueFiles.length} issue file(s) failed to parse in ${issuesDir}`,
@@ -577,31 +608,34 @@ async function readDiffFiles(reviewDir) {
   const manifestPath = path.join(reviewDir, 'diff-manifest.txt');
   const manifest = await parseDiffManifest(manifestPath);
   const files = await fs.readdir(diffsDir).catch(() => []);
-  const diffFiles = files.filter((f) => f.endsWith('.diff'));
-  const settled = await Promise.allSettled(
-    diffFiles.map(async (f) => ({
-      filePath: resolveOriginalPath(f, manifest),
-      safeName: f,
-      content: await fs.readFile(path.join(diffsDir, f), 'utf8'),
-    })),
-  );
-  const diffs = [];
-  for (let i = 0; i < settled.length; i += 1) {
-    const result = settled[i];
-    if (result.status === 'fulfilled') {
-      diffs.push(result.value);
-    } else {
-      console.error(
-        `Failed to read diff file ${diffFiles[i]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
-      );
-    }
-  }
+  const diffFiles = files.filter((file) => file.endsWith('.diff'));
+  const results = await mapWithConcurrency(diffFiles, 8, async (file) => ({
+    filePath: file,
+    diff: {
+      filePath: resolveOriginalPath(file, manifest),
+      safeName: file,
+      content: await fs.readFile(path.join(diffsDir, file), 'utf8'),
+    },
+  }));
+  const diffs = collectArtifactReads(results, 'diff');
   if (diffFiles.length > 0 && diffs.length === 0) {
     throw new Error(
       `All ${diffFiles.length} diff file(s) failed to read in ${diffsDir}`,
     );
   }
   return diffs;
+}
+
+function collectArtifactReads(results, valueKey) {
+  const values = [];
+  for (const result of results) {
+    if ('error' in result) {
+      console.error(`Failed to read ${result.filePath}: ${result.error}`);
+    } else {
+      values.push(result[valueKey]);
+    }
+  }
+  return values;
 }
 
 /**

@@ -95,6 +95,12 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(env.LLXPRT_CONTEXT_LIMIT).toBeTruthy();
       expect(env.DEBUG_OUTPUT).toBeTruthy();
     });
+
+    it('wires the strong model tier from repository variables', () => {
+      const env = reviewJob.env ?? {};
+      expect(env.LLXPRT_STRONG_MODEL).toContain('vars.LLXPRT_STRONG_MODEL');
+      expect(env.LLXPRT_STRONG_MODEL).toContain('vars.LLXPRT_DEFAULT_MODEL');
+    });
   });
 
   describe('comment tag (changed to llxprt-walkthrough)', () => {
@@ -155,6 +161,11 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       const contextRun = stepRunText(reviewJob, 'Build review context');
       expect(contextRun).not.toContain('clean(issue.body || "", 500)');
     });
+  });
+
+  it('does not write a dead issues-full.md artifact', () => {
+    const contextRun = stepRunText(reviewJob, 'Build review context');
+    expect(contextRun).not.toContain('review/issues-full.md');
   });
 
   describe('walkthrough pipeline step added', () => {
@@ -266,6 +277,14 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(run).toContain('! -s review/comment.md');
       expect(run).toContain('<!-- llxprt-walkthrough -->');
       expect(run).toContain('LLxprt PR Review unavailable');
+    });
+
+    it('uploads the private diagnostics log for post-mortem inspection', () => {
+      const step = findStepByName(reviewJob, 'Upload walkthrough diagnostics');
+      expect(step, 'should upload the diagnostics log').toBeTruthy();
+      expect(step.if).toBe('failure()');
+      expect(step.uses).toContain('actions/upload-artifact@');
+      expect(step.with?.path).toBe('review/walkthrough-error.log');
     });
 
     it('the fallback step runs before the post-comment step', () => {

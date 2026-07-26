@@ -20,6 +20,7 @@ import {
   MAX_DIFF_BYTES,
 } from '../pr-review-walkthrough.mjs';
 
+const BACKSLASH = String.fromCharCode(92);
 describe('parseMapResponse', () => {
   it('parses clean JSON', () => {
     expect(
@@ -72,6 +73,27 @@ describe('parseMapResponse', () => {
       ).triage,
     ).toBe('refactor');
   });
+});
+it('extracts the first balanced JSON object after prose with unrelated braces', () => {
+  const result = parseMapResponse(
+    'Example function { return 1; } then {"summary":"adds","signature":"foo()","triage":"test"}',
+  );
+  expect(result).toEqual({
+    summary: 'adds',
+    signature: 'foo()',
+    triage: 'test',
+  });
+});
+
+it('does not expose raw response text in parse errors', () => {
+  expect(() =>
+    parseMapResponse('secret-token-that-must-not-appear { malformed'),
+  ).toThrow('Cannot parse JSON from response');
+  try {
+    parseMapResponse('secret-token-that-must-not-appear { malformed');
+  } catch (error) {
+    expect(error.message).not.toContain('secret-token-that-must-not-appear');
+  }
 });
 
 describe('extractJsonObject non-object rejection (OCR Finding 1)', () => {
@@ -327,7 +349,7 @@ describe('renderWalkthroughComment', () => {
 });
 
 describe('escapeMarkdownTableCell (MEDIUM 11)', () => {
-  const BS = String.fromCharCode(92);
+  const BS = BACKSLASH;
   it('escapes pipe characters', () => {
     expect(escapeMarkdownTableCell('a|b')).toBe('a' + BS + '|b');
   });
@@ -364,7 +386,7 @@ describe('escapeMarkdownTableCell (MEDIUM 11)', () => {
 });
 
 describe('renderWalkthroughComment markdown escaping in tables (MEDIUM 11)', () => {
-  const BS = String.fromCharCode(92);
+  const BS = BACKSLASH;
   it('escapes pipes in file paths in the changes table', () => {
     const comment = renderWalkthroughComment({
       walkthrough: 'test',
@@ -605,6 +627,27 @@ describe('sanitizeErrorMessage (CRITICAL 1)', () => {
       new Error('cmd --key -v --prompt hello'),
     );
     expect(sanitized.message).not.toContain('[REDACTED]');
+  });
+
+  it('redacts an equals-format key value', () => {
+    const sanitized = sanitizeErrorMessage(
+      new Error('cmd --key=equals-secret --prompt hello'),
+    );
+    expect(sanitized.message).toContain('--key=[REDACTED]');
+    expect(sanitized.message).not.toContain('equals-secret');
+  });
+
+  it('redacts a quoted equals-format key value', () => {
+    const sanitized = sanitizeErrorMessage(
+      new Error('cmd --key="quoted secret" --prompt hello'),
+    );
+    expect(sanitized.message).toContain('--key=[REDACTED]');
+    expect(sanitized.message).not.toContain('quoted secret');
+  });
+
+  it('leaves a trailing --key without a value unchanged', () => {
+    const sanitized = sanitizeErrorMessage(new Error('cmd --key'));
+    expect(sanitized.message).toBe('cmd --key');
   });
 });
 

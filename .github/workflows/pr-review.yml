@@ -53,6 +53,7 @@ jobs:
       OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
       OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+      LLXPRT_STRONG_MODEL: '${{ vars.LLXPRT_STRONG_MODEL || vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
       LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}"
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
@@ -377,10 +378,6 @@ jobs:
           ].join("\\n");
 
           fs.writeFileSync("review/context.md", context);
-
-          // Write the full (untruncated) linked-issue bodies so the
-          // walkthrough orchestrator can judge acceptance-criteria fulfillment.
-          fs.writeFileSync("review/issues-full.md", issueSection);
           '
 
       - name: 'Run walkthrough pipeline'
@@ -393,6 +390,14 @@ jobs:
           # internal diagnostics to the public PR).
           node scripts/pr-review-walkthrough.mjs 2>review/walkthrough-error.log
 
+      - name: 'Upload walkthrough diagnostics'
+        if: failure()
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'walkthrough-diagnostics-${{ github.run_attempt }}'
+          path: 'review/walkthrough-error.log'
+          if-no-files-found: 'ignore'
+          retention-days: 3
       - name: 'Ensure fallback comment'
         if: always()
         run: |
