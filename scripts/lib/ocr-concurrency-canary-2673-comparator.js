@@ -209,16 +209,18 @@ function responseCount(transport, label, errors) {
     return null;
   }
   let total = 0;
+  let valid = true;
   for (const [status, count] of Object.entries(transport.responses_by_status)) {
     if (!/^\d{3}$/.test(status) || !Number.isInteger(count) || count < 0) {
       errors.push(
         `${label}.${status} must be a non-negative integer status count`,
       );
-      return null;
+      valid = false;
+      continue;
     }
     total += count;
   }
-  return total;
+  return valid ? total : null;
 }
 
 function validateTransport(label, artifact, errors) {

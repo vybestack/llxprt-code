@@ -17,7 +17,15 @@ import {
 } from './ocr-concurrency-canary-2673-helpers.js';
 
 function expectSanitized(metrics) {
-  expect(metrics).not.toHaveProperty('raw_result');
+  for (const field of [
+    'raw_result',
+    'provider_credentials',
+    'headers',
+    'bodies',
+    'raw_ocr_sessions',
+  ]) {
+    expect(metrics).not.toHaveProperty(field);
+  }
 }
 
 describe('normalized canary evidence', () => {

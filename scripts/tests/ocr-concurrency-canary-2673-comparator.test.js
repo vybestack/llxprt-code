@@ -383,10 +383,28 @@ describe('ocr-concurrency-canary-2673-comparator', () => {
     expect(result.valid).toBe(false);
     expect(result.errors.join(' ')).toMatch(expected);
   });
+
+  it('reports every malformed response status entry', () => {
+    const result = buildComparison(
+      changeArtifact(1, (artifact) => {
+        artifact.transport.responses_by_status = {
+          20: 1,
+          200: -1,
+        };
+      }),
+    );
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/responses_by_status\.20 must be/i),
+        expect.stringMatching(/responses_by_status\.200 must be/i),
+      ]),
+    );
+  });
 });
 
 describe('issue 2673 comparison constants', () => {
-  it('requires exactly concurrencies 2, 3, and 4', () => {
+  it('requires exactly concurrency levels 2, 3, and 4', () => {
     expect(REQUIRED_CONCURRENCIES).toEqual([2, 3, 4]);
   });
 
