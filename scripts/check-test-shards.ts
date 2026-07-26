@@ -68,7 +68,7 @@ function readDeclaredWorkspaceIds(rootDir: string): readonly string[] {
       if (!existsSync(pkgJsonPath)) {
         return undefined;
       }
-      return g.split('/').pop() ?? g;
+      return g.split('/').pop()!;
     })
     .filter((id): id is string => id !== undefined);
 }

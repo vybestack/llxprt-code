@@ -819,7 +819,7 @@ jobs:
         # The orchestrator expands --shard to the shard's workspaces (or runs
         # npm run test:scripts for the scripts shard). Each workspace's tests
         # still run under Vitest, preserving per-package config/reporters.
-        run: 'bun scripts/test.ts --shard ${{ matrix.shard }}'
+        run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Report harness toolchain versions'
         # The assign harness shells out to jq, python3 and bash. Those differ
@@ -891,13 +891,24 @@ jobs:
   # `Test` means branch-protection rules do not need to change — downstream
   # jobs (post_coverage_comment) and required checks keep gating on a single
   # name while the real work fans out across the matrix.
+  #
+  # `if: always()` is essential: when a `test_shard` leg fails, GitHub would
+  # otherwise **skip** this job, and branch protection treats skipped checks
+  # as passing — a silent bypass. The explicit result check converts a shard
+  # failure into a `failure` conclusion on this required check.
   test:
     name: 'Test'
     needs:
       - 'test_shard'
+    if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
-      - run: |-
+      - name: 'Check shard results'
+        run: |-
+          if [ "${{ needs.test_shard.result }}" == "failure" ]; then
+            echo "::error::One or more test shards failed"
+            exit 1
+          fi
           echo 'All test shards finished!'
 
   post_coverage_comment:

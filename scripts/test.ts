@@ -584,8 +584,12 @@ function main(): void {
     console.log('Running Bun-backed test orchestration...');
     if (options.shardFilter) {
       console.log(`  Shard: ${options.shardFilter}`);
-    }
-    if (options.workspaceFilter) {
+      if (options.workspaceFilter) {
+        console.log(
+          `  Note: --workspace "${options.workspaceFilter}" ignored (--shard takes precedence)`,
+        );
+      }
+    } else if (options.workspaceFilter) {
       console.log(`  Filter: ${options.workspaceFilter}`);
     }
     if (options.skipScripts) {
@@ -603,8 +607,10 @@ function main(): void {
     // `failed` count only tallies workspace outcomes (pretest/test); the
     // scripts phase is tracked separately in `results`, so a scripts-only
     // failure (e.g. the dedicated scripts shard) must be checked here.
+    // `anyPhaseFailed` already covers `summary.failed > 0` (a failed
+    // workspace produces a failed phase result), so it is the sole check.
     const anyPhaseFailed = summary.results.some((r) => !r.success);
-    if (summary.failed > 0 || anyPhaseFailed) {
+    if (anyPhaseFailed) {
       process.exit(1);
     }
   } catch (error) {

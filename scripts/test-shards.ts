@@ -132,6 +132,9 @@ export function getAllAssignedWorkspaceIds(
  * Expands a shard name to its owned workspace ids. Returns an empty array for
  * the scripts shard (the caller runs `npm run test:scripts` instead). Throws
  * if the shard name is unknown so a typo cannot silently run nothing.
+ *
+ * Returns a defensive copy so callers cannot mutate the canonical shard map
+ * at runtime (TypeScript's `readonly` is compile-time only).
  */
 export function expandShard(
   shards: readonly ShardDefinition[],
@@ -142,7 +145,7 @@ export function expandShard(
     const known = getAllShardNames(shards).join(', ');
     throw new Error(`Unknown shard "${name}". Known shards: ${known}.`);
   }
-  return shard.isScriptsShard ? [] : shard.workspaces;
+  return shard.isScriptsShard ? [] : [...shard.workspaces];
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +224,7 @@ export function validateShardCoverage(
     if (count > 1) {
       issues.push({
         kind: 'duplicate-workspace',
-        detail: `Workspace "${id}" is assigned to ${count} shards; each workspace must belong to exactly one shard.`,
+        detail: `Workspace "${id}" appears ${count} times across all shards; each workspace must belong to exactly one shard.`,
       });
     }
     if (!declared.has(id)) {
@@ -232,9 +235,11 @@ export function validateShardCoverage(
     }
   }
 
-  // 4. Missing: declared but not assigned to any shard.
+  // 4. Missing: declared but not assigned to any shard. Iterate over the
+  //    deduplicated `declared` set to avoid duplicate messages if the caller
+  //    passes the same workspace id more than once.
   const assigned = new Set(assignedCounts.keys());
-  const sortedDeclared = [...declaredWorkspaceIds].sort();
+  const sortedDeclared = [...declared].sort();
   for (const id of sortedDeclared) {
     if (!assigned.has(id)) {
       issues.push({

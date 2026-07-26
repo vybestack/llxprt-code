@@ -10,6 +10,21 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseArgs, type CommandRunner, orchestrateTests } from '../test.ts';
 
+// Shared recording runner factory; the identical helper in
+// test-orchestrator.test.ts serves that file's own describe blocks. Kept
+// local (not imported) to avoid coupling the two test files' setup paths.
+function createRecordingRunner(): {
+  runner: CommandRunner;
+  commands: Array<{ command: string; cwd: string }>;
+} {
+  const commands: Array<{ command: string; cwd: string }> = [];
+  const runner: CommandRunner = (command, cwd) => {
+    commands.push({ command, cwd });
+    return { success: true, exitCode: 0 };
+  };
+  return { runner, commands };
+}
+
 const fixtures: string[] = [];
 
 afterAll(() => {
@@ -47,18 +62,6 @@ function createFixtureRepo(workspaces: FixtureWorkspace[]): string {
     );
   }
   return root;
-}
-
-function createRecordingRunner(): {
-  runner: CommandRunner;
-  commands: Array<{ command: string; cwd: string }>;
-} {
-  const commands: Array<{ command: string; cwd: string }> = [];
-  const runner: CommandRunner = (command, cwd) => {
-    commands.push({ command, cwd });
-    return { success: true, exitCode: 0 };
-  };
-  return { runner, commands };
 }
 
 describe('parseArgs (--shard)', () => {
@@ -136,6 +139,15 @@ describe('orchestrateTests (--shard)', () => {
       },
     ]);
 
+    // Provide a scripts/tests config so runScriptTests cannot early-return
+    // due to a missing config. This ensures the test specifically validates
+    // the runScriptsPhase gate for the cli shard, not a coincidental absence.
+    mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      'export default {};',
+    );
+
     orchestrateTests(fixtureRoot, { ...parseArgs(['--shard', 'cli']) }, runner);
 
     // No scripts/tests invocation for a workspace shard.
@@ -174,9 +186,7 @@ describe('orchestrateTests (--shard)', () => {
     );
     expect(scriptsCommand).toBeDefined();
     // No workspace test command ran.
-    const wsTest = commands.find(
-      (c) => c.command === 'vitest run' && !c.command.includes('config'),
-    );
+    const wsTest = commands.find((c) => c.command === 'vitest run');
     expect(wsTest).toBeUndefined();
     expect(summary.totalWorkspaces).toBe(0);
   });
