@@ -120,7 +120,11 @@ function options(
 function complete(socket: FakeSocket, text?: string): void {
   if (text !== undefined) {
     socket.message(
-      JSON.stringify({ type: 'response.output_text.delta', delta: text }),
+      JSON.stringify(
+        { type: 'response.output_text.delta', delta: text },
+        null,
+        2,
+      ),
     );
   }
   socket.message(

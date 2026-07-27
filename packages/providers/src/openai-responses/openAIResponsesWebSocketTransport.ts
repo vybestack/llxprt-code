@@ -84,7 +84,7 @@ function parseFrame(data: string): { type: string | undefined; data: string } {
       error,
     );
   }
-  return { type: eventType(value), data };
+  return { type: eventType(value), data: JSON.stringify(value) };
 }
 
 function toWebSocketURL(responsesURL: string): string {

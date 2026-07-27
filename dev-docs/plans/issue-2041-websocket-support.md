@@ -42,7 +42,7 @@ Expected: this plan, provider package/lockfiles, provider core/executor, and new
 
 ## Actual delivery
 
-All 10 expected paths changed. The HTTP extraction keeps the executor below the enforced 800-line limit without weakening lint. Final measured scope is 10 files and 1,487 net changed lines, including forced-text lockfile changes; 17 focused tests and the full root suite provide behavioral evidence.
+All 10 expected paths changed. The HTTP extraction keeps the executor below the enforced 800-line limit without weakening lint. Final measured scope is 10 files and 1,491 net changed lines, including forced-text lockfile changes; 17 focused tests and the full root suite provide behavioral evidence.
 The Codex handshake requires bearer/account/custom HTTP headers. Node's global `WebSocket` cannot supply them, while the existing OpenAI Realtime client uses a different protocol. The approved direct `undici ^7.28.0` providers dependency supplies a header-capable client; lockfiles are updated.
 
 ## Scope ledger
