@@ -55,11 +55,10 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(testShardJob.name).toBe(
       'Test (${{ matrix.os }}) [${{ matrix.shard }}]',
     );
-    expect(testShardJob.strategy?.matrix?.os).toEqual([
-      'ubuntu-latest',
-      'macos-latest',
-    ]);
-    expect(testShardJob.strategy?.matrix?.['node-version']).toEqual(['24.x']);
+    expect(testShardJob.strategy?.matrix?.include).toContain(
+      '${{ fromJSON(needs.shard_selector.outputs.matrix) }}',
+    );
+    expect(testShardJob['runs-on']).toBe('${{ matrix.os }}');
     expect(testShardJob.strategy?.matrix).not.toHaveProperty(
       'secure-store-mode',
     );
