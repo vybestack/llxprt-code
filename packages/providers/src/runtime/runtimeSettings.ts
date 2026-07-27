@@ -98,6 +98,7 @@ export {
   getActiveModelParams,
   setActiveModelParam,
   clearActiveModelParam,
+  getUnallowedParametersForActiveModel,
   listProviders,
   getActiveProviderName,
 } from './runtimeAccessors.js';

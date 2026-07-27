@@ -53,6 +53,10 @@ import {
   formatNormalizationFailureMessage,
   MissingProviderRuntimeError,
 } from './messages.js';
+import {
+  loadProviderAliasEntries,
+  computeUnallowedParameters,
+} from '../composition/index.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
@@ -634,6 +638,30 @@ export function clearActiveModelParam(name: string): void {
     throw new Error('No active provider available to clear model parameters.');
   }
   settingsService.setProviderSetting(providerName, name, undefined);
+}
+
+/**
+ * Parameters the active model does not accept, declared via the active
+ * provider alias's modelDefaults unallowedParameters rules. Returns an empty
+ * array when the provider/model has no alias rules or no alias config.
+ */
+export function getUnallowedParametersForActiveModel(): string[] {
+  const { config, settingsService } = getCliRuntimeServices();
+  const providerName = resolveActiveProviderName(settingsService, config);
+  if (!providerName) {
+    return [];
+  }
+  const modelName = getActiveModelName();
+  if (!modelName) {
+    return [];
+  }
+  const aliasConfig = loadProviderAliasEntries().find(
+    (entry) => entry.alias === providerName,
+  )?.config;
+  if (!aliasConfig?.modelDefaults) {
+    return [];
+  }
+  return [...computeUnallowedParameters(modelName, aliasConfig.modelDefaults)];
 }
 
 export function listProviders(): string[] {

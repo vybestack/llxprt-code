@@ -16,64 +16,82 @@ import { TextInput } from './ProfileCreateWizard/TextInput.js';
 import { parseValue } from '../commands/setCommand.js';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
 
-const MODEL_PARAM_KEYS = [
-  'temperature',
+const PARAM_KEYS = [
   'max_tokens',
+  'temperature',
   'top_p',
   'top_k',
   'frequency_penalty',
   'presence_penalty',
 ] as const;
 
-const EPHEMERAL_SETTING_KEYS = [
+const EPHEMERAL_KEYS = [
+  'context-limit',
   'reasoning.enabled',
   'reasoning.effort',
-  'context-limit',
   'streaming',
   'prompt-caching',
 ] as const;
 
 const PARAM_HINTS: Record<string, string> = {
-  temperature: 'Sampling randomness (0.0-2.0)',
   max_tokens: 'Maximum output tokens',
+  temperature: 'Sampling randomness (0.0-2.0)',
   top_p: 'Nucleus sampling (0.0-1.0)',
   top_k: 'Top-k sampling',
   frequency_penalty: 'Penalize frequent tokens',
   presence_penalty: 'Penalize present tokens',
-  'reasoning.enabled': 'Enable thinking/reasoning (true/false)',
-  'reasoning.effort': 'minimal|low|medium|high|xhigh|max',
   'context-limit': 'Positive integer token cap',
+  'reasoning.enabled': 'Enable thinking/reasoning',
+  'reasoning.effort': 'minimal|low|medium|high|xhigh|max',
   streaming: 'enabled|disabled',
   'prompt-caching': 'off|5m|1h|24h',
 };
 
+const BOOLEAN_EPHEMERALS = new Set(['reasoning.enabled']);
+const ENUM_EPHEMERALS: Record<string, readonly string[]> = {
+  streaming: ['enabled', 'disabled'],
+  'prompt-caching': ['off', '5m', '1h', '24h'],
+};
+
 type FieldKind = 'param' | 'ephemeral';
+type EditorType = 'text' | 'boolean' | 'enum';
 
 interface ConfigField {
   key: string;
   kind: FieldKind;
   hint: string;
+  editor: EditorType;
+  enumValues?: readonly string[];
 }
 
-const ALL_FIELDS: readonly ConfigField[] = [
-  ...MODEL_PARAM_KEYS.map((key) => ({
-    key,
-    kind: 'param' as const,
-    hint: PARAM_HINTS[key] ?? '',
-  })),
-  ...EPHEMERAL_SETTING_KEYS.map((key) => ({
-    key,
-    kind: 'ephemeral' as const,
-    hint: PARAM_HINTS[key] ?? '',
-  })),
-];
+function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
+  const paramFields = PARAM_KEYS.filter((key) => !unallowed.has(key)).map(
+    (key) => ({
+      key,
+      kind: 'param' as const,
+      hint: PARAM_HINTS[key] ?? '',
+      editor: 'text' as const,
+    }),
+  );
 
-const PARAM_FIELDS: readonly ConfigField[] = ALL_FIELDS.filter(
-  (f) => f.kind === 'param',
-);
-const EPHEMERAL_FIELDS: readonly ConfigField[] = ALL_FIELDS.filter(
-  (f) => f.kind === 'ephemeral',
-);
+  const ephemeralFields = EPHEMERAL_KEYS.map((key) => {
+    let editor: EditorType = 'text';
+    if (BOOLEAN_EPHEMERALS.has(key)) {
+      editor = 'boolean';
+    } else if (Object.hasOwn(ENUM_EPHEMERALS, key)) {
+      editor = 'enum';
+    }
+    return {
+      key,
+      kind: 'ephemeral' as const,
+      hint: PARAM_HINTS[key] ?? '',
+      editor,
+      enumValues: ENUM_EPHEMERALS[key],
+    };
+  });
+
+  return [...paramFields, ...ephemeralFields];
+}
 
 export interface ModelConfigDialogProps {
   onClose: () => void;
@@ -125,9 +143,33 @@ function valueForField(
   ephemeral: Record<string, unknown>,
 ): unknown {
   if (field.kind === 'param') {
-    return params[field.key];
+    // Provider-scoped params take precedence; fall back to the global
+    // ephemeral snapshot so inherited modelDefaults render as initial values.
+    return params[field.key] ?? ephemeral[field.key];
   }
   return ephemeral[field.key];
+}
+
+interface RuntimeReads {
+  providerName: string;
+  modelName: string;
+  modelParams: Record<string, unknown>;
+  ephemeralSettings: Record<string, unknown>;
+  unallowedParameters: ReadonlySet<string>;
+}
+
+function useRuntimeReads(
+  runtime: ReturnType<typeof useRuntimeApi>,
+): RuntimeReads {
+  return {
+    providerName: runtime.getActiveProviderName(),
+    modelName: runtime.getActiveModelName(),
+    modelParams: runtime.getActiveModelParams(),
+    ephemeralSettings: runtime.getEphemeralSettings(),
+    unallowedParameters: new Set(
+      runtime.getUnallowedParametersForActiveModel(),
+    ),
+  };
 }
 
 const SectionHeader: React.FC<{ label: string }> = ({ label }) => (
@@ -141,234 +183,254 @@ const SectionHeader: React.FC<{ label: string }> = ({ label }) => (
 const FieldRow: React.FC<{
   field: ConfigField;
   isSelected: boolean;
+  isEditing: boolean;
+  editValue: string;
   currentValue: unknown;
-}> = ({ field, isSelected, currentValue }) => {
+  enumIndex: number;
+  onEditChange: (value: string) => void;
+}> = ({
+  field,
+  isSelected,
+  isEditing,
+  editValue,
+  currentValue,
+  enumIndex,
+  onEditChange,
+}) => {
   const indicator = isSelected ? '\u25CF' : '\u25CB';
   const color = isSelected
     ? SemanticColors.text.accent
     : SemanticColors.text.primary;
+  const displayValue = formatValue(currentValue).padEnd(12);
+
+  if (isEditing && field.editor === 'text') {
+    return (
+      <Box>
+        <Text color={color}>{indicator} </Text>
+        <Text color={color}>{field.key.padEnd(22)}</Text>
+        <TextInput
+          value={editValue}
+          onChange={onEditChange}
+          isFocused={true}
+          placeholder={field.hint}
+        />
+      </Box>
+    );
+  }
+
+  if (isEditing && field.editor === 'boolean') {
+    const boolVal = currentValue === true;
+    return (
+      <Box>
+        <Text color={color}>{indicator} </Text>
+        <Text color={color}>{field.key.padEnd(22)}</Text>
+        <Text color={SemanticColors.text.secondary}>
+          {boolVal ? 'true ' : 'false'}
+        </Text>
+        <Text color={SemanticColors.text.secondary}>
+          {' (Space to toggle)'}
+        </Text>
+      </Box>
+    );
+  }
+
+  if (isEditing && field.editor === 'enum') {
+    const values = field.enumValues ?? [];
+    return (
+      <Box>
+        <Text color={color}>{indicator} </Text>
+        <Text color={color}>{field.key.padEnd(22)}</Text>
+        {values.map((v, i) => (
+          <Text
+            key={v}
+            color={
+              i === enumIndex
+                ? SemanticColors.text.accent
+                : SemanticColors.text.secondary
+            }
+          >
+            {i === enumIndex ? `[${v}]` : ` ${v} `}
+          </Text>
+        ))}
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Text color={color}>{indicator} </Text>
       <Text color={color}>{field.key.padEnd(22)}</Text>
-      <Text color={SemanticColors.text.secondary}>
-        {formatValue(currentValue).padEnd(12)}
-      </Text>
+      <Text color={SemanticColors.text.secondary}>{displayValue}</Text>
       <Text color={SemanticColors.text.secondary}>{field.hint}</Text>
     </Box>
   );
 };
 
-const FieldList: React.FC<{
-  fields: readonly ConfigField[];
+interface KeypressDispatch {
+  onClose: () => void;
   selectedIndex: number;
-  isEditing: boolean;
+  editingIndex: number | null;
+  editValue: string;
+  setEditingIndex: (index: number | null) => void;
+  setEditValue: (value: string) => void;
+  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
+  enumIndex: number;
+  setEnumIndex: React.Dispatch<React.SetStateAction<number>>;
+  runtime: ReturnType<typeof useRuntimeApi>;
+  setValidationError: (msg: string | null) => void;
+  validationError: string | null;
   params: Record<string, unknown>;
   ephemeral: Record<string, unknown>;
-  startIndex: number;
-}> = ({ fields, selectedIndex, isEditing, params, ephemeral, startIndex }) => (
-  <>
-    {fields.map((field, i) => (
-      <FieldRow
-        key={field.key}
-        field={field}
-        isSelected={!isEditing && selectedIndex === startIndex + i}
-        currentValue={valueForField(field, params, ephemeral)}
-      />
-    ))}
-  </>
-);
-
-const EditMode: React.FC<{
-  field: ConfigField;
-  value: string;
-  onChange: (value: string) => void;
-  validationError: string | null;
-}> = ({ field, value, onChange, validationError }) => (
-  <Box flexDirection="column" marginTop={1}>
-    <Text color={SemanticColors.text.primary}>
-      {`Edit ${field.key} (Enter=save Esc=cancel)`}
-    </Text>
-    <TextInput
-      value={value}
-      onChange={onChange}
-      isFocused={true}
-      placeholder={field.hint}
-    />
-    {validationError !== null && (
-      <Box marginTop={1}>
-        <Text color={SemanticColors.status.error}>{validationError}</Text>
-      </Box>
-    )}
-  </Box>
-);
-
-interface RuntimeReads {
-  providerName: string;
-  modelName: string;
-  modelParams: Record<string, unknown>;
-  ephemeralSettings: Record<string, unknown>;
+  forceRender: () => void;
+  fields: readonly ConfigField[];
 }
 
-function useRuntimeReads(
+function toggleBooleanValue(
+  field: ConfigField,
+  current: unknown,
   runtime: ReturnType<typeof useRuntimeApi>,
-): RuntimeReads {
-  // Read runtime snapshots directly on every render. These are inexpensive
-  // snapshot reads, and memoizing on [runtime] causes stale values after a
-  // write because the runtime API object identity does not change.
-  return {
-    providerName: runtime.getActiveProviderName(),
-    modelName: runtime.getActiveModelName(),
-    modelParams: runtime.getActiveModelParams(),
-    ephemeralSettings: runtime.getEphemeralSettings(),
-  };
+): void {
+  if (field.kind !== 'ephemeral') return;
+  const next = current !== true;
+  runtime.setEphemeralSetting(field.key, next);
+}
+
+function cycleEnumValue(
+  field: ConfigField,
+  enumIndex: number,
+  direction: 1 | -1,
+  runtime: ReturnType<typeof useRuntimeApi>,
+): number {
+  const values = field.enumValues ?? [];
+  if (values.length === 0) return enumIndex;
+  const nextIndex = (enumIndex + direction + values.length) % values.length;
+  runtime.setEphemeralSetting(field.key, values[nextIndex]);
+  return nextIndex;
+}
+
+function handleListKey(key: Key, d: KeypressDispatch): void {
+  const field = d.fields[d.selectedIndex];
+
+  if (key.name === 'escape') {
+    d.onClose();
+    return;
+  }
+  if (key.name === 'up') {
+    d.setSelectedIndex((prev) => Math.max(0, prev - 1));
+    return;
+  }
+  if (key.name === 'down') {
+    d.setSelectedIndex((prev) => Math.min(d.fields.length - 1, prev + 1));
+    return;
+  }
+  if (key.name === 'return') {
+    if (field.editor === 'boolean') {
+      toggleBooleanValue(
+        field,
+        valueForField(field, d.params, d.ephemeral),
+        d.runtime,
+      );
+      d.forceRender();
+      return;
+    }
+    if (field.editor === 'enum') {
+      const current = valueForField(field, d.params, d.ephemeral);
+      const idx = field.enumValues?.indexOf(String(current)) ?? -1;
+      d.setEnumIndex(idx >= 0 ? idx : 0);
+      d.setEditingIndex(d.selectedIndex);
+      return;
+    }
+    const current = valueForField(field, d.params, d.ephemeral);
+    d.setEditValue(
+      current === undefined || current === null ? '' : formatValue(current),
+    );
+    d.setValidationError(null);
+    d.setEditingIndex(d.selectedIndex);
+    return;
+  }
+  if (isPlainLetter(key, 'c') && field.kind === 'param') {
+    d.runtime.clearActiveModelParam(field.key);
+    d.forceRender();
+  }
+}
+
+function handleEditKey(key: Key, d: KeypressDispatch): void {
+  const field = d.fields[d.editingIndex!];
+
+  if (key.name === 'escape') {
+    d.setEditingIndex(null);
+    d.setValidationError(null);
+    return;
+  }
+
+  if (field.editor === 'enum') {
+    if (key.name === 'left') {
+      d.setEnumIndex((prev) => {
+        const next = cycleEnumValue(field, prev, -1, d.runtime);
+        return next;
+      });
+      return;
+    }
+    if (key.name === 'right') {
+      d.setEnumIndex((prev) => {
+        const next = cycleEnumValue(field, prev, 1, d.runtime);
+        return next;
+      });
+      return;
+    }
+    if (key.name === 'return') {
+      d.setEditingIndex(null);
+      d.setValidationError(null);
+      return;
+    }
+    return;
+  }
+
+  if (key.name !== 'return') {
+    return;
+  }
+
+  if (field.kind === 'param') {
+    const result = commitParam(
+      field.key,
+      d.editValue,
+      d.runtime.setActiveModelParam,
+    );
+    if (!result.success) {
+      d.setValidationError(result.message ?? 'Invalid value');
+      return;
+    }
+    d.setEditingIndex(null);
+    d.setValidationError(null);
+    return;
+  }
+
+  const result = commitEphemeral(
+    field,
+    d.editValue,
+    d.runtime.setEphemeralSetting,
+  );
+  if (!result.success) {
+    d.setValidationError(result.message ?? 'Invalid value');
+    return;
+  }
+  d.setEditingIndex(null);
+  d.setValidationError(null);
 }
 
 function isPlainLetter(key: Key, letter: string): boolean {
   return key.name === letter && key.ctrl !== true && key.meta !== true;
 }
 
-function getClearableParamField(
-  key: Key,
-  field: ConfigField,
-): ConfigField | null {
-  if (field.kind === 'param' && isPlainLetter(key, 'c')) {
-    return field;
-  }
-  return null;
-}
-
-interface KeypressDispatch {
-  onClose: () => void;
-  selectedIndex: number;
-  editingField: ConfigField | null;
-  editValue: string;
-  setEditingField: (field: ConfigField | null) => void;
-  setEditValue: (value: string) => void;
-  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
-  forceRender: () => void;
-  runtime: ReturnType<typeof useRuntimeApi>;
-  setValidationError: (msg: string | null) => void;
-  params: Record<string, unknown>;
-  ephemeral: Record<string, unknown>;
-}
-
-function handleListKey(
-  key: Key,
-  onClose: () => void,
-  selectedIndex: number,
-  setEditingField: (f: ConfigField | null) => void,
-  setEditValue: (v: string) => void,
-  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>,
-  setValidationError: (m: string | null) => void,
-  runtime: ReturnType<typeof useRuntimeApi>,
-  params: Record<string, unknown>,
-  ephemeral: Record<string, unknown>,
-  forceRender: () => void,
-): void {
-  if (key.name === 'escape') {
-    onClose();
-    return;
-  }
-  if (key.name === 'up') {
-    setSelectedIndex((prev) => Math.max(0, prev - 1));
-    return;
-  }
-  if (key.name === 'down') {
-    setSelectedIndex((prev) => Math.min(ALL_FIELDS.length - 1, prev + 1));
-    return;
-  }
-  if (key.name === 'return') {
-    const field = ALL_FIELDS[selectedIndex];
-    const current = valueForField(field, params, ephemeral);
-    setEditValue(
-      current === undefined || current === null ? '' : formatValue(current),
-    );
-    setValidationError(null);
-    setEditingField(field);
-    return;
-  }
-  const clearable = getClearableParamField(key, ALL_FIELDS[selectedIndex]);
-  if (clearable !== null) {
-    runtime.clearActiveModelParam(clearable.key);
-    forceRender();
-  }
-}
-
-function handleEditKey(
-  key: Key,
-  editingField: ConfigField | null,
-  editValue: string,
-  runtime: ReturnType<typeof useRuntimeApi>,
-  setEditingField: (f: ConfigField | null) => void,
-  setValidationError: (m: string | null) => void,
-): void {
-  if (key.name === 'escape') {
-    setEditingField(null);
-    setValidationError(null);
-    return;
-  }
-  if (key.name !== 'return') {
-    return;
-  }
-  if (editingField === null) return;
-  if (editingField.kind === 'param') {
-    const result = commitParam(
-      editingField.key,
-      editValue,
-      runtime.setActiveModelParam,
-    );
-    if (!result.success) {
-      setValidationError(result.message ?? 'Invalid value');
-      return;
-    }
-    setEditingField(null);
-    setValidationError(null);
-    return;
-  }
-  const result = commitEphemeral(
-    editingField,
-    editValue,
-    runtime.setEphemeralSetting,
-  );
-  if (!result.success) {
-    setValidationError(result.message ?? 'Invalid value');
-    return;
-  }
-  setEditingField(null);
-  setValidationError(null);
-}
-
 function useModelConfigKeypress(d: KeypressDispatch): void {
-  // Use a ref to hold the latest dispatch so the keypress callback identity
-  // stays stable, avoiding unnecessary re-subscriptions in useKeypress.
   const dispatchRef = useRef(d);
   dispatchRef.current = d;
   const onKeypress = useCallback((key: Key) => {
     const cur = dispatchRef.current;
-    if (cur.editingField !== null) {
-      handleEditKey(
-        key,
-        cur.editingField,
-        cur.editValue,
-        cur.runtime,
-        cur.setEditingField,
-        cur.setValidationError,
-      );
+    if (cur.editingIndex !== null) {
+      handleEditKey(key, cur);
     } else {
-      handleListKey(
-        key,
-        cur.onClose,
-        cur.selectedIndex,
-        cur.setEditingField,
-        cur.setEditValue,
-        cur.setSelectedIndex,
-        cur.setValidationError,
-        cur.runtime,
-        cur.params,
-        cur.ephemeral,
-        cur.forceRender,
-      );
+      handleListKey(key, cur);
     }
   }, []);
   useKeypress(onKeypress, { isActive: true });
@@ -398,27 +460,33 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   const runtime = useRuntimeApi();
   const { width } = useResponsive();
   const reads = useRuntimeReads(runtime);
+  const fields = buildFields(reads.unallowedParameters);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [editingField, setEditingField] = useState<ConfigField | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [enumIndex, setEnumIndex] = useState(0);
   const [, setRenderTick] = useState(0);
   const forceRender = useCallback(() => setRenderTick((t) => t + 1), []);
 
   useModelConfigKeypress({
     onClose,
     selectedIndex,
-    editingField,
+    editingIndex,
     editValue,
-    setEditingField,
+    setEditingIndex,
     setEditValue,
     setSelectedIndex,
-    forceRender,
+    enumIndex,
+    setEnumIndex,
     runtime,
     setValidationError,
+    validationError,
     params: reads.modelParams,
     ephemeral: reads.ephemeralSettings,
+    forceRender,
+    fields,
   });
 
   const dialogWidth = Math.min(width, 80);
@@ -437,41 +505,34 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
       />
 
       <SectionHeader label="Model Parameters" />
-      <FieldList
-        fields={PARAM_FIELDS}
-        selectedIndex={selectedIndex}
-        isEditing={editingField !== null}
-        params={reads.modelParams}
-        ephemeral={reads.ephemeralSettings}
-        startIndex={0}
-      />
-
-      <SectionHeader label="Model Behavior" />
-      <FieldList
-        fields={EPHEMERAL_FIELDS}
-        selectedIndex={selectedIndex}
-        isEditing={editingField !== null}
-        params={reads.modelParams}
-        ephemeral={reads.ephemeralSettings}
-        startIndex={PARAM_FIELDS.length}
-      />
-
-      {editingField !== null && (
-        <EditMode
-          field={editingField}
-          value={editValue}
-          onChange={setEditValue}
-          validationError={validationError}
+      {fields.map((field, i) => (
+        <FieldRow
+          key={field.key}
+          field={field}
+          isSelected={selectedIndex === i}
+          isEditing={editingIndex === i}
+          editValue={editValue}
+          currentValue={valueForField(
+            field,
+            reads.modelParams,
+            reads.ephemeralSettings,
+          )}
+          enumIndex={enumIndex}
+          onEditChange={setEditValue}
         />
-      )}
+      ))}
 
-      {editingField === null && (
+      {validationError !== null && (
         <Box marginTop={1}>
-          <Text color={SemanticColors.text.secondary}>
-            {'\u2191'}/{'\u2193'} navigate Enter edit c=clear(param) Esc close
-          </Text>
+          <Text color={SemanticColors.status.error}>{validationError}</Text>
         </Box>
       )}
+
+      <Box marginTop={1}>
+        <Text color={SemanticColors.text.secondary}>
+          {'\u2191'}/{'\u2193'} navigate Enter edit c=clear(param) Esc close
+        </Text>
+      </Box>
     </Box>
   );
 };

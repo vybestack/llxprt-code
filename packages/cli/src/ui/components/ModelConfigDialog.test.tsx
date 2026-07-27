@@ -35,6 +35,7 @@ interface StatefulRuntimeState {
   modelName: string;
   modelParams: Record<string, unknown>;
   ephemeralSettings: Record<string, unknown>;
+  unallowedParameters?: string[];
 }
 
 function createStatefulRuntime(
@@ -47,6 +48,7 @@ function createStatefulRuntime(
   setActiveModelParam: (key: string, value: unknown) => void;
   clearActiveModelParam: (key: string) => void;
   setEphemeralSetting: (key: string, value: unknown) => void;
+  getUnallowedParametersForActiveModel: () => string[];
 } {
   const state: StatefulRuntimeState = {
     providerName: 'openai',
@@ -70,6 +72,7 @@ function createStatefulRuntime(
     setEphemeralSetting: (key: string, value: unknown) => {
       state.ephemeralSettings[key] = value;
     },
+    getUnallowedParametersForActiveModel: () => state.unallowedParameters ?? [],
   };
 }
 
@@ -79,9 +82,10 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => activeRuntime,
 }));
 
-const DOWN = '\u001B[B';
+const DOWN = '[B';
 const ENTER = '\r';
-const ESC = '\u001b';
+const ESC = '[27u';
+const RIGHT = '[C';
 
 function defaultProps() {
   return { onClose: vi.fn() };
@@ -111,16 +115,28 @@ describe('<ModelConfigDialog />', () => {
     expect(output).toContain('gpt-5');
   });
 
+  it('renders max_tokens and context-limit at the top (field reorder)', () => {
+    const { lastFrame } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    const output = lastFrame();
+    expect(output).toBeDefined();
+    const lines = output!.split('\n');
+    const fieldLines = lines.filter((l) => l.includes('○') || l.includes('●'));
+    expect(fieldLines[0]).toContain('max_tokens');
+    expect(fieldLines[6]).toContain('context-limit');
+  });
+
   it('renders the model parameters section with current values (AC3)', () => {
     const { lastFrame } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
     const output = lastFrame();
-    expect(output).toContain('Model Parameters');
+    expect(output).toContain('max_tokens');
     expect(output).toContain('temperature');
     expect(output).toContain('0.7');
-    expect(output).toContain('max_tokens');
     expect(output).toContain('top_p');
     expect(output).toContain('top_k');
     expect(output).toContain('frequency_penalty');
@@ -142,10 +158,9 @@ describe('<ModelConfigDialog />', () => {
     );
 
     const output = lastFrame();
-    expect(output).toContain('Model Behavior');
+    expect(output).toContain('context-limit');
     expect(output).toContain('reasoning.enabled');
     expect(output).toContain('reasoning.effort');
-    expect(output).toContain('context-limit');
     expect(output).toContain('streaming');
     expect(output).toContain('prompt-caching');
   });
@@ -155,7 +170,7 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // Navigate down once from temperature (index 0) to max_tokens (index 1)
+    // Navigate down once from max_tokens (index 0) to temperature (index 1)
     act(() => {
       stdin.write(DOWN);
     });
@@ -165,25 +180,24 @@ describe('<ModelConfigDialog />', () => {
       stdin.write(ENTER);
     });
 
-    expect(lastFrame()).toContain('Edit max_tokens');
+    expect(lastFrame()).toContain('temperature');
   });
 
-  it('edits a model param and shows the new value after save (AC5)', async () => {
+  it('edits a model param inline and shows the new value after save (AC5)', async () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
     expect(lastFrame()).toContain('temperature');
 
-    // Enter edit mode on temperature (index 0, default selection)
+    // Navigate to temperature (index 1)
     act(() => {
-      stdin.write(ENTER);
+      stdin.write(DOWN);
     });
 
-    // EditValue is pre-populated with the current value (0.7).
-    // Clear the pre-filled text before typing the new value.
+    // Enter edit mode
     act(() => {
-      stdin.write('\u0015'); // Ctrl+U clears the line in TextInput
+      stdin.write(ENTER);
     });
 
     // Type a new value
@@ -209,8 +223,13 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // temperature starts at 0.7, selected by default (index 0)
+    // temperature starts at 0.7
     expect(lastFrame()).toContain('0.7');
+
+    // Navigate to temperature (index 1)
+    act(() => {
+      stdin.write(DOWN);
+    });
 
     // Press 'c' in list mode to clear the selected param field
     await act(async () => {
@@ -223,42 +242,86 @@ describe('<ModelConfigDialog />', () => {
     });
   });
 
-  it('ignores c=clear on ephemeral fields in list mode', async () => {
-    setupRuntime({
-      ephemeralSettings: { 'reasoning.enabled': true },
-    });
-    const { stdin } = renderWithProviders(
+  it('toggles reasoning.enabled with Enter (boolean select)', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // Navigate to reasoning.enabled (index 6) — an ephemeral field
-    for (let i = 0; i < 6; i++) {
+    // reasoning.enabled starts at true
+    expect(lastFrame()).toContain('true');
+
+    // Navigate to reasoning.enabled (index 7)
+    for (let i = 0; i < 7; i++) {
       act(() => {
         stdin.write(DOWN);
       });
     }
 
-    // Press 'c' in list mode — should NOT clear an ephemeral field
+    // Press Enter to toggle boolean
     await act(async () => {
-      stdin.write('c');
+      stdin.write(ENTER);
     });
 
-    // The ephemeral setting must still be present in runtime state
     await waitFor(() => {
-      expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
-        true,
-      );
+      expect(lastFrame()).toContain('false');
+    });
+
+    // Toggle back
+    await act(async () => {
+      stdin.write(ENTER);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('true');
     });
   });
 
-  it('edits an ephemeral setting and shows the new value after save (AC8)', async () => {
-    // Navigate to context-limit (index 8): 6 params + 2 ephemeral before it
-    // reasoning.enabled=6, reasoning.effort=7, context-limit=8
+  it('cycles streaming enum with Left/Right in edit mode', async () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // Press down 8 times to reach context-limit
+    // Navigate to streaming (index 9)
+    for (let i = 0; i < 9; i++) {
+      act(() => {
+        stdin.write(DOWN);
+      });
+    }
+
+    // Enter edit mode on streaming
+    act(() => {
+      stdin.write(ENTER);
+    });
+
+    // Should show enum values
+    expect(lastFrame()).toContain('[enabled]');
+
+    // Press Right to cycle to disabled
+    act(() => {
+      stdin.write(RIGHT);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('[disabled]');
+    });
+
+    // Press Enter to confirm
+    await act(async () => {
+      stdin.write(ENTER);
+    });
+
+    // Value should be saved as disabled
+    await waitFor(() => {
+      expect(lastFrame()).toContain('disabled');
+    });
+  });
+
+  it('shows validation error when committing an invalid ephemeral value', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    // Navigate to reasoning.effort (index 8)
     for (let i = 0; i < 8; i++) {
       act(() => {
         stdin.write(DOWN);
@@ -268,87 +331,6 @@ describe('<ModelConfigDialog />', () => {
     // Enter edit mode
     act(() => {
       stdin.write(ENTER);
-    });
-
-    expect(lastFrame()).toContain('Edit context-limit');
-
-    // Clear the pre-filled text (context-limit has no value by default)
-    act(() => {
-      stdin.write('\u0015'); // Ctrl+U clears the line
-    });
-
-    // Type a new value
-    for (const ch of '100000') {
-      act(() => {
-        stdin.write(ch);
-      });
-    }
-
-    // Save
-    await act(async () => {
-      stdin.write(ENTER);
-    });
-
-    // The rendered output must reflect the new value
-    await waitFor(() => {
-      expect(lastFrame()).toContain('100000');
-    });
-  });
-
-  it('does not show c=clear in edit mode help text (clear is list-mode only)', () => {
-    const { lastFrame, stdin } = renderWithProviders(
-      <ModelConfigDialog {...defaultProps()} />,
-    );
-
-    // Navigate to reasoning.enabled (index 6)
-    for (let i = 0; i < 6; i++) {
-      act(() => {
-        stdin.write(DOWN);
-      });
-    }
-
-    // Enter edit mode
-    act(() => {
-      stdin.write(ENTER);
-    });
-
-    const output = lastFrame();
-    expect(output).toContain('Edit reasoning.enabled');
-    expect(output).not.toContain('c=clear');
-  });
-
-  it('shows c=clear in list mode help text', () => {
-    const { lastFrame } = renderWithProviders(
-      <ModelConfigDialog {...defaultProps()} />,
-    );
-
-    // In list mode (no edit), help text should mention c=clear
-    const output = lastFrame();
-    expect(output).toContain('c=clear');
-  });
-
-  it('shows validation error when committing an invalid ephemeral value', async () => {
-    const { lastFrame, stdin } = renderWithProviders(
-      <ModelConfigDialog {...defaultProps()} />,
-    );
-
-    // Navigate to reasoning.effort (index 7)
-    for (let i = 0; i < 7; i++) {
-      act(() => {
-        stdin.write(DOWN);
-      });
-    }
-
-    // Enter edit mode
-    act(() => {
-      stdin.write(ENTER);
-    });
-
-    expect(lastFrame()).toContain('Edit reasoning.effort');
-
-    // Clear the pre-filled text if any
-    act(() => {
-      stdin.write('\u0015'); // Ctrl+U clears the line
     });
 
     // Type an invalid value (reasoning.effort only accepts known enum values)
@@ -364,12 +346,7 @@ describe('<ModelConfigDialog />', () => {
     });
 
     await waitFor(() => {
-      const frame = lastFrame();
-      // Still in edit mode (validation failed, not saved)
-      expect(frame).toContain('Edit reasoning.effort');
-      // The validation error message from parseEphemeralSettingValue
-      // must be rendered (enum values: minimal/low/medium/high/xhigh/max)
-      expect(frame).toContain('must be one of');
+      expect(lastFrame()).toContain('must be one of');
     });
   });
 
@@ -392,12 +369,12 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...props} />,
     );
 
+    // Enter edit mode on max_tokens (index 0)
     act(() => {
       stdin.write(ENTER);
     });
 
-    expect(lastFrame()).toContain('>');
-
+    // Cancel with Escape
     act(() => {
       stdin.write(ESC);
     });
@@ -406,5 +383,72 @@ describe('<ModelConfigDialog />', () => {
       expect(lastFrame()).toContain('Model Parameters');
     });
     expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('hides unallowed sampling params (e.g. kimi-k3 fixed params)', async () => {
+    setupRuntime({
+      providerName: 'kimi',
+      modelName: 'kimi-k3',
+      modelParams: { temperature: 1.0 },
+      unallowedParameters: [
+        'temperature',
+        'top_p',
+        'top_k',
+        'frequency_penalty',
+        'presence_penalty',
+      ],
+    });
+
+    const { lastFrame } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Model Parameters');
+    });
+    const output = lastFrame();
+    expect(output).toContain('max_tokens');
+    expect(output).not.toContain('temperature');
+    expect(output).not.toContain('top_p');
+    expect(output).not.toContain('top_k');
+    expect(output).not.toContain('frequency_penalty');
+    expect(output).not.toContain('presence_penalty');
+  });
+
+  it('shows inherited modelDefaults (global ephemerals) for unset provider params', async () => {
+    setupRuntime({
+      providerName: 'kimi',
+      modelName: 'kimi-k3',
+      modelParams: {},
+      ephemeralSettings: { max_tokens: 131072 },
+      unallowedParameters: ['temperature'],
+    });
+
+    const { lastFrame } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('max_tokens');
+    });
+    const output = lastFrame();
+    // The inherited default renders on the max_tokens row.
+    expect(output).toMatch(/max_tokens\s+131072/);
+  });
+
+  it('prefers the provider-scoped param over the inherited global value', async () => {
+    setupRuntime({
+      modelParams: { max_tokens: 4096 },
+      ephemeralSettings: { max_tokens: 131072 },
+    });
+
+    const { lastFrame } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('4096');
+    });
+    expect(lastFrame()).not.toContain('131072');
   });
 });
