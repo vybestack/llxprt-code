@@ -358,7 +358,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
             if (isBinaryStream) break;
             cumulativeOutput = chunk;
             shouldUpdate = true;
-          } else {
+          } else if (chunk !== undefined) {
             // PTY terminal-buffer snapshot — replace semantics.
             updateOutput({ mode: 'replace', data: chunk });
             lastUpdateTime = Date.now();
