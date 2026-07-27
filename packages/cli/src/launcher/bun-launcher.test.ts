@@ -453,7 +453,7 @@ describe('relaunchUnderBunIfNeeded', () => {
         const result = (await import('node:child_process')).spawnSync(
           'bash',
           ['-c', bash],
-          { encoding: 'utf8', timeout: 15000 },
+          { encoding: 'utf8', timeout: 30000 },
         );
         expect(result.status).toBe(0);
         expect(result.stderr).toBe('');

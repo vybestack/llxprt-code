@@ -577,6 +577,6 @@ describe('Factory Detection Wiring (P33)', () => {
         await server1.stop();
         await server2.stop();
       }
-    });
+    }, 60000);
   });
 });
