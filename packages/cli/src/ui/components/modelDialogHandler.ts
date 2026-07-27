@@ -110,14 +110,16 @@ export function useModelDialogHandler(
             }
           }
         } catch (e) {
-          const status = runtime.getActiveProviderStatus();
-          addItem(
-            {
-              type: 'error',
-              text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
-            },
-            Date.now(),
-          );
+          let providerName: string | null | undefined;
+          try {
+            providerName = runtime.getActiveProviderStatus().providerName;
+          } catch {
+            // Runtime status read failure must not mask the original error
+          }
+          addItem({
+            type: 'error',
+            text: `Failed to switch model for provider '${providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
+          });
         }
         uiActions.closeModelsDialog();
         if (switchSucceeded) {

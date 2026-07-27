@@ -179,27 +179,24 @@ const EditMode: React.FC<{
   value: string;
   onChange: (value: string) => void;
   validationError: string | null;
-}> = ({ field, value, onChange, validationError }) => {
-  const clearHint = field.kind === 'param' ? ' c=clear' : '';
-  return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text color={SemanticColors.text.primary}>
-        {`Edit ${field.key} (Enter=save Esc=cancel${clearHint})`}
-      </Text>
-      <TextInput
-        value={value}
-        onChange={onChange}
-        isFocused={true}
-        placeholder={field.hint}
-      />
-      {validationError !== null && (
-        <Box marginTop={1}>
-          <Text color={SemanticColors.status.error}>{validationError}</Text>
-        </Box>
-      )}
-    </Box>
-  );
-};
+}> = ({ field, value, onChange, validationError }) => (
+  <Box flexDirection="column" marginTop={1}>
+    <Text color={SemanticColors.text.primary}>
+      {`Edit ${field.key} (Enter=save Esc=cancel)`}
+    </Text>
+    <TextInput
+      value={value}
+      onChange={onChange}
+      isFocused={true}
+      placeholder={field.hint}
+    />
+    {validationError !== null && (
+      <Box marginTop={1}>
+        <Text color={SemanticColors.status.error}>{validationError}</Text>
+      </Box>
+    )}
+  </Box>
+);
 
 interface RuntimeReads {
   providerName: string;
@@ -228,9 +225,9 @@ function isPlainLetter(key: Key, letter: string): boolean {
 
 function getClearableParamField(
   key: Key,
-  field: ConfigField | null,
+  field: ConfigField,
 ): ConfigField | null {
-  if (field !== null && field.kind === 'param' && isPlainLetter(key, 'c')) {
+  if (field.kind === 'param' && isPlainLetter(key, 'c')) {
     return field;
   }
   return null;
@@ -256,6 +253,7 @@ function handleListKey(
   setEditValue: (v: string) => void,
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>,
   setValidationError: (m: string | null) => void,
+  runtime: ReturnType<typeof useRuntimeApi>,
 ): void {
   if (key.name === 'escape') {
     onClose();
@@ -273,6 +271,11 @@ function handleListKey(
     setEditValue('');
     setValidationError(null);
     setEditingField(ALL_FIELDS[selectedIndex]);
+    return;
+  }
+  const clearable = getClearableParamField(key, ALL_FIELDS[selectedIndex]);
+  if (clearable !== null) {
+    runtime.clearActiveModelParam(clearable.key);
   }
 }
 
@@ -290,12 +293,6 @@ function handleEditKey(
     return;
   }
   if (key.name !== 'return') {
-    const clearable = getClearableParamField(key, editingField);
-    if (clearable !== null) {
-      runtime.clearActiveModelParam(clearable.key);
-      setEditingField(null);
-      setValidationError(null);
-    }
     return;
   }
   if (editingField === null) return;
@@ -339,6 +336,7 @@ function useModelConfigKeypress(d: KeypressDispatch): void {
           d.setEditValue,
           d.setSelectedIndex,
           d.setValidationError,
+          d.runtime,
         );
       }
     },
@@ -354,7 +352,7 @@ function useModelConfigKeypress(d: KeypressDispatch): void {
       d.setValidationError,
     ],
   );
-  useKeypress(onKeypress, { isActive: d.editingField === null });
+  useKeypress(onKeypress, { isActive: true });
 }
 
 const DialogHeader: React.FC<{
@@ -444,7 +442,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
       {editingField === null && (
         <Box marginTop={1}>
           <Text color={SemanticColors.text.secondary}>
-            {'\u2191'}/{'\u2193'} navigate Enter edit Esc close
+            {'\u2191'}/{'\u2193'} navigate Enter edit c=clear(param) Esc close
           </Text>
         </Box>
       )}

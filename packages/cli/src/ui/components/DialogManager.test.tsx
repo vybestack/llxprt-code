@@ -177,7 +177,29 @@ describe('useModelDialogHandler', () => {
     await waitFor(() => {
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'error' }),
-        expect.any(Number),
+      );
+    });
+    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
+  });
+
+  it('does NOT open config dialog when cross-provider setProvider fails', async () => {
+    fakeRuntime = createFakeRuntime({ setProviderShouldFail: true });
+
+    const { result } = renderHook(() =>
+      useModelDialogHandler(
+        fakeRuntime as never,
+        mockAddItem,
+        mockUiActions as never,
+        'openai',
+        {},
+      ),
+    );
+
+    result.current(makeModel('anthropic', 'claude-sonnet'));
+
+    await waitFor(() => {
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error' }),
       );
     });
     expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
@@ -186,6 +208,12 @@ describe('useModelDialogHandler', () => {
   it('STILL opens config dialog when addItem fails after successful switch', async () => {
     const recordProviderSwitch = vi.fn(() => {
       throw new Error('recording infrastructure down');
+    });
+
+    // Same-provider switch succeeds, but addItem throws.
+    // The dialog must still open because the switch itself succeeded.
+    mockAddItem.mockImplementation(() => {
+      throw new Error('addItem failed');
     });
 
     const { result } = renderHook(() =>
@@ -197,12 +225,6 @@ describe('useModelDialogHandler', () => {
         { recordingIntegration: { recordProviderSwitch } },
       ),
     );
-
-    // Same-provider switch succeeds, but addItem throws.
-    // The dialog must still open because the switch itself succeeded.
-    mockAddItem.mockImplementation(() => {
-      throw new Error('addItem failed');
-    });
 
     result.current(makeModel('openai', 'gpt-5'));
 

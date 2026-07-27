@@ -198,20 +198,15 @@ describe('<ModelConfigDialog />', () => {
     });
   });
 
-  it('clears a model param and shows (not set) after clear (AC6)', async () => {
+  it('clears a model param from list mode and shows (not set) after clear (AC6)', async () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // temperature starts at 0.7
+    // temperature starts at 0.7, selected by default (index 0)
     expect(lastFrame()).toContain('0.7');
 
-    // Enter edit mode on temperature
-    act(() => {
-      stdin.write(ENTER);
-    });
-
-    // Clear
+    // Press 'c' in list mode to clear the selected param field
     await act(async () => {
       stdin.write('c');
     });
@@ -219,6 +214,29 @@ describe('<ModelConfigDialog />', () => {
     // The rendered output must show (not set) for temperature
     await waitFor(() => {
       expect(lastFrame()).toContain('(not set)');
+    });
+  });
+
+  it('ignores c=clear on ephemeral fields in list mode', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    // Navigate to reasoning.enabled (index 6) — an ephemeral field
+    for (let i = 0; i < 6; i++) {
+      act(() => {
+        stdin.write(DOWN);
+      });
+    }
+
+    // Press 'c' in list mode — should NOT clear an ephemeral field
+    await act(async () => {
+      stdin.write('c');
+    });
+
+    // reasoning.enabled should still be true
+    await waitFor(() => {
+      expect(lastFrame()).toContain('true');
     });
   });
 
@@ -261,7 +279,7 @@ describe('<ModelConfigDialog />', () => {
     });
   });
 
-  it('does not show c=clear in edit mode help for ephemeral fields', () => {
+  it('does not show c=clear in edit mode help text (clear is list-mode only)', () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
@@ -283,18 +301,13 @@ describe('<ModelConfigDialog />', () => {
     expect(output).not.toContain('c=clear');
   });
 
-  it('shows c=clear in edit mode help for param fields', () => {
-    const { lastFrame, stdin } = renderWithProviders(
+  it('shows c=clear in list mode help text', () => {
+    const { lastFrame } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // temperature (index 0) is selected by default; enter edit mode
-    act(() => {
-      stdin.write(ENTER);
-    });
-
+    // In list mode (no edit), help text should mention c=clear
     const output = lastFrame();
-    expect(output).toContain('Edit temperature');
     expect(output).toContain('c=clear');
   });
 
@@ -330,7 +343,12 @@ describe('<ModelConfigDialog />', () => {
     });
 
     await waitFor(() => {
-      expect(lastFrame()).toContain('Edit reasoning.effort');
+      const frame = lastFrame();
+      // Still in edit mode (validation failed, not saved)
+      expect(frame).toContain('Edit reasoning.effort');
+      // The validation error message from parseEphemeralSettingValue
+      // must be rendered (enum values: minimal/low/medium/high/xhigh/max)
+      expect(frame).toContain('must be one of');
     });
   });
 
