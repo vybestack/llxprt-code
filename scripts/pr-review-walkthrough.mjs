@@ -17,6 +17,18 @@ import {
   TRIAGE_TAGS,
   DEFAULT_PR_TEMPLATE_SECTIONS,
 } from './pr-review-prompts.mjs';
+import {
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_CONTEXT_LIMIT,
+  isParseError,
+  runLlxprtPromptWithParse,
+  saveParseFailureArtifact,
+} from './pr-review-llm-helpers.mjs';
+import {
+  readArtifacts,
+  parseDiffManifest,
+  resolveOriginalPath,
+} from './pr-review-artifacts.mjs';
 
 export {
   buildMapPrompt,
@@ -24,6 +36,14 @@ export {
   buildSynthesisPrompts,
   buildPreMergeChecksPrompt,
 };
+export {
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_CONTEXT_LIMIT,
+  isParseError,
+  runLlxprtPromptWithParse,
+  saveParseFailureArtifact,
+};
+export { parseDiffManifest, resolveOriginalPath };
 
 const COMMENT_TAG = '<!-- llxprt-walkthrough -->';
 const PLANNER_ISSUE = '#2256';
@@ -436,7 +456,8 @@ export async function runLlxprtPrompt(
       'Missing required configuration: LLXPRT_DEFAULT_PROVIDER, OPENAI_API_KEY, OPENAI_BASE_URL, and a model must all be set',
     );
   }
-  const contextLimit = process.env.LLXPRT_CONTEXT_LIMIT || '200000';
+  const contextLimit =
+    process.env.LLXPRT_CONTEXT_LIMIT || String(DEFAULT_CONTEXT_LIMIT);
   const args = [
     '--provider',
     provider,
@@ -447,7 +468,7 @@ export async function runLlxprtPrompt(
     '--set',
     'modelparam.temperature=0.7',
     '--set',
-    'modelparam.max_tokens=4000',
+    `modelparam.max_tokens=${DEFAULT_MAX_TOKENS}`,
     '--set',
     `context-limit=${contextLimit}`,
     '--prompt',
@@ -587,217 +608,54 @@ async function runPipeline(reviewDir) {
     console.log('No diffs detected; minimal walkthrough written.');
     return;
   }
-  const summaries = await runMapPhase(reviewDir, artifacts);
-  const themes = await runGroupPhase(artifacts, summaries);
-  const synthesis = await runSynthesisPhases(artifacts, summaries, themes);
-  const preMergeChecks = await runPreMergeChecksPhase(artifacts, summaries);
-  const magnitude = computeMagnitude(artifacts.magnitudeInput);
-  const comment = renderWalkthroughComment({
-    releaseNotes: synthesis.releaseNotes,
-    walkthrough: synthesis.walkthrough,
-    themes,
-    sequenceDiagram: synthesis.sequenceDiagram,
-    magnitude,
-    related: synthesis.related,
-    preMergeChecks,
-  });
-  await fs.writeFile(path.join(reviewDir, 'comment.md'), comment);
-  await fs.writeFile(path.join(reviewDir, 'walkthrough.md'), comment);
-  console.log('Walkthrough written to review/comment.md');
-}
-
-async function readArtifacts(reviewDir) {
-  const prPath = path.join(reviewDir, 'pr.json');
   try {
-    await fs.access(prPath);
-  } catch {
-    throw new Error(`Required artifact missing: ${prPath}`);
-  }
-  const pr = JSON.parse(await fs.readFile(prPath, 'utf8'));
-  const issues = await readIssueFiles(reviewDir);
-  if (issues.length === 0) {
-    throw new Error(
-      'No linked issue files found in review/issues — the issue_gate should have blocked this PR. Infrastructure problem.',
+    const summaries = await runMapPhase(reviewDir, artifacts);
+    const themes = await runGroupPhase(reviewDir, artifacts, summaries);
+    const synthesis = await runSynthesisPhases(
+      reviewDir,
+      artifacts,
+      summaries,
+      themes,
     );
-  }
-  const diffs = await readDiffFiles(reviewDir);
-  const numstat = await readNumstat(reviewDir);
-  return buildArtifactContext(pr, issues, diffs, numstat);
-}
-
-async function readIssueFiles(reviewDir) {
-  const issuesDir = path.join(reviewDir, 'issues');
-  const files = await fs.readdir(issuesDir).catch(() => []);
-  const issueFiles = files.filter((file) => file.endsWith('.json'));
-  const results = await mapWithConcurrency(issueFiles, 8, async (file) => ({
-    filePath: file,
-    issue: JSON.parse(await fs.readFile(path.join(issuesDir, file), 'utf8')),
-  }));
-  const issues = collectArtifactReads(results, 'issue');
-  if (issueFiles.length > 0 && issues.length === 0) {
-    throw new Error(
-      `All ${issueFiles.length} issue file(s) failed to parse in ${issuesDir}`,
+    const preMergeChecks = await runPreMergeChecksPhase(
+      reviewDir,
+      artifacts,
+      summaries,
     );
-  }
-  return issues.sort((a, b) => a.number - b.number);
-}
-
-async function readDiffFiles(reviewDir) {
-  const diffsDir = path.join(reviewDir, 'diffs');
-  const manifestPath = path.join(reviewDir, 'diff-manifest.txt');
-  const manifest = await parseDiffManifest(manifestPath);
-  const files = await fs.readdir(diffsDir).catch(() => []);
-  const diffFiles = files.filter((file) => file.endsWith('.diff'));
-  const results = await mapWithConcurrency(diffFiles, 8, async (file) => ({
-    filePath: file,
-    diff: {
-      filePath: resolveOriginalPath(file, manifest),
-      safeName: file,
-      content: await fs.readFile(path.join(diffsDir, file), 'utf8'),
-    },
-  }));
-  const diffs = collectArtifactReads(results, 'diff');
-  if (diffFiles.length > 0 && diffs.length === 0) {
-    throw new Error(
-      `All ${diffFiles.length} diff file(s) failed to read in ${diffsDir}`,
-    );
-  }
-  return diffs;
-}
-
-function collectArtifactReads(results, valueKey) {
-  const values = [];
-  for (const result of results) {
-    if ('error' in result) {
-      console.error(`Failed to read ${result.filePath}: ${result.error}`);
-    } else {
-      values.push(result[valueKey]);
-    }
-  }
-  return values;
-}
-
-/**
- * Read review/diff-manifest.txt (lines of `<safeName>.diff\t<originalPath>`).
- * Returns a Map of safeName -> originalPath, or null if the file is missing.
- */
-export async function parseDiffManifest(manifestPath) {
-  let raw;
-  try {
-    raw = await fs.readFile(manifestPath, 'utf8');
-  } catch {
-    return null;
-  }
-  const map = new Map();
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim();
-    const tabIdx = line.indexOf('\t');
-    if (trimmed === '' || tabIdx === -1) {
-      continue;
-    }
-    const safeName = line.slice(0, tabIdx).trim();
-    const originalPath = line.slice(tabIdx + 1).trim();
-    if (safeName && originalPath) {
-      map.set(safeName, originalPath);
-    }
-  }
-  return map;
-}
-
-/**
- * Resolve a sanitized diff filename (e.g. `src__tests__foo.test.ts.diff`)
- * back to the original path. Prefer the authoritative manifest; fall back to
- * the naive `__` -> `/` replace only when no manifest is available.
- */
-export function resolveOriginalPath(safeDiffName, manifest) {
-  if (manifest && manifest.has(safeDiffName)) {
-    return manifest.get(safeDiffName);
-  }
-  return safeDiffName.replace(/__/g, '/').replace(/\.diff$/, '');
-}
-
-async function readNumstat(reviewDir) {
-  const numstatPath = path.join(reviewDir, 'numstat.txt');
-  const raw = await fs.readFile(numstatPath, 'utf8').catch(() => '');
-  return raw
-    .split('\n')
-    .filter((line) => line.trim())
-    .map((line) => {
-      const [additions, deletions, filename] = line.split('\t');
-      return {
-        additions: Number(additions) || 0,
-        deletions: Number(deletions) || 0,
-        filename,
-      };
+    const magnitude = computeMagnitude(artifacts.magnitudeInput);
+    const comment = renderWalkthroughComment({
+      releaseNotes: synthesis.releaseNotes,
+      walkthrough: synthesis.walkthrough,
+      themes,
+      sequenceDiagram: synthesis.sequenceDiagram,
+      magnitude,
+      related: synthesis.related,
+      preMergeChecks,
     });
-}
-
-function buildArtifactContext(pr, issues, diffs, numstat) {
-  const totalAdditions = numstat.reduce((sum, n) => sum + n.additions, 0);
-  const totalDeletions = numstat.reduce((sum, n) => sum + n.deletions, 0);
-  const changedFiles = pr.changedFiles || numstat.length;
-  const changedFilePaths = deriveChangedFilePaths(numstat, diffs);
-  return {
-    prContext: {
-      number: pr.number,
-      title: pr.title,
-      author: pr.author?.login,
-      body: pr.body,
-      baseRefName: pr.baseRefName,
-      headRefName: pr.headRefName,
-      additions: pr.additions ?? totalAdditions,
-      deletions: pr.deletions ?? totalDeletions,
-      changedFiles,
-      commits: pr.commits,
-    },
-    issues,
-    diffs,
-    numstat,
-    changedFilePaths,
-    magnitudeInput: {
-      additions: totalAdditions,
-      deletions: totalDeletions,
-      changedFiles,
-      packageCount: countPackages(changedFilePaths),
-      criteriaCount: countAcceptanceCriteria(issues),
-    },
-  };
-}
-
-function deriveChangedFilePaths(numstat, diffs) {
-  const fromNumstat = numstat.map((n) => n.filename).filter(Boolean);
-  return fromNumstat.length > 0
-    ? fromNumstat
-    : diffs.map((d) => d.filePath).filter(Boolean);
-}
-
-function countPackages(filenames) {
-  const packages = new Set(
-    filenames
-      .filter((f) => f.startsWith('packages/'))
-      .map((f) => f.split('/')[1]),
-  );
-  return packages.size;
-}
-
-function countAcceptanceCriteria(issues) {
-  return issues.reduce((sum, issue) => {
-    const body = String(issue.body ?? '').toLowerCase();
-    const matches = body.match(/acceptance criteri[\s\S]*?(?=\n#|\n##|$)/i);
-    if (!matches) {
-      return sum;
-    }
-    const checkboxCount = (matches[0].match(/-\s*\[/g) || []).length;
-    return sum + Math.max(1, checkboxCount);
-  }, 0);
-}
-
-const MAP_MODEL = process.env.LLXPRT_DEFAULT_MODEL;
-const STRONG_MODEL =
-  process.env.LLXPRT_STRONG_MODEL || process.env.LLXPRT_DEFAULT_MODEL;
-
-function placeholderSummary(filePath, reason) {
-  return { filePath, summary: reason, signature: '', triage: 'chore' };
+    await fs.writeFile(path.join(reviewDir, 'comment.md'), comment);
+    await fs.writeFile(path.join(reviewDir, 'walkthrough.md'), comment);
+    console.log('Walkthrough written to review/comment.md');
+  } catch (pipelineError) {
+    console.error(
+      `Pipeline phase failed unexpectedly, writing minimal walkthrough: ${pipelineError.message}`,
+    );
+    const comment = renderWalkthroughComment({
+      releaseNotes: '',
+      walkthrough: buildMinimalWalkthrough(
+        artifacts.diffs.map((d) => ({
+          filePath: d.filePath,
+          summary: d.filePath,
+        })),
+      ),
+      themes: [],
+      sequenceDiagram: '',
+      magnitude: computeMagnitude(artifacts.magnitudeInput),
+      related: '',
+      preMergeChecks: null,
+    });
+    await fs.writeFile(path.join(reviewDir, 'comment.md'), comment);
+    await fs.writeFile(path.join(reviewDir, 'walkthrough.md'), comment);
+  }
 }
 
 async function runMapPhase(reviewDir, artifacts) {
@@ -806,17 +664,9 @@ async function runMapPhase(reviewDir, artifacts) {
     diff: d.content,
     prContext: artifacts.prContext,
   }));
-  const results = await mapWithConcurrency(mapItems, 3, async (item) => {
-    if (item.diff.length > MAX_DIFF_BYTES) {
-      return placeholderSummary(
-        item.filePath,
-        '(file too large for per-file summary, skipped)',
-      );
-    }
-    const prompt = buildMapPrompt(item.filePath, item.diff, item.prContext);
-    const raw = await runLlxprtPrompt(prompt, { model: MAP_MODEL });
-    return { filePath: item.filePath, ...parseMapResponse(raw) };
-  });
+  const results = await mapWithConcurrency(mapItems, 3, (item) =>
+    mapSingleItem(reviewDir, item),
+  );
   const summariesDir = path.join(reviewDir, 'summaries');
   await fs.mkdir(summariesDir, { recursive: true });
   for (const result of results) {
@@ -836,27 +686,121 @@ async function runMapPhase(reviewDir, artifacts) {
   );
 }
 
-async function runGroupPhase(artifacts, summaries) {
-  const prompt = buildGroupPrompt(summaries, artifacts.prContext);
-  const raw = await runLlxprtPrompt(prompt, { model: STRONG_MODEL });
-  const { themes } = parseGroupResponse(raw);
-  return themes;
+const MAP_MODEL = process.env.LLXPRT_DEFAULT_MODEL;
+const STRONG_MODEL =
+  process.env.LLXPRT_STRONG_MODEL || process.env.LLXPRT_DEFAULT_MODEL;
+
+function placeholderSummary(filePath, reason) {
+  return { filePath, summary: reason, signature: '', triage: 'chore' };
 }
 
-async function runSynthesisPhases(artifacts, summaries, themes) {
+async function mapSingleItem(reviewDir, item) {
+  if (item.diff.length > MAX_DIFF_BYTES) {
+    return placeholderSummary(
+      item.filePath,
+      '(file too large for per-file summary, skipped)',
+    );
+  }
+  const prompt = buildMapPrompt(item.filePath, item.diff, item.prContext);
+  const parsed = await runLlxprtPromptWithParse(
+    () => runLlxprtPrompt(prompt, { model: MAP_MODEL }),
+    parseMapResponse,
+    {
+      phase: 'map',
+      saveParseFailure: (phase, raw, promptLength) =>
+        saveParseFailureArtifact(reviewDir, phase, raw, { promptLength }),
+      promptLength: prompt.length,
+    },
+  );
+  return { filePath: item.filePath, ...parsed };
+}
+
+async function runGroupPhase(reviewDir, artifacts, summaries) {
+  const prompt = buildGroupPrompt(summaries, artifacts.prContext);
+  try {
+    const themes = await runLlxprtPromptWithParse(
+      () => runLlxprtPrompt(prompt, { model: STRONG_MODEL }),
+      parseGroupResponse,
+      {
+        phase: 'group',
+        saveParseFailure: (phase, raw, promptLength) =>
+          saveParseFailureArtifact(reviewDir, phase, raw, { promptLength }),
+        promptLength: prompt.length,
+      },
+    );
+    return themes.themes;
+  } catch (error) {
+    console.error(
+      `Group phase failed, falling back to directory grouping: ${error.message}`,
+    );
+    return fallbackGroupByDirectory(summaries);
+  }
+}
+
+function fallbackGroupByDirectory(summaries) {
+  const groups = new Map();
+  for (const s of summaries) {
+    const dir = path.dirname(s.filePath);
+    if (!groups.has(dir)) {
+      groups.set(dir, {
+        layer: dir,
+        files: [],
+        summary: `Changes in ${dir}`,
+        triage: 'chore',
+        signature: '',
+      });
+    }
+    groups.get(dir).files.push(s.filePath);
+  }
+  return Array.from(groups.values());
+}
+
+async function runSynthesisPhases(reviewDir, artifacts, summaries, themes) {
   const prompts = buildSynthesisPrompts({
     prContext: artifacts.prContext,
     summaries,
     themes,
     fullIssueBodies: artifacts.issues,
   });
-  const walkthroughRaw = await runLlxprtPrompt(
-    prompts.walkthroughReleaseNotes,
-    {
-      model: STRONG_MODEL,
-    },
-  );
-  const walkthroughParsed = extractJsonObject(walkthroughRaw);
+  try {
+    const walkthroughParsed = await runLlxprtPromptWithParse(
+      () =>
+        runLlxprtPrompt(prompts.walkthroughReleaseNotes, {
+          model: STRONG_MODEL,
+        }),
+      extractJsonObject,
+      {
+        phase: 'synthesis',
+        saveParseFailure: (phase, raw, promptLength) =>
+          saveParseFailureArtifact(reviewDir, phase, raw, { promptLength }),
+        promptLength: prompts.walkthroughReleaseNotes.length,
+      },
+    );
+    return await buildSynthesisTail(
+      prompts,
+      themes,
+      artifacts,
+      walkthroughParsed,
+    );
+  } catch (error) {
+    console.error(
+      `Synthesis phase failed, producing minimal walkthrough: ${error.message}`,
+    );
+    return {
+      walkthrough: buildMinimalWalkthrough(summaries),
+      releaseNotes: '',
+      sequenceDiagram: '',
+      related: '',
+    };
+  }
+}
+
+async function buildSynthesisTail(
+  prompts,
+  themes,
+  artifacts,
+  walkthroughParsed,
+) {
   const validThemes = validateGroupThemes(themes);
   const shouldDiagram = gateSequenceDiagram(
     validThemes,
@@ -874,6 +818,13 @@ async function runSynthesisPhases(artifacts, summaries, themes) {
   };
 }
 
+function buildMinimalWalkthrough(summaries) {
+  const fileList = summaries
+    .map((s) => `- \`${s.filePath}\`: ${s.summary}`)
+    .join('\n');
+  return `This PR changes ${summaries.length} file(s).\n\n${fileList}`;
+}
+
 async function runOptionalStage(prompt, key) {
   try {
     const raw = await runLlxprtPrompt(prompt, { model: STRONG_MODEL });
@@ -885,7 +836,7 @@ async function runOptionalStage(prompt, key) {
   }
 }
 
-async function runPreMergeChecksPhase(artifacts, summaries) {
+async function runPreMergeChecksPhase(reviewDir, artifacts, summaries) {
   const changeEvidence = summaries.map((s) => ({
     filePath: s.filePath,
     summary: s.summary,
@@ -897,8 +848,21 @@ async function runPreMergeChecksPhase(artifacts, summaries) {
     DEFAULT_PR_TEMPLATE_SECTIONS,
     changeEvidence,
   );
-  const raw = await runLlxprtPrompt(prompt, { model: STRONG_MODEL });
-  return extractJsonObject(raw);
+  try {
+    return await runLlxprtPromptWithParse(
+      () => runLlxprtPrompt(prompt, { model: STRONG_MODEL }),
+      extractJsonObject,
+      {
+        phase: 'pre-merge',
+        saveParseFailure: (phase, raw, promptLength) =>
+          saveParseFailureArtifact(reviewDir, phase, raw, { promptLength }),
+        promptLength: prompt.length,
+      },
+    );
+  } catch (error) {
+    console.error(`Pre-merge checks phase failed, skipping: ${error.message}`);
+    return null;
+  }
 }
 
 const isMainModule =
