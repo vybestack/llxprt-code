@@ -164,10 +164,12 @@ describe('OAuth Provider Premature Initialization', () => {
 
       // Verify providers remain unauthenticated (no OAuth triggered)
       const codexStatus = statuses.find((s) => s.provider === 'codex');
-      const anthropicStatus = statuses.find((s) => s.provider === 'claudecode');
+      const claudecodeStatus = statuses.find(
+        (s) => s.provider === 'claudecode',
+      );
 
       expect(codexStatus?.authenticated).toBe(false);
-      expect(anthropicStatus?.authenticated).toBe(false);
+      expect(claudecodeStatus?.authenticated).toBe(false);
     });
 
     /**

@@ -583,6 +583,8 @@ export class AuthCommandExecutor {
       // Check if --all flag specified
       if (bucketOrFlag === '--all') {
         await this.oauthManager.logoutAllBuckets(provider);
+        this.oauthManager.clearSessionBucket(provider);
+        this.clearProviderCache(provider);
         return {
           type: 'message',
           messageType: 'info',
