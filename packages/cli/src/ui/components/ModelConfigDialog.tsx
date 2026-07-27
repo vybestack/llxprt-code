@@ -95,8 +95,15 @@ function commitParam(
   raw: string,
   setActiveModelParam: (key: string, value: unknown) => void,
 ): CommitResult {
-  setActiveModelParam(key, parseValue(raw));
-  return { success: true };
+  try {
+    setActiveModelParam(key, parseValue(raw));
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      message: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
 function commitEphemeral(
@@ -239,6 +246,7 @@ interface KeypressDispatch {
   setEditingField: (field: ConfigField | null) => void;
   setEditValue: (value: string) => void;
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
+  forceRender: () => void;
   runtime: ReturnType<typeof useRuntimeApi>;
   setValidationError: (msg: string | null) => void;
   params: Record<string, unknown>;
@@ -256,6 +264,7 @@ function handleListKey(
   runtime: ReturnType<typeof useRuntimeApi>,
   params: Record<string, unknown>,
   ephemeral: Record<string, unknown>,
+  forceRender: () => void,
 ): void {
   if (key.name === 'escape') {
     onClose();
@@ -282,7 +291,7 @@ function handleListKey(
   const clearable = getClearableParamField(key, ALL_FIELDS[selectedIndex]);
   if (clearable !== null) {
     runtime.clearActiveModelParam(clearable.key);
-    setSelectedIndex((prev) => prev);
+    forceRender();
   }
 }
 
@@ -304,7 +313,15 @@ function handleEditKey(
   }
   if (editingField === null) return;
   if (editingField.kind === 'param') {
-    commitParam(editingField.key, editValue, runtime.setActiveModelParam);
+    const result = commitParam(
+      editingField.key,
+      editValue,
+      runtime.setActiveModelParam,
+    );
+    if (!result.success) {
+      setValidationError(result.message ?? 'Invalid value');
+      return;
+    }
     setEditingField(null);
     setValidationError(null);
     return;
@@ -350,6 +367,7 @@ function useModelConfigKeypress(d: KeypressDispatch): void {
         cur.runtime,
         cur.params,
         cur.ephemeral,
+        cur.forceRender,
       );
     }
   }, []);
@@ -385,6 +403,8 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   const [editingField, setEditingField] = useState<ConfigField | null>(null);
   const [editValue, setEditValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [, setRenderTick] = useState(0);
+  const forceRender = useCallback(() => setRenderTick((t) => t + 1), []);
 
   useModelConfigKeypress({
     onClose,
@@ -394,6 +414,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
     setEditingField,
     setEditValue,
     setSelectedIndex,
+    forceRender,
     runtime,
     setValidationError,
     params: reads.modelParams,

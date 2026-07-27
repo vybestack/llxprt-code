@@ -185,6 +185,7 @@ describe('useModelDialogHandler', () => {
       );
     });
     expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
+    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT open config dialog when cross-provider setProvider fails', async () => {
@@ -208,6 +209,7 @@ describe('useModelDialogHandler', () => {
       );
     });
     expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
+    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
   });
 
   it('STILL opens config dialog when addItem fails after successful switch', async () => {
