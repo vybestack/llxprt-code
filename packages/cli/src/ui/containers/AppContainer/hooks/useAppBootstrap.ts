@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
@@ -18,7 +18,6 @@ import {
 } from '../../../../constants/historyLimits.js';
 import { useHistory } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
-import { TodoPausePreserver } from '../../../hooks/useTodoPausePreserver.js';
 import {
   type IContent,
   type IdeInfo,
@@ -41,7 +40,6 @@ import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
-import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
 import type {
   AgentClientSource,
   StreamRuntime,
@@ -106,13 +104,6 @@ export interface AppBootstrapResult {
   tokenMetrics: ReturnType<typeof useTokenMetricsTracking>['tokenMetrics'];
   todos: ReturnType<typeof useTodoContext>['todos'];
   updateTodos: ReturnType<typeof useTodoContext>['updateTodos'];
-  todoPauseController: TodoPausePreserver;
-  todoContinuationRef: React.MutableRefObject<Pick<
-    TodoContinuationHook,
-    'handleTodoPause' | 'clearPause'
-  > | null>;
-  hadToolCallsRef: React.MutableRefObject<boolean>;
-  registerTodoPause: () => void;
   recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
   recordingSwapCallbacks: ReturnType<
     typeof useRecordingInfrastructure
@@ -192,27 +183,10 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   };
 }
 
-/** Initializes task-list state and pause controller */
+/** Initializes task-list state */
 function useBootstrapTodo() {
   const { todos, updateTodos } = useTodoContext();
-  const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
-  const todoContinuationRef = useRef<Pick<
-    TodoContinuationHook,
-    'handleTodoPause' | 'clearPause'
-  > | null>(null);
-  const hadToolCallsRef = useRef<boolean>(false);
-  const registerTodoPause = useCallback(() => {
-    todoPauseController.registerTodoPause();
-    todoContinuationRef.current?.handleTodoPause('paused by model');
-  }, [todoPauseController]);
-  return {
-    todos,
-    updateTodos,
-    todoPauseController,
-    todoContinuationRef,
-    hadToolCallsRef,
-    registerTodoPause,
-  };
+  return { todos, updateTodos };
 }
 
 /** Initializes recording, IDE prompt, messages, and token metrics */
@@ -324,10 +298,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     stdout: h.stdout,
     todos: t.todos,
     updateTodos: t.updateTodos,
-    todoPauseController: t.todoPauseController,
-    todoContinuationRef: t.todoContinuationRef,
-    hadToolCallsRef: t.hadToolCallsRef,
-    registerTodoPause: t.registerTodoPause,
     recordingIntegrationRef: e.recordingIntegrationRef,
     recordingSwapCallbacks: e.recordingSwapCallbacks,
     idePromptAnswered: e.idePromptAnswered,

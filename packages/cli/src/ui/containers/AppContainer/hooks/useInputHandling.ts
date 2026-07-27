@@ -18,10 +18,6 @@ export interface UseInputHandlingParams {
   submitQuery: (query: string) => Promise<void>;
   pendingHistoryItems: HistoryItemWithoutId[];
   lastSubmittedPromptRef: React.MutableRefObject<string | null>;
-  hadToolCallsRef: React.MutableRefObject<boolean>;
-  todoContinuationRef: React.MutableRefObject<{
-    clearPause: () => void;
-  } | null>;
   /** Whether the user needs to re-authenticate before continuing. */
   needsRelogin: boolean;
   /** Dispatch app actions (e.g., open auth dialog). */
@@ -82,8 +78,6 @@ function useFinalSubmitHandler({
   inputHistoryStore,
   submitQuery,
   lastSubmittedPromptRef,
-  hadToolCallsRef,
-  todoContinuationRef,
   needsRelogin,
   appDispatch,
 }: UseInputHandlingParams): (submittedValue: string) => void {
@@ -103,14 +97,6 @@ function useFinalSubmitHandler({
         return;
       }
 
-      /**
-       * @plan PLAN-20260129-TODOPERSIST.P12
-       * Reset continuation attempt counter when user submits a new prompt.
-       * This prevents the continuation limit from blocking future continuations
-       * after user interaction.
-       */
-      hadToolCallsRef.current = false;
-      todoContinuationRef.current?.clearPause();
       lastSubmittedPromptRef.current = trimmedValue;
       inputHistoryStore.addInput(trimmedValue);
       void submitQuery(trimmedValue);
@@ -118,8 +104,6 @@ function useFinalSubmitHandler({
     [
       submitQuery,
       inputHistoryStore,
-      hadToolCallsRef,
-      todoContinuationRef,
       lastSubmittedPromptRef,
       needsRelogin,
       appDispatch,

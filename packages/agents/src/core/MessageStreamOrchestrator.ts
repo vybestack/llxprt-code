@@ -97,7 +97,6 @@ export interface StreamContext {
 export interface IterationResult {
   earlyReturn: boolean;
   hadToolCallsThisTurn: boolean;
-  todoPauseSeen: boolean;
   hadThinking: boolean;
   hadContent: boolean;
   deferredEvents: ServerAgentStreamEvent[];
@@ -476,7 +475,6 @@ export class MessageStreamOrchestrator {
       return this._earlyIterResult(hadToolCallsPrior);
     }
 
-    let todoPauseSeen = false;
     let hadThinking = false;
     let hadContent = false;
     let hadToolCallsThisTurn = hadToolCallsPrior;
@@ -488,7 +486,6 @@ export class MessageStreamOrchestrator {
         yield { type: AgentEventType.LoopDetected };
         yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(hadToolCallsThisTurn, {
-          todoPauseSeen,
           hadThinking,
           hadContent,
           deferredEvents,
@@ -499,11 +496,10 @@ export class MessageStreamOrchestrator {
       todoContinuationService.recordModelActivity(event);
       if (event.type === AgentEventType.ToolCallRequest)
         hadToolCallsThisTurn = true;
-      if (
-        event.type === AgentEventType.ToolCallResponse &&
-        todoContinuationService.isSuccessfulTodoPauseResponse(event.value)
-      )
-        todoPauseSeen = true;
+      // Pause detection happens in AgenticLoop.buildNextMessage(), which sees
+      // real scheduler tool responses. Turn.run() only emits ToolCallRequest
+      // events, so checking for ToolCallResponse here would be dead code — the
+      // real responses arrive later via the scheduler (issue #2657).
       if (event.type === AgentEventType.Thought) hadThinking = true;
       if (event.type === AgentEventType.Content) hadContent = true;
       if (event.type === AgentEventType.Finished && event.value.outcome)
@@ -525,7 +521,7 @@ export class MessageStreamOrchestrator {
         signal,
         ctx,
         deferredEvents,
-        { hadToolCallsThisTurn, todoPauseSeen, hadThinking, hadContent },
+        { hadToolCallsThisTurn, hadThinking, hadContent },
         initialRequest,
       );
       if (terminalResult) return terminalResult;
@@ -534,7 +530,6 @@ export class MessageStreamOrchestrator {
     return {
       earlyReturn: false,
       hadToolCallsThisTurn,
-      todoPauseSeen,
       hadThinking,
       hadContent,
       deferredEvents,
@@ -551,7 +546,6 @@ export class MessageStreamOrchestrator {
     return {
       earlyReturn: true,
       hadToolCallsThisTurn: hadToolCalls,
-      todoPauseSeen: false,
       hadThinking: false,
       hadContent: false,
       deferredEvents: [],
@@ -565,15 +559,6 @@ export class MessageStreamOrchestrator {
     retryCount: number,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, PostTurnResult> {
-    if (iter.todoPauseSeen) {
-      return yield* this._evaluateTodoContinuation(
-        iter,
-        baseRequest,
-        retryCount,
-        ctx,
-      );
-    }
-
     if (iter.hadToolCallsThisTurn) {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }
@@ -634,13 +619,6 @@ export class MessageStreamOrchestrator {
       await todoContinuationService.getTodoReminderForCurrentState();
     const latestSnapshot = reminderState.todos;
     const activeTodos = reminderState.activeTodos;
-
-    if (iter.todoPauseSeen) {
-      for (const d of iter.deferredEvents) yield d;
-      this._resetTodoState(todoContinuationService, latestSnapshot);
-      yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return { done: true, retryCount, newBaseRequest: undefined };
-    }
 
     const todosStillPending = activeTodos.length > 0;
     const hasPendingReminder =
