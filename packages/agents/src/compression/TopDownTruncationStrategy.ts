@@ -22,8 +22,9 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   CompressionContext,
-  CompressionResult,
+  StrategyCompressionResult,
   CompressionStrategy,
+  StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { adjustForToolCallBoundary } from './utils.js';
@@ -37,21 +38,15 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  async compress(context: CompressionContext): Promise<CompressionResult> {
+  async compress(
+    context: CompressionContext,
+  ): Promise<StrategyCompressionResult> {
     const { history, runtimeContext, estimateTokens, currentTokenCount } =
       context;
     const originalCount = history.length;
 
     if (originalCount === 0) {
-      return {
-        newHistory: [],
-        metadata: {
-          originalMessageCount: 0,
-          compressedMessageCount: 0,
-          strategyUsed: 'top-down-truncation',
-          llmCallMade: false,
-        },
-      };
+      return this.structuralNoop(0, 'empty-history');
     }
 
     const compressionThreshold =
@@ -60,15 +55,7 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     const target = compressionThreshold * contextLimit * 0.6;
 
     if (currentTokenCount <= target) {
-      return {
-        newHistory: [...history],
-        metadata: {
-          originalMessageCount: originalCount,
-          compressedMessageCount: originalCount,
-          strategyUsed: 'top-down-truncation',
-          llmCallMade: false,
-        },
-      };
+      return this.structuralNoop(originalCount, 'already-under-target');
     }
 
     const minKeep = Math.min(2, originalCount);
@@ -101,10 +88,27 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     const newHistory = mutableHistory.slice(finalRemoveCount);
 
     return {
+      kind: 'applied',
       newHistory,
       metadata: {
         originalMessageCount: originalCount,
         compressedMessageCount: newHistory.length,
+        strategyUsed: 'top-down-truncation',
+        llmCallMade: false,
+      },
+    };
+  }
+
+  private structuralNoop(
+    originalCount: number,
+    reason: StructuralNoopReason,
+  ): StrategyCompressionResult {
+    return {
+      kind: 'noop',
+      reason,
+      metadata: {
+        originalMessageCount: originalCount,
+        compressedMessageCount: originalCount,
         strategyUsed: 'top-down-truncation',
         llmCallMade: false,
       },

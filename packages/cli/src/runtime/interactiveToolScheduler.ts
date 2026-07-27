@@ -28,7 +28,7 @@ import {
   type ToolSchedulerContract,
   hasInteractiveSubagentScheduler,
   DEFAULT_AGENT_ID,
-  type AnsiOutput,
+  type LiveOutputUpdate,
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -149,7 +149,7 @@ export type SchedulerRefs = {
   updateToolCallOutput: (
     schedulerId: symbol,
     toolCallId: string,
-    chunk: string | AnsiOutput,
+    update: LiveOutputUpdate,
   ) => void;
   replaceToolCallsForScheduler: (
     schedulerId: symbol,
@@ -179,9 +179,9 @@ function createMainSchedulerCallbacks(
   SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
 >[1] {
   return {
-    outputUpdateHandler: (toolCallId, chunk) => {
+    outputUpdateHandler: (toolCallId, update) => {
       if (!mounted.current) return;
-      refs.updateToolCallOutput(mainSchedulerId, toolCallId, chunk);
+      refs.updateToolCallOutput(mainSchedulerId, toolCallId, update);
       refs.setLastToolOutputTime(Date.now());
     },
     onAllToolCallsComplete: async (completedToolCalls) => {
@@ -214,8 +214,8 @@ function createSubagentCallbacks(
   SchedulerConfigWithExplicitMessageBus['getOrCreateScheduler']
 >[1] {
   return {
-    outputUpdateHandler: (toolCallId, chunk) => {
-      refs.updateToolCallOutput(schedulerId, toolCallId, chunk);
+    outputUpdateHandler: (toolCallId, update) => {
+      refs.updateToolCallOutput(schedulerId, toolCallId, update);
       refs.setLastToolOutputTime(Date.now());
     },
     onToolCallsUpdate: (calls) => {

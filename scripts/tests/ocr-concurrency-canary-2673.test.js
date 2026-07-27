@@ -69,7 +69,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
     it('does not alter the review pin, model, range, timeout, audience, or format', () => {
       const reviewStep = stepNamed(codeReviewJob, 'Run OpenCodeReview');
       const reviewRun = commandText(reviewStep);
-      expect(workflow.env?.OCR_VERSION).toBe('1.7.16');
+      expect(workflow.env?.OCR_VERSION).toBe('1.7.17');
       expect(reviewStep.env?.OCR_LLM_MODEL).toBe('${{ vars.OCR_LLM_MODEL }}');
       expect(reviewStep.env?.FROM_SHA).toBe(
         "${{ github.event_name == 'workflow_dispatch' && env.MERGE_BASE_SHA || steps.resolve-range.outputs.FROM_SHA }}",

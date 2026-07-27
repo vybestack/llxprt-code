@@ -27,7 +27,7 @@ import type {
   AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import type {
-  AnsiOutput,
+  LiveOutputUpdate,
   CompletedToolCall,
   EditorType,
   ToolCall,
@@ -69,15 +69,13 @@ export interface UseAgentEventStreamArgs {
   clearPendingHistoryItem: () => void;
   /** Refreshes in-memory data after a successful save_memory. */
   performMemoryRefresh: () => Promise<void>;
-  /** Invoked when the pause tool succeeds. */
-  onTodoPause?: () => void;
   /**
    * Marks the given tool callIds as cleared from the React display state.
    */
   markToolsAsDisplayCleared?: (callIds: string[]) => void;
   /** Display callbacks for tool-call display state. */
   onToolCallsUpdate?: (toolCalls: ToolCall[]) => void;
-  outputUpdateHandler?: (callId: string, chunk: string | AnsiOutput) => void;
+  outputUpdateHandler?: (callId: string, update: LiveOutputUpdate) => void;
   getPreferredEditor?: () => EditorType | undefined;
   onEditorOpen?: () => void;
   onEditorClose?: () => void;
@@ -96,10 +94,10 @@ export interface UseAgentEventStreamReturn {
 }
 
 /**
- * Processes a tools_complete callback: adds the tool-group display item,
- * refreshes memory if a save_memory succeeded, and fires onTodoPause if a
- * pause-task tool succeeded. The Agent's loop has ALREADY recorded the completed
- * calls into chat history — do NOT call recordCompletedToolCalls here.
+ * Processes a tools_complete callback: adds the tool-group display item and
+ * refreshes memory if a save_memory succeeded. The Agent's loop has ALREADY
+ * recorded the completed calls into chat history — do NOT call
+ * recordCompletedToolCalls here.
  */
 function handleToolsComplete(
   completed: readonly CompletedToolCall[],
@@ -118,13 +116,6 @@ function handleToolsComplete(
     userMessageTimestamp,
   );
   const { primaryTools, externalTools } = classifyCompletedTools(completedArr);
-  if (
-    primaryTools.some(
-      (tc) => tc.request.name === 'todo_pause' && tc.status === 'success',
-    )
-  ) {
-    args.onTodoPause?.();
-  }
   const memoryRef = { current: processedMemoryTools };
   processMemoryToolResults(primaryTools, memoryRef, args.performMemoryRefresh);
 
@@ -161,8 +152,8 @@ export function useAgentEventStream(
     agent.tools.setDisplayCallbacks({
       onToolCallsUpdate: (toolCalls) =>
         latestArgs.current.onToolCallsUpdate?.(toolCalls),
-      outputUpdateHandler: (callId, chunk) =>
-        latestArgs.current.outputUpdateHandler?.(callId, chunk),
+      outputUpdateHandler: (callId, update) =>
+        latestArgs.current.outputUpdateHandler?.(callId, update),
       onAllToolCallsComplete: (completed) => {
         const userMessageTimestamp =
           currentTurnTimestampRef.current ?? Date.now();

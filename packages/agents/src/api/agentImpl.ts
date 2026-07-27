@@ -985,6 +985,11 @@ export class AgentImpl implements Agent {
         promptId,
       };
     }
+    if (raw === PerformCompressionResult.NOOP) {
+      // Structural no-op: history unchanged by a deterministic strategy guard.
+      // Distinct from 'skipped' (cooldown/empty) per issue #2602.
+      return { status: 'noop', promptId };
+    }
     const status: 'skipped' | 'failed' =
       raw === PerformCompressionResult.FAILED ? 'failed' : 'skipped';
     return { status, promptId };

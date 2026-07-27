@@ -14,7 +14,7 @@ import {
   type CancelledToolCall,
   type ToolCall,
   type EditorType,
-  type AnsiOutput,
+  type LiveOutputUpdate,
   type MessageBus,
   accumulateLiveOutput,
 } from '@vybestack/llxprt-code-core';
@@ -86,7 +86,7 @@ export type CancelAllFn = () => void;
 export type ReplaceToolCallsFn = (calls: ToolCall[]) => void;
 export type UpdateToolOutputFn = (
   toolCallId: string,
-  chunk: string | AnsiOutput,
+  update: LiveOutputUpdate,
 ) => void;
 export type ReactToolSchedulerResult = readonly [
   TrackedToolCall[],
@@ -104,7 +104,7 @@ export type ReactToolSchedulerResult = readonly [
 function updatePendingItemWithOutput(
   prevItem: HistoryItemWithoutId | null,
   toolCallId: string,
-  outputChunk: string | AnsiOutput,
+  update: LiveOutputUpdate,
 ): HistoryItemWithoutId | null {
   if (prevItem?.type !== 'tool_group') return prevItem;
   return {
@@ -116,7 +116,7 @@ function updatePendingItemWithOutput(
             ...toolDisplay,
             resultDisplay: accumulateLiveOutput(
               toolDisplay.resultDisplay,
-              outputChunk,
+              update,
             ),
           }
         : toolDisplay,
@@ -148,13 +148,13 @@ function mapCallsWithDisplayClearedFlag(
 function updateCallsWithLiveOutput(
   prevCalls: TrackedToolCall[],
   toolCallId: string,
-  outputChunk: string | AnsiOutput,
+  update: LiveOutputUpdate,
 ): TrackedToolCall[] {
   return prevCalls.map((call) =>
     call.request.callId === toolCallId && call.status === 'executing'
       ? {
           ...call,
-          liveOutput: accumulateLiveOutput(call.liveOutput, outputChunk),
+          liveOutput: accumulateLiveOutput(call.liveOutput, update),
         }
       : call,
   );
@@ -209,7 +209,7 @@ function useToolCallUpdaters(
   updateToolCallOutput: (
     schedulerId: symbol,
     toolCallId: string,
-    outputChunk: string | AnsiOutput,
+    update: LiveOutputUpdate,
   ) => void;
   replaceToolCallsForScheduler: (
     schedulerId: symbol,
@@ -240,23 +240,19 @@ function useToolCallUpdaters(
   );
 
   const updateToolCallOutput = useCallback(
-    (
-      schedulerId: symbol,
-      toolCallId: string,
-      outputChunk: string | AnsiOutput,
-    ) => {
+    (schedulerId: symbol, toolCallId: string, update: LiveOutputUpdate) => {
       updateToolCallsForScheduler(schedulerId, (prevCalls) => {
         const nextCalls = updateCallsWithLiveOutput(
           prevCalls,
           toolCallId,
-          outputChunk,
+          update,
         );
         return nextCalls.some((call, index) => call !== prevCalls[index])
           ? nextCalls
           : prevCalls;
       });
       setPendingHistoryItem((prev) =>
-        updatePendingItemWithOutput(prev, toolCallId, outputChunk),
+        updatePendingItemWithOutput(prev, toolCallId, update),
       );
     },
     [updateToolCallsForScheduler, setPendingHistoryItem],
@@ -378,7 +374,7 @@ function useSchedulerRefs(
     updateToolCallOutput: (
       schedulerId: symbol,
       toolCallId: string,
-      chunk: string | AnsiOutput,
+      update: LiveOutputUpdate,
     ) => void;
     replaceToolCallsForScheduler: (
       schedulerId: symbol,
@@ -470,8 +466,8 @@ function useBoundDisplayUpdaters(
     [replaceToolCallsForScheduler, mainSchedulerId],
   );
   const updateToolOutput = useCallback(
-    (toolCallId: string, chunk: string | AnsiOutput) =>
-      updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
+    (toolCallId: string, update: LiveOutputUpdate) =>
+      updateToolCallOutput(mainSchedulerId, toolCallId, update),
     [updateToolCallOutput, mainSchedulerId],
   );
   return { replaceToolCalls, updateToolOutput };

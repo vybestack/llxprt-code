@@ -12,7 +12,6 @@ import { getAllLlxprtMdFilenames } from '@vybestack/llxprt-code-core';
 import { useKeybindings } from './useKeybindings.js';
 import { useLayoutMeasurement } from './useLayoutMeasurement.js';
 import { useFlickerDetector } from '../../../hooks/useFlickerDetector.js';
-import { useTodoContinuationFlow } from './useTodoContinuationFlow.js';
 import { useSelectionDebugLogger } from './useSelectionDebugLogger.js';
 import { useClearScreenAction } from './useClearScreenAction.js';
 import { useConfirmationSelection } from './useConfirmationSelection.js';
@@ -29,10 +28,7 @@ import type { UiRuntime } from '../../../cliUiRuntime.js';
 export interface AppLayoutParams {
   // From bootstrap
   uiRuntime: UiRuntime;
-  agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
-  todoContinuationRef: AppBootstrapResult['todoContinuationRef'];
-  hadToolCallsRef: AppBootstrapResult['hadToolCallsRef'];
   runtimeMessageBus: AppBootstrapResult['runtimeMessageBus'];
   consoleMessages: AppBootstrapResult['consoleMessages'];
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'];
@@ -228,19 +224,11 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
 
 function useLayoutMeasure(p: AppLayoutParams) {
   const {
-    uiRuntime,
-    agent,
-    todoContinuationRef,
-    hadToolCallsRef,
     consoleMessages,
     constrainHeight,
     setFooterHeight,
     footerHeight,
-    streamingState,
-    history,
-    pendingHistoryItems,
     confirmationRequest,
-    setDebugMessage,
     terminalHeight,
   } = p;
   useSelectionDebugLogger({ confirmationRequest });
@@ -262,16 +250,6 @@ function useLayoutMeasure(p: AppLayoutParams) {
     [terminalHeight, footerHeight],
   );
   useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
-  useTodoContinuationFlow({
-    uiRuntime,
-    agent,
-    streamingState,
-    history,
-    pendingHistoryItems,
-    setDebugMessage,
-    todoContinuationRef,
-    hadToolCallsRef,
-  });
   return {
     mainControlsRef,
     pendingHistoryItemRef,

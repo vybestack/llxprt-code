@@ -87,7 +87,7 @@ describe('Zed terminal execution', () => {
       preparedEcho,
       '/project',
       (event) => {
-        if (event.type === 'data' && event.chunk !== undefined) {
+        if (event.type === 'data' && typeof event.chunk === 'string') {
           chunks.push(event.chunk);
         }
       },

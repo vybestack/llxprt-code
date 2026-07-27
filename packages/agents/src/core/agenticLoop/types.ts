@@ -86,7 +86,13 @@ export type ApprovalHandler = (
 export interface DisplayCallbacks {
   /** Forwarded after the loop records its own tool_update/awaiting_approval events. */
   onToolCallsUpdate?: ToolCallsUpdateHandler;
-  /** Forwarded after the loop records its own tool_output event (string chunks only). */
+  /**
+   * Forwarded to the display after the scheduler accumulates the update.
+   * The loop queues only `append` updates as `tool_output` events before
+   * forwarding; `replace` updates are forwarded directly without a queued
+   * event. In both cases the handler receives the full
+   * {@link LiveOutputUpdate}.
+   */
   outputUpdateHandler?: OutputUpdateHandler;
   /**
    * Forwarded once per turn with the same rich CompletedToolCall[] batch the

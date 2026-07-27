@@ -7,7 +7,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import {
   type EditorType,
-  type AnsiOutput,
+  type LiveOutputUpdate,
   type MessageBus,
   type RecordingIntegration,
   type ToolCall,
@@ -55,7 +55,6 @@ export interface AgentStreamOrchestrationDeps {
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;
-  onTodoPause?: () => void;
   onEditorOpen: () => void;
   recordingIntegration?: RecordingIntegration;
   runtimeMessageBus?: MessageBus;
@@ -85,7 +84,7 @@ interface ToolSchedulerState {
   interactiveRuntimeReady: boolean;
   /** Bound display-state updaters for the AgenticLoop's displayCallbacks. */
   replaceToolCalls: (calls: ToolCall[]) => void;
-  updateToolOutput: (callId: string, chunk: string | AnsiOutput) => void;
+  updateToolOutput: (callId: string, update: LiveOutputUpdate) => void;
 }
 
 export function useAgentStreamOrchestration(
@@ -266,7 +265,6 @@ function useEventStreamForAgent(
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => st.setPendingHistoryItem(null),
     performMemoryRefresh: args.performMemoryRefresh,
-    onTodoPause: args.onTodoPause,
     markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
     onToolCallsUpdate: scheduler.replaceToolCalls,
     outputUpdateHandler: scheduler.updateToolOutput,

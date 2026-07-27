@@ -12,6 +12,7 @@ import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/scheduler
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
+import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
 import {
   type ApprovalHandler,
   createScriptedAgentClient,
@@ -337,8 +338,12 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       canUpdateOutput: true,
     });
     tool.executeFn.mockImplementation(
-      async (_params, _signal, updateOutput?: (chunk: string) => void) => {
-        updateOutput?.('streaming-chunk');
+      async (
+        _params,
+        _signal,
+        updateOutput?: (update: LiveOutputUpdate) => void,
+      ) => {
+        updateOutput?.({ mode: 'append', data: 'streaming-chunk' });
         return {
           llmContent: 'final-output',
           returnDisplay: 'final-output',

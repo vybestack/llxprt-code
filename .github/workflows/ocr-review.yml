@@ -88,7 +88,7 @@ env:
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
-  OCR_VERSION: '1.7.16'
+  OCR_VERSION: '1.7.17'
   # Issue #2673: workflow_dispatch canaries select OCR concurrency (2, 3, or
   # 4). All other (automatic/comment) triggers resolve to the evidence-backed
   # default of 3 (canary 3 showed 43% speedup over 2 with zero 429s/retries).

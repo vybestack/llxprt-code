@@ -658,14 +658,14 @@ export class AgenticLoop {
     return this.config.getOrCreateScheduler(
       sessionId,
       {
-        outputUpdateHandler: (callId, chunk) => {
+        outputUpdateHandler: (callId, update) => {
           if (!forwardingState.active) {
             return;
           }
-          if (typeof chunk === 'string') {
-            queue.push({ kind: 'tool_output', callId, chunk });
+          if (update.mode === 'append') {
+            queue.push({ kind: 'tool_output', callId, chunk: update.data });
           }
-          display?.outputUpdateHandler?.(callId, chunk);
+          display?.outputUpdateHandler?.(callId, update);
         },
         onToolCallsUpdate: (toolCalls) => {
           if (!forwardingState.active) {

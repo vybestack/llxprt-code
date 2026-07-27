@@ -18,9 +18,6 @@ interface InputHandlingHarness {
   submitQuery: ReturnType<typeof vi.fn>;
   pendingHistoryItems: HistoryItemWithoutId[];
   lastSubmittedPromptRef: { current: string | null };
-  hadToolCallsRef: { current: boolean };
-  clearPause: ReturnType<typeof vi.fn>;
-  todoContinuationRef: { current: { clearPause: () => void } | null };
   needsRelogin: boolean;
   appDispatch: ReturnType<typeof vi.fn>;
 }
@@ -31,7 +28,6 @@ const createHarness = (
   const bufferSetText = vi.fn();
   const addInput = vi.fn();
   const submitQuery = vi.fn().mockResolvedValue(undefined);
-  const clearPause = vi.fn();
 
   return {
     buffer: { setText: bufferSetText } as unknown as TextBuffer,
@@ -40,9 +36,6 @@ const createHarness = (
     submitQuery,
     pendingHistoryItems: [],
     lastSubmittedPromptRef: { current: 'last submitted prompt' },
-    hadToolCallsRef: { current: true },
-    clearPause,
-    todoContinuationRef: { current: { clearPause } },
     needsRelogin: false,
     appDispatch: vi.fn(),
     ...overrides,
@@ -57,8 +50,6 @@ const renderInputHandling = (harness: InputHandlingHarness) =>
       submitQuery: harness.submitQuery,
       pendingHistoryItems: harness.pendingHistoryItems,
       lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
-      hadToolCallsRef: harness.hadToolCallsRef,
-      todoContinuationRef: harness.todoContinuationRef,
       needsRelogin: harness.needsRelogin,
       appDispatch: harness.appDispatch,
     }),
@@ -122,10 +113,9 @@ describe('useInputHandling', () => {
     );
   });
 
-  it('submits trimmed input and resets continuation-related refs', () => {
+  it('submits trimmed input', () => {
     const harness = createHarness({
       lastSubmittedPromptRef: { current: null },
-      hadToolCallsRef: { current: true },
     });
     const { result } = renderInputHandling(harness);
 
@@ -133,8 +123,6 @@ describe('useInputHandling', () => {
       result.current.handleFinalSubmit('   run tests   ');
     });
 
-    expect(harness.hadToolCallsRef.current).toBe(false);
-    expect(harness.clearPause).toHaveBeenCalledTimes(1);
     expect(harness.lastSubmittedPromptRef.current).toBe('run tests');
     expect(harness.addInput).toHaveBeenCalledWith('run tests');
     expect(harness.submitQuery).toHaveBeenCalledWith('run tests');
@@ -143,7 +131,6 @@ describe('useInputHandling', () => {
   it('ignores blank submissions and does not mutate state or side effects', () => {
     const harness = createHarness({
       lastSubmittedPromptRef: { current: 'keep me' },
-      hadToolCallsRef: { current: true },
     });
     const { result } = renderInputHandling(harness);
 
@@ -151,9 +138,7 @@ describe('useInputHandling', () => {
       result.current.handleFinalSubmit('   ');
     });
 
-    expect(harness.hadToolCallsRef.current).toBe(true);
     expect(harness.lastSubmittedPromptRef.current).toBe('keep me');
-    expect(harness.clearPause).not.toHaveBeenCalled();
     expect(harness.addInput).not.toHaveBeenCalled();
     expect(harness.submitQuery).not.toHaveBeenCalled();
   });
@@ -161,7 +146,6 @@ describe('useInputHandling', () => {
   it('submits non-slash prompt immediately regardless of MCP discovery state', () => {
     const harness = createHarness({
       lastSubmittedPromptRef: { current: null },
-      hadToolCallsRef: { current: true },
     });
     const { result } = renderInputHandling(harness);
 
@@ -172,8 +156,6 @@ describe('useInputHandling', () => {
     expect(harness.submitQuery).toHaveBeenCalledWith('search my files');
     expect(harness.addInput).toHaveBeenCalledWith('search my files');
     expect(harness.lastSubmittedPromptRef.current).toBe('search my files');
-    expect(harness.hadToolCallsRef.current).toBe(false);
-    expect(harness.clearPause).toHaveBeenCalledTimes(1);
   });
 
   it('lets slash commands through to submitQuery', () => {

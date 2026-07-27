@@ -19,7 +19,10 @@ import {
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { AnsiToken } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
+import type {
+  AnsiOutput,
+  AnsiToken,
+} from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 
 function makeOutput(): OutputObject {
   return { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR };
@@ -312,54 +315,68 @@ describe('subagentExecution', () => {
       };
     }
 
-    it('should forward string output to onMessage', () => {
+    it('should forward append output data to onMessage', () => {
       const onMessage = vi.fn();
       const channel = createCompletionChannel({ onMessage });
-      channel.outputUpdateHandler('call-1', 'hello world');
+      channel.outputUpdateHandler('call-1', {
+        mode: 'append',
+        data: 'hello world',
+      });
       expect(onMessage).toHaveBeenCalledWith('hello world');
     });
 
-    it('should convert well-formed AnsiOutput to text', () => {
+    it('should convert well-formed replace AnsiOutput to text', () => {
       const onMessage = vi.fn();
       const channel = createCompletionChannel({ onMessage });
-      const ansiOutput = [
+      const ansiOutput: AnsiOutput = [
         [makeToken('line one')],
         [makeToken('line '), makeToken('two')],
       ];
-      channel.outputUpdateHandler('call-1', ansiOutput);
+      channel.outputUpdateHandler('call-1', {
+        mode: 'replace',
+        data: ansiOutput,
+      });
       const result = onMessage.mock.calls[0][0] as string;
       expect(result).toContain('line one');
       expect(result).toContain('line two');
       expect(result.split(String.fromCharCode(10))).toHaveLength(2);
     });
 
-    it('should skip undefined line entries in AnsiOutput without crashing', () => {
-      const onMessage = vi.fn();
-      const channel = createCompletionChannel({ onMessage });
-      const ansiOutput = [
-        [makeToken('valid')],
-        undefined as never,
-        null as never,
-        { content: 'bad' } as never,
-        [makeToken('also valid')],
-      ];
-      channel.outputUpdateHandler('call-1', ansiOutput);
-      const result = onMessage.mock.calls[0][0] as string;
-      expect(result).toBe('valid\nalso valid');
-    });
-
-    it('should not call onMessage when output is falsy', () => {
-      const onMessage = vi.fn();
-      const channel = createCompletionChannel({ onMessage });
-      channel.outputUpdateHandler('call-1', undefined as never);
-      expect(onMessage).not.toHaveBeenCalled();
-    });
-
     it('should not throw when onMessage is not provided', () => {
       const channel = createCompletionChannel({});
       expect(() =>
-        channel.outputUpdateHandler('call-1', 'some output'),
+        channel.outputUpdateHandler('call-1', {
+          mode: 'append',
+          data: 'some output',
+        }),
       ).not.toThrow();
+    });
+
+    it('should throw on malformed replace payload (null line)', () => {
+      const onMessage = vi.fn();
+      const channel = createCompletionChannel({ onMessage });
+      // Malformed AnsiOutput: a null line entry. The replace branch accesses
+      // token.text without a null guard, so this throws at runtime — proving
+      // the type system contract (well-formed AnsiOutput) is enforced.
+      expect(() =>
+        channel.outputUpdateHandler('call-1', {
+          mode: 'replace',
+          data: [null] as unknown as AnsiOutput,
+        }),
+      ).toThrow(TypeError);
+    });
+
+    it('should throw on unexpected mode values (exhaustive switch)', () => {
+      const onMessage = vi.fn();
+      const channel = createCompletionChannel({ onMessage });
+      // The switch on update.mode is exhaustive with a never default that
+      // throws. A malformed mode value must throw rather than silently pass.
+      expect(() =>
+        channel.outputUpdateHandler('call-1', {
+          mode: 'invalid',
+          data: '',
+        } as unknown as never),
+      ).toThrow('Unhandled live-output mode');
     });
 
     it('should reject awaitCompletedCalls when the abort signal fires first', async () => {

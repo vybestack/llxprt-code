@@ -117,7 +117,7 @@ export interface AgentResult {
 }
 
 export interface CompressionResult {
-  readonly status: 'compressed' | 'skipped' | 'failed';
+  readonly status: 'compressed' | 'skipped' | 'failed' | 'noop';
   readonly originalTokenCount?: number;
   readonly newTokenCount?: number;
   readonly promptId?: string;

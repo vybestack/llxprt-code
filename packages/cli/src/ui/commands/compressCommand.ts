@@ -27,6 +27,9 @@ function resolveCompressionStatus(
       return CompressionStatus.COMPRESSION_FAILED;
     case PerformCompressionResult.SKIPPED_EMPTY:
       return CompressionStatus.NOOP;
+    case PerformCompressionResult.NOOP:
+      // Structural no-op: history unchanged, no mutation occurred.
+      return CompressionStatus.NOOP;
     case PerformCompressionResult.COMPRESSED:
       if (newTokenCount < originalTokenCount) {
         return CompressionStatus.COMPRESSED;
@@ -44,12 +47,17 @@ function resolveCompressionStatus(
 }
 
 function resolveAgentCompressionStatus(
-  status: 'compressed' | 'skipped' | 'failed',
+  status: 'compressed' | 'skipped' | 'failed' | 'noop',
   originalTokenCount: number | undefined,
   newTokenCount: number | undefined,
 ): CompressionStatus {
   if (status === 'failed') {
     return CompressionStatus.COMPRESSION_FAILED;
+  }
+  // Structural no-op: history was unchanged by a deterministic strategy guard.
+  // Distinct from 'skipped' (cooldown/empty) per issue #2602.
+  if (status === 'noop') {
+    return CompressionStatus.NOOP;
   }
   // The agent's CompressionResult collapses both SKIPPED_COOLDOWN (treated as
   // COMPRESSION_FAILED by the legacy path) and SKIPPED_EMPTY (treated as NOOP)

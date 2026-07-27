@@ -252,11 +252,12 @@ describe('Existing strategy compress compatibility @plan PLAN-20260211-HIGHDENSI
   /**
    * @requirement REQ-HD-001.4
    */
-  it('TopDownTruncationStrategy.compress with empty history returns unchanged', async () => {
+  it('TopDownTruncationStrategy.compress with empty history returns noop', async () => {
     const strategy = new TopDownTruncationStrategy();
     const ctx = buildMinimalContext({ history: [] });
     const result = await strategy.compress(ctx);
-    expect(result.newHistory).toHaveLength(0);
+    expect(result.kind).toBe('noop');
+    expect(result.reason).toBe('empty-history');
     expect(result.metadata.originalMessageCount).toBe(0);
     expect(result.metadata.strategyUsed).toBe('top-down-truncation');
   });

@@ -9,6 +9,7 @@ import { AgentExecutor } from './executor.js';
 import {
   BaseToolInvocation,
   type ToolResult,
+  type LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type {
@@ -85,11 +86,11 @@ export class SubagentInvocation<
    */
   async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     try {
       if (updateOutput) {
-        updateOutput('Subagent starting...\n');
+        updateOutput({ mode: 'append', data: 'Subagent starting...\n' });
       }
 
       // Create an activity callback to bridge the executor's events to the
@@ -101,7 +102,10 @@ export class SubagentInvocation<
           activity.type === 'THOUGHT_CHUNK' &&
           typeof activity.data['text'] === 'string'
         ) {
-          updateOutput(`🤖💭 ${activity.data['text']}`);
+          updateOutput({
+            mode: 'append',
+            data: `🤖💭 ${activity.data['text']}`,
+          });
         }
       };
 

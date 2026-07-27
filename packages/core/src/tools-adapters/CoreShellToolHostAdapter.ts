@@ -224,13 +224,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
   private mapOutputEvent(event: ShellOutputEvent): ToolsShellOutputEvent {
     switch (event.type) {
       case 'data':
-        return {
-          type: 'data',
-          chunk:
-            typeof event.chunk === 'string'
-              ? event.chunk
-              : JSON.stringify(event.chunk),
-        };
+        return { type: 'data', chunk: event.chunk };
       case 'binary_detected':
         return { type: 'binary_detected' };
       case 'binary_progress':

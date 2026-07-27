@@ -23,6 +23,7 @@ import {
   Kind,
   type ToolInvocation,
   type ToolResult,
+  type LiveOutputUpdate,
 } from './tools.js';
 
 const API_CONFIG = {
@@ -140,7 +141,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
 
   async execute(
     signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const codeRequest: McpCodeRequest = {
       jsonrpc: '2.0',
