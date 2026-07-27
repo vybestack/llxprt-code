@@ -195,10 +195,21 @@ function parseRustUseDeclaration(
     .replace(/^use\s+/, '')
     .trim();
 
-  // Strip inline comments (e.g., `use std::fmt; // comment`)
-  const commentIndex = body.indexOf('//');
-  if (commentIndex !== -1) {
-    body = body.slice(0, commentIndex).trim();
+  // Strip inline comments: line (`//`) and block (`/* ... */`)
+  const lineCommentIndex = body.indexOf('//');
+  if (lineCommentIndex !== -1) {
+    body = body.slice(0, lineCommentIndex).trim();
+  }
+  const blockCommentStart = body.indexOf('/*');
+  if (blockCommentStart !== -1) {
+    const blockCommentEnd = body.indexOf('*/', blockCommentStart);
+    if (blockCommentEnd !== -1) {
+      body = (
+        body.slice(0, blockCommentStart) + body.slice(blockCommentEnd + 2)
+      ).trim();
+    } else {
+      body = body.slice(0, blockCommentStart).trim();
+    }
   }
   if (body.endsWith(';')) {
     body = body.slice(0, -1).trim();
@@ -207,19 +218,32 @@ function parseRustUseDeclaration(
     return null;
   }
 
-  const braceOpen = body.lastIndexOf('{');
+  const braceOpen = body.indexOf('{');
   if (braceOpen === -1) {
     // Simple path: use a::b::c -> module is the whole path.
     // Strip trailing ` as <alias>` (e.g., `use std::fmt::Write as W`).
     return { module: stripImportAlias(body), items: [] };
   }
 
-  const braceClose = body.lastIndexOf('}');
+  // Forward-scan to find the matching closing brace for the first opening
+  // brace, so nested groups (e.g., `std::{io::{Read, Write}}`) parse correctly.
+  let depth = 0;
+  let braceClose = -1;
+  for (let i = braceOpen; i < body.length; i++) {
+    if (body[i] === '{') depth++;
+    else if (body[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        braceClose = i;
+        break;
+      }
+    }
+  }
   if (braceClose <= braceOpen) {
     return null;
   }
 
-  // Module path is everything before the final `{` group (minus trailing `::`)
+  // Module path is everything before the first `{` group (minus trailing `::`)
   const modulePath = body.slice(0, braceOpen).replace(/::$/, '').trim();
   const itemsStr = body.slice(braceOpen + 1, braceClose).trim();
   const items = itemsStr

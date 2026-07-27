@@ -335,4 +335,20 @@ describe('ast_edit Rust import extraction', () => {
     expect(imports[0].module).toBe('crate::utils::helper');
     expect(imports[0].line).toBe(1);
   });
+
+  it('handles nested brace groups in use declarations', () => {
+    const code = 'use std::{io::{Read, Write}, fs};\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std');
+  });
+
+  it('strips block comments from use declarations', () => {
+    const code = 'use std::fs; /* important */\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::fs');
+  });
 });
