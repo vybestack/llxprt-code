@@ -35,17 +35,15 @@ Codex mode automatically uses protocol v2 at `/responses` with flat `response.cr
 2. Streaming lifecycle, exclusive reuse, and failures (A3, A4, A8).
 3. Sticky fallback and cancellation (A5, A6).
 4. Verification, review, and delivery.
-   - Run scoped tests after each slice, then all required local gates, reviews, scope review, PR CI, and exact-head checks.
 
 ## Expected paths
 
-`dev-docs/plans/issue-2041-websocket-support.md`, provider package/lockfiles, `OpenAIResponsesProviderCore.ts`, `openAIResponsesExecutor.ts`, and new transport, HTTP-stream, and two test files. The HTTP extraction was discovered as necessary to preserve the enforced 800-line executor limit. Total expected: 10 files.
-Expected maximum: 10 files, below the 25-file review threshold and 40-file hard stop. The hard budgets remain 25 files/1,500 net lines for mandatory scope review and 40 files/2,500 net lines for an approval stop.
+Expected: this plan, provider package/lockfiles, provider core/executor, and new transport, HTTP-stream, and two test files. The HTTP extraction preserves the enforced 800-line executor limit. Maximum: 10 files, below the 25-file review threshold and 40-file hard stop. Hard budgets remain 25 files/1,500 net lines and 40 files/2,500 net lines.
 
 ## Actual delivery
 
-All 10 expected paths changed. The discovered `openAIResponsesHttpStream.ts` extraction keeps the executor below the enforced 800-line limit without weakening lint. Final measured scope is 10 files and 1,498 net changed lines, including forced-text lockfile changes and untracked files. Behavioral evidence is 17 focused WebSocket tests plus the passing full root test suite.
-The Codex handshake requires bearer/account/custom HTTP headers. Node's global WHATWG `WebSocket` does not accept custom handshake headers. The existing OpenAI SDK's Realtime client authenticates with a Realtime-specific subprotocol and is not a Responses WebSocket transport. `undici` 7.28.0 is already standardized elsewhere in this monorepo and exposes a header-capable `WebSocket`, but `packages/providers` does not declare it. Correct package isolation therefore requires adding `undici` as a direct providers dependency and updating lockfiles.
+All 10 expected paths changed. The HTTP extraction keeps the executor below the enforced 800-line limit without weakening lint. Final measured scope is 10 files and 1,498 net changed lines, including forced-text lockfile changes; 17 focused tests and the full root suite provide behavioral evidence.
+The Codex handshake requires bearer/account/custom HTTP headers. Node's global `WebSocket` cannot supply them, while the existing OpenAI Realtime client uses a different protocol. The approved direct `undici ^7.28.0` providers dependency supplies a header-capable client; lockfiles are updated.
 
 ## Scope ledger
 
@@ -59,20 +57,6 @@ The Codex handshake requires bearer/account/custom HTTP headers. Node's global W
 | Incremental `previous_response_id` payloads               | Non-goal              | Excluded                | Conflicts with bounded stateless scope                             |
 | Unrelated refactors/findings                              | Out of scope          | Must be Reject or Defer | Reviewer suggestions do not expand scope                           |
 
-## Review finding classification
-
-Every finding will be recorded as exactly one of:
-
-- **Blocker-Fix**: prevents accepted behavior, safety, correctness, required verification, or mergeability.
-- **In-scope-Fix**: improves or corrects implementation inside A1-A8 and expected paths/budget.
-- **Reject**: factually incorrect or outside the accepted issue behavior.
-- **Defer**: valid but requires a separate issue or explicit approval because it expands scope.
-
-Open Code Review is capped at two local and two PR runs. Total code/design review cycles are capped at two; DeepThinker participates in at least one.
-
 ## Review, verification, and completion
 
-DeepThinker found no actionable issue. OCR's nested-payload claim is **Reject** because source sends flat `response.create`. Focused tests (17) and root test/lint/typecheck/format/build pass. Smoke reached the provider but external quota returned HTTP 429; tmux is not applicable. Exact-head completion additionally requires green CI, resolved review threads, correct ancestry, no conflicts, and a clean scope ledger.
-
-- Final `git diff --stat` and numstat remain inside the hard scope budget and every changed path is accounted for in this ledger.
-- No optional hardening or cleanup continues after these gates are satisfied.
+Findings use **Blocker-Fix**, **In-scope-Fix**, **Reject**, or **Defer** without expanding scope. DeepThinker found no actionable issue. Local OCR's nested-payload claim is **Reject** because source sends flat `response.create`. PR OCR's session-header parity and deterministic-test findings are **In-scope-Fix** and addressed. Its HTTP partial-retry findings are **Defer** because they describe unchanged pre-existing behavior outside A1-A8. The narrow fetch type, empty harness, CLOSING constant, and callback findings are **Reject** as factually incorrect, speculative test hardening, or incompatible with fail-fast internal callbacks. Focused tests and root test/lint/typecheck/format/build pass. Smoke reached the provider but external quota returned HTTP 429; tmux is not applicable. Exact-head completion requires green CI, resolved threads, correct ancestry, no conflicts, and a clean scope ledger.

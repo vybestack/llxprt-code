@@ -224,12 +224,17 @@ describe('Codex Responses WebSocket transport', () => {
 
   it('serializes concurrent requests until response.completed', async () => {
     let requestCount = 0;
+    let firstRequestSent = (): void => undefined;
+    const firstSend = new Promise<void>((resolve) => {
+      firstRequestSent = resolve;
+    });
     const harness = new SocketHarness([
       (socket) => {
         socket.open();
         socket.onSend = () => {
           requestCount += 1;
-          if (requestCount === 2) complete(socket);
+          if (requestCount === 1) firstRequestSent();
+          else complete(socket);
         };
       },
     ]);
@@ -239,7 +244,7 @@ describe('Codex Responses WebSocket transport', () => {
 
     const first = drain(transport.streamResponse(request(), options()));
     const second = drain(transport.streamResponse(request(), options()));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await firstSend;
     expect(harness.sockets[0].sent).toHaveLength(1);
 
     complete(harness.sockets[0]);

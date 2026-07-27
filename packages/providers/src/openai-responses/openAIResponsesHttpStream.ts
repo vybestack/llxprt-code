@@ -118,14 +118,18 @@ async function addCodexHeaders(
   headers['ChatGPT-Account-ID'] = accountId;
   headers['originator'] = 'codex_cli_rs';
 
+  const invocationSessionId = options.invocation.runtimeId;
   const sessionId =
-    (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??
-    options.runtime?.runtimeId;
-  if (typeof sessionId === 'string' && sessionId.trim()) {
-    headers['session_id'] = sessionId;
-  }
+    typeof invocationSessionId === 'string' && invocationSessionId.trim() !== ''
+      ? invocationSessionId
+      : options.runtime?.runtimeId;
+  const validSessionId =
+    typeof sessionId === 'string' && sessionId.trim() !== ''
+      ? sessionId
+      : undefined;
+  if (validSessionId !== undefined) headers['session_id'] = validSessionId;
 
-  const sessionIdForLog = sessionId?.substring(0, 8) ?? 'none';
+  const sessionIdForLog = validSessionId?.substring(0, 8) ?? 'none';
   deps.logger.debug(
     () =>
       `Codex mode: adding headers for account ${accountId.substring(0, 8)}..., session_id=${sessionIdForLog}...`,

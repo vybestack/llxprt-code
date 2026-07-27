@@ -718,7 +718,14 @@ async function buildWebSocketHandshakeHeaders(
   };
   headers['ChatGPT-Account-ID'] = await deps.getCodexAccountId();
   headers['originator'] = 'codex_cli_rs';
-  headers['session_id'] = params.normalizedOptions.invocation.runtimeId;
+  const invocationSessionId = params.normalizedOptions.invocation.runtimeId;
+  const sessionId =
+    typeof invocationSessionId === 'string' && invocationSessionId.trim() !== ''
+      ? invocationSessionId
+      : params.normalizedOptions.runtime?.runtimeId;
+  if (typeof sessionId === 'string' && sessionId.trim() !== '') {
+    headers['session_id'] = sessionId;
+  }
   headers['OpenAI-Beta'] = CODEX_WEBSOCKET_BETA_HEADER;
   return headers;
 }
