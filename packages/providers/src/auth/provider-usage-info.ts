@@ -42,7 +42,7 @@ export async function getAnthropicUsageInfo(
   bucket?: string,
 ): Promise<Record<string, unknown> | null> {
   const bucketToUse = bucket ?? 'default';
-  const token = await tokenStore.getToken('anthropic', bucketToUse);
+  const token = await tokenStore.getToken('claudecode', bucketToUse);
 
   if (!token) {
     return null;
@@ -122,7 +122,7 @@ export async function getAllAnthropicUsageInfo(
 ): Promise<Map<string, Record<string, unknown>>> {
   const result = new Map<string, Record<string, unknown>>();
 
-  const buckets = await tokenStore.listBuckets('anthropic');
+  const buckets = await tokenStore.listBuckets('claudecode');
   const bucketsToCheck = buckets.length > 0 ? buckets : ['default'];
 
   const { fetchAnthropicUsage } = await import(
@@ -130,7 +130,7 @@ export async function getAllAnthropicUsageInfo(
   );
 
   for (const bucket of bucketsToCheck) {
-    const token = await tokenStore.getToken('anthropic', bucket);
+    const token = await tokenStore.getToken('claudecode', bucket);
     if (!token) {
       continue;
     }

@@ -122,6 +122,22 @@ mock.module(
         source: 'builtin',
       },
       {
+        alias: 'claudecode',
+        config: {
+          name: 'claudecode',
+          baseProvider: 'anthropic',
+          'base-url': 'https://api.anthropic.com',
+          defaultModel: 'claude-opus-5',
+          description: 'Claude Code (Claude.ai subscription OAuth)',
+          staticModels: [
+            { id: 'claude-opus-5', name: 'Claude Opus 5' },
+            { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+          ],
+        },
+        filePath: '/mock/aliases/claudecode.config',
+        source: 'builtin',
+      },
+      {
         alias: 'kimi',
         config: {
           name: 'kimi',

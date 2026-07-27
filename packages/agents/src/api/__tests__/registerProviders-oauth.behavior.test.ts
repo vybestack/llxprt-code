@@ -12,16 +12,13 @@
  * `createProviderManager(context, { config })` WITHOUT an `oauthSettings`
  * provider, so — per createProviderManager's contract — the resulting
  * OAuthManager ran without a settings surface and `isOAuthEnabled(provider)`
- * always returned false. OAuth-only providers (codex, anthropic) then reported
+ * always returned false. OAuth-only providers (codex, claudecode) then reported
  * "auth required" even though the user's settings enabled them.
  *
  * This test drives the REAL production `registerProvidersOntoManager` against a
  * REAL isolated runtime context and a REAL on-disk settings file (via
- * LLXPRT_CONFIG_HOME). It asserts the registered Anthropic provider recognizes
- * OAuth enablement, observed token-free through `getModels()`: when OAuth is
- * enabled the provider returns its curated OAuth model list (which uniquely
- * contains `claude-fable-5`); when disabled it returns the default list, which
- * does not.
+ * LLXPRT_CONFIG_HOME). It asserts that the registered Claude Code alias exposes
+ * its static OAuth model list, while the Anthropic API-key alias does not.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -42,11 +39,8 @@ interface ProviderLike {
   getModels(): Promise<ModelLike[]>;
 }
 
-/**
- * `claude-fable-5` appears ONLY in Anthropic's OAuth model list, never in the
- * default (non-OAuth) list. Its presence therefore proves the provider resolved
- * OAuth as enabled — i.e. its OAuthManager consulted a wired settings provider.
- */
+// Fable 5 is a sentinel for the Claude Code subscription catalog: it is not
+// exposed by the Anthropic API-key alias's dynamic model listing.
 const OAUTH_ONLY_MODEL_ID = 'claude-fable-5';
 
 function formatCleanupError(error: unknown): string {
@@ -113,7 +107,7 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     );
   }
 
-  async function registerAndGetAnthropic(): Promise<ProviderLike> {
+  async function registerAndGet(providerName: string): Promise<ProviderLike> {
     const handle = createIsolatedRuntimeContext({
       runtimeId: `issue2410-oauth-${Math.random().toString(36).slice(2)}`,
       model: 'claude-opus-4-8',
@@ -133,34 +127,29 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
       handle.config,
     );
 
-    const provider = handle.providerManager.getProviderByName('anthropic') as
+    const provider = handle.providerManager.getProviderByName(providerName) as
       | ProviderLike
       | undefined;
     if (!provider) {
-      throw new Error('Anthropic provider was not registered onto the manager');
+      throw new Error(`${providerName} was not registered onto the manager`);
     }
     return provider;
   }
 
-  it('wires oauthSettings so an OAuth-enabled Anthropic provider resolves OAuth (returns the OAuth model list)', async () => {
-    writeSettings({ oauthEnabledProviders: { anthropic: true } });
+  it('registers the Claude Code alias with its subscription model catalog', async () => {
+    writeSettings({ oauthEnabledProviders: { claudecode: true } });
 
-    const anthropic = await registerAndGetAnthropic();
-    const models = await anthropic.getModels();
+    const claudecode = await registerAndGet('claudecode');
+    const models = await claudecode.getModels();
     const ids = models.map((m) => m.id);
 
-    // OAuth was recognized as enabled: the curated OAuth model list is returned.
     expect(ids).toContain(OAUTH_ONLY_MODEL_ID);
   });
 
-  it('does not surface the OAuth-only model when the provider is NOT OAuth-enabled', async () => {
-    // A settings file that explicitly disables anthropic OAuth. With the fix,
-    // the settings provider is still wired, but the provider correctly reports
-    // OAuth disabled, so the OAuth-only model must NOT appear. This guards
-    // against a false positive where getModels() always returns the OAuth list.
-    writeSettings({ oauthEnabledProviders: { anthropic: false } });
+  it('keeps the Anthropic API-key alias separate from subscription models', async () => {
+    writeSettings({ oauthEnabledProviders: { claudecode: true } });
 
-    const anthropic = await registerAndGetAnthropic();
+    const anthropic = await registerAndGet('anthropic');
     const models = await anthropic.getModels();
     const ids = models.map((m) => m.id);
 

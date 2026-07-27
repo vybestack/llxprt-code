@@ -61,7 +61,7 @@ export function ensureOAuthProviderRegistered(
   let oauthProvider: OAuthProviderWithAddItem;
 
   switch (providerName) {
-    case 'anthropic':
+    case 'claudecode':
       oauthProvider = new AnthropicOAuthProvider(effectiveTokenStore, addItem);
       break;
     case 'codex':
@@ -82,7 +82,7 @@ export function ensureOAuthProviderRegistered(
 }
 
 /**
- * Register the standard OAuth providers (anthropic, codex) on an OAuthManager
+ * Register the standard OAuth providers (claudecode, codex) on an OAuthManager
  * instance. This is the canonical way to ensure a manager has the full provider
  * set available, regardless of which creation path produced it. Delegates to
  * ensureOAuthProviderRegistered for dedup and tokenStore handling.
@@ -92,7 +92,12 @@ export function registerStandardOAuthProviders(
   tokenStore?: TokenStore,
   addItem?: AddItemCallback,
 ): void {
-  ensureOAuthProviderRegistered('anthropic', oauthManager, tokenStore, addItem);
+  ensureOAuthProviderRegistered(
+    'claudecode',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
   ensureOAuthProviderRegistered('codex', oauthManager, tokenStore, addItem);
 }
 

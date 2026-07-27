@@ -111,7 +111,7 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     // bus (bus binding asserted above), not a stub the caller must complete.
     expect(result.oauthManager).toBeInstanceOf(OAuthManager);
     expect(result.oauthManager?.getSupportedProviders().sort()).toStrictEqual(
-      expect.arrayContaining(['anthropic']),
+      expect.arrayContaining(['claudecode']),
     );
   });
 });

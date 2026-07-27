@@ -32,7 +32,6 @@ import {
 import { processAnthropicStream } from './AnthropicStreamProcessor.js';
 import { parseAnthropicResponse } from './AnthropicResponseParser.js';
 import {
-  OAUTH_MODELS,
   DEFAULT_MODELS,
   getMaxTokensForModel as getMaxTokensForModelFn,
   getContextWindowForModel as getContextWindowForModelFn,
@@ -69,7 +68,10 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       envKeyNames: ['ANTHROPIC_API_KEY'],
       isOAuthEnabled: !!oauthManager,
-      oauthProvider: oauthManager ? 'anthropic' : undefined,
+      // Binding is by identity, not host: when an OAuth manager is supplied
+      // (the `claudecode` subscription alias), the Anthropic protocol
+      // implementation resolves tokens under the `claudecode` identity.
+      oauthProvider: oauthManager ? 'claudecode' : undefined,
       oauthManager,
     };
 
@@ -207,13 +209,23 @@ export class AnthropicProvider extends BaseProvider {
       authLogger.debug(
         () => 'No authentication available for Anthropic API calls',
       );
-      if (isAnthropicOAuthBaseURL(baseURL)) {
+      // Third-party hosts must never be misdirected to Anthropic OAuth; they
+      // require an explicit credential regardless of bound identity.
+      if (!isAnthropicOAuthBaseURL(baseURL)) {
         throw new Error(
-          'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
+          `No API key resolved for Anthropic-compatible endpoint "${baseURL}". Configure an explicit credential (auth-key, auth-keyfile, or auth-key-name) for this profile; OAuth against api.anthropic.com is not used for third-party base URLs.`,
+        );
+      }
+      // On the canonical Anthropic host, distinguish by bound identity: only
+      // the `claudecode` subscription identity surfaces OAuth recovery; the
+      // API-key-only `anthropic` identity is directed to /key or /keyfile.
+      if (this.baseProviderConfig.oauthProvider === 'claudecode') {
+        throw new Error(
+          'No authentication available for Anthropic API calls. Use /auth claudecode to re-authenticate or /auth claudecode logout to clear any expired session.',
         );
       }
       throw new Error(
-        `No API key resolved for Anthropic-compatible endpoint "${baseURL}". Configure an explicit credential (auth-key, auth-keyfile, or auth-key-name) for this profile; OAuth against api.anthropic.com is not used for third-party base URLs.`,
+        'No Anthropic API key resolved. Set an API key with /key or /keyfile (or ANTHROPIC_API_KEY) to use the Anthropic API.',
       );
     }
 
@@ -246,21 +258,6 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    // The OAuth model list is static, so return it directly when OAuth is the
-    // configured auth for this provider. We deliberately do NOT resolve a live
-    // token here: model listing is a config-time operation and OAuth token
-    // refresh is reserved for prompt sends (BaseProvider.getAuthToken resolves
-    // with includeOAuth: false, yielding '' for OAuth-only accounts). Resolving
-    // a token merely to pick a static list would either trigger an unwanted
-    // refresh or — for OAuth-only accounts with no API key — fall through to
-    // getDefaultModels() (DEFAULT_MODELS), hiding the curated OAuth list.
-    if (this.isOAuthEnabled()) {
-      this.getAuthLogger().debug(
-        () => 'Using hardcoded model list for OAuth authentication',
-      );
-      return OAUTH_MODELS.map((m) => ({ ...m, provider: this.name }));
-    }
-
     const authToken = await this.getAuthToken();
     if (!authToken) {
       this.getAuthLogger().debug(
@@ -269,19 +266,6 @@ export class AnthropicProvider extends BaseProvider {
       );
       // Return default models instead of throwing
       return this.getDefaultModels();
-    }
-
-    // API-key path: the models.list endpoint does not work with OAuth tokens.
-    // classifyOAuthToken is kept as a defensive fallback for the rare case
-    // where an OAuth token is resolved despite isOAuthEnabled() being false.
-    const isOAuthToken = this.classifyOAuthToken(authToken);
-
-    if (isOAuthToken) {
-      // For OAuth, return only the working models
-      this.getAuthLogger().debug(
-        () => 'Using hardcoded model list for OAuth authentication',
-      );
-      return OAUTH_MODELS.map((m) => ({ ...m, provider: this.name }));
     }
 
     try {
