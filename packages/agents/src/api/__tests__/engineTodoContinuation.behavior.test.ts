@@ -40,16 +40,15 @@ import { ApprovalMode } from '@vybestack/llxprt-code-agents';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 
 /**
- * Builds a two-turn JSONL fixture: turn 1 emits a tool_call for the given
- * tool with the given params; turn 2 emits a terminal text block so the
- * continuation settles with a `done`.
+ * Builds a single-turn JSONL fixture: one tool_call block for the given tool
+ * and params. Shared by scriptToolCallThenText and scriptToolCallOnly to
+ * prevent schema drift if the event format evolves.
  */
-function scriptToolCallThenText(
+function buildToolCallTurn(
   toolName: string,
   parameters: Readonly<Record<string, unknown>>,
-  continuationText = 'done after tool',
-): string {
-  const turn1 = {
+): object {
+  return {
     chunks: [
       {
         speaker: 'ai',
@@ -64,6 +63,19 @@ function scriptToolCallThenText(
       },
     ],
   };
+}
+
+/**
+ * Builds a two-turn JSONL fixture: turn 1 emits a tool_call for the given
+ * tool with the given params; turn 2 emits a terminal text block so the
+ * continuation settles with a `done`.
+ */
+function scriptToolCallThenText(
+  toolName: string,
+  parameters: Readonly<Record<string, unknown>>,
+  continuationText = 'done after tool',
+): string {
+  const turn1 = buildToolCallTurn(toolName, parameters);
   const turn2 = {
     chunks: [
       {
@@ -85,21 +97,7 @@ function scriptToolCallOnly(
   toolName: string,
   parameters: Readonly<Record<string, unknown>>,
 ): string {
-  const turn1 = {
-    chunks: [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-1',
-            name: toolName,
-            parameters,
-          },
-        ],
-      },
-    ],
-  };
+  const turn1 = buildToolCallTurn(toolName, parameters);
   return `${JSON.stringify(turn1)}\n`;
 }
 
