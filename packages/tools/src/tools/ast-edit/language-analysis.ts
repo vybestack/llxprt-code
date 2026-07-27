@@ -53,6 +53,14 @@ export function extractImports(content: string, language: string): Import[] {
         items: extractPythonImportItems(trimmed),
         line: index + 1,
       });
+    } else if (
+      language === 'rust' &&
+      (trimmed.startsWith('use ') || trimmed.startsWith('pub use '))
+    ) {
+      const parsed = parseRustUseDeclaration(trimmed);
+      if (parsed) {
+        imports.push({ ...parsed, line: index + 1 });
+      }
     }
   });
 
@@ -166,4 +174,58 @@ function extractPythonImportItems(line: string): string[] {
     .split(',')
     .map((item) => stripImportAlias(item.trim()))
     .filter((item) => item);
+}
+
+/**
+ * Parses a Rust `use` declaration into a module path and imported items.
+ * Handles:
+ * - `use std::collections::HashMap;`  -> { module: 'std::collections::HashMap', items: [] }
+ * - `use std::io::{Read, Write};`     -> { module: 'std::io', items: ['Read', 'Write'] }
+ * - `use std::fs::{self};`            -> { module: 'std::fs', items: ['self'] }
+ *
+ * Uses linear string scanning to avoid polynomial backtracking.
+ * Returns null if the line is not a valid use declaration.
+ */
+function parseRustUseDeclaration(
+  line: string,
+): { module: string; items: string[] } | null {
+  // Strip leading "use " or "pub use "
+  let body = line
+    .replace(/^pub\s+use\s+/, '')
+    .replace(/^use\s+/, '')
+    .trim();
+
+  // Strip inline comments (e.g., `use std::fmt; // comment`)
+  const commentIndex = body.indexOf('//');
+  if (commentIndex !== -1) {
+    body = body.slice(0, commentIndex).trim();
+  }
+  if (body.endsWith(';')) {
+    body = body.slice(0, -1).trim();
+  }
+  if (body.length === 0) {
+    return null;
+  }
+
+  const braceOpen = body.lastIndexOf('{');
+  if (braceOpen === -1) {
+    // Simple path: use a::b::c -> module is the whole path.
+    // Strip trailing ` as <alias>` (e.g., `use std::fmt::Write as W`).
+    return { module: stripImportAlias(body), items: [] };
+  }
+
+  const braceClose = body.lastIndexOf('}');
+  if (braceClose <= braceOpen) {
+    return null;
+  }
+
+  // Module path is everything before the final `{` group (minus trailing `::`)
+  const modulePath = body.slice(0, braceOpen).replace(/::$/, '').trim();
+  const itemsStr = body.slice(braceOpen + 1, braceClose).trim();
+  const items = itemsStr
+    .split(',')
+    .map((item) => stripImportAlias(item.trim()))
+    .filter((item) => item);
+
+  return { module: modulePath, items };
 }

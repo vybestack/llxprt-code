@@ -41,6 +41,8 @@ export class ASTQueryExtractor {
         this.extractJsFamilyDeclarations(sgRoot, declarations);
       } else if (extension === 'py') {
         this.extractPythonDeclarations(sgRoot, declarations);
+      } else if (extension === 'rs') {
+        this.extractRustDeclarations(sgRoot, declarations);
       } else {
         return this.fallbackExtraction(content, extension);
       }
@@ -132,6 +134,51 @@ export class ASTQueryExtractor {
       const nameNode = n.field('name');
       if (nameNode != null) {
         declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'class'));
+      }
+    });
+  }
+
+  private extractRustDeclarations(
+    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
+    declarations: EnhancedDeclaration[],
+  ): void {
+    sgRoot.findAll({ rule: { kind: 'function_item' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      const paramsNode = n.field('parameters');
+      const returnTypeNode = n.field('return_type');
+      if (nameNode != null) {
+        const signature = this.buildPythonSignature(paramsNode, returnTypeNode);
+        declarations.push(
+          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+        );
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'struct_item' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'struct'));
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'trait_item' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'trait'));
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'enum_item' } }).forEach((n) => {
+      const nameNode = n.field('name');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'enum'));
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'impl_item' } }).forEach((n) => {
+      const nameNode = n.field('type');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'impl'));
       }
     });
   }
