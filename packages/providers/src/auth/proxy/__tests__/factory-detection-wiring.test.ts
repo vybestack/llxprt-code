@@ -423,7 +423,7 @@ describe('Factory Detection Wiring (P33)', () => {
         'const { spawnSync } = require("node:child_process");',
         `const { createTokenStore } = require(${JSON.stringify(FACTORY_MODULE_PATH)});`,
         'createTokenStore();',
-        `const r = spawnSync(${JSON.stringify(CHILD_RUNTIME)}, ["-e", ${JSON.stringify(probeScript)}], { encoding: "utf8", env: process.env });`,
+        `const r = spawnSync(${JSON.stringify(CHILD_RUNTIME)}, ["-e", ${JSON.stringify(probeScript)}], { encoding: "utf8", env: process.env, stdio: ["ignore", "pipe", "inherit"] });`,
         'process.stdout.write(r.stdout);',
       ].join('');
       const bashScript = [
