@@ -511,6 +511,20 @@ describe('affected-lint-targets selector — type-aware soundness (A5)', () => {
           },
         );
 
+        // Surface infrastructure failures (spawn error, timeout, or empty
+        // stdout) as a clear assertion instead of a confusing JSON.parse throw.
+        if (eslintRun.error !== undefined) {
+          throw new Error(
+            `ESLint spawn failed: ${String(eslintRun.error.message)}`,
+          );
+        }
+        if (eslintRun.stdout === undefined || eslintRun.stdout.length === 0) {
+          throw new Error(
+            `ESLint produced no stdout (status=${eslintRun.status}). ` +
+              `stderr: ${eslintRun.stderr ?? '<empty>'}`,
+          );
+        }
+
         // ESLint exits non-zero when it reports errors; that is expected here.
         const reports = JSON.parse(eslintRun.stdout) as Array<{
           readonly filePath: string;

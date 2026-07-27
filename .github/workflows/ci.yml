@@ -227,7 +227,7 @@ jobs:
       - name: 'Select affected lint targets'
         id: 'lint_select'
         run: |
-          set -euo pipefail
+          set +e
           event='${{ github.event_name }}'
           files_arg=()
           if [[ "$event" == "pull_request" ]]; then
@@ -236,11 +236,21 @@ jobs:
           # The lint selector reuses the same import graph as the test-shard
           # selector and writes lint_targets (JSON array of package dirs +
           # integration-tests) and lint_full_run (true when fail-closed to a
-          # full root lint) directly to GITHUB_OUTPUT.
+          # full root lint) directly to GITHUB_OUTPUT. The selector must NOT
+          # fail this job — on crash it writes a full-run fallback so that
+          # lint_javascript's step-level fail-closed logic lints the whole
+          # root tree.
           node scripts/affected-lint-targets.ts \
             --event "$event" \
             "${files_arg[@]}" \
             --output github-actions
+          select_rc=$?
+          if [[ "$select_rc" -ne 0 ]]; then
+            echo "lint_targets=[\".\"]" >> "$GITHUB_OUTPUT"
+            echo "lint_full_run=true" >> "$GITHUB_OUTPUT"
+            echo "lint_full_run_reason=lint selector failed (exit $select_rc)" >> "$GITHUB_OUTPUT"
+            echo "::warning::affected-lint-targets failed (exit $select_rc); falling back to full lint"
+          fi
   #
   lint_github_actions:
     name: 'Lint (GitHub Actions)'
@@ -303,9 +313,12 @@ jobs:
     needs:
       - 'skip_check'
       - 'shard_selector'
-    # Fail closed: when the lint selector did not succeed (failed/skipped), the
-    # required lint must NOT be silently skipped — fall back to a full lint.
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    # Fail closed: run this required lint job even when shard_selector fails or
+    # is skipped, so the step-level fail-closed logic (full lint on non-success)
+    # is reachable. Without `!cancelled()`, GitHub Actions skips dependent jobs
+    # before evaluating `if` when a needed job fails, which would silently skip
+    # lint and allow un-linted code to merge.
+    if: ${{ !cancelled() && needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -433,7 +446,7 @@ jobs:
         uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
         with:
           path: 'node_modules/.cache/eslint'
-          key: ${{ runner.os }}-eslint-${{ hashFiles('packages/*/src/**', 'packages/*/package.json', 'packages/*/tsconfig.json', 'scripts/**', 'scripts/**/*', 'evals/**', 'integration-tests/**', 'eslint.config.js', 'eslint-rules/**', 'package.json', 'package-lock.json', 'bun.lock', 'tsconfig.json', 'tsconfig.scripts.json', '*.js', 'test-setup/**', '.github/workflows/**', '.github/scripts/**') }}
+          key: ${{ runner.os }}-eslint-${{ hashFiles('packages/*/src/**', 'packages/*/package.json', 'packages/*/tsconfig.json', 'scripts/**', 'evals/**', 'integration-tests/**', 'eslint.config.js', 'eslint-rules/**', 'package.json', 'package-lock.json', 'bun.lock', 'tsconfig.json', 'tsconfig.scripts.json', '*.js', 'test-setup/**', '.github/workflows/**', '.github/scripts/**') }}
 
       - name: 'Run linter'
         env:

@@ -34,7 +34,6 @@ const LINT_TARGETS_ENV = 'LLXPRT_LINT_TARGETS';
 const CACHE_VALUE_FLAGS: ReadonlySet<string> = new Set([
   '--cache-strategy',
   '--cache-location',
-  '--cache-flag',
 ]);
 
 /** Boolean cache flags; consumed by isCacheEnabled, never forwarded. */
@@ -65,6 +64,8 @@ function nodeOptionsWithoutMemoryLimit(nodeOptions: string): string[] {
   let skipNext = false;
   for (const option of options) {
     if (skipNext) {
+      // The token after a space-separated --max-old-space-size is the numeric
+      // value and must be dropped, not preserved as a stray argument.
       skipNext = false;
     } else if (option === '--max-old-space-size') {
       skipNext = true;
@@ -104,7 +105,11 @@ export function buildLintCommands({
   const eslintBin = fileURLToPath(
     new URL('../node_modules/.bin/eslint', import.meta.url),
   );
-  const resolvedNodeOptions = nodeOptionsWithMemoryLimit(heapMb, nodeOptions);
+  // The exported builder can be called from tests/automation with any heap
+  // value; clamp non-positive input to 1MB so an invalid --max-old-space-size
+  // never reaches Node.js and produces a confusing startup failure.
+  const safeHeap = Math.max(heapMb, 1);
+  const resolvedNodeOptions = nodeOptionsWithMemoryLimit(safeHeap, nodeOptions);
 
   const cacheArgs: readonly string[] = cache
     ? [
@@ -187,15 +192,23 @@ function isCacheEnabled(argv: readonly string[]): boolean {
  * `--targets` itself, so all cache flags and `--targets` are stripped here to
  * prevent eslint from receiving them twice when a caller passes them on the
  * CLI. Exported for behavioral testing.
+ *
+ * A value-flag with no following value (end of args, or the next token looks
+ * like another flag) is treated as a boolean and stripped alone, so a malformed
+ * sequence like `['--targets', '--fix']` does not consume the legitimate
+ * `--fix`.
  */
 export function stripRunnerArgs(rawArgs: readonly string[]): string[] {
   const forwardedArgs: string[] = [];
+  const valueFlags = new Set<string>(['--targets', ...CACHE_VALUE_FLAGS]);
   for (let i = 0; i < rawArgs.length; i++) {
     const a = rawArgs[i];
-    if (a === '--targets') {
-      i++; // skip flag and its JSON value
-    } else if (CACHE_VALUE_FLAGS.has(a)) {
-      i++; // skip flag and its value
+    if (valueFlags.has(a)) {
+      const next = rawArgs[i + 1];
+      if (next !== undefined && !next.startsWith('-')) {
+        i++; // skip flag and its value
+      }
+      // else: malformed/boolean value flag; strip flag alone, do not consume next
     } else if (CACHE_BOOL_FLAGS.has(a)) {
       // boolean cache flag; consumed by isCacheEnabled, not forwarded
     } else {

@@ -106,6 +106,18 @@ describe('run-lint runner — scoped run forwards explicit targets (A2)', () => 
     expect(commands[0].args).toContain('integration-tests');
   });
 
+  it('treats an empty targets array as a scoped run with integration-tests only', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: [],
+      forwardedArgs: [],
+      cache: false,
+    });
+    expect(commands.length).toBe(1);
+    expect(commands[0].args).toContain('integration-tests');
+    expect(commands[0].args).not.toContain('.');
+  });
+
   it('scoped run always includes integration-tests even if omitted from input', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
@@ -231,6 +243,29 @@ describe('run-lint runner — runner-managed arg stripping', () => {
     ).toEqual(['--max-warnings', '0']);
   });
 
+  it('does not consume the next flag when --targets has no value (malformed)', async () => {
+    const { stripRunnerArgs } = await loadRunner();
+    // --targets followed by another flag must not eat --fix
+    expect(
+      stripRunnerArgs(['--targets', '--fix', '--max-warnings', '0']),
+    ).toEqual(['--fix', '--max-warnings', '0']);
+  });
+
+  it('strips --targets alone when it is the last arg (no value)', async () => {
+    const { stripRunnerArgs } = await loadRunner();
+    expect(stripRunnerArgs(['--max-warnings', '0', '--targets'])).toEqual([
+      '--max-warnings',
+      '0',
+    ]);
+  });
+
+  it('does not consume the next flag when a cache value flag has no value', async () => {
+    const { stripRunnerArgs } = await loadRunner();
+    expect(
+      stripRunnerArgs(['--cache-location', '--fix', '--max-warnings', '0']),
+    ).toEqual(['--fix', '--max-warnings', '0']);
+  });
+
   it('preserves eslint args like --fix and --max-warnings', async () => {
     const { stripRunnerArgs } = await loadRunner();
     expect(stripRunnerArgs(['--fix', '--max-warnings', '0'])).toEqual([
@@ -265,5 +300,31 @@ describe('run-lint runner — heap normalization', () => {
     expect(commands[0].nodeOptions).not.toContain('4096');
     expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
     expect(commands[0].nodeOptions).toContain('--enable-source-maps');
+  });
+
+  it('removes a space-separated --max-old-space-size and its numeric value', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      nodeOptions: '--max-old-space-size 4096 --enable-source-maps',
+    });
+    // The space-separated 4096 must be stripped (not left as a stray token)
+    // and replaced by the normalized 12288.
+    expect(commands[0].nodeOptions).not.toContain('4096');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).toContain('--enable-source-maps');
+  });
+
+  it('clamps a non-positive heap to 1MB so Node.js still starts', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      heapMb: 0,
+    });
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=1');
   });
 });
