@@ -236,6 +236,7 @@ export type {
   ToolInfoConfirmationDetails,
   ToolCallConfirmationDetails,
   ToolLocation,
+  LiveOutputUpdate,
 } from './tools/tools.js';
 
 export {

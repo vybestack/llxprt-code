@@ -367,24 +367,33 @@ function wrapInvocation(invocation: AnyToolInvocation): AgentToolInvocation {
     getDescription: () => invocation.getDescription(),
     execute: async (signal, updateOutput) => {
       // The public AgentToolInvocation.execute contract accepts only string
-      // chunks, but the real ToolInvocation.execute delivers string |
-      // AnsiOutput. When the caller supplies an updateOutput callback, forward
-      // string chunks directly and losslessly flatten AnsiOutput (an
-      // AnsiToken[][]) to its plain text so rich terminal output is preserved
-      // rather than silently dropped — honoring the public (string-only)
-      // contract without a cast.
+      // chunks, but the real ToolInvocation.execute delivers a tagged
+      // LiveOutputUpdate. When the caller supplies an updateOutput callback,
+      // forward append deltas directly and losslessly flatten replace
+      // AnsiOutput (an AnsiToken[][]) to its plain text so rich terminal
+      // output is preserved rather than silently dropped — honoring the
+      // public (string-only) contract without a cast.
       const result: ToolResult = await invocation.execute(
         signal,
         updateOutput !== undefined
-          ? (chunk) => {
-              if (typeof chunk === 'string') {
-                updateOutput(chunk);
-              } else {
-                updateOutput(
-                  chunk
-                    .map((line) => line.map((token) => token.text).join(''))
-                    .join('\n'),
-                );
+          ? (update) => {
+              switch (update.mode) {
+                case 'append':
+                  updateOutput(update.data);
+                  break;
+                case 'replace':
+                  updateOutput(
+                    update.data
+                      .map((line) => line.map((token) => token.text).join(''))
+                      .join('\n'),
+                  );
+                  break;
+                default: {
+                  const _exhaustive: never = update;
+                  throw new Error(
+                    `Unhandled live-output mode: ${JSON.stringify(_exhaustive)}`,
+                  );
+                }
               }
             }
           : undefined,

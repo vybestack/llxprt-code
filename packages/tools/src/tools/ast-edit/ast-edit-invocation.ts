@@ -32,7 +32,7 @@ import { toIdeConnectionStatus } from '../edit-utils.js';
 import { hasLspCap } from '../../interfaces/host-capabilities.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../../utils/diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../../utils/lsp-diagnostics-helper.js';
-import type { AnsiOutput } from '../../utils/terminalSerializer.js';
+import type { LiveOutputUpdate } from '../../utils/terminalSerializer.js';
 import { ensureParentDirectoriesExist } from '../../utils/ensure-dirs.js';
 
 import type { ASTEditToolParams } from './types.js';
@@ -186,7 +186,7 @@ export class ASTEditToolInvocation
 
   async execute(
     signal: AbortSignal,
-    _updateOutput?: (output: string | AnsiOutput) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
     _terminalColumns?: number,
     _terminalRows?: number,
     _setPidCallback?: (pid: number) => void,

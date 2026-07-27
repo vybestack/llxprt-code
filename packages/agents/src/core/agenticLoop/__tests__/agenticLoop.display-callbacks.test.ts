@@ -17,6 +17,7 @@ import type {
   CompletedToolCall,
   ToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
@@ -53,10 +54,10 @@ describe('AgenticLoop with caller display callbacks', () => {
       async (
         _params: Record<string, unknown>,
         _signal: AbortSignal,
-        updateOutput?: (output: string) => void,
+        updateOutput?: (update: LiveOutputUpdate) => void,
       ) => {
-        updateOutput?.('chunk-1');
-        updateOutput?.('chunk-2');
+        updateOutput?.({ mode: 'append', data: 'chunk-1' });
+        updateOutput?.({ mode: 'append', data: 'chunk-2' });
         return { llmContent: 'done', returnDisplay: 'done' };
       },
     );
@@ -74,7 +75,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     const displayToolUpdates: ToolCall[] = [];
     const displayOutputChunks: Array<{
       callId: string;
-      chunk: string | unknown;
+      chunk: LiveOutputUpdate;
     }> = [];
 
     const { client } = createScriptedAgentClient([
@@ -141,7 +142,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     }));
     const dispStringChunks = displayOutputChunks.map((c) => ({
       callId: c.callId,
-      chunk: c.chunk,
+      chunk: c.chunk.data,
     }));
     expect(dispStringChunks).toStrictEqual(emittedOutputData);
     expect(dispStringChunks.every((c) => c.callId === 'call-disp')).toBe(true);
@@ -497,11 +498,11 @@ describe('AgenticLoop with caller display callbacks', () => {
       async (
         _params: Record<string, unknown>,
         _signal: AbortSignal,
-        updateOutput?: (output: string) => void,
+        updateOutput?: (update: LiveOutputUpdate) => void,
       ) => {
-        updateOutput?.('Hello ');
-        updateOutput?.('world');
-        updateOutput?.('!');
+        updateOutput?.({ mode: 'append', data: 'Hello ' });
+        updateOutput?.({ mode: 'append', data: 'world' });
+        updateOutput?.({ mode: 'append', data: '!' });
         return { llmContent: 'done', returnDisplay: 'done' };
       },
     );

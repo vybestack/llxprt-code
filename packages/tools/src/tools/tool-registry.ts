@@ -11,6 +11,7 @@ import {
   type ToolResult,
   BaseTool,
   BaseToolInvocation,
+  type LiveOutputUpdate,
 } from './tools.js';
 import { type ToolContext, isContextAwareTool } from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
@@ -120,7 +121,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
   async execute(
     params: ToolParams,
     signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const callCommand = this.config.getToolCallCommand?.() ?? '';
     const child = spawn(callCommand, [this.name]);
@@ -267,7 +268,7 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
 
   async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     return this.tool.execute(this.params, signal, updateOutput);
   }

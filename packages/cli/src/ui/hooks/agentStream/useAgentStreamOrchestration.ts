@@ -7,7 +7,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 import {
   type EditorType,
-  type AnsiOutput,
+  type LiveOutputUpdate,
   type MessageBus,
   type RecordingIntegration,
   type ToolCall,
@@ -84,7 +84,7 @@ interface ToolSchedulerState {
   interactiveRuntimeReady: boolean;
   /** Bound display-state updaters for the AgenticLoop's displayCallbacks. */
   replaceToolCalls: (calls: ToolCall[]) => void;
-  updateToolOutput: (callId: string, chunk: string | AnsiOutput) => void;
+  updateToolOutput: (callId: string, update: LiveOutputUpdate) => void;
 }
 
 export function useAgentStreamOrchestration(

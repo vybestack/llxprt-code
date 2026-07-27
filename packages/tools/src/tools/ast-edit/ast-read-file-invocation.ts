@@ -18,7 +18,7 @@ import { makeRelative, shortenPath } from '../../utils/paths.js';
 import { isNodeError } from '../../utils/errors.js';
 import { countLines } from '../../utils/fileUtils.js';
 import type { IToolHost } from '../../interfaces/index.js';
-import type { AnsiOutput } from '../../utils/terminalSerializer.js';
+import type { LiveOutputUpdate } from '../../utils/terminalSerializer.js';
 
 import type { ASTReadFileToolParams } from './types.js';
 import { ASTConfig } from './ast-config.js';
@@ -51,7 +51,7 @@ export class ASTReadFileToolInvocation
 
   async execute(
     _signal?: AbortSignal,
-    _updateOutput?: (output: string | AnsiOutput) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
     _terminalColumns?: number,
     _terminalRows?: number,
     _setPidCallback?: (pid: number) => void,

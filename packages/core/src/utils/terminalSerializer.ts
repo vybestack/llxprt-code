@@ -19,6 +19,15 @@ export interface AnsiToken {
 export type AnsiLine = AnsiToken[];
 export type AnsiOutput = AnsiLine[];
 
+/**
+ * Explicit tagged update protocol for live-output streaming. Discriminated
+ * by `mode`: text stream producers emit `append` (incremental deltas);
+ * terminal-buffer producers emit `replace` (full snapshots).
+ */
+export type LiveOutputUpdate =
+  | { mode: 'append'; data: string }
+  | { mode: 'replace'; data: AnsiOutput };
+
 const enum Attribute {
   inverse = 1,
   bold = 2,

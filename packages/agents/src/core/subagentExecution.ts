@@ -41,7 +41,6 @@ import {
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AnsiLine } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
 
@@ -437,16 +436,25 @@ export function createCompletionChannel(
     return completionPromise;
   };
 
-  const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
-    if ((output as unknown) != null && ctx.onMessage != null) {
-      const textOutput =
-        typeof output === 'string'
-          ? output
-          : output
-              .filter((line): line is AnsiLine => Array.isArray(line))
-              .map((line) => line.map((token) => token.text).join(''))
-              .join('\n');
-      ctx.onMessage(textOutput);
+  const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, update) => {
+    if (ctx.onMessage == null) return;
+    switch (update.mode) {
+      case 'append':
+        ctx.onMessage(update.data);
+        break;
+      case 'replace': {
+        const textOutput = update.data
+          .map((line) => line.map((token) => token.text).join(''))
+          .join('\n');
+        ctx.onMessage(textOutput);
+        break;
+      }
+      default: {
+        const _exhaustive: never = update;
+        throw new Error(
+          `Unhandled live-output mode: ${JSON.stringify(_exhaustive)}`,
+        );
+      }
     }
   };
 

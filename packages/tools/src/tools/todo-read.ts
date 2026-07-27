@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BaseTool, type ToolResult, Kind } from './tools.js';
+import {
+  BaseTool,
+  type ToolResult,
+  Kind,
+  type LiveOutputUpdate,
+} from './tools.js';
 import { type Todo } from '../types/todo-schemas.js';
 import { Type } from '../types/schema-type.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
@@ -39,7 +44,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
   async execute(
     _params: TodoReadParams,
     _signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     // Get session and agent IDs from context
     const sessionId = this.context?.sessionId ?? 'default';
