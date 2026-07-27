@@ -180,15 +180,10 @@ async function fetchResponse(params: {
 
 async function* parseSuccessfulResponse(
   response: Response,
-  params: {
-    responsesURL: string;
-    headers: Record<string, string>;
-    bodyBlob: Blob;
-    abortSignal?: AbortSignal;
-    includeThinkingInResponse: boolean;
-    responsesStored: boolean;
-    onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
-  },
+  params: Pick<
+    FetchStreamParams,
+    'includeThinkingInResponse' | 'responsesStored' | 'onStreamLiveness'
+  >,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
   if (!response.ok) await throwApiError(response, deps);

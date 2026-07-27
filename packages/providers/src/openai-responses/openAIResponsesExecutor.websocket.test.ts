@@ -127,11 +127,8 @@ function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
 } {
   const instances: WebSocketTransport[] = [];
   let streamResponseCalls = 0;
-  let enabled = true;
   const getWebSocketTransport = (): WebSocketTransport | undefined => {
-    if (!enabled) return undefined;
     const instance: WebSocketTransport = {
-      isUsable: () => true,
       async *streamResponse() {
         streamResponseCalls += 1;
         if (behavior === 'connect-failure') {
@@ -142,6 +139,7 @@ function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
           blocks: [{ type: 'text', text: 'from websocket' }],
         };
       },
+      close() {},
     };
     instances.push(instance);
     return instance;
@@ -152,13 +150,6 @@ function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
     get streamResponseCalls() {
       return streamResponseCalls;
     },
-    // Expose a way to disable (simulate sticky fallback) — unused slot kept
-    // for compatibility with closures that disable the transport.
-    ...({
-      disable: () => {
-        enabled = false;
-      },
-    } as unknown as Record<string, never>),
   };
 }
 
@@ -221,8 +212,11 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         getWebSocketTransport: transport.getWebSocketTransport,
       }),
     );
-    await drain(iterator);
+    const messages = await drain(iterator);
 
+    expect(messages).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi' }] },
+    ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(transport.instances).toHaveLength(0);
   });
@@ -240,6 +234,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       );
     vi.stubGlobal('fetch', fetchSpy);
     const transport = makeRecordingTransport('connect-failure');
+    let stickyFallback = false;
 
     // onWebSocketFallback disables the transport so subsequent requests use
     // HTTP (sticky fallback), mirroring the provider-owned sticky flag.
@@ -252,7 +247,6 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
         stickyFallback = true;
       },
     });
-    let stickyFallback = false;
 
     // First request: WebSocket fails, falls back to HTTP.
     const first = await drain(
