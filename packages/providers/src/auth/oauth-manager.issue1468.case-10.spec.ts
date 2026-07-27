@@ -19,7 +19,7 @@ describe('Issue #1468 getProfileBuckets case 10', () => {
 
     mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
     mockLoadProfile.mockResolvedValue({
-      provider: 'anthropic',
+      provider: 'claudecode',
       auth: {
         type: 'oauth',
         buckets: ['bucket-a', 'bucket-b'],
@@ -27,7 +27,7 @@ describe('Issue #1468 getProfileBuckets case 10', () => {
     });
 
     const provider: OAuthProvider = {
-      name: 'anthropic',
+      name: 'claudecode',
       initiateAuth: vi.fn().mockResolvedValue({
         access_token: 'fresh-token',
         token_type: 'Bearer',
@@ -39,7 +39,7 @@ describe('Issue #1468 getProfileBuckets case 10', () => {
     manager.registerProvider(provider);
 
     await tokenStore.saveToken(
-      'anthropic',
+      'claudecode',
       {
         access_token: 'bucket-b-token',
         token_type: 'Bearer',
@@ -47,9 +47,9 @@ describe('Issue #1468 getProfileBuckets case 10', () => {
       },
       'bucket-b',
     );
-    manager.setSessionBucket('anthropic', 'bucket-b', {
+    manager.setSessionBucket('claudecode', 'bucket-b', {
       profileId: 'opusthinkingbucketed',
-      providerId: 'anthropic',
+      providerId: 'claudecode',
     });
     mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'bucket-b' });
 

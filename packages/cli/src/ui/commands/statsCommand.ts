@@ -74,7 +74,7 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
       context.ui.addItem(
         {
           type: MessageType.INFO,
-          text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
+          text: 'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
         },
         Date.now(),
       );
@@ -278,7 +278,7 @@ export const statsCommand: SlashCommand = {
     {
       name: 'quota',
       description:
-        'Show quota/usage information for OAuth providers (Anthropic, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
+        'Show quota/usage information for OAuth providers (Claude Code, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
       kind: CommandKind.BUILT_IN,
       action: quotaSubcommandAction,
     },

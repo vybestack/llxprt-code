@@ -19,7 +19,7 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
 
     mockGetCurrentProfileName.mockReturnValue('single-bucket-profile');
     mockLoadProfile.mockResolvedValue({
-      provider: 'anthropic',
+      provider: 'claudecode',
       auth: {
         type: 'oauth',
         buckets: ['named-bucket'],
@@ -28,7 +28,7 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
 
     const logout = vi.fn().mockResolvedValue(undefined);
     const provider: OAuthProvider & { logout?: typeof logout } = {
-      name: 'anthropic',
+      name: 'claudecode',
       initiateAuth: vi.fn().mockResolvedValue({
         access_token: 'fresh-token',
         token_type: 'Bearer',
@@ -41,7 +41,7 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
     manager.registerProvider(provider);
 
     await tokenStore.saveToken(
-      'anthropic',
+      'claudecode',
       {
         access_token: 'foreground-token',
         token_type: 'Bearer',
@@ -50,7 +50,7 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
       'foreground-bucket',
     );
     await tokenStore.saveToken(
-      'anthropic',
+      'claudecode',
       {
         access_token: 'named-bucket-token',
         token_type: 'Bearer',
@@ -58,10 +58,10 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
       },
       'named-bucket',
     );
-    manager.setSessionBucket('anthropic', 'foreground-bucket');
+    manager.setSessionBucket('claudecode', 'foreground-bucket');
     mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'named-bucket' });
 
-    const statuses = await manager.getAuthStatusWithBuckets('anthropic');
+    const statuses = await manager.getAuthStatusWithBuckets('claudecode');
     expect(
       statuses.find((status) => status.bucket === 'named-bucket')
         ?.isSessionBucket,
@@ -75,14 +75,14 @@ describe('Issue #1468 getProfileBuckets case 13', () => {
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('named-bucket-token');
     expect(usage).toStrictEqual({ bucket: 'named-bucket' });
 
-    await manager.logout('anthropic');
+    await manager.logout('claudecode');
 
     expect(logout).toHaveBeenCalledTimes(1);
     await expect(
-      tokenStore.getToken('anthropic', 'named-bucket'),
+      tokenStore.getToken('claudecode', 'named-bucket'),
     ).resolves.toBeNull();
     await expect(
-      tokenStore.getToken('anthropic', 'foreground-bucket'),
+      tokenStore.getToken('claudecode', 'foreground-bucket'),
     ).resolves.not.toBeNull();
   });
 });

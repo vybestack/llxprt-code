@@ -80,7 +80,7 @@ describe('OAuth Provider Premature Initialization', () => {
     const settings = createLoadedSettings({
       oauthEnabledProviders: {
         codex: false,
-        anthropic: false,
+        claudecode: false,
       },
     });
     oauthManager = new OAuthManager(tokenStore, settings);
@@ -131,7 +131,7 @@ describe('OAuth Provider Premature Initialization', () => {
       // Verify all providers are registered
       const providers = oauthManager.getSupportedProviders();
       expect(providers).toContain('codex');
-      expect(providers).toContain('anthropic');
+      expect(providers).toContain('claudecode');
     });
 
     /**
@@ -156,7 +156,7 @@ describe('OAuth Provider Premature Initialization', () => {
 
       // Verify MCP operations completed successfully
       expect(providers).toContain('codex');
-      expect(providers).toContain('anthropic');
+      expect(providers).toContain('claudecode');
       expect(statuses).toHaveLength(2);
 
       // Verify no OAuth initialization was triggered
@@ -164,7 +164,7 @@ describe('OAuth Provider Premature Initialization', () => {
 
       // Verify providers remain unauthenticated (no OAuth triggered)
       const codexStatus = statuses.find((s) => s.provider === 'codex');
-      const anthropicStatus = statuses.find((s) => s.provider === 'anthropic');
+      const anthropicStatus = statuses.find((s) => s.provider === 'claudecode');
 
       expect(codexStatus?.authenticated).toBe(false);
       expect(anthropicStatus?.authenticated).toBe(false);
@@ -193,7 +193,7 @@ describe('OAuth Provider Premature Initialization', () => {
       // Verify operations completed
       expect(statuses).toHaveLength(2);
       expect(availableProviders).toContain('codex');
-      expect(availableProviders).toContain('anthropic');
+      expect(availableProviders).toContain('claudecode');
 
       // Verify no OAuth initialization was triggered
       expect(mockFs.readFile).not.toHaveBeenCalled();
