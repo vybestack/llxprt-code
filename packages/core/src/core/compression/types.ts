@@ -9,6 +9,7 @@
  * @plan PLAN-20260211-HIGHDENSITY.P03
  * @plan PLAN-20260211-HIGHDENSITY.P05
  * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+ * @plan PLAN-20260727-ISSUE2602
  * @requirement REQ-CS-001.1, REQ-CS-001.4, REQ-CS-001.5, REQ-CS-001.6, REQ-CS-010.3
  * @requirement REQ-HD-001.1, REQ-HD-001.2, REQ-HD-001.5, REQ-HD-001.8, REQ-HD-001.9, REQ-HD-004.1
  * @requirement REQ-CR-001, REQ-CR-002
@@ -168,6 +169,50 @@ export interface CompressionContext {
 }
 
 /**
+ * Well-known reason codes for a structural compression no-op.
+ *
+ * A structural no-op occurs when the strategy's splitting logic
+ * determines it cannot produce a valid compressed candidate without
+ * violating its own invariants (e.g. a four-message minimum middle, or
+ * tool-call boundary integrity). This is distinct from a transient
+ * LLM/provider failure (which is retryable) and from an empty summary
+ * (which is a permanent error).
+ *
+ * @plan PLAN-20260727-ISSUE2602
+ */
+export const STRUCTURAL_NOOP_REASONS = [
+  /**
+   * The middle/compressible region had fewer than the strategy's minimum
+   * compressible messages after the initial split. E.g. MiddleOutStrategy
+   * when `toCompress.length < MINIMUM_MIDDLE_MESSAGES`, OneShotStrategy
+   * when `toCompress.length < MINIMUM_COMPRESS_MESSAGES`.
+   */
+  'too-few-compressible',
+  /**
+   * The compressible region was shrunk below the strategy's minimum by a
+   * later preservation step (last-user-prompt preservation, tool-boundary
+   * adjustment, or density pruning), so the split no longer has enough
+   * messages to summarize safely.
+   */
+  'shrunk-below-minimum',
+  /** The input history was empty. */
+  'empty-history',
+  /**
+   * The input was already at or below the target size, so no truncation
+   * or summarization is structurally possible (used by TopDownTruncation).
+   */
+  'already-under-target',
+  /**
+   * A density-optimization or tail-covering pass determined the whole
+   * history is covered by the preserved tail / no removable unit remains
+   * (used by HighDensity / tail-cover paths).
+   */
+  'tail-covers-all',
+] as const;
+
+export type StructuralNoopReason = (typeof STRUCTURAL_NOOP_REASONS)[number];
+
+/**
  * @plan PLAN-20260211-HIGHDENSITY.P03
  * @requirement REQ-HD-001.1, REQ-HD-001.2
  * @pseudocode strategy-interface.md lines 47-59
@@ -176,10 +221,19 @@ export interface CompressionStrategy {
   readonly name: CompressionStrategyName;
   readonly requiresLLM: boolean;
   readonly trigger: StrategyTrigger;
-  compress(context: CompressionContext): Promise<CompressionResult>;
+  compress(context: CompressionContext): Promise<StrategyCompressionResult>;
   optimize?(history: readonly IContent[], config: DensityConfig): DensityResult;
 }
 
+/**
+ * @deprecated Superseded by {@link StrategyCompressionResult}.
+ * CompressionStrategy.compress now returns the discriminated union; this
+ * interface is retained only as the shape of the 'applied' variant's payload
+ * and for backward-compatible consumers. New code should use
+ * StrategyCompressionResult.
+ *
+ * @plan PLAN-20260727-ISSUE2602
+ */
 export interface CompressionResult {
   newHistory: IContent[];
   metadata: CompressionResultMetadata;
@@ -196,6 +250,32 @@ export interface CompressionResultMetadata {
   /** Actual token usage returned by the LLM during compression, if available. */
   usage?: UsageStats;
 }
+
+/**
+ * Discriminated outcome returned by {@link CompressionStrategy.compress}.
+ *
+ * @plan PLAN-20260727-ISSUE2602
+ *
+ * - `applied`: the strategy produced a real compressed candidate. `newHistory`
+ *   may legitimately differ from the input by only a small amount, but it is
+ *   a genuine compression result, not an unchanged pass-through.
+ * - `noop`: the strategy made a *structural* determination that it could not
+ *   produce a valid compressed candidate and returned the history unchanged.
+ *   Callers must NOT treat this as a successful compression; it is the basis
+ *   for {@link PerformCompressionResult.NOOP} and for middle-out→one-shot
+ *   routing.
+ */
+export type StrategyCompressionResult =
+  | {
+      kind: 'applied';
+      newHistory: IContent[];
+      metadata: CompressionResultMetadata;
+    }
+  | {
+      kind: 'noop';
+      reason: StructuralNoopReason;
+      metadata: CompressionResultMetadata;
+    };
 
 // ---------------------------------------------------------------------------
 // Errors

@@ -98,6 +98,10 @@ describe('TopDownTruncationStrategy ignores activeTodos (REQ-HD-011.4)', () => {
     const resultWith = await strategy.compress(contextWith);
 
     expect(resultWith.metadata.strategyUsed).toBe('top-down-truncation');
-    expect(resultWith.newHistory.length).toBe(resultWithout.newHistory.length);
+    // activeTodos must not alter the structural outcome
+    expect(resultWith.kind).toBe(resultWithout.kind);
+    expect(resultWith.metadata.compressedMessageCount).toBe(
+      resultWithout.metadata.compressedMessageCount,
+    );
   });
 });

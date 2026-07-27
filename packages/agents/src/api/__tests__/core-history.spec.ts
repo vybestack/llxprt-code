@@ -131,8 +131,10 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       const result = await agent.compress({ promptId: 'caller-compress-id' });
       expect(result.promptId).toBe('caller-compress-id');
 
-      // status is one of the documented outcomes
-      expect(['compressed', 'skipped', 'failed']).toContain(result.status);
+      // status is one of the documented outcomes (issue #2602 added 'noop')
+      expect(['compressed', 'skipped', 'failed', 'noop']).toContain(
+        result.status,
+      );
 
       // when compressed, numeric token fields are populated and monotonic.
       // Evaluate the contract as a single boolean to avoid conditional expects.

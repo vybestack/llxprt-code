@@ -341,10 +341,9 @@ describe('TopDownTruncationStrategy', () => {
       const strategy = new TopDownTruncationStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toHaveLength(5);
-      for (let i = 0; i < 5; i++) {
-        expect(result.newHistory[i]).toBe(history[i]);
-      }
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('already-under-target');
+      expect(result.metadata.originalMessageCount).toBe(5);
     });
 
     it('removes specific number of messages to get under target', async () => {
@@ -646,7 +645,8 @@ describe('TopDownTruncationStrategy', () => {
       const strategy = new TopDownTruncationStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toHaveLength(0);
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('empty-history');
       expect(result.metadata.originalMessageCount).toBe(0);
       expect(result.metadata.compressedMessageCount).toBe(0);
       expect(result.metadata.llmCallMade).toBe(false);
