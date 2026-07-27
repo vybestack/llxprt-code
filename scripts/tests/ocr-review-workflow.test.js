@@ -314,7 +314,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       'Skipping OCR preview because an earlier OCR setup/configuration failure was recorded.',
       'echo "preview" > ocr-phase.txt',
       'command -v ocr',
-      'ocr review --preview --from "$BASE_SHA" --to "$HEAD_SHA"',
+      'ocr review --preview --from "$FROM_SHA" --to "$HEAD_SHA"',
       'echo "::warning::Could not verify OCR preview scope for changed test files."',
       'echo "$status" > ocr-exit-code.txt',
       'mark_infrastructure_failure "preview" "OCR preview command failed"',
@@ -346,7 +346,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       '"**/__tests__/**"',
       '"**/tests/**"',
       '"**/test/**"',
-      'git diff --name-only --diff-filter=d "${BASE_SHA}..${HEAD_SHA}"',
+      'git diff --name-only --diff-filter=d "${FROM_SHA}..${HEAD_SHA}"',
     ]);
   });
 
@@ -600,10 +600,21 @@ describe('.github/workflows/ocr-review.yml', () => {
   });
 
   it('creates non-telemetry placeholders before producing telemetry', () => {
+    const uploadStep = stepNamed(codeReviewJob, 'Upload OCR artifacts');
     const placeholderRun = commandText(
       stepNamed(codeReviewJob, 'Ensure OCR artifact placeholders exist'),
     );
-    expect(placeholderRun).toContain('ocr-routing-decisions.json');
+    const coverageEnsureRun = commandText(
+      stepNamed(codeReviewJob, 'Ensure valid OCR coverage report'),
+    );
+    const uploadPath = uploadStep.with?.path ?? '';
+    for (const artifact of uploadPath.trim().split(/\s+/)) {
+      if (artifact === 'ocr-coverage-report.json') {
+        expect(coverageEnsureRun).toContain(artifact);
+      } else {
+        expect(placeholderRun).toContain(artifact);
+      }
+    }
     expect(placeholderRun).not.toContain('ocr-telemetry.json');
   });
 

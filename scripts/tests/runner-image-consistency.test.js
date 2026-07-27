@@ -26,6 +26,7 @@ import * as path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const WORKFLOW_DIR = path.join(ROOT, '.github/workflows');
+const SHARD_SELECTOR = path.join(ROOT, 'scripts/affected-test-shards.ts');
 
 /**
  * Collect every literal runner image referenced anywhere in the workflow
@@ -54,8 +55,9 @@ function collectRunnerImages() {
     images.set(image, existing);
   };
 
-  // A runner reference is either a bare string or a list of them; normalizing
-  // here keeps the traversal below flat.
+  // A runner reference is either a bare string, a list of strings, or a
+  // dynamic-matrix expression whose concrete rows are produced by the shard
+  // selector. The selector's output function owns those literal runner images.
   const recordAll = (value, file) => {
     const entries = Array.isArray(value) ? value : [value];
     for (const entry of entries) {
@@ -63,8 +65,20 @@ function collectRunnerImages() {
     }
   };
 
+  const recordShardSelectorImages = (file) => {
+    const selector = fs.readFileSync(SHARD_SELECTOR, 'utf8');
+    const osLoop = selector.match(/for \(const os of \[([^\]]+)\]\)/);
+    if (!osLoop) {
+      throw new Error('affected-test-shards.ts must define its runner OS rows');
+    }
+    for (const match of osLoop[1].matchAll(/'([^']+)'/g)) {
+      record(match[1], file);
+    }
+  };
+
   // `runs-on` names an image directly; a matrix `os` list feeds `runs-on`
-  // through expression indirection. Both are sources of runner images.
+  // through expression indirection. Dynamic shard rows are emitted by the
+  // selector and consumed through matrix.include.
   const isRunnerKey = (key) => key === 'runs-on' || key === 'os';
 
   const walk = (node, file) => {
@@ -80,6 +94,13 @@ function collectRunnerImages() {
     for (const [key, value] of Object.entries(node)) {
       if (isRunnerKey(key)) {
         recordAll(value, file);
+      }
+      if (
+        key === 'include' &&
+        typeof value === 'string' &&
+        value.includes('needs.shard_selector.outputs.matrix')
+      ) {
+        recordShardSelectorImages(file);
       }
       walk(value, file);
     }
@@ -120,15 +141,12 @@ describe('runner image consistency (#2688)', () => {
     const release = yaml.load(
       fs.readFileSync(path.join(WORKFLOW_DIR, 'release.yml'), 'utf8'),
     );
-    const ci = yaml.load(
-      fs.readFileSync(path.join(WORKFLOW_DIR, 'ci.yml'), 'utf8'),
-    );
 
     const releaseRunner = release.jobs?.release?.['runs-on'];
-    const ciOsList = ci.jobs?.test?.strategy?.matrix?.os ?? [];
+    const ciRunners = collectRunnerImages();
 
     expect(releaseRunner).toBe('ubuntu-latest');
-    expect(ciOsList).toContain(releaseRunner);
+    expect(ciRunners.get(releaseRunner)).toContain('ci.yml');
   });
 
   it('exercises every referenced runner image in more than one workflow', () => {

@@ -22,7 +22,7 @@ import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
 } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
-import type { AnsiOutput } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
+import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 /**
@@ -31,7 +31,7 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 export interface ToolExecutionContext {
   call: ScheduledToolCall;
   signal: AbortSignal;
-  onLiveOutput?: (callId: string, chunk: string | AnsiOutput) => void;
+  onLiveOutput?: (callId: string, update: LiveOutputUpdate) => void;
   onPid?: (callId: string, pid: number) => void;
 }
 
@@ -164,8 +164,8 @@ export class ToolExecutor {
     }
 
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
-      ? (outputChunk: string | AnsiOutput) => {
-          onLiveOutput?.(callId, outputChunk);
+      ? (update: LiveOutputUpdate) => {
+          onLiveOutput?.(callId, update);
         }
       : undefined;
     const setPidCallback = (pid: number) => {

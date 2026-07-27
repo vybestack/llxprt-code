@@ -34,63 +34,95 @@ function allRunCommands(job) {
 
 describe('Issue #2147: SecureStore backend coverage is separated from full CI suite', () => {
   let workflow;
-  let testJob;
+  let testShardJob;
+  let testAggregatorJob;
   let secureStoreJob;
 
   beforeAll(() => {
     workflow = loadCiWorkflow();
-    testJob = workflow.jobs?.test;
+    // Issue #2707: the old single `test` job is now a `test_shard` matrix job
+    // plus a virtual `test` aggregator that gates branch protection.
+    testShardJob = workflow.jobs?.test_shard;
+    testAggregatorJob = workflow.jobs?.test;
     secureStoreJob = workflow.jobs?.secure_store_backend;
   });
 
-  it('runs the full test suite once per OS under normal keyring behavior', () => {
-    expect(testJob, 'ci.yml must contain the full-suite test job').toBeTruthy();
-    expect(testJob.name).toBe('Test (${{ matrix.os }})');
-    expect(testJob.strategy?.matrix?.os).toEqual([
-      'ubuntu-latest',
-      'macos-latest',
-    ]);
-    expect(testJob.strategy?.matrix?.['node-version']).toEqual(['24.x']);
-    expect(testJob.strategy?.matrix).not.toHaveProperty('secure-store-mode');
+  it('runs the full test suite once per OS per shard under normal keyring behavior', () => {
+    expect(
+      testShardJob,
+      'ci.yml must contain the test_shard matrix job',
+    ).toBeTruthy();
+    expect(testShardJob.name).toBe(
+      'Test (${{ matrix.os }}) [${{ matrix.shard }}]',
+    );
+    expect(testShardJob.strategy?.matrix?.include).toContain(
+      '${{ fromJSON(needs.shard_selector.outputs.matrix) }}',
+    );
+    expect(testShardJob['runs-on']).toBe('${{ matrix.os }}');
+    expect(testShardJob.strategy?.matrix).not.toHaveProperty(
+      'secure-store-mode',
+    );
 
-    const runTests = stepNamed(testJob, 'Run tests and generate reports');
-    expect(runTests.run).toBe('npm run test');
+    const runTests = stepNamed(testShardJob, 'Run shard tests (issue #2707)');
+    expect(runTests.run).toContain('bun scripts/test.ts --shard');
     expect(runTests.env ?? {}).not.toHaveProperty(
       'LLXPRT_SECURE_STORE_FORCE_FALLBACK',
     );
 
+    // The virtual aggregator job preserves the `Test` required-check name.
+    expect(
+      testAggregatorJob,
+      'ci.yml must contain the virtual Test aggregator job',
+    ).toBeTruthy();
+    expect(testAggregatorJob.name).toBe('Test');
+
     const forkArtifact = stepNamed(
-      testJob,
+      testShardJob,
       'Upload Test Results Artifact (for forks)',
     );
     expect(forkArtifact.with?.name).toBe(
-      'test-results-fork-${{ matrix.node-version }}-${{ matrix.os }}',
+      'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
     );
 
-    const coverageArtifact = stepNamed(testJob, 'Upload coverage reports');
+    // Coverage is uploaded only from cli and core shards (issue #2707).
+    const coverageArtifact = stepNamed(testShardJob, 'Upload coverage reports');
+    expect(coverageArtifact.if).toContain("matrix.shard == 'cli'");
+    expect(coverageArtifact.if).toContain("matrix.shard == 'core'");
     expect(coverageArtifact.with?.name).toBe(
-      'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}',
+      'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}',
     );
 
-    const report = stepNamed(testJob, 'Publish Test Report (for non-forks)');
-    expect(report.with?.name).toBe(
-      'Test Results (Node ${{ matrix.node-version }}, ${{ matrix.os }})',
+    const report = stepNamed(
+      testShardJob,
+      'Publish Test Report (for non-forks)',
     );
+    expect(report.if).toContain("matrix.shard != 'scripts'");
+    expect(report.with?.name).toContain('${{ matrix.shard }}');
   });
 
-  it('keeps coverage comment downloads aligned to the full-suite artifact name', () => {
+  it('keeps coverage comment downloads aligned to the per-shard artifact names', () => {
     const postCoverage = workflow.jobs?.post_coverage_comment;
     expect(
       postCoverage,
       'ci.yml must contain post_coverage_comment',
     ).toBeTruthy();
 
-    const download = stepNamed(
+    // Issue #2707: coverage is now per-shard. post_coverage_comment downloads
+    // the cli and core shard artifacts separately.
+    const downloadCli = stepNamed(
       postCoverage,
-      'Download coverage reports artifact',
+      'Download CLI coverage (cli shard)',
     );
-    expect(download.with?.name).toBe(
-      'coverage-reports-${{ matrix.node-version }}-${{ matrix.os }}',
+    expect(downloadCli.with?.name).toBe(
+      'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}',
+    );
+
+    const downloadCore = stepNamed(
+      postCoverage,
+      'Download core coverage (core shard)',
+    );
+    expect(downloadCore.with?.name).toBe(
+      'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}',
     );
   });
 
@@ -339,5 +371,58 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
       'secure-store-results-fork-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}',
     );
     expect(artifact.with?.path).toBe('packages/storage/junit.secure-store.xml');
+  });
+});
+
+describe('Issue #2709: shard_selector and Test aggregator wiring', () => {
+  let workflow;
+  let shardSelectorJob;
+  let testAggregatorJob;
+
+  beforeAll(() => {
+    workflow = loadCiWorkflow();
+    shardSelectorJob = workflow.jobs?.shard_selector;
+    testAggregatorJob = workflow.jobs?.test;
+  });
+
+  it('shard_selector is least-privilege, self-contained, and does not suppress gh failures', () => {
+    expect(shardSelectorJob).toBeTruthy();
+    // Least-privilege permissions.
+    expect(shardSelectorJob.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
+    // Unused doc_change_filter dependency removed.
+    expect(shardSelectorJob.needs).not.toContain('doc_change_filter');
+    expect(shardSelectorJob.needs).toContain('skip_check');
+    // Bounded timeout.
+    expect(shardSelectorJob['timeout-minutes']).toBeGreaterThan(0);
+    // Checkout does not persist credentials.
+    const checkout = stepNamed(shardSelectorJob, 'Checkout');
+    expect(checkout.with?.['persist-credentials']).toBe(false);
+    // Pinned setup-node with .nvmrc; no dependency install.
+    const setupNode = stepNamed(shardSelectorJob, 'Set up Node.js');
+    expect(setupNode.uses).toContain('actions/setup-node@');
+    expect(setupNode.with?.['node-version-file']).toBe('.nvmrc');
+    const stepNames = (shardSelectorJob.steps ?? []).map((s) => s.name);
+    expect(stepNames).not.toContain('Install dependencies');
+    expect(stepNames).not.toContain('Setup Bun');
+    // gh api pagination failures must not be suppressed (no `|| true`).
+    const changed = stepNamed(shardSelectorJob, 'Determine changed files');
+    expect(changed.run).not.toContain('|| true');
+  });
+
+  it('Test aggregator honors explicit skip_check but stays red for selector failure', () => {
+    expect(testAggregatorJob).toBeTruthy();
+    expect(testAggregatorJob.needs).toContain('skip_check');
+    expect(testAggregatorJob.needs).toContain('shard_selector');
+    const check = stepNamed(testAggregatorJob, 'Check shard results');
+    // The should_skip=true branch runs before the selector-result check.
+    const skipIdx = check.run.indexOf('should_skip');
+    const selectorIdx = check.run.indexOf('selector_result');
+    expect(skipIdx).toBeGreaterThanOrEqual(0);
+    expect(selectorIdx).toBeGreaterThan(skipIdx);
+    // Non-skip selector failure stays red.
+    expect(check.run).toContain('Shard selector did not succeed');
   });
 });

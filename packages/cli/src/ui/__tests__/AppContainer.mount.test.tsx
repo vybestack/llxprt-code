@@ -214,10 +214,7 @@ vi.mock('../../hooks/useMemoryMonitor.js', () => ({
 }));
 
 vi.mock('../../hooks/useTodoPausePreserver.js', () => ({
-  useTodoPausePreserver: vi.fn(() => ({
-    handleUserInputSubmit: vi.fn(),
-  })),
-  TodoPausePreserver: vi.fn(),
+  shouldClearTodos: vi.fn(() => false),
 }));
 
 vi.mock('../../hooks/useAutoAcceptIndicator.js', () => ({
@@ -381,6 +378,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 vi.mock('node:process', () => ({
   default: {
+    cwd: vi.fn(() => process.cwd()),
     exit: vi.fn(),
     env: {},
   },

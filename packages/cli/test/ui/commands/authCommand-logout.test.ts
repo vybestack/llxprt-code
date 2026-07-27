@@ -123,7 +123,7 @@ describe.skipIf(skipInCI)(
     afterEach(async () => {
       try {
         await tokenStore.removeToken('codex');
-        await tokenStore.removeToken('anthropic');
+        await tokenStore.removeToken('claudecode');
       } catch {
         // Ignore cleanup errors
       }
@@ -198,7 +198,7 @@ describe.skipIf(skipInCI)(
       expect(messageResult.messageType).toBe('error');
       expect(messageResult.content).toContain('Supported providers');
       expect(messageResult.content).toContain('codex');
-      expect(messageResult.content).toContain('anthropic');
+      expect(messageResult.content).toContain('claudecode');
     });
 
     /**
@@ -344,7 +344,7 @@ describe.skipIf(skipInCI)(
     afterEach(async () => {
       try {
         await tokenStore.removeToken('codex');
-        await tokenStore.removeToken('anthropic');
+        await tokenStore.removeToken('claudecode');
       } catch {
         // Ignore cleanup errors
       }
@@ -434,7 +434,7 @@ describe.skipIf(skipInCI)(
 
       // Should include all registered providers
       expect(availableProviders).toContain('codex');
-      expect(availableProviders).toContain('anthropic');
+      expect(availableProviders).toContain('claudecode');
 
       // Test that error messages include these providers
       const result = await authCommand.execute(context, 'unknown logout');
@@ -470,7 +470,7 @@ describe.skipIf(skipInCI)(
     afterEach(async () => {
       try {
         await tokenStore.removeToken('codex');
-        await tokenStore.removeToken('anthropic');
+        await tokenStore.removeToken('claudecode');
       } catch {
         // Ignore cleanup errors
       }
@@ -556,7 +556,7 @@ describe.skipIf(skipInCI)(
       const testCases = [
         { args: 'codex logout', expectSuccess: true },
         { args: 'invalid logout', expectSuccess: false },
-        { args: 'anthropic logout', expectSuccess: true },
+        { args: 'claudecode logout', expectSuccess: true },
       ];
 
       for (const testCase of testCases) {
@@ -634,7 +634,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
   afterEach(async () => {
     try {
       await tokenStore.removeToken('codex');
-      await tokenStore.removeToken('anthropic');
+      await tokenStore.removeToken('claudecode');
     } catch {
       // Ignore cleanup errors
     }
@@ -650,7 +650,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 1: Command parsing with random whitespace
    */
   it.prop([
-    fc.constantFrom('codex', 'anthropic'),
+    fc.constantFrom('codex', 'claudecode'),
     fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5), // Only whitespace, shorter
     fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5),
   ])(
@@ -676,7 +676,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 3: Command argument normalization
    */
   it.prop([
-    fc.constantFrom('codex', 'anthropic'),
+    fc.constantFrom('codex', 'claudecode'),
     fc.constantFrom('logout', 'LOGOUT', 'Logout', 'logOut', 'LogOut'),
   ])(
     'should normalize command argument case variations',
@@ -698,7 +698,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * Property Test 4: Concurrent command execution
    */
   it.prop([
-    fc.array(fc.constantFrom('codex', 'anthropic'), {
+    fc.array(fc.constantFrom('codex', 'claudecode'), {
       minLength: 2,
       maxLength: 10,
     }),
@@ -735,7 +735,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    * @requirement REQ-002
    * Property Test 5: Message content validation
    */
-  it.prop([fc.constantFrom('codex', 'anthropic')])(
+  it.prop([fc.constantFrom('codex', 'claudecode')])(
     'should always include provider name in response messages',
     async (provider) => {
       const result = await authCommand.execute(context, `${provider} logout`);

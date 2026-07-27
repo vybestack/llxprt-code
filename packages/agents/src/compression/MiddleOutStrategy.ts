@@ -32,9 +32,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
+  StrategyCompressionResult,
+  StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -89,17 +90,23 @@ export class MiddleOutStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  async compress(context: CompressionContext): Promise<CompressionResult> {
+  async compress(
+    context: CompressionContext,
+  ): Promise<StrategyCompressionResult> {
     const { history } = context;
 
     if (history.length === 0) {
-      return this.noCompressionResult(history);
+      return this.structuralNoop(history, 'empty-history');
     }
 
     let { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
 
     if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
-      return this.noCompressionResult(history);
+      return this.structuralNoop(history, 'too-few-compressible', {
+        toKeepTop,
+        toKeepBottom,
+        middleCompressed: toCompress.length,
+      });
     }
 
     const {
@@ -112,7 +119,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
     toKeepBottom = adjustedBottom;
 
     if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
-      return this.noCompressionResult(history);
+      return this.structuralNoop(history, 'shrunk-below-minimum', {
+        toKeepTop,
+        toKeepBottom,
+        middleCompressed: 0,
+      });
     }
 
     const compressionProfile =
@@ -142,17 +153,16 @@ export class MiddleOutStrategy implements CompressionStrategy {
       lastUserPromptContext,
     );
 
-    return {
+    const metadata = this.buildMetadata(
+      history,
       newHistory,
-      metadata: this.buildMetadata(
-        history,
-        newHistory,
-        toKeepTop,
-        toCompress,
-        toKeepBottom,
-        capturedUsage,
-      ),
-    };
+      toKeepTop,
+      toCompress,
+      toKeepBottom,
+      capturedUsage,
+    );
+
+    return { kind: 'applied', newHistory, metadata };
   }
 
   private buildCompressionRequest(
@@ -532,7 +542,12 @@ ${messageText}`,
     const summaryEntry: IContent = {
       speaker: 'human' as const,
       blocks: [{ type: 'text' as const, text: summary }],
-      ...(usage ? { metadata: { usage } } : {}),
+      metadata: {
+        isSummary: true,
+        synthetic: true,
+        reason: 'compression-state-snapshot',
+        ...(usage ? { usage } : {}),
+      },
     };
 
     return [
@@ -549,22 +564,35 @@ ${messageText}`,
             ),
           },
         ],
+        metadata: {
+          synthetic: true,
+          reason: 'compression-continuation',
+        },
       },
       ...toKeepBottom,
     ];
   }
 
-  private noCompressionResult(history: readonly IContent[]): CompressionResult {
+  private structuralNoop(
+    history: readonly IContent[],
+    reason: StructuralNoopReason,
+    split?: {
+      toKeepTop: readonly IContent[];
+      toKeepBottom: readonly IContent[];
+      middleCompressed: number;
+    },
+  ): StrategyCompressionResult {
     return {
-      newHistory: [...history],
+      kind: 'noop',
+      reason,
       metadata: {
         originalMessageCount: history.length,
         compressedMessageCount: history.length,
         strategyUsed: 'middle-out',
         llmCallMade: false,
-        topPreserved: 0,
-        bottomPreserved: 0,
-        middleCompressed: 0,
+        topPreserved: split?.toKeepTop.length ?? 0,
+        bottomPreserved: split?.toKeepBottom.length ?? 0,
+        middleCompressed: split?.middleCompressed ?? 0,
       },
     };
   }

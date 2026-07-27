@@ -446,7 +446,6 @@ function setupHookWithAgent(agent: Agent): HookHarness {
       flushPendingHistoryItem: vi.fn(),
       clearPendingHistoryItem: vi.fn(),
       performMemoryRefresh: vi.fn().mockResolvedValue(undefined),
-      onTodoPause: vi.fn(),
       markToolsAsDisplayCleared: vi.fn(),
       onToolCallsUpdate,
       outputUpdateHandler: vi.fn(),

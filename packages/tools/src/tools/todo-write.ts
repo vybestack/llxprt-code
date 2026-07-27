@@ -5,7 +5,12 @@
  */
 
 import { Type } from '../types/schema-type.js';
-import { BaseTool, type ToolResult, Kind } from './tools.js';
+import {
+  BaseTool,
+  type ToolResult,
+  Kind,
+  type LiveOutputUpdate,
+} from './tools.js';
 import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
 import { DEFAULT_AGENT_ID } from './todo-store.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
@@ -147,7 +152,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   async execute(
     params: TodoWriteParams,
     _signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const normalizedTodos = this.normalizeTodos(params.todos);
     const validation = this.validateAndFilterTodos(normalizedTodos);

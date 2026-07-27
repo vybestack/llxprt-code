@@ -192,8 +192,16 @@ export async function createOpenAIClient(
     ? createDeveloperRoleToSystemFetch(customFetch ?? fetch)
     : customFetch;
 
+  // The @ai-sdk/openai factory validates `apiKey` via `loadApiKey`, which throws
+  // `LoadAPIKeyError` for `undefined` before any request is made. The guard above
+  // already throws when auth is required but no token is available, so at this
+  // point either a real token is present or the endpoint is auth-exempt (local /
+  // requiresAuth === false). `authToken` is coalesced to a string above, so
+  // passing it directly mirrors the classic openai provider's `authToken || ''`
+  // behavior and prevents `loadApiKey` from throwing for local servers like
+  // Ollama. See issue #2506.
   return createOpenAI({
-    apiKey: authToken !== '' ? authToken : undefined,
+    apiKey: authToken,
     baseURL: baseURL !== '' ? baseURL : undefined,
     headers: headers && Object.keys(headers).length > 0 ? headers : undefined,
     fetch: fetchWithCompatibility,

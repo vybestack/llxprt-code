@@ -288,6 +288,12 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     });
     const pending = makeUserMessage('latest user request after tool result');
     const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    // This test exercises the callback recompose path after successful
+    // compression, not compression semantics, so mock COMPRESSED.
+    vi.spyOn(
+      chat['compressionHandler'],
+      'performCompression',
+    ).mockResolvedValue(PerformCompressionResult.COMPRESSED);
 
     let capturedCallback: CompressionCallback | null = null;
     const providerWithCallback = {
@@ -379,6 +385,12 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       ],
     };
     const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    // This test exercises the callback recompose path after successful
+    // compression, not compression semantics, so mock COMPRESSED.
+    vi.spyOn(
+      chat['compressionHandler'],
+      'performCompression',
+    ).mockResolvedValue(PerformCompressionResult.COMPRESSED);
 
     let capturedCallback: CompressionCallback | null = null;
     const providerWithCallback = {

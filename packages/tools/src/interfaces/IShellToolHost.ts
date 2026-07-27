@@ -9,6 +9,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
+
 /**
  * Tools-owned interface for shell tool host dependencies.
  *
@@ -210,6 +212,6 @@ export interface IShellToolHost {
  */
 export interface ShellOutputEvent {
   type: 'data' | 'binary_detected' | 'binary_progress';
-  chunk?: string;
+  chunk?: string | AnsiOutput;
   bytesReceived?: number;
 }

@@ -29,7 +29,7 @@ import type {
 import type {
   CompressionStrategy,
   CompressionContext,
-  CompressionResult,
+  StrategyCompressionResult,
   CompressionResultMetadata,
   DensityResult,
   DensityConfig,
@@ -732,14 +732,16 @@ export class HighDensityStrategy implements CompressionStrategy {
    * 4. Truncate oldest entries if still over budget
    * 5. Return CompressionResult with metadata
    */
-  async compress(context: CompressionContext): Promise<CompressionResult> {
+  async compress(
+    context: CompressionContext,
+  ): Promise<StrategyCompressionResult> {
     const history = context.history;
     const originalCount = history.length;
 
-    // Edge case: empty history
     if (originalCount === 0) {
       return {
-        newHistory: [],
+        kind: 'noop',
+        reason: 'empty-history',
         metadata: this.buildMetadata(0, 0),
       };
     }
@@ -756,7 +758,8 @@ export class HighDensityStrategy implements CompressionStrategy {
     // If tail covers everything, return history unchanged (@pseudocode lines 29-34)
     if (tailStartIndex <= 0) {
       return {
-        newHistory: [...history] as IContent[],
+        kind: 'noop',
+        reason: 'tail-covers-all',
         metadata: this.buildMetadata(originalCount, originalCount),
       };
     }
@@ -806,6 +809,7 @@ export class HighDensityStrategy implements CompressionStrategy {
 
     // STEP 5: Return result (@pseudocode lines 87-91)
     return {
+      kind: 'applied',
       newHistory: finalHistory,
       metadata: this.buildMetadata(originalCount, finalHistory.length),
     };
@@ -828,17 +832,8 @@ export class HighDensityStrategy implements CompressionStrategy {
     history: readonly IContent[],
     index: number,
   ): number {
-    if (index <= 0 || index >= history.length) {
-      return index;
-    }
-
-    // If the entry at index is a tool_response, move backward to include
-    // any preceding tool entries and their AI tool_call
-    while (index > 0 && history[index].speaker === 'tool') {
-      index--;
-    }
-    // If we landed on an AI entry with tool_calls, include it only if
-    // its tool responses are in the tail (to avoid orphaning the call)
+    if (index <= 0 || index >= history.length) return index;
+    while (index > 0 && history[index].speaker === 'tool') index--;
     if (index > 0 && history[index].speaker === 'ai') {
       const toolCallIds = history[index].blocks
         .filter((b): b is ToolCallBlock => b.type === 'tool_call')
@@ -855,9 +850,7 @@ export class HighDensityStrategy implements CompressionStrategy {
                 ),
             ),
         );
-        if (!tailHasResponses) {
-          index++;
-        }
+        if (!tailHasResponses) index++;
       }
     }
     return index;
@@ -875,16 +868,17 @@ export class HighDensityStrategy implements CompressionStrategy {
     entry: IContent,
     fullHistory: readonly IContent[],
   ): IContent {
-    const newBlocks: ContentBlock[] = entry.blocks.map((block) => {
-      if (block.type !== 'tool_response') {
-        return block;
-      }
-      return {
-        ...block,
-        result: this.buildToolSummaryText(block, fullHistory),
-      } as ToolResponseBlock;
-    });
-    return { ...entry, blocks: newBlocks } as IContent;
+    return {
+      ...entry,
+      blocks: entry.blocks.map((block) =>
+        block.type !== 'tool_response'
+          ? block
+          : ({
+              ...block,
+              result: this.buildToolSummaryText(block, fullHistory),
+            } as ToolResponseBlock),
+      ),
+    } as IContent;
   }
 
   /**
@@ -950,11 +944,7 @@ export class HighDensityStrategy implements CompressionStrategy {
     return removeCount > 0 ? history.slice(removeCount) : history;
   }
 
-  /**
-   * @plan PLAN-20260211-HIGHDENSITY.P14
-   * @requirement REQ-HD-008.5
-   * @pseudocode high-density-compress.md lines 180-193
-   */
+  /** @plan PLAN-20260211-HIGHDENSITY.P14 @requirement REQ-HD-008.5 */
   private buildMetadata(
     originalMessageCount: number,
     compressedMessageCount: number,

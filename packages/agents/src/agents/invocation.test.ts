@@ -181,7 +181,10 @@ describe('SubagentInvocation', () => {
         expect.anything(),
         expect.any(Function),
       );
-      expect(updateOutput).toHaveBeenCalledWith('Subagent starting...\n');
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: 'Subagent starting...\n',
+      });
 
       expect(mockExecutorInstance.run).toHaveBeenCalledWith(params, signal);
 
@@ -219,9 +222,18 @@ describe('SubagentInvocation', () => {
 
       await invocation.execute(signal, updateOutput);
 
-      expect(updateOutput).toHaveBeenCalledWith('Subagent starting...\n');
-      expect(updateOutput).toHaveBeenCalledWith('🤖💭 Analyzing...');
-      expect(updateOutput).toHaveBeenCalledWith('🤖💭  Still thinking.');
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: 'Subagent starting...\n',
+      });
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: '🤖💭 Analyzing...',
+      });
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: '🤖💭  Still thinking.',
+      });
       expect(updateOutput).toHaveBeenCalledTimes(3); // Initial message + 2 thoughts
     });
 
@@ -250,7 +262,10 @@ describe('SubagentInvocation', () => {
 
       // Should only contain the initial "Subagent starting..." message
       expect(updateOutput).toHaveBeenCalledTimes(1);
-      expect(updateOutput).toHaveBeenCalledWith('Subagent starting...\n');
+      expect(updateOutput).toHaveBeenCalledWith({
+        mode: 'append',
+        data: 'Subagent starting...\n',
+      });
     });
 
     it('should run successfully without an updateOutput callback', async () => {

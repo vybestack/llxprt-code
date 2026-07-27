@@ -159,7 +159,7 @@ describe('AnthropicOAuthProvider', () => {
       expect.objectContaining({
         type: 'oauth_url', // Now expecting 'oauth_url' type
         text: expect.stringContaining(
-          'Please visit the following URL to authorize with Anthropic Claude',
+          'Please visit the following URL to authorize with Claude Code',
         ),
       }),
     );
@@ -187,7 +187,7 @@ describe('AnthropicOAuthProvider', () => {
     // This should now pass - we expect the item to have a url property
     expect(addItemCall).toHaveProperty('url');
     expect(addItemCall.text).toContain(
-      'Please visit the following URL to authorize with Anthropic Claude',
+      'Please visit the following URL to authorize with Claude Code',
     );
     expect(typeof addItemCall.url).toBe('string');
   });
@@ -232,7 +232,7 @@ describe('AnthropicOAuthProvider', () => {
       expect.objectContaining({
         type: 'oauth_url', // Now expecting 'oauth_url' type
         text: expect.stringContaining(
-          'Please visit the following URL to authorize with Anthropic Claude',
+          'Please visit the following URL to authorize with Claude Code',
         ),
       }),
     );
@@ -258,7 +258,7 @@ describe('AnthropicOAuthProvider', () => {
       expect.objectContaining({
         type: 'oauth_url', // Now expecting 'oauth_url' type
         text: expect.stringContaining(
-          'Please visit the following URL to authorize with Anthropic Claude',
+          'Please visit the following URL to authorize with Claude Code',
         ),
       }),
     );
@@ -282,5 +282,33 @@ describe('AnthropicOAuthProvider', () => {
 
     // This should now pass - we expect the URL to be copied to clipboard
     expect(ClipboardService.copyToClipboard).toHaveBeenCalled();
+  });
+
+  describe('claudecode identity (@issue:2274)', () => {
+    it('exposes claudecode as its public runtime identity name', () => {
+      expect(provider.name).toBe('claudecode');
+    });
+
+    it('requests the TokenStore under the exact key claudecode during initialization', async () => {
+      mockTokenStore.getToken.mockResolvedValue(null);
+
+      await provider.initializeToken();
+
+      expect(mockTokenStore.getToken).toHaveBeenCalledWith('claudecode');
+    });
+
+    it('reads the stored token under the exact key claudecode via getToken()', async () => {
+      const expectedToken = {
+        accessToken: 'stored-access',
+        refreshToken: 'stored-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      } as const;
+      mockTokenStore.getToken.mockResolvedValue(expectedToken);
+
+      const token = await provider.getToken();
+
+      expect(mockTokenStore.getToken).toHaveBeenCalledWith('claudecode');
+      expect(token).toStrictEqual(expectedToken);
+    });
   });
 });

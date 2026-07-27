@@ -100,9 +100,9 @@ function buildAuthItems(
 }> {
   return [
     {
-      key: 'oauth_anthropic',
-      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getStatusLabel('anthropic', authStatuses)}`,
-      value: 'oauth_anthropic',
+      key: 'oauth_claudecode',
+      label: `Claude Code (Claude.ai OAuth) ${enabledProviders.has('oauth_claudecode') ? '[ON]' : '[OFF]'}${getStatusLabel('claudecode', authStatuses)}`,
+      value: 'oauth_claudecode',
     },
     {
       key: 'oauth_codex',

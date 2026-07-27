@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { isCoverageEnabled } from '../../vitest.coverage.js';
 
 const require = createRequire(import.meta.url);
 
@@ -227,7 +228,7 @@ export default defineConfig({
       junit: 'junit.xml',
     },
     coverage: {
-      enabled: true,
+      enabled: isCoverageEnabled,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],

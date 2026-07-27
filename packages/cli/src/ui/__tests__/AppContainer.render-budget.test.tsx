@@ -275,10 +275,7 @@ vi.mock('../hooks/useMemoryMonitor.js', () => ({
 }));
 
 vi.mock('../hooks/useTodoPausePreserver.js', () => ({
-  useTodoPausePreserver: vi.fn(() => ({
-    handleUserInputSubmit: vi.fn(),
-  })),
-  TodoPausePreserver: vi.fn(),
+  shouldClearTodos: vi.fn(() => false),
 }));
 
 vi.mock('../hooks/useAutoAcceptIndicator.js', () => ({

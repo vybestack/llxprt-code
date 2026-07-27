@@ -4,17 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Set NODE_ENV to test if not already set
-process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+/**
+ * Full React/Ink test setup, composed over the node-safe base layer.
+ *
+ * The base setup (`test-setup-base.ts`) owns NODE_ENV, storage isolation,
+ * NO_COLOR removal, providerAliases mock, lazy ink stub mock, custom matchers,
+ * process-listener restoration, DebugLogger reset, cleanup-state reset, and
+ * provider runtime context reset. This module adds the React/global internals
+ * compatibility code and ink-testing-library render cleanup that only make
+ * sense when React/Ink rendering is exercised.
+ */
 
-// Isolate storage roots (profiles/settings/secure-store) to a temp dir so
-// tests never write into the real user config/data dirs.
-import './test-setup-storage-isolation.js';
-
-// Unset NO_COLOR environment variable to ensure consistent theme behavior between local and CI test runs
-if (process.env.NO_COLOR !== undefined) {
-  delete process.env.NO_COLOR;
-}
+import './test-setup-base.js';
 
 // Clear credential-proxy env vars so unit tests don't inherit the host
 // process's proxy configuration (which would skip proactive renewal
@@ -25,143 +26,8 @@ delete process.env.LLXPRT_CAPABILITY_FD;
 
 // Setup for React DOM testing - fix for React 19 internals issue
 import React from 'react';
-import {
-  clearActiveProviderRuntimeContext,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
 import { cleanup as cleanupInkRenders } from 'ink-testing-library';
-import { afterEach, vi } from 'vitest';
-import { __resetCleanupStateForTesting } from './src/utils/cleanup.js';
-
-// Mock provider aliases globally so tests don't need real config files
-// This prevents "Provider not found" errors when fs is mocked
-vi.mock(
-  '@vybestack/llxprt-code-providers/composition/providerAliases.js',
-  () => ({
-    loadProviderAliasEntries: () => [
-      {
-        alias: 'gemini',
-        config: {
-          name: 'gemini',
-          modelsDevProviderId: 'google',
-          baseProvider: 'gemini',
-          'base-url': 'https://generativelanguage.googleapis.com/v1beta',
-          defaultModel: 'gemini-2.5-pro',
-          apiKeyEnv: 'GEMINI_API_KEY',
-        },
-        filePath: '/mock/aliases/gemini.config',
-        source: 'builtin',
-      },
-      {
-        alias: 'openai',
-        config: {
-          name: 'openai',
-          modelsDevProviderId: 'openai',
-          baseProvider: 'openai',
-          'base-url': 'https://api.openai.com/v1',
-          defaultModel: 'gpt-4o',
-          apiKeyEnv: 'OPENAI_API_KEY',
-        },
-        filePath: '/mock/aliases/openai.config',
-        source: 'builtin',
-      },
-      {
-        alias: 'anthropic',
-        config: {
-          name: 'anthropic',
-          modelsDevProviderId: 'anthropic',
-          baseProvider: 'anthropic',
-          'base-url': 'https://api.anthropic.com/v1',
-          defaultModel: 'claude-sonnet-4-20250514',
-          apiKeyEnv: 'ANTHROPIC_API_KEY',
-        },
-        filePath: '/mock/aliases/anthropic.config',
-        source: 'builtin',
-      },
-      {
-        alias: 'kimi',
-        config: {
-          name: 'kimi',
-          modelsDevProviderId: 'kimi-for-coding',
-          baseProvider: 'openai',
-          'base-url': 'https://api.kimi.com/coding/v1',
-          defaultModel: 'kimi-for-coding',
-          description: 'Kimi For Coding OpenAI-compatible endpoint',
-          ephemeralSettings: {
-            'context-limit': 262144,
-            max_tokens: 32768,
-            'user-agent': 'RooCode/1.0',
-          },
-          modelDefaults: [
-            {
-              pattern: 'kimi.*',
-              ephemeralSettings: {
-                'reasoning.effort': 'medium',
-                'reasoning.enabled': true,
-                'reasoning.includeInResponse': true,
-                'reasoning.includeInContext': true,
-                'reasoning.stripFromContext': 'none',
-              },
-            },
-          ],
-        },
-        filePath: '/mock/aliases/kimi.config',
-        source: 'builtin',
-      },
-      {
-        alias: 'openai-responses',
-        config: {
-          name: 'openai-responses',
-          modelsDevProviderId: 'openai',
-          baseProvider: 'openai-responses',
-          'base-url': 'https://api.openai.com/v1',
-          defaultModel: 'gpt-4o',
-          apiKeyEnv: 'OPENAI_API_KEY',
-        },
-        filePath: '/mock/aliases/openai-responses.config',
-        source: 'builtin',
-      },
-      {
-        alias: 'codex',
-        config: {
-          name: 'codex',
-          modelsDevProviderId: 'openai',
-          baseProvider: 'openai-responses',
-          'base-url': 'https://chatgpt.com/backend-api/codex',
-          defaultModel: 'gpt-5.2',
-          description: 'OpenAI Codex (ChatGPT backend with OAuth)',
-          ephemeralSettings: {
-            'context-limit': 262144,
-          },
-        },
-        filePath: '/mock/aliases/codex.config',
-        source: 'builtin',
-      },
-      {
-        alias: 'deepseek',
-        config: {
-          name: 'deepseek',
-          modelsDevProviderId: 'deepseek',
-          baseProvider: 'openai',
-          'base-url': 'https://api.deepseek.com/v1',
-          defaultModel: 'deepseek-chat',
-          description: 'DeepSeek OpenAI-compatible endpoint',
-          apiKeyEnv: 'DEEPSEEK_API_KEY',
-        },
-        filePath: '/mock/aliases/deepseek.config',
-        source: 'builtin',
-      },
-    ],
-    getUserAliasDir: () => '/mock/home/.llxprt/providers',
-    getAliasFilePath: (alias: string) =>
-      `/mock/home/.llxprt/providers/${alias}.config`,
-    writeProviderAliasConfig: vi.fn(),
-  }),
-);
-
-vi.mock('ink', () => import('./test-utils/ink-stub.ts'), {
-  virtual: true,
-});
+import { afterEach } from 'vitest';
 
 // The issue is that React DOM is trying to access ReactSharedInternals.S
 // but ReactSharedInternals might be undefined or missing the S property.
@@ -208,55 +74,9 @@ if (ReactInternals) {
   globalWithReact.ReactSharedInternals = ReactInternals;
 }
 
-import './src/test-utils/customMatchers.js';
-
-const managedProcessEvents = [
-  'exit',
-  'SIGINT',
-  'SIGTERM',
-  'warning',
-  'unhandledRejection',
-] as const;
-
-type ManagedProcessEvent = (typeof managedProcessEvents)[number];
-type ProcessListener = (...args: unknown[]) => void;
-
-const baselineProcessListeners = new Map<
-  ManagedProcessEvent,
-  ProcessListener[]
->(
-  managedProcessEvents.map((eventName) => [
-    eventName,
-    process.listeners(eventName) as ProcessListener[],
-  ]),
-);
-
-function restoreProcessListeners(eventName: ManagedProcessEvent): void {
-  const baseline = baselineProcessListeners.get(eventName) ?? [];
-  const current = process.listeners(eventName) as ProcessListener[];
-  const baselineCounts = new Map<ProcessListener, number>();
-
-  for (const listener of baseline) {
-    baselineCounts.set(listener, (baselineCounts.get(listener) ?? 0) + 1);
-  }
-
-  for (const listener of current) {
-    const remaining = baselineCounts.get(listener) ?? 0;
-    if (remaining > 0) {
-      baselineCounts.set(listener, remaining - 1);
-      continue;
-    }
-
-    process.removeListener(eventName, listener);
-  }
-}
-
 afterEach(async () => {
   cleanupInkRenders();
-  for (const eventName of managedProcessEvents) {
-    restoreProcessListeners(eventName);
-  }
-  await DebugLogger.resetForTesting();
-  __resetCleanupStateForTesting();
-  clearActiveProviderRuntimeContext();
+  // Base cleanup is registered before this hook by test-setup-base.ts. Vitest
+  // executes afterEach hooks in reverse registration order, so Ink teardown
+  // completes before the shared process and runtime state are reset.
 });

@@ -37,7 +37,6 @@ function setupHook(agent: Agent) {
   const flushPendingHistoryItem = vi.fn();
   const clearPendingHistoryItem = vi.fn();
   const performMemoryRefresh = vi.fn().mockResolvedValue(undefined);
-  const onTodoPause = vi.fn();
   const markToolsAsDisplayCleared = vi.fn();
   const onToolCallsUpdate = vi.fn();
   const outputUpdateHandler = vi.fn();
@@ -53,7 +52,6 @@ function setupHook(agent: Agent) {
       flushPendingHistoryItem,
       clearPendingHistoryItem,
       performMemoryRefresh,
-      onTodoPause,
       markToolsAsDisplayCleared,
       onToolCallsUpdate,
       outputUpdateHandler,
@@ -75,7 +73,6 @@ function setupHook(agent: Agent) {
     flushPendingHistoryItem,
     clearPendingHistoryItem,
     performMemoryRefresh,
-    onTodoPause,
     markToolsAsDisplayCleared,
     onToolCallsUpdate,
     outputUpdateHandler,

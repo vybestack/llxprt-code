@@ -26,6 +26,8 @@ const peekStoredTokenMock = vi.fn();
 const getOAuthTokenMock = vi.fn();
 const setBrowserProfileAssociationMock = vi.fn();
 const clearBrowserProfileAssociationMock = vi.fn();
+const clearSessionBucketMock = vi.fn();
+const logoutAllBucketsMock = vi.fn();
 const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
@@ -35,11 +37,13 @@ const mockOAuthManager = {
   getToken: vi.fn(),
   getOAuthToken: getOAuthTokenMock,
   peekStoredToken: peekStoredTokenMock,
-  getSupportedProviders: vi.fn().mockReturnValue(['anthropic', 'codex']),
+  getSupportedProviders: vi.fn().mockReturnValue(['claudecode', 'codex']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
+  logoutAllBuckets: logoutAllBucketsMock,
   setBrowserProfileAssociation: setBrowserProfileAssociationMock,
   clearBrowserProfileAssociation: clearBrowserProfileAssociationMock,
+  clearSessionBucket: clearSessionBucketMock,
 } as unknown as OAuthManager;
 
 describe('AuthCommandExecutor OAuth Support', () => {
@@ -50,6 +54,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
     vi.clearAllMocks();
     peekStoredTokenMock.mockReset();
     getOAuthTokenMock.mockReset();
+    clearSessionBucketMock.mockReset();
+    logoutAllBucketsMock.mockReset();
     executor = new AuthCommandExecutor(mockOAuthManager);
     mockContext = {
       services: {
@@ -88,8 +94,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
   });
 
   describe('@requirement REQ-005: Direct provider OAuth enablement', () => {
-    it('@given user enters /auth anthropic @when provider specified without action @then shows provider status', async () => {
-      // Given: OAuth is enabled and authenticated for anthropic
+    it('@given user enters /auth claudecode @when provider specified without action @then shows provider status', async () => {
+      // Given: OAuth is enabled and authenticated for claudecode
       const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockIsAuthenticated = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
@@ -99,18 +105,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth anthropic (without action)
-      const result = await executor.execute(mockContext, 'anthropic');
+      // When: User enters /auth claudecode (without action)
+      const result = await executor.execute(mockContext, 'claudecode');
 
       // Then: Should show provider status
-      expect(mockIsEnabled).toHaveBeenCalledWith('anthropic');
-      expect(mockIsAuthenticated).toHaveBeenCalledWith('anthropic');
+      expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for anthropic: ENABLED (authenticated)',
+        content: 'OAuth for claudecode: ENABLED (authenticated)',
       });
-      expect(peekStoredTokenMock).toHaveBeenCalledWith('anthropic');
+      expect(peekStoredTokenMock).toHaveBeenCalledWith('claudecode');
       expect(getOAuthTokenMock).not.toHaveBeenCalled();
     });
 
@@ -134,25 +140,25 @@ describe('AuthCommandExecutor OAuth Support', () => {
         (mockOAuthManager.getHigherPriorityAuth as unknown) =
           mockGetHigherPriority;
 
-        const result = await executor.execute(mockContext, 'anthropic');
+        const result = await executor.execute(mockContext, 'claudecode');
 
         expect(result).toStrictEqual({
           type: 'message',
           messageType: 'info',
           content:
-            'anthropic OAuth: Enabled and authenticated\n' +
+            'claudecode OAuth: Enabled and authenticated\n' +
             'Token expires: 2025-01-01T02:00:00.000Z\n' +
             'Time remaining: 2h 0m\n' +
-            'Use /auth anthropic logout to sign out',
+            'Use /auth claudecode logout to sign out',
         });
-        expect(peekStoredTokenMock).toHaveBeenCalledWith('anthropic');
+        expect(peekStoredTokenMock).toHaveBeenCalledWith('claudecode');
         expect(getOAuthTokenMock).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('@given user enters /auth anthropic enable @when provider specified with action @then toggles OAuth enablement for Anthropic', async () => {
+    it('@given user enters /auth claudecode enable @when provider specified with action @then toggles OAuth enablement for Claudecode', async () => {
       // Given: OAuth currently disabled, no higher priority auth
       const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
@@ -162,15 +168,15 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth anthropic enable
-      const result = await executor.execute(mockContext, 'anthropic enable');
+      // When: User enters /auth claudecode enable
+      const result = await executor.execute(mockContext, 'claudecode enable');
 
       // Then: Should toggle OAuth enablement and return success
-      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for anthropic',
+        content: 'OAuth enabled for claudecode',
       });
     });
 
@@ -207,21 +213,21 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth with leading/trailing spaces
-      const result = await executor.execute(mockContext, '  anthropic  ');
+      const result = await executor.execute(mockContext, '  claudecode  ');
 
       // Then: Should trim and show provider status
-      expect(mockIsEnabled).toHaveBeenCalledWith('anthropic');
-      expect(mockIsAuthenticated).toHaveBeenCalledWith('anthropic');
+      expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for anthropic: DISABLED',
+        content: 'OAuth for claudecode: DISABLED',
       });
     });
 
-    it('@given user enters /auth anthropic invalid @when invalid action specified @then returns error', async () => {
+    it('@given user enters /auth claudecode invalid @when invalid action specified @then returns error', async () => {
       // When: User enters invalid action
-      const result = await executor.execute(mockContext, 'anthropic invalid');
+      const result = await executor.execute(mockContext, 'claudecode invalid');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
@@ -251,8 +257,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
   describe('Provider validation', () => {
     it('@given unknown provider @when provider not supported @then returns error message', async () => {
-      // Given: getSupportedProviders returns anthropic, codex
-      const mockGetSupported = vi.fn().mockReturnValue(['anthropic', 'codex']);
+      // Given: getSupportedProviders returns claudecode, codex
+      const mockGetSupported = vi.fn().mockReturnValue(['claudecode', 'codex']);
       (mockOAuthManager.getSupportedProviders as unknown) = mockGetSupported;
 
       // When: User enters unknown provider
@@ -263,7 +269,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Unknown provider: unknown-provider. Supported providers: anthropic, codex',
+          'Unknown provider: unknown-provider. Supported providers: claudecode, codex',
       });
     });
 
@@ -299,14 +305,14 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enable OAuth
-      const result = await executor.execute(mockContext, 'anthropic enable');
+      const result = await executor.execute(mockContext, 'claudecode enable');
 
       // Then: Should enable OAuth and show success message
-      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for anthropic',
+        content: 'OAuth enabled for claudecode',
       });
     });
 
@@ -341,13 +347,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Try to enable already enabled OAuth
-      const result = await executor.execute(mockContext, 'anthropic enable');
+      const result = await executor.execute(mockContext, 'claudecode enable');
 
       // Then: Should show already enabled message
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for anthropic is already enabled',
+        content: 'OAuth for claudecode is already enabled',
       });
     });
 
@@ -383,14 +389,14 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enabling OAuth with higher priority auth present
-      const result = await executor.execute(mockContext, 'anthropic enable');
+      const result = await executor.execute(mockContext, 'claudecode enable');
 
       // Then: Should show warning about precedence
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
-          'OAuth enabled for anthropic (Note: API Key will take precedence)',
+          'OAuth enabled for claudecode (Note: API Key will take precedence)',
       });
     });
   });
@@ -407,15 +413,15 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enable OAuth for provider
-      await executor.execute(mockContext, 'anthropic enable');
+      await executor.execute(mockContext, 'claudecode enable');
 
       // Then: OAuth manager should save the enabled state
-      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
 
       // And: Status should reflect the change
       const mockGetAuthStatus = vi.fn().mockResolvedValue([
         {
-          provider: 'anthropic',
+          provider: 'claudecode',
           authenticated: false,
           oauthEnabled: true,
         },
@@ -424,7 +430,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       const result = await executor.getAuthStatus();
       expect(result).toStrictEqual([
-        '[] anthropic: not authenticated [OAuth enabled]',
+        '[] claudecode: not authenticated [OAuth enabled]',
       ]);
     });
   });
@@ -434,13 +440,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
       // Given: Mock auth status response with OAuth enablement
       const mockGetAuthStatus = vi.fn().mockResolvedValue([
         {
-          provider: 'anthropic',
+          provider: 'claudecode',
           authenticated: true,
           oauthEnabled: true,
           expiresIn: 3600,
         },
         {
-          provider: 'qwen',
+          provider: 'codex',
           authenticated: false,
           oauthEnabled: false,
         },
@@ -452,8 +458,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should return formatted status indicators with enablement info
       expect(result).toStrictEqual([
-        '[✓] anthropic: authenticated (expires in 60m) [OAuth enabled]',
-        '[] qwen: not authenticated [OAuth disabled]',
+        '[✓] claudecode: authenticated (expires in 60m) [OAuth enabled]',
+        '[] codex: not authenticated [OAuth disabled]',
       ]);
     });
   });
@@ -472,13 +478,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User attempts OAuth enable
-      const result = await executor.execute(mockContext, 'anthropic enable');
+      const result = await executor.execute(mockContext, 'claudecode enable');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Failed to enable OAuth for anthropic: Toggle failed',
+        content: 'Failed to enable OAuth for claudecode: Toggle failed',
       });
     });
 
@@ -526,7 +532,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given user enters /auth ANTHROPIC @when provider is all-caps @then shows status for anthropic', async () => {
+    it('@given user enters /auth CLAUDECODE @when provider is all-caps @then shows status for claudecode', async () => {
       const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockIsAuthenticated = vi.fn().mockResolvedValue(false);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
@@ -535,18 +541,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'ANTHROPIC');
+      const result = await executor.execute(mockContext, 'CLAUDECODE');
 
-      expect(mockIsEnabled).toHaveBeenCalledWith('anthropic');
-      expect(mockIsAuthenticated).toHaveBeenCalledWith('anthropic');
+      expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth for anthropic: DISABLED',
+        content: 'OAuth for claudecode: DISABLED',
       });
     });
 
-    it('@given user enters /auth Anthropic ENABLE @when both provider and action are mixed case @then enables OAuth for anthropic', async () => {
+    it('@given user enters /auth Claudecode ENABLE @when both provider and action are mixed case @then enables OAuth for claudecode', async () => {
       const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
@@ -555,13 +561,13 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'Anthropic ENABLE');
+      const result = await executor.execute(mockContext, 'Claudecode ENABLE');
 
-      expect(mockToggleOAuth).toHaveBeenCalledWith('anthropic');
+      expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for anthropic',
+        content: 'OAuth enabled for claudecode',
       });
     });
   });
@@ -588,19 +594,19 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       const result = await executor.execute(
         mockContext,
-        'anthropic create mybucket',
+        'claudecode create mybucket',
       );
 
       const expectedContent = [
-        'Discovered Chrome profiles for anthropic bucket "mybucket":',
+        'Discovered Chrome profiles for claudecode bucket "mybucket":',
         '',
         '  1: Personal (profile: Default)',
         '  2: Work (profile: Profile 1)',
         '',
         'To associate a profile, run:',
-        '  /auth anthropic profile mybucket <number-or-directory>',
+        '  /auth claudecode profile mybucket <number-or-directory>',
         'Then authenticate with:',
-        '  /auth anthropic login mybucket',
+        '  /auth claudecode login mybucket',
       ].join('\n');
 
       expect(result).toStrictEqual({
@@ -615,7 +621,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
       ).mockReturnValue([]);
 
-      const result = await executor.execute(mockContext, 'anthropic create');
+      const result = await executor.execute(mockContext, 'claudecode create');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       expect((result as { content: string }).content).toContain(
@@ -636,11 +642,11 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       const result = await executor.execute(
         mockContext,
-        'anthropic profile workbucket 2',
+        'claudecode profile workbucket 2',
       );
 
       expect(setBrowserProfileAssociationMock).toHaveBeenCalledWith(
-        'anthropic',
+        'claudecode',
         'workbucket',
         {
           browser: 'chrome',
@@ -650,23 +656,23 @@ describe('AuthCommandExecutor OAuth Support', () => {
       );
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       expect((result as { content: string }).content).toContain(
-        'Associated anthropic bucket "workbucket" with Chrome profile: Work (Profile 1)',
+        'Associated claudecode bucket "workbucket" with Chrome profile: Work (Profile 1)',
       );
     });
 
     it('@given literal directory selector @when profile set by name @then stores directory without displayName', async () => {
       const result = await executor.execute(
         mockContext,
-        'anthropic profile mybucket MyCustomDir',
+        'claudecode profile mybucket MyCustomDir',
       );
 
       expect(setBrowserProfileAssociationMock).toHaveBeenCalledWith(
-        'anthropic',
+        'claudecode',
         'mybucket',
         { browser: 'chrome', profileDirectory: 'MyCustomDir' },
       );
       expect((result as { content: string }).content).toContain(
-        'Associated anthropic bucket "mybucket" with Chrome profile: MyCustomDir',
+        'Associated claudecode bucket "mybucket" with Chrome profile: MyCustomDir',
       );
     });
 
@@ -679,7 +685,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       const result = await executor.execute(
         mockContext,
-        'anthropic profile mybucket 9',
+        'claudecode profile mybucket 9',
       );
 
       expect(setBrowserProfileAssociationMock).not.toHaveBeenCalled();
@@ -692,7 +698,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     it('@given traversal selector @when profile selector has path separators @then returns error', async () => {
       const result = await executor.execute(
         mockContext,
-        'anthropic profile mybucket ../etc',
+        'claudecode profile mybucket ../etc',
       );
 
       expect(setBrowserProfileAssociationMock).not.toHaveBeenCalled();
@@ -705,11 +711,11 @@ describe('AuthCommandExecutor OAuth Support', () => {
     it('@given --clear flag @when profile clear @then clears association', async () => {
       const result = await executor.execute(
         mockContext,
-        'anthropic profile mybucket --clear',
+        'claudecode profile mybucket --clear',
       );
 
       expect(clearBrowserProfileAssociationMock).toHaveBeenCalledWith(
-        'anthropic',
+        'claudecode',
         'mybucket',
       );
       expect((result as { content: string }).content).toContain(
@@ -718,7 +724,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     });
 
     it('@given missing bucket @when profile without bucket @then returns error', async () => {
-      const result = await executor.execute(mockContext, 'anthropic profile');
+      const result = await executor.execute(mockContext, 'claudecode profile');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'error' });
       expect((result as { content: string }).content).toContain(
@@ -729,13 +735,164 @@ describe('AuthCommandExecutor OAuth Support', () => {
     it('@given missing selector @when profile without selector @then returns error', async () => {
       const result = await executor.execute(
         mockContext,
-        'anthropic profile mybucket',
+        'claudecode profile mybucket',
       );
 
       expect(result).toMatchObject({ type: 'message', messageType: 'error' });
       expect((result as { content: string }).content).toContain(
         'selector is required',
       );
+    });
+  });
+
+  describe('/auth claudecode login/logout identity routing (@issue:2274)', () => {
+    it('@given /auth claudecode login @when executed @then routes login to claudecode identity', async () => {
+      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
+      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
+
+      const result = await executor.execute(mockContext, 'claudecode login');
+
+      expect(mockAuthenticate).toHaveBeenCalledWith('claudecode', undefined, {
+        signalAuthCompletion: true,
+      });
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Successfully authenticated claudecode',
+      });
+    });
+
+    it('@given /auth claudecode login mybucket @when executed @then routes login to claudecode with bucket', async () => {
+      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
+      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
+
+      const result = await executor.execute(
+        mockContext,
+        'claudecode login mybucket',
+      );
+
+      expect(mockAuthenticate).toHaveBeenCalledWith('claudecode', 'mybucket', {
+        signalAuthCompletion: true,
+      });
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Successfully authenticated claudecode (bucket: mybucket)',
+      });
+    });
+
+    it('@given /auth claudecode logout @when executed @then routes logout to claudecode identity', async () => {
+      mockOAuthManager.isAuthenticated = vi.fn().mockResolvedValue(true);
+      mockOAuthManager.logout = vi.fn().mockResolvedValue(undefined);
+
+      const result = await executor.execute(mockContext, 'claudecode logout');
+
+      expect(mockOAuthManager.logout).toHaveBeenCalledWith(
+        'claudecode',
+        undefined,
+      );
+      expect(clearSessionBucketMock).toHaveBeenCalledWith('claudecode');
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Successfully logged out of claudecode',
+      });
+    });
+
+    it('@given /auth claudecode logout --all @when executed @then routes logoutAllBuckets to claudecode', async () => {
+      logoutAllBucketsMock.mockResolvedValue(undefined);
+
+      const result = await executor.execute(
+        mockContext,
+        'claudecode logout --all',
+      );
+
+      expect(logoutAllBucketsMock).toHaveBeenCalledWith('claudecode');
+      expect(clearSessionBucketMock).not.toHaveBeenCalled();
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'Successfully logged out of all buckets for claudecode',
+      });
+    });
+  });
+
+  describe('/auth anthropic redirect (@issue:2274)', () => {
+    beforeEach(() => {
+      peekStoredTokenMock.mockReset();
+      getOAuthTokenMock.mockReset();
+    });
+
+    it('@given /auth anthropic @when executed @then returns targeted redirect message', async () => {
+      const result = await executor.execute(mockContext, 'anthropic');
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      const content = (result as { content: string }).content;
+      expect(content).toContain('/auth claudecode');
+      expect(content).toContain('/provider anthropic');
+      expect(content).toContain('/key');
+    });
+
+    it('@given /auth anthropic @when executed @then does NOT call any OAuth manager mutating operation', async () => {
+      const mockToggleOAuth = vi.fn();
+      const mockAuthenticate = vi.fn();
+      const mockLogout = vi.fn();
+      (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
+      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
+      (mockOAuthManager.logout as unknown) = mockLogout;
+
+      await executor.execute(mockContext, 'anthropic');
+
+      expect(mockToggleOAuth).not.toHaveBeenCalled();
+      expect(mockAuthenticate).not.toHaveBeenCalled();
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+
+    it('@given /auth anthropic enable @when executed @then redirects without toggling OAuth', async () => {
+      const mockToggleOAuth = vi.fn();
+      (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
+
+      const result = await executor.execute(mockContext, 'anthropic enable');
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      expect((result as { content: string }).content).toContain(
+        '/auth claudecode',
+      );
+      expect((result as { content: string }).content).toContain(
+        '/provider anthropic',
+      );
+      expect(mockToggleOAuth).not.toHaveBeenCalled();
+    });
+
+    it('@given /auth anthropic login @when executed @then redirects without authenticating', async () => {
+      const mockAuthenticate = vi.fn();
+      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
+
+      const result = await executor.execute(mockContext, 'anthropic login');
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      expect((result as { content: string }).content).toContain(
+        '/auth claudecode',
+      );
+      expect((result as { content: string }).content).toContain(
+        '/provider anthropic',
+      );
+      expect(mockAuthenticate).not.toHaveBeenCalled();
+    });
+
+    it('@given /auth claudecode status @when executed @then proceeds normally for claudecode identity', async () => {
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
+      const mockIsAuthenticated = vi.fn().mockResolvedValue(false);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      const result = await executor.execute(mockContext, 'claudecode');
+
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
     });
   });
 });

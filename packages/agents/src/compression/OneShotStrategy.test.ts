@@ -319,7 +319,8 @@ describe('OneShotStrategy', () => {
       const strategy = new OneShotStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toStrictEqual([]);
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('empty-history');
       expect(result.metadata.llmCallMade).toBe(false);
       expect(result.metadata.strategyUsed).toBe('one-shot');
     });
@@ -330,7 +331,8 @@ describe('OneShotStrategy', () => {
       const strategy = new OneShotStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toHaveLength(3);
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('too-few-compressible');
       expect(result.metadata.llmCallMade).toBe(false);
       expect(result.metadata.originalMessageCount).toBe(3);
       expect(result.metadata.compressedMessageCount).toBe(3);
@@ -345,6 +347,7 @@ describe('OneShotStrategy', () => {
       const result = await strategy.compress(ctx);
 
       // floor(5 * 0.5) = 2 messages to compress, which is < 4
+      expect(result.kind).toBe('noop');
       expect(result.metadata.llmCallMade).toBe(false);
     });
   });

@@ -23,7 +23,7 @@ import type {
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionContext,
-  CompressionResult,
+  StrategyCompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
@@ -64,10 +64,13 @@ export interface PendingContextWindowEnforcerDeps {
   buildCompressionContext(promptId: string): Promise<CompressionContext>;
   compressWithFallbackStrategy(
     context: CompressionContext,
-  ): Promise<CompressionResult>;
+  ): Promise<StrategyCompressionResult>;
   applyFallbackCompressionResult(
-    result: CompressionResult,
-    applyResult: (newHistory: IContent[]) => void,
+    result: StrategyCompressionResult,
+    applyResult: (
+      newHistory: IContent[],
+      summary: IContent | undefined,
+    ) => void,
   ): void;
   setSuppressDensityDirty(value: boolean): void;
   recordCompressionFailure(): void;
@@ -438,8 +441,17 @@ export class PendingContextWindowEnforcer {
     );
   }
 
-  private applyFallbackCompressionResult(result: CompressionResult): void {
-    this.deps.applyFallbackCompressionResult(result, (newHistory) => {
+  private applyFallbackCompressionResult(
+    result: StrategyCompressionResult,
+  ): void {
+    if (result.kind === 'noop') {
+      // Truthful no-op: do not mutate history or counters.
+      this.deps.logger.debug(
+        `Hard-limit fallback (TopDownTruncation) was a structural no-op: ${result.reason}`,
+      );
+      return;
+    }
+    this.deps.applyFallbackCompressionResult(result, (newHistory, _summary) => {
       this.deps.historyService.clear();
       for (const content of newHistory) {
         this.deps.historyService.add(content, this.deps.getRuntimeModel());

@@ -177,7 +177,7 @@ type OAuthManagerStub = Required<
 /**
  * Builds a stub OAuthManager sufficient for the real AuthPrecedenceResolver to
  * reach resolveOAuthAuthentication(): getToken returns an OAuth token,
- * isAuthenticated returns true, isOAuthEnabled('anthropic') returns true (so
+ * isAuthenticated returns true, isOAuthEnabled('claudecode') returns true (so
  * the manager does not disable OAuth), and getOAuthToken returns null.
  */
 function createOAuthManagerStub(): OAuthManagerStub {
@@ -185,7 +185,7 @@ function createOAuthManagerStub(): OAuthManagerStub {
     getToken: vi.fn(async () => OAUTH_TOKEN),
     isAuthenticated: vi.fn(async () => true),
     getOAuthToken: vi.fn(async () => null),
-    isOAuthEnabled: vi.fn((provider: string) => provider === 'anthropic'),
+    isOAuthEnabled: vi.fn((provider: string) => provider === 'claudecode'),
     forceRefreshToken: vi.fn(async () => null),
   };
 }
@@ -442,7 +442,7 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       // resolved.baseURL is the z.ai URL and resolved.authToken is absent,
       // while SettingsService.activeProvider === 'load-balancer' (NOT
       // 'anthropic'). OAuth is globally enabled for anthropic (the stub
-      // oauthManager.isOAuthEnabled('anthropic') returns true) and no
+      // oauthManager.isOAuthEnabled('claudecode') returns true) and no
       // non-OAuth credential is resolvable under the delegated provider. The
       // ONLY way a token could appear is oauthManager.getToken — which must
       // NOT be called.
@@ -555,6 +555,81 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       const sdkAuth = lastSdkConstructorAuth();
       expect(sdkAuth.apiKey).toBe('zai-explicit-api-key');
       expect(sdkAuth.authToken).toBeUndefined();
+    });
+  });
+
+  describe('missing-auth recovery text is identity-distinct (@issue:2274)', () => {
+    it('directs a claudecode-bound provider (canonical host, no token) to /auth claudecode', async () => {
+      const oauthManager = createOAuthManagerStub();
+      const result = createProviderWithRuntime<AnthropicProvider>(
+        ({ settingsService: svc }) => {
+          svc.set('activeProvider', 'anthropic');
+          svc.setProviderSetting('anthropic', 'streaming', 'disabled');
+          return new AnthropicProvider(
+            undefined,
+            undefined,
+            TEST_PROVIDER_CONFIG,
+            toOAuthManager(oauthManager),
+          );
+        },
+        {
+          runtimeId: 'anthropic.issue2274.claudecode-recovery.test',
+          metadata: { source: 'AnthropicProvider.issue2411.test.ts' },
+        },
+      );
+      wireRuntime(result);
+
+      // The provider was constructed with an OAuth manager, so the bound
+      // identity is claudecode. Force token resolution to return nothing.
+      oauthManager.getToken.mockResolvedValue(null);
+      oauthManager.isAuthenticated.mockResolvedValue(false);
+
+      const callOptions = buildCallOptions([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'no creds' }],
+        },
+      ]);
+
+      const generator = result.provider.generateChatCompletion(callOptions);
+      const thrownError = await captureGeneratorError(generator);
+
+      expect(thrownError.message).toContain('/auth claudecode');
+      expect(thrownError.message.toLowerCase()).not.toContain('/key');
+    });
+
+    it('directs an anthropic API-key-only provider (canonical host, no token) to /key or /keyfile, not /auth claudecode', async () => {
+      const result = createProviderWithRuntime<AnthropicProvider>(
+        ({ settingsService: svc }) => {
+          svc.set('activeProvider', 'anthropic');
+          svc.setProviderSetting('anthropic', 'streaming', 'disabled');
+          // No OAuth manager → API-key-only identity, never claudecode.
+          return new AnthropicProvider(
+            undefined,
+            undefined,
+            TEST_PROVIDER_CONFIG,
+          );
+        },
+        {
+          runtimeId: 'anthropic.issue2274.apikey-recovery.test',
+          metadata: { source: 'AnthropicProvider.issue2411.test.ts' },
+        },
+      );
+      wireRuntime(result);
+
+      const callOptions = buildCallOptions([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'no api key' }],
+        },
+      ]);
+
+      const generator = result.provider.generateChatCompletion(callOptions);
+      const thrownError = await captureGeneratorError(generator);
+
+      expect(thrownError.message).not.toContain('/auth claudecode');
+      expect(thrownError.message).toContain('/key');
+      expect(thrownError.message.toLowerCase()).toContain('api key');
     });
   });
 });
