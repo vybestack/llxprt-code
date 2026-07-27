@@ -55,7 +55,7 @@ small data file and should complete in well under one second.
 
 - `project-plans/issue-2709-affected-package-selection.md`
 - `scripts/affected-test-shards.data.json`
-- `scripts/affected-test-shards.mjs`
+- `scripts/affected-test-shards.ts`
 - `scripts/check-affected-test-shards.ts`
 - `scripts/tests/affected-test-shards.test.ts`
 - `package.json`

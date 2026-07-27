@@ -8,7 +8,7 @@
 /**
  * Graph drift validator for the affected-test-shard selector (issue #2709).
  *
- * The fast PR selector (`scripts/affected-test-shards.mjs`) reads a checked-in
+ * The fast PR selector (`scripts/affected-test-shards.ts`) reads a checked-in
  * import graph (`scripts/affected-test-shards.data.json`) and does NOT scan
  * source at PR time. This validator scans the real tracked TypeScript/TSX
  * source once (in CI after install, or locally via `lint:affected-shards`) and

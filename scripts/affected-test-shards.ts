@@ -28,17 +28,114 @@ const DATA_PATH = join(__dirname, 'affected-test-shards.data.json');
 // Data types (see SelectionResult and ReplayResult returns below)
 // ---------------------------------------------------------------------------
 
+/** Observer rule: a package whose tests scan an observed package's source. */
+interface ObserverRule {
+  readonly observingPackage: string;
+  readonly selectShard: string;
+  readonly reason: string;
+}
+
+/** The checked-in import graph shape (validated by the checker). */
+interface GraphData {
+  readonly packageToShard: Record<string, string>;
+  readonly shardOrder: readonly string[];
+  readonly shardTimingsSeconds: Record<string, number>;
+  readonly importEdges: Record<string, readonly string[]>;
+  readonly testOnlyEdges: Record<string, readonly string[]>;
+  readonly observers: Record<string, readonly ObserverRule[]>;
+  readonly sharedInputs: readonly string[];
+}
+
+/** Per-path explanation of why shards were (or were not) selected. */
+interface PathReason {
+  readonly path: string;
+  readonly reason: string;
+  readonly shards: readonly string[];
+}
+
+/** Result of selecting affected test shards for an event + changed paths. */
+export interface SelectionResult {
+  readonly selectedShards: readonly string[];
+  readonly skippedShards: readonly string[];
+  readonly hasTests: boolean;
+  readonly coverageComplete: boolean;
+  readonly fullRunReason: string | null;
+  readonly pathReasons: readonly PathReason[];
+}
+
+/** Aggregate result of replaying history through the selector. */
+export interface ReplayResult {
+  readonly commits: number;
+  readonly forcedFull: number;
+  readonly selectedLegs: number;
+  readonly aggregateSeconds: number;
+  readonly fullRunSeconds: number;
+  readonly aggregateSavingSeconds: number;
+  readonly criticalPathSeconds: number;
+  readonly fullCriticalPathSeconds: number;
+  readonly criticalPathSavingSeconds: number;
+}
+
+/** Reverse-dependency graph: package → packages that import it. */
+type ReverseGraph = Record<string, readonly string[]>;
+
+/** Cached selection context derived from loaded graph data. */
+interface SelectionContext {
+  readonly packageToShard: Record<string, string>;
+  readonly observers: Record<string, readonly ObserverRule[]>;
+  readonly reverseGraph: ReverseGraph;
+  readonly sharedSet: Set<string>;
+}
+
+/** Classification of a single changed path into shards or a full-run. */
+interface PathClassification {
+  readonly shards: readonly string[];
+  readonly reason: string;
+  readonly fullRun: boolean;
+  readonly fullRunReason?: string;
+}
+
+/** Parameters for {@link selectAffectedShards}. */
+interface SelectAffectedShardsParams {
+  readonly event: string;
+  readonly changedPaths: readonly string[];
+  readonly dataPath?: string;
+}
+
+/** Parameters for {@link replayHistory}. */
+interface ReplayHistoryParams {
+  readonly count: number;
+  readonly base?: string;
+  readonly dataPath?: string;
+}
+
+/** A single commit and the files it changed. */
+interface HistoryCommit {
+  readonly commit: string;
+  readonly files: readonly string[];
+}
+
+/** Parsed CLI options. */
+interface ParsedArgs {
+  readonly event?: string;
+  readonly filesFrom?: string;
+  readonly base?: string;
+  readonly head?: string;
+  readonly output?: string;
+  readonly replay?: number;
+  readonly help?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Data loading
 // ---------------------------------------------------------------------------
 
 /**
  * Loads the checked-in graph data. Exported for tests and the checker.
- * @param {string} [dataPath]
  */
-export function loadData(dataPath = DATA_PATH) {
+export function loadData(dataPath: string = DATA_PATH): GraphData {
   const raw = readFileSync(dataPath, 'utf8');
-  const data = JSON.parse(raw);
+  const data: GraphData = JSON.parse(raw);
   return data;
 }
 
@@ -57,7 +154,7 @@ const RESEARCH_RE = /^research\//;
 const DEV_DOCS_RE = /^dev-docs\//;
 const EVALS_RE = /^evals\//;
 
-const FULL_RUN_EVENTS = new Set([
+const FULL_RUN_EVENTS = new Set<string>([
   'push',
   'merge_group',
   'workflow_dispatch',
@@ -65,21 +162,13 @@ const FULL_RUN_EVENTS = new Set([
   'release',
 ]);
 
-/**
- * Extracts the package name from a packages/<name>/... path.
- * @param {string} p
- * @returns {string | undefined}
- */
-function packageFromPath(p) {
+/** Extracts the package name from a packages/<name>/... path. */
+function packageFromPath(p: string): string | undefined {
   const m = p.match(/^packages\/([a-z0-9-]+)\//);
   return m ? m[1] : undefined;
 }
 
-/**
- * @param {string} p
- * @returns {boolean}
- */
-function isTestPath(p) {
+function isTestPath(p: string): boolean {
   return TEST_FILE_RE.test(p);
 }
 
@@ -90,17 +179,19 @@ function isTestPath(p) {
 /**
  * Builds a reverse-dependency map: for each package, which packages import it
  * (production or test-only). Used to compute the transitive reverse closure.
- *
- * @param {Record<string, readonly string[]>} importEdges
- * @param {Record<string, readonly string[]>} testOnlyEdges
- * @returns {Record<string, string[]>}
  */
-function buildReverseGraph(importEdges, testOnlyEdges) {
-  /** @type {Map<string, Set<string>>} */
-  const reverse = new Map();
-  const addEdge = (from, to) => {
-    if (!reverse.has(to)) reverse.set(to, new Set());
-    reverse.get(to).add(from);
+function buildReverseGraph(
+  importEdges: Record<string, readonly string[]>,
+  testOnlyEdges: Record<string, readonly string[]>,
+): ReverseGraph {
+  const reverse = new Map<string, Set<string>>();
+  const addEdge = (from: string, to: string): void => {
+    let set = reverse.get(to);
+    if (set === undefined) {
+      set = new Set<string>();
+      reverse.set(to, set);
+    }
+    set.add(from);
   };
   for (const [pkg, deps] of Object.entries(importEdges)) {
     for (const dep of deps) addEdge(pkg, dep);
@@ -108,8 +199,7 @@ function buildReverseGraph(importEdges, testOnlyEdges) {
   for (const [pkg, deps] of Object.entries(testOnlyEdges)) {
     for (const dep of deps) addEdge(pkg, dep);
   }
-  /** @type {Record<string, string[]>} */
-  const out = {};
+  const out: Record<string, string[]> = {};
   for (const [k, v] of reverse) out[k] = [...v].sort();
   return out;
 }
@@ -117,17 +207,13 @@ function buildReverseGraph(importEdges, testOnlyEdges) {
 /**
  * Computes the transitive set of packages that (transitively) import `pkg`.
  * Uses BFS over the reverse graph.
- *
- * @param {string} pkg
- * @param {Record<string, string[]>} reverseGraph
- * @returns {Set<string>}
  */
-function reverseClosure(pkg, reverseGraph) {
-  const result = new Set();
-  const queue = [pkg];
+function reverseClosure(pkg: string, reverseGraph: ReverseGraph): Set<string> {
+  const result = new Set<string>();
+  const queue: string[] = [pkg];
   while (queue.length > 0) {
     const cur = queue.shift();
-    const importers = reverseGraph[cur];
+    const importers = cur !== undefined ? reverseGraph[cur] : undefined;
     if (!importers) continue;
     for (const importer of importers) {
       if (!result.has(importer)) {
@@ -145,24 +231,14 @@ function reverseClosure(pkg, reverseGraph) {
 
 /**
  * Selects affected test shards for a given event and changed paths.
- *
- * @param {{
- *   event: string,
- *   changedPaths: readonly string[],
- *   dataPath?: string,
- * }} params
- * @returns {{
- *   selectedShards: readonly string[],
- *   skippedShards: readonly string[],
- *   hasTests: boolean,
- *   coverageComplete: boolean,
- *   fullRunReason: string | null,
- *   pathReasons: readonly {path: string, reason: string, shards: readonly string[]}[],
- * }}
  */
-export function selectAffectedShards({ event, changedPaths, dataPath }) {
+export function selectAffectedShards({
+  event,
+  changedPaths,
+  dataPath,
+}: SelectAffectedShardsParams): SelectionResult {
   const data = loadData(dataPath);
-  const allShards = [...data.shardOrder];
+  const allShards: readonly string[] = [...data.shardOrder];
 
   // Non-PR events always run the full suite.
   if (FULL_RUN_EVENTS.has(event)) {
@@ -191,17 +267,21 @@ export function selectAffectedShards({ event, changedPaths, dataPath }) {
 }
 
 /** Builds the shared selection context from loaded data. */
-function buildSelectionContext(data) {
+function buildSelectionContext(data: GraphData): SelectionContext {
   return {
     packageToShard: data.packageToShard,
     observers: data.observers,
     reverseGraph: buildReverseGraph(data.importEdges, data.testOnlyEdges),
-    sharedSet: new Set(data.sharedInputs),
+    sharedSet: new Set<string>(data.sharedInputs),
   };
 }
 
 /** Creates a full-run result object. */
-function fullRunResult(allShards, fullRunReason, pathReasons) {
+function fullRunResult(
+  allShards: readonly string[],
+  fullRunReason: string,
+  pathReasons: readonly PathReason[],
+): SelectionResult {
   return {
     selectedShards: allShards,
     skippedShards: [],
@@ -213,16 +293,20 @@ function fullRunResult(allShards, fullRunReason, pathReasons) {
 }
 
 /** Iterates changed paths, selecting shards. Returns early on first full-run. */
-function selectFromPaths(changedPaths, ctx, allShards) {
-  const selectedShardSet = new Set();
-  const pathReasons = [];
+function selectFromPaths(
+  changedPaths: readonly string[],
+  ctx: SelectionContext,
+  allShards: readonly string[],
+): SelectionResult {
+  const selectedShardSet = new Set<string>();
+  const pathReasons: PathReason[] = [];
 
   for (const p of changedPaths) {
     const pathShards = selectPathShards(p, ctx);
     if (pathShards.fullRun) {
       pathReasons.push({
         path: p,
-        reason: pathShards.fullRunReason,
+        reason: pathShards.fullRunReason ?? '',
         shards: allShards,
       });
       return fullRunResult(
@@ -243,7 +327,11 @@ function selectFromPaths(changedPaths, ctx, allShards) {
 }
 
 /** Builds the final non-full-run selection result. */
-function selectionResult(selectedShardSet, allShards, pathReasons) {
+function selectionResult(
+  selectedShardSet: Set<string>,
+  allShards: readonly string[],
+  pathReasons: readonly PathReason[],
+): SelectionResult {
   const selectedShards = allShards.filter((s) => selectedShardSet.has(s));
   const skippedShards = allShards.filter((s) => !selectedShardSet.has(s));
   return {
@@ -257,28 +345,30 @@ function selectionResult(selectedShardSet, allShards, pathReasons) {
   };
 }
 
-/**
- * Selects shards for a single changed path.
- *
- * @param {string} p
- * @param {Object} ctx
- * @returns {{shards: string[], reason: string, fullRun: boolean, fullRunReason?: string}}
- */
-/** Result of classifying a single path. */
-function fullRun(reason, fullRunReason) {
+/** Creates a full-run path classification. */
+function fullRun(reason: string, fullRunReason: string): PathClassification {
   return { shards: [], reason, fullRun: true, fullRunReason };
 }
 
-function noShards(reason) {
+/** Creates a no-shards path classification. */
+function noShards(reason: string): PathClassification {
   return { shards: [], reason, fullRun: false };
 }
 
-function selectShards(shards, reason) {
+/** Creates a shard-selection path classification. */
+function selectShards(
+  shards: readonly string[],
+  reason: string,
+): PathClassification {
   return { shards, reason, fullRun: false };
 }
 
 /** Classifies a package source change (production or test-only). */
-function classifyPackageChange(p, pkg, ctx) {
+function classifyPackageChange(
+  p: string,
+  pkg: string,
+  ctx: SelectionContext,
+): PathClassification {
   const { packageToShard, observers, reverseGraph } = ctx;
   const ownerShard = packageToShard[pkg];
   if (!ownerShard) {
@@ -294,7 +384,7 @@ function classifyPackageChange(p, pkg, ctx) {
     );
   }
   // Production/manifest: owner + reverse closure + observers.
-  const shards = new Set([ownerShard]);
+  const shards = new Set<string>([ownerShard]);
   const closure = reverseClosure(pkg, reverseGraph);
   const reasons = [`owner '${ownerShard}'`];
   if (closure.size > 0) {
@@ -314,7 +404,7 @@ function classifyPackageChange(p, pkg, ctx) {
 }
 
 /** Metadata and config paths that never affect tests. */
-const NO_TEST_METADATA = new Set([
+const NO_TEST_METADATA = new Set<string>([
   'LICENSE',
   '.gitignore',
   '.gitattributes',
@@ -331,7 +421,7 @@ const NO_TEST_METADATA = new Set([
 ]);
 
 /** Regexes for paths that never affect tests (docs, metadata). */
-const NO_TEST_PATH_RES = [
+const NO_TEST_PATH_RES: readonly RegExp[] = [
   DOCS_RE,
   PROJECT_PLAN_RE,
   RESEARCH_RE,
@@ -341,7 +431,7 @@ const NO_TEST_PATH_RES = [
 ];
 
 /** Classifies a non-package, non-scripts path. Returns null if unhandled. */
-function classifyOtherPath(p) {
+function classifyOtherPath(p: string): PathClassification | null {
   if (NO_TEST_PATH_RES.some((re) => re.test(p))) {
     return noShards(`documentation/metadata path '${p}' selects no test shard`);
   }
@@ -366,7 +456,10 @@ function classifyOtherPath(p) {
   return null;
 }
 
-function selectPathShards(p, ctx) {
+function selectPathShards(
+  p: string,
+  ctx: SelectionContext,
+): PathClassification {
   // 1. Shared install/build/test/tooling inputs → full run.
   if (ctx.sharedSet.has(p)) {
     return fullRun(
@@ -407,14 +500,13 @@ function selectPathShards(p, ctx) {
 /**
  * Gets the changed files for a git commit range using first-parent non-merge
  * history.
- *
- * @param {number} count
- * @param {string} [base]
- * @returns {{commit: string, files: string[]}[]}
  */
-function getHistoryCommits(count, base) {
+function getHistoryCommits(
+  count: number,
+  base?: string,
+): readonly HistoryCommit[] {
   // Get first-parent commit SHAs (non-merge)
-  const baseRef = base || 'HEAD';
+  const baseRef = base ?? 'HEAD';
   const logOut = execFileSync(
     'git',
     [
@@ -429,8 +521,7 @@ function getHistoryCommits(count, base) {
     { encoding: 'utf8', cwd: process.cwd() },
   ).trim();
   const commits = logOut ? logOut.split('\n') : [];
-  /** @type {{commit: string, files: string[]}[]} */
-  const result = [];
+  const result: HistoryCommit[] = [];
   for (const commit of commits) {
     if (!commit) continue;
     const diffOut = execFileSync(
@@ -448,23 +539,14 @@ function getHistoryCommits(count, base) {
  * Replays the last `count` first-parent non-merge commits through the selector
  * and computes aggregate and critical-path time savings using canonical shard
  * timings.
- *
- * @param {{count: number, base?: string, dataPath?: string}} params
- * @returns {{
- *   commits: number,
- *   forcedFull: number,
- *   selectedLegs: number,
- *   aggregateSeconds: number,
- *   fullRunSeconds: number,
- *   aggregateSavingSeconds: number,
- *   criticalPathSeconds: number,
- *   fullCriticalPathSeconds: number,
- *   criticalPathSavingSeconds: number,
- * }}
  */
-export function replayHistory({ count, base, dataPath }) {
+export function replayHistory({
+  count,
+  base,
+  dataPath,
+}: ReplayHistoryParams): ReplayResult {
   const data = loadData(dataPath);
-  const timings = data.shardTimingsSeconds;
+  const timings: Record<string, number> = data.shardTimingsSeconds;
   const history = getHistoryCommits(count, base);
 
   // The full-run baseline: every commit runs every shard. The aggregate is
@@ -531,9 +613,16 @@ export function replayHistory({ count, base, dataPath }) {
 // CLI
 // ---------------------------------------------------------------------------
 
-function parseArgs(args) {
-  /** @type {Record<string, string | boolean | number>} */
-  const opts = {};
+function parseArgs(args: readonly string[]): ParsedArgs {
+  const opts: {
+    event?: string;
+    filesFrom?: string;
+    base?: string;
+    head?: string;
+    output?: string;
+    replay?: number;
+    help?: boolean;
+  } = {};
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--event') {
@@ -555,8 +644,8 @@ function parseArgs(args) {
   return opts;
 }
 
-function printHelp() {
-  stdout.write(`Usage: affected-test-shards.mjs [options]
+function printHelp(): void {
+  stdout.write(`Usage: affected-test-shards.ts [options]
 
 Options:
   --event <name>       CI event name (pull_request, push, merge_group, ...)
@@ -573,7 +662,7 @@ Output (github-actions): writes GITHUB_OUTPUT and GITHUB_STEP_SUMMARY for CI.
 `);
 }
 
-function readFilesFromFile(filePath) {
+function readFilesFromFile(filePath: string): string[] {
   const raw = readFileSync(filePath, 'utf8');
   return raw
     .split('\n')
@@ -581,8 +670,8 @@ function readFilesFromFile(filePath) {
     .filter((l) => l.length > 0);
 }
 
-function readFilesFromGit(base, head) {
-  const headRef = head || 'HEAD';
+function readFilesFromGit(base: string, head?: string): string[] {
+  const headRef = head ?? 'HEAD';
   const out = execFileSync(
     'git',
     ['diff', '--name-only', `${base}..${headRef}`],
@@ -591,7 +680,7 @@ function readFilesFromGit(base, head) {
   return out ? out.split('\n') : [];
 }
 
-function main() {
+function main(): void {
   const opts = parseArgs(argv.slice(2));
 
   if (opts.help) {
@@ -599,7 +688,8 @@ function main() {
     return;
   }
 
-  const outputMode = typeof opts.output === 'string' ? opts.output : 'json';
+  const outputMode: string =
+    typeof opts.output === 'string' ? opts.output : 'json';
 
   if (opts.replay !== undefined) {
     const result = replayHistory({
@@ -611,8 +701,7 @@ function main() {
   }
 
   const event = typeof opts.event === 'string' ? opts.event : 'pull_request';
-  /** @type {string[]} */
-  let changedPaths = [];
+  let changedPaths: string[] = [];
   if (typeof opts.filesFrom === 'string') {
     changedPaths = readFilesFromFile(opts.filesFrom);
   } else if (typeof opts.base === 'string') {
@@ -638,16 +727,17 @@ function main() {
  * Writes selection results to GITHUB_OUTPUT and GITHUB_STEP_SUMMARY for use in
  * GitHub Actions CI. Builds a matrix JSON array (shard × os × node-version)
  * that the test_shard job consumes via fromJSON().
- *
- * @param {SelectionResult} result
- * @param {string} event
  */
-function outputGithubActions(result, event) {
+function outputGithubActions(result: SelectionResult, event: string): void {
   const ghOutputPath = process.env.GITHUB_OUTPUT;
   const ghSummaryPath = process.env.GITHUB_STEP_SUMMARY;
 
   // Build the matrix: one entry per selected shard per OS.
-  const matrix = [];
+  const matrix: Array<{
+    readonly shard: string;
+    readonly os: string;
+    readonly 'node-version': string;
+  }> = [];
   for (const shard of result.selectedShards) {
     for (const os of ['ubuntu-latest', 'macos-latest']) {
       matrix.push({ shard, os, 'node-version': '24.x' });
@@ -695,7 +785,8 @@ function outputGithubActions(result, event) {
   );
 }
 
-const isMain = argv[1] && resolve(argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  argv[1] !== undefined && resolve(argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   main();
 }

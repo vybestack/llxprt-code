@@ -126,7 +126,7 @@
     "scripts/postinstall.cjs",
     "scripts/preinstall.cjs",
     "scripts/copy_bundle_assets.ts",
-    "scripts/affected-test-shards.mjs",
+    "scripts/affected-test-shards.ts",
     "scripts/affected-test-shards.data.json",
     "scripts/check-affected-test-shards.ts"
   ]

@@ -203,7 +203,7 @@ jobs:
           # and a human-readable summary to GITHUB_STEP_SUMMARY. The matrix is
           # a JSON array of {shard, os, node-version} objects, one per
           # selected shard per OS (Linux + macOS).
-          node scripts/affected-test-shards.mjs \
+          node scripts/affected-test-shards.ts \
             --event "$event" \
             "${files_arg[@]}" \
             --output github-actions

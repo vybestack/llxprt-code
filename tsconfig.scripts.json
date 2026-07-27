@@ -52,6 +52,7 @@
     "scripts/test.ts",
     "scripts/test-shards.ts",
     "scripts/check-test-shards.ts",
+    "scripts/affected-test-shards.ts",
     "scripts/check-affected-test-shards.ts",
     "scripts/utils/**/*.ts",
     "scripts/release-notes/**/*.ts",

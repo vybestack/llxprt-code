@@ -7,7 +7,7 @@
 /**
  * Behavioral tests for the affected-test-shard selector (issue #2709).
  *
- * These tests exercise the REAL selector (`scripts/affected-test-shards.mjs`)
+ * These tests exercise the REAL selector (`scripts/affected-test-shards.ts`)
  * and the REAL checked-in graph (`scripts/affected-test-shards.data.json`).
  * No mock theater: the selector is imported and invoked with real path lists.
  *
@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..', '..');
-const SELECTOR_PATH = join(REPO_ROOT, 'scripts', 'affected-test-shards.mjs');
+const SELECTOR_PATH = join(REPO_ROOT, 'scripts', 'affected-test-shards.ts');
 const DATA_PATH = join(REPO_ROOT, 'scripts', 'affected-test-shards.data.json');
 
 interface PathReason {
@@ -329,7 +329,7 @@ describe('affected-test-shards selector — shared inputs', () => {
     const { selectAffectedShards } = await loadSelector();
     const result = selectAffectedShards({
       event: PR_EVENT,
-      changedPaths: ['scripts/affected-test-shards.mjs'],
+      changedPaths: ['scripts/affected-test-shards.ts'],
     });
     expect(result.selectedShards).toEqual(ALL_SHARDS);
   });
