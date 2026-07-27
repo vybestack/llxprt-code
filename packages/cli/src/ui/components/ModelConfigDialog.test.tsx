@@ -81,7 +81,7 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 
 const DOWN = '\u001B[B';
 const ENTER = '\r';
-const ESC = '\u001b[27u';
+const ESC = '\u001b';
 
 function defaultProps() {
   return { onClose: vi.fn() };
@@ -180,6 +180,12 @@ describe('<ModelConfigDialog />', () => {
       stdin.write(ENTER);
     });
 
+    // EditValue is pre-populated with the current value (0.7).
+    // Clear the pre-filled text before typing the new value.
+    act(() => {
+      stdin.write('\u0015'); // Ctrl+U clears the line in TextInput
+    });
+
     // Type a new value
     for (const ch of '0.9') {
       act(() => {
@@ -261,6 +267,11 @@ describe('<ModelConfigDialog />', () => {
 
     expect(lastFrame()).toContain('Edit context-limit');
 
+    // Clear the pre-filled text (context-limit has no value by default)
+    act(() => {
+      stdin.write('\u0015'); // Ctrl+U clears the line
+    });
+
     // Type a new value
     for (const ch of '100000') {
       act(() => {
@@ -329,6 +340,11 @@ describe('<ModelConfigDialog />', () => {
     });
 
     expect(lastFrame()).toContain('Edit reasoning.effort');
+
+    // Clear the pre-filled text if any
+    act(() => {
+      stdin.write('\u0015'); // Ctrl+U clears the line
+    });
 
     // Type an invalid value (reasoning.effort only accepts known enum values)
     for (const ch of 'invalid-effort') {

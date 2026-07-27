@@ -131,6 +131,7 @@ describe('useModelDialogHandler', () => {
     await waitFor(() => {
       expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
     });
+    expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('gpt-5');
     expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
   });
 
@@ -153,6 +154,7 @@ describe('useModelDialogHandler', () => {
     });
     expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
     expect(fakeRuntime.setProvider).toHaveBeenCalledWith('anthropic');
+    expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('claude-sonnet');
     expect(recordProviderSwitch).toHaveBeenCalledWith(
       'anthropic',
       'claude-sonnet',

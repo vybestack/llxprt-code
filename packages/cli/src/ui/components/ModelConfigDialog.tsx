@@ -243,6 +243,8 @@ interface KeypressDispatch {
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   runtime: ReturnType<typeof useRuntimeApi>;
   setValidationError: (msg: string | null) => void;
+  params: Record<string, unknown>;
+  ephemeral: Record<string, unknown>;
 }
 
 function handleListKey(
@@ -254,6 +256,8 @@ function handleListKey(
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>,
   setValidationError: (m: string | null) => void,
   runtime: ReturnType<typeof useRuntimeApi>,
+  params: Record<string, unknown>,
+  ephemeral: Record<string, unknown>,
 ): void {
   if (key.name === 'escape') {
     onClose();
@@ -268,9 +272,10 @@ function handleListKey(
     return;
   }
   if (key.name === 'return') {
-    setEditValue('');
+    const field = ALL_FIELDS[selectedIndex];
+    setEditValue(formatValue(valueForField(field, params, ephemeral)));
     setValidationError(null);
-    setEditingField(ALL_FIELDS[selectedIndex]);
+    setEditingField(field);
     return;
   }
   const clearable = getClearableParamField(key, ALL_FIELDS[selectedIndex]);
@@ -337,6 +342,8 @@ function useModelConfigKeypress(d: KeypressDispatch): void {
           d.setSelectedIndex,
           d.setValidationError,
           d.runtime,
+          d.params,
+          d.ephemeral,
         );
       }
     },
@@ -350,6 +357,8 @@ function useModelConfigKeypress(d: KeypressDispatch): void {
       d.setEditValue,
       d.setSelectedIndex,
       d.setValidationError,
+      d.params,
+      d.ephemeral,
     ],
   );
   useKeypress(onKeypress, { isActive: true });
@@ -395,6 +404,8 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
     setSelectedIndex,
     runtime,
     setValidationError,
+    params: reads.modelParams,
+    ephemeral: reads.ephemeralSettings,
   });
 
   const dialogWidth = Math.min(width, 80);
