@@ -6,10 +6,26 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+const { mockRandomBytes } = vi.hoisted(() => ({
+  mockRandomBytes: vi.fn(),
+}));
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  mockRandomBytes.mockImplementation((size: number) =>
+    actual.randomBytes(size),
+  );
+  return {
+    ...actual,
+    randomBytes: mockRandomBytes,
+  };
+});
+
 import {
   sanitizeTranscript,
   exportHistoryForBugReport,
@@ -309,30 +325,50 @@ describe('historyExportUtils', () => {
       await unlink(result2.filePath).catch(() => {});
     });
 
-    it('should refuse to overwrite an existing path (exclusive create)', async () => {
-      const existingPath = join(
-        tmpdir(),
-        `llxprt-bug-report-collision-${Date.now()}.md`,
+    it('should retry when the exporter candidate path already exists', async () => {
+      const actualCrypto = await vi.importActual<typeof import('node:crypto')>(
+        'node:crypto',
       );
-      const handle = await open(existingPath, 'wx', 0o600);
-      await handle.writeFile('preexisting', 'utf-8');
-      await handle.close();
+      const fixedTime = '2026-07-28T12:34:56.789Z';
+      const firstRandom = Buffer.alloc(8, 1);
+      const secondRandom = Buffer.alloc(8, 2);
+      const stamped = fixedTime.replace(/[:.]/g, '-');
+      const collidedPath = join(
+        tmpdir(),
+        `llxprt-bug-report-${stamped}-${firstRandom.toString('hex')}.md`,
+      );
 
-      await expect(open(existingPath, 'wx', 0o600)).rejects.toMatchObject({
-        code: 'EEXIST',
-      });
+      const dateSpy = vi
+        .spyOn(Date.prototype, 'toISOString')
+        .mockReturnValue(fixedTime);
+      mockRandomBytes
+        .mockImplementationOnce(() => firstRandom)
+        .mockImplementationOnce(() => secondRandom);
 
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Test' }],
-        },
-      ];
-      const result = await exportHistoryForBugReport(history);
-      exportedFilePath = result.filePath;
-      expect(result.filePath).not.toBe(existingPath);
+      const preexisting = await open(collidedPath, 'wx', 0o600);
+      await preexisting.writeFile('preexisting', 'utf-8');
+      await preexisting.close();
 
-      await unlink(existingPath).catch(() => {});
+      try {
+        const history: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Test' }],
+          },
+        ];
+        const result = await exportHistoryForBugReport(history);
+        exportedFilePath = result.filePath;
+
+        expect(result.filePath).not.toBe(collidedPath);
+        expect(result.filePath).toContain(secondRandom.toString('hex'));
+        expect(await readFile(collidedPath, 'utf-8')).toBe('preexisting');
+      } finally {
+        dateSpy.mockRestore();
+        mockRandomBytes.mockImplementation((size: number) =>
+          actualCrypto.randomBytes(size),
+        );
+        await unlink(collidedPath).catch(() => {});
+      }
     });
   });
 });

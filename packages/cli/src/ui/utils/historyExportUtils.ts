@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { randomBytes } from 'node:crypto';
+import * as nodeCrypto from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -188,17 +188,38 @@ export async function exportHistoryForBugReport(
   // Exclusive create with a random suffix so concurrent exports cannot
   // collide or follow a pre-existing path/symlink. Owner-only mode keeps
   // residual credentials/paths in the transcript from being world-readable.
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const random = randomBytes(8).toString('hex');
-  const filename = `llxprt-bug-report-${timestamp}-${random}.md`;
-  const filePath = join(tmpdir(), filename);
+  // Retry a few times if another process raced us for the same name.
+  const maxAttempts = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const random = nodeCrypto.randomBytes(8).toString('hex');
+    const filename = `llxprt-bug-report-${timestamp}-${random}.md`;
+    const filePath = join(tmpdir(), filename);
 
-  const handle = await open(filePath, 'wx', 0o600);
-  try {
-    await handle.writeFile(sanitized, 'utf-8');
-  } finally {
-    await handle.close();
+    try {
+      const handle = await open(filePath, 'wx', 0o600);
+      try {
+        await handle.writeFile(sanitized, 'utf-8');
+      } finally {
+        await handle.close();
+      }
+      return { filePath, sanitized };
+    } catch (error) {
+      lastError = error;
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'EEXIST' &&
+        attempt < maxAttempts - 1
+      ) {
+        continue;
+      }
+      throw error;
+    }
   }
 
-  return { filePath, sanitized };
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Failed to create exclusive bug report file');
 }
