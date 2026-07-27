@@ -31,7 +31,12 @@ function snapshot(text: string): AnsiOutput {
   return [[makeToken(text)]];
 }
 
-/** Drives a sequence of updates through the accumulator and returns the result. */
+/**
+ * Drives a sequence of updates through the accumulator and returns the result.
+ * These behavioral scenarios exercise end-to-end mode transitions that mirror
+ * real producer sequences (shell PTY replace after task append, etc.) rather
+ * than the isolated single-step unit assertions in liveOutput.test.ts.
+ */
 function replay(updates: LiveOutputUpdate[]): string | AnsiOutput {
   return updates.reduce<string | AnsiOutput | undefined>((acc, update) => {
     const next = accumulateLiveOutput(acc, update);
@@ -41,6 +46,7 @@ function replay(updates: LiveOutputUpdate[]): string | AnsiOutput {
 
 describe('Live-output accumulation behavioral scenarios', () => {
   it('interleaved append (text) and replace (AnsiOutput) updates accumulate correctly', () => {
+    // Mirrors a shell PTY snapshot arriving mid-stream of subagent text.
     const result = replay([
       { mode: 'append', data: 'first ' },
       { mode: 'append', data: 'second ' },
@@ -53,6 +59,7 @@ describe('Live-output accumulation behavioral scenarios', () => {
   });
 
   it('append streams contain no inserted separators between consecutive appends', () => {
+    // Producer contract: append must not invent newlines or separators.
     const result = replay([
       { mode: 'append', data: 'a' },
       { mode: 'append', data: 'b' },

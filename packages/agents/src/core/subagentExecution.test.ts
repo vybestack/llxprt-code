@@ -19,7 +19,10 @@ import {
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { AnsiToken } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
+import type {
+  AnsiOutput,
+  AnsiToken,
+} from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 
 function makeOutput(): OutputObject {
   return { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR };
@@ -325,7 +328,7 @@ describe('subagentExecution', () => {
     it('should convert well-formed replace AnsiOutput to text', () => {
       const onMessage = vi.fn();
       const channel = createCompletionChannel({ onMessage });
-      const ansiOutput = [
+      const ansiOutput: AnsiOutput = [
         [makeToken('line one')],
         [makeToken('line '), makeToken('two')],
       ];
@@ -347,6 +350,20 @@ describe('subagentExecution', () => {
           data: 'some output',
         }),
       ).not.toThrow();
+    });
+
+    it('should throw on malformed replace payload (null line)', () => {
+      const onMessage = vi.fn();
+      const channel = createCompletionChannel({ onMessage });
+      // Malformed AnsiOutput: a null line entry. The replace branch accesses
+      // token.text without a null guard, so this throws at runtime — proving
+      // the type system contract (well-formed AnsiOutput) is enforced.
+      expect(() =>
+        channel.outputUpdateHandler('call-1', {
+          mode: 'replace',
+          data: [null] as unknown as AnsiOutput,
+        }),
+      ).toThrow(TypeError);
     });
 
     it('should reject awaitCompletedCalls when the abort signal fires first', async () => {
