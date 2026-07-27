@@ -392,5 +392,25 @@ describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
         deps.todoContinuationService.isSuccessfulTodoPauseResponse,
       ).not.toHaveBeenCalled();
     });
+
+    it('completes the turn without calling sendMessageStream when AfterAgent hook is non-blocking', async () => {
+      // With a non-blocking AfterAgent hook (the default), the generic
+      // tool-call finish path should NOT forward into sendMessageStream.
+      const { orchestrator, deps } = buildOrchestrator({
+        turnStream: toolCallRequestOnlyStream(makePauseRequest()),
+        blockingAfterHook: false,
+      });
+
+      const events = await collectEvents(orchestrator);
+
+      expect(deps.sendMessageStream).not.toHaveBeenCalled();
+      expect(
+        events.some((event) => event.type === AgentEventType.ToolCallRequest),
+      ).toBe(true);
+      // Still no pause detection.
+      expect(
+        deps.todoContinuationService.isSuccessfulTodoPauseResponse,
+      ).not.toHaveBeenCalled();
+    });
   });
 });
