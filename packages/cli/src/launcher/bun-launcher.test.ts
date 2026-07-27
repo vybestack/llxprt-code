@@ -397,13 +397,12 @@ describe('relaunchUnderBunIfNeeded', () => {
           harness,
           'const{spawn}=require("child_process");const c=spawn(' +
             JSON.stringify(recorder) +
-            ',[],{stdio:[0,1,2,3],env:{...process.env,LLXPRT_BUN_RELAUNCHED:"true"}});c.on("close",e=>process.exit(e));',
+            ',[],{stdio:[0,1,2,0],env:{...process.env,LLXPRT_BUN_RELAUNCHED:"true"}});c.on("close",e=>process.exit(e));',
         );
-        const bash = `exec 3<${JSON.stringify(tokenFile)}\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(harness)}`;
         const result = (await import('node:child_process')).spawnSync(
-          'bash',
-          ['-c', bash],
-          { encoding: 'utf8', timeout: 10000 },
+          process.execPath,
+          [harness],
+          { encoding: 'utf8', timeout: 10000, input: token },
         );
         expect(result.status).toBe(0);
         const rec = JSON.parse(fsMod.readFileSync(sentinel, 'utf8')) as {
