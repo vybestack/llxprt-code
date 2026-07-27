@@ -87,6 +87,50 @@ const ENTER = '\r';
 const ESC = '[27u';
 const RIGHT = '[C';
 
+const DEFAULT_UNALLOWED: readonly string[] = [];
+const PARAM_KEYS = [
+  'max_tokens',
+  'temperature',
+  'top_p',
+  'top_k',
+  'frequency_penalty',
+  'presence_penalty',
+] as const;
+const EPHEMERAL_KEYS = [
+  'context-limit',
+  'reasoning.enabled',
+  'reasoning.effort',
+  'streaming',
+  'prompt-caching',
+] as const;
+
+function fieldIndex(
+  key: string,
+  unallowed: readonly string[] = DEFAULT_UNALLOWED,
+): number {
+  const keys = [
+    ...PARAM_KEYS.filter((k) => !unallowed.includes(k)),
+    ...EPHEMERAL_KEYS,
+  ];
+  const index = keys.indexOf(key as (typeof keys)[number]);
+  if (index < 0) {
+    throw new Error(`Unknown field key: ${key}`);
+  }
+  return index;
+}
+
+function navigateToField(
+  stdin: { write: (data: string) => void },
+  key: string,
+  unallowed?: readonly string[],
+): void {
+  for (let i = 0; i < fieldIndex(key, unallowed); i++) {
+    act(() => {
+      stdin.write(DOWN);
+    });
+  }
+}
+
 function defaultProps() {
   return { onClose: vi.fn() };
 }
@@ -170,10 +214,7 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // Navigate down once from max_tokens (index 0) to temperature (index 1)
-    act(() => {
-      stdin.write(DOWN);
-    });
+    navigateToField(stdin, 'temperature');
 
     // Enter edit mode to reveal which field is selected via the prompt text
     act(() => {
@@ -190,10 +231,7 @@ describe('<ModelConfigDialog />', () => {
 
     expect(lastFrame()).toContain('temperature');
 
-    // Navigate to temperature (index 1)
-    act(() => {
-      stdin.write(DOWN);
-    });
+    navigateToField(stdin, 'temperature');
 
     // Enter edit mode
     act(() => {
@@ -226,18 +264,19 @@ describe('<ModelConfigDialog />', () => {
     // temperature starts at 0.7
     expect(lastFrame()).toContain('0.7');
 
-    // Navigate to temperature (index 1)
-    act(() => {
-      stdin.write(DOWN);
-    });
+    navigateToField(stdin, 'temperature');
 
     // Press 'c' in list mode to clear the selected param field
     await act(async () => {
       stdin.write('c');
     });
 
-    // The rendered output must show (not set) for temperature
+    // The runtime state must reflect the clear — rendered text alone is
+    // ambiguous because hints contain literal "true"/"false" strings.
     await waitFor(() => {
+      expect(activeRuntime.getActiveModelParams()).not.toHaveProperty(
+        'temperature',
+      );
       expect(lastFrame()).toContain('(not set)');
     });
   });
@@ -250,12 +289,7 @@ describe('<ModelConfigDialog />', () => {
     // reasoning.enabled starts at true
     expect(lastFrame()).toContain('true');
 
-    // Navigate to reasoning.enabled (index 7)
-    for (let i = 0; i < 7; i++) {
-      act(() => {
-        stdin.write(DOWN);
-      });
-    }
+    navigateToField(stdin, 'reasoning.enabled');
 
     // Press Enter to toggle boolean
     await act(async () => {
@@ -263,6 +297,9 @@ describe('<ModelConfigDialog />', () => {
     });
 
     await waitFor(() => {
+      expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+        false,
+      );
       expect(lastFrame()).toContain('false');
     });
 
@@ -271,8 +308,12 @@ describe('<ModelConfigDialog />', () => {
       stdin.write(ENTER);
     });
 
+    // Assert the runtime state, not rendered text — the hint string
+    // "Enable thinking/reasoning (true/false)" always contains "true".
     await waitFor(() => {
-      expect(lastFrame()).toContain('true');
+      expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+        true,
+      );
     });
   });
 
@@ -281,12 +322,7 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // Navigate to streaming (index 9)
-    for (let i = 0; i < 9; i++) {
-      act(() => {
-        stdin.write(DOWN);
-      });
-    }
+    navigateToField(stdin, 'streaming');
 
     // Enter edit mode on streaming
     act(() => {
@@ -321,12 +357,7 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // Navigate to reasoning.effort (index 8)
-    for (let i = 0; i < 8; i++) {
-      act(() => {
-        stdin.write(DOWN);
-      });
-    }
+    navigateToField(stdin, 'reasoning.effort');
 
     // Enter edit mode
     act(() => {
