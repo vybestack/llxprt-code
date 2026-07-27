@@ -1,14 +1,14 @@
 /**
  * @requirement:Issue-181 Issue-1769
- * Test suite for Anthropic OAuth default settings
+ * Test suite for Claude Code OAuth default settings
  *
- * Verifies that when switching to Anthropic provider with OAuth (subscription mode),
+ * Verifies that when switching to Claude Code provider with OAuth (subscription mode),
  * user-set values for context_limit, max_tokens, and maxOutputTokens are preserved.
  * Hardcoded defaults have been removed (Issue #1769); defaults now come from
- * the anthropic.config alias ephemeralSettings instead.
+ * the claudecode.config alias ephemeralSettings instead.
  * This applies when either:
  * - authOnly=true is set (explicit OAuth mode), OR
- * - oauthManager.isOAuthEnabled('anthropic') returns true (OAuth is actively being used)
+ * - oauthManager.isOAuthEnabled('claudecode') returns true (OAuth is actively being used)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -155,6 +155,7 @@ const StubProvider = StubProviderClass;
 const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
   anthropic: new StubProvider('anthropic'),
+  claudecode: new StubProvider('claudecode'),
 };
 
 let activeProviderName = 'openai';
@@ -233,12 +234,12 @@ const {
   registerCliProviderInfrastructure,
 } = await import('./runtimeSettings.js');
 
-let mockOAuthEnabledForAnthropic = false;
+let mockOAuthEnabledForClaudeCode = false;
 
 const mockOAuthManager = {
   isOAuthEnabled: vi.fn((provider: string) => {
-    if (provider === 'anthropic') {
-      return mockOAuthEnabledForAnthropic;
+    if (provider === 'claudecode') {
+      return mockOAuthEnabledForClaudeCode;
     }
     return false;
   }),
@@ -248,14 +249,14 @@ const mockOAuthManager = {
   setConfigGetter: vi.fn(),
 } as never;
 
-describe('Anthropic OAuth defaults (Issue #181)', () => {
+describe('Claude Code OAuth defaults (Issue #181)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
     stubSettingsService = new StubSettingsService();
     stubConfig = new StubConfig(stubSettingsService);
     activeProviderName = 'openai';
-    mockOAuthEnabledForAnthropic = false;
+    mockOAuthEnabledForClaudeCode = false;
 
     // Set up the runtime context so switchActiveProvider can find it
     setCliRuntimeContext(stubSettingsService as never, stubConfig as never, {
@@ -281,11 +282,11 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
     vi.clearAllMocks();
   });
 
-  describe('when switching to Anthropic with authOnly=true', () => {
+  describe('when switching to Claude Code with authOnly=true', () => {
     it('should NOT inject hardcoded context-limit default (Issue #1769)', async () => {
       stubConfig.setEphemeralSetting('authOnly', true);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
     });
@@ -293,7 +294,7 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
     it('should NOT inject hardcoded max_tokens default (Issue #1769)', async () => {
       stubConfig.setEphemeralSetting('authOnly', true);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
     });
@@ -302,7 +303,7 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
       stubConfig.setEphemeralSetting('authOnly', true);
       stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
@@ -312,7 +313,7 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
       stubConfig.setEphemeralSetting('authOnly', true);
       stubConfig.setEphemeralSetting('context-limit', 150000);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('context-limit')).toBe(150000);
     });
@@ -321,19 +322,19 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
       stubConfig.setEphemeralSetting('authOnly', true);
       stubConfig.setEphemeralSetting('max_tokens', 8192);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
     });
   });
 
-  describe('when switching to Anthropic with authOnly=false', () => {
+  describe('when switching to Claude Code with authOnly=false', () => {
     it('should NOT set default context_limit when authOnly is false', async () => {
       // Arrange: authOnly disabled (API key mode)
       stubConfig.setEphemeralSetting('authOnly', false);
 
-      // Act: Switch to Anthropic provider
-      await switchActiveProvider('anthropic');
+      // Act: Switch to Claude Code provider
+      await switchActiveProvider('claudecode');
 
       // Assert: context_limit should NOT be set
       expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
@@ -343,21 +344,21 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
       // Arrange: authOnly disabled (API key mode)
       stubConfig.setEphemeralSetting('authOnly', false);
 
-      // Act: Switch to Anthropic provider
-      await switchActiveProvider('anthropic');
+      // Act: Switch to Claude Code provider
+      await switchActiveProvider('claudecode');
 
       // Assert: max_tokens should NOT be set
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
     });
   });
 
-  describe('when switching to Anthropic with authOnly undefined', () => {
+  describe('when switching to Claude Code with authOnly undefined', () => {
     it('should NOT set defaults when authOnly is undefined and OAuth not enabled', async () => {
       // Arrange: authOnly not set (default behavior), OAuth not enabled
       // (don't set authOnly at all)
 
-      // Act: Switch to Anthropic provider
-      await switchActiveProvider('anthropic');
+      // Act: Switch to Claude Code provider
+      await switchActiveProvider('claudecode');
 
       // Assert: No defaults should be applied
       expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
@@ -365,64 +366,75 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
     });
   });
 
-  describe('when switching to Anthropic with OAuth enabled (via oauthManager)', () => {
+  describe('when switching to Claude Code with OAuth enabled (via oauthManager)', () => {
     it('should NOT inject hardcoded context-limit default (Issue #1769)', async () => {
-      mockOAuthEnabledForAnthropic = true;
+      mockOAuthEnabledForClaudeCode = true;
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
     });
 
     it('should NOT inject hardcoded max_tokens default (Issue #1769)', async () => {
-      mockOAuthEnabledForAnthropic = true;
+      mockOAuthEnabledForClaudeCode = true;
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
     });
 
     it('should restore maxOutputTokens when previously set and no explicit max_tokens (Issue #1769)', async () => {
-      mockOAuthEnabledForAnthropic = true;
+      mockOAuthEnabledForClaudeCode = true;
       stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
     });
 
     it('should NOT override existing context_limit when OAuth is enabled', async () => {
-      mockOAuthEnabledForAnthropic = true;
+      mockOAuthEnabledForClaudeCode = true;
       stubConfig.setEphemeralSetting('context-limit', 150000);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('context-limit')).toBe(150000);
     });
 
     it('should NOT override existing max_tokens when OAuth is enabled', async () => {
-      mockOAuthEnabledForAnthropic = true;
+      mockOAuthEnabledForClaudeCode = true;
       stubConfig.setEphemeralSetting('max_tokens', 8192);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
     });
   });
 
-  describe('when switching to non-Anthropic providers', () => {
+  describe('when switching to non-Claude Code providers', () => {
     it('should NOT set defaults for OpenAI even with authOnly=true', async () => {
       // Arrange: authOnly enabled but switching to OpenAI
       stubConfig.setEphemeralSetting('authOnly', true);
-      activeProviderName = 'anthropic'; // Start from anthropic
+      activeProviderName = 'claudecode'; // Start from claudecode
 
       // Act: Switch to OpenAI
       await switchActiveProvider('openai');
 
-      // Assert: No Anthropic-specific defaults should be set
+      // Assert: No Claude Code-specific defaults should be set
       expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+    });
+
+    it('does not apply OAuth defaults to API-key-only anthropic', async () => {
+      mockOAuthEnabledForClaudeCode = true;
+      activeProviderName = 'claudecode';
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBeUndefined();
     });
   });
 });
