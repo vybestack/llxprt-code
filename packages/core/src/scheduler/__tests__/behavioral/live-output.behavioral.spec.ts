@@ -47,8 +47,8 @@ describe('Live-output accumulation behavioral scenarios', () => {
       { mode: 'replace', data: snapshot('terminal-snap') },
       { mode: 'append', data: ' after' },
     ]);
-    // The replace wipes prior text; the append starts fresh on top of the
-    // returned AnsiOutput (existing is non-string, so append returns just data).
+    // The replace wipes prior text; the append discards the AnsiOutput
+    // (existing is non-string) and returns just the new string data.
     expect(result).toBe(' after');
   });
 
@@ -87,8 +87,8 @@ describe('Live-output accumulation behavioral scenarios', () => {
       { mode: 'replace', data: snapshot('buffer') },
       { mode: 'append', data: 'fresh' },
     ]);
-    // After replace the accumulated value is AnsiOutput; the next append drops
-    // it and returns just the new string data.
+    // After replace the accumulated value is AnsiOutput; the next append
+    // discards it and returns just the new string data.
     expect(result).toBe('fresh');
   });
 });
