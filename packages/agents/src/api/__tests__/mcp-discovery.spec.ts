@@ -489,6 +489,30 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     expect(manager.restartedServers()).toStrictEqual(['one']);
   });
 
+  it('reload refreshes configuration, reconciles servers, and republishes tools', async () => {
+    const { deps, manager } = createFakeMcpDeps({
+      servers: { one: fakeServerConfig() },
+    });
+    let reloadCount = 0;
+    let toolRefreshCount = 0;
+    const control = new McpControl({
+      ...deps,
+      reloadMcpServers: async () => {
+        reloadCount += 1;
+      },
+      refreshClientTools: async () => {
+        toolRefreshCount += 1;
+      },
+    });
+
+    await control.reload();
+
+    expect(reloadCount).toBe(1);
+    expect(manager.reconcileCount()).toBe(1);
+    expect(toolRefreshCount).toBe(1);
+    expect(manager.restartAllCount()).toBe(0);
+  });
+
   it('refresh() is a no-op (resolves) when the manager is not yet initialized @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
     const { deps } = createFakeMcpDeps({ hasManager: false });
     const control = new McpControl(deps);

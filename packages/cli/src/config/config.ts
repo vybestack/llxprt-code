@@ -17,7 +17,11 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { type MergedSettings, type Settings } from './settings.js';
+import {
+  loadSettings,
+  type MergedSettings,
+  type Settings,
+} from './settings.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { resolveMcpServers } from './mcpServerConfig.js';
 import { type CliArgs } from './cliArgParser.js';
@@ -50,6 +54,11 @@ type ConfigBuildPieces = {
   filePaths: string[];
   mcpServers: Record<string, MCPServerConfig>;
   blockedMcpServers: ReadonlyArray<{ name: string; extensionName: string }>;
+  reloadMcpServers: () => Promise<{
+    mcpServers: Record<string, MCPServerConfig>;
+    blockedMcpServers: Array<{ name: string; extensionName: string }>;
+    settingsMcpServers: Record<string, MCPServerConfig>;
+  }>;
   approvalMode: ApprovalMode;
   providerModel: ReturnType<typeof resolveProviderAndModel>;
   sandboxConfig: SandboxConfig | undefined;
@@ -146,6 +155,29 @@ function resolveApprovalAndProvider(
   return { approvalMode, providerModel };
 }
 
+function applyStartupMcpProfileOverrides(
+  refreshedSettings: Settings,
+  startupSettings: Settings,
+  profileMergedSettings: Settings,
+): Settings {
+  return {
+    ...refreshedSettings,
+    mcpServers:
+      profileMergedSettings.mcpServers === startupSettings.mcpServers
+        ? refreshedSettings.mcpServers
+        : profileMergedSettings.mcpServers,
+    allowMCPServers:
+      profileMergedSettings.allowMCPServers === startupSettings.allowMCPServers
+        ? refreshedSettings.allowMCPServers
+        : profileMergedSettings.allowMCPServers,
+    excludeMCPServers:
+      profileMergedSettings.excludeMCPServers ===
+      startupSettings.excludeMCPServers
+        ? refreshedSettings.excludeMCPServers
+        : profileMergedSettings.excludeMCPServers,
+  };
+}
+
 async function resolveConfigBuildPieces(
   argv: CliArgs,
   settings: Settings,
@@ -189,6 +221,29 @@ async function resolveConfigBuildPieces(
     approvalMode,
   );
   const sandboxConfig = await loadSandboxConfig(profileMergedSettings, argv);
+  const reloadMcpServers = async () => {
+    if (!intermediate.mcpEnabled) {
+      return {
+        mcpServers: {},
+        blockedMcpServers: [],
+        settingsMcpServers: {},
+      };
+    }
+    const refreshedSettings = loadSettings(cwd).merged;
+    const reloadedSettings = applyStartupMcpProfileOverrides(
+      refreshedSettings,
+      settings,
+      profileMergedSettings,
+    );
+    return {
+      ...resolveMcpServers(
+        reloadedSettings,
+        context,
+        argv.allowedMcpServerNames,
+      ),
+      settingsMcpServers: reloadedSettings.mcpServers ?? {},
+    };
+  };
 
   return {
     context,
@@ -197,6 +252,7 @@ async function resolveConfigBuildPieces(
     filePaths,
     mcpServers,
     blockedMcpServers,
+    reloadMcpServers,
     approvalMode,
     providerModel,
     sandboxConfig,
@@ -256,6 +312,7 @@ function buildLoadedConfig(
     sandboxConfig: pieces.sandboxConfig,
     mcpServers: pieces.mcpServers,
     blockedMcpServers: pieces.blockedMcpServers,
+    reloadMcpServers: pieces.reloadMcpServers,
     excludeTools: pieces.excludeTools,
     memoryContent: pieces.memoryContent,
     fileCount: pieces.fileCount,

@@ -229,6 +229,13 @@ export abstract class ConfigBaseCore {
         adminSkillsEnabled?: boolean;
       }>)
     | undefined;
+  protected readonly _onReloadMcpServers:
+    | (() => Promise<{
+        mcpServers: Record<string, MCPServerConfig>;
+        blockedMcpServers: Array<{ name: string; extensionName: string }>;
+        settingsMcpServers: Record<string, MCPServerConfig>;
+      }>)
+    | undefined;
   protected readonly outputSettings!: OutputSettings;
   protected readonly introspectionAgentSettings!: IntrospectionAgentSettings;
   protected readonly useWriteTodos!: boolean;

@@ -439,6 +439,26 @@ export class Config extends ConfigBase {
     }
   }
 
+  async reloadMcpServers(): Promise<void> {
+    if (this._onReloadMcpServers === undefined) {
+      throw new Error(
+        'MCP server reload is not available in this composition.',
+      );
+    }
+    const { mcpServers, blockedMcpServers, settingsMcpServers } =
+      await this._onReloadMcpServers();
+    this.mcpServers = mcpServers;
+    this.blockedMcpServers = [...blockedMcpServers];
+    this.policyEngine.removeRulesBySource(MCP_TRUSTED_POLICY_SOURCE);
+    if (this.isTrustedFolder()) {
+      for (const rule of buildMcpTrustedRules({
+        mcpServers: settingsMcpServers,
+      })) {
+        this.policyEngine.addRule(rule);
+      }
+    }
+  }
+
   async reloadSkills(): Promise<void> {
     if (this._onReload) {
       const result = await this._onReload();

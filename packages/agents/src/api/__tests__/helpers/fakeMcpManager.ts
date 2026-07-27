@@ -52,6 +52,7 @@ export interface FakeMcpManagerView {
   restartAllCount(): number;
   /** Servers passed to restartServer(name), in call order. */
   restartedServers(): readonly string[];
+  reconcileCount(): number;
 }
 
 interface FakeManagerInternal extends FakeMcpManagerView {
@@ -61,6 +62,7 @@ interface FakeManagerInternal extends FakeMcpManagerView {
   whenDiscoverySettled(): Promise<void>;
   restart(): Promise<void>;
   restartServer(name: string): Promise<void>;
+  reconcileConfiguredMcpServers(): Promise<void>;
 }
 
 class FakeManager implements FakeManagerInternal {
@@ -68,6 +70,7 @@ class FakeManager implements FakeManagerInternal {
   private state: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
   private readonly failures = new Map<string, string>();
   private restartAll = 0;
+  private reconcileAll = 0;
   private readonly restartedNames: string[] = [];
 
   setServers(servers: Record<string, MCPServerConfig>): void {
@@ -94,6 +97,10 @@ class FakeManager implements FakeManagerInternal {
     return [...this.restartedNames];
   }
 
+  reconcileCount(): number {
+    return this.reconcileAll;
+  }
+
   getMcpServers(): Record<string, MCPServerConfig> {
     return { ...this.servers };
   }
@@ -118,6 +125,10 @@ class FakeManager implements FakeManagerInternal {
 
   async restartServer(name: string): Promise<void> {
     this.restartedNames.push(name);
+  }
+
+  async reconcileConfiguredMcpServers(): Promise<void> {
+    this.reconcileAll += 1;
   }
 }
 

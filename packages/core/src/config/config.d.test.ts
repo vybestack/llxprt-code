@@ -523,6 +523,148 @@ describe('Config getHookSystem', () => {
     expect(config.getEnableHooksUI()).toBe(true);
   });
 
+  describe('reloadMcpServers', () => {
+    it('atomically replaces MCP and blocked server configuration', async () => {
+      const reloadMcpServers = vi.fn().mockResolvedValue({
+        mcpServers: { fresh: { command: 'fresh-command' } },
+        blockedMcpServers: [{ name: 'blocked', extensionName: '' }],
+        settingsMcpServers: { fresh: { command: 'fresh-command' } },
+      });
+      const config = new Config({
+        ...baseParams,
+        mcpServers: { stale: { command: 'stale-command' } },
+        onReloadMcpServers: reloadMcpServers,
+      });
+
+      await config.reloadMcpServers();
+
+      expect(config.getMcpServers()).toStrictEqual({
+        fresh: { command: 'fresh-command' },
+      });
+      expect(config.getBlockedMcpServers()).toStrictEqual([
+        { name: 'blocked', extensionName: '' },
+      ]);
+    });
+
+    it('replaces trusted MCP policy rules with rules from the reloaded configuration', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: true,
+        mcpServers: { stale: { command: 'stale-command', trust: true } },
+        onReloadMcpServers: vi.fn().mockResolvedValue({
+          mcpServers: { fresh: { command: 'fresh-command', trust: true } },
+          blockedMcpServers: [],
+          settingsMcpServers: {
+            fresh: { command: 'fresh-command', trust: true },
+          },
+        }),
+      });
+
+      await config.reloadMcpServers();
+
+      const trustedPrefixes = config
+        .getPolicyEngine()
+        .getRules()
+        .filter((rule) => rule.source === 'Settings (MCP Trusted)')
+        .map((rule) => rule.toolNamePrefix);
+      expect(trustedPrefixes).toStrictEqual(['fresh__']);
+    });
+
+    it('preserves existing MCP state when reload resolution fails', async () => {
+      const config = new Config({
+        ...baseParams,
+        mcpServers: { stable: { command: 'stable-command' } },
+        blockedMcpServers: [{ name: 'stable-blocked', extensionName: '' }],
+        onReloadMcpServers: vi
+          .fn()
+          .mockRejectedValue(new Error('settings invalid')),
+      });
+
+      await expect(config.reloadMcpServers()).rejects.toThrow(
+        'settings invalid',
+      );
+      expect(config.getMcpServers()).toStrictEqual({
+        stable: { command: 'stable-command' },
+      });
+      expect(config.getBlockedMcpServers()).toStrictEqual([
+        { name: 'stable-blocked', extensionName: '' },
+      ]);
+    });
+
+    it('throws when onReloadMcpServers is not wired instead of silently no-oping', async () => {
+      const config = new Config({
+        ...baseParams,
+        mcpServers: { existing: { command: 'existing' } },
+      });
+
+      await expect(config.reloadMcpServers()).rejects.toThrow(
+        'MCP server reload is not available in this composition.',
+      );
+      expect(config.getMcpServers()).toStrictEqual({
+        existing: { command: 'existing' },
+      });
+    });
+
+    it('builds trusted rules from settingsMcpServers, not the merged mcpServers map', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: true,
+        mcpServers: { stale: { command: 'stale', trust: true } },
+        onReloadMcpServers: vi.fn().mockResolvedValue({
+          mcpServers: {
+            mergedOnly: { command: 'merged', trust: true },
+            shared: { command: 'shared', trust: true },
+          },
+          blockedMcpServers: [],
+          settingsMcpServers: {
+            settingsOnly: { command: 'settings', trust: true },
+            shared: { command: 'shared', trust: true },
+          },
+        }),
+      });
+
+      await config.reloadMcpServers();
+
+      const trustedPrefixes = config
+        .getPolicyEngine()
+        .getRules()
+        .filter((rule) => rule.source === 'Settings (MCP Trusted)')
+        .map((rule) => rule.toolNamePrefix)
+        .sort();
+      expect(trustedPrefixes).toStrictEqual(['settingsOnly__', 'shared__']);
+    });
+
+    it('preserves non-MCP policy rules during reload', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: true,
+        mcpServers: { stale: { command: 'stale-command', trust: true } },
+        onReloadMcpServers: vi.fn().mockResolvedValue({
+          mcpServers: { fresh: { command: 'fresh-command', trust: true } },
+          blockedMcpServers: [],
+          settingsMcpServers: {
+            fresh: { command: 'fresh-command', trust: true },
+          },
+        }),
+      });
+
+      config.getPolicyEngine().addRule({
+        toolNamePrefix: 'custom__',
+        decision: 'allow',
+        priority: 1,
+        source: 'Test Custom Source',
+      });
+
+      await config.reloadMcpServers();
+
+      const sources = config
+        .getPolicyEngine()
+        .getRules()
+        .map((rule) => rule.source);
+      expect(sources).toContain('Test Custom Source');
+    });
+  });
+
   describe('reloadSkills', () => {
     it('should call onReload, update disabledSkills, discover, and apply disabled list', async () => {
       const mockOnReload = vi.fn().mockResolvedValue({

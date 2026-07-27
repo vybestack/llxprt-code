@@ -58,6 +58,18 @@ describe('P17 public barrel + command-api-map @plan:PLAN-20260622-COREAPIGAP.P17
     }
   });
 
+  it('maps /mcp reload to the runtime MCP reload control', () => {
+    const row = COMMAND_API_MAP.find(
+      (entry) => entry.command === '/mcp reload',
+    );
+
+    expect(row).toBeDefined();
+    expect(row).toMatchObject({
+      kind: 'runtime',
+      target: 'agent.mcp.reload',
+    });
+  });
+
   it('T4 map invariants hold after the append: valid kinds + unique command names @requirement:REQ-008 @requirement:REQ-009 @scenario:map-invariants @given:the full COMMAND_API_MAP after the six new rows @when:inspecting every row @then:every kind is in {runtime,subpath,cli-local} and command names are unique', () => {
     const validKinds = new Set(['runtime', 'subpath', 'cli-local']);
     for (const e of COMMAND_API_MAP) {

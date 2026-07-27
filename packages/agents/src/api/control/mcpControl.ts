@@ -107,6 +107,7 @@ export interface McpControlDeps {
   readonly getResourceRegistry?: () => McpResourceRegistryView | undefined;
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Re-publishes client tool declarations. */
   readonly refreshClientTools?: () => Promise<void>;
+  readonly reloadMcpServers?: () => Promise<void>;
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Performs the real OAuth handshake. */
   readonly performOAuth?: (
     server: string,
@@ -352,6 +353,16 @@ export class McpControl implements AgentMcpControl {
     if (this.deps?.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();
     }
+  }
+
+  async reload(): Promise<void> {
+    await this.deps?.reloadMcpServers?.();
+    const manager = this.deps?.getManager();
+    if (manager === undefined) {
+      return;
+    }
+    await manager.reconcileConfiguredMcpServers();
+    await this.deps?.refreshClientTools?.();
   }
 
   /**

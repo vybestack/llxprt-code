@@ -136,6 +136,53 @@ const listCommand: SlashCommand = {
   },
 };
 
+const reloadCommand: SlashCommand = {
+  name: 'reload',
+  description: 'Reloads MCP server configuration from disk.',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  action: async (
+    context: CommandContext,
+  ): Promise<SlashCommandActionReturn> => {
+    const { config } = context.services;
+    const agent = context.services.agent;
+    if (!config) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Configuration not loaded.',
+      };
+    }
+    if (!agent) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Could not retrieve tools from the agent.',
+      };
+    }
+    context.ui.addItem(
+      {
+        type: 'info',
+        text: 'Reloading MCP configuration from disk...',
+      },
+      Date.now(),
+    );
+    try {
+      await agent.mcp.reload();
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to reload MCP configuration: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+    context.ui.reloadCommands();
+    return getMcpStatus(context, false, false, false);
+  },
+};
+
 const refreshCommand: SlashCommand = {
   name: 'refresh',
   description: 'Restarts MCP servers.',
@@ -197,7 +244,7 @@ export const mcpCommand: SlashCommand = {
   description:
     'list configured MCP servers and tools, or authenticate with OAuth-enabled servers',
   kind: CommandKind.BUILT_IN,
-  subCommands: [listCommand, authCommand, refreshCommand],
+  subCommands: [listCommand, authCommand, reloadCommand, refreshCommand],
   // Default action when no subcommand is provided
   action: async (context: CommandContext, args: string) =>
     // If no subcommand, run the list command

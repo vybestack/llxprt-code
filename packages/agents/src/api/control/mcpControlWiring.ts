@@ -90,6 +90,7 @@ export function buildMcpControlDeps(
       getAllResources: () => config.getResourceRegistry().getAllResources(),
     }),
     refreshClientTools: () => resolveClient().setTools(),
+    reloadMcpServers: () => config.reloadMcpServers(),
     performOAuth: async (server, oauthConfig, mcpServerUrl) => {
       await MCPOAuthProvider.authenticate(
         server,

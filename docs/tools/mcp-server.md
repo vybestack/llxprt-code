@@ -263,6 +263,22 @@ This displays:
 - **Available tools:** List of tools from each server with descriptions
 - **Discovery state:** Overall discovery process status
 
+After editing `settings.json` or running `llxprt mcp add` or `llxprt mcp remove`
+in another terminal, apply the persisted changes to the current session with:
+
+```text
+/mcp reload
+```
+
+Reloading adds newly configured servers, disconnects removed servers, and
+reconnects servers whose effective configuration changed. Existing profile,
+extension, administrative, and command-line restrictions from session startup
+remain in effect. Use `/mcp refresh` when you only want to reconnect the servers
+that are already loaded without rereading configuration.
+
+Changing OAuth settings may still require `/mcp auth <server>`. Installing or
+removing an extension still requires the extension reload flow or a new session.
+
 ### Example `/mcp` Output
 
 ```
