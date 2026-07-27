@@ -181,7 +181,7 @@ Required local candidate-head gates:
 - `npm run typecheck`
 - `npm run format`
 - `npm run build`
-- `node scripts/start.js --profile-load ollamakimi "write me a haiku and nothing else"`
+- `bun scripts/start.ts --profile-load ollamakimi "write me a haiku and nothing else"`
 - Open Code Review no more than two local and two PR runs.
 - DeepThinker review within the two-cycle total review limit.
 - Review findings classified as `Blocker-Fix`, `In-scope-Fix`, `Reject`, or
