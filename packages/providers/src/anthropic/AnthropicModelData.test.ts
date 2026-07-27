@@ -59,25 +59,25 @@ describe('AnthropicModelData latest Opus models', () => {
   });
 
   describe('getMaxTokensForModel', () => {
-    it('returns 32000 (auth default) for opus 4.6, 4.7, and 4.8', () => {
+    it('returns 32000 for opus 4.6, 4.7, and 4.8', () => {
       expect(getMaxTokensForModel('claude-opus-4-8')).toBe(32000);
       expect(getMaxTokensForModel('claude-opus-4-7')).toBe(32000);
       expect(getMaxTokensForModel('claude-opus-4-6')).toBe(32000);
     });
 
-    it('returns 32000 (auth default) for the claude-opus-4-latest alias', () => {
+    it('returns 32000 for the claude-opus-4-latest alias', () => {
       expect(getMaxTokensForModel('claude-opus-4-latest')).toBe(32000);
     });
   });
 
   describe('getContextWindowForModel', () => {
-    it('returns 200000 (auth default) for opus 4.6, 4.7, and 4.8', () => {
+    it('returns 200000 for opus 4.6, 4.7, and 4.8', () => {
       expect(getContextWindowForModel('claude-opus-4-8')).toBe(200000);
       expect(getContextWindowForModel('claude-opus-4-7')).toBe(200000);
       expect(getContextWindowForModel('claude-opus-4-6')).toBe(200000);
     });
 
-    it('returns 200000 (auth default) for the claude-opus-4-latest alias', () => {
+    it('returns 200000 for the claude-opus-4-latest alias', () => {
       expect(getContextWindowForModel('claude-opus-4-latest')).toBe(200000);
     });
   });

@@ -808,7 +808,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       );
 
       expect(logoutAllBucketsMock).toHaveBeenCalledWith('claudecode');
-      expect(clearSessionBucketMock).toHaveBeenCalledWith('claudecode');
+      expect(clearSessionBucketMock).not.toHaveBeenCalled();
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',

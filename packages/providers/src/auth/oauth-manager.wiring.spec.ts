@@ -498,7 +498,7 @@ describe('OAuthManager wiring', () => {
     expect(authFlowOrchestrator.setRuntimeMessageBus).toHaveBeenCalledWith(bus);
   });
 
-  it('returns null for Claude Code usage when the claudecode provider is not registered', async () => {
+  it('getAnthropicUsageInfo returns null when the claudecode provider is not registered', async () => {
     const tokenStore = createTokenStore();
     const manager = new OAuthManager(tokenStore);
 

@@ -149,7 +149,7 @@ describe('AuthDialog + ProfileCreateWizard claudecode identity (@issue:2274)', (
     unmount();
   });
 
-  it('closes the dialog via the Close item (index 3)', async () => {
+  it('closes the dialog via the Close item at visible position 3', async () => {
     const onSelect = vi.fn();
     const { stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={onSelect} settings={makeSettings()} />,
