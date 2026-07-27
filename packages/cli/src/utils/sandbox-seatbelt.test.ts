@@ -4,19 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildSeatbeltArgs } from './sandbox-seatbelt.js';
+import { buildSeatbeltArgs, runSeatbeltSandbox } from './sandbox-seatbelt.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isMacOS = os.platform() === 'darwin';
+
+/** Extracts the value of a `-D NAME=value` seatbelt param from args. */
+function paramValue(args: string[], name: string): string | undefined {
+  const param = args.find(
+    (a, i) => i > 0 && args[i - 1] === '-D' && a.startsWith(`${name}=`),
+  );
+  return param?.split('=').slice(1).join('=');
+}
 
 /**
  * Reads all 6 built-in .sb profile files and returns their content keyed by
@@ -46,17 +54,14 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
 
   /**
    * Extracts every `(allow|deny) file-(read|write)*` grant block from a
-   * profile's source text, returning an array of raw block strings.
-   *
-   * Each block terminates at a standalone `)` on its own line — NOT at the
-   * first inner `)` (subpath entries also close with `)`), so later
-   * entries such as a legacy HOME_DIR/.llxprt write grant are captured.
+   * profile's source text. Each block terminates at a standalone `)` line.
    */
   function extractGrantBlocks(content: string): string[] {
-    const matches = content.match(
-      /\((?:allow|deny)\s+file-(?:read|write)\*[\s\S]*?\n\)\s*\n/g,
+    return (
+      content.match(
+        /\((?:allow|deny)\s+file-(?:read|write)\*[\s\S]*?\n\)\s*\n/g,
+      ) ?? []
     );
-    return matches ?? [];
   }
 
   for (const [profileName, content] of Object.entries(profiles)) {
@@ -68,45 +73,26 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
       });
 
       it('does NOT grant writes to HOME_DIR/.llxprt (no active legacy write grant)', () => {
-        // The string-append pattern for .llxprt writes must never appear.
-        // A file-read* grant for migration is allowed, but NOT a file-write*
-        // grant containing HOME_DIR joined with .llxprt.
-        // The regex terminates at a standalone `)` line so the FULL
-        // file-write* block is captured, not just the first subpath entry.
-        const writeGrantMatch = content.match(
-          /\(allow file-write\*[\s\S]*?\n\)\s*\n/g,
-        );
-        const writeGrants = writeGrantMatch ? writeGrantMatch.join('\n') : '';
+        const writeGrants = (
+          content.match(/\(allow file-write\*[\s\S]*?\n\)\s*\n/g) ?? []
+        ).join('\n');
         expect(writeGrants).not.toContain(
           '(string-append (param "HOME_DIR") "/.llxprt")',
         );
       });
 
       it('every HOME_DIR/.llxprt grant is read-only (no write grants)', () => {
-        // Any HOME_DIR/.llxprt reference must be under file-read*, never
-        // file-write*. We assert explicitly: among ALL grant blocks that
-        // mention both HOME_DIR and .llxprt, none may be a file-write* grant.
-        const grantBlocks = extractGrantBlocks(content);
-        const llxprtGrantBlocks = grantBlocks.filter(
-          (block) => block.includes('HOME_DIR') && block.includes('.llxprt'),
+        const llxprtBlocks = extractGrantBlocks(content).filter(
+          (b) => b.includes('HOME_DIR') && b.includes('.llxprt'),
         );
-        // Assert every matching block is read-only (contains file-read).
-        // A block is a write grant if it mentions file-write* but NOT
-        // file-read*.
-        const writeGrants = llxprtGrantBlocks.filter(
-          (block) => !block.includes('file-read'),
-        );
-        expect(writeGrants).toStrictEqual([]);
+        expect(
+          llxprtBlocks.filter((b) => !b.includes('file-read')),
+        ).toStrictEqual([]);
       });
     });
   }
 
-  it('extractGrantBlocks mutation guard: detects a reintroduced HOME_DIR/.llxprt write grant in a later subpath entry', () => {
-    // This mutation test proves the regex captures the FULL grant block,
-    // not just the first subpath entry. If the legacy HOME_DIR/.llxprt
-    // write grant were reintroduced as a later entry in a file-write* block
-    // (exactly where it used to live, next to .npm/.cache/.gitconfig), the
-    // regression guard must detect it.
+  it('extractGrantBlocks mutation guard: detects a reintroduced HOME_DIR/.llxprt write grant', () => {
     const mutatedProfile = `(version 1)
 (deny default)
 (allow file-write*
@@ -123,23 +109,15 @@ describe('seatbelt .sb profiles: canonical roots and no legacy write grants', ()
     (subpath (string-append (param "HOME_DIR") "/.llxprt"))
 )
 `;
-    // The write-grant regex must capture the FULL file-write* block
-    // including the .llxprt entry near the end.
-    const writeGrantMatch = mutatedProfile.match(
-      /\(allow file-write\*[\s\S]*?\n\)\s*\n/g,
-    );
-    const writeGrants = writeGrantMatch ? writeGrantMatch.join('\n') : '';
+    const writeGrants = (
+      mutatedProfile.match(/\(allow file-write\*[\s\S]*?\n\)\s*\n/g) ?? []
+    ).join('\n');
     expect(writeGrants).toContain(
       '(string-append (param "HOME_DIR") "/.llxprt")',
     );
-
-    // extractGrantBlocks must also include the mutated block.
-    const blocks = extractGrantBlocks(mutatedProfile);
-    const llxprtBlocks = blocks.filter(
-      (b) => b.includes('HOME_DIR') && b.includes('.llxprt'),
-    );
-    const writeBlocks = llxprtBlocks.filter((b) => !b.includes('file-read'));
-    // The mutation test: a reintroduced write grant IS detected.
+    const writeBlocks = extractGrantBlocks(mutatedProfile)
+      .filter((b) => b.includes('HOME_DIR') && b.includes('.llxprt'))
+      .filter((b) => !b.includes('file-read'));
     expect(writeBlocks.length).toBeGreaterThan(0);
   });
 });
@@ -192,47 +170,18 @@ describe('buildSeatbeltArgs: canonical root resolution', () => {
     await fs.promises.rm(tmpRoot, { recursive: true, force: true });
   });
 
-  it('passes CONFIG_DIR resolved from Storage.getGlobalConfigDir()', () => {
-    const args = buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
-    const configDirParam = args.find(
-      (a, i) => i > 0 && args[i - 1] === '-D' && a.startsWith('CONFIG_DIR='),
-    );
-    expect(configDirParam).toBeDefined();
-    const value = configDirParam!.split('=').slice(1).join('=');
-    expect(value).toBe(fs.realpathSync(Storage.getGlobalConfigDir()));
-  });
-
-  it('passes DATA_DIR resolved from Storage.getGlobalDataDir()', () => {
-    const args = buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
-    const dataDirParam = args.find(
-      (a, i) => i > 0 && args[i - 1] === '-D' && a.startsWith('DATA_DIR='),
-    );
-    expect(dataDirParam).toBeDefined();
-    const value = dataDirParam!.split('=').slice(1).join('=');
-    expect(value).toBe(fs.realpathSync(Storage.getGlobalDataDir()));
-  });
-
-  it('passes LOG_DIR resolved from Storage.getGlobalLogDir()', () => {
-    const args = buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
-    const logDirParam = args.find(
-      (a, i) => i > 0 && args[i - 1] === '-D' && a.startsWith('LOG_DIR='),
-    );
-    expect(logDirParam).toBeDefined();
-    const value = logDirParam!.split('=').slice(1).join('=');
-    expect(value).toBe(fs.realpathSync(Storage.getGlobalLogDir()));
-  });
-
-  it('passes CACHE_DIR resolved from Storage.getGlobalCacheDir() (canonical, not Darwin user cache)', () => {
-    const args = buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
-    const cacheDirParam = args.find(
-      (a, i) => i > 0 && args[i - 1] === '-D' && a.startsWith('CACHE_DIR='),
-    );
-    expect(cacheDirParam).toBeDefined();
-    const value = cacheDirParam!.split('=').slice(1).join('=');
-    // CACHE_DIR must resolve through the canonical Storage cache resolver
-    // (honoring LLXPRT_CACHE_HOME), NOT the Darwin per-user cache dir.
-    expect(value).toBe(fs.realpathSync(Storage.getGlobalCacheDir()));
-  });
+  it.each([
+    ['CONFIG_DIR', () => Storage.getGlobalConfigDir()],
+    ['DATA_DIR', () => Storage.getGlobalDataDir()],
+    ['LOG_DIR', () => Storage.getGlobalLogDir()],
+    ['CACHE_DIR', () => Storage.getGlobalCacheDir()],
+  ])(
+    'passes %s resolved from canonical Storage resolver',
+    (_name, resolver) => {
+      const args = buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
+      expect(paramValue(args, _name)).toBe(fs.realpathSync(resolver()));
+    },
+  );
 
   it('creates missing canonical root directories with mode 0o700', () => {
     // Point CONFIG_DIR at a path that does NOT exist yet so
@@ -318,25 +267,8 @@ describe.skipIf(!isMacOS)(
 `,
       );
 
-      // Write to CONFIG_DIR should succeed.
-      const writeCmd = `echo test > "${configDir}/write-test.txt"`;
-      execFileSync('sandbox-exec', [
-        '-D',
-        `CONFIG_DIR=${configDir}`,
-        '-D',
-        `HOME_DIR=${realTmpRoot}`,
-        '-f',
-        profile,
-        'sh',
-        '-c',
-        writeCmd,
-      ]);
-      expect(fs.existsSync(path.join(configDir, 'write-test.txt'))).toBe(true);
-
-      // Write to legacy HOME/.llxprt should be DENIED (no file-write* grant).
-      let denied = false;
-      try {
-        execFileSync(
+      function runInSandbox(cmd: string): string {
+        return execFileSync(
           'sandbox-exec',
           [
             '-D',
@@ -347,34 +279,214 @@ describe.skipIf(!isMacOS)(
             profile,
             'sh',
             '-c',
-            `echo test > "${legacyDir}/denied.txt"`,
+            cmd,
           ],
           { encoding: 'utf8', stdio: 'pipe' },
         );
-      } catch {
-        denied = true;
       }
-      expect(denied).toBe(true);
+
+      // Write to CONFIG_DIR should succeed.
+      execFileSync('sandbox-exec', [
+        '-D',
+        `CONFIG_DIR=${configDir}`,
+        '-D',
+        `HOME_DIR=${realTmpRoot}`,
+        '-f',
+        profile,
+        'sh',
+        '-c',
+        `echo test > "${configDir}/write-test.txt"`,
+      ]);
+      expect(fs.existsSync(path.join(configDir, 'write-test.txt'))).toBe(true);
+
+      // Write to legacy HOME/.llxprt should be DENIED.
+      expect(() =>
+        runInSandbox(`echo test > "${legacyDir}/denied.txt"`),
+      ).toThrow(/denied|operation not permitted|sandbox/i);
       expect(fs.existsSync(path.join(legacyDir, 'denied.txt'))).toBe(false);
 
-      // Read from legacy HOME/.llxprt should SUCCEED (read-only migration grant).
+      // Read from legacy HOME/.llxprt should SUCCEED (read-only grant).
       const legacyFile = path.join(legacyDir, 'readme.txt');
       fs.writeFileSync(legacyFile, 'legacy data');
-      const readResult = execFileSync(
-        'sandbox-exec',
-        [
-          '-D',
-          `CONFIG_DIR=${configDir}`,
-          '-D',
-          `HOME_DIR=${realTmpRoot}`,
-          '-f',
-          profile,
-          'cat',
-          legacyFile,
-        ],
-        { encoding: 'utf8', stdio: 'pipe' },
-      );
-      expect(readResult.trim()).toBe('legacy data');
+      expect(runInSandbox(`cat "${legacyFile}"`).trim()).toBe('legacy data');
     });
   },
 );
+
+// ─── AC11: Seatbelt starts no proxy and receives no capability transport (#1954)
+
+/**
+ * Reusable -D parameter pairs for the permissive-open profile that requires
+ * all params defined. Used by every sandbox-exec spawn test.
+ */
+const PERMISSIVE_OPEN_D_PARAMS = [
+  '-D',
+  'TARGET_DIR=/tmp',
+  '-D',
+  'TMP_DIR=/tmp',
+  '-D',
+  'HOME_DIR=/tmp',
+  '-D',
+  'CACHE_DIR=/tmp',
+  '-D',
+  'CONFIG_DIR=/tmp',
+  '-D',
+  'DATA_DIR=/tmp',
+  '-D',
+  'LOG_DIR=/tmp',
+  '-D',
+  'INCLUDE_DIR_0=/dev/null',
+  '-D',
+  'INCLUDE_DIR_1=/dev/null',
+  '-D',
+  'INCLUDE_DIR_2=/dev/null',
+  '-D',
+  'INCLUDE_DIR_3=/dev/null',
+  '-D',
+  'INCLUDE_DIR_4=/dev/null',
+];
+
+const PERMISSIVE_OPEN_PROFILE = path.join(
+  __dirname,
+  'sandbox-macos-permissive-open.sb',
+);
+
+describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () => {
+  /**
+   * Cross-platform behavioral test through the real exported
+   * runSeatbeltSandbox path. Begins with dirty capability markers in
+   * process.env and asserts the actual spawned child env lacks
+   * token/fd/socket. Uses a stub sandbox-exec binary on PATH that prints
+   * its environment so this works on ALL platforms without a real
+   * sandbox-exec.
+   */
+  it('runSeatbeltSandbox: child env lacks LLXPRT_CAPABILITY_* and LLXPRT_CREDENTIAL_SOCKET even when parent env has dirty markers', async () => {
+    const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-stub-'));
+    const stubPath = path.join(stubDir, 'sandbox-exec');
+    // Stub binary: prints its own env (the child env) to stdout, exits 0.
+    fs.writeFileSync(stubPath, '#!/bin/sh\nenv\n', { mode: 0o755 });
+    const savedFd = process.env.LLXPRT_CAPABILITY_FD;
+    const savedTok = process.env.LLXPRT_CAPABILITY_TOKEN;
+    const savedSock = process.env.LLXPRT_CREDENTIAL_SOCKET;
+    const savedProfile = process.env.SEATBELT_PROFILE;
+    const savedPath = process.env.PATH;
+    process.env.LLXPRT_CAPABILITY_TOKEN = 'd'.repeat(64);
+    process.env.LLXPRT_CAPABILITY_FD = '3';
+    process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/fake-dirty.sock';
+    process.env.SEATBELT_PROFILE = 'permissive-open';
+    // Under vitest, import.meta.url inside sandbox-seatbelt.ts may resolve
+    // to a transform-relative path, so the builtin .sb profile may not be
+    // found. Spy on fs.existsSync to allow the profile check to pass; the
+    // stub sandbox-exec binary ignores the profile entirely.
+    const realExistsSync = fs.existsSync;
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((p: fs.PathLike) => {
+        if (String(p).includes('sandbox-macos-permissive-open.sb')) return true;
+        return realExistsSync(p);
+      });
+    process.env.PATH = `${stubDir}:${process.env.PATH ?? ''}`;
+    try {
+      // Capture stdout from the spawned child via a temporary redirect.
+      // runSeatbeltSandbox uses stdio:'inherit', so the stub's env output
+      // goes to the test process stdout. We intercept by spying on
+      // process.stdout.write.
+      const chunks: string[] = [];
+      const origWrite = process.stdout.write.bind(process.stdout);
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((
+        data: string | Uint8Array,
+        ...rest: unknown[]
+      ) => {
+        chunks.push(
+          typeof data === 'string' ? data : Buffer.from(data).toString(),
+        );
+        return origWrite(data, ...(rest as []));
+      }) as typeof process.stdout.write);
+      try {
+        await runSeatbeltSandbox(
+          { command: 'sandbox-exec', image: 'test' } as never,
+          [],
+          undefined,
+          [],
+        );
+      } finally {
+        writeSpy.mockRestore();
+      }
+      const childEnvOutput = chunks.join('');
+      expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_TOKEN');
+      expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_FD');
+      expect(childEnvOutput).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
+    } finally {
+      if (savedFd !== undefined) process.env.LLXPRT_CAPABILITY_FD = savedFd;
+      else delete process.env.LLXPRT_CAPABILITY_FD;
+      if (savedTok !== undefined)
+        process.env.LLXPRT_CAPABILITY_TOKEN = savedTok;
+      else delete process.env.LLXPRT_CAPABILITY_TOKEN;
+      if (savedSock !== undefined)
+        process.env.LLXPRT_CREDENTIAL_SOCKET = savedSock;
+      else delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+      if (savedProfile !== undefined)
+        process.env.SEATBELT_PROFILE = savedProfile;
+      else delete process.env.SEATBELT_PROFILE;
+      process.env.PATH = savedPath;
+      fs.rmSync(stubDir, { recursive: true, force: true });
+      existsSpy.mockRestore();
+    }
+  });
+
+  it.runIf(isMacOS)(
+    'real sandbox-exec child inherits no capability transport markers from the post-consumption parent env',
+    () => {
+      expect(fs.existsSync(PERMISSIVE_OPEN_PROFILE)).toBe(true);
+
+      const cleanEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+      };
+      delete cleanEnv.LLXPRT_CAPABILITY_FD;
+      delete cleanEnv.LLXPRT_CAPABILITY_TOKEN;
+      delete cleanEnv.LLXPRT_CREDENTIAL_SOCKET;
+
+      const result = spawnSync(
+        'sandbox-exec',
+        [...PERMISSIVE_OPEN_D_PARAMS, '-f', PERMISSIVE_OPEN_PROFILE, 'env'],
+        { encoding: 'utf8', env: cleanEnv },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(0);
+      const childEnv = result.stdout;
+      expect(childEnv).not.toContain('LLXPRT_CAPABILITY_FD');
+      expect(childEnv).not.toContain('LLXPRT_CAPABILITY_TOKEN');
+      expect(childEnv).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
+    },
+  );
+
+  it.runIf(isMacOS)(
+    'O16: asserts real macOS sandbox-exec spawn success/failure surfaces correctly',
+    () => {
+      expect(fs.existsSync(PERMISSIVE_OPEN_PROFILE)).toBe(true);
+      const dirtyEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        LLXPRT_CAPABILITY_TOKEN: 'd'.repeat(64),
+        LLXPRT_CAPABILITY_FD: '3',
+        LLXPRT_CREDENTIAL_SOCKET: '/tmp/fake.sock',
+      };
+      const ok = spawnSync(
+        'sandbox-exec',
+        [...PERMISSIVE_OPEN_D_PARAMS, '-f', PERMISSIVE_OPEN_PROFILE, 'env'],
+        { encoding: 'utf8', env: dirtyEnv },
+      );
+      expect(ok.error).toBeUndefined();
+      expect(ok.status).toBe(0);
+      expect(ok.stdout).toContain('PATH=');
+
+      const fail = spawnSync('sandbox-exec', [
+        '-f',
+        '/nonexistent/profile.sb',
+        'env',
+      ]);
+      expect(fail.error !== undefined || fail.status !== 0).toBe(true);
+    },
+  );
+});
