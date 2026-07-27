@@ -102,7 +102,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
     let { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
 
     if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
-      return this.structuralNoop(history, 'too-few-compressible');
+      return this.structuralNoop(history, 'too-few-compressible', {
+        toKeepTop,
+        toKeepBottom,
+        middleCompressed: toCompress.length,
+      });
     }
 
     const {
