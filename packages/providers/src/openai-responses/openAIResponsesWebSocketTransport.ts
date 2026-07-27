@@ -108,6 +108,36 @@ function connectionIdentity(
   return JSON.stringify([url, headerIdentity]);
 }
 
+function throwIfAborted(abortSignal: AbortSignal | undefined): void {
+  if (abortSignal?.aborted === true) {
+    throw createAbortError(abortSignal.reason);
+  }
+}
+
+async function waitForTurn(
+  turn: Promise<void>,
+  abortSignal: AbortSignal | undefined,
+): Promise<void> {
+  throwIfAborted(abortSignal);
+  if (abortSignal === undefined) {
+    await turn;
+    return;
+  }
+  let onAbort = (): void => undefined;
+  try {
+    await Promise.race([
+      turn,
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(createAbortError(abortSignal.reason));
+        abortSignal.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    abortSignal.removeEventListener('abort', onAbort);
+  }
+  throwIfAborted(abortSignal);
+}
+
 class UndiciTransportSocket implements TransportSocket {
   readonly CONNECTING = WebSocket.CONNECTING;
   readonly OPEN = WebSocket.OPEN;
@@ -242,9 +272,10 @@ class RequestFrameSource {
     const onAbort = (): void =>
       this.fail(createAbortError(abortSignal?.reason));
     if (abortSignal !== undefined) {
-      abortSignal.addEventListener('abort', onAbort, { once: true });
       this.detachAbort = () =>
         abortSignal.removeEventListener('abort', onAbort);
+      if (abortSignal.aborted) onAbort();
+      else abortSignal.addEventListener('abort', onAbort, { once: true });
     } else {
       this.detachAbort = () => undefined;
     }
@@ -339,17 +370,20 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    const resolveTurn = await this.acquireRequestTurn();
+    const resolveTurn = await this.acquireRequestTurn(options.abortSignal);
     let socket: TransportSocket | undefined;
     let completed = false;
     try {
+      throwIfAborted(options.abortSignal);
       socket = await this.acquireConnection(options);
+      throwIfAborted(options.abortSignal);
       const source = new RequestFrameSource(
         socket,
         options.abortSignal,
         options.onResponseEvent,
       );
       try {
+        throwIfAborted(options.abortSignal);
         socket.send(JSON.stringify({ ...request, type: 'response.create' }));
         for await (const message of parseResponsesStream(
           createResponseByteStream(source),
@@ -381,12 +415,20 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
     this.active = undefined;
   }
 
-  private async acquireRequestTurn(): Promise<() => void> {
+  private async acquireRequestTurn(
+    abortSignal: AbortSignal | undefined,
+  ): Promise<() => void> {
     const previous = this.requestQueue;
     let resolveTurn = (): void => undefined;
-    this.requestQueue = new Promise<void>((resolve) => (resolveTurn = resolve));
-    await previous;
-    return resolveTurn;
+    const current = new Promise<void>((resolve) => (resolveTurn = resolve));
+    this.requestQueue = previous.then(() => current);
+    try {
+      await waitForTurn(previous, abortSignal);
+      return resolveTurn;
+    } catch (error) {
+      resolveTurn();
+      throw error;
+    }
   }
 
   private async acquireConnection(

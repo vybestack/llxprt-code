@@ -42,17 +42,20 @@ Expected: this plan, provider package/lockfiles, provider core/executor, and new
 
 ## Actual delivery
 
-All 10 expected paths changed. Final scope: 10 files/1,500 net lines. Eighteen focused tests and the full root suite provide evidence. Approved `undici ^7.28.0` supplies the client.
+All 10 expected paths changed. Final scope: 10 files, 1,805 insertions, 204 deletions, and 1,601 net lines. Twenty focused tests and the full root suite provide evidence. Approved `undici ^7.28.0` supplies the client. The mandatory scope review accepted the 101-line target overage because it is confined to two existing issue paths and adds direct A6 regression coverage plus abort-aware queue ownership; consolidating the two distinct cancellation scenarios would reduce clarity without removing behavior. Scope remains below the 2,500-line hard stop.
 
 ## Scope ledger
 
 | Entry                                                     | Classification        | Status                  | Notes                                                              |
 | --------------------------------------------------------- | --------------------- | ----------------------- | ------------------------------------------------------------------ |
-| Acceptance A1-A8                                          | In scope              | Implemented + tested    | 18 focused tests plus full root suite pass                         |
+| Acceptance A1-A8                                          | In scope              | Implemented + tested    | 20 focused tests plus full root suite pass                         |
 | Upstream Codex v2 beta protocol                           | In scope              | Implemented             | `/responses`, flat `response.create`, beta header dated 2026-02-06 |
 | `undici` direct providers dependency                      | Planned approval gate | Approved + added        | `undici ^7.28.0`; lockfiles updated                                |
 | HTTP/SSE path extraction (`openAIResponsesHttpStream.ts`) | Discovered necessity  | Added                   | Keeps executor under enforced 800-line limit                       |
-| Generic endpoint WebSockets                               | Non-goal              | Excluded                | Would require capability/config design                             |
+| A6 queued/pre-aborted lifecycle remediation               | Blocker-Fix           | Implemented + tested    | Prevents canceled requests from sending on a reused socket         |
+| Generic endpoint WebSockets                               | Non-goal              | Deferred to #2756       | Configurable transport work is targeted to milestone 0.12.0        |
+| Connection-limit recovery                                 | Defer                 | Tracked by #2771        | Bounded reconnect/retry work is targeted to milestone 0.12.0       |
+| Metadata and idle-timeout parity                          | Defer                 | Tracked by #2772        | Remaining parity work is targeted to milestone 0.12.0              |
 | Incremental `previous_response_id` payloads               | Non-goal              | Excluded                | Conflicts with bounded stateless scope                             |
 | Unrelated refactors/findings                              | Out of scope          | Must be Reject or Defer | Reviewer suggestions do not expand scope                           |
 

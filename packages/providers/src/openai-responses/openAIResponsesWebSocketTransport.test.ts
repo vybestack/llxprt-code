@@ -226,6 +226,26 @@ describe('Codex Responses WebSocket transport', () => {
     expect(harness.sockets[0].sent).toHaveLength(2);
   });
 
+  it('rejects an already-aborted request without sending on a reused connection', async () => {
+    const harness = new SocketHarness([completingScript()]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    await drain(transport.streamResponse(request(), options()));
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      drain(
+        transport.streamResponse(
+          request(),
+          options({ abortSignal: controller.signal }),
+        ),
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(harness.sockets[0].sent).toHaveLength(1);
+  });
+
   it('serializes concurrent requests until response.completed', async () => {
     let requestCount = 0;
     let firstRequestSent = (): void => undefined;
@@ -255,6 +275,42 @@ describe('Codex Responses WebSocket transport', () => {
     await first;
     await second;
     expect(harness.sockets[0].sent).toHaveLength(2);
+  });
+
+  it('promptly rejects a request aborted while queued without sending it', async () => {
+    let firstRequestSent = (): void => undefined;
+    const firstSend = new Promise<void>((resolve) => {
+      firstRequestSent = resolve;
+    });
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => firstRequestSent();
+      },
+    ]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const controller = new AbortController();
+    const first = drain(transport.streamResponse(request(), options()));
+    const second = drain(
+      transport.streamResponse(
+        request(),
+        options({ abortSignal: controller.signal }),
+      ),
+    );
+    await firstSend;
+
+    controller.abort();
+
+    const result = second.then(
+      () => 'completed',
+      (error: unknown) => (error instanceof Error ? error.name : 'unknown'),
+    );
+    expect(await result).toBe('AbortError');
+    expect(harness.sockets[0].sent).toHaveLength(1);
+    complete(harness.sockets[0]);
+    await first;
   });
 
   it('reconnects when the endpoint or a handshake header changes', async () => {
