@@ -33,8 +33,10 @@ import {
   isToolCallEvent,
   isToolResultEvent,
   isTextEvent,
+  isErrorEvent,
   countType,
 } from './helpers/agentHarness.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-agents';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 
 /**
@@ -107,7 +109,7 @@ describe('Engine task continuation and pause (issue #2657)', () => {
     // terminate the loop without requiring a CLI React pause gate.
     const fixture = scriptToolCallOnly('todo_pause', { reason: 'blocked' });
     const { agent, cleanup } = await buildAgentFromContent(fixture, {
-      approvalMode: 'yolo' as never,
+      approvalMode: ApprovalMode.YOLO,
     });
     try {
       const events: AgentEvent[] = await drain(agent.stream('pause please'));
@@ -127,6 +129,11 @@ describe('Engine task continuation and pause (issue #2657)', () => {
       // No text event from a continuation turn — the loop stopped.
       const textEvents = events.filter(isTextEvent);
       expect(textEvents).toHaveLength(0);
+
+      // No error events — the stream ended cleanly via pause, not from
+      // FakeProvider exhaustion or a tool failure.
+      const errorEvents = events.filter(isErrorEvent);
+      expect(errorEvents).toHaveLength(0);
     } finally {
       await cleanup();
     }
@@ -142,7 +149,7 @@ describe('Engine task continuation and pause (issue #2657)', () => {
       'continued after failed pause',
     );
     const { agent, cleanup } = await buildAgentFromContent(fixture, {
-      approvalMode: 'yolo' as never,
+      approvalMode: ApprovalMode.YOLO,
     });
     try {
       const events: AgentEvent[] = await drain(agent.stream('try pause'));
@@ -171,7 +178,7 @@ describe('Engine task continuation and pause (issue #2657)', () => {
       'read the file and continued',
     );
     const { agent, cleanup } = await buildAgentFromContent(fixture, {
-      approvalMode: 'yolo' as never,
+      approvalMode: ApprovalMode.YOLO,
     });
     try {
       const events: AgentEvent[] = await drain(agent.stream('read the file'));
@@ -199,7 +206,7 @@ describe('Engine task continuation and pause (issue #2657)', () => {
       reason: 'parity check',
     });
     const { agent, cleanup } = await buildAgentFromContent(fixture, {
-      approvalMode: 'yolo' as never,
+      approvalMode: ApprovalMode.YOLO,
     });
     try {
       const events: AgentEvent[] = await drain(agent.stream('verify parity'));
@@ -210,6 +217,7 @@ describe('Engine task continuation and pause (issue #2657)', () => {
       expect(events.filter(isToolResultEvent).length).toBeGreaterThanOrEqual(1);
       expect(countType(events, 'done')).toBe(1);
       expect(events.filter(isTextEvent)).toHaveLength(0);
+      expect(events.filter(isErrorEvent)).toHaveLength(0);
     } finally {
       await cleanup();
     }
