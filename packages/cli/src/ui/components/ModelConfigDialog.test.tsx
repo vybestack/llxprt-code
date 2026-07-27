@@ -224,7 +224,10 @@ describe('<ModelConfigDialog />', () => {
   });
 
   it('ignores c=clear on ephemeral fields in list mode', async () => {
-    const { lastFrame, stdin } = renderWithProviders(
+    setupRuntime({
+      ephemeralSettings: { 'reasoning.enabled': true },
+    });
+    const { stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
@@ -240,9 +243,11 @@ describe('<ModelConfigDialog />', () => {
       stdin.write('c');
     });
 
-    // reasoning.enabled should still be true
+    // The ephemeral setting must still be present in runtime state
     await waitFor(() => {
-      expect(lastFrame()).toContain('true');
+      expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+        true,
+      );
     });
   });
 
