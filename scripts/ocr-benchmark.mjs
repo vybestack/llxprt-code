@@ -456,6 +456,7 @@ for (const concurrency of concurrencyValues) {
     `Running benchmark: concurrency=${concurrency} label=${label} ocr=${ocrVersion}\n`,
   );
   const result = runOcrReview(fromResolved, toResolved, concurrency);
+  const parseOk = result.parseStatus === 'ok';
   experiments.push({
     label,
     timestamp: new Date().toISOString(),
@@ -467,15 +468,16 @@ for (const concurrency of concurrencyValues) {
     to_sha: toResolved,
     cumulative_files: cumulativeScope.files,
     cumulative_lines: cumulativeScope.lines,
-    finding_count: result.findingCount,
-    findings: result.findings,
-    completed_files: result.completedFiles,
-    selected_files: result.selectedFiles,
+    finding_count: parseOk ? result.findingCount : 0,
+    findings: parseOk ? result.findings : [],
+    completed_files: parseOk ? result.completedFiles : 0,
+    selected_files: parseOk ? result.selectedFiles : 0,
     elapsed_ms: result.elapsed,
     timed_out: result.timedOut,
     parse_status: result.parseStatus,
-    tokens: result.tokens,
-    warnings: result.warnings,
+    parse_ok: parseOk,
+    tokens: parseOk ? result.tokens : {},
+    warnings: parseOk ? result.warnings : [],
     exit_code: result.exitCode,
     stderr: result.stderr,
     error: result.error,
