@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import type { Key } from '../hooks/useKeypress.js';
 import { SemanticColors } from '../colors.js';
@@ -158,19 +158,17 @@ const FieldList: React.FC<{
   isEditing: boolean;
   params: Record<string, unknown>;
   ephemeral: Record<string, unknown>;
-}> = ({ fields, selectedIndex, isEditing, params, ephemeral }) => (
+  startIndex: number;
+}> = ({ fields, selectedIndex, isEditing, params, ephemeral, startIndex }) => (
   <>
-    {fields.map((field) => {
-      const absoluteIndex = ALL_FIELDS.indexOf(field);
-      return (
-        <FieldRow
-          key={field.key}
-          field={field}
-          isSelected={!isEditing && selectedIndex === absoluteIndex}
-          currentValue={valueForField(field, params, ephemeral)}
-        />
-      );
-    })}
+    {fields.map((field, i) => (
+      <FieldRow
+        key={field.key}
+        field={field}
+        isSelected={!isEditing && selectedIndex === startIndex + i}
+        currentValue={valueForField(field, params, ephemeral)}
+      />
+    ))}
   </>
 );
 
@@ -273,7 +271,10 @@ function handleListKey(
   }
   if (key.name === 'return') {
     const field = ALL_FIELDS[selectedIndex];
-    setEditValue(formatValue(valueForField(field, params, ephemeral)));
+    const current = valueForField(field, params, ephemeral);
+    setEditValue(
+      current === undefined || current === null ? '' : formatValue(current),
+    );
     setValidationError(null);
     setEditingField(field);
     return;
@@ -321,46 +322,36 @@ function handleEditKey(
 }
 
 function useModelConfigKeypress(d: KeypressDispatch): void {
-  const onKeypress = useCallback(
-    (key: Key) => {
-      if (d.editingField !== null) {
-        handleEditKey(
-          key,
-          d.editingField,
-          d.editValue,
-          d.runtime,
-          d.setEditingField,
-          d.setValidationError,
-        );
-      } else {
-        handleListKey(
-          key,
-          d.onClose,
-          d.selectedIndex,
-          d.setEditingField,
-          d.setEditValue,
-          d.setSelectedIndex,
-          d.setValidationError,
-          d.runtime,
-          d.params,
-          d.ephemeral,
-        );
-      }
-    },
-    [
-      d.editingField,
-      d.editValue,
-      d.runtime,
-      d.onClose,
-      d.selectedIndex,
-      d.setEditingField,
-      d.setEditValue,
-      d.setSelectedIndex,
-      d.setValidationError,
-      d.params,
-      d.ephemeral,
-    ],
-  );
+  // Use a ref to hold the latest dispatch so the keypress callback identity
+  // stays stable, avoiding unnecessary re-subscriptions in useKeypress.
+  const dispatchRef = useRef(d);
+  dispatchRef.current = d;
+  const onKeypress = useCallback((key: Key) => {
+    const cur = dispatchRef.current;
+    if (cur.editingField !== null) {
+      handleEditKey(
+        key,
+        cur.editingField,
+        cur.editValue,
+        cur.runtime,
+        cur.setEditingField,
+        cur.setValidationError,
+      );
+    } else {
+      handleListKey(
+        key,
+        cur.onClose,
+        cur.selectedIndex,
+        cur.setEditingField,
+        cur.setEditValue,
+        cur.setSelectedIndex,
+        cur.setValidationError,
+        cur.runtime,
+        cur.params,
+        cur.ephemeral,
+      );
+    }
+  }, []);
   useKeypress(onKeypress, { isActive: true });
 }
 
@@ -430,6 +421,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
         isEditing={editingField !== null}
         params={reads.modelParams}
         ephemeral={reads.ephemeralSettings}
+        startIndex={0}
       />
 
       <SectionHeader label="Model Behavior" />
@@ -439,6 +431,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
         isEditing={editingField !== null}
         params={reads.modelParams}
         ephemeral={reads.ephemeralSettings}
+        startIndex={PARAM_FIELDS.length}
       />
 
       {editingField !== null && (

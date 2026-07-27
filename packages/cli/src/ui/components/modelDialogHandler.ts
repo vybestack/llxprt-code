@@ -116,10 +116,14 @@ export function useModelDialogHandler(
           } catch {
             // Runtime status read failure must not mask the original error
           }
-          addItem({
-            type: 'error',
-            text: `Failed to switch model for provider '${providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
-          });
+          try {
+            addItem({
+              type: 'error',
+              text: `Failed to switch model for provider '${providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
+            });
+          } catch {
+            // addItem failure must not prevent dialog cleanup
+          }
         }
         uiActions.closeModelsDialog();
         if (switchSucceeded) {
