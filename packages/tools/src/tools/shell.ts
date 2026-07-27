@@ -353,16 +353,16 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       switch (event.type) {
         case 'data': {
+          if (isBinaryStream) break;
           const chunk = event.chunk;
           if (typeof chunk === 'string') {
-            if (isBinaryStream) break;
             cumulativeOutput = chunk;
             shouldUpdate = true;
           } else if (chunk !== undefined) {
             // PTY terminal-buffer snapshot — replace semantics.
             updateOutput({ mode: 'replace', data: chunk });
             lastUpdateTime = Date.now();
-          } else if (!isBinaryStream) {
+          } else {
             // Preserve pre-migration behavior: an undefined chunk on a data
             // event forwards the (empty) cumulative output as an append.
             cumulativeOutput = '';

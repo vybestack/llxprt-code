@@ -18,6 +18,7 @@ import {
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -366,7 +367,7 @@ describe('TaskTool', () => {
       await invocation.execute(new AbortController().signal, updateOutput);
 
       const calls = updateOutput.mock.calls.map(
-        (c) => (c[0] as { data: string }).data,
+        (c) => (c[0] as LiveOutputUpdate).data as string,
       );
       // Slice off opening tag (first) and closing tag (last)
       const textChunks = calls.slice(1, -1);
@@ -427,7 +428,7 @@ describe('TaskTool', () => {
       await invocation.execute(new AbortController().signal, updateOutput);
 
       const calls = updateOutput.mock.calls.map(
-        (c) => (c[0] as { data: string }).data,
+        (c) => (c[0] as LiveOutputUpdate).data as string,
       );
       const textChunks = calls.slice(1, -1);
       const accumulated = textChunks.join('');

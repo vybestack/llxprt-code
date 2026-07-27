@@ -352,18 +352,6 @@ describe('subagentExecution', () => {
       ).not.toThrow();
     });
 
-    it('should not invoke onMessage when onMessage is not provided', () => {
-      const channel = createCompletionChannel({});
-      channel.outputUpdateHandler('call-1', {
-        mode: 'append',
-        data: 'some output',
-      });
-      // No onMessage callback was supplied, so nothing to assert against
-      // beyond not throwing; the guard `if (ctx.onMessage == null) return`
-      // ensures the append path is skipped entirely.
-      expect(true).toBe(true);
-    });
-
     it('should throw on malformed replace payload (null line)', () => {
       const onMessage = vi.fn();
       const channel = createCompletionChannel({ onMessage });

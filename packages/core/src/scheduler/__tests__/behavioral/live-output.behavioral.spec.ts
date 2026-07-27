@@ -37,11 +37,11 @@ function snapshot(text: string): AnsiOutput {
  * real producer sequences (shell PTY replace after task append, etc.) rather
  * than the isolated single-step unit assertions in liveOutput.test.ts.
  */
-function replay(updates: LiveOutputUpdate[]): string | AnsiOutput {
-  return updates.reduce<string | AnsiOutput | undefined>((acc, update) => {
-    const next = accumulateLiveOutput(acc, update);
-    return next;
-  }, undefined) as string | AnsiOutput;
+function replay(updates: LiveOutputUpdate[]): string | AnsiOutput | undefined {
+  return updates.reduce<string | AnsiOutput | undefined>(
+    (acc, update) => accumulateLiveOutput(acc, update),
+    undefined,
+  );
 }
 
 describe('Live-output accumulation behavioral scenarios', () => {
