@@ -19,8 +19,9 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionResult,
+  CompressionStrategyName,
   DensityConfig,
+  StrategyCompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   shouldRetryCompressionError,
@@ -514,12 +515,13 @@ export class CompressionHandler {
             this.lastPromptTokenCount = null;
             applyResult(newHistory);
           };
-          return await this.performFallbackCompression(
+          const outcome = await this.performFallbackCompression(
             context,
             new Error('Provider content fallback truncation triggered'),
             applyAndResetPromptCount,
             { swallowErrors: false },
           );
+          return outcome === 'applied';
         } finally {
           this.popSuppressDensityDirty();
         }
@@ -648,47 +650,91 @@ export class CompressionHandler {
       this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
     let compressionSummary: IContent | undefined;
-    const compressionState: { succeeded: boolean } = { succeeded: false };
+    // Compression outcome determined by runCompressionWithRetryAndFallback.
+    // On 'noop', we must avoid history mutation, recording events, and
+    // counter/timestamp changes entirely. (Issue #2602)
+    let compressionOutcome: 'applied' | 'noop' | 'failed' = 'failed';
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
     this.setSuppressDensityDirty(true);
-    let didCompress = false;
     try {
-      didCompress = await this.runCompressionWithRetryAndFallback(
+      compressionOutcome = await this.runCompressionWithRetryAndFallback(
         prompt_id,
-        (newHistory) => {
+        (newHistory, summary) => {
           // Apply result: clear history, add each entry from newHistory
           this.historyService.clear();
           for (const content of newHistory) {
             this.historyService.add(content, this.runtimeContext.state.model);
           }
           this.lastPromptTokenCount = null;
-          compressionSummary = newHistory[0];
-          compressionState.succeeded = true;
+          compressionSummary = summary;
         },
       );
     } finally {
       this.setSuppressDensityDirty(false);
-      this.historyService.endCompression(
-        compressionSummary,
-        preCompressionCount,
+      // Balance the compression lock in all cases. On 'noop' no history was
+      // mutated, so flush/unlock WITHOUT summary/itemsCompressed to avoid
+      // emitting a compressionEnded recording event. (Issue #2602)
+      if (compressionOutcome === 'noop') {
+        this.historyService.endCompression();
+      } else {
+        this.historyService.endCompression(
+          compressionSummary,
+          preCompressionCount,
+        );
+      }
+    }
+
+    if (compressionOutcome === 'noop') {
+      this.logger.debug(
+        'Compression was a structural no-op — no history mutation or recording',
       );
+      return PerformCompressionResult.NOOP;
     }
 
     await this.historyService.waitForTokenUpdates();
-    if (didCompress && compressionState.succeeded) {
-      this.lastSuccessfulCompressionTime = Date.now();
+    if (compressionOutcome === 'applied') {
       return PerformCompressionResult.COMPRESSED;
     }
 
-    if (didCompress) {
-      this.logger.warn(
-        'Compression strategy reported success without applying history updates',
-      );
-    }
+    this.logger.warn(
+      'Compression strategy reported failure without applying history updates',
+    );
 
     return PerformCompressionResult.FAILED;
+  }
+
+  /**
+   * Select the genuine compression snapshot entry from candidate history for
+   * recording. Prefers the entry explicitly marked with the
+   * 'compression-state-snapshot' reason; falls back to text-based detection
+   * of the canonical <state_snapshot> container for legacy/imported histories.
+   * Returns undefined when no summary entry is identifiable (e.g. truncation
+   * strategies that emit no synthetic snapshot).
+   *
+   * @plan PLAN-20260727-ISSUE2602
+   */
+  static selectCompressionSummary(
+    newHistory: readonly IContent[],
+  ): IContent | undefined {
+    for (const entry of newHistory) {
+      if (entry.metadata?.reason === 'compression-state-snapshot') {
+        return entry;
+      }
+    }
+    for (const entry of newHistory) {
+      if (
+        entry.metadata?.isSummary === true ||
+        (entry.metadata?.synthetic === true &&
+          entry.blocks.some(
+            (b) => b.type === 'text' && b.text.includes('<state_snapshot>'),
+          ))
+      ) {
+        return entry;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -728,38 +774,56 @@ export class CompressionHandler {
   /**
    * Execute compression with retry for transient errors and fallback to truncation.
    *
+   * Returns one of:
+   * - 'applied' — history was mutated via applyResult
+   * - 'noop'    — strategy returned a structural no-op; nothing was mutated
+   * - 'failed'  — all strategies errored (when swallowErrors) or threw
+   *
    * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @plan PLAN-20260727-ISSUE2602
    * @requirement REQ-CR-003-005
    */
   private async runCompressionWithRetryAndFallback(
     promptId: string,
-    applyResult: (newHistory: IContent[]) => void,
-  ): Promise<boolean> {
+    applyResult: (
+      newHistory: IContent[],
+      summary: IContent | undefined,
+    ) => void,
+  ): Promise<'applied' | 'noop' | 'failed'> {
     const context = await this.buildCompressionContext(promptId);
+    const configuredStrategyName = parseCompressionStrategyName(
+      this.runtimeContext.ephemerals.compressionStrategy(),
+    );
 
-    const attemptPrimary = async (): Promise<IContent[]> => {
-      const strategyName = parseCompressionStrategyName(
-        this.runtimeContext.ephemerals.compressionStrategy(),
-      );
-      const strategy = getCompressionStrategy(strategyName);
-      const result = await strategy.compress(context);
-      return result.newHistory;
+    const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
+      const strategy = getCompressionStrategy(configuredStrategyName);
+      return strategy.compress(context);
     };
 
     let primaryError: unknown;
     try {
-      const newHistory = await retryWithBackoff(attemptPrimary, {
+      const result = await retryWithBackoff(attemptPrimary, {
         maxAttempts: 3,
         initialDelayMs: 2000,
         maxDelayMs: 10000,
         shouldRetryOnError: (err) => shouldRetryCompressionError(err),
       });
-      applyResult(newHistory);
-      // Primary strategy succeeded — reset failure counters
-      this.compressionFailureCount = 0;
-      this.lastCompressionFailureTime = null;
+
+      // Structural no-op from the primary strategy. For middle-out, route to
+      // one-shot summarization of the same unchanged history; for other
+      // strategies the no-op is truthful and not re-routed. (Issue #2602)
+      if (result.kind === 'noop') {
+        return await this.handleStructuralNoop(
+          result,
+          configuredStrategyName,
+          context,
+          applyResult,
+        );
+      }
+
+      this.applyFallbackCompressionResult(result, applyResult);
       this.logger.debug('Compression completed with primary strategy');
-      return true;
+      return 'applied';
     } catch (err) {
       primaryError = err;
     }
@@ -775,14 +839,86 @@ export class CompressionHandler {
       'Primary compression strategy failed after retries, attempting fallback truncation',
       primaryError,
     );
-    return this.performFallbackCompression(context, primaryError, applyResult);
+    const fallbackOutcome = await this.performFallbackCompression(
+      context,
+      primaryError,
+      (newHistory, summary) => applyResult(newHistory, summary),
+    );
+    return fallbackOutcome;
   }
 
+  /**
+   * Resolve a structural no-op from the primary strategy. For middle-out,
+   * route to one-shot summarization of the same unchanged history; for other
+   * strategies the no-op is truthful and not re-routed. (Issue #2602)
+   *
+   * Provider/transient/LLM/verification failures from the one-shot fallback
+   * propagate as exceptions (they are never structural no-ops).
+   */
+  private async handleStructuralNoop(
+    result: Extract<StrategyCompressionResult, { kind: 'noop' }>,
+    configuredStrategyName: CompressionStrategyName,
+    context: CompressionContext,
+    applyResult: (
+      newHistory: IContent[],
+      summary: IContent | undefined,
+    ) => void,
+  ): Promise<'applied' | 'noop'> {
+    if (configuredStrategyName !== 'middle-out') {
+      this.logger.debug(
+        `Compression was a structural no-op (${configuredStrategyName}: ${result.reason})`,
+      );
+      return 'noop';
+    }
+    const routed = await this.runOneShotFallback(context);
+    if (routed.kind === 'applied') {
+      this.applyFallbackCompressionResult(routed, applyResult);
+      this.logger.debug(
+        'Compression completed — middle-out structural no-op routed to one-shot',
+      );
+      return 'applied';
+    }
+    this.logger.debug(
+      'Compression was a structural no-op (middle-out and one-shot)',
+    );
+    return 'noop';
+  }
+
+  /**
+   * Run the one-shot strategy against an immutable context for the middle-out
+   * structural no-op fallback route. Only the strategy execution is performed;
+   * provider/transient/LLM failures propagate as errors (not structural no-op).
+   */
+  private async runOneShotFallback(
+    context: CompressionContext,
+  ): Promise<StrategyCompressionResult> {
+    const oneShot = getCompressionStrategy('one-shot');
+    return oneShot.compress(context);
+  }
+
+  /**
+   * Apply an 'applied' strategy outcome: commit history, reset failure
+   * counters, and surface the marked compression snapshot for recording.
+   */
   private applyFallbackCompressionResult(
-    result: CompressionResult,
-    applyResult: (newHistory: IContent[]) => void,
+    result: StrategyCompressionResult,
+    applyResult: (
+      newHistory: IContent[],
+      summary: IContent | undefined,
+    ) => void,
   ): void {
-    applyResult(result.newHistory);
+    if (result.kind === 'noop') {
+      // Defensive: callers (pending enforcer) already filter noop, but ensure
+      // a truthful no-op never mutates history if reached directly.
+      this.logger.debug(
+        `applyFallbackCompressionResult received structural no-op (${result.reason}); not applying`,
+      );
+      return;
+    }
+    const summary = CompressionHandler.selectCompressionSummary(
+      result.newHistory,
+    );
+    applyResult(result.newHistory, summary);
     this.compressionFailureCount = 0;
     this.lastCompressionFailureTime = null;
     this.lastSuccessfulCompressionTime = Date.now();
@@ -790,7 +926,7 @@ export class CompressionHandler {
 
   private async compressWithFallbackStrategy(
     context: CompressionContext,
-  ): Promise<CompressionResult> {
+  ): Promise<StrategyCompressionResult> {
     const fallback = getCompressionStrategy('top-down-truncation');
     return fallback.compress(context);
   }
@@ -799,28 +935,42 @@ export class CompressionHandler {
    * Attempt fallback compression using TopDownTruncationStrategy.
    *
    * @plan PLAN-20260218-COMPRESSION-RETRY.P01
+   * @plan PLAN-20260727-ISSUE2602
    * @requirement REQ-CR-004-005
    *
    * When `swallowErrors` is true (default), errors are caught and false is
    * returned to avoid blocking the conversation turn. When false (provider
    * hard-limit enforcement), errors propagate so the enforcer can capture
    * them as truncationFailure for actionable overflow diagnostics.
+   *
+   * Returns true if history was applied (fallback compressed), false if the
+   * fallback was itself a structural no-op or errored (when swallowErrors).
    */
   private async performFallbackCompression(
     context: CompressionContext,
     primaryError: unknown,
-    applyResult: (newHistory: IContent[]) => void,
+    applyResult: (
+      newHistory: IContent[],
+      summary: IContent | undefined,
+    ) => void,
     options?: { swallowErrors?: boolean },
-  ): Promise<boolean> {
+  ): Promise<'applied' | 'noop' | 'failed'> {
     const swallowErrors = options?.swallowErrors ?? true;
     try {
       // Use the strategy factory so tests can intercept
       const result = await this.compressWithFallbackStrategy(context);
+      if (result.kind === 'noop') {
+        // Truthful fallback no-op: do not apply, do not reset counters.
+        this.logger.debug(
+          `Fallback (TopDownTruncation) was a structural no-op: ${result.reason}`,
+        );
+        return 'noop';
+      }
       this.applyFallbackCompressionResult(result, applyResult);
       this.logger.debug(
         'Compression completed with fallback (TopDownTruncation)',
       );
-      return true;
+      return 'applied';
     } catch (fallbackError) {
       // Both strategies failed — track the failure
       this.compressionFailureCount++;
@@ -847,7 +997,7 @@ export class CompressionHandler {
         'Fallback compression also failed — continuing without compression',
         { primaryError, fallbackError },
       );
-      return false;
+      return 'failed';
     }
   }
 
