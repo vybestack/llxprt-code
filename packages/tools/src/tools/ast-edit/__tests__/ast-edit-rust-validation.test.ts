@@ -15,6 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   useTempDir,
   createFakeToolHost,
@@ -23,6 +24,8 @@ import {
 import { ASTEditTool } from '../../ast-edit.js';
 import { ASTQueryExtractor } from '../ast-query-extractor.js';
 import { extractImports } from '../language-analysis.js';
+
+const rustFilePath = join(tmpdir(), 'test.rs');
 
 describe('ast_edit AST validation: Rust', () => {
   const ctx = useTempDir();
@@ -220,7 +223,7 @@ describe('ast_edit Rust declaration extraction', () => {
     const code = 'fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n';
 
     const declarations = await extractor.extractDeclarations(
-      '/tmp/test.rs',
+      rustFilePath,
       code,
     );
 
@@ -241,7 +244,7 @@ describe('ast_edit Rust declaration extraction', () => {
     ].join('\n');
 
     const declarations = await extractor.extractDeclarations(
-      '/tmp/test.rs',
+      rustFilePath,
       code,
     );
 
@@ -262,7 +265,7 @@ describe('ast_edit Rust declaration extraction', () => {
     ].join('\n');
 
     const declarations = await extractor.extractDeclarations(
-      '/tmp/test.rs',
+      rustFilePath,
       code,
     );
 
@@ -346,6 +349,29 @@ describe('ast_edit Rust import extraction', () => {
 
   it('strips block comments from use declarations', () => {
     const code = 'use std::fs; /* important */\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::fs');
+  });
+
+  it('extracts visibility-qualified use declarations', () => {
+    const code = [
+      'pub use crate::utils::helper;\n',
+      'pub(crate) use std::fs::File;\n',
+      'pub(super) use std::io::Read;\n',
+    ].join('');
+
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(3);
+    expect(imports[0].module).toBe('crate::utils::helper');
+    expect(imports[1].module).toBe('std::fs::File');
+    expect(imports[2].module).toBe('std::io::Read');
+  });
+
+  it('handles block comments containing // in use declarations', () => {
+    const code = 'use std::fs; /* see docs//examples */\n';
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(1);

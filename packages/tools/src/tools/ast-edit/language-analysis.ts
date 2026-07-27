@@ -53,10 +53,7 @@ export function extractImports(content: string, language: string): Import[] {
         items: extractPythonImportItems(trimmed),
         line: index + 1,
       });
-    } else if (
-      language === 'rust' &&
-      (trimmed.startsWith('use ') || trimmed.startsWith('pub use '))
-    ) {
+    } else if (language === 'rust' && isRustUseDeclaration(trimmed)) {
       const parsed = parseRustUseDeclaration(trimmed);
       if (parsed) {
         imports.push({ ...parsed, line: index + 1 });
@@ -186,20 +183,22 @@ function extractPythonImportItems(line: string): string[] {
  * Uses linear string scanning to avoid polynomial backtracking.
  * Returns null if the line is not a valid use declaration.
  */
+function isRustUseDeclaration(line: string): boolean {
+  return /^use\s+/.test(line) || /^pub(?:\s*\([^)]*\))?\s+use\s+/.test(line);
+}
+
 function parseRustUseDeclaration(
   line: string,
 ): { module: string; items: string[] } | null {
-  // Strip leading "use " or "pub use "
+  // Strip leading visibility + "use" keyword: "use ", "pub use ",
+  // "pub(crate) use", "pub(super) use", "pub(in path) use".
   let body = line
-    .replace(/^pub\s+use\s+/, '')
+    .replace(/^pub(?:\s*\([^)]*\))?\s+use\s+/, '')
     .replace(/^use\s+/, '')
     .trim();
 
-  // Strip inline comments: line (`//`) and block (`/* ... */`)
-  const lineCommentIndex = body.indexOf('//');
-  if (lineCommentIndex !== -1) {
-    body = body.slice(0, lineCommentIndex).trim();
-  }
+  // Strip block comments first (/* ... */) so that a `//` inside a block
+  // comment does not prematurely trigger the line-comment strip below.
   const blockCommentStart = body.indexOf('/*');
   if (blockCommentStart !== -1) {
     const blockCommentEnd = body.indexOf('*/', blockCommentStart);
@@ -210,6 +209,11 @@ function parseRustUseDeclaration(
     } else {
       body = body.slice(0, blockCommentStart).trim();
     }
+  }
+  // Strip line comments (//)
+  const lineCommentIndex = body.indexOf('//');
+  if (lineCommentIndex !== -1) {
+    body = body.slice(0, lineCommentIndex).trim();
   }
   if (body.endsWith(';')) {
     body = body.slice(0, -1).trim();
