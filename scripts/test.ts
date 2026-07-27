@@ -254,8 +254,19 @@ function createRunnerWithPATH(rootDir: string): CommandRunner {
 // Orchestration
 // ---------------------------------------------------------------------------
 
-const SCRIPTS_TEST_COMMAND =
-  'vitest run --config ./scripts/tests/vitest.config.ts';
+// The release-install smoke test (issue #2603) takes ~175–195s because it
+// packs a CLI tarball and runs three npm installs. Running it inside the same
+// vitest worker pool as the ~169 fast script tests congests the vitest main
+// process: the worker's onTaskUpdate RPC call cannot get a response within
+// birpc's hardcoded 60s timeout (DEFAULT_TIMEOUT in vitest's birpc), causing a
+// spurious `[vitest-worker]: Timeout calling "onTaskUpdate"` error and exit
+// code 1 even though every test passed. This is not configurable via vitest
+// config. (issue #2780)
+const RELEASE_INSTALL_SLOW_TEST =
+  'scripts/tests/issue-2603-release-install.test.ts';
+
+const SCRIPTS_TEST_COMMAND = `vitest run --config ./scripts/tests/vitest.config.ts --exclude ${RELEASE_INSTALL_SLOW_TEST}`;
+const SCRIPTS_SLOW_TEST_COMMAND = `vitest run --config ./scripts/tests/vitest.config.ts ${RELEASE_INSTALL_SLOW_TEST}`;
 const SCRIPTS_TEST_CONFIG = 'scripts/tests/vitest.config.ts';
 
 function matchesFilter(workspace: WorkspaceInfo, filter: string): boolean {
@@ -464,14 +475,29 @@ function runScriptTests(
   if (!existsSync(scriptConfigPath)) {
     return;
   }
-  const scriptResult = runPhase(
+  const mainResult = runPhase(
     'scripts',
     'scripts',
     SCRIPTS_TEST_COMMAND,
     rootDir,
     runner,
   );
-  results.push(scriptResult);
+  results.push(mainResult);
+
+  // The release-install smoke test runs as a separate vitest invocation so it
+  // never shares a worker pool with the fast script tests. This eliminates the
+  // vitest worker RPC timeout (issue #2780). Fail-fast: skip it if the main
+  // suite already failed.
+  if (mainResult.success) {
+    const slowResult = runPhase(
+      'scripts',
+      'scripts',
+      SCRIPTS_SLOW_TEST_COMMAND,
+      rootDir,
+      runner,
+    );
+    results.push(slowResult);
+  }
 }
 
 function buildSummary(
