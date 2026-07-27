@@ -70,33 +70,61 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--root') {
-      root = resolve(argv[++i] ?? '');
+      const value = argv[++i];
+      if (value === undefined) {
+        failWith('--root requires a directory argument.');
+      }
+      root = resolve(value);
     } else if (a === '--allowlist') {
-      allowlistPath = resolve(argv[++i] ?? '');
+      const value = argv[++i];
+      if (value === undefined) {
+        failWith('--allowlist requires a path argument.');
+      }
+      allowlistPath = resolve(value);
     }
   }
   return { update, root, allowlistPath };
+}
+
+/** Print an error and exit(1). Kept tiny so arg-validation stays readable. */
+function failWith(message: string): never {
+  console.error(`no-new-js guard: ${message}`);
+  process.exit(EXIT_FAIL);
 }
 
 // ─── Git interaction ────────────────────────────────────────────────────────
 
 /**
  * List tracked `.js` and `.mjs` files under `repoRoot`, excluding
- * `node_modules`. Returns repo-relative POSIX paths, sorted.
+ * `node_modules`. Returns repo-relative paths, sorted.
  *
  * `git ls-files` is the source of truth for what is committed: untracked and
  * generated files are never reported, and `node_modules` is excluded defensively
  * (it is gitignored and not tracked, but the exclude keeps the output stable
  * even in unusual checkouts).
+ *
+ * Paths are returned exactly as Git reports them (POSIX, no surrounding
+ * whitespace). Git stores paths with forward slashes even on Windows and the
+ * NUL-delimited `-z` output has no trailing whitespace, so neither `trim()`
+ * nor backslash normalization is applied — both could mask distinct filenames
+ * and allow a non-allowlisted path to collide with an allowlisted one.
  */
 function listTrackedJsFiles(repoRoot: string): string[] {
-  const out = execFileSync('git', ['ls-files', '-z', '*.js', '*.mjs'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
+  let out: string;
+  try {
+    out = execFileSync('git', ['ls-files', '-z', '*.js', '*.mjs'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `no-new-js guard: \`git ls-files\` failed in ${repoRoot} ` +
+        `(is this a git repository and is git on PATH?): ${msg}`,
+    );
+  }
   const files = out
     .split('\0')
-    .map((f) => f.trim())
     .filter((f) => f.length > 0 && !f.startsWith('node_modules/'));
   return sortPosix(files);
 }
@@ -281,5 +309,14 @@ if (
   process.argv[1] !== undefined &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  main();
+  try {
+    main();
+  } catch (e) {
+    // Fail-closed: any operational error (git unavailable, unreadable
+    // allowlist, bad JSON) exits 1 with a clear message instead of a raw
+    // stack trace, so CI misconfiguration is immediately diagnosable.
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`no-new-js guard FAILED: ${msg}`);
+    process.exit(EXIT_FAIL);
+  }
 }
