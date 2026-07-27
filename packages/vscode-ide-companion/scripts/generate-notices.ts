@@ -4,16 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 
 const projectRoot = path.resolve(
   path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..'),
 );
 const packagePath = path.join(projectRoot, 'packages', 'vscode-ide-companion');
 const noticeFilePath = path.join(packagePath, 'NOTICES.txt');
-const packageMetadataFallbacks = {
+const packageMetadataFallbacks: Readonly<
+  Record<
+    string,
+    {
+      readonly repository: string;
+      readonly license: string;
+    }
+  >
+> = {
   '@protobufjs/utf8': {
     repository: 'https://github.com/dcodeIO/protobuf.js.git',
     license: `Copyright (c) 2016, Daniel Wirtz  All rights reserved.
@@ -69,14 +78,106 @@ SOFTWARE.`,
   },
 };
 
+const packageAuthorSchema = z
+  .object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    url: z.string().optional(),
+  })
+  .passthrough();
+
+const packageRepositorySchema = z
+  .object({
+    url: z.string().optional(),
+  })
+  .passthrough();
+
+const packageJsonMetadataSchema = z
+  .object({
+    author: z.union([z.string(), packageAuthorSchema]).optional(),
+    contributors: z
+      .union([
+        z.string(),
+        packageAuthorSchema,
+        z.array(z.union([z.string(), packageAuthorSchema])),
+      ])
+      .optional(),
+    maintainers: z
+      .union([
+        z.string(),
+        packageAuthorSchema,
+        z.array(z.union([z.string(), packageAuthorSchema])),
+      ])
+      .optional(),
+    license: z
+      .union([
+        z.string(),
+        z.object({ type: z.string().optional() }).passthrough(),
+      ])
+      .optional(),
+    licenseFile: z.string().optional(),
+    repository: z.union([z.string(), packageRepositorySchema]).optional(),
+    dependencies: z.record(z.string()).optional(),
+  })
+  .passthrough();
+
+const lockfilePackageSchema = z
+  .object({
+    version: z.string().optional(),
+    link: z.boolean().optional(),
+    resolved: z.string().optional(),
+    dependencies: z.record(z.string()).optional(),
+  })
+  .passthrough();
+
+const lockfileSchema = z
+  .object({
+    packages: z.record(lockfilePackageSchema),
+  })
+  .passthrough();
+
+const rootPackageSchema = z
+  .object({
+    dependencies: z.record(z.string()),
+  })
+  .passthrough();
+
+const npmTimeSchema = z
+  .object({
+    created: z.string(),
+  })
+  .passthrough();
+
+type PackageAuthor = z.infer<typeof packageAuthorSchema>;
+type PackageJsonMetadata = z.infer<typeof packageJsonMetadataSchema>;
+type LockfilePackage = z.infer<typeof lockfilePackageSchema>;
+type Lockfile = z.infer<typeof lockfileSchema>;
+type DependencyLicense = {
+  readonly name: string;
+  readonly version: string;
+  readonly repository: string;
+  readonly license: string;
+};
+type CopyrightInfo = {
+  readonly year: string;
+  readonly holder: string;
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isFiniteYear(year: number): boolean {
+  return Number.isFinite(year) && year > 0 && year < 10000;
+}
+
 /**
  * Extract copyright information from LICENSE file content.
  * Based on common copyright patterns in open source licenses.
- *
- * @param {string} licenseContent - The content of the LICENSE file
- * @returns {{year: string, holder: string} | null} - Parsed copyright info or null
  */
-function extractCopyrightFromLicense(licenseContent) {
+function extractCopyrightFromLicense(
+  licenseContent: string,
+): CopyrightInfo | null {
   const COPYRIGHT_PATTERNS = [
     /Copyright\s+(?:\(c\)|©)?\s*(\d{4}(?:\s*[-–,]\s*\d{4})?)\s+(.+)/i,
     /©\s*(\d{4}(?:\s*[-–,]\s*\d{4})?)\s+(.+)/i,
@@ -102,7 +203,15 @@ function extractCopyrightFromLicense(licenseContent) {
  * Special copyright mappings for packages that don't have proper
  * copyright information in their package.json or LICENSE files.
  */
-const SPECIAL_COPYRIGHT_MAPPINGS = {
+const SPECIAL_COPYRIGHT_MAPPINGS: Readonly<
+  Record<
+    string,
+    {
+      readonly copyright: string;
+      readonly source: string;
+    }
+  >
+> = {
   '@dqbd/tiktoken': {
     copyright: '2022 OpenAI, Shantanu Jain',
     source: 'upstream tiktoken library',
@@ -112,14 +221,11 @@ const SPECIAL_COPYRIGHT_MAPPINGS = {
 /**
  * Get the first publish year of a package from npm registry.
  * Returns the current year if query fails.
- *
- * @param {string} packageName - Name of the npm package
- * @returns {Promise<number>} - First publish year
  */
-async function getFirstPublishYear(packageName) {
+async function getFirstPublishYear(packageName: string): Promise<number> {
   try {
-    const { execFile } = await import('child_process');
-    const { promisify } = await import('util');
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
     const execFileAsync = promisify(execFile);
 
     const { stdout } = await execFileAsync(
@@ -130,55 +236,78 @@ async function getFirstPublishYear(packageName) {
         maxBuffer: 1024 * 1024,
       },
     );
-    const timeData = JSON.parse(stdout);
-    const firstPublishYear = new Date(timeData.created).getFullYear();
+    const timeData: unknown = JSON.parse(stdout);
+    const parsed = npmTimeSchema.parse(timeData);
+    const firstPublishYear = new Date(parsed.created).getFullYear();
+    if (!isFiniteYear(firstPublishYear)) {
+      throw new Error(
+        `invalid year extracted from created date: ${parsed.created}`,
+      );
+    }
     return firstPublishYear;
   } catch (e) {
     console.warn(
-      `Warning: Could not get first publish year for ${packageName}: ${e.message}`,
+      `Warning: Could not get first publish year for ${packageName}: ${errorMessage(e)}`,
     );
-    return new Date().getFullYear(); // Fallback to current year
+    return new Date().getFullYear();
   }
 }
 
 /**
  * Format the author field from package.json.
  * Handles both string and object formats.
- *
- * @param {string|object|null} author - The author field from package.json
- * @returns {string|null} - Formatted author string or null
  */
-function formatAuthor(author) {
+function formatAuthor(
+  author: string | PackageAuthor | null | undefined,
+): string | null {
   if (!author) return null;
 
   if (typeof author === 'string') {
     return author.trim();
   }
 
-  if (typeof author === 'object' && author !== null) {
-    const parts = [];
-    if (author.name) parts.push(author.name);
-    if (author.email) parts.push(`<${author.email}>`);
-    if (author.url) parts.push(`(${author.url})`);
-    return parts.join(' ').trim();
-  }
+  const parts: string[] = [];
+  if (author.name) parts.push(author.name);
+  if (author.email) parts.push(`<${author.email}>`);
+  if (author.url) parts.push(`(${author.url})`);
+  return parts.join(' ').trim();
+}
 
-  return null;
+function isAuthorList(
+  value: string | PackageAuthor | ReadonlyArray<string | PackageAuthor>,
+): value is ReadonlyArray<string | PackageAuthor> {
+  return Array.isArray(value);
+}
+
+function toAuthorList(
+  value:
+    | string
+    | PackageAuthor
+    | ReadonlyArray<string | PackageAuthor>
+    | undefined,
+): ReadonlyArray<string | PackageAuthor> {
+  if (value === undefined) {
+    return [];
+  }
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (isAuthorList(value)) {
+    return value;
+  }
+  return [value];
 }
 
 /**
  * Extract all contributors from maintainers and contributors fields.
- *
- * @param {object} packageJson - Parsed package.json content
- * @returns {string[] | null} - Array of formatted contributors or null
  */
-function extractContributors(packageJson) {
-  const contributors = [];
+function extractContributors(
+  packageJson: PackageJsonMetadata,
+): string[] | null {
+  const contributors: string[] = [];
 
   if (packageJson.maintainers) {
-    const maintainers = Array.isArray(packageJson.maintainers)
-      ? packageJson.maintainers
-      : [packageJson.maintainers];
+    const maintainers = toAuthorList(packageJson.maintainers);
     maintainers.forEach((m) => {
       const formatted = formatAuthor(m);
       if (formatted) contributors.push(formatted);
@@ -186,9 +315,7 @@ function extractContributors(packageJson) {
   }
 
   if (packageJson.contributors) {
-    const contributorsArray = Array.isArray(packageJson.contributors)
-      ? packageJson.contributors
-      : [packageJson.contributors];
+    const contributorsArray = toAuthorList(packageJson.contributors);
     contributorsArray.forEach((c) => {
       const formatted = formatAuthor(c);
       if (formatted) contributors.push(formatted);
@@ -200,19 +327,21 @@ function extractContributors(packageJson) {
 
 // Standard license templates
 function getStandardLicenseText(
-  licenseType,
-  packageName,
-  customCopyright = null,
-) {
+  licenseType: PackageJsonMetadata['license'],
+  packageName: string,
+  customCopyright: string | null = null,
+): string {
   const copyrightNotice =
-    customCopyright ||
+    customCopyright ??
     `Copyright (c) ${new Date().getFullYear()} ${packageName} contributors`;
 
-  let normalizedLicenseType;
+  let normalizedLicenseType: string;
   if (typeof licenseType === 'string') {
     normalizedLicenseType = licenseType;
-  } else if (typeof licenseType === 'object' && licenseType !== null) {
-    normalizedLicenseType = licenseType.type || String(licenseType);
+  } else if (licenseType !== null && typeof licenseType === 'object') {
+    const type = licenseType['type'];
+    normalizedLicenseType =
+      typeof type === 'string' ? type : String(licenseType);
   } else {
     normalizedLicenseType = String(licenseType);
   }
@@ -275,18 +404,19 @@ limitations under the License.`;
  * lifecycle that regenerates this checked-in file). Canonicalizing the
  * protocol keeps the generated text identical regardless of which spelling the
  * installed package advertises.
- *
- * @param {string} url - The repository URL read from package metadata.
- * @returns {string} The URL with the deprecated git:// GitHub protocol
- *   normalized to https://.
  */
-export function normalizeGitHubRepositoryUrl(url) {
+export function normalizeGitHubRepositoryUrl(
+  url: string | null | undefined,
+): string | null | undefined {
   if (typeof url !== 'string') return url;
   return url.replace(/^git:\/\/github\.com\//, 'https://github.com/');
 }
 
-async function getDependencyLicense(depName, depVersion) {
-  let depPackageJsonPath;
+async function getDependencyLicense(
+  depName: string,
+  depVersion: string,
+): Promise<DependencyLicense> {
+  let depPackageJsonPath: string | undefined;
   let licenseContent = 'License text not found.';
   let repositoryUrl = 'No repository found';
 
@@ -325,13 +455,21 @@ async function getDependencyLicense(depName, depVersion) {
       depPackageJsonPath,
       'utf-8',
     );
-    const depPackageJson = JSON.parse(depPackageJsonContent);
+    const depPackageJsonRaw: unknown = JSON.parse(depPackageJsonContent);
+    const depPackageJson = packageJsonMetadataSchema.parse(depPackageJsonRaw);
 
-    repositoryUrl = normalizeGitHubRepositoryUrl(
-      packageMetadataFallbacks[depName]?.repository ??
-        depPackageJson.repository?.url ??
-        repositoryUrl,
-    );
+    const fallbackRepo = packageMetadataFallbacks[depName]?.repository;
+    if (fallbackRepo) {
+      repositoryUrl =
+        normalizeGitHubRepositoryUrl(fallbackRepo) ?? fallbackRepo;
+    } else if (
+      depPackageJson.repository !== undefined &&
+      typeof depPackageJson.repository === 'object'
+    ) {
+      repositoryUrl =
+        normalizeGitHubRepositoryUrl(depPackageJson.repository.url) ??
+        repositoryUrl;
+    }
 
     const packageDir = path.dirname(depPackageJsonPath);
 
@@ -339,7 +477,9 @@ async function getDependencyLicense(depName, depVersion) {
     // case-sensitive (Linux CI) and case-insensitive (macOS) filesystems —
     // e.g. vscode-jsonrpc ships "License.txt".
     const packageDirEntries = await fs.readdir(packageDir).catch(() => []);
-    const findPackageFile = (candidates) => {
+    const findPackageFile = (
+      candidates: ReadonlyArray<string>,
+    ): string | null => {
       for (const candidate of candidates) {
         const match = packageDirEntries.find(
           (entry) => entry.toLowerCase() === candidate.toLowerCase(),
@@ -361,7 +501,7 @@ async function getDependencyLicense(depName, depVersion) {
       'LICENSE.md',
       'LICENSE.txt',
       'LICENSE-MIT.txt',
-    ].filter(Boolean);
+    ].filter((c): c is string => typeof c === 'string');
 
     const licenseFile = findPackageFile(licenseFileCandidates);
 
@@ -379,7 +519,7 @@ async function getDependencyLicense(depName, depVersion) {
         }
       } catch (e) {
         console.warn(
-          `Warning: Failed to read license file for ${depName}: ${e.message}`,
+          `Warning: Failed to read license file for ${depName}: ${errorMessage(e)}`,
         );
       }
     } else {
@@ -387,7 +527,7 @@ async function getDependencyLicense(depName, depVersion) {
       const contributors = extractContributors(depPackageJson);
 
       if (depPackageJson.license) {
-        let copyrightNotice;
+        let copyrightNotice: string;
 
         if (specialMapping) {
           copyrightNotice = `Copyright (c) ${specialMapping.copyright}`;
@@ -451,13 +591,13 @@ async function getDependencyLicense(depName, depVersion) {
         console.log(`✓ Attached NOTICE file for ${depName}`);
       } catch (e) {
         console.warn(
-          `Warning: Failed to read notice file for ${depName}: ${e.message}`,
+          `Warning: Failed to read notice file for ${depName}: ${errorMessage(e)}`,
         );
       }
     }
   } catch (e) {
     console.warn(
-      `Warning: Could not find package.json for ${depName}: ${e.message}`,
+      `Warning: Could not find package.json for ${depName}: ${errorMessage(e)}`,
     );
   }
 
@@ -470,16 +610,16 @@ async function getDependencyLicense(depName, depVersion) {
 }
 
 function collectDependencies(
-  packageName,
-  packageLock,
-  dependenciesMap,
-  workspaceRelativePath,
-) {
+  packageName: string,
+  packageLock: Lockfile,
+  dependenciesMap: Map<string, string>,
+  workspaceRelativePath: string,
+): void {
   if (dependenciesMap.has(packageName)) {
     return;
   }
 
-  let packageInfo =
+  let packageInfo: LockfilePackage | undefined =
     packageLock.packages[
       `${workspaceRelativePath}/node_modules/${packageName}`
     ];
@@ -495,7 +635,14 @@ function collectDependencies(
   }
 
   if (packageInfo.link && typeof packageInfo.resolved === 'string') {
-    packageInfo = packageLock.packages[packageInfo.resolved] ?? packageInfo;
+    const linkedEntry = packageLock.packages[packageInfo.resolved];
+    if (linkedEntry) {
+      packageInfo = linkedEntry;
+    }
+  }
+
+  if (typeof packageInfo.version !== 'string') {
+    throw new Error(`Lockfile entry for ${packageName} has no string version`);
   }
 
   dependenciesMap.set(packageName, packageInfo.version);
@@ -512,23 +659,25 @@ function collectDependencies(
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   try {
     const packageJsonPath = path.join(packagePath, 'package.json');
     const packageJsonContent = await fs.readFile(packageJsonPath, 'utf-8');
-    const packageJson = JSON.parse(packageJsonContent);
+    const packageJsonRaw: unknown = JSON.parse(packageJsonContent);
+    const packageJson = rootPackageSchema.parse(packageJsonRaw);
 
     const packageLockJsonPath = path.join(projectRoot, 'package-lock.json');
     const packageLockJsonContent = await fs.readFile(
       packageLockJsonPath,
       'utf-8',
     );
-    const packageLockJson = JSON.parse(packageLockJsonContent);
+    const packageLockJsonRaw: unknown = JSON.parse(packageLockJsonContent);
+    const packageLockJson = lockfileSchema.parse(packageLockJsonRaw);
 
     const workspaceRelativePath = path
       .relative(projectRoot, packagePath)
       .replace(/\\/g, '/');
-    const allDependencies = new Map();
+    const allDependencies = new Map<string, string>();
     const directDependencies = Object.keys(packageJson.dependencies);
 
     for (const depName of directDependencies) {
@@ -568,7 +717,7 @@ async function main() {
 }
 
 // Only run when invoked directly (e.g. the npm `prepare` lifecycle running
-// `node ./scripts/generate-notices.js`) so the module can be imported by tests
+// `bun ./scripts/generate-notices.ts`) so the module can be imported by tests
 // without triggering filesystem writes or registry lookups.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch(console.error);

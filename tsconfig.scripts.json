@@ -35,6 +35,8 @@
     "scripts/copy_files.ts",
     "scripts/deflake.ts",
     "scripts/dev-env.ts",
+    "packages/vscode-ide-companion/scripts/generate-notices.ts",
+    "packages/vscode-ide-companion/scripts/generate-notices.test.ts",
     "scripts/generate-git-commit-info.ts",
     "scripts/generate-keybindings-doc.ts",
     "scripts/generate-settings-doc.ts",

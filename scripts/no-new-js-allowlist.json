@@ -17,8 +17,6 @@
     "packages/cli/src/commands/extensions/examples/mcp-server/example.js",
     "packages/vscode-ide-companion/esbuild.js",
     "packages/vscode-ide-companion/eslint.config.mjs",
-    "packages/vscode-ide-companion/scripts/generate-notices.js",
-    "packages/vscode-ide-companion/scripts/generate-notices.test.js",
     "project-plans/issue1585/analysis/capture-pre-extraction-fixtures.mjs",
     "project-plans/issue1586/scripts/verify-auth-extraction-gate.js",
     "project-plans/issue2285/analysis/boundary-checker-characterization-proof.mjs",
