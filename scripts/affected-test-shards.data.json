@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "description": "Checked-in package import graph, shard map, and observer rules for affected-test-shard selection (issue #2709). Validated by scripts/check-affected-test-shards.ts against real AST imports.",
+  "packagePrefix": "@vybestack/llxprt-code-",
+  "packageToShard": {
+    "cli": "cli",
+    "agents": "agents",
+    "providers": "providers",
+    "core": "core",
+    "tools": "rest",
+    "storage": "rest",
+    "auth": "rest",
+    "settings": "rest",
+    "telemetry": "rest",
+    "ide-integration": "rest",
+    "policy": "rest",
+    "mcp": "rest",
+    "lsp": "rest",
+    "test-utils": "rest",
+    "a2a-server": "rest",
+    "vscode-ide-companion": "rest"
+  },
+  "shardOrder": ["cli", "agents", "providers", "core", "rest", "scripts"],
+  "shardTimingsSeconds": {
+    "cli": 703,
+    "agents": 289,
+    "providers": 185,
+    "core": 130,
+    "rest": 55,
+    "scripts": 270
+  },
+  "importEdges": {
+    "a2a-server": ["agents", "core", "mcp", "storage"],
+    "agents": [
+      "auth",
+      "core",
+      "ide-integration",
+      "policy",
+      "providers",
+      "settings",
+      "tools"
+    ],
+    "auth": [],
+    "cli": [
+      "agents",
+      "auth",
+      "core",
+      "ide-integration",
+      "mcp",
+      "providers",
+      "settings",
+      "storage",
+      "telemetry",
+      "tools"
+    ],
+    "core": [
+      "auth",
+      "ide-integration",
+      "mcp",
+      "policy",
+      "settings",
+      "storage",
+      "telemetry",
+      "tools"
+    ],
+    "ide-integration": ["telemetry"],
+    "lsp": [],
+    "mcp": ["core", "settings", "storage", "tools"],
+    "policy": [],
+    "providers": ["auth", "core", "settings", "storage", "telemetry", "tools"],
+    "settings": ["storage"],
+    "storage": [],
+    "telemetry": ["storage"],
+    "test-utils": [],
+    "tools": [],
+    "vscode-ide-companion": ["ide-integration"]
+  },
+  "testOnlyEdges": {
+    "agents": ["mcp"],
+    "cli": ["test-utils"],
+    "core": ["providers", "test-utils"],
+    "tools": ["storage", "test-utils"]
+  },
+  "observers": {
+    "agents": [
+      {
+        "observingPackage": "policy",
+        "selectShard": "rest",
+        "reason": "packages/policy/src/editor-mode-matrix.test.ts reads agents source files without importing"
+      }
+    ],
+    "cli": [
+      {
+        "observingPackage": "test-utils",
+        "selectShard": "rest",
+        "reason": "packages/test-utils/src/cli-args.test.ts reads cli source files without importing"
+      }
+    ],
+    "providers": [
+      {
+        "observingPackage": "core",
+        "selectShard": "core",
+        "reason": "packages/core/src/llm-types/assignability.test.ts reads providers type definitions without importing"
+      }
+    ]
+  },
+  "sharedInputs": [
+    "package.json",
+    "package-lock.json",
+    "bun.lock",
+    "tsconfig.json",
+    "tsconfig.scripts.json",
+    "eslint.config.js",
+    "vitest.coverage.ts",
+    ".npmrc",
+    ".nvmrc",
+    ".bun-version",
+    "scripts/build.ts",
+    "scripts/build_package.ts",
+    "scripts/build_sandbox.ts",
+    "scripts/build_vscode_companion.ts",
+    "scripts/bun-build.config.mjs",
+    "scripts/test.ts",
+    "scripts/test-shards.ts",
+    "scripts/check-test-shards.ts",
+    "scripts/run_bun_tests.ts",
+    "scripts/bun-test-manifest.ts",
+    "scripts/postinstall.cjs",
+    "scripts/preinstall.cjs",
+    "scripts/copy_bundle_assets.ts",
+    "scripts/affected-test-shards.ts",
+    "scripts/affected-test-shards.data.json",
+    "scripts/check-affected-test-shards.ts",
+    ".github/workflows/ci.yml"
+  ]
+}
