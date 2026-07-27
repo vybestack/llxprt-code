@@ -115,6 +115,10 @@ function listTrackedJsFiles(repoRoot: string): string[] {
     out = execFileSync('git', ['ls-files', '-z', '*.js', '*.mjs'], {
       cwd: repoRoot,
       encoding: 'utf8',
+      // `git ls-files` against a healthy repo completes in milliseconds, but a
+      // corrupted repo or FS hang would otherwise stall CI indefinitely. 60s is
+      // generous headroom for the largest repos while preventing an infinite hang.
+      timeout: 60_000,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
