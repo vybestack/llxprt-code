@@ -199,6 +199,7 @@ mock.module(
     getAliasFilePath: (alias: string) =>
       `/mock/home/.llxprt/providers/${alias}.config`,
     writeProviderAliasConfig: () => {},
+    computeUnallowedParameters: () => new Set<string>(),
   }),
 );
 
