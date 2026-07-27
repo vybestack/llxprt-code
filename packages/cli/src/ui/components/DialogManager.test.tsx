@@ -155,6 +155,9 @@ describe('useModelDialogHandler', () => {
     expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
     expect(fakeRuntime.setProvider).toHaveBeenCalledWith('anthropic');
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('claude-sonnet');
+    expect(fakeRuntime.setProvider.mock.invocationCallOrder[0]).toBeLessThan(
+      fakeRuntime.setActiveModel.mock.invocationCallOrder[0],
+    );
     expect(recordProviderSwitch).toHaveBeenCalledWith(
       'anthropic',
       'claude-sonnet',

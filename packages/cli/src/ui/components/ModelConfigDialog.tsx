@@ -282,6 +282,7 @@ function handleListKey(
   const clearable = getClearableParamField(key, ALL_FIELDS[selectedIndex]);
   if (clearable !== null) {
     runtime.clearActiveModelParam(clearable.key);
+    setSelectedIndex((prev) => prev);
   }
 }
 
