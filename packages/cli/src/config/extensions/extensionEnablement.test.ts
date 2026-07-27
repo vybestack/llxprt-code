@@ -467,6 +467,25 @@ describe('ExtensionEnablementManager', () => {
       },
     );
 
+    it.each([
+      ['truncated JSON', '{bad'],
+      ['empty file', ''],
+      ['whitespace only', '   '],
+    ])(
+      'should fall back when the file has %s',
+      (_label, content) => {
+        writeEnablementConfig(content);
+        const localManager = new ExtensionEnablementManager(configDir);
+
+        expect(localManager.isEnabled('ext-test', '/any/path')).toBe(true);
+        expect(coreEventsEmitSpy).toHaveBeenCalledWith(
+          'error',
+          'Failed to read extension enablement config.',
+          expect.anything(),
+        );
+      },
+    );
+
     it('should still apply valid config shapes', () => {
       writeEnablementConfig(
         JSON.stringify({
