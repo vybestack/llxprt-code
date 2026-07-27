@@ -250,10 +250,30 @@ function parseRustUseDeclaration(
   // Module path is everything before the first `{` group (minus trailing `::`)
   const modulePath = body.slice(0, braceOpen).replace(/::$/, '').trim();
   const itemsStr = body.slice(braceOpen + 1, braceClose).trim();
-  const items = itemsStr
-    .split(',')
+  const items = splitRustImportItems(itemsStr)
     .map((item) => stripImportAlias(item.trim()))
     .filter((item) => item);
 
   return { module: modulePath, items };
+}
+
+/**
+ * Splits a Rust use-group item list by top-level commas, ignoring commas
+ * inside nested brace groups (e.g., `{Read, Write}` inside `io::{Read, Write}`).
+ */
+function splitRustImportItems(itemsStr: string): string[] {
+  const items: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < itemsStr.length; i++) {
+    const ch = itemsStr[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    else if (ch === ',' && depth === 0) {
+      items.push(itemsStr.slice(start, i));
+      start = i + 1;
+    }
+  }
+  items.push(itemsStr.slice(start));
+  return items;
 }

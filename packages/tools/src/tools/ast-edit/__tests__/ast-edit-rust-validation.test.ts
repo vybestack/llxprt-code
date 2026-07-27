@@ -345,6 +345,16 @@ describe('ast_edit Rust import extraction', () => {
 
     expect(imports).toHaveLength(1);
     expect(imports[0].module).toBe('std');
+    expect(imports[0].items).toEqual(['io::{Read, Write}', 'fs']);
+  });
+
+  it('handles empty brace groups in use declarations', () => {
+    const code = 'use std::{};\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std');
+    expect(imports[0].items).toEqual([]);
   });
 
   it('strips block comments from use declarations', () => {
