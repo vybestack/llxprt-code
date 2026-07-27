@@ -98,4 +98,44 @@ describe('Live-output accumulation behavioral scenarios', () => {
     // discards it and returns just the new string data.
     expect(result).toBe('fresh');
   });
+
+  it('empty string append preserves prior accumulated text', () => {
+    // An empty string is a valid append delta (e.g. a whitespace-only normalized
+    // to empty); it must not wipe prior content.
+    const result = replay([
+      { mode: 'append', data: 'prior' },
+      { mode: 'append', data: '' },
+    ]);
+    expect(result).toBe('prior');
+  });
+
+  it('empty AnsiOutput replace clears any prior accumulated state', () => {
+    // An empty snapshot is a valid replace that should reset the accumulator.
+    const empty: AnsiOutput = [];
+    const result = replay([
+      { mode: 'append', data: 'prior text' },
+      { mode: 'replace', data: empty },
+    ]);
+    expect(result).toBe(empty);
+  });
+
+  it('consecutive replace operations keep only the latest snapshot', () => {
+    const first = snapshot('snap-1');
+    const second = snapshot('snap-2');
+    const third = snapshot('snap-3');
+    const result = replay([
+      { mode: 'replace', data: first },
+      { mode: 'replace', data: second },
+      { mode: 'replace', data: third },
+    ]);
+    expect(result).toBe(third);
+  });
+
+  it('replace as the very first update (no prior state) returns the snapshot', () => {
+    // When no prior append has occurred, a replace from undefined must
+    // return the AnsiOutput snapshot directly.
+    const snap = snapshot('initial');
+    const result = replay([{ mode: 'replace', data: snap }]);
+    expect(result).toBe(snap);
+  });
 });
