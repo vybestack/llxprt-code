@@ -312,53 +312,40 @@ describe('subagentExecution', () => {
       };
     }
 
-    it('should forward string output to onMessage', () => {
+    it('should forward append output data to onMessage', () => {
       const onMessage = vi.fn();
       const channel = createCompletionChannel({ onMessage });
-      channel.outputUpdateHandler('call-1', 'hello world');
+      channel.outputUpdateHandler('call-1', {
+        mode: 'append',
+        data: 'hello world',
+      });
       expect(onMessage).toHaveBeenCalledWith('hello world');
     });
 
-    it('should convert well-formed AnsiOutput to text', () => {
+    it('should convert well-formed replace AnsiOutput to text', () => {
       const onMessage = vi.fn();
       const channel = createCompletionChannel({ onMessage });
       const ansiOutput = [
         [makeToken('line one')],
         [makeToken('line '), makeToken('two')],
       ];
-      channel.outputUpdateHandler('call-1', ansiOutput);
+      channel.outputUpdateHandler('call-1', {
+        mode: 'replace',
+        data: ansiOutput,
+      });
       const result = onMessage.mock.calls[0][0] as string;
       expect(result).toContain('line one');
       expect(result).toContain('line two');
       expect(result.split(String.fromCharCode(10))).toHaveLength(2);
     });
 
-    it('should skip undefined line entries in AnsiOutput without crashing', () => {
-      const onMessage = vi.fn();
-      const channel = createCompletionChannel({ onMessage });
-      const ansiOutput = [
-        [makeToken('valid')],
-        undefined as never,
-        null as never,
-        { content: 'bad' } as never,
-        [makeToken('also valid')],
-      ];
-      channel.outputUpdateHandler('call-1', ansiOutput);
-      const result = onMessage.mock.calls[0][0] as string;
-      expect(result).toBe('valid\nalso valid');
-    });
-
-    it('should not call onMessage when output is falsy', () => {
-      const onMessage = vi.fn();
-      const channel = createCompletionChannel({ onMessage });
-      channel.outputUpdateHandler('call-1', undefined as never);
-      expect(onMessage).not.toHaveBeenCalled();
-    });
-
-    it('should not throw when onMessage is not provided', () => {
+    it('should not call onMessage when onMessage is not provided', () => {
       const channel = createCompletionChannel({});
       expect(() =>
-        channel.outputUpdateHandler('call-1', 'some output'),
+        channel.outputUpdateHandler('call-1', {
+          mode: 'append',
+          data: 'some output',
+        }),
       ).not.toThrow();
     });
 

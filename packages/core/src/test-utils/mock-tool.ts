@@ -9,6 +9,7 @@ import type {
   ToolCallConfirmationDetails,
   ToolInvocation,
   ToolResult,
+  LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
 import {
   BaseDeclarativeTool,
@@ -33,7 +34,7 @@ interface MockToolOptions {
   execute?: (
     params: { [key: string]: unknown },
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ) => Promise<ToolResult>;
   params?: object;
   messageBus?: IToolMessageBus;
@@ -64,7 +65,7 @@ class MockToolInvocation extends BaseToolInvocation<
 
   execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     return this.tool.executeFn(this.params, signal, updateOutput);
   }
@@ -86,7 +87,7 @@ class MockToolInvocation extends BaseToolInvocation<
 type ExecuteFn = (
   params: { [key: string]: unknown },
   signal: AbortSignal,
-  updateOutput?: (output: string) => void,
+  updateOutput?: (update: LiveOutputUpdate) => void,
 ) => Promise<ToolResult>;
 
 type ExecuteMock = ReturnType<typeof vi.fn<ExecuteFn>>;

@@ -25,7 +25,7 @@ import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildToolGovernance, canonicalizeToolName } from './toolGovernance.js';
-import type { AnsiOutput } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
+import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { triggerToolNotificationHook } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
 import { ToolDispatcher } from '../scheduler/tool-dispatcher.js';
@@ -596,10 +596,10 @@ export class CoreToolScheduler implements ToolSchedulerContract {
         call: scheduledCall,
         signal,
         onLiveOutput: scheduledCall.tool.canUpdateOutput
-          ? (id: string, chunk: string | AnsiOutput) => {
+          ? (id: string, update: LiveOutputUpdate) => {
               if (this.outputUpdateHandler) {
                 try {
-                  this.outputUpdateHandler(id, chunk);
+                  this.outputUpdateHandler(id, update);
                 } catch (error) {
                   toolSchedulerLogger.debug(
                     () =>
@@ -611,7 +611,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
                 tc.request.callId === id && tc.status === 'executing'
                   ? {
                       ...tc,
-                      liveOutput: accumulateLiveOutput(tc.liveOutput, chunk),
+                      liveOutput: accumulateLiveOutput(tc.liveOutput, update),
                     }
                   : tc,
               );

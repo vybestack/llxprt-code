@@ -86,7 +86,7 @@ export type ApprovalHandler = (
 export interface DisplayCallbacks {
   /** Forwarded after the loop records its own tool_update/awaiting_approval events. */
   onToolCallsUpdate?: ToolCallsUpdateHandler;
-  /** Forwarded after the loop records its own tool_output event (string chunks only). */
+  /** Forwarded after the loop records its own tool_output event (the loop routes only `append` updates into the tool_output queue, but the handler receives the full {@link LiveOutputUpdate}). */
   outputUpdateHandler?: OutputUpdateHandler;
   /**
    * Forwarded once per turn with the same rich CompletedToolCall[] batch the

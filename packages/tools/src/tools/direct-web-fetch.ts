@@ -14,6 +14,7 @@ import {
   Kind,
   type ToolInvocation,
   type ToolResult,
+  type LiveOutputUpdate,
 } from './tools.js';
 import { DIRECT_WEB_FETCH_TOOL } from '../types/tool-names.js';
 import { ToolErrorType } from '../types/tool-error.js';
@@ -103,7 +104,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
 
   async execute(
     signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const protocolError = this.validateUrlProtocol();
     if (protocolError) return protocolError;

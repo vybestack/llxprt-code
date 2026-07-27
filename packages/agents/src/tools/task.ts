@@ -9,6 +9,7 @@ import {
   BaseToolInvocation,
   Kind,
   type ToolResult,
+  type LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
 import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -246,7 +247,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
   override async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     if (this.normalized.async) {
       return this.executeAsync(signal, updateOutput);
@@ -316,7 +317,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutSeconds: number | undefined,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const abortState = this.createAbortState(launchRequest, signal);
 
@@ -461,7 +462,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         result: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
       ) => void;
     },
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const { scope, agentId, dispose } = launchResult;
     taskLogger.debug(
@@ -547,33 +548,36 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
     agentId: string,
     scope: SubAgentScope,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): { emitClosingSubagentTag: () => void } {
     const subagentName =
       launchRequestName(launchResult) || this.normalized.subagentName;
     let xmlOutputOpen = false;
     const normalizer = createStreamNormalizer();
+    const emitAppend = (data: string): void => {
+      updateOutput?.({ mode: 'append', data });
+    };
     const emitClosingSubagentTag = () => {
       if (!xmlOutputOpen || !updateOutput) {
         return;
       }
       const flushed = normalizer.flush();
       if (flushed !== undefined) {
-        updateOutput(flushed);
+        emitAppend(flushed);
       }
-      updateOutput(`</subagent name="${subagentName}" id="${agentId}">\n`);
+      emitAppend(`</subagent name="${subagentName}" id="${agentId}">\n`);
       xmlOutputOpen = false;
     };
 
     if (updateOutput) {
-      updateOutput(`<subagent name="${subagentName}" id="${agentId}">\n`);
+      emitAppend(`<subagent name="${subagentName}" id="${agentId}">\n`);
       xmlOutputOpen = true;
 
       const existingHandler = scope.onMessage;
       scope.onMessage = (message: string) => {
         const delta = normalizer.push(message);
         if (delta !== undefined) {
-          updateOutput(delta);
+          emitAppend(delta);
         }
         existingHandler?.(message);
       };
@@ -703,7 +707,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
   private async executeAsync(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     return executeAsyncTask(
       {

@@ -27,7 +27,7 @@ import type {
   AgentInput,
 } from '@vybestack/llxprt-code-agents';
 import type {
-  AnsiOutput,
+  LiveOutputUpdate,
   CompletedToolCall,
   EditorType,
   ToolCall,
@@ -77,7 +77,7 @@ export interface UseAgentEventStreamArgs {
   markToolsAsDisplayCleared?: (callIds: string[]) => void;
   /** Display callbacks for tool-call display state. */
   onToolCallsUpdate?: (toolCalls: ToolCall[]) => void;
-  outputUpdateHandler?: (callId: string, chunk: string | AnsiOutput) => void;
+  outputUpdateHandler?: (callId: string, update: LiveOutputUpdate) => void;
   getPreferredEditor?: () => EditorType | undefined;
   onEditorOpen?: () => void;
   onEditorClose?: () => void;
@@ -161,8 +161,8 @@ export function useAgentEventStream(
     agent.tools.setDisplayCallbacks({
       onToolCallsUpdate: (toolCalls) =>
         latestArgs.current.onToolCallsUpdate?.(toolCalls),
-      outputUpdateHandler: (callId, chunk) =>
-        latestArgs.current.outputUpdateHandler?.(callId, chunk),
+      outputUpdateHandler: (callId, update) =>
+        latestArgs.current.outputUpdateHandler?.(callId, update),
       onAllToolCallsComplete: (completed) => {
         const userMessageTimestamp =
           currentTurnTimestampRef.current ?? Date.now();

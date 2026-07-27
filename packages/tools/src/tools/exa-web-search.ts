@@ -19,6 +19,7 @@ import {
   Kind,
   type ToolInvocation,
   type ToolResult,
+  type LiveOutputUpdate,
 } from './tools.js';
 
 const API_CONFIG = {
@@ -154,7 +155,7 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
 
   async execute(
     signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const searchRequest: McpSearchRequest = {
       jsonrpc: '2.0',

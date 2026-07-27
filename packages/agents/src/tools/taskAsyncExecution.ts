@@ -15,7 +15,10 @@ import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyn
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
-import { type ToolResult } from '@vybestack/llxprt-code-tools';
+import {
+  type ToolResult,
+  type LiveOutputUpdate,
+} from '@vybestack/llxprt-code-tools';
 import { type TaskToolInvocationParams } from './taskToolGovernance.js';
 import {
   handleBackgroundAbort,
@@ -290,32 +293,35 @@ export function setupAsyncStreaming(
   subagentName: string,
   scope: SubAgentScope,
   agentId: string,
-  updateOutput?: (output: string) => void,
+  updateOutput?: (update: LiveOutputUpdate) => void,
 ): { emitAsyncClosingSubagentTag: () => void } | undefined {
   if (!updateOutput) return undefined;
 
   const normalizer = createStreamNormalizer();
   let asyncXmlOutputOpen = false;
+  const emitAppend = (data: string): void => {
+    updateOutput({ mode: 'append', data });
+  };
   const emitAsyncClosingSubagentTag = () => {
     if (!asyncXmlOutputOpen) {
       return;
     }
     const flushed = normalizer.flush();
     if (flushed !== undefined) {
-      updateOutput(flushed);
+      emitAppend(flushed);
     }
-    updateOutput(`</subagent name="${subagentName}" id="${agentId}">\n`);
+    emitAppend(`</subagent name="${subagentName}" id="${agentId}">\n`);
     asyncXmlOutputOpen = false;
   };
 
-  updateOutput(`<subagent name="${subagentName}" id="${agentId}">\n`);
+  emitAppend(`<subagent name="${subagentName}" id="${agentId}">\n`);
   asyncXmlOutputOpen = true;
 
   const existingHandler = scope.onMessage;
   scope.onMessage = (message: string) => {
     const delta = normalizer.push(message);
     if (delta !== undefined) {
-      updateOutput(delta);
+      emitAppend(delta);
     }
     existingHandler?.(message);
   };
@@ -404,7 +410,7 @@ export function executeInBackground(
 export async function executeAsyncTask(
   collaborators: AsyncTaskCollaborators,
   signal: AbortSignal,
-  updateOutput?: (output: string) => void,
+  updateOutput?: (update: LiveOutputUpdate) => void,
 ): Promise<ToolResult> {
   const ctx = resolveAsyncContext(collaborators);
   if (!('asyncTaskManager' in ctx)) {
