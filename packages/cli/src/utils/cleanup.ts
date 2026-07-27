@@ -9,21 +9,25 @@ import { join } from 'path';
 import { ShellExecutionService } from '@vybestack/llxprt-code-core';
 import { FileOutput } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import {
+  beginCleanup,
+  drainAsyncCleanups,
+  drainSyncCleanups,
+  isCleanupInProgress,
+  registerCleanupFn,
+  registerSyncCleanupFn,
+} from './cleanup-state.js';
 
 type FileOutputWithOptionalDisposeInstance = typeof FileOutput & {
   disposeInstance?: unknown;
 };
 
-const cleanupFunctions: Array<(() => void) | (() => Promise<void>)> = [];
-const syncCleanupFunctions: Array<() => void> = [];
-let cleanupInProgress = false;
-
 export function registerCleanup(fn: (() => void) | (() => Promise<void>)) {
-  cleanupFunctions.push(fn);
+  registerCleanupFn(fn);
 }
 
 export function registerSyncCleanup(fn: () => void) {
-  syncCleanupFunctions.push(fn);
+  registerSyncCleanupFn(fn);
 }
 
 export function runBestEffortSyncCleanup(
@@ -39,8 +43,8 @@ export function runBestEffortSyncCleanup(
 
 export async function runExitCleanup() {
   // Guard against concurrent cleanup if signal handlers fire multiple times
-  if (cleanupInProgress) return;
-  cleanupInProgress = true;
+  if (isCleanupInProgress()) return;
+  beginCleanup();
 
   // Tear down any active PTYs first to release FDs/sockets promptly
   try {
@@ -50,23 +54,13 @@ export async function runExitCleanup() {
   }
 
   // Run sync cleanups first (e.g., stdio restoration)
-  for (const fn of syncCleanupFunctions) {
-    try {
-      fn();
-    } catch {
-      // Ignore errors during cleanup.
-    }
-  }
-  syncCleanupFunctions.length = 0;
+  drainSyncCleanups(() => {
+    // Ignore errors during cleanup.
+  });
 
-  for (const fn of cleanupFunctions) {
-    try {
-      await fn();
-    } catch {
-      // Ignore errors during cleanup.
-    }
-  }
-  cleanupFunctions.length = 0; // Clear the array
+  await drainAsyncCleanups(() => {
+    // Ignore errors during cleanup.
+  });
 
   try {
     const disposeInstance = (
@@ -83,16 +77,9 @@ export async function runExitCleanup() {
   }
 }
 
-/**
- * Reset cleanup state for testing purposes only.
- * DO NOT use this in production code.
- * @internal
- */
-export function __resetCleanupStateForTesting() {
-  cleanupFunctions.length = 0;
-  syncCleanupFunctions.length = 0;
-  cleanupInProgress = false;
-}
+// Re-export the test reset from the state module that owns the state,
+// preserving backward compatibility for existing consumers.
+export { __resetCleanupStateForTesting } from './cleanup-state.js';
 
 export async function cleanupCheckpoints() {
   const storage = new Storage(process.cwd());

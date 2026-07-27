@@ -5,13 +5,20 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { FileOutput, ShellExecutionService } from '@vybestack/llxprt-code-core';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
+  registerSyncCleanup,
   runBestEffortSyncCleanup,
   runExitCleanup,
 } from './cleanup';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 describe('cleanup', () => {
   beforeEach(() => {
@@ -79,15 +86,15 @@ describe('cleanup', () => {
     expect(executionOrder).toStrictEqual([1, 2]);
   });
 
-  it('should continue executing cleanup functions even if one throws an error', async () => {
+  it('should continue executing cleanup functions after an async cleanup rejects', async () => {
     let firstRan = false;
     let secondRan = false;
 
-    registerCleanup(() => {
+    registerCleanup(async () => {
       firstRan = true;
       throw new Error('Test Error');
     });
-    registerCleanup(() => {
+    registerCleanup(async () => {
       secondRan = true;
     });
 
@@ -199,5 +206,232 @@ describe('cleanup', () => {
     expect(executionOrder).toStrictEqual(['cleanup', 'file-output']);
     expect(disposeSpy).toHaveBeenCalledOnce();
     disposeSpy.mockRestore();
+  });
+
+  it('should execute synchronous cleanups before asynchronous cleanups', async () => {
+    const executionOrder: string[] = [];
+
+    registerCleanup(async () => {
+      executionOrder.push('async-1');
+    });
+    registerSyncCleanup(() => {
+      executionOrder.push('sync-1');
+    });
+    registerCleanup(async () => {
+      executionOrder.push('async-2');
+    });
+    registerSyncCleanup(() => {
+      executionOrder.push('sync-2');
+    });
+
+    await runExitCleanup();
+
+    expect(executionOrder).toStrictEqual([
+      'sync-1',
+      'sync-2',
+      'async-1',
+      'async-2',
+    ]);
+  });
+
+  it('should continue executing sync cleanups even if one throws', async () => {
+    let firstSyncRan = false;
+    let secondSyncRan = false;
+
+    registerSyncCleanup(() => {
+      firstSyncRan = true;
+      throw new Error('Sync cleanup error');
+    });
+    registerSyncCleanup(() => {
+      secondSyncRan = true;
+    });
+
+    await runExitCleanup();
+
+    expect(firstSyncRan).toBe(true);
+    expect(secondSyncRan).toBe(true);
+  });
+
+  it('should drain callbacks registered via registerCleanup during async draining', async () => {
+    const executionOrder: string[] = [];
+
+    registerCleanup(async () => {
+      executionOrder.push('async-1');
+      registerCleanup(() => {
+        executionOrder.push('async-appended');
+      });
+    });
+
+    await runExitCleanup();
+
+    expect(executionOrder).toStrictEqual(['async-1', 'async-appended']);
+  });
+
+  it('should run sync callbacks registered during sync draining (drain-until-empty)', async () => {
+    const executionOrder: string[] = [];
+
+    registerSyncCleanup(() => {
+      executionOrder.push('sync-1');
+      registerSyncCleanup(() => {
+        executionOrder.push('sync-appended');
+      });
+    });
+
+    await runExitCleanup();
+
+    expect(executionOrder).toStrictEqual(['sync-1', 'sync-appended']);
+  });
+});
+
+describe('cleanup state reset', () => {
+  beforeEach(() => {
+    __resetCleanupStateForTesting();
+  });
+
+  it('reset clears pending async callbacks so they do not run after reset', async () => {
+    let asyncRan = false;
+    registerCleanup(() => {
+      asyncRan = true;
+    });
+
+    __resetCleanupStateForTesting();
+
+    await runExitCleanup();
+
+    expect(asyncRan).toBe(false);
+  });
+
+  it('reset clears pending sync callbacks so they do not run after reset', async () => {
+    let syncRan = false;
+    registerSyncCleanup(() => {
+      syncRan = true;
+    });
+
+    __resetCleanupStateForTesting();
+
+    await runExitCleanup();
+
+    expect(syncRan).toBe(false);
+  });
+
+  it('reset returns the in-progress guard to idle allowing cleanup to run again', async () => {
+    let firstCount = 0;
+    registerCleanup(() => {
+      firstCount++;
+    });
+
+    await runExitCleanup();
+    expect(firstCount).toBe(1);
+
+    // After completion the guard is still set — cleanup won't run again
+    let secondCount = 0;
+    registerCleanup(() => {
+      secondCount++;
+    });
+    await runExitCleanup();
+    expect(secondCount).toBe(0);
+
+    // After reset, the guard is cleared and cleanup can run
+    __resetCleanupStateForTesting();
+    let thirdCount = 0;
+    registerCleanup(() => {
+      thirdCount++;
+    });
+    await runExitCleanup();
+    expect(thirdCount).toBe(1);
+  });
+
+  it('reset clears both sync and async queues before draining', async () => {
+    const order: string[] = [];
+    registerSyncCleanup(() => {
+      order.push('sync');
+    });
+    registerCleanup(async () => {
+      order.push('async');
+    });
+
+    __resetCleanupStateForTesting();
+
+    let ran = false;
+    registerCleanup(() => {
+      ran = true;
+    });
+    await runExitCleanup();
+
+    expect(order).toStrictEqual([]);
+    expect(ran).toBe(true);
+  });
+});
+
+describe('cleanup-state module owns the reset state', () => {
+  // These tests import directly from the lightweight state module to prove
+  // that the state is actually owned there, not merely re-exported. The
+  // behavior must be identical whether accessed via cleanup.ts (public API)
+  // or cleanup-state.ts (internal owner).
+  beforeEach(() => {
+    __resetCleanupStateForTesting();
+  });
+
+  it('resetting via the state module clears callbacks registered via cleanup.ts', async () => {
+    let ran = false;
+    registerCleanup(() => {
+      ran = true;
+    });
+    registerSyncCleanup(() => {
+      ran = true;
+    });
+
+    // Import the state module's reset — must clear state owned by cleanup.ts
+    const { __resetCleanupStateForTesting: resetFromState } = await import(
+      './cleanup-state'
+    );
+    resetFromState();
+
+    await runExitCleanup();
+    expect(ran).toBe(false);
+  });
+
+  it('the state module reset allows cleanup to run again after completion', async () => {
+    let count = 0;
+    registerCleanup(() => {
+      count++;
+    });
+
+    await runExitCleanup();
+    expect(count).toBe(1);
+
+    // Guard is now set; a second run won't fire
+    registerCleanup(() => {
+      count++;
+    });
+    await runExitCleanup();
+    expect(count).toBe(1);
+
+    const { __resetCleanupStateForTesting: resetFromState } = await import(
+      './cleanup-state'
+    );
+    resetFromState();
+
+    registerCleanup(() => {
+      count++;
+    });
+    await runExitCleanup();
+    expect(count).toBe(2);
+  });
+});
+
+describe('cleanup-state dependency isolation', () => {
+  it('cleanup-state.ts source has zero import declarations (pure lightweight module)', () => {
+    const filePath = resolve(__dirname, 'cleanup-state.ts');
+    const sourceFile = ts.createSourceFile(
+      filePath,
+      readFileSync(filePath, 'utf8'),
+      ts.ScriptTarget.Latest,
+      false,
+      ts.ScriptKind.TS,
+    );
+    const imports = sourceFile.statements.filter(ts.isImportDeclaration);
+
+    expect(imports).toHaveLength(0);
   });
 });

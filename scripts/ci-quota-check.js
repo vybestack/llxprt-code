@@ -17,6 +17,7 @@
  */
 
 import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,6 +47,35 @@ function writeSelectedKeyOutput(selectedKeyName) {
   if (githubOutputPath) {
     fs.appendFileSync(githubOutputPath, `selected_key=${selectedKeyName}\n`);
   }
+}
+
+/**
+ * Propagates the selected key to GITHUB_ENV so the downstream "Run planner
+ * agent" step can read it as $OPENAI_API_KEY. Step-scoped env does NOT
+ * propagate across steps; without this write the agent step sees an empty
+ * key and fails authentication. The "Clear selected API key" step unsets
+ * this value in finally.
+ */
+function exportSelectedKeyToEnv(keyValue, keyName) {
+  const githubEnvPath = process.env.GITHUB_ENV;
+  if (!githubEnvPath) {
+    return;
+  }
+  assertKeySafe(keyValue, keyName);
+  // GITHUB_ENV delimiter protocol: a heredoc-style block avoids shell
+  // injection from key values containing quotes or special characters.
+  // A random suffix guarantees the delimiter cannot collide with the key
+  // value itself, which would prematurely terminate the heredoc.
+  const delimiter = `ghadelimiter_${keyName}_${randomUUID()}`;
+  if (keyValue.includes(delimiter)) {
+    throw new Error(
+      `${keyName} contains the generated delimiter and cannot be safely written to GITHUB_ENV.`,
+    );
+  }
+  fs.appendFileSync(
+    githubEnvPath,
+    `OPENAI_API_KEY<<${delimiter}\n${keyValue}\n${delimiter}\n`,
+  );
 }
 
 async function checkQuota(apiKey, keyName) {
@@ -146,6 +176,7 @@ export async function selectOptimalKey() {
 
   const selectedKeyName = selectedKey === key2 ? 'secondary' : 'primary';
   writeSelectedKeyOutput(selectedKeyName);
+  exportSelectedKeyToEnv(selectedKey, selectedKeyName);
 }
 
 export async function main() {
@@ -167,6 +198,7 @@ export async function main() {
     const selectedKeyName =
       primaryKey === process.env.OPENAI_API_KEY_2 ? 'secondary' : 'primary';
     writeSelectedKeyOutput(selectedKeyName);
+    exportSelectedKeyToEnv(primaryKey, selectedKeyName);
   }
 }
 

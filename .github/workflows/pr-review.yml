@@ -380,7 +380,10 @@ jobs:
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
           name: 'walkthrough-diagnostics-${{ github.run_attempt }}'
-          path: 'review/walkthrough-error.log'
+          path: |
+            review/walkthrough-error.log
+            review/parse-failure-raw-*.txt
+            review/parse-failure-info-*.json
           if-no-files-found: 'ignore'
           retention-days: 3
 

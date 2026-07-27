@@ -381,6 +381,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 vi.mock('node:process', () => ({
   default: {
+    cwd: vi.fn(() => process.cwd()),
     exit: vi.fn(),
     env: {},
   },

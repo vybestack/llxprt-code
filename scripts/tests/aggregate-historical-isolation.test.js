@@ -7,6 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.js';
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const recentIso = (daysAgo) =>
+  new Date(Date.now() - daysAgo * MS_PER_DAY).toISOString();
+
 /**
  * Issue #2605 (per-run exception isolation): Historical retrieval is best
  * effort: a single run that throws during processing (e.g. an unexpected
@@ -19,8 +23,11 @@ import { loadHistoricalModule, writeAttempt } from './aggregate-helpers.js';
 describe('aggregate_evals: per-run exception isolation in historical fetch', () => {
   it('omits a run whose downloader throws while retaining a valid run', async () => {
     const mod = await loadHistoricalModule();
-    const runA = { databaseId: 5000, createdAt: '2026-07-19T02:00:00Z' };
-    const runB = { databaseId: 5001, createdAt: '2026-07-18T02:00:00Z' };
+    // Both timestamps are within the 7-day retention window (1 and 2 days ago).
+    // The day-based recentIso helper is used intentionally; the test only
+    // requires that timestamps fall within the window, not a specific hour.
+    const runA = { databaseId: 5000, createdAt: recentIso(1) };
+    const runB = { databaseId: 5001, createdAt: recentIso(2) };
     const downloadThrowing = () => {
       throw new Error('unexpected filesystem explosion');
     };
@@ -47,7 +54,7 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
     // Must not throw — the exception must be caught and the run omitted.
     expect(() =>
       mod.processHistoricalRun(
-        { databaseId: 4242, createdAt: '2026-07-19T02:00:00Z' },
+        { databaseId: 4242, createdAt: recentIso(1) },
         throwingDownload,
       ),
     ).not.toThrow();
@@ -64,8 +71,6 @@ describe('aggregate_evals: per-run exception isolation in historical fetch', () 
     // fetchHistoricalData filters by Date.now() internally against the 7-day
     // retention window, so timestamps must be derived from the current time
     // (not fixed past dates that eventually fall outside the window).
-    const recentIso = (hoursAgo) =>
-      new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
     const runA = { databaseId: 99001, createdAt: recentIso(1) };
     const runB = { databaseId: 99002, createdAt: recentIso(2) };
 
