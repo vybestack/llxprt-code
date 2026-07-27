@@ -1857,6 +1857,10 @@ jobs:
           # routing decisions. Set to 'false' to go live (route low-severity
           # findings to the sticky summary).
           OCR_ROUTING_SHADOW_MODE: ${{ vars.OCR_ROUTING_SHADOW_MODE }}
+          # Phase 2 (issue #2649): proactive inline comment cap. Comments in
+          # excess of this number are routed to the sticky summary rather than
+          # waiting for a large batch to fail. Default 50.
+          OCR_INLINE_COMMENT_CAP: ${{ vars.OCR_INLINE_COMMENT_CAP }}
           # Fallback bot login for dedup when getAuthenticated() fails.
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
           # Issue #2675: configurable coverage threshold (0..100, default 90).
@@ -2153,7 +2157,7 @@ jobs:
             let parsedOcrResult = null;
             let rawFindingCount = 0;
             let schemaInvalidCount = 0;
-            let overflowFindingCount = 0;
+            const overflowRouted = [];
             const policyFailure = readTrimmed(POLICY_FAILURE_FILE, '');
             const exitCode = readExitCode('ocr-exit-code.txt');
             if (exitCode !== 0) {
@@ -2351,6 +2355,71 @@ jobs:
               const category = effectiveCategory(finding);
               const severity = effectiveSeverity(finding);
               return `**[${category}/${severity}]** `;
+            }
+
+            // Phase 2 (issue #2649): deterministic severity ranking for inline
+            // comment sorting. Lower rank = higher priority = posted first.
+            // Critical and unknown severities rank above low so protected
+            // findings are never displaced by low-severity overflow.
+            function severityRank(severity) {
+              switch (severity) {
+                case 'critical': return 0;
+                case 'high': return 1;
+                case 'medium': return 2;
+                case 'unknown': return 3; // fail-safe: unknown ranks above low
+                case 'low': return 4;
+                case 'info': return 5;
+                default: return 3; // undocumented → fail-safe above low
+              }
+            }
+
+            // Phase 2 (issue #2649): deterministic inline comment sort.
+            // Sorts an array of { comment, finding } pairs by severity
+            // priority (critical/high first), then path (lexicographic), then
+            // start_line (ascending), then end_line. Returns a new array; does
+            // not mutate the input.
+            function sortInlineComments(pairs) {
+              return [...pairs].sort((a, b) => {
+                const sevA = severityRank(a.comment._severity || 'unknown');
+                const sevB = severityRank(b.comment._severity || 'unknown');
+                if (sevA !== sevB) return sevA - sevB;
+                const pathA = String(a.comment.path || '');
+                const pathB = String(b.comment.path || '');
+                if (pathA !== pathB) return pathA < pathB ? -1 : 1;
+                const lineA = Number(a.comment.start_line || a.comment.line || 0);
+                const lineB = Number(b.comment.start_line || b.comment.line || 0);
+                if (lineA !== lineB) return lineA - lineB;
+                const endA = Number(a.comment.line || 0);
+                const endB = Number(b.comment.line || 0);
+                return endA - endB;
+              });
+            }
+
+            // Phase 2 (issue #2649): run-scoped finding fingerprint for
+            // publication reconciliation within a single OCR run. Uses
+            // Math.imul for correct 32-bit FNV-1a arithmetic. The fingerprint
+            // is a per-run marker only (not a cross-push stable identity — that
+            // is Phase 4 / upstream #369). Only a hex identifier is embedded in
+            // the HTML comment; raw paths are never placed inside the marker
+            // to prevent HTML-comment termination attacks.
+            function findingFingerprint(finding, runId, index) {
+              const startLine = Number((finding && finding.start_line) || 0);
+              const endLine = Number((finding && finding.end_line) || 0);
+              const lo = Math.min(startLine, endLine);
+              const hi = Math.max(startLine, endLine);
+              const category = effectiveCategory(finding);
+              const severity = effectiveSeverity(finding);
+              const body = String(
+                (finding && (finding.content || finding.comment || finding.message || finding.body)) || '',
+              );
+              const hashInput = `${category}\u0000${severity}\u0000${lo}\u0000${hi}\u0000${body}`;
+              let hash = 0x811c9dc5;
+              for (let i = 0; i < hashInput.length; i++) {
+                hash ^= hashInput.charCodeAt(i);
+                hash = Math.imul(hash, 0x01000193) >>> 0;
+              }
+              const hex = hash.toString(16).padStart(8, '0');
+              return `ocr-${runId}-${index}-${hex}`;
             }
 
             function escapeMarkdownHtml(value) {
@@ -3045,6 +3114,11 @@ jobs:
             const inline = [];
             const summaryRouted = [];
             const lineless = [];
+            // Phase 2: carries the original finding alongside each generated
+            // comment so overflow entries preserve full structured metadata.
+            const inlineFindings = [];
+            const runId = String(context.runId);
+            let inlineIndex = 0;
             for (const f of findings) {
               const decision = routeFinding(f);
               if (f && f.path && Number.isInteger(f.start_line) &&
@@ -3063,21 +3137,45 @@ jobs:
                   // Insert the label inside the blockquote (after the first
                   // '> ' prefix) so the first line stays '> **[cat/sev]** text'.
                   const labeledText = label ? rendered.replace(/^> /, `> ${label}`) : rendered;
+                  // Phase 2 (issue #2649): embed a per-run finding fingerprint
+                  // in the comment body as an HTML comment marker for
+                  // deterministic publication reconciliation within this run.
+                  const fingerprint = findingFingerprint(f, runId, inlineIndex);
+                  inlineIndex += 1;
                   const comment = {
                     path: String(f.path),
                     line: endLine,
                     side: 'RIGHT',
-                    body: `${INLINE_MARKER}\n${labeledText}`,
+                    body: `${INLINE_MARKER}\n<!-- ocr-fp:${fingerprint} -->\n${labeledText}`,
+                    _severity: effectiveSeverity(f),
                   };
                   if (startLine < endLine) {
                     comment.start_line = startLine;
                     comment.start_side = 'RIGHT';
                   }
                   inline.push(comment);
+                  inlineFindings.push(f);
                 }
               } else {
                 lineless.push(f && typeof f === 'object' ? f : { body: f || 'Malformed OCR finding' });
               }
+            }
+
+            // Phase 2 (issue #2649): sort inline comments by severity priority
+            // (critical/high first), then path, then line. This ensures the
+            // most important findings are posted first and overflow (capped)
+            // comments are the lowest-priority ones. sortInlineComments returns
+            // a new array; the inlineFindingRefs parallel array is reordered
+            // to match so overflow entries can preserve full structured
+            // metadata.
+            const sortedPairs = sortInlineComments(
+              inline.map((c, i) => ({ comment: c, finding: inlineFindings[i] })),
+            );
+            // Rebuild inline and inlineFindings from sorted pairs so both
+            // arrays remain in lockstep after sorting.
+            for (let i = 0; i < inline.length; i++) {
+              inline[i] = sortedPairs[i].comment;
+              inlineFindings[i] = sortedPairs[i].finding;
             }
 
             // Post inline comments via a COMMENT review on the head SHA.
@@ -3097,12 +3195,16 @@ jobs:
                 core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before posting: ${listErr.message || listErr}`));
               }
               const beforeExactFilter = inline.length;
-              let inlineToPost = inline.filter((c) => !existingInlineKeys.has(inlineCommentKey(c)));
-              skippedExactHistoryCount = beforeExactFilter - inlineToPost.length;
+              // Carry finding references through filtering so overflow can
+              // preserve full structured metadata.
+              let pairsToPost = inline
+                .map((c, i) => ({ comment: c, finding: inlineFindings[i] }))
+                .filter((p) => !existingInlineKeys.has(inlineCommentKey(p.comment)));
+              skippedExactHistoryCount = beforeExactFilter - pairsToPost.length;
               // Feature 3: when incremental mode is enabled, additionally
               // filter out comments whose (path, line range) overlaps an
               // existing bot review comment (IoU > threshold).
-              if (incrementalEnabled && inlineToPost.length > 0) {
+              if (incrementalEnabled && pairsToPost.length > 0) {
                 let historySpans = [];
                 try {
                   historySpans = await existingReviewCommentSpans();
@@ -3110,28 +3212,44 @@ jobs:
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR review comments for incremental dedup: ${listErr.message || listErr}`));
                 }
                 if (historySpans.length > 0) {
-                  const candidates = inlineToPost.map((c) => ({
-                    comment: c,
-                    span: lineSpan(c),
-                  }));
                   const kept = [];
-                  for (const candidate of candidates) {
+                  for (const p of pairsToPost) {
                     if (overlapsHistory(
-                      { path: candidate.comment.path, span: candidate.span },
+                      { path: p.comment.path, span: lineSpan(p.comment) },
                       historySpans,
                       overlapThreshold,
                     )) {
                       skippedOverlapCount += 1;
                     } else {
-                      kept.push(candidate.comment);
+                      kept.push(p);
                     }
                   }
-                  inlineToPost = kept;
+                  pairsToPost = kept;
                 }
               }
-              if (inlineToPost.length === 0) {
+              if (pairsToPost.length === 0) {
                 core.info('All OCR inline comments already exist on this head SHA; skipping inline posting.');
               } else {
+                // Phase 2 (issue #2649): proactive inline comment cap. The
+                // inline array is already sorted by severity priority so the
+                // highest-priority findings are posted first, and overflow
+                // goes to the sticky summary instead of waiting for a large
+                // batch to fail.
+                const INLINE_COMMENT_CAP = Number(process.env.OCR_INLINE_COMMENT_CAP || 50);
+                const effectiveCap = Number.isInteger(INLINE_COMMENT_CAP) && INLINE_COMMENT_CAP > 0
+                  ? INLINE_COMMENT_CAP
+                  : 50;
+                if (pairsToPost.length > effectiveCap) {
+                  // Phase 2: overflow preserves the original finding object so
+                  // structured metadata (category, severity, path, line range)
+                  // is not lost when a finding is moved from inline to summary.
+                  const overflowPairs = pairsToPost.slice(effectiveCap);
+                  pairsToPost = pairsToPost.slice(0, effectiveCap);
+                  for (const pair of overflowPairs) {
+                    overflowRouted.push(pair.finding);
+                  }
+                }
+                const inlineToPost = pairsToPost.map((p) => p.comment);
               try {
                 await github.rest.pulls.createReview({
                   owner, repo, pull_number: number,
@@ -3147,22 +3265,11 @@ jobs:
                 } catch (listErr) {
                   core.warning(redactSecretDiagnostics(`Could not list existing OCR inline comments before fallback posting: ${listErr.message || listErr}`));
                 }
-                const MAX_INLINE_FALLBACK = 50;
-                for (const [index, c] of inlineToPost.entries()) {
-                  if (index >= MAX_INLINE_FALLBACK) {
-                    const lineRange = c.start_line && c.start_line !== c.line
-                      ? `${c.start_line}-${c.line}`
-                      : String(c.line);
-                    const overflowBody = `${unrenderFindingText(c.body)} (line ${lineRange})`;
-                    overflowFindingCount += 1;
-                    lineless.push({
-                      path: c.path,
-                      comment: overflowBody,
-                      message: overflowBody,
-                      body: overflowBody,
-                    });
-                    continue;
-                  }
+                // pairsToPost was already capped to effectiveCap before the
+                // batch attempt, so the fallback loop does not need a second
+                // overflow check — every remaining pair is within the cap.
+                for (const p of pairsToPost) {
+                  const c = p.comment;
                   if (existingInlineKeys.has(inlineCommentKey(c))) {
                     core.warning(`Skipping duplicate OCR inline comment on ${c.path}:${c.line} after batch post uncertainty.`);
                     skippedExactHistoryCount += 1;
@@ -3185,21 +3292,47 @@ jobs:
                   } catch (commentErr) {
                     core.warning(redactSecretDiagnostics(`Failed to post inline comment on ${c.path}:${c.line}: ${commentErr.message || commentErr}`));
                     failedInline += 1;
-                    const lineRange = c.start_line && c.start_line !== c.line
-                      ? `${c.start_line}-${c.line}`
-                      : String(c.line);
-                    const fallbackBody = `${unrenderFindingText(c.body)} (line ${lineRange})`;
-                    lineless.push({
-                      path: c.path,
-                      comment: fallbackBody,
-                      message: fallbackBody,
-                      body: fallbackBody,
-                    });
+                    // Failed individual posts also preserve metadata.
+                    overflowRouted.push(p.finding);
                   }
                 }
                 // All individual fallback posts completed without errors,
-                // so the batch failure was fully recovered.
-                if (failedInline === 0) {
+                // so the batch failure was fully recovered. Perform a final
+                // re-list to confirm GitHub's observed state matches the
+                // intended posts before clearing the ambiguity flag.
+                // GitHub's API may have eventual consistency for newly
+                // created review comments, so retry once after a delay.
+                async function reconcileWithRetry() {
+                  for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                      const finalKeys = await existingInlineCommentKeys();
+                      const allAccountedFor = inlineToPost.every(
+                        (c) => finalKeys.has(inlineCommentKey(c)),
+                      );
+                      if (failedInline === 0 && allAccountedFor) {
+                        return true;
+                      }
+                      // If not all accounted for on first attempt, wait and
+                      // retry to allow eventual consistency to settle.
+                      if (attempt === 0) {
+                        await new Promise((r) => setTimeout(r, 3000));
+                      }
+                    } catch (finalListErr) {
+                      core.warning(redactSecretDiagnostics(
+                        `Reconciliation attempt ${attempt + 1} failed: ${finalListErr.message || finalListErr}`,
+                      ));
+                      if (attempt === 0) {
+                        await new Promise((r) => setTimeout(r, 3000));
+                      }
+                    }
+                  }
+                  return false;
+                }
+                if (!(await reconcileWithRetry())) {
+                  core.warning(redactSecretDiagnostics(
+                    'Could not confirm all inline comments are present after fallback; leaving publication ambiguous.',
+                  ));
+                } else {
                   batchPublicationAmbiguous = false;
                 }
               }
@@ -3321,6 +3454,16 @@ jobs:
                 body.splice(artifactLineIndex + 1, 0, infrastructureDiagnosticLine);
               } else {
                 body.push(infrastructureDiagnosticLine);
+              }
+            }
+            if (overflowRouted.length > 0) {
+              body.push('', '### Inline overflow (exceeds inline comment cap)', '');
+              for (const f of overflowRouted) {
+                const where = f && f.path ? `\`${f.path}\`: ` : '';
+                const label = categorySeverityLabel(f);
+                const rawText = f.content || f.comment || f.message || f.body;
+                const text = renderFindingText(typeof rawText === 'string' ? rawText : 'OCR finding');
+                body.push(`- ${where}${label}${text}`);
               }
             }
             if (lineless.length > 0) {
@@ -3724,10 +3867,11 @@ jobs:
                 raw: rawFindingCount,
                 duplicate: suppressedDuplicateCount,
                 schema_invalid: schemaInvalidCount,
-                policy_tiered: 0,
+                policy_tiered: summaryRouted.length + overflowRouted.length,
+                inline_overflow: overflowRouted.length,
                 inline: postedInline,
-                summary: lineless.length,
-                overflow: overflowFindingCount,
+                summary: lineless.length + summaryRouted.length + overflowRouted.length,
+                overflow: overflowRouted.length,
                 failed: failedInline,
                 severity_distribution: severityDistribution,
                 category_distribution: categoryDistribution,
