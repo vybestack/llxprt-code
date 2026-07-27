@@ -322,11 +322,11 @@ describe('HookRunner', () => {
           );
 
           await vi.advanceTimersByTimeAsync(50);
-          expect(signals).toEqual(['SIGTERM']);
+          expect(signals).toStrictEqual(['SIGTERM']);
           expect(mockSpawn.killed).toBe(true);
 
           await vi.advanceTimersByTimeAsync(5000);
-          expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+          expect(signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
 
           const result = await resultPromise;
           expect(result.success).toBe(false);
