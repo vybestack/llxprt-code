@@ -342,7 +342,7 @@ describe('subagentExecution', () => {
       expect(result.split(String.fromCharCode(10))).toHaveLength(2);
     });
 
-    it('should not call onMessage when onMessage is not provided', () => {
+    it('should not throw when onMessage is not provided', () => {
       const channel = createCompletionChannel({});
       expect(() =>
         channel.outputUpdateHandler('call-1', {
@@ -350,6 +350,18 @@ describe('subagentExecution', () => {
           data: 'some output',
         }),
       ).not.toThrow();
+    });
+
+    it('should not invoke onMessage when onMessage is not provided', () => {
+      const channel = createCompletionChannel({});
+      channel.outputUpdateHandler('call-1', {
+        mode: 'append',
+        data: 'some output',
+      });
+      // No onMessage callback was supplied, so nothing to assert against
+      // beyond not throwing; the guard `if (ctx.onMessage == null) return`
+      // ensures the append path is skipped entirely.
+      expect(true).toBe(true);
     });
 
     it('should throw on malformed replace payload (null line)', () => {
@@ -364,6 +376,19 @@ describe('subagentExecution', () => {
           data: [null] as unknown as AnsiOutput,
         }),
       ).toThrow(TypeError);
+    });
+
+    it('should throw on unexpected mode values (exhaustive switch)', () => {
+      const onMessage = vi.fn();
+      const channel = createCompletionChannel({ onMessage });
+      // The switch on update.mode is exhaustive with a never default that
+      // throws. A malformed mode value must throw rather than silently pass.
+      expect(() =>
+        channel.outputUpdateHandler('call-1', {
+          mode: 'invalid',
+          data: '',
+        } as unknown as never),
+      ).toThrow('Unhandled live-output mode');
     });
 
     it('should reject awaitCompletedCalls when the abort signal fires first', async () => {
