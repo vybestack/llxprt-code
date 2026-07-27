@@ -277,6 +277,65 @@ describe('HookRunner', () => {
         expect(mockSpawn.kill).toHaveBeenCalledWith('SIGTERM');
       });
 
+      it('should escalate to SIGKILL when the process ignores SIGTERM', async () => {
+        vi.useFakeTimers();
+        const shortTimeoutConfig: HookConfig = {
+          type: HookType.Command,
+          command: './hooks/slow.sh',
+          timeout: 50,
+        };
+
+        let closeCallback: ((code: number) => void) | undefined;
+        const signals: string[] = [];
+
+        Object.assign(mockSpawn, {
+          exitCode: null,
+          signalCode: null,
+          killed: false,
+        });
+
+        mockSpawn.mockProcessOn.mockImplementation(
+          (event: string, callback: (code: number) => void) => {
+            if (event === 'close') {
+              closeCallback = callback;
+            }
+          },
+        );
+
+        mockSpawn.kill = vi.fn().mockImplementation((signal: string) => {
+          signals.push(signal);
+          // Node sets killed=true when the signal is sent, even if ignored.
+          mockSpawn.killed = true;
+          if (signal === 'SIGKILL' && closeCallback) {
+            mockSpawn.exitCode = null;
+            mockSpawn.signalCode = 'SIGKILL';
+            queueMicrotask(() => closeCallback!(137));
+          }
+          return true;
+        });
+
+        try {
+          const resultPromise = hookRunner.executeHook(
+            shortTimeoutConfig,
+            HookEventName.BeforeTool,
+            mockInput,
+          );
+
+          await vi.advanceTimersByTimeAsync(50);
+          expect(signals).toEqual(['SIGTERM']);
+          expect(mockSpawn.killed).toBe(true);
+
+          await vi.advanceTimersByTimeAsync(5000);
+          expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+
+          const result = await resultPromise;
+          expect(result.success).toBe(false);
+          expect(result.error?.message).toContain('timed out');
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
       it('should expand environment variables in commands', async () => {
         const configWithEnvVar: HookConfig = {
           type: HookType.Command,
