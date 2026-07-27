@@ -42,14 +42,13 @@ Expected: this plan, provider package/lockfiles, provider core/executor, and new
 
 ## Actual delivery
 
-All 10 expected paths changed. The HTTP extraction keeps the executor below the enforced 800-line limit without weakening lint. Final measured scope is 10 files and 1,491 net changed lines, including forced-text lockfile changes; 17 focused tests and the full root suite provide behavioral evidence.
-The Codex handshake requires bearer/account/custom HTTP headers. Node's global `WebSocket` cannot supply them, while the existing OpenAI Realtime client uses a different protocol. The approved direct `undici ^7.28.0` providers dependency supplies a header-capable client; lockfiles are updated.
+All 10 expected paths changed. Final scope: 10 files/1,500 net lines. Eighteen focused tests and the full root suite provide evidence. Approved `undici ^7.28.0` supplies the client.
 
 ## Scope ledger
 
 | Entry                                                     | Classification        | Status                  | Notes                                                              |
 | --------------------------------------------------------- | --------------------- | ----------------------- | ------------------------------------------------------------------ |
-| Acceptance A1-A8                                          | In scope              | Implemented + tested    | 17 focused tests plus full root suite pass                         |
+| Acceptance A1-A8                                          | In scope              | Implemented + tested    | 18 focused tests plus full root suite pass                         |
 | Upstream Codex v2 beta protocol                           | In scope              | Implemented             | `/responses`, flat `response.create`, beta header dated 2026-02-06 |
 | `undici` direct providers dependency                      | Planned approval gate | Approved + added        | `undici ^7.28.0`; lockfiles updated                                |
 | HTTP/SSE path extraction (`openAIResponsesHttpStream.ts`) | Discovered necessity  | Added                   | Keeps executor under enforced 800-line limit                       |

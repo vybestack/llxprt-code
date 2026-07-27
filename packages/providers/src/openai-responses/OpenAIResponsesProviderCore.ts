@@ -53,9 +53,12 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   }
 
   private resolveWebSocketTransport(): WebSocketTransport | undefined {
-    if (this.webSocketStickToHttp || !this.isCodexMode(this.getBaseURL())) {
+    if (!this.isCodexMode(this.getBaseURL())) {
+      this.webSocketTransport?.close();
+      this.webSocketTransport = undefined;
       return undefined;
     }
+    if (this.webSocketStickToHttp) return undefined;
     this.webSocketTransport ??= createCodexResponsesWebSocketTransport({
       logger: this.logger,
     });

@@ -15,11 +15,9 @@ import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
-
 export interface TransportLogger {
   debug(messageFactory: (() => string) | string): void;
 }
-
 export interface StreamResponseOptions {
   readonly responsesURL: string;
   readonly headers: Readonly<Record<string, string>>;
@@ -60,6 +58,7 @@ interface WebSocketTransportConfig {
   readonly openSocket?: OpenTransportSocket;
 }
 
+const HANDSHAKE_TIMEOUT_MS = 10_000;
 const TERMINAL_EVENT_TYPES = new Set([
   'response.completed',
   'response.incomplete',
@@ -340,7 +339,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    const release = await this.acquireRequestTurn();
+    const resolveTurn = await this.acquireRequestTurn();
     let socket: TransportSocket | undefined;
     let completed = false;
     try {
@@ -373,7 +372,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       }
     } finally {
       if (!completed && socket !== undefined) this.invalidate(socket);
-      release();
+      resolveTurn();
     }
   }
 
@@ -384,12 +383,10 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
 
   private async acquireRequestTurn(): Promise<() => void> {
     const previous = this.requestQueue;
-    let release = (): void => undefined;
-    this.requestQueue = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    let resolveTurn = (): void => undefined;
+    this.requestQueue = new Promise<void>((resolve) => (resolveTurn = resolve));
     await previous;
-    return release;
+    return resolveTurn;
   }
 
   private async acquireConnection(
@@ -423,6 +420,7 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       let settled = false;
       const removers: Array<() => void> = [];
       const cleanup = (): void => {
+        clearTimeout(timeout);
         for (const remove of removers) remove();
         if (abortSignal !== undefined) {
           abortSignal.removeEventListener('abort', onAbort);
@@ -437,10 +435,20 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         if ('socket' in result) resolve(result.socket);
         else reject(result.error);
       };
-      const onAbort = (): void => {
+      const fail = (error: Error): void => {
         this.closeSocket(socket);
-        finish({ error: createAbortError(abortSignal?.reason) });
+        finish({ error });
       };
+      const timeout = setTimeout(
+        () =>
+          fail(
+            createStreamInterruptionError(
+              'Codex Responses WebSocket handshake timed out',
+            ),
+          ),
+        HANDSHAKE_TIMEOUT_MS,
+      );
+      const onAbort = (): void => fail(createAbortError(abortSignal?.reason));
       removers.push(socket.onOpen(() => finish({ socket })));
       removers.push(
         socket.onError(() =>

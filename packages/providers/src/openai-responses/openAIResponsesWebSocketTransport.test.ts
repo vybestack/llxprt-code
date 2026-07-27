@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createCodexResponsesWebSocketTransport,
   streamOverWebSocketOrFallback,
@@ -297,6 +297,23 @@ describe('Codex Responses WebSocket transport', () => {
 
     await expect(result).rejects.toMatchObject({ name: 'AbortError' });
     expect(harness.sockets[0].closed).toBe(true);
+  });
+
+  it('closes and rejects when the handshake stalls', async () => {
+    vi.useFakeTimers();
+    const harness = new SocketHarness([() => undefined]);
+    const transport = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    });
+    const result = drain(transport.streamResponse(request(), options()));
+    const assertion = result.then(
+      () => 'completed',
+      (error: unknown) => (error instanceof Error ? error.name : 'unknown'),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await assertion).toBe('StreamInterruptionError');
+    expect(harness.sockets[0].closed).toBe(true);
+    vi.useRealTimers();
   });
 
   it('closes a streaming socket on abort and reconnects later', async () => {

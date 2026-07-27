@@ -4,16 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Vertical integration tests for the OpenAI Responses executor's WebSocket
- * selection and fallback behavior (issue #2041, acceptance A1, A5, A7).
- *
- * These tests exercise the REAL request builder (executeOpenAIResponsesRequest)
- * and the REAL Responses event parser. The only network boundary that is
- * replaced is fetch (HTTP fallback path) and the WebSocket connector factory
- * (injected transport) — both legitimate I/O edges.
- */
-
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -119,7 +109,6 @@ async function drain(
   return out;
 }
 
-/** Builds an injected WebSocket transport fake that records whether it ran. */
 function makeRecordingTransport(behavior: 'success' | 'connect-failure'): {
   getWebSocketTransport: () => WebSocketTransport | undefined;
   instances: WebSocketTransport[];
@@ -195,7 +184,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       ]),
     });
     vi.stubGlobal('fetch', fetchSpy);
-    const transport = makeRecordingTransport('success');
+    let transportChecks = 0;
 
     const options = buildNormalizedOptions({
       resolved: {
@@ -209,7 +198,10 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       buildDeps({
         isCodexBaseURL: () => false,
         getProviderBaseURL: () => 'https://api.openai.com/v1',
-        getWebSocketTransport: transport.getWebSocketTransport,
+        getWebSocketTransport: () => {
+          transportChecks += 1;
+          return undefined;
+        },
       }),
     );
     const messages = await drain(iterator);
@@ -218,7 +210,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi' }] },
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(transport.instances).toHaveLength(0);
+    expect(transportChecks).toBe(1);
   });
 
   it('A5: falls back to HTTP once when WebSocket connect fails before events, then sticks to HTTP', async () => {
@@ -236,8 +228,6 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     const transport = makeRecordingTransport('connect-failure');
     let stickyFallback = false;
 
-    // onWebSocketFallback disables the transport so subsequent requests use
-    // HTTP (sticky fallback), mirroring the provider-owned sticky flag.
     const deps = buildDeps({
       getWebSocketTransport: () => {
         if (stickyFallback) return undefined;
@@ -248,7 +238,6 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       },
     });
 
-    // First request: WebSocket fails, falls back to HTTP.
     const first = await drain(
       executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
     );
@@ -257,7 +246,6 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-    // Second request: must NOT retry WebSocket (sticky HTTP fallback).
     const second = await drain(
       executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
     );
@@ -265,7 +253,6 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
     ]);
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    // The transport was only invoked once (first request), not the second.
     expect(transport.streamResponseCalls).toBe(1);
   });
 });

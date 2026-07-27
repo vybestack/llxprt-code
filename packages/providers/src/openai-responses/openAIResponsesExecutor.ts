@@ -678,31 +678,26 @@ async function* streamResponses(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  // Issue #2041: Codex mode uses WebSockets when a transport is available and
-  // the provider has not sticky-fallen back to HTTP. A pre-event failure falls
-  // back to HTTP once; a failure after partial output fails fast (no replay).
-  if (params.isCodex && deps.getWebSocketTransport !== undefined) {
-    const transport = deps.getWebSocketTransport();
-    if (transport !== undefined) {
-      const headers = await buildWebSocketHandshakeHeaders(params, deps);
-      const streamOptions: StreamResponseOptions = {
-        responsesURL: `${params.baseURL}/responses`,
-        headers,
-        abortSignal: params.abortSignal,
-        includeThinkingInResponse: params.includeThinkingInResponse,
-        responsesStored: params.responsesStored,
-        onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-      };
-      yield* streamOverWebSocketOrFallback(
-        transport,
-        params.request,
-        streamOptions,
-        () => streamOverHttp(params, deps),
-        deps.onWebSocketFallback,
-        deps.logger,
-      );
-      return;
-    }
+  const transport = deps.getWebSocketTransport?.();
+  if (params.isCodex && transport !== undefined) {
+    const headers = await buildWebSocketHandshakeHeaders(params, deps);
+    const streamOptions: StreamResponseOptions = {
+      responsesURL: `${params.baseURL}/responses`,
+      headers,
+      abortSignal: params.abortSignal,
+      includeThinkingInResponse: params.includeThinkingInResponse,
+      responsesStored: params.responsesStored,
+      onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+    };
+    yield* streamOverWebSocketOrFallback(
+      transport,
+      params.request,
+      streamOptions,
+      () => streamOverHttp(params, deps),
+      deps.onWebSocketFallback,
+      deps.logger,
+    );
+    return;
   }
 
   yield* streamOverHttp(params, deps);
