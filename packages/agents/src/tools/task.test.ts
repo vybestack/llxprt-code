@@ -127,15 +127,18 @@ describe('TaskTool', () => {
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
     // Verify XML wrapping: opening tag, message without prefix, closing tag
-    expect(updateOutput).toHaveBeenNthCalledWith(
-      1,
-      '<subagent name="helper" id="agent-42">\n',
-    );
-    expect(updateOutput).toHaveBeenNthCalledWith(2, 'progress update');
-    expect(updateOutput).toHaveBeenNthCalledWith(
-      3,
-      '</subagent name="helper" id="agent-42">\n',
-    );
+    expect(updateOutput).toHaveBeenNthCalledWith(1, {
+      mode: 'append',
+      data: '<subagent name="helper" id="agent-42">\n',
+    });
+    expect(updateOutput).toHaveBeenNthCalledWith(2, {
+      mode: 'append',
+      data: 'progress update',
+    });
+    expect(updateOutput).toHaveBeenNthCalledWith(3, {
+      mode: 'append',
+      data: '</subagent name="helper" id="agent-42">\n',
+    });
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(result.metadata).toStrictEqual({
       agentId: 'agent-42',

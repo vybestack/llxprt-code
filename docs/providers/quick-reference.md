@@ -122,7 +122,15 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 
 ### Anthropic (Claude)
 
-#### Using Alias (Recommended)
+Anthropic API keys and Claude Code (Claude.ai subscription) OAuth are now
+separate identities (issue #2274):
+
+- **`anthropic`** — Anthropic API-key access. Configure with `/provider anthropic`
+  plus `/key` or `/keyfile` (or `ANTHROPIC_API_KEY`). No OAuth.
+- **`claudecode`** — Claude.ai subscription OAuth. Configure with
+  `/auth claudecode enable`, then `/provider claudecode`.
+
+#### Using an Anthropic API key (Recommended for API access)
 
 ```bash
 /provider anthropic
@@ -130,13 +138,18 @@ This uses OAuth to authenticate with your ChatGPT subscription.
 /model claude-opus-5
 ```
 
-#### Or OAuth (Claude Pro/Max)
+#### Or Claude Code OAuth (Claude Pro/Max subscription)
 
 ```bash
-/auth anthropic enable
+/auth claudecode enable
+/provider claudecode
+/model claude-opus-5
 ```
 
 Note: OAuth is lazy — authentication happens when you first use the provider.
+`/auth anthropic` does not perform OAuth; it redirects subscription users to
+`/auth claudecode` and API-key users to `/provider anthropic` plus `/key` or
+`/keyfile`.
 
 #### Model geometry & recommended settings (Anthropic)
 
@@ -153,7 +166,7 @@ Guidance:
 /set reasoning.effort high
 ```
 
-**Profile JSON:**
+**Profile JSON (API key):**
 
 ```json
 {
@@ -670,11 +683,11 @@ Set directly with `/key` or load from file:
 
 ### OAuth
 
-**Two** providers support OAuth for authentication: Anthropic and Codex (ChatGPT).
+**Two** providers support OAuth for authentication: Claude Code (Claude.ai subscription) and Codex (ChatGPT).
 
 ```bash
 # Enable OAuth provider (lazy authentication - happens on first use)
-/auth anthropic enable
+/auth claudecode enable
 /auth codex enable
 
 # Check OAuth status
@@ -683,6 +696,10 @@ Set directly with `/key` or load from file:
 # Logout from provider
 /auth provider-name logout
 ```
+
+Anthropic API keys are configured separately via `/provider anthropic` plus
+`/key` or `/keyfile` (or `ANTHROPIC_API_KEY`). `/auth anthropic` does not perform
+OAuth.
 
 ### Environment Variables
 

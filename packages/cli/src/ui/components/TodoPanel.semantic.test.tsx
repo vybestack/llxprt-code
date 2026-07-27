@@ -38,8 +38,6 @@ const mockTodoContext = {
   removeTodo: vi.fn(),
   getInProgressTodo: vi.fn(),
   getTodos: vi.fn(),
-  paused: false,
-  setPaused: vi.fn(),
 };
 
 const mockToolCallContext = {

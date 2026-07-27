@@ -22,7 +22,10 @@ import type {
   ToolCallResponseInfo,
 } from '../core/turn.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import type {
+  AnsiOutput,
+  LiveOutputUpdate,
+} from '../utils/terminalSerializer.js';
 import type { SerializableConfirmationDetails } from '../confirmation-bus/types.js';
 
 /**
@@ -142,7 +145,7 @@ export type ConfirmHandler = (
 
 export type OutputUpdateHandler = (
   toolCallId: string,
-  outputChunk: string | AnsiOutput,
+  update: LiveOutputUpdate,
 ) => void;
 
 export type AllToolCallsCompleteHandler = (

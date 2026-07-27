@@ -19,7 +19,7 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
 
     mockGetCurrentProfileName.mockReturnValue('single-bucket-profile');
     mockLoadProfile.mockResolvedValue({
-      provider: 'anthropic',
+      provider: 'claudecode',
       auth: {
         type: 'oauth',
         buckets: ['named-bucket'],
@@ -28,7 +28,7 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
 
     const logout = vi.fn().mockResolvedValue(undefined);
     const provider: OAuthProvider & { logout?: typeof logout } = {
-      name: 'anthropic',
+      name: 'claudecode',
       initiateAuth: vi.fn().mockResolvedValue({
         access_token: 'fresh-token',
         token_type: 'Bearer',
@@ -41,7 +41,7 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
     manager.registerProvider(provider);
 
     await tokenStore.saveToken(
-      'anthropic',
+      'claudecode',
       {
         access_token: 'named-bucket-token',
         token_type: 'Bearer',
@@ -52,7 +52,7 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
     mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'named-bucket' });
 
     const statusesBeforeLogout =
-      await manager.getAuthStatusWithBuckets('anthropic');
+      await manager.getAuthStatusWithBuckets('claudecode');
     expect(
       statusesBeforeLogout.find((status) => status.bucket === 'named-bucket')
         ?.isSessionBucket,
@@ -62,11 +62,11 @@ describe('Issue #1468 getProfileBuckets case 12', () => {
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('named-bucket-token');
     expect(usage).toStrictEqual({ bucket: 'named-bucket' });
 
-    await manager.logout('anthropic');
+    await manager.logout('claudecode');
 
     expect(logout).toHaveBeenCalledTimes(1);
     await expect(
-      tokenStore.getToken('anthropic', 'named-bucket'),
+      tokenStore.getToken('claudecode', 'named-bucket'),
     ).resolves.toBeNull();
   });
 });

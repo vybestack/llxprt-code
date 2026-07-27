@@ -18,6 +18,7 @@ import {
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -76,19 +77,26 @@ describe('TaskTool', () => {
       await invocation.execute(new AbortController().signal, updateOutput);
 
       // Verify opening tag is sent first
-      expect(updateOutput).toHaveBeenNthCalledWith(
-        1,
-        '<subagent name="test-agent" id="agent-xml-001">\n',
-      );
+      expect(updateOutput).toHaveBeenNthCalledWith(1, {
+        mode: 'append',
+        data: '<subagent name="test-agent" id="agent-xml-001">\n',
+      });
 
       // Verify messages are sent without [agentId] prefix
-      expect(updateOutput).toHaveBeenNthCalledWith(2, 'First message');
-      expect(updateOutput).toHaveBeenNthCalledWith(3, 'Second message');
+      expect(updateOutput).toHaveBeenNthCalledWith(2, {
+        mode: 'append',
+        data: 'First message',
+      });
+      expect(updateOutput).toHaveBeenNthCalledWith(3, {
+        mode: 'append',
+        data: 'Second message',
+      });
 
       // Verify closing tag is sent last
-      expect(updateOutput).toHaveBeenLastCalledWith(
-        '</subagent name="test-agent" id="agent-xml-001">\n',
-      );
+      expect(updateOutput).toHaveBeenLastCalledWith({
+        mode: 'append',
+        data: '</subagent name="test-agent" id="agent-xml-001">\n',
+      });
     });
 
     it('should wrap interactive output with XML tags', async () => {
@@ -136,14 +144,18 @@ describe('TaskTool', () => {
 
       await invocation.execute(new AbortController().signal, updateOutput);
 
-      expect(updateOutput).toHaveBeenNthCalledWith(
-        1,
-        '<subagent name="interactive-agent" id="agent-xml-002">\n',
-      );
-      expect(updateOutput).toHaveBeenNthCalledWith(2, 'Interactive message');
-      expect(updateOutput).toHaveBeenLastCalledWith(
-        '</subagent name="interactive-agent" id="agent-xml-002">\n',
-      );
+      expect(updateOutput).toHaveBeenNthCalledWith(1, {
+        mode: 'append',
+        data: '<subagent name="interactive-agent" id="agent-xml-002">\n',
+      });
+      expect(updateOutput).toHaveBeenNthCalledWith(2, {
+        mode: 'append',
+        data: 'Interactive message',
+      });
+      expect(updateOutput).toHaveBeenLastCalledWith({
+        mode: 'append',
+        data: '</subagent name="interactive-agent" id="agent-xml-002">\n',
+      });
     });
 
     it('should send closing XML tag even when subagent errors', async () => {
@@ -180,14 +192,15 @@ describe('TaskTool', () => {
       await invocation.execute(new AbortController().signal, updateOutput);
 
       // Should still send opening tag
-      expect(updateOutput).toHaveBeenNthCalledWith(
-        1,
-        '<subagent name="error-agent" id="agent-xml-err">\n',
-      );
+      expect(updateOutput).toHaveBeenNthCalledWith(1, {
+        mode: 'append',
+        data: '<subagent name="error-agent" id="agent-xml-err">\n',
+      });
       // And closing tag despite error
-      expect(updateOutput).toHaveBeenLastCalledWith(
-        '</subagent name="error-agent" id="agent-xml-err">\n',
-      );
+      expect(updateOutput).toHaveBeenLastCalledWith({
+        mode: 'append',
+        data: '</subagent name="error-agent" id="agent-xml-err">\n',
+      });
     });
 
     it('should send XML tags even when subagent produces no output', async () => {
@@ -225,14 +238,14 @@ describe('TaskTool', () => {
 
       // Should still send opening and closing tags
       expect(updateOutput).toHaveBeenCalledTimes(2);
-      expect(updateOutput).toHaveBeenNthCalledWith(
-        1,
-        '<subagent name="silent-agent" id="agent-xml-empty">\n',
-      );
-      expect(updateOutput).toHaveBeenNthCalledWith(
-        2,
-        '</subagent name="silent-agent" id="agent-xml-empty">\n',
-      );
+      expect(updateOutput).toHaveBeenNthCalledWith(1, {
+        mode: 'append',
+        data: '<subagent name="silent-agent" id="agent-xml-empty">\n',
+      });
+      expect(updateOutput).toHaveBeenNthCalledWith(2, {
+        mode: 'append',
+        data: '</subagent name="silent-agent" id="agent-xml-empty">\n',
+      });
     });
 
     it('should send opening and closing XML tags for async tasks', async () => {
@@ -280,16 +293,17 @@ describe('TaskTool', () => {
       await invocation.execute(new AbortController().signal, updateOutput);
 
       // Async tasks should send opening tag immediately
-      expect(updateOutput).toHaveBeenNthCalledWith(
-        1,
-        '<subagent name="async-helper" id="async-xml-agent">\n',
-      );
+      expect(updateOutput).toHaveBeenNthCalledWith(1, {
+        mode: 'append',
+        data: '<subagent name="async-helper" id="async-xml-agent">\n',
+      });
 
       // Wait for background execution to complete and emit closing tag
       await backgroundExecutionPromise;
-      expect(updateOutput).toHaveBeenLastCalledWith(
-        '</subagent name="async-helper" id="async-xml-agent">\n',
-      );
+      expect(updateOutput).toHaveBeenLastCalledWith({
+        mode: 'append',
+        data: '</subagent name="async-helper" id="async-xml-agent">\n',
+      });
     });
   });
 
@@ -352,7 +366,9 @@ describe('TaskTool', () => {
 
       await invocation.execute(new AbortController().signal, updateOutput);
 
-      const calls = updateOutput.mock.calls.map((c) => c[0] as string);
+      const calls = updateOutput.mock.calls.map(
+        (c) => (c[0] as LiveOutputUpdate).data as string,
+      );
       // Slice off opening tag (first) and closing tag (last)
       const textChunks = calls.slice(1, -1);
       const accumulated = textChunks.join('');
@@ -411,7 +427,9 @@ describe('TaskTool', () => {
 
       await invocation.execute(new AbortController().signal, updateOutput);
 
-      const calls = updateOutput.mock.calls.map((c) => c[0] as string);
+      const calls = updateOutput.mock.calls.map(
+        (c) => (c[0] as LiveOutputUpdate).data as string,
+      );
       const textChunks = calls.slice(1, -1);
       const accumulated = textChunks.join('');
 

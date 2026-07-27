@@ -15,7 +15,6 @@ import { AgentEventType, type ServerAgentStreamEvent } from './turn.js';
 
 interface TerminalState {
   hadToolCallsThisTurn: boolean;
-  todoPauseSeen: boolean;
   hadThinking: boolean;
   hadContent: boolean;
 }
@@ -33,7 +32,6 @@ function earlyIterResult(
   return {
     earlyReturn: true,
     hadToolCallsThisTurn: hadToolCalls,
-    todoPauseSeen: false,
     hadThinking: false,
     hadContent: false,
     deferredEvents: [],

@@ -18,16 +18,13 @@ import type {
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { EditorType } from '../utils/editor.js';
-import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import type { LiveOutputUpdate } from '../utils/terminalSerializer.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 const debugLog = new DebugLogger('llxprt:schedulerSingleton');
 
 export interface SchedulerCallbacks {
-  outputUpdateHandler?: (
-    toolCallId: string,
-    outputChunk: string | AnsiOutput,
-  ) => void;
+  outputUpdateHandler?: (toolCallId: string, update: LiveOutputUpdate) => void;
   onAllToolCallsComplete?: (
     completedToolCalls: CompletedToolCall[],
   ) => Promise<void>;

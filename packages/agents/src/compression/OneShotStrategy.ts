@@ -31,9 +31,10 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionResult,
   CompressionResultMetadata,
   CompressionStrategy,
+  StrategyCompressionResult,
+  StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -83,17 +84,19 @@ export class OneShotStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  async compress(context: CompressionContext): Promise<CompressionResult> {
+  async compress(
+    context: CompressionContext,
+  ): Promise<StrategyCompressionResult> {
     const { history } = context;
 
     if (history.length === 0) {
-      return this.noCompressionResult(history);
+      return this.structuralNoop(history, 'empty-history');
     }
 
     const { toCompress, toKeep } = this.computeSplit(context);
 
     if (toCompress.length < MINIMUM_COMPRESS_MESSAGES) {
-      return this.noCompressionResult(history);
+      return this.structuralNoop(history, 'too-few-compressible');
     }
 
     const compressionProfile =
@@ -199,11 +202,16 @@ export class OneShotStrategy implements CompressionStrategy {
     finalSummary: string,
     capturedUsage: UsageStats | undefined,
     activeTodos: string | undefined,
-  ): CompressionResult {
+  ): StrategyCompressionResult {
     const summaryEntry: IContent = {
       speaker: 'human' as const,
       blocks: [{ type: 'text' as const, text: finalSummary }],
-      ...(capturedUsage ? { metadata: { usage: capturedUsage } } : {}),
+      metadata: {
+        isSummary: true,
+        synthetic: true,
+        reason: 'compression-state-snapshot',
+        ...(capturedUsage ? { usage: capturedUsage } : {}),
+      },
     };
 
     const newHistory: IContent[] = [
@@ -216,6 +224,10 @@ export class OneShotStrategy implements CompressionStrategy {
             text: buildContinuationDirective(activeTodos),
           },
         ],
+        metadata: {
+          synthetic: true,
+          reason: 'compression-continuation',
+        },
       },
       ...toKeep,
     ];
@@ -231,7 +243,7 @@ export class OneShotStrategy implements CompressionStrategy {
       ...(capturedUsage ? { usage: capturedUsage } : {}),
     };
 
-    return { newHistory, metadata };
+    return { kind: 'applied', newHistory, metadata };
   }
 
   // -------------------------------------------------------------------------
@@ -370,9 +382,13 @@ export class OneShotStrategy implements CompressionStrategy {
     }
   }
 
-  private noCompressionResult(history: readonly IContent[]): CompressionResult {
+  private structuralNoop(
+    history: readonly IContent[],
+    reason: StructuralNoopReason,
+  ): StrategyCompressionResult {
     return {
-      newHistory: [...history],
+      kind: 'noop',
+      reason,
       metadata: {
         originalMessageCount: history.length,
         compressedMessageCount: history.length,

@@ -23,6 +23,7 @@ import {
   type ToolCallConfirmationDetails,
   type ToolExecuteConfirmationDetails,
   type PolicyUpdateOptions,
+  type LiveOutputUpdate,
 } from './tools.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
@@ -184,7 +185,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
   async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     this.validateFilterParams();
 
@@ -243,7 +244,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     timeoutSeconds: number | undefined,
     defaultTimeoutSeconds: number,
     _timeoutId: ReturnType<typeof setTimeout> | null,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const combinedSignal = timeoutController.signal;
     const cwd = this.resolveCwd();
@@ -340,7 +341,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 
   private createOutputEventHandler(
-    updateOutput: ((output: string) => void) | undefined,
+    updateOutput: ((update: LiveOutputUpdate) => void) | undefined,
   ): (event: ShellOutputEvent) => void {
     let cumulativeOutput = '';
     let lastUpdateTime = 0;
@@ -353,8 +354,20 @@ export class ShellToolInvocation extends BaseToolInvocation<
       switch (event.type) {
         case 'data': {
           if (isBinaryStream) break;
-          cumulativeOutput = event.chunk ?? '';
-          shouldUpdate = true;
+          const chunk = event.chunk;
+          if (typeof chunk === 'string') {
+            cumulativeOutput = chunk;
+            shouldUpdate = true;
+          } else if (chunk !== undefined) {
+            // PTY terminal-buffer snapshot — replace semantics.
+            updateOutput({ mode: 'replace', data: chunk });
+            lastUpdateTime = Date.now();
+          } else {
+            // Preserve pre-migration behavior: an undefined chunk on a data
+            // event forwards the (empty) cumulative output as an append.
+            cumulativeOutput = '';
+            shouldUpdate = true;
+          }
           break;
         }
         case 'binary_detected':
@@ -375,7 +388,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }
 
       if (shouldUpdate) {
-        updateOutput(cumulativeOutput);
+        updateOutput({ mode: 'append', data: cumulativeOutput });
         lastUpdateTime = Date.now();
       }
     };

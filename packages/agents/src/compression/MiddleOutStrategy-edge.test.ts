@@ -40,7 +40,8 @@ describe('MiddleOutStrategy edge cases', () => {
 
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toHaveLength(6);
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('too-few-compressible');
       expect(result.metadata.compressedMessageCount).toBe(6);
       expect(result.metadata.originalMessageCount).toBe(6);
       expect(result.metadata.llmCallMade).toBe(false);
@@ -54,10 +55,9 @@ describe('MiddleOutStrategy edge cases', () => {
 
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toHaveLength(3);
-      for (let i = 0; i < 3; i++) {
-        expect(result.newHistory[i]).toBe(history[i]);
-      }
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('too-few-compressible');
+      expect(result.metadata.originalMessageCount).toBe(3);
       expect(result.metadata.llmCallMade).toBe(false);
     });
   });
@@ -89,8 +89,8 @@ describe('MiddleOutStrategy edge cases', () => {
       const strategy = new MiddleOutStrategy();
       const result = await strategy.compress(ctx);
 
+      expect(result.kind).toBe('noop');
       expect(result.metadata.llmCallMade).toBe(false);
-      expect(result.newHistory).toHaveLength(history.length);
       expect(result.metadata.compressedMessageCount).toBe(
         result.metadata.originalMessageCount,
       );
@@ -108,7 +108,8 @@ describe('MiddleOutStrategy edge cases', () => {
 
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toHaveLength(0);
+      expect(result.kind).toBe('noop');
+      expect(result.reason).toBe('empty-history');
       expect(result.metadata.originalMessageCount).toBe(0);
       expect(result.metadata.compressedMessageCount).toBe(0);
       expect(result.metadata.llmCallMade).toBe(false);

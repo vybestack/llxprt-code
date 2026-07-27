@@ -275,4 +275,101 @@ describe('orchestrateTests (--shard)', () => {
     expect(scriptsResult!.success).toBe(false);
     expect(summary.results.some((r) => !r.success)).toBe(true);
   });
+
+  // Issue #2780: the long-running release-install smoke test
+  // (issue-2603-release-install.test.ts) must run as a SEPARATE vitest
+  // invocation so it does not share a worker pool with the ~169 fast script
+  // tests. When it did, the vitest worker RPC (onTaskUpdate) timed out under
+  // main-process congestion on macOS runners (3 vCPUs), causing a spurious
+  // exit code 1 even though every test passed.
+  it('runs the release-install smoke test as a separate vitest invocation', () => {
+    const { runner, commands } = createRecordingRunner();
+
+    const fixtureRoot = createFixtureRepo([
+      {
+        dir: 'packages/cli',
+        name: '@scope/cli',
+        scripts: { test: 'vitest run' },
+      },
+    ]);
+    mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      'export default {};',
+    );
+
+    orchestrateTests(
+      fixtureRoot,
+      { ...parseArgs(['--shard', 'scripts']) },
+      runner,
+    );
+
+    const scriptsCommands = commands.filter((c) =>
+      c.command.includes('scripts/tests/vitest.config.ts'),
+    );
+    // Two invocations: the main scripts suite (excluding the slow smoke) and
+    // a dedicated invocation for the release-install smoke test.
+    expect(scriptsCommands).toHaveLength(2);
+
+    // The main invocation must exclude the slow release-install test so it
+    // never shares a worker pool with the fast tests, and the slow test must
+    // run as a separate invocation without --exclude.
+    const hasExcludedInvocation = scriptsCommands.some(
+      (c) =>
+        c.command.includes('--exclude') &&
+        c.command.includes('issue-2603-release-install.test.ts'),
+    );
+    const hasDirectInvocation = scriptsCommands.some(
+      (c) =>
+        !c.command.includes('--exclude') &&
+        c.command.includes('issue-2603-release-install.test.ts'),
+    );
+    expect(hasExcludedInvocation).toBe(true);
+    expect(hasDirectInvocation).toBe(true);
+  });
+
+  it('skips the release-install smoke invocation when the main scripts suite fails', () => {
+    const commands: Array<{ command: string; cwd: string }> = [];
+    const runner: CommandRunner = (command, cwd) => {
+      commands.push({ command, cwd });
+      // Fail only the main scripts suite (the one with --exclude); pass
+      // everything else so the slow invocation is the only thing that could
+      // run.
+      if (
+        command.includes('scripts/tests/vitest.config.ts') &&
+        command.includes('--exclude')
+      ) {
+        return { success: false, exitCode: 1 };
+      }
+      return { success: true, exitCode: 0 };
+    };
+
+    const fixtureRoot = createFixtureRepo([
+      {
+        dir: 'packages/cli',
+        name: '@scope/cli',
+        scripts: { test: 'vitest run' },
+      },
+    ]);
+    mkdirSync(join(fixtureRoot, 'scripts', 'tests'), { recursive: true });
+    writeFileSync(
+      join(fixtureRoot, 'scripts', 'tests', 'vitest.config.ts'),
+      'export default {};',
+    );
+
+    orchestrateTests(
+      fixtureRoot,
+      { ...parseArgs(['--shard', 'scripts']) },
+      runner,
+    );
+
+    // The slow smoke invocation must NOT run when the main suite failed
+    // (fail-fast semantics).
+    const slowCommand = commands.filter(
+      (c) =>
+        c.command.includes('issue-2603-release-install.test.ts') &&
+        !c.command.includes('--exclude'),
+    );
+    expect(slowCommand).toHaveLength(0);
+  });
 });

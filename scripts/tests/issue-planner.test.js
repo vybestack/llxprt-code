@@ -482,10 +482,10 @@ describe('.github/workflows/issue-planner.yml', () => {
       stepNamed(planJob, 'Validate required repository variables'),
     );
     for (const name of [
-      'KEY_VAR_NAME',
-      'OPENAI_BASE_URL',
-      'LLXPRT_DEFAULT_MODEL',
-      'LLXPRT_DEFAULT_PROVIDER',
+      'PLANNER_KEY_VAR_NAME',
+      'PLANNER_BASE_URL',
+      'PLANNER_MODEL',
+      'PLANNER_PROVIDER',
     ]) {
       expect(validation).toContain(`${name}:?`);
     }
@@ -539,6 +539,17 @@ describe('.github/workflows/issue-planner.yml', () => {
     expect(script).not.toContain('repo:${REPO}');
   });
 
+  it('uses the gh search prs --merged flag, never the invalid --state merged (#2747)', () => {
+    const script = commandText(
+      stepNamed(planJob, 'Precompute related PRs/issues candidates'),
+    );
+    // Regression guard: `gh search prs --state merged` is invalid (the
+    // --state flag only accepts open|closed) and caused a 100% workflow
+    // failure rate. The correct flag is the boolean --merged.
+    expect(script).not.toContain('--state merged');
+    expect(script).toContain('--merged');
+  });
+
   it('delegates reconciliation to the helper and catches failures with core.setFailed', () => {
     const script = commandText(stepNamed(planJob, 'Upsert plan comment'));
     expect(script).toContain('reconcilePlanComment');
@@ -576,6 +587,28 @@ describe('.github/workflows/issue-planner.yml', () => {
     const cleanup = stepNamed(planJob, 'Clear selected API key');
     expect(cleanup.if).toBe('always()');
     expect(commandText(cleanup)).toContain('OPENAI_API_KEY=');
+  });
+
+  it('uses planner-specific provider/model/baseurl env vars in the agent step (#2747)', () => {
+    const script = commandText(stepNamed(planJob, 'Run planner agent'));
+    // The agent must read the planner-specific overrides, not the shared CI
+    // defaults, so a stronger model can be configured via repo vars.
+    expect(script).toContain('--provider "${PLANNER_PROVIDER}"');
+    expect(script).toContain('--model "${PLANNER_MODEL}"');
+    expect(script).toContain('--baseurl "${PLANNER_BASE_URL}"');
+    expect(script).not.toContain('LLXPRT_DEFAULT_PROVIDER');
+    expect(script).not.toContain('LLXPRT_DEFAULT_MODEL');
+    expect(script).not.toContain('OPENAI_BASE_URL');
+  });
+
+  it('resolves planner-specific keys with fallback to shared CI keys (#2747)', () => {
+    const quota = stepNamed(planJob, 'Check API quota and select optimal key');
+    const script = JSON.stringify(quota);
+    // The quota step must prefer planner-specific key vars, falling back to
+    // the shared CI defaults when planner-specific vars are unset.
+    expect(script).toContain('secrets[vars.PLANNER_KEY_VAR_NAME]');
+    expect(script).toContain('secrets[vars.KEY_VAR_NAME]');
+    expect(script).toContain('env.PLANNER_KEY_VAR_NAME');
   });
 
   it('uses the production CLI for reference extraction without suppressing feedback failures', () => {

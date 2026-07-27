@@ -176,7 +176,7 @@ describe('getAnthropicUsageInfo', () => {
 
     await getAnthropicUsageInfo(store, undefined);
 
-    expect(store.getToken).toHaveBeenCalledWith('anthropic', 'default');
+    expect(store.getToken).toHaveBeenCalledWith('claudecode', 'default');
   });
 
   it('returns null when fetchAnthropicUsage returns null', async () => {
@@ -218,7 +218,8 @@ describe('getAllAnthropicUsageInfo', () => {
 
     await getAllAnthropicUsageInfo(store);
 
-    expect(store.getToken).toHaveBeenCalledWith('anthropic', 'default');
+    expect(store.listBuckets).toHaveBeenCalledWith('claudecode');
+    expect(store.getToken).toHaveBeenCalledWith('claudecode', 'default');
   });
 
   it('skips expired tokens', async () => {

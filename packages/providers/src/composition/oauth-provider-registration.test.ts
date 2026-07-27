@@ -23,7 +23,7 @@ describe('registerStandardOAuthProviders', () => {
     resetRegisteredProviders();
   });
 
-  it('registers anthropic and codex on a fresh manager', () => {
+  it('registers claudecode and codex on a fresh manager (@issue:2274 A4)', () => {
     const oauthManager = createFreshManager();
 
     expect(oauthManager.getSupportedProviders()).toStrictEqual([]);
@@ -31,9 +31,18 @@ describe('registerStandardOAuthProviders', () => {
     registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
 
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
-      'anthropic',
+      'claudecode',
       'codex',
     ]);
+  });
+
+  it('does not register anthropic as an OAuth identity (@issue:2274 A4)', () => {
+    const oauthManager = createFreshManager();
+
+    registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
+
+    expect(oauthManager.getSupportedProviders()).not.toContain('anthropic');
+    expect(isOAuthProviderRegistered('anthropic', oauthManager)).toBe(false);
   });
 
   it('does not duplicate providers when called twice on the same manager', () => {
@@ -43,7 +52,7 @@ describe('registerStandardOAuthProviders', () => {
     registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
 
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
-      'anthropic',
+      'claudecode',
       'codex',
     ]);
   });
@@ -54,7 +63,7 @@ describe('registerStandardOAuthProviders', () => {
 
     registerStandardOAuthProviders(oauthManager, explicitTokenStore);
 
-    expect(isOAuthProviderRegistered('anthropic', oauthManager)).toBe(true);
+    expect(isOAuthProviderRegistered('claudecode', oauthManager)).toBe(true);
     expect(isOAuthProviderRegistered('codex', oauthManager)).toBe(true);
   });
 
@@ -64,7 +73,7 @@ describe('registerStandardOAuthProviders', () => {
     registerStandardOAuthProviders(oauthManager);
 
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
-      'anthropic',
+      'claudecode',
       'codex',
     ]);
   });

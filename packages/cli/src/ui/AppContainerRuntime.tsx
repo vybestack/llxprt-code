@@ -89,10 +89,6 @@ function buildInputParams(
     loadHistory: bootstrap.loadHistory,
     todos: bootstrap.todos,
     updateTodos: bootstrap.updateTodos,
-    todoPauseController: bootstrap.todoPauseController,
-    todoContinuationRef: bootstrap.todoContinuationRef,
-    hadToolCallsRef: bootstrap.hadToolCallsRef,
-    registerTodoPause: bootstrap.registerTodoPause,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
     recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
     recordingIntegration: bootstrap.recordingIntegration,
@@ -146,10 +142,7 @@ function buildLayoutParams(
 ): AppLayoutParams {
   return {
     uiRuntime: bootstrap.uiRuntime,
-    agent: bootstrap.agent,
     settings: bootstrap.settings,
-    todoContinuationRef: bootstrap.todoContinuationRef,
-    hadToolCallsRef: bootstrap.hadToolCallsRef,
     runtimeMessageBus: bootstrap.runtimeMessageBus,
     consoleMessages: bootstrap.consoleMessages,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,

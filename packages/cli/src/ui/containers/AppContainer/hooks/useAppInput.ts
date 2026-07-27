@@ -15,7 +15,7 @@ import { useVimMode } from '../../../contexts/VimModeContext.js';
 import { useVim } from '../../../hooks/vim.js';
 import { useTextBuffer } from '../../../components/shared/text-buffer.js';
 import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
-import { useTodoPausePreserver } from '../../../hooks/useTodoPausePreserver.js';
+import { shouldClearTodos } from '../../../hooks/useTodoPausePreserver.js';
 import { StreamingState, type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
 import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
@@ -47,10 +47,6 @@ export interface AppInputParams {
   loadHistory: AppBootstrapResult['loadHistory'];
   todos: AppBootstrapResult['todos'];
   updateTodos: AppBootstrapResult['updateTodos'];
-  todoPauseController: AppBootstrapResult['todoPauseController'];
-  todoContinuationRef: AppBootstrapResult['todoContinuationRef'];
-  hadToolCallsRef: AppBootstrapResult['hadToolCallsRef'];
-  registerTodoPause: AppBootstrapResult['registerTodoPause'];
   recordingIntegrationRef: AppBootstrapResult['recordingIntegrationRef'];
   recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'];
   recordingIntegration: AppBootstrapResult['recordingIntegration'];
@@ -314,7 +310,6 @@ function useInputStreamSetup(
     settings,
     history,
     addItem,
-    registerTodoPause,
     recordingIntegration,
     runtimeMessageBus,
     stdout,
@@ -346,7 +341,6 @@ function useInputStreamSetup(
     setEmbeddedShellFocused,
     stdout.columns,
     stdout.rows,
-    registerTodoPause,
     handleExternalEditorOpen,
     recordingIntegration,
     runtimeMessageBus,
@@ -359,15 +353,8 @@ function useInputStreamWiring(
   core: ReturnType<typeof useInputCore>,
   setup: ReturnType<typeof useInputStreamSetup>,
 ) {
-  const {
-    todos,
-    updateTodos,
-    todoPauseController,
-    todoContinuationRef,
-    hadToolCallsRef,
-    embeddedShellFocused,
-    setEmbeddedShellFocused,
-  } = p;
+  const { todos, updateTodos, embeddedShellFocused, setEmbeddedShellFocused } =
+    p;
   const {
     buffer,
     inputHistoryStore,
@@ -395,17 +382,18 @@ function useInputStreamWiring(
     submitQuery,
     pendingHistoryItems,
     lastSubmittedPromptRef,
-    hadToolCallsRef,
-    todoContinuationRef,
     needsRelogin: p.appState.needsRelogin,
     appDispatch: p.appDispatch,
   });
-  const { handleUserInputSubmit } = useTodoPausePreserver({
-    controller: todoPauseController,
-    updateTodos,
-    handleFinalSubmit,
-    todos,
-  });
+  const handleUserInputSubmit = useCallback(
+    (submittedValue: string) => {
+      if (shouldClearTodos(todos)) {
+        updateTodos([]);
+      }
+      handleFinalSubmit(submittedValue);
+    },
+    [todos, updateTodos, handleFinalSubmit],
+  );
   const enqueueSteer = useCallback(
     (message: string) => {
       void submitQuery(message);

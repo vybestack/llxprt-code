@@ -61,13 +61,13 @@ function createRegisterStandardOAuthProvidersMock(
   ensureMock: ReturnType<typeof vi.fn>,
 ): (oauthManager: unknown, tokenStore?: unknown, addItem?: unknown) => void {
   return (oauthManager, tokenStore, addItem) => {
-    for (const provider of ['gemini', 'anthropic', 'codex'] as const) {
+    for (const provider of ['gemini', 'claudecode', 'codex'] as const) {
       ensureMock(provider, oauthManager, tokenStore, addItem);
     }
   };
 }
 
-describe('Anthropic OAuth registration with environment key', () => {
+describe('claudecode OAuth registration with environment key', () => {
   let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
   let anthropicCtor: ReturnType<typeof vi.fn>;
   let openaiCtor: ReturnType<typeof vi.fn>;
@@ -93,7 +93,7 @@ describe('Anthropic OAuth registration with environment key', () => {
     vi.clearAllMocks();
   });
 
-  it('registers Anthropic OAuth provider even when ANTHROPIC_API_KEY is set', async () => {
+  it('registers claudecode OAuth provider even when ANTHROPIC_API_KEY is set', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
 
     vi.doMock('./oauth-provider-registration.js', () => ({
@@ -133,17 +133,22 @@ describe('Anthropic OAuth registration with environment key', () => {
     });
     registerProviderManagerSingleton(manager, oauthManager);
 
-    const registeredAnthropic =
+    const registeredClaudecode =
       ensureOAuthProviderRegisteredMock.mock.calls.some(
-        ([provider]) => provider === 'anthropic',
+        ([provider]) => provider === 'claudecode',
       );
-    expect(registeredAnthropic).toBe(true);
+    expect(registeredClaudecode).toBe(true);
 
     const ctorCalls = anthropicCtor.mock.calls;
     expect(ctorCalls.length).toBeGreaterThanOrEqual(1);
-    const firstCall = ctorCalls[0] as unknown[] | undefined;
-    const oauthManagerArg = firstCall ? firstCall[3] : undefined;
-    expect(oauthManagerArg).toBeTruthy();
+    // Exactly one AnthropicProvider constructor call receives the OAuth
+    // manager (the claudecode alias); the API-key-only anthropic alias does
+    // not. The primary behavioral A7 proof remains the real alias test.
+    const callsWithOAuthManager = ctorCalls.filter(
+      (call) => (call as unknown[])[3] !== undefined,
+    );
+    expect(callsWithOAuthManager).toHaveLength(1);
+    expect(callsWithOAuthManager[0]?.[3]).toBe(oauthManager);
   });
 
   it('ignores API keys when authOnly is enabled', async () => {

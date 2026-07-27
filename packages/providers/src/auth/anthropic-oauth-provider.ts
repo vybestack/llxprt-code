@@ -48,12 +48,12 @@ class AuthAttemptCancelledError extends OAuthError {
   constructor() {
     super(
       OAuthErrorType.USER_CANCELLED,
-      'anthropic',
+      'claudecode',
       'Auth attempt cancelled',
       {
-        userMessage: 'Anthropic authentication was cancelled.',
+        userMessage: 'Claude Code authentication was cancelled.',
         actionRequired:
-          'Complete the Anthropic authentication process to continue.',
+          'Complete the Claude Code authentication process to continue.',
       },
     );
     this.name = 'AuthAttemptCancelledError';
@@ -61,7 +61,7 @@ class AuthAttemptCancelledError extends OAuthError {
 }
 
 export class AnthropicOAuthProvider implements OAuthProvider {
-  name = 'anthropic';
+  name = 'claudecode';
   private deviceFlow: AnthropicDeviceFlow;
   private pendingAuthPromise?: Promise<string>;
   private initGuard: InitializationGuard;
@@ -87,7 +87,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     this.deviceFlow = new AnthropicDeviceFlow();
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
-    this.logger = new DebugLogger('llxprt:auth:anthropic');
+    this.logger = new DebugLogger('llxprt:auth:claudecode');
     this.addItem = addItem;
     this.initGuard = new InitializationGuard('wrap', this.name);
     this.dialog = new AuthCodeDialog();
@@ -227,7 +227,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     const historyItem: OAuthUIEvent = {
       type: 'oauth_url',
-      text: `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`,
+      text: `Please visit the following URL to authorize with Claude Code:\n${deviceCodeUrl}`,
       url: deviceCodeUrl,
     };
     if (this.addItem) {
@@ -296,7 +296,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   private armPendingAuthDialog(): void {
     (global as unknown as { __oauth_provider: string }).__oauth_provider =
-      'anthropic';
+      'claudecode';
 
     this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
       const innerDialog = new AuthCodeDialog();
@@ -417,9 +417,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           global as unknown as { __oauth_needs_code: boolean }
         ).__oauth_needs_code = false;
 
-        this.logger.debug(
-          () => 'Successfully authenticated with Anthropic Claude!',
-        );
+        this.logger.debug(() => 'Successfully authenticated with Claude Code!');
 
         return token;
       },
@@ -440,7 +438,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     await this.errorHandler.handleGracefully(
       async () => {
         // @pseudocode line 19: Load saved token from store
-        const savedToken = await this._tokenStore!.getToken('anthropic');
+        const savedToken = await this._tokenStore!.getToken('claudecode');
         // @pseudocode lines 20-22: Check if token exists and not expired
         if (savedToken && !isTokenExpired(savedToken)) {
           return undefined; // Token is valid, ready to use
@@ -467,7 +465,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     return this.errorHandler.handleGracefully(
       // Issue #1378: Return token as-is; OAuthManager owns all refresh operations
-      async () => this._tokenStore!.getToken('anthropic'),
+      async () => this._tokenStore!.getToken('claudecode'),
       null, // Return null on error
       this.name,
       'getToken',
@@ -539,6 +537,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
 
     // @pseudocode line 112: Log successful logout
-    this.logger.debug(() => 'Logged out of Anthropic Claude');
+    this.logger.debug(() => 'Logged out of Claude Code');
   }
 }

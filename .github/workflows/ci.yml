@@ -79,7 +79,7 @@ jobs:
             --paginate \
             -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' || true)"
+            --jq '.[].filename')"
 
           if [[ -z "$files" ]]; then
             echo "docs_only=false" >>"$GITHUB_OUTPUT"
@@ -103,6 +103,11 @@ jobs:
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             case "$file" in
+              # integration-tests/ fixtures (any extension) are never docs.
+              integration-tests/*)
+                docs_only=false
+                break
+                ;;
               docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
                 ;;
               CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
@@ -137,6 +142,85 @@ jobs:
           fi
   #
   # Lint: GitHub Actions
+  #
+  # Shard selection (issue #2709)
+  #
+  # A cheap Node script reads the PR's changed paths and a checked-in package
+  # import graph to select only the test shards that can observe the changes.
+  # Non-PR events (push, merge_group, workflow_dispatch) select all shards.
+  # Unknown paths or selector failure run all six shards (fail-closed). The
+  # selector is path-only (no AST scan, no install) and completes in
+  # milliseconds; the import-graph drift guard
+  # (scripts/check-affected-test-shards.ts) runs in the lint_javascript job.
+  shard_selector:
+    name: 'Select test shards'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    permissions:
+      contents: 'read'
+      pull-requests: 'read'
+    outputs:
+      matrix: '${{ steps.select.outputs.matrix }}'
+      selected_shards: '${{ steps.select.outputs.selected_shards }}'
+      has_tests: '${{ steps.select.outputs.has_tests }}'
+      coverage_complete: '${{ steps.select.outputs.coverage_complete }}'
+      full_run_reason: '${{ steps.select.outputs.full_run_reason }}'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: 'Determine changed files'
+        id: 'changed'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          PR_NUMBER: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+          # Non-PR events select all shards, so we only need the file list for
+          # pull_request events. An empty file list makes the selector fail
+          # closed (all shards), which is the safe default.
+          files_file="${RUNNER_TEMP}/changed-files.txt"
+          : >"$files_file"
+          if [[ -n "${PR_NUMBER:-}" ]]; then
+            gh api \
+              --paginate \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+              --jq '.[].filename' >"$files_file"
+          fi
+          echo "count=$(wc -l <"$files_file" | tr -d ' ')" >>"$GITHUB_OUTPUT"
+
+      - name: 'Select affected shards'
+        id: 'select'
+        run: |
+          set -euo pipefail
+          event='${{ github.event_name }}'
+          files_arg=()
+          if [[ "$event" == "pull_request" ]]; then
+            files_arg=(--files-from "${RUNNER_TEMP}/changed-files.txt")
+          fi
+
+          # The selector writes selected_shards, matrix, has_tests,
+          # coverage_complete, and full_run_reason directly to GITHUB_OUTPUT,
+          # and a human-readable summary to GITHUB_STEP_SUMMARY. The matrix is
+          # a JSON array of {shard, os, node-version} objects, one per
+          # selected shard per OS (Linux + macOS).
+          node scripts/affected-test-shards.ts \
+            --event "$event" \
+            "${files_arg[@]}" \
+            --output github-actions
   #
   lint_github_actions:
     name: 'Lint (GitHub Actions)'
@@ -275,6 +359,10 @@ jobs:
         run: |-
           npm run lint:legacy-paths
 
+      - name: 'Check for new JS files (#2745)'
+        run: |-
+          npm run lint:no-new-js
+
       - name: 'Run doc-links guard (#2654)'
         run: |-
           npm run lint:doc-links
@@ -289,6 +377,13 @@ jobs:
       - name: 'Run agents neutral gate (anti-#2424 enforcement)'
         run: |-
           npm run gate:agents-neutral
+
+      - name: 'Run affected-test-shards graph drift guard (#2709)'
+        # Verifies the checked-in import graph matches the real AST-derived
+        # edges. Runs here (after build) because it needs the TypeScript
+        # compiler API available.
+        run: |-
+          npm run lint:affected-shards
 
       # Build must run BEFORE the type-aware lint: several workspace tsconfigs
       # map cross-workspace imports to `dist/*.d.ts` (e.g. storage, settings),
@@ -710,6 +805,15 @@ jobs:
   # scripts/check-test-shards.ts (run below and via `lint:test-shards`). Each
   # shard is a matrix leg over `os`; the `scripts` shard runs the root script
   # harness instead of workspace tests.
+  #
+  # Issue #2709: the matrix is now dynamic — shard_selector outputs a JSON
+  # matrix of only the shards that can observe the PR's changed files. When
+  # shard_selector fails or is skipped, the `if` condition prevents test_shard
+  # from running entirely, and the `test` aggregator converts that into a
+  # failure (see test job). When the selector succeeds but selects zero
+  # shards (has_tests=false), the matrix is empty and no legs run; the
+  # `test` aggregator treats that as success (the selector explicitly said
+  # there are no tests to run).
   test_shard:
     name: 'Test (${{ matrix.os }}) [${{ matrix.shard }}]'
     runs-on: '${{ matrix.os }}'
@@ -719,31 +823,22 @@ jobs:
     needs:
       - 'lint'
       - 'doc_change_filter'
+      - 'shard_selector'
       - 'skip_check'
-    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' }}
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' && needs.skip_check.outputs.should_skip != 'true' && needs.shard_selector.result == 'success' && needs.shard_selector.outputs.has_tests == 'true' }}
     permissions:
       contents: 'read'
       checks: 'write'
       pull-requests: 'write'
     strategy:
       fail-fast: false # So we can see all test failures
+      # Dynamic matrix from shard_selector (issue #2709): only shards that can
+      # observe the changed files. The selector guarantees Linux+macOS for
+      # every selected shard, preserving cross-platform coverage. An empty
+      # matrix (no tests selected) combined with the has_tests gate above
+      # skips all legs without making the required `Test` check red.
       matrix:
-        os:
-          - 'ubuntu-latest'
-          - 'macos-latest'
-        node-version:
-          - '24.x'
-        # Mirrors the canonical shard map in scripts/test-shards.ts. The
-        # completeness guard (scripts/check-test-shards.ts) fails CI if a
-        # workspace is added without being assigned here. The `scripts` shard
-        # runs the root script harness (npm run test:scripts).
-        shard:
-          - 'cli'
-          - 'agents'
-          - 'providers'
-          - 'core'
-          - 'rest'
-          - 'scripts'
+        include: ${{ fromJSON(needs.shard_selector.outputs.matrix) }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -796,7 +891,27 @@ jobs:
         run: |-
           npm run lint:test-shards
 
-      - name: 'Limit Vitest forks on Windows'
+      # Cap parallel forks on Windows and macOS. Under heavy load a high fork
+      # count saturates the vitest main process event loop so worker RPC
+      # acknowledgments (e.g. onTaskUpdate) time out (birpc DEFAULT_TIMEOUT
+      # 60s), producing spurious `[vitest-worker]: Timeout calling ...`
+      # unhandled errors that fail the shard even when every test passed.
+      # Ubuntu runners have enough headroom without a cap.
+      #
+      # macOS runners have 3 vCPUs (Windows has 4). With VITEST_MAX_FORKS=2,
+      # two worker forks plus the vitest main process saturate all 3 cores,
+      # starving the main process and causing the onTaskUpdate RPC timeout.
+      # A single fork leaves a spare core for the main process to stay
+      # responsive to worker RPCs. Windows tolerates 2 forks because its
+      # 4th core provides the same headroom.
+      - name: 'Limit Vitest forks (macOS — single fork)'
+        if: runner.os == 'macOS'
+        run: |
+          echo "VITEST_MAX_FORKS=1" >> "$GITHUB_ENV"
+          echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
+          echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
+          echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
+      - name: 'Limit Vitest forks (Windows)'
         if: runner.os == 'Windows'
         run: |
           echo "VITEST_MAX_FORKS=2" >> "$GITHUB_ENV"
@@ -909,17 +1024,53 @@ jobs:
   # as passing — a silent bypass. The explicit result check converts any
   # non-success outcome (failure, skipped, cancelled) into a `failure`
   # conclusion on this required check.
+  #
+  # Issue #2709: the `test` job now also depends on `shard_selector`. When the
+  # selector succeeds and explicitly reports has_tests=false (the PR touches
+  # no testable code), test_shard is intentionally skipped (empty matrix). In
+  # that case `test` is green: the selector said there is nothing to test and
+  # it succeeded. Any other selector outcome (failed, skipped) makes `test`
+  # red, because a skipped/failed selector means we cannot trust the skip and
+  # must fail closed.
   test:
     name: 'Test'
     needs:
       - 'test_shard'
+      - 'shard_selector'
+      - 'skip_check'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Check shard results'
         run: |-
-          if [ "${{ needs.test_shard.result }}" != "success" ]; then
-            echo "::error::Test shards did not all succeed (result: ${{ needs.test_shard.result }})"
+          should_skip='${{ needs.skip_check.outputs.should_skip }}'
+          selector_result='${{ needs.shard_selector.result }}'
+          has_tests='${{ needs.shard_selector.outputs.has_tests }}'
+          shard_result='${{ needs.test_shard.result }}'
+
+          # Explicit duplicate-skip: skip_check said this run duplicates a
+          # passing one, so every downstream job was intentionally skipped.
+          # The required Test check is green by design.
+          if [ "$should_skip" == "true" ]; then
+            echo "skip_check reported a duplicate passing run (should_skip=true). Test check is green by design."
+            exit 0
+          fi
+
+          # Fail closed if the selector itself did not succeed.
+          if [ "$selector_result" != "success" ]; then
+            echo "::error::Shard selector did not succeed (result: $selector_result); cannot trust test selection."
+            exit 1
+          fi
+
+          # Intentional no-test PR: selector succeeded and said has_tests=false.
+          if [ "$has_tests" != "true" ]; then
+            echo "Shard selector reported no tests to run (has_tests=false). Test check is green by design."
+            exit 0
+          fi
+
+          # Normal case: all selected shards must succeed.
+          if [ "$shard_result" != "success" ]; then
+            echo "::error::Test shards did not all succeed (result: $shard_result)"
             exit 1
           fi
           echo 'All test shards finished!'
@@ -1084,9 +1235,13 @@ jobs:
   post_coverage_comment:
     name: 'Post Coverage Comment'
     runs-on: 'ubuntu-latest'
-    needs: ['test', 'doc_change_filter']
+    needs: ['test', 'doc_change_filter', 'shard_selector']
+    # Issue #2709: only post the coverage comment when both the cli and core
+    # shards were selected (coverage_complete=true), since those are the only
+    # shards that produce coverage artifacts. When either is skipped, the
+    # download-artifact steps would fail; gate the whole job instead.
     if: |-
-      ${{ always() && needs.test.result == 'success' && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name == github.repository) }}
+      ${{ always() && needs.test.result == 'success' && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name == github.repository) && needs.shard_selector.outputs.coverage_complete == 'true' }}
     continue-on-error: true
     permissions:
       contents: 'read' # For checkout

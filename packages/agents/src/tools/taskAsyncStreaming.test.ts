@@ -137,14 +137,17 @@ function createAsyncStreamingHarness(
 }
 
 /** Asserts the exact XML wrapper tags then returns the interior deltas only. */
-function extractMessageDeltas(outputs: string[]): string[] {
-  const [opening] = outputs;
+function extractMessageDeltas(
+  outputs: Array<{ mode: 'append'; data: string }>,
+): string[] {
+  const all = outputs.map((u) => u.data);
+  const [opening] = all;
   expect(opening.startsWith('<subagent name="')).toBe(true);
   expect(opening.endsWith('">\n')).toBe(true);
-  const closing = outputs[outputs.length - 1];
+  const closing = all[all.length - 1];
   expect(closing.startsWith('</subagent name="')).toBe(true);
   expect(closing.endsWith('">\n')).toBe(true);
-  return outputs.slice(1, -1);
+  return all.slice(1, -1);
 }
 
 describe('TaskTool async streaming through real async path', () => {
@@ -158,7 +161,7 @@ describe('TaskTool async streaming through real async path', () => {
         scope.onMessage?.('1. Missing import');
       });
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review the code',
@@ -193,7 +196,7 @@ describe('TaskTool async streaming through real async path', () => {
       },
     );
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review',
@@ -221,7 +224,7 @@ describe('TaskTool async streaming through real async path', () => {
       { existingHandler: (msg) => receivedRaw.push(msg) },
     );
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review',
@@ -248,7 +251,7 @@ describe('TaskTool async streaming through real async path', () => {
       { agentId: 'async-xml-stream' },
     );
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review',
@@ -261,10 +264,10 @@ describe('TaskTool async streaming through real async path', () => {
 
     await expectCompletionWithin(completionPromise);
 
-    expect(outputs[0]).toBe(
+    expect(outputs[0].data).toBe(
       '<subagent name="reviewer" id="async-xml-stream">\n',
     );
-    expect(outputs[outputs.length - 1]).toBe(
+    expect(outputs[outputs.length - 1].data).toBe(
       '</subagent name="reviewer" id="async-xml-stream">\n',
     );
   });
@@ -277,7 +280,7 @@ describe('TaskTool async streaming through real async path', () => {
       },
     );
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review',
@@ -301,7 +304,7 @@ describe('TaskTool async streaming through real async path', () => {
       },
     );
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review',
@@ -325,7 +328,7 @@ describe('TaskTool async streaming through real async path', () => {
       },
     );
 
-    const outputs: string[] = [];
+    const outputs: Array<{ mode: 'append'; data: string }> = [];
     const invocation = tool.build({
       subagent_name: 'reviewer',
       goal_prompt: 'Review',

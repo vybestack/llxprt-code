@@ -103,11 +103,12 @@ describe('Integration: Density + Compression Pipeline', () => {
     expect(result.metadata.recencyPruned).toBe(0);
   });
 
-  it('compress returns valid CompressionResult for empty history', async () => {
+  it('compress returns valid result for empty history', async () => {
     const strategy = new HighDensityStrategy();
     const context = makeMinimalContext([]);
     const result = await strategy.compress(context);
-    expect(result.newHistory).toStrictEqual([]);
+    expect(result.kind).toBe('noop');
+    expect(result.reason).toBe('empty-history');
     expect(result.metadata.llmCallMade).toBe(false);
     expect(result.metadata.strategyUsed).toBe('high-density');
   });

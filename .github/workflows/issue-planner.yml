@@ -32,7 +32,6 @@ defaults:
     shell: bash
 
 env:
-  KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
   REPO: '${{ github.repository }}'
 
 jobs:
@@ -60,9 +59,17 @@ jobs:
         startsWith(toJSON(github.event.comment.body), '"/plan\t')))
     env:
       ISSUE_NUMBER: '${{ github.event.issue.number }}'
-      OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-      LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-      LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+      # Planner-specific model configuration. Each var falls back to the
+      # shared CI default so the planner can use a stronger model
+      # (set PLANNER_MODEL/PLANNER_PROVIDER/PLANNER_BASE_URL repo vars)
+      # without affecting the test matrix. Supports both OpenAI-compatible
+      # and Anthropic-compatible endpoints — the CLI --key flag is
+      # provider-agnostic.
+      PLANNER_PROVIDER: '${{ vars.PLANNER_PROVIDER || vars.LLXPRT_DEFAULT_PROVIDER }}'
+      PLANNER_MODEL: '${{ vars.PLANNER_MODEL || vars.LLXPRT_DEFAULT_MODEL }}'
+      PLANNER_BASE_URL: '${{ vars.PLANNER_BASE_URL || vars.OPENAI_BASE_URL }}'
+      PLANNER_KEY_VAR_NAME: '${{ vars.PLANNER_KEY_VAR_NAME || vars.KEY_VAR_NAME }}'
+      PLANNER_KEY_VAR_NAME_2: '${{ vars.PLANNER_KEY_VAR_NAME_2 || vars.KEY_VAR_NAME_2 }}'
       LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}"
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
@@ -83,10 +90,13 @@ jobs:
       - name: 'Validate required repository variables'
         run: |
           set -euo pipefail
-          : "${KEY_VAR_NAME:?KEY_VAR_NAME repository variable is not set}"
-          : "${OPENAI_BASE_URL:?OPENAI_BASE_URL repository variable is not set}"
-          : "${LLXPRT_DEFAULT_MODEL:?LLXPRT_DEFAULT_MODEL repository variable is not set}"
-          : "${LLXPRT_DEFAULT_PROVIDER:?LLXPRT_DEFAULT_PROVIDER repository variable is not set}"
+          # PLANNER_* vars are resolved in the job env block with fallback to
+          # the shared CI defaults, so a non-empty value here proves either a
+          # planner-specific override or a shared default is configured.
+          : "${PLANNER_PROVIDER:?PLANNER_PROVIDER (or LLXPRT_DEFAULT_PROVIDER) repository variable is not set}"
+          : "${PLANNER_MODEL:?PLANNER_MODEL (or LLXPRT_DEFAULT_MODEL) repository variable is not set}"
+          : "${PLANNER_BASE_URL:?PLANNER_BASE_URL (or OPENAI_BASE_URL) repository variable is not set}"
+          : "${PLANNER_KEY_VAR_NAME:?PLANNER_KEY_VAR_NAME (or KEY_VAR_NAME) repository variable is not set}"
 
       - name: 'Gather issue metadata'
         env:
@@ -129,8 +139,10 @@ jobs:
           issue_title="${issue_title//$'\n'/ }"
           issue_title="${issue_title//$'\r'/ }"
           search_query="\"${issue_title}\""
+          # Use the boolean --merged search qualifier; the --state flag only
+          # accepts open|closed, so the old state value was invalid (#2747).
           gh search prs "${search_query}" --repo "${REPO}" \
-            --state merged --limit 10 --json number,title,state,url \
+            --merged --limit 10 --json number,title,state,url \
             | jq -c '[.[] | { kind: "pr", number, title, state, url }]' \
             > planner/related-prs.json
           gh search issues "${search_query}" --repo "${REPO}" --limit 10 \
@@ -158,11 +170,11 @@ jobs:
         run: npm install -g @vybestack/llxprt-code@nightly
 
       - name: 'Check API quota and select optimal key'
-        run: node scripts/ci-quota-check.js
         env:
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
+          KEY_VAR_NAME: '${{ env.PLANNER_KEY_VAR_NAME }}'
+          OPENAI_API_KEY: '${{ secrets[vars.PLANNER_KEY_VAR_NAME] || secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_API_KEY_2: '${{ secrets[vars.PLANNER_KEY_VAR_NAME_2] || secrets[vars.KEY_VAR_NAME_2] }}'
+        run: node scripts/ci-quota-check.js
 
       - name: 'Confine filesystem for planner agent'
         run: |
@@ -197,11 +209,11 @@ jobs:
 
           set +e
           llxprt \
-            --provider "${LLXPRT_DEFAULT_PROVIDER}" \
-            --model "${LLXPRT_DEFAULT_MODEL}" \
+            --provider "${PLANNER_PROVIDER}" \
+            --model "${PLANNER_MODEL}" \
             --yolo \
             --key "${OPENAI_API_KEY}" \
-            --baseurl "${OPENAI_BASE_URL}" \
+            --baseurl "${PLANNER_BASE_URL}" \
             --set modelparam.temperature=0.7 \
             --set modelparam.max_tokens=16000 \
             --set context-limit="${context_limit}" \

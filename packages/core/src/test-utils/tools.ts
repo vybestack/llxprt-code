@@ -12,6 +12,7 @@ import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
+  type LiveOutputUpdate,
   Kind,
 } from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -61,7 +62,7 @@ async function executeMockTool(
   tool: { name: string; executeFn: ToolSpy },
   params: Record<string, unknown>,
   abortSignal: AbortSignal,
-  updateOutput?: (output: string) => void,
+  updateOutput?: (update: LiveOutputUpdate) => void,
 ): Promise<ToolResult> {
   const result = await tool.executeFn(params, abortSignal, updateOutput);
   if (isToolResultLike(result)) {
@@ -87,7 +88,7 @@ class MockToolInvocation extends BaseToolInvocation<
 
   async execute(
     abortSignal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     return executeMockTool(this.tool, this.params, abortSignal, updateOutput);
   }
@@ -168,7 +169,7 @@ export class MockModifiableToolInvocation extends BaseToolInvocation<
 
   async execute(
     abortSignal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     return executeMockTool(this.tool, this.params, abortSignal, updateOutput);
   }
