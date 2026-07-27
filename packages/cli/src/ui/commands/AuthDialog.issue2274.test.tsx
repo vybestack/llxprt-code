@@ -134,15 +134,7 @@ describe('AuthDialog + ProfileCreateWizard claudecode identity (@issue:2274)', (
   });
 
   it('toggles the claudecode OAuth identity when the claudecode item is selected', async () => {
-    mockGetAuthStatus.mockResolvedValueOnce([]).mockResolvedValueOnce([
-      {
-        provider: 'claudecode',
-        authenticated: false,
-        method: 'oauth',
-        expiresIn: 3600,
-        oauthEnabled: true,
-      },
-    ]);
+    mockGetAuthStatus.mockResolvedValueOnce([]);
 
     const { stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={vi.fn()} settings={makeSettings()} />,

@@ -39,6 +39,8 @@ interface ProviderLike {
   getModels(): Promise<ModelLike[]>;
 }
 
+// Fable 5 is a sentinel for the Claude Code subscription catalog: it is not
+// exposed by the Anthropic API-key alias's dynamic model listing.
 const OAUTH_ONLY_MODEL_ID = 'claude-fable-5';
 
 function formatCleanupError(error: unknown): string {
