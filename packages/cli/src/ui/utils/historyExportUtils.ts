@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ContentBlock, IContent } from '@vybestack/llxprt-code-core';
@@ -184,13 +185,20 @@ export async function exportHistoryForBugReport(
   // Sanitize the transcript
   const sanitized = sanitizeTranscript(markdown);
 
-  // Generate filename with timestamp
+  // Exclusive create with a random suffix so concurrent exports cannot
+  // collide or follow a pre-existing path/symlink. Owner-only mode keeps
+  // residual credentials/paths in the transcript from being world-readable.
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `llxprt-bug-report-${timestamp}.md`;
+  const random = randomBytes(8).toString('hex');
+  const filename = `llxprt-bug-report-${timestamp}-${random}.md`;
   const filePath = join(tmpdir(), filename);
 
-  // Write to temp directory
-  await writeFile(filePath, sanitized, 'utf-8');
+  const handle = await open(filePath, 'wx', 0o600);
+  try {
+    await handle.writeFile(sanitized, 'utf-8');
+  } finally {
+    await handle.close();
+  }
 
   return { filePath, sanitized };
 }

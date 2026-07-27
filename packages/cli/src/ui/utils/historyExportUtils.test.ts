@@ -7,8 +7,9 @@
 import type { IContent } from '@vybestack/llxprt-code-core';
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { readFile, unlink } from 'node:fs/promises';
+import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   sanitizeTranscript,
   exportHistoryForBugReport,
@@ -282,6 +283,56 @@ describe('historyExportUtils', () => {
 
       // Clean up second file
       await unlink(result2.filePath).catch(() => {});
+    });
+
+    it('should create owner-only files and avoid colliding exports', async () => {
+      const history: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'secret path /home/user/.ssh' }],
+        },
+      ];
+
+      const [result1, result2] = await Promise.all([
+        exportHistoryForBugReport(history),
+        exportHistoryForBugReport(history),
+      ]);
+      exportedFilePath = result1.filePath;
+
+      expect(result1.filePath).not.toBe(result2.filePath);
+
+      if (process.platform !== 'win32') {
+        const mode = (await stat(result1.filePath)).mode & 0o777;
+        expect(mode).toBe(0o600);
+      }
+
+      await unlink(result2.filePath).catch(() => {});
+    });
+
+    it('should refuse to overwrite an existing path (exclusive create)', async () => {
+      const existingPath = join(
+        tmpdir(),
+        `llxprt-bug-report-collision-${Date.now()}.md`,
+      );
+      const handle = await open(existingPath, 'wx', 0o600);
+      await handle.writeFile('preexisting', 'utf-8');
+      await handle.close();
+
+      await expect(open(existingPath, 'wx', 0o600)).rejects.toMatchObject({
+        code: 'EEXIST',
+      });
+
+      const history: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Test' }],
+        },
+      ];
+      const result = await exportHistoryForBugReport(history);
+      exportedFilePath = result.filePath;
+      expect(result.filePath).not.toBe(existingPath);
+
+      await unlink(existingPath).catch(() => {});
     });
   });
 });
