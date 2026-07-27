@@ -363,8 +363,10 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
   it('runSeatbeltSandbox: child env lacks LLXPRT_CAPABILITY_* and LLXPRT_CREDENTIAL_SOCKET even when parent env has dirty markers', async () => {
     const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-stub-'));
     const stubPath = path.join(stubDir, 'sandbox-exec');
-    // Stub binary: prints its own env (the child env) to stdout, exits 0.
-    fs.writeFileSync(stubPath, '#!/bin/sh\nenv\n', { mode: 0o755 });
+    const capturedEnvPath = path.join(stubDir, 'child-env');
+    fs.writeFileSync(stubPath, '#!/bin/sh\nenv > "$SEATBELT_ENV_CAPTURE"\n', {
+      mode: 0o755,
+    });
     const savedFd = process.env.LLXPRT_CAPABILITY_FD;
     const savedTok = process.env.LLXPRT_CAPABILITY_TOKEN;
     const savedSock = process.env.LLXPRT_CREDENTIAL_SOCKET;
@@ -374,6 +376,7 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
     process.env.LLXPRT_CAPABILITY_FD = '3';
     process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/fake-dirty.sock';
     process.env.SEATBELT_PROFILE = 'permissive-open';
+    process.env.SEATBELT_ENV_CAPTURE = capturedEnvPath;
     // Under vitest, import.meta.url inside sandbox-seatbelt.ts may resolve
     // to a transform-relative path, so the builtin .sb profile may not be
     // found. Spy on fs.existsSync to allow the profile check to pass; the
@@ -387,32 +390,13 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
       });
     process.env.PATH = `${stubDir}:${process.env.PATH ?? ''}`;
     try {
-      // Capture stdout from the spawned child via a temporary redirect.
-      // runSeatbeltSandbox uses stdio:'inherit', so the stub's env output
-      // goes to the test process stdout. We intercept by spying on
-      // process.stdout.write.
-      const chunks: string[] = [];
-      const origWrite = process.stdout.write.bind(process.stdout);
-      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((
-        data: string | Uint8Array,
-        ...rest: unknown[]
-      ) => {
-        chunks.push(
-          typeof data === 'string' ? data : Buffer.from(data).toString(),
-        );
-        return origWrite(data, ...(rest as []));
-      }) as typeof process.stdout.write);
-      try {
-        await runSeatbeltSandbox(
-          { command: 'sandbox-exec', image: 'test' } as never,
-          [],
-          undefined,
-          [],
-        );
-      } finally {
-        writeSpy.mockRestore();
-      }
-      const childEnvOutput = chunks.join('');
+      await runSeatbeltSandbox(
+        { command: 'sandbox-exec', image: 'test' } as never,
+        [],
+        undefined,
+        [],
+      );
+      const childEnvOutput = fs.readFileSync(capturedEnvPath, 'utf8');
       expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_TOKEN');
       expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_FD');
       expect(childEnvOutput).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
@@ -429,6 +413,7 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
         process.env.SEATBELT_PROFILE = savedProfile;
       else delete process.env.SEATBELT_PROFILE;
       process.env.PATH = savedPath;
+      delete process.env.SEATBELT_ENV_CAPTURE;
       fs.rmSync(stubDir, { recursive: true, force: true });
       existsSpy.mockRestore();
     }

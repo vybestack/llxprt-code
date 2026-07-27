@@ -18,7 +18,7 @@ import path from 'node:path';
  */
 
 const CAPABILITY_ENV_PREFIXES = ['LLXPRT_CAPABILITY_'] as const;
-const BASH_NOISE_VARS = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'IFS']);
+const BASH_NOISE_VARS = new Set(['PWD', 'OLDPWD', 'SHLVL', '_']);
 
 export interface SandboxBashrcChanges {
   readonly env: Record<string, string>;
@@ -86,9 +86,7 @@ function runBashrcProbe(
     );
   }
   if (result.status !== 0) {
-    throw new Error(
-      `sandbox.bashrc child exited with status ${result.status}: ${result.stderr}`,
-    );
+    throw new Error(`sandbox.bashrc child exited with status ${result.status}`);
   }
   const envOutput = result.output[3] ?? '';
   const cwdOutput = result.output[4] ?? '';
