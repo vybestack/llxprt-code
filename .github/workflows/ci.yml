@@ -187,7 +187,6 @@ jobs:
               --jq '.[].filename' >"$files_file" || true
           fi
           echo "count=$(wc -l <"$files_file" | tr -d ' ')" >>"$GITHUB_OUTPUT"
-          cp "$files_file" "${RUNNER_TEMP}/changed-files.txt"
 
       - name: 'Select affected shards'
         id: 'select'
