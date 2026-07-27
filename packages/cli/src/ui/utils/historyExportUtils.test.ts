@@ -301,7 +301,7 @@ describe('historyExportUtils', () => {
       await unlink(result2.filePath).catch(() => {});
     });
 
-    it('should create owner-only files and avoid colliding exports', async () => {
+    it('should create distinct files for concurrent exports', async () => {
       const history: IContent[] = [
         {
           speaker: 'human',
@@ -317,13 +317,26 @@ describe('historyExportUtils', () => {
 
       expect(result1.filePath).not.toBe(result2.filePath);
 
-      if (process.platform !== 'win32') {
-        const mode = (await stat(result1.filePath)).mode & 0o777;
-        expect(mode).toBe(0o600);
-      }
-
       await unlink(result2.filePath).catch(() => {});
     });
+
+    it.skipIf(process.platform === 'win32')(
+      'should set owner-only permissions on exported transcripts',
+      async () => {
+        const history: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'permission check' }],
+          },
+        ];
+
+        const result = await exportHistoryForBugReport(history);
+        exportedFilePath = result.filePath;
+
+        const mode = (await stat(result.filePath)).mode & 0o777;
+        expect(mode).toBe(0o600);
+      },
+    );
 
     it('should retry when the exporter candidate path already exists', async () => {
       const actualCrypto =
