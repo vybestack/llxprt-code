@@ -823,7 +823,8 @@ jobs:
       # every selected shard, preserving cross-platform coverage. An empty
       # matrix (no tests selected) combined with the has_tests gate above
       # skips all legs without making the required `Test` check red.
-      matrix: '${{ fromJSON(needs.shard_selector.outputs.matrix) }}'
+      matrix:
+        include: ${{ fromJSON(needs.shard_selector.outputs.matrix) }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
