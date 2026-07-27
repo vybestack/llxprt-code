@@ -29,7 +29,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -539,5 +541,130 @@ describe('affected-test-shards selector — data graph integrity', () => {
       importEdges: Record<string, readonly string[]>;
     };
     expect(data.importEdges['providers']).toContain('telemetry');
+  });
+});
+
+describe('affected-test-shards selector — integration-tests protection', () => {
+  const integrationCases = [
+    'integration-tests/file-system.test.ts',
+    'integration-tests/some.fixture.md',
+  ];
+
+  for (const path of integrationCases) {
+    it(`selects all shards for ${path}`, async () => {
+      const { selectAffectedShards } = await loadSelector();
+      const result = selectAffectedShards({
+        event: PR_EVENT,
+        changedPaths: [path],
+      });
+      expect(result.fullRunReason).toContain('integration-tests');
+      expect(result.selectedShards).toEqual(ALL_SHARDS);
+    });
+  }
+});
+
+describe('affected-test-shards selector — event gating (PR-only selection)', () => {
+  const fullRunCases = ['', 'some_future_event', 'release'];
+  for (const event of fullRunCases) {
+    it(`selects all shards for event '${event || '(empty)'}'`, async () => {
+      const { selectAffectedShards } = await loadSelector();
+      const result = selectAffectedShards({
+        event,
+        changedPaths: ['docs/foo.md'],
+      });
+      expect(result.selectedShards).toEqual(ALL_SHARDS);
+      expect(result.fullRunReason).toBeTruthy();
+    });
+  }
+});
+
+describe('affected-test-shards selector — schemas selection', () => {
+  it('selects cli for a schemas/settings.schema.json change', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['schemas/settings.schema.json'],
+    });
+    expect(result.selectedShards).toEqual(['cli']);
+  });
+});
+
+describe('affected-test-shards selector — .github/.husky narrow selection', () => {
+  const scriptsShardCases = [
+    '.github/workflows/assign.yml',
+    '.husky/pre-commit',
+    '.github/CODEOWNERS',
+  ];
+  for (const path of scriptsShardCases) {
+    it(`selects scripts shard for ${path}`, async () => {
+      const { selectAffectedShards } = await loadSelector();
+      const result = selectAffectedShards({
+        event: PR_EVENT,
+        changedPaths: [path],
+      });
+      expect(result.selectedShards).toContain('scripts');
+      expect(result.fullRunReason).toBeNull();
+    });
+  }
+});
+
+describe('affected-test-shards selector — complete shared inputs', () => {
+  const sharedInputCases = [
+    'package-lock.json',
+    'scripts/build_sandbox.ts',
+    'scripts/build_vscode_companion.ts',
+    'scripts/postinstall.cjs',
+    'scripts/bun-test-manifest.ts',
+    'eslint.config.js',
+    '.github/workflows/ci.yml',
+  ];
+
+  for (const path of sharedInputCases) {
+    it(`selects all shards for a ${path} change`, async () => {
+      const { selectAffectedShards } = await loadSelector();
+      const result = selectAffectedShards({
+        event: PR_EVENT,
+        changedPaths: [path],
+      });
+      expect(result.selectedShards).toEqual(ALL_SHARDS);
+    });
+  }
+});
+
+describe('affected-test-shards selector — replay validation', () => {
+  it('throws for invalid replay counts', async () => {
+    const { replayHistory } = await loadSelector();
+    for (const count of [0, -3, 1.5]) {
+      expect(() => replayHistory({ count })).toThrow(
+        'replay count must be a positive integer',
+      );
+    }
+  });
+});
+
+describe('affected-test-shards selector — GitHub output safety', () => {
+  it('does not create output records from carriage returns in paths', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'affected-shards-'));
+    const files = join(dir, 'files.txt');
+    const output = join(dir, 'output.txt');
+    writeFileSync(files, 'evil\rhas_tests=false');
+    const run = spawnSync(
+      process.execPath,
+      [
+        SELECTOR_PATH,
+        '--event',
+        PR_EVENT,
+        '--files-from',
+        files,
+        '--output',
+        'github-actions',
+      ],
+      { env: { ...process.env, GITHUB_OUTPUT: output } },
+    );
+    const records = readFileSync(output, 'utf8').split('\n');
+    expect(run.status).toBe(0);
+    expect(records.filter((line) => line.startsWith('has_tests='))).toEqual([
+      'has_tests=true',
+    ]);
   });
 });

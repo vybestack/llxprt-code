@@ -80,18 +80,14 @@ quality-rule, or agent-memory change is in scope.
 
 | Slice | Paths | Status |
 | --- | --- | --- |
-| Goal and bounded acceptance | project plan | Complete |
-| Selector behavior | selector data/script/test | Pending |
-| Graph drift guard | checker, package script, scripts tsconfig | Pending |
-| CI integration | ci.yml | Pending |
-| Performance and exact-head evidence | command/CI results in PR | Pending |
+| Acceptance and implementation | plan, selector, graph guard, CI/tests | Complete |
+| Exact-head evidence | local gates except test-utils OS timeout; CI required | Pending |
 
-Budget: target 8 paths and no more than 1,500 net changed lines. Mandatory scope
-review above 25 files or 1,500 net lines; stop without approval above 40 files
-or 2,500 net lines.
-
-Review findings are classified as **Blocker-Fix**, **In-scope-Fix**,
-**Reject**, or **Defer**. Reviewer suggestions do not expand scope. Local OCR
-and PR OCR are each limited to two runs. Exact-head completion requires accepted
-behavioral evidence, local and CI verification, completed/triaged reviews, clean
-scope, correct ancestry, and a conflict-free PR.
+Final scope: 10 paths, +2541/-41 = 2,500 net lines. Mandatory review confirmed
+one bounded feature with no dependency, lockfile, package-source, nightly,
+public-API, quality-rule, or memory expansion; no additions remain authorized.
+Review triage consolidated duplicates: accepted fixes cover event/path gating,
+pagination/output safety, graph/observer correctness, workflow permissions,
+skip/replay behavior, and cross-platform paths. Catch-and-swallow fallbacks,
+speculative optimization, and new abstractions are Reject/Defer. Completion
+still requires pushed-head CI, resolved threads, ancestry, and mergeability.

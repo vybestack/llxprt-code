@@ -79,7 +79,7 @@ jobs:
             --paginate \
             -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' || true)"
+            --jq '.[].filename')"
 
           if [[ -z "$files" ]]; then
             echo "docs_only=false" >>"$GITHUB_OUTPUT"
@@ -103,6 +103,11 @@ jobs:
           while IFS= read -r file; do
             [[ -z "$file" ]] && continue
             case "$file" in
+              # integration-tests/ fixtures (any extension) are never docs.
+              integration-tests/*)
+                docs_only=false
+                break
+                ;;
               docs/*|README.md|README.*|CHANGELOG.md|CHANGELOG.*)
                 ;;
               CONTRIBUTING.md|CONTRIBUTING.*|CODE_OF_CONDUCT.md|SECURITY.md)
@@ -150,10 +155,13 @@ jobs:
   shard_selector:
     name: 'Select test shards'
     runs-on: 'ubuntu-latest'
+    timeout-minutes: 5
     needs:
-      - 'doc_change_filter'
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    permissions:
+      contents: 'read'
+      pull-requests: 'read'
     outputs:
       matrix: '${{ steps.select.outputs.matrix }}'
       selected_shards: '${{ steps.select.outputs.selected_shards }}'
@@ -165,6 +173,12 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
 
       - name: 'Determine changed files'
         id: 'changed'
@@ -184,7 +198,7 @@ jobs:
               --paginate \
               -H "Accept: application/vnd.github+json" \
               "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-              --jq '.[].filename' >"$files_file" || true
+              --jq '.[].filename' >"$files_file"
           fi
           echo "count=$(wc -l <"$files_file" | tr -d ' ')" >>"$GITHUB_OUTPUT"
 
@@ -1003,14 +1017,24 @@ jobs:
     needs:
       - 'test_shard'
       - 'shard_selector'
+      - 'skip_check'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Check shard results'
         run: |-
+          should_skip='${{ needs.skip_check.outputs.should_skip }}'
           selector_result='${{ needs.shard_selector.result }}'
           has_tests='${{ needs.shard_selector.outputs.has_tests }}'
           shard_result='${{ needs.test_shard.result }}'
+
+          # Explicit duplicate-skip: skip_check said this run duplicates a
+          # passing one, so every downstream job was intentionally skipped.
+          # The required Test check is green by design.
+          if [ "$should_skip" == "true" ]; then
+            echo "skip_check reported a duplicate passing run (should_skip=true). Test check is green by design."
+            exit 0
+          fi
 
           # Fail closed if the selector itself did not succeed.
           if [ "$selector_result" != "success" ]; then

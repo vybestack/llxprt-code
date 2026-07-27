@@ -106,17 +106,19 @@
   },
   "sharedInputs": [
     "package.json",
-    "bun.lock",
     "package-lock.json",
-    ".npmrc",
-    ".nvmrc",
-    ".bun-version",
+    "bun.lock",
     "tsconfig.json",
     "tsconfig.scripts.json",
     "eslint.config.js",
     "vitest.coverage.ts",
+    ".npmrc",
+    ".nvmrc",
+    ".bun-version",
     "scripts/build.ts",
     "scripts/build_package.ts",
+    "scripts/build_sandbox.ts",
+    "scripts/build_vscode_companion.ts",
     "scripts/bun-build.config.mjs",
     "scripts/test.ts",
     "scripts/test-shards.ts",
@@ -128,6 +130,7 @@
     "scripts/copy_bundle_assets.ts",
     "scripts/affected-test-shards.ts",
     "scripts/affected-test-shards.data.json",
-    "scripts/check-affected-test-shards.ts"
+    "scripts/check-affected-test-shards.ts",
+    ".github/workflows/ci.yml"
   ]
 }

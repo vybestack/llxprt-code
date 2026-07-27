@@ -154,14 +154,6 @@ const RESEARCH_RE = /^research\//;
 const DEV_DOCS_RE = /^dev-docs\//;
 const EVALS_RE = /^evals\//;
 
-const FULL_RUN_EVENTS = new Set<string>([
-  'push',
-  'merge_group',
-  'workflow_dispatch',
-  'schedule',
-  'release',
-]);
-
 /** Extracts the package name from a packages/<name>/... path. */
 function packageFromPath(p: string): string | undefined {
   const m = p.match(/^packages\/([a-z0-9-]+)\//);
@@ -240,14 +232,19 @@ export function selectAffectedShards({
   const data = loadData(dataPath);
   const allShards: readonly string[] = [...data.shardOrder];
 
-  // Non-PR events always run the full suite.
-  if (FULL_RUN_EVENTS.has(event)) {
+  // Only `pull_request` selects from paths; all other/missing/unknown events
+  // select all shards (fail closed to full).
+  if (event !== 'pull_request') {
+    const reason =
+      event && event.length > 0
+        ? `non-PR event '${event}' runs all shards`
+        : 'missing/empty event runs all shards (selection is pull_request-only)';
     return fullRunResult(
       allShards,
-      `non-PR event '${event}' runs all shards`,
+      reason,
       changedPaths.map((p) => ({
         path: p,
-        reason: `full-run: non-PR event '${event}'`,
+        reason: `full-run: ${reason}`,
         shards: allShards,
       })),
     );
@@ -414,7 +411,6 @@ const NO_TEST_METADATA = new Set<string>([
   'Dockerfile',
   'Makefile',
   'AGENTS.md',
-  'eslint.config.js',
   '.prettierrc.json',
   '.editorconfig',
   '.prettierignore',
@@ -430,25 +426,52 @@ const NO_TEST_PATH_RES: readonly RegExp[] = [
   MARKDOWN_RE,
 ];
 
-/** Classifies a non-package, non-scripts path. Returns null if unhandled. */
+/**
+ * Maps repository-relative paths whose tests read them without importing to the
+ * shard that must run. The checker validates existence on disk.
+ */
+const FILE_OBSERVERS: Readonly<Record<string, readonly string[]>> = {
+  'schemas/settings.schema.json': ['cli'],
+};
+
+/**
+ * Classifies a non-package, non-scripts path. Returns null if unhandled.
+ *
+ * Order matters: integration-tests/ and file-observer rules are checked BEFORE
+ * docs-suffix regexes so an integration-tests/*.md fixture is never treated as
+ * docs-only.
+ */
 function classifyOtherPath(p: string): PathClassification | null {
-  if (NO_TEST_PATH_RES.some((re) => re.test(p))) {
-    return noShards(`documentation/metadata path '${p}' selects no test shard`);
-  }
-  if (p.startsWith('.github/') || p.startsWith('.husky/')) {
-    return fullRun(
-      `CI/workflow config '${p}' → fail closed`,
-      `CI/workflow config '${p}' may affect all shards`,
-    );
-  }
-  if (NO_TEST_METADATA.has(p)) {
-    return noShards(`metadata/config path '${p}' selects no test shard`);
-  }
+  // integration-tests/ fixtures (any extension) affect any shard → fail closed.
   if (p.startsWith('integration-tests/')) {
     return fullRun(
       `integration-tests path '${p}' → fail closed`,
       `integration-tests path '${p}' may affect any shard`,
     );
+  }
+  const fileObs = FILE_OBSERVERS[p];
+  if (fileObs) {
+    return selectShards(
+      fileObs,
+      `file-observer rule selects shard(s) ${fileObs.join(', ')} for '${p}'`,
+    );
+  }
+  if (NO_TEST_PATH_RES.some((re) => re.test(p))) {
+    return noShards(`documentation/metadata path '${p}' selects no test shard`);
+  }
+  // Workflow/hook/.github harness changes are exercised by scripts-shard tests.
+  if (
+    p.startsWith('.github/workflows/') ||
+    p.startsWith('.husky/') ||
+    p.startsWith('.github/')
+  ) {
+    return selectShards(
+      ['scripts'],
+      `workflow/harness change '${p}' selects scripts shard`,
+    );
+  }
+  if (NO_TEST_METADATA.has(p)) {
+    return noShards(`metadata/config path '${p}' selects no test shard`);
   }
   if (p.startsWith('profiles/') || p.startsWith('schemas/')) {
     return noShards(`path '${p}' selects no test shard`);
@@ -545,6 +568,11 @@ export function replayHistory({
   base,
   dataPath,
 }: ReplayHistoryParams): ReplayResult {
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new Error(
+      `replay count must be a positive integer (received ${count})`,
+    );
+  }
   const data = loadData(dataPath);
   const timings: Record<string, number> = data.shardTimingsSeconds;
   const history = getHistoryCommits(count, base);
@@ -576,11 +604,13 @@ export function replayHistory({
       changedPaths: files,
       dataPath,
     });
-    if (result.fullRunReason || result.selectedShards.length === 0) {
-      // Full run or no selection: every shard runs. No saving.
+    if (result.fullRunReason) {
       forcedFull++;
       aggregateSeconds += fullAggregatePerCommit;
       criticalPathSeconds += fullCriticalPerCommit;
+    } else if (result.selectedShards.length === 0) {
+      // Zero-shard (docs-only): costs zero, not forced-full.
+      continue;
     } else {
       const legTime = result.selectedShards.reduce(
         (sum, s) => sum + (timings[s] ?? 0),
@@ -692,8 +722,15 @@ function main(): void {
     typeof opts.output === 'string' ? opts.output : 'json';
 
   if (opts.replay !== undefined) {
+    const replayCount = typeof opts.replay === 'number' ? opts.replay : 120;
+    if (!Number.isInteger(replayCount) || replayCount <= 0) {
+      stdout.write(
+        `Error: --replay must be a positive integer (received ${opts.replay})\n`,
+      );
+      exit(2);
+    }
     const result = replayHistory({
-      count: typeof opts.replay === 'number' ? opts.replay : 120,
+      count: replayCount,
       base: typeof opts.base === 'string' ? opts.base : undefined,
     });
     stdout.write(JSON.stringify(result, null, 2) + '\n');
@@ -709,6 +746,10 @@ function main(): void {
       opts.base,
       typeof opts.head === 'string' ? opts.head : undefined,
     );
+  } else if (event !== 'pull_request') {
+    // Non-PR invocation without a file source is valid: selection is
+    // pull_request-only, so non-PR events select all shards regardless of paths.
+    changedPaths = [];
   } else {
     stdout.write('Error: provide --files-from <path> or --base <sha>\n');
     exit(2);
@@ -727,7 +768,18 @@ function main(): void {
  * Writes selection results to GITHUB_OUTPUT and GITHUB_STEP_SUMMARY for use in
  * GitHub Actions CI. Builds a matrix JSON array (shard × os × node-version)
  * that the test_shard job consumes via fromJSON().
+ *
+ * PR-controlled values (event, fullRunReason/path text) are sanitized of CR/LF
+ * before being written to prevent GITHUB_OUTPUT injection. Keys/shape preserved.
  */
+const CRLF_RE = new RegExp(
+  `[${String.fromCharCode(13)}${String.fromCharCode(10)}]+`,
+  'g',
+);
+function sanitizeGhValue(value: string): string {
+  return value.replace(CRLF_RE, ' ');
+}
+
 function outputGithubActions(result: SelectionResult, event: string): void {
   const ghOutputPath = process.env.GITHUB_OUTPUT;
   const ghSummaryPath = process.env.GITHUB_STEP_SUMMARY;
@@ -744,11 +796,12 @@ function outputGithubActions(result: SelectionResult, event: string): void {
     }
   }
 
-  const selectedStr = result.selectedShards.join(',');
-  const matrixStr = JSON.stringify(matrix);
+  const selectedStr = sanitizeGhValue(result.selectedShards.join(','));
+  const matrixStr = sanitizeGhValue(JSON.stringify(matrix));
   const hasTestsStr = String(result.hasTests);
   const coverageCompleteStr = String(result.coverageComplete);
-  const fullRunReason = result.fullRunReason ?? '';
+  const fullRunReason = sanitizeGhValue(result.fullRunReason ?? '');
+  const safeEvent = sanitizeGhValue(event);
 
   if (ghOutputPath) {
     const lines = [
@@ -765,7 +818,7 @@ function outputGithubActions(result: SelectionResult, event: string): void {
     const summary = [
       '### Test shard selection (issue #2709)',
       '',
-      `**Event:** \`${event}\``,
+      `**Event:** \`${safeEvent}\``,
       `**Selected shards:** \`${selectedStr}\``,
       `**Has tests:** \`${hasTestsStr}\``,
       `**Coverage complete:** \`${coverageCompleteStr}\``,

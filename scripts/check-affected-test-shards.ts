@@ -28,9 +28,10 @@
  * Exits 0 on success, 1 on any drift.
  */
 
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, relative, resolve, extname, dirname } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, relative, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { TEST_SHARDS } from './test-shards.ts';
 
@@ -58,36 +59,23 @@ interface GraphData {
   readonly sharedInputs: readonly string[];
 }
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'coverage']);
-
-function walkSourceFiles(
-  dir: string,
-  rootDir: string,
-  files: string[] = [],
-): string[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return files;
-  }
-  for (const entry of entries) {
-    if (SKIP_DIRS.has(entry)) {
-      continue;
-    }
-    const p = join(dir, entry);
-    try {
-      const s = statSync(p);
-      if (s.isDirectory()) {
-        walkSourceFiles(p, rootDir, files);
-      } else if (extname(p) === '.ts' || extname(p) === '.tsx') {
-        files.push(p);
-      }
-    } catch {
-      // Ignore stat errors (e.g. broken symlinks).
-    }
-  }
-  return files;
+/**
+ * Returns tracked files matching the given pathspecs via `git ls-files`. Using
+ * tracked files means node_modules/build artifacts are never scanned, and a git
+ * failure throws instead of being silently skipped.
+ */
+function listTrackedFiles(
+  repoRoot: string,
+  pathspecs: readonly string[] = [],
+): readonly string[] {
+  const out = execFileSync('git', ['ls-files', ...pathspecs], {
+    encoding: 'utf8',
+    cwd: repoRoot,
+  });
+  return out
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
 }
 
 /**
@@ -134,7 +122,7 @@ function extractImportSpecifiers(
     fileName,
     sourceText,
     ts.ScriptTarget.Latest,
-    true,
+    false,
     fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const specs: string[] = [];
@@ -154,23 +142,24 @@ function extractImportSpecifiers(
 /**
  * Reads a file and records every inter-package import edge it contains into
  * the `edgeFiles` map. Each edge is tracked as {prod, test} so an edge seen
- * in any production file is classified as production.
+ * in any production file is classified as production. Fail-fast: a read error
+ * propagates instead of being silently skipped.
  */
 function recordEdgesFromFile(
   file: string,
   pkg: string,
-  pkgBaseDir: string,
+  repoRoot: string,
   edgeFiles: Map<string, { prod: boolean; test: boolean }>,
 ): void {
-  let sourceText: string;
-  try {
-    sourceText = readFileSync(file, 'utf-8');
-  } catch {
-    return;
-  }
-  const relFile = relative(pkgBaseDir, file);
+  const absFile = join(repoRoot, file);
+  const sourceText = readFileSync(absFile, 'utf-8');
+  // Normalize OS path separators to '/' so TEST_PATH_RE (which uses '/') is
+  // correct on Windows as well.
+  const relFile = relative(join(repoRoot, 'packages', pkg), absFile)
+    .split(sep)
+    .join('/');
   const isTest = TEST_PATH_RE.test(relFile);
-  const depSpecs = extractImportSpecifiers(sourceText, file)
+  const depSpecs = extractImportSpecifiers(sourceText, absFile)
     .filter((spec) => spec.startsWith(PACKAGE_PREFIX))
     .map((spec) => spec.slice(PACKAGE_PREFIX.length).split('/')[0])
     .filter((dep) => dep !== pkg);
@@ -194,10 +183,6 @@ function extractAllEdges(repoRoot: string): {
   if (!existsSync(packagesDir)) {
     throw new Error(`packages/ directory not found at ${packagesDir}`);
   }
-  const packageNames = readdirSync(packagesDir).filter((d) => {
-    const s = statSync(join(packagesDir, d));
-    return s.isDirectory();
-  });
 
   // Track, for each (from → to) edge, whether it appears in any prod file
   // and/or any test file. An edge is "prod" if it appears in at least one
@@ -208,13 +193,15 @@ function extractAllEdges(repoRoot: string): {
   /** All packages seen during extraction. */
   const seenPackages = new Set<string>();
 
-  for (const pkg of packageNames) {
+  for (const file of listTrackedFiles(repoRoot, [
+    'packages/**/*.ts',
+    'packages/**/*.tsx',
+  ])) {
+    const m = file.match(/^packages\/([a-z0-9-]+)\//);
+    if (!m) continue;
+    const pkg = m[1];
     seenPackages.add(pkg);
-    const pkgDir = join(packagesDir, pkg);
-    const pkgBaseDir = join(packagesDir, pkg);
-    for (const file of walkSourceFiles(pkgDir, repoRoot)) {
-      recordEdgesFromFile(file, pkg, pkgBaseDir, edgeFiles);
-    }
+    recordEdgesFromFile(file, pkg, repoRoot, edgeFiles);
   }
 
   const prodEdges = new Map<string, Set<string>>();
@@ -385,6 +372,92 @@ function validateShardConfig(
   return issues;
 }
 
+/** Indispensable shared inputs that MUST appear in sharedInputs. */
+const REQUIRED_SHARED_INPUTS: readonly string[] = [
+  'package.json',
+  'package-lock.json',
+  'bun.lock',
+  'tsconfig.json',
+  'eslint.config.js',
+  '.github/workflows/ci.yml',
+  'scripts/test.ts',
+  'scripts/postinstall.cjs',
+];
+
+/** Globs (over tracked files) whose matches must all be shared inputs. */
+const REQUIRED_SHARED_GLOBS: readonly RegExp[] = [
+  /^scripts\/build.*\.ts$/,
+  /^scripts\/bun-test-manifest.*\.ts$/,
+];
+
+function matchesAnyGlob(path: string): boolean {
+  return REQUIRED_SHARED_GLOBS.some((re) => re.test(path));
+}
+
+/**
+ * Validates sharedInputs bidirectionally: each listed entry must exist on disk
+ * (stale/dangling), and each indispensable input and build/manifest glob match
+ * must be listed (missing).
+ */
+function validateSharedInputs(
+  data: GraphData,
+  repoRoot: string,
+  trackedFiles: readonly string[],
+): DriftIssue[] {
+  const issues: DriftIssue[] = [];
+  const dataInputs = new Set<string>(data.sharedInputs);
+
+  // Existence: every listed shared input must exist on disk.
+  for (const entry of [...dataInputs].sort()) {
+    if (!existsSync(join(repoRoot, entry))) {
+      issues.push({
+        kind: 'shared-input-not-found',
+        detail: `sharedInputs references '${entry}' which does not exist on disk.`,
+      });
+    }
+  }
+  // Missing: indispensable inputs must be listed.
+  for (const entry of REQUIRED_SHARED_INPUTS) {
+    if (!dataInputs.has(entry)) {
+      issues.push({
+        kind: 'shared-input-missing',
+        detail: `sharedInputs is missing canonical shared input '${entry}'. Add it.`,
+      });
+    }
+  }
+  // Missing: every tracked file matching a required glob must be listed.
+  for (const file of trackedFiles) {
+    if (matchesAnyGlob(file) && !dataInputs.has(file)) {
+      issues.push({
+        kind: 'shared-input-missing',
+        detail: `sharedInputs is missing build/manifest input '${file}' matching the accepted contract. Add it.`,
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Reverse-completeness: every canonical TEST_SHARDS workspace must be present
+ * in packageToShard, catching a new workspace added without updating the data.
+ */
+function validateReverseCompleteness(
+  data: GraphData,
+  canonical: Map<string, string>,
+): DriftIssue[] {
+  const issues: DriftIssue[] = [];
+  const mapped = new Set<string>(Object.keys(data.packageToShard));
+  for (const ws of [...canonical.keys()].sort()) {
+    if (!mapped.has(ws)) {
+      issues.push({
+        kind: 'workspace-not-in-shard-map',
+        detail: `workspace '${ws}' is declared in TEST_SHARDS but is missing from packageToShard.`,
+      });
+    }
+  }
+  return issues;
+}
+
 function checkGraph(
   repoRoot: string,
   dataPath: string,
@@ -422,6 +495,10 @@ function checkGraph(
   const canonical = buildCanonicalShardMap();
   issues.push(...validateShardMap(data, canonical));
   issues.push(...validateShardConfig(data, canonical));
+  issues.push(
+    ...validateSharedInputs(data, repoRoot, listTrackedFiles(repoRoot)),
+  );
+  issues.push(...validateReverseCompleteness(data, canonical));
 
   return { issues, ok: issues.length === 0 };
 }
