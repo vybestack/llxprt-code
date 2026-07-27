@@ -317,7 +317,7 @@ describe('run-lint runner — heap normalization', () => {
     expect(commands[0].nodeOptions).toContain('--enable-source-maps');
   });
 
-  it('clamps a non-positive heap to 1MB so Node.js still starts', async () => {
+  it('clamps a non-positive heap to the default so Node.js still starts', async () => {
     const { buildLintCommands } = await loadRunner();
     const commands = buildLintCommands({
       targets: null,
@@ -325,6 +325,30 @@ describe('run-lint runner — heap normalization', () => {
       cache: false,
       heapMb: 0,
     });
-    expect(commands[0].nodeOptions).toContain('--max-old-space-size=1');
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+  });
+
+  it('clamps NaN heap to the default instead of producing --max-old-space-size=NaN', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      heapMb: Number.NaN,
+    });
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).not.toContain('NaN');
+  });
+
+  it('clamps Infinity heap to the default', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const commands = buildLintCommands({
+      targets: null,
+      forwardedArgs: [],
+      cache: false,
+      heapMb: Number.POSITIVE_INFINITY,
+    });
+    expect(commands[0].nodeOptions).toContain('--max-old-space-size=12288');
+    expect(commands[0].nodeOptions).not.toContain('Infinity');
   });
 });

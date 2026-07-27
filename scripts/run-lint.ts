@@ -106,9 +106,11 @@ export function buildLintCommands({
     new URL('../node_modules/.bin/eslint', import.meta.url),
   );
   // The exported builder can be called from tests/automation with any heap
-  // value; clamp non-positive input to 1MB so an invalid --max-old-space-size
-  // never reaches Node.js and produces a confusing startup failure.
-  const safeHeap = Math.max(heapMb, 1);
+  // value; clamp non-finite or non-positive input to the default so an
+  // invalid --max-old-space-size never reaches Node.js and produces a
+  // confusing startup failure (NaN/Infinity would crash Node at boot).
+  const safeHeap =
+    Number.isFinite(heapMb) && heapMb > 0 ? heapMb : DEFAULT_HEAP_MB;
   const resolvedNodeOptions = nodeOptionsWithMemoryLimit(safeHeap, nodeOptions);
 
   const cacheArgs: readonly string[] = cache

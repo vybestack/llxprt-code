@@ -340,6 +340,43 @@ describe('affected-lint-targets selector — data graph reuse', () => {
   });
 });
 
+describe('affected-lint-targets selector — audit trail on full-run fallback', () => {
+  it('records all changed paths in pathReasons even when one triggers a full run', async () => {
+    const { selectLintTargets } = await loadSelector();
+    const result = selectLintTargets({
+      event: PR_EVENT,
+      changedPaths: [
+        'packages/cli/src/index.ts',
+        'package.json',
+        'packages/core/src/config.ts',
+      ],
+    });
+    // package.json triggers a full run; the remaining core path must still
+    // appear in the audit trail (not be silently omitted).
+    expect(result.fullRun).toBe(true);
+    expect(result.targets).toEqual(['.']);
+    expect(result.pathReasons.length).toBe(3);
+    const paths = result.pathReasons.map((r) => r.path);
+    expect(paths).toContain('packages/cli/src/index.ts');
+    expect(paths).toContain('package.json');
+    expect(paths).toContain('packages/core/src/config.ts');
+  });
+
+  it('marks not-yet-classified paths as not classified after the triggering path', async () => {
+    const { selectLintTargets } = await loadSelector();
+    const result = selectLintTargets({
+      event: PR_EVENT,
+      changedPaths: ['package.json', 'packages/core/src/config.ts'],
+    });
+    expect(result.fullRun).toBe(true);
+    const coreReason = result.pathReasons.find(
+      (r) => r.path === 'packages/core/src/config.ts',
+    );
+    expect(coreReason, 'core path must appear in audit trail').toBeTruthy();
+    expect(coreReason?.reason).toContain('not classified');
+  });
+});
+
 describe('affected-lint-targets selector — type-aware soundness (A5)', () => {
   /**
    * Mandatory soundness proof: package A changes an exported return from void

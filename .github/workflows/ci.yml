@@ -170,6 +170,7 @@ jobs:
       full_run_reason: '${{ steps.select.outputs.full_run_reason }}'
       lint_targets: '${{ steps.lint_select.outputs.lint_targets }}'
       lint_full_run: '${{ steps.lint_select.outputs.lint_full_run }}'
+      lint_full_run_reason: '${{ steps.lint_select.outputs.lint_full_run_reason }}'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -459,6 +460,10 @@ jobs:
           selector_result='${{ needs.shard_selector.result }}'
           lint_full_run='${{ needs.shard_selector.outputs.lint_full_run }}'
           lint_targets='${{ needs.shard_selector.outputs.lint_targets }}'
+          lint_full_run_reason='${{ needs.shard_selector.outputs.lint_full_run_reason }}'
+          if [[ -n "$lint_full_run_reason" ]]; then
+            echo "::notice::Lint running full: $lint_full_run_reason"
+          fi
           if [[ "$selector_result" == "success" && "$lint_full_run" != "true" && -n "$lint_targets" && "$lint_targets" != "null" ]]; then
             # Scoped run: the runner derives --cache args centrally from the
             # LLXPRT_LINT_CACHE env (it also reads the target list from env),

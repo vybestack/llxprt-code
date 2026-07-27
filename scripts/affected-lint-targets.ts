@@ -294,7 +294,8 @@ function selectFromPaths(
   const targetSet = new Set<string>();
   const pathReasons: LintPathReason[] = [];
 
-  for (const p of changedPaths) {
+  for (let i = 0; i < changedPaths.length; i++) {
+    const p = changedPaths[i];
     const pathClass = selectPathTargets(p, ctx);
     if (pathClass.fullRun) {
       pathReasons.push({
@@ -302,6 +303,16 @@ function selectFromPaths(
         reason: pathClass.fullRunReason ?? '',
         targets: [FULL_TARGET],
       });
+      // Record the remaining paths so the audit trail covers the complete
+      // set of changed files rather than omitting everything after the
+      // triggering path.
+      for (let j = i + 1; j < changedPaths.length; j++) {
+        pathReasons.push({
+          path: changedPaths[j],
+          reason: `not classified — earlier path triggered full run`,
+          targets: [FULL_TARGET],
+        });
+      }
       return fullRunResult(
         pathClass.fullRunReason ?? 'full-run triggered',
         pathReasons,
