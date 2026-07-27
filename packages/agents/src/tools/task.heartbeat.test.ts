@@ -184,6 +184,28 @@ describe('TaskHeartbeat unit', () => {
       status: { kind: 'liveness', seq: 7 },
     });
   });
+
+  it('survives a throwing updateOutput and keeps ticking', () => {
+    const updates: LiveOutputUpdate[] = [];
+    let callCount = 0;
+    const hb = startTaskHeartbeat((u) => {
+      callCount += 1;
+      updates.push(u);
+      if (callCount === 2) {
+        throw new Error('downstream stream error');
+      }
+    }, 100);
+
+    vi.advanceTimersByTime(100);
+    expect(updates).toHaveLength(1);
+    // Second tick throws; the heartbeat must reschedule anyway.
+    vi.advanceTimersByTime(100);
+    expect(updates).toHaveLength(2);
+    // Third tick proves the timer chain survived the exception.
+    vi.advanceTimersByTime(100);
+    expect(updates).toHaveLength(3);
+    hb.stop();
+  });
 });
 
 describe('TaskTool heartbeat integration', () => {
@@ -313,6 +335,12 @@ describe('TaskTool heartbeat integration', () => {
   });
 
   it('stops the heartbeat on Task timeout with no post-terminal status', async () => {
+    // timeout_seconds is shorter than one heartbeat interval (50ms << 10s),
+    // so the timeout fires before any heartbeat. The mock scope's
+    // runInteractive returns a plain Promise that does not observe the
+    // timeout controller's abort signal on its own, so the test drives the
+    // rejection to mirror the real subagent detecting the abort. This matches
+    // the established convention in task.timeout.test.ts.
     const { scope, reject } = createPendingScope();
     const tool = buildTool(scope);
     const updates: LiveOutputUpdate[] = [];
@@ -330,7 +358,7 @@ describe('TaskTool heartbeat integration', () => {
     await vi.advanceTimersByTimeAsync(5);
     expect(scope.runInteractive).toHaveBeenCalled();
 
-    // Advance past the 50ms task timeout.
+    // Advance past the 50ms task timeout; the timeout controller aborts.
     await vi.advanceTimersByTimeAsync(60);
     const abortError = new Error('Aborted');
     abortError.name = 'AbortError';

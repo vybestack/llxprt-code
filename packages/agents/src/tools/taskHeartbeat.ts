@@ -84,7 +84,19 @@ export function startTaskHeartbeat(
     if (stopped) return;
     seq += 1;
     heartbeatLogger.debug(() => `emit liveness seq=${seq}`);
-    updateOutput(createLivenessStatus(seq));
+    // The updateOutput callback is consumer-supplied and may throw on a
+    // downstream stream/serialization error. Such an error must not kill the
+    // timer chain: the heartbeat's whole purpose is to keep ticking across
+    // silent waits. Swallow the error (logged) and reschedule so an isolated
+    // callback failure cannot cause a false-positive outer-inactivity timeout.
+    try {
+      updateOutput(createLivenessStatus(seq));
+    } catch (error) {
+      heartbeatLogger.warn(
+        () =>
+          `liveness updateOutput threw (seq=${seq}); continuing: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     timerId = setTimeout(tick, intervalMs);
   };
 
