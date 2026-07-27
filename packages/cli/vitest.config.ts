@@ -10,6 +10,7 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
+import { isCoverageEnabled } from '../../vitest.coverage.js';
 import {
   buildTestGroups,
   INCLUDE_PATTERNS,
@@ -201,11 +202,17 @@ const baseExcludePatterns = isMultiRuntimeGuardrailRun
 
 // Shared Vite-level config that each routing project must carry so workspace
 // source aliases resolve identically to the root. Projects without
-// `extends: true` do not inherit root plugins/resolve, so they re-declare them.
-const projectResolve = {
+// `extends: true` do not inherit root plugins/resolve, so both levels use this
+// single source of truth.
+const sharedResolve = {
   conditions: ['node', 'import', 'module', 'browser', 'default'],
   extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
   alias: {
+    /**
+     * @plan:PLAN-20260603-ISSUE1584.P16
+     * @requirement:REQ-VERIFY-001
+     * @pseudocode verification.md lines 19-22
+     */
     'ajv/dist/2020.js': ajv2020Entry,
     ajv: ajvCjsEntry,
     fdir: fdirEntry,
@@ -253,7 +260,7 @@ const isMainConfig =
 // identically to the root.
 const routingProjects = testGroups.map((group) => ({
   plugins: [workspaceAliasPlugin],
-  resolve: projectResolve,
+  resolve: sharedResolve,
   test: {
     ...sharedTestOptions,
     name: group.name,
@@ -276,24 +283,7 @@ const routingProjects = testGroups.map((group) => ({
 export default defineConfig({
   plugins: [workspaceAliasPlugin],
   root: __dirname,
-  resolve: {
-    conditions: ['node', 'import', 'module', 'browser', 'default'],
-    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
-    alias: {
-      /**
-       * @plan:PLAN-20260603-ISSUE1584.P16
-       * @requirement:REQ-VERIFY-001
-       * @pseudocode verification.md lines 19-22
-       */
-      'ajv/dist/2020.js': ajv2020Entry,
-      ajv: ajvCjsEntry,
-      fdir: fdirEntry,
-      ink: inkStubPath,
-      'ink-testing-library': inkTestingLibraryPath,
-      [inkTestingLibraryActualPath]: inkTestingLibraryPath,
-      react: resolve(__dirname, '../../node_modules/react'),
-    },
-  },
+  resolve: sharedResolve,
   test: {
     include: INCLUDE_PATTERNS,
     exclude: baseExcludePatterns,
@@ -330,7 +320,7 @@ export default defineConfig({
     // through and causing sibling runs to enumerate the full group set.
     projects: isMainConfig ? routingProjects : undefined,
     coverage: {
-      enabled: true,
+      enabled: isCoverageEnabled,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],

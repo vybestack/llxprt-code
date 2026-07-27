@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { isCoverageEnabled } from '../../vitest.coverage.js';
 
 const require = createRequire(import.meta.url);
 
@@ -221,7 +222,7 @@ export default defineConfig({
       },
     },
     coverage: {
-      enabled: true,
+      enabled: isCoverageEnabled,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],

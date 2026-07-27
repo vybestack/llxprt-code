@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { isCoverageEnabled } from '../../vitest.coverage.js';
 
 const storagePackagePrefix = '@vybestack/llxprt-code-storage/';
 const storageEntry = fileURLToPath(
@@ -110,7 +111,7 @@ export default defineConfig({
         }
       : undefined,
     coverage: {
-      enabled: true,
+      enabled: isCoverageEnabled,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],

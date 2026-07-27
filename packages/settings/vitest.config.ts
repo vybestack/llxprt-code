@@ -6,6 +6,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+import { isCoverageEnabled } from '../../vitest.coverage.js';
 
 const settingsPackagePrefix = '@vybestack/llxprt-code-settings/';
 const settingsEntry = fileURLToPath(new URL('./index.ts', import.meta.url));
@@ -110,7 +111,7 @@ export default defineConfig({
       junit: 'junit.xml',
     },
     coverage: {
-      enabled: true,
+      enabled: isCoverageEnabled,
       provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],
