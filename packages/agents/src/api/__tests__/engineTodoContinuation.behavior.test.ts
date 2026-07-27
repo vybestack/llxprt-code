@@ -102,6 +102,19 @@ function scriptToolCallOnly(
 }
 
 describe('Engine task continuation and pause (issue #2657)', () => {
+  /**
+   * Shared assertion: a successful pause must stop the loop with no
+   * continuation text and no error events. Used by both the pause-stop
+   * test and the CLI/ACP parity test to avoid duplicated assertions.
+   */
+  function assertPauseStopsLoop(events: AgentEvent[]): void {
+    expect(events.filter(isToolCallEvent).length).toBeGreaterThanOrEqual(1);
+    expect(events.filter(isToolResultEvent).length).toBeGreaterThanOrEqual(1);
+    expect(countType(events, 'done')).toBe(1);
+    expect(events.filter(isTextEvent)).toHaveLength(0);
+    expect(events.filter(isErrorEvent)).toHaveLength(0);
+  }
+
   it('stops the loop after a successful pause tool call — no CLI React gate needed', async () => {
     // The engine must own pause detection. A successful pause must
     // terminate the loop without requiring a CLI React pause gate.
@@ -112,26 +125,8 @@ describe('Engine task continuation and pause (issue #2657)', () => {
     try {
       const events: AgentEvent[] = await drain(agent.stream('pause please'));
 
-      // A tool-call event surfaces for the pause tool.
-      const callEvents = events.filter(isToolCallEvent);
-      expect(callEvents.length).toBeGreaterThanOrEqual(1);
-      expect(callEvents[0].call.name).toBe('todo_pause');
-
-      // A tool-result event surfaces (the tool executed).
-      const resultEvents = events.filter(isToolResultEvent);
-      expect(resultEvents.length).toBeGreaterThanOrEqual(1);
-
-      // The loop terminates with exactly one done event.
-      expect(countType(events, 'done')).toBe(1);
-
-      // No text event from a continuation turn — the loop stopped.
-      const textEvents = events.filter(isTextEvent);
-      expect(textEvents).toHaveLength(0);
-
-      // No error events — the stream ended cleanly via pause, not from
-      // FakeProvider exhaustion or a tool failure.
-      const errorEvents = events.filter(isErrorEvent);
-      expect(errorEvents).toHaveLength(0);
+      expect(events.filter(isToolCallEvent)[0].call.name).toBe('todo_pause');
+      assertPauseStopsLoop(events);
     } finally {
       await cleanup();
     }
@@ -209,13 +204,8 @@ describe('Engine task continuation and pause (issue #2657)', () => {
     try {
       const events: AgentEvent[] = await drain(agent.stream('verify parity'));
 
-      // The observable contract: tool-call, tool-result, done.
-      // No continuation text — the engine stopped the loop.
-      expect(events.filter(isToolCallEvent).length).toBeGreaterThanOrEqual(1);
-      expect(events.filter(isToolResultEvent).length).toBeGreaterThanOrEqual(1);
-      expect(countType(events, 'done')).toBe(1);
-      expect(events.filter(isTextEvent)).toHaveLength(0);
-      expect(events.filter(isErrorEvent)).toHaveLength(0);
+      expect(events.length).toBeGreaterThan(0);
+      assertPauseStopsLoop(events);
     } finally {
       await cleanup();
     }
