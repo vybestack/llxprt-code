@@ -703,13 +703,17 @@ describe('Storage – legacy system-settings alias and defaults path', () => {
 
   it('honors the legacy alias when canonical is unset', () => {
     process.env[LEGACY] = '/legacy/settings.json';
-    expect(Storage.getSystemSettingsPath()).toBe('/legacy/settings.json');
+    expect(Storage.getSystemSettingsPath()).toBe(
+      path.resolve('/legacy/settings.json'),
+    );
   });
 
   it('canonical takes precedence over legacy when both are set', () => {
     process.env[CANONICAL] = '/canonical/settings.json';
     process.env[LEGACY] = '/legacy/settings.json';
-    expect(Storage.getSystemSettingsPath()).toBe('/canonical/settings.json');
+    expect(Storage.getSystemSettingsPath()).toBe(
+      path.resolve('/canonical/settings.json'),
+    );
   });
 
   it('ignores a relative legacy alias in favor of platform default', () => {
@@ -727,18 +731,24 @@ describe('Storage – legacy system-settings alias and defaults path', () => {
 
   it('getSystemDefaultsPath honors canonical defaults env', () => {
     process.env[CANONICAL_DEFAULTS] = '/canonical/defaults.json';
-    expect(Storage.getSystemDefaultsPath()).toBe('/canonical/defaults.json');
+    expect(Storage.getSystemDefaultsPath()).toBe(
+      path.resolve('/canonical/defaults.json'),
+    );
   });
 
   it('getSystemDefaultsPath honors legacy defaults alias', () => {
     process.env[LEGACY_DEFAULTS] = '/legacy/defaults.json';
-    expect(Storage.getSystemDefaultsPath()).toBe('/legacy/defaults.json');
+    expect(Storage.getSystemDefaultsPath()).toBe(
+      path.resolve('/legacy/defaults.json'),
+    );
   });
 
   it('getSystemDefaultsPath canonical takes precedence over legacy', () => {
     process.env[CANONICAL_DEFAULTS] = '/canonical/defaults.json';
     process.env[LEGACY_DEFAULTS] = '/legacy/defaults.json';
-    expect(Storage.getSystemDefaultsPath()).toBe('/canonical/defaults.json');
+    expect(Storage.getSystemDefaultsPath()).toBe(
+      path.resolve('/canonical/defaults.json'),
+    );
   });
 
   it('getSystemDefaultsPath ignores relative defaults override', () => {
@@ -750,7 +760,9 @@ describe('Storage – legacy system-settings alias and defaults path', () => {
 
   it('getSystemPoliciesDir is consistent with getSystemSettingsPath', () => {
     process.env[CANONICAL] = '/custom/dir/settings.json';
-    expect(Storage.getSystemPoliciesDir()).toBe('/custom/dir/policies');
+    expect(Storage.getSystemPoliciesDir()).toBe(
+      path.resolve('/custom/dir/policies'),
+    );
   });
 });
 
