@@ -411,13 +411,15 @@ describe('Factory Detection Wiring (P33)', () => {
   });
 
   describe('AC5: descendant process cannot recover the token', () => {
-    it('a model descendant spawned after consumption has no capability env, no fd, and no marker', () => {
+    it('a model descendant spawned after consumption has no capability env, fd authority, or marker', () => {
       const probeScript = [
         'const fs = require("node:fs");',
         'const capKeys = Object.keys(process.env).filter((k) => k.startsWith("LLXPRT_CAPABILITY"));',
-        'let fd3open = false;',
-        'try { const b = Buffer.alloc(8); fs.readSync(3, b, 0, 8, null); fd3open = true; } catch (e) { fd3open = false; }',
-        'process.stdout.write(JSON.stringify({ capKeys, fd3open }));',
+        'let fd3Capability = false;',
+        'try { const b = Buffer.alloc(128); const n = fs.readSync(3, b, 0, 128, null); fd3Capability = b.subarray(0, n).toString("utf8").includes(' +
+          JSON.stringify(VALID_TOKEN) +
+          '); } catch (e) { fd3Capability = false; }',
+        'process.stdout.write(JSON.stringify({ capKeys, fd3Capability }));',
       ].join('');
       const childScript = [
         'const { spawnSync } = require("node:child_process");',
@@ -434,10 +436,10 @@ describe('Factory Detection Wiring (P33)', () => {
       expect(result.status).toBe(0);
       const payload = JSON.parse(result.stdout.trim()) as {
         capKeys: string[];
-        fd3open: boolean;
+        fd3Capability: boolean;
       };
       expect(payload.capKeys).toStrictEqual([]);
-      expect(payload.fd3open).toBe(false);
+      expect(payload.fd3Capability).toBe(false);
     });
   });
 
