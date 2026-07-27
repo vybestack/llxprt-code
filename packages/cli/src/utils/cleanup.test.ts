@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { FileOutput, ShellExecutionService } from '@vybestack/llxprt-code-core';
 import {
   __resetCleanupStateForTesting,
@@ -420,11 +421,17 @@ describe('cleanup-state module owns the reset state', () => {
 });
 
 describe('cleanup-state dependency isolation', () => {
-  it('cleanup-state.ts source has zero import statements (pure lightweight module)', () => {
-    const source = readFileSync(resolve(__dirname, 'cleanup-state.ts'), 'utf8');
-    // Count import statements — this module must have none at all
-    const lines = source.split('\n');
-    const importLines = lines.filter((line) => line.match(/^\s*import\s/));
-    expect(importLines).toHaveLength(0);
+  it('cleanup-state.ts source has zero import declarations (pure lightweight module)', () => {
+    const filePath = resolve(__dirname, 'cleanup-state.ts');
+    const sourceFile = ts.createSourceFile(
+      filePath,
+      readFileSync(filePath, 'utf8'),
+      ts.ScriptTarget.Latest,
+      false,
+      ts.ScriptKind.TS,
+    );
+    const imports = sourceFile.statements.filter(ts.isImportDeclaration);
+
+    expect(imports).toHaveLength(0);
   });
 });
