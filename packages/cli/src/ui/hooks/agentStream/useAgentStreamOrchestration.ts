@@ -55,7 +55,6 @@ export interface AgentStreamOrchestrationDeps {
   setShellInputFocused: (value: boolean) => void;
   terminalWidth?: number;
   terminalHeight?: number;
-  onTodoPause?: () => void;
   onEditorOpen: () => void;
   recordingIntegration?: RecordingIntegration;
   runtimeMessageBus?: MessageBus;
@@ -266,7 +265,6 @@ function useEventStreamForAgent(
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => st.setPendingHistoryItem(null),
     performMemoryRefresh: args.performMemoryRefresh,
-    onTodoPause: args.onTodoPause,
     markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
     onToolCallsUpdate: scheduler.replaceToolCalls,
     outputUpdateHandler: scheduler.updateToolOutput,

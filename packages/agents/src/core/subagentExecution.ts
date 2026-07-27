@@ -469,6 +469,11 @@ export async function initInteractiveScheduler(
 ) {
   const channel = createCompletionChannel(ctx);
 
+  // Issue #2657: The engine fallback here is the canonical scheduler
+  // creation path. A consumer-provided schedulerFactory (e.g. the CLI's
+  // display-callback factory in interactiveToolScheduler.ts) is purely
+  // for UI-side display callbacks — NOT for fixing scheduler.schedule
+  // receiver binding. Both paths wrap schedule in a closure below.
   const schedulerPromise = options?.schedulerFactory
     ? Promise.resolve(
         options.schedulerFactory({
@@ -532,9 +537,9 @@ export async function initInteractiveScheduler(
     scheduler: {
       // Preserve the scheduler receiver: copying scheduler.schedule directly
       // loses `this`, causing CoreToolScheduler.schedule() to crash with
-      // "this.isRunning is not a function" (issue #2653). A closure keeps
-      // the original instance as the receiver, matching the pattern in
-      // interactiveToolScheduler.ts.
+      // "this.isRunning is not a function" (issue #2653). This closure is the
+      // single canonical binding point — consumers never need to bind
+      // scheduler.schedule themselves (issue #2657).
       schedule: (
         request: Parameters<typeof scheduler.schedule>[0],
         signal: Parameters<typeof scheduler.schedule>[1],

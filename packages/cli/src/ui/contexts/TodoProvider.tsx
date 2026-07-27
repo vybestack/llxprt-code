@@ -27,7 +27,6 @@ interface TodoProviderProps {
  */
 function useTaskState(sessionId: string, agentId: string | undefined) {
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [paused, setPausedState] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,16 +41,13 @@ function useTaskState(sessionId: string, agentId: string | undefined) {
         agentId,
       );
       const loadedTodos = await store.readTodos();
-      const pausedState = await store.readPausedState();
       setTodos(loadedTodos);
-      setPausedState(pausedState);
       setError(null);
     } catch (err) {
       setError(
         `Failed to load todos: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
       setTodos([]);
-      setPausedState(false);
     } finally {
       setLoading(false);
     }
@@ -60,8 +56,6 @@ function useTaskState(sessionId: string, agentId: string | undefined) {
   return {
     todos,
     setTodos,
-    paused,
-    setPausedState,
     loading,
     setLoading,
     error,
@@ -105,7 +99,6 @@ function useTaskPersistence(
   sessionId: string,
   agentId: string | undefined,
   setTodos: (todos: Todo[]) => void,
-  setPausedState: (paused: boolean) => void,
   setError: (error: string | null) => void,
 ) {
   const updateTodos = useCallback(
@@ -127,26 +120,7 @@ function useTaskPersistence(
     [agentId, sessionId, setTodos, setError],
   );
 
-  const setPaused = useCallback(
-    (newPaused: boolean) => {
-      setPausedState(newPaused);
-      const store = new TodoStore(
-        sessionId,
-        {
-          dataDirResolver: () => Storage.getGlobalDataDir(),
-        },
-        agentId,
-      );
-      store.writePausedState(newPaused).catch((err: unknown) => {
-        setError(
-          `Failed to save paused state: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
-    },
-    [agentId, sessionId, setPausedState, setError],
-  );
-
-  return { updateTodos, setPaused };
+  return { updateTodos };
 }
 
 /**
@@ -162,7 +136,6 @@ function useTaskManagement(sessionId: string, agentId: string | undefined) {
     sessionId,
     agentId,
     state.setTodos,
-    state.setPausedState,
     state.setError,
   );
 
@@ -175,12 +148,10 @@ function useTaskManagement(sessionId: string, agentId: string | undefined) {
 
   return {
     todos: state.todos,
-    paused: state.paused,
     loading: state.loading,
     error: state.error,
     refreshTodos: state.refreshTodos,
     updateTodos: persistence.updateTodos,
-    setPaused: persistence.setPaused,
   };
 }
 
@@ -196,8 +167,6 @@ export const TodoProvider: React.FC<TodoProviderProps> = ({
       todos: management.todos,
       updateTodos: management.updateTodos,
       refreshTodos: management.refreshTodos,
-      paused: management.paused,
-      setPaused: management.setPaused,
       loading: management.loading,
       error: management.error,
     }),
@@ -205,8 +174,6 @@ export const TodoProvider: React.FC<TodoProviderProps> = ({
       management.todos,
       management.updateTodos,
       management.refreshTodos,
-      management.paused,
-      management.setPaused,
       management.loading,
       management.error,
     ],
