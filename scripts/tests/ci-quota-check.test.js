@@ -105,7 +105,11 @@ describe('ci quota key selection outputs', () => {
 
     await main();
 
-    expect(existsSync(process.env.GITHUB_ENV)).toBe(false);
+    // GITHUB_OUTPUT is absent, but the selected key must still propagate to
+    // GITHUB_ENV so the downstream agent step can authenticate.
+    const envContent = readFileSync(process.env.GITHUB_ENV, 'utf8');
+    expect(envContent).toContain('OPENAI_API_KEY');
+    expect(envContent).toContain('primary-secret');
   });
 
   it('falls back to first configured key when both Synthetic quota probes fail', async () => {
@@ -125,7 +129,10 @@ describe('ci quota key selection outputs', () => {
     expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe(
       'selected_key=primary\n',
     );
-    expect(existsSync(process.env.GITHUB_ENV)).toBe(false);
+    // The selected key must propagate to GITHUB_ENV for the agent step.
+    expect(readFileSync(process.env.GITHUB_ENV, 'utf8')).toContain(
+      'primary-secret',
+    );
   });
 
   it('falls back to secondary when primary is absent and both probes fail', async () => {
@@ -145,7 +152,10 @@ describe('ci quota key selection outputs', () => {
     expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe(
       'selected_key=secondary\n',
     );
-    expect(existsSync(process.env.GITHUB_ENV)).toBe(false);
+    // The selected key must propagate to GITHUB_ENV for the agent step.
+    expect(readFileSync(process.env.GITHUB_ENV, 'utf8')).toContain(
+      'secondary-secret',
+    );
   });
 
   it('selects key2 when key1 probe fails but key2 succeeds', async () => {
@@ -239,7 +249,10 @@ describe('ci quota key selection outputs', () => {
     expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe(
       'selected_key=secondary\n',
     );
-    expect(existsSync(process.env.GITHUB_ENV)).toBe(false);
+    // The selected key must propagate to GITHUB_ENV for the agent step.
+    expect(readFileSync(process.env.GITHUB_ENV, 'utf8')).toContain(
+      'secondary-secret',
+    );
   });
 
   it('exits with error for non-Synthetic when no keys are configured', async () => {
@@ -351,7 +364,10 @@ describe('ci quota key selection outputs', () => {
     expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe(
       'selected_key=primary\n',
     );
-    expect(existsSync(process.env.GITHUB_ENV)).toBe(false);
+    // The selected key must propagate to GITHUB_ENV for the agent step.
+    expect(readFileSync(process.env.GITHUB_ENV, 'utf8')).toContain(
+      'primary-secret',
+    );
   });
 
   it('writes no GITHUB_OUTPUT or GITHUB_ENV content when the quota check rejects', async () => {
