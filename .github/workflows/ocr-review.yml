@@ -2656,6 +2656,8 @@ jobs:
                   core.warning(redactSecretDiagnostics(
                     'Could not confirm all inline comments are present after fallback; leaving publication ambiguous.',
                   ));
+                } else {
+                  batchPublicationAmbiguous = false;
                 }
               }
               }
@@ -3123,7 +3125,7 @@ jobs:
                 policy_tiered: summaryRouted.length + overflowRouted.length,
                 inline_overflow: overflowRouted.length,
                 inline: postedInline,
-                summary: lineless.length + overflowRouted.length,
+                summary: lineless.length + summaryRouted.length + overflowRouted.length,
                 overflow: overflowRouted.length,
                 failed: failedInline,
                 severity_distribution: severityDistribution,
