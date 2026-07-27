@@ -800,8 +800,14 @@ jobs:
         run: |-
           npm run lint:test-shards
 
-      - name: 'Limit Vitest forks on Windows'
-        if: runner.os == 'Windows'
+      # Cap parallel forks on Windows and macOS. Under heavy load a high fork
+      # count saturates the vitest main process event loop so worker RPC
+      # acknowledgments (e.g. onTaskUpdate) time out (birpc DEFAULT_TIMEOUT
+      # 60s), producing spurious `[vitest-worker]: Timeout calling ...`
+      # unhandled errors that fail the shard even when every test passed.
+      # Ubuntu runners have enough headroom without a cap.
+      - name: 'Limit Vitest forks on Windows and macOS'
+        if: runner.os == 'Windows' || runner.os == 'macOS'
         run: |
           echo "VITEST_MAX_FORKS=2" >> "$GITHUB_ENV"
           echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
