@@ -21,6 +21,7 @@ import {
   CACHE_EFFICIENCY_MEDIUM,
 } from '../utils/displayUtils.js';
 import { computeSessionStats } from '../utils/computeStats.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 // A more flexible and powerful StatRow component
 interface StatRowProps {
@@ -283,7 +284,7 @@ const ModelUsageTable: React.FC<{
     <Box flexDirection="column" marginTop={1}>
       <ModelTableHeader />
       <Box
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderBottom={true}
         borderTop={false}
         borderLeft={false}
@@ -652,7 +653,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}

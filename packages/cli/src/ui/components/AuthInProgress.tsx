@@ -10,6 +10,10 @@ import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import {
+  getBorderStyle,
+  getSpinnerType,
+} from '../contexts/UnicodeRenderingContext.js';
 
 interface AuthInProgressProps {
   onTimeout: () => void;
@@ -40,7 +44,7 @@ export function AuthInProgress({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}
@@ -53,8 +57,8 @@ export function AuthInProgress({
       ) : (
         <Box>
           <Text color={Colors.Foreground}>
-            <Spinner type="dots" /> Waiting for auth... (Press ESC or CTRL+C to
-            cancel)
+            <Spinner type={getSpinnerType('dots')} /> Waiting for auth... (Press
+            ESC or CTRL+C to cancel)
           </Text>
         </Box>
       )}

@@ -9,6 +9,7 @@ import { type ReactNode } from 'react';
 import { theme } from '../semantic-colors.js';
 import { MarkdownDisplay } from '../utils/MarkdownDisplay.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 type ConsentPromptProps = {
   // If a simple string is given, it will render using markdown by default.
@@ -22,7 +23,7 @@ export const ConsentPrompt = (props: ConsentPromptProps) => {
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}

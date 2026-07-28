@@ -123,8 +123,28 @@ export function tokenLimit(
  * Returns true when *value* is a positive, finite number suitable as a
  * context-window override.
  */
-function isPositiveFiniteLimit(value: unknown): value is number {
+export function isPositiveFiniteLimit(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * Normalize a raw provider-reported context limit (from
+ * `IProvider.getContextLimit()`) into a usable number or `undefined`.
+ *
+ * The active provider may report `undefined`, a non-number, a non-positive
+ * value, or `NaN`/`Infinity` (e.g. when a load-balancer pool has no resolvable
+ * sub-profile context windows). This collapses all of those to `undefined` so
+ * `resolveEffectiveContextLimit` cleanly falls back to the model-name lookup.
+ *
+ * Single source of truth for issue #2270 DRY: both the core runtime
+ * (`createAgentRuntimeContext`) and the agents layer
+ * (`contextLimitResolver`) delegate provider-limit validation here so a future
+ * change to the acceptance predicate only needs one edit.
+ */
+export function resolveProviderReportedLimit(
+  value: unknown,
+): number | undefined {
+  return isPositiveFiniteLimit(value) ? value : undefined;
 }
 
 /**

@@ -9,6 +9,7 @@ import { Text, Box } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
 import { SCREEN_READER_USER_PREFIX } from '../../textConstants.js';
 import { isSlashCommand as checkIsSlashCommand } from '../../utils/commandUtils.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface UserMessageProps {
   text: string;
@@ -28,7 +29,7 @@ export const UserMessage: React.FC<UserMessageProps> = ({ text }) => {
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={borderColor}
       flexDirection="row"
       paddingX={2}

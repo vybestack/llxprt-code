@@ -11,6 +11,7 @@ import Spinner from 'ink-spinner';
 import { Colors } from '../../colors.js';
 import { SCREEN_READER_MODEL_PREFIX } from '../../textConstants.js';
 import { CompressionStatus } from '@vybestack/llxprt-code-core';
+import { getSpinnerType } from '../../contexts/UnicodeRenderingContext.js';
 
 export interface CompressionDisplayProps {
   compression: CompressionProps;
@@ -66,7 +67,7 @@ export const CompressionMessage: React.FC<CompressionDisplayProps> = ({
     <Box flexDirection="row">
       <Box marginRight={1}>
         {compression.isPending ? (
-          <Spinner type="dots" />
+          <Spinner type={getSpinnerType('dots')} />
         ) : (
           <Text color={Colors.AccentPurple}>✦</Text>
         )}

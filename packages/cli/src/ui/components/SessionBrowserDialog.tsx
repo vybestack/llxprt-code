@@ -21,6 +21,7 @@ import { useSessionBrowser } from '../hooks/useSessionBrowser.js';
 import type { EnrichedSessionSummary } from '../hooks/useSessionBrowser.js';
 import { formatRelativeTime } from '../../utils/formatRelativeTime.js';
 import { truncateEnd } from '../utils/responsive.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 /**
  * Props for the SessionBrowserDialog component
@@ -212,7 +213,7 @@ const LoadingState: React.FC<{ isNarrow: boolean }> = ({ isNarrow }) => {
   }
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
@@ -246,7 +247,7 @@ const EmptyState: React.FC<{ isNarrow: boolean }> = ({ isNarrow }) => {
   }
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
@@ -658,7 +659,7 @@ export function SessionBrowserDialog(
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}

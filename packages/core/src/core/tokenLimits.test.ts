@@ -9,6 +9,8 @@ import {
   tokenLimit,
   DEFAULT_TOKEN_LIMIT,
   resolveEffectiveContextLimit,
+  resolveProviderReportedLimit,
+  isPositiveFiniteLimit,
   resolveOrderedRuleFromCatalog,
 } from './tokenLimits.js';
 import catalogData from './model-limits.json' with { type: 'json' };
@@ -371,5 +373,58 @@ describe('resolveEffectiveContextLimit', () => {
     expect(resolveEffectiveContextLimit('gpt-4o', 500_000, undefined)).toBe(
       500_000,
     );
+  });
+});
+
+describe('isPositiveFiniteLimit', () => {
+  it('accepts a positive finite number', () => {
+    expect(isPositiveFiniteLimit(1)).toBe(true);
+    expect(isPositiveFiniteLimit(200_000)).toBe(true);
+  });
+
+  it('rejects zero, negatives, NaN, and Infinity', () => {
+    expect(isPositiveFiniteLimit(0)).toBe(false);
+    expect(isPositiveFiniteLimit(-1)).toBe(false);
+    expect(isPositiveFiniteLimit(NaN)).toBe(false);
+    expect(isPositiveFiniteLimit(Infinity)).toBe(false);
+    expect(isPositiveFiniteLimit(-Infinity)).toBe(false);
+  });
+
+  it('rejects non-number values', () => {
+    expect(isPositiveFiniteLimit(undefined)).toBe(false);
+    expect(isPositiveFiniteLimit(null)).toBe(false);
+    expect(isPositiveFiniteLimit('200000')).toBe(false);
+    expect(isPositiveFiniteLimit(true)).toBe(false);
+  });
+});
+
+describe('resolveProviderReportedLimit', () => {
+  it('returns a positive finite provider limit unchanged', () => {
+    expect(resolveProviderReportedLimit(200_000)).toBe(200_000);
+    expect(resolveProviderReportedLimit(1)).toBe(1);
+  });
+
+  it('returns undefined for undefined (provider did not report a limit)', () => {
+    expect(resolveProviderReportedLimit(undefined)).toBeUndefined();
+  });
+
+  it('returns undefined for null (no active provider / method absent)', () => {
+    expect(resolveProviderReportedLimit(null)).toBeUndefined();
+  });
+
+  it('returns undefined for non-positive values', () => {
+    expect(resolveProviderReportedLimit(0)).toBeUndefined();
+    expect(resolveProviderReportedLimit(-1)).toBeUndefined();
+  });
+
+  it('returns undefined for NaN and Infinity', () => {
+    expect(resolveProviderReportedLimit(NaN)).toBeUndefined();
+    expect(resolveProviderReportedLimit(Infinity)).toBeUndefined();
+  });
+
+  it('returns undefined for non-number raw values', () => {
+    expect(resolveProviderReportedLimit('200000')).toBeUndefined();
+    expect(resolveProviderReportedLimit(true)).toBeUndefined();
+    expect(resolveProviderReportedLimit({ limit: 200_000 })).toBeUndefined();
   });
 });

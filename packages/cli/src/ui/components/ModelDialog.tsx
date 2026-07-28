@@ -13,6 +13,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 // Matches a single printable ASCII character (space through tilde).
 const PRINTABLE_ASCII = /[\x20-\x7E]/;
@@ -693,7 +694,7 @@ const ModelsDialogBody: React.FC<{
   visibleModels,
 }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.border.default}
     flexDirection="column"
     padding={1}
@@ -810,7 +811,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   if (isLoading) {
     return (
       <Box
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={SemanticColors.border.default}
         flexDirection="column"
         padding={1}

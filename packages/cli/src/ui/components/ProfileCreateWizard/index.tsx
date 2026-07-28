@@ -18,6 +18,7 @@ import { AuthenticationStep } from './AuthenticationStep.js';
 import { AdvancedParamsStep } from './AdvancedParamsStep.js';
 import { ProfileSaveStep } from './ProfileSaveStep.js';
 import { ProfileSuccessSummary } from './ProfileSuccessSummary.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 const INITIAL_STATE: WizardState = {
   currentStep: WizardStep.PROVIDER_SELECT,
@@ -32,7 +33,7 @@ const CancelConfirmDialog: React.FC<{
   handleCancelDialogSelect: (value: string) => void;
 }> = ({ state, handleCancelDialogSelect }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={Colors.Gray}
     flexDirection="column"
     padding={1}
@@ -308,7 +309,7 @@ export const ProfileCreateWizard: React.FC<ProfileCreateWizardProps> = ({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}
