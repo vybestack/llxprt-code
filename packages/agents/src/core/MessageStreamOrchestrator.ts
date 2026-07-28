@@ -305,12 +305,13 @@ export class MessageStreamOrchestrator {
 
     const chat = getChat();
     const effectiveIdentity = getEffectiveModelIdentity();
+    const configuredContextLimit = getTokenLimitForConfiguredContext(
+      effectiveIdentity.model,
+      config,
+      this.deps.resolveTokenLimit,
+    );
     const remainingTokenCount =
-      getTokenLimitForConfiguredContext(
-        effectiveIdentity.model,
-        config,
-        this.deps.resolveTokenLimit,
-      ) - chat.getLastPromptTokenCount();
+      configuredContextLimit - chat.getProjectedPromptBaseline();
 
     const fallback = estimateStructuredTokens(initialRequest);
     const recordEstimate = (estimatedTokens: number): void => {
@@ -345,6 +346,7 @@ export class MessageStreamOrchestrator {
       promptId: ctx.prompt_id,
       estimatedRequestTokenCount,
       remainingTokenCount,
+      configuredContextLimit,
     });
     if (proceed) return undefined;
     yield {
