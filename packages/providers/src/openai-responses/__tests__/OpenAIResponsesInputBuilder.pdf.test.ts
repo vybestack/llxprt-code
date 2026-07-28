@@ -409,7 +409,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
           ],
           buildContext(),
         ),
-      ).toThrow(new RegExp(`50000001.*50000000|50\\\\s*MB`));
+      ).toThrow(new RegExp(`${overBytes}.*${MAX_BYTES}.*50\\s*MB`, 'i'));
     });
 
     it('fails with an unambiguous error including exact actual/allowed bytes and 50 MB', () => {

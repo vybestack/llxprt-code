@@ -431,8 +431,9 @@ describe('inlineBase64ByteLength @issue:2608', () => {
   });
 
   it('computes correct length for unpadded base64', () => {
-    const padded = Buffer.from('abc').toString('base64');
-    const data = `data:application/pdf;base64,${padded.endsWith('=') ? padded.slice(0, -1) : padded}`;
-    expect(inlineBase64ByteLength(data)).toBe(3);
+    const unpadded = Buffer.from('ab').toString('base64').slice(0, -1);
+    expect(
+      inlineBase64ByteLength(`data:application/pdf;base64,${unpadded}`),
+    ).toBe(2);
   });
 });
