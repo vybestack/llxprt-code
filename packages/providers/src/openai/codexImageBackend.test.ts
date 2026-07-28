@@ -244,6 +244,18 @@ describe('CodexImageBackend', () => {
         backend.generate({ prompt: 'hello' }, new AbortController().signal),
       ).rejects.toBeInstanceOf(ImageGenerationError);
     });
+
+    it('throws ImageGenerationError when data[0] lacks b64_json', async () => {
+      const { fetchImpl } = makeStubFetch({
+        status: 200,
+        body: { data: [{ url: 'https://example.com/img.png' }] },
+      });
+      const backend = makeBackend({ fetchImpl });
+
+      await expect(
+        backend.generate({ prompt: 'hello' }, new AbortController().signal),
+      ).rejects.toBeInstanceOf(ImageGenerationError);
+    });
   });
 
   describe('A7 — abort propagation', () => {
@@ -262,6 +274,65 @@ describe('CodexImageBackend', () => {
           controller.signal,
         ),
       ).rejects.toThrow('aborted');
+    });
+
+    it('forwards the abort signal to the underlying fetch call', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      const fetchImpl: typeof fetch = ((
+        input: string | URL | Request,
+        init?: RequestInit,
+      ) => {
+        capturedSignal = init?.signal;
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] }), {
+            status: 200,
+          }),
+        );
+      }) as typeof fetch;
+
+      const backend = makeBackend({ fetchImpl });
+      const controller = new AbortController();
+      await backend.generate({ prompt: 'hello' }, controller.signal);
+
+      expect(capturedSignal).toBe(controller.signal);
+    });
+  });
+
+  describe('n validation', () => {
+    it('rejects n > 1 before any network call', async () => {
+      let fetchCalled = false;
+      const fetchImpl: typeof fetch = (() => {
+        fetchCalled = true;
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }) as typeof fetch;
+      const backend = makeBackend({ fetchImpl });
+
+      await expect(
+        backend.generate(
+          { prompt: 'hello', n: 2 },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow('n=1');
+
+      expect(fetchCalled).toBe(false);
+    });
+
+    it('rejects n < 1 before any network call', async () => {
+      let fetchCalled = false;
+      const fetchImpl: typeof fetch = (() => {
+        fetchCalled = true;
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      }) as typeof fetch;
+      const backend = makeBackend({ fetchImpl });
+
+      await expect(
+        backend.generate(
+          { prompt: 'hello', n: 0 },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow('n=1');
+
+      expect(fetchCalled).toBe(false);
     });
   });
 

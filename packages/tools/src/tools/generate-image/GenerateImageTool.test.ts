@@ -145,4 +145,45 @@ describe('GenerateImageTool', () => {
       expect(result.error?.type).toBe(ToolErrorType.TIMEOUT);
     });
   });
+
+  describe('n > 1 rejection', () => {
+    it('rejects n > 1 with INVALID_TOOL_PARAMS before calling the backend', async () => {
+      const { backend, state } = makeStubBackend({
+        mimeType: 'image/png',
+        encoding: 'base64',
+        data: 'aGVsbG8=',
+      });
+      const tool = new GenerateImageTool({ resolveBackend: () => backend });
+
+      const result = await tool
+        .build({ prompt: 'a sunset', n: 3 })
+        .execute(new AbortController().signal);
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+      expect(state.generateCalls).toHaveLength(0);
+    });
+  });
+
+  describe('generic backend error mapping', () => {
+    it('maps a generic backend Error to EXECUTION_FAILED', async () => {
+      const { backend } = makeStubBackend(
+        {
+          mimeType: 'image/png',
+          encoding: 'base64',
+          data: 'aGVsbG8=',
+        },
+        { throwOnGenerate: new Error('network failure') },
+      );
+      const tool = new GenerateImageTool({ resolveBackend: () => backend });
+
+      const result = await tool
+        .build({ prompt: 'a sunset' })
+        .execute(new AbortController().signal);
+
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+      expect(result.error?.message).toContain('network failure');
+    });
+  });
 });

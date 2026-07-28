@@ -105,6 +105,14 @@ export class CodexImageBackend implements ImageGenerationBackend {
     // A4: validate before any network call.
     validateImagePrompt(request.prompt);
 
+    // The backend contract returns a single image; reject invalid n to avoid
+    // silent data loss (n > 1) or a confusing empty response (n < 1).
+    if (request.n !== undefined && request.n !== 1) {
+      throw new ImageValidationError(
+        `Codex image generation only supports n=1 (received n=${request.n}).`,
+      );
+    }
+
     const accessToken = await this.getAccessToken();
     const accountId = await this.getAccountId();
     const endpoint = buildCodexImageGenerateEndpoint(this.getBaseUrl());
@@ -148,17 +156,19 @@ export class CodexImageBackend implements ImageGenerationBackend {
       );
     }
 
+    // Read the body once as text, then parse — response streams can only be
+    // consumed a single time, so reading text after a failed .json() yields ''.
+    const rawBody = await response.text().catch(() => '');
     let parsed: CodexImageGenerateResponse;
     try {
-      parsed = (await response.json()) as CodexImageGenerateResponse;
+      parsed = JSON.parse(rawBody) as CodexImageGenerateResponse;
     } catch (jsonError) {
-      const bodyText = await response.text().catch(() => '');
       throw new ImageGenerationError(
         'Codex image generation returned a non-JSON response.',
         {
           status: response.status,
           endpoint,
-          bodySnippet: truncateForSnippet(bodyText),
+          bodySnippet: truncateForSnippet(rawBody),
           cause: jsonError,
         },
       );
