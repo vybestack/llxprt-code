@@ -192,7 +192,7 @@ async function constructForegroundAgentAndDispatch(
   // Configure Unicode rendering before any Ink render (including the MCP
   // initialization spinner inside constructAgentWithSpinner) so that Windows
   // consoles with non-UTF-8 codepages fall back to ASCII borders/spinners.
-  configureUnicodeSupport(settings.merged.ui?.unicode ?? 'auto');
+  configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
   const agent = await constructAgentWithSpinner(
     config,
     providerActivation.token,

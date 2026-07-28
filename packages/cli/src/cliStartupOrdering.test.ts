@@ -201,7 +201,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     }));
 
     vi.doMock('./config/settings.js', () => ({
-      loadSettings: () => ({ merged: {}, errors: [] }),
+      loadSettings: () => ({ merged: { ui: { unicode: 'auto' } }, errors: [] }),
     }));
 
     vi.doMock('./cliBootstrap.js', () => ({
