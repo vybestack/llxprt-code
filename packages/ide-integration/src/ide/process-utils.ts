@@ -66,12 +66,17 @@ function tokenizeCommand(command: string): readonly string[] {
  * does not exist (the issue #2656 regression).
  */
 function isIdeProcess(processInfo: ProcessInfo): boolean {
-  const nameBase = path.basename(processInfo.name).toLowerCase();
+  // Use path.win32.basename because this function only ever inspects Windows
+  // process data (it is called exclusively from getIdeProcessInfoForWindows).
+  // On a POSIX host (e.g. Linux CI), path.basename does not treat `` as a
+  // separator, so a Windows path like `C:\Program Files\Code.exe` would not
+  // reduce to `Code.exe` and matching would silently fail.
+  const nameBase = path.win32.basename(processInfo.name).toLowerCase();
   const matchesByName =
     Boolean(nameBase) && IDE_EXECUTABLE_BASENAMES.has(nameBase);
   const tokens = tokenizeCommand(processInfo.command);
   const commandFirstToken = tokens[0] ?? '';
-  const commandBase = path.basename(commandFirstToken).toLowerCase();
+  const commandBase = path.win32.basename(commandFirstToken).toLowerCase();
   const matchesByCommand =
     Boolean(commandBase) && IDE_EXECUTABLE_BASENAMES.has(commandBase);
   if (!matchesByName && !matchesByCommand) {
