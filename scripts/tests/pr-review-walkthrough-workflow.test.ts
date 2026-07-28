@@ -63,6 +63,12 @@ function findStepByName(
   return job.steps.find((step) => step.name === name);
 }
 
+function requireStepByName(job: WorkflowJob, name: string): WorkflowStep {
+  const step = job.steps.find((s) => s.name === name);
+  expect(step, `review job should have a step named "${name}"`).toBeTruthy();
+  return step as WorkflowStep;
+}
+
 function requireStepById(job: WorkflowJob, id: string): WorkflowStep {
   const step = job.steps.find((s) => s.id === id);
   expect(step, `review job should have a step with id "${id}"`).toBeTruthy();
@@ -105,6 +111,9 @@ function evalStepIf(
   let normalized = String(expr).trim();
   if (normalized.startsWith('${{') && normalized.endsWith('}}')) {
     normalized = normalized.slice(3, -2).trim();
+  }
+  if (normalized === '') {
+    return true;
   }
   normalized = normalized.replace(/\s+/g, ' ');
   normalized = normalized.replace(
@@ -530,12 +539,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     }
 
     function stepByName(name: string): WorkflowStep {
-      const step = reviewJob.steps.find((s) => s.name === name);
-      expect(
-        step,
-        `review job should have a step named "${name}"`,
-      ).toBeTruthy();
-      return step as WorkflowStep;
+      return requireStepByName(reviewJob, name);
     }
 
     // --- A1: Every advisory step has continue-on-error: true ---
@@ -582,6 +586,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(
         evalStepIf(walkthrough.if, {
           outcomes: { install: 'failure', quota: 'success' },
+          outputs: { issue_gate: { should_review: 'true' } },
         }),
       ).toBe(false);
     });
@@ -591,6 +596,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(
         evalStepIf(walkthrough.if, {
           outcomes: { install: 'success', quota: 'failure' },
+          outputs: { issue_gate: { should_review: 'true' } },
         }),
       ).toBe(false);
     });
@@ -600,8 +606,19 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(
         evalStepIf(walkthrough.if, {
           outcomes: { install: 'success', quota: 'success' },
+          outputs: { issue_gate: { should_review: 'true' } },
         }),
       ).toBe(true);
+    });
+
+    it('walkthrough step does not run when issue_gate says false', () => {
+      const walkthrough = stepById('walkthrough');
+      expect(
+        evalStepIf(walkthrough.if, {
+          outcomes: { install: 'success', quota: 'success' },
+          outputs: { issue_gate: { should_review: 'false' } },
+        }),
+      ).toBe(false);
     });
 
     // --- A5: Diagnostics upload under always(), capturing zero-exit parse artifacts ---
@@ -697,6 +714,11 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   });
 
   describe('injected-failure scenario coverage (Issue #2778)', () => {
+    // These tests use optional find (returning WorkflowStep | undefined)
+    // because they pass results to continueOnError(), which handles
+    // undefined by returning false. This is intentionally different from the
+    // non-blocking block's requireStepByName/requireStepById which assert
+    // step existence.
     function stepByName(name: string): WorkflowStep | undefined {
       return reviewJob.steps.find((s) => s.name === name);
     }
