@@ -119,9 +119,12 @@ function evalBoolean(expr) {
       pos += 1;
       const value = parseOr();
       skipSpaces();
-      if (expr[pos] === ')') {
-        pos += 1;
+      if (expr[pos] !== ')') {
+        throw new Error(
+          `Invalid boolean expression: expected ')' at ${pos} in "${expr}"`,
+        );
       }
+      pos += 1;
       return value;
     }
     if (expr[pos] === '!') {
@@ -129,7 +132,9 @@ function evalBoolean(expr) {
       skipSpaces();
       return !parsePrimary();
     }
-    return false;
+    throw new Error(
+      `Invalid boolean expression: unexpected token at ${pos} in "${expr}"`,
+    );
   }
   function parseAnd() {
     let value = parsePrimary();
