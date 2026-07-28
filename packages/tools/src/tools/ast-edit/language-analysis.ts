@@ -53,6 +53,11 @@ export function extractImports(content: string, language: string): Import[] {
         items: extractPythonImportItems(trimmed),
         line: index + 1,
       });
+    } else if (language === 'rust' && isRustUseDeclaration(trimmed)) {
+      const parsed = parseRustUseDeclaration(trimmed);
+      if (parsed) {
+        imports.push({ ...parsed, line: index + 1 });
+      }
     }
   });
 
@@ -166,4 +171,109 @@ function extractPythonImportItems(line: string): string[] {
     .split(',')
     .map((item) => stripImportAlias(item.trim()))
     .filter((item) => item);
+}
+
+/**
+ * Parses a Rust `use` declaration into a module path and imported items.
+ * Handles:
+ * - `use std::collections::HashMap;`  -> { module: 'std::collections::HashMap', items: [] }
+ * - `use std::io::{Read, Write};`     -> { module: 'std::io', items: ['Read', 'Write'] }
+ * - `use std::fs::{self};`            -> { module: 'std::fs', items: ['self'] }
+ *
+ * Uses linear string scanning to avoid polynomial backtracking.
+ * Returns null if the line is not a valid use declaration.
+ */
+function isRustUseDeclaration(line: string): boolean {
+  return /^use\s+/.test(line) || /^pub(?:\s*\([^)]*\))?\s+use\s+/.test(line);
+}
+
+function parseRustUseDeclaration(
+  line: string,
+): { module: string; items: string[] } | null {
+  // Strip leading visibility + "use" keyword: "use ", "pub use ",
+  // "pub(crate) use", "pub(super) use", "pub(in path) use".
+  let body = line
+    .replace(/^pub(?:\s*\([^)]*\))?\s+use\s+/, '')
+    .replace(/^use\s+/, '')
+    .trim();
+
+  // Strip block comments first (/* ... */) so that a `//` inside a block
+  // comment does not prematurely trigger the line-comment strip below.
+  const blockCommentStart = body.indexOf('/*');
+  if (blockCommentStart !== -1) {
+    const blockCommentEnd = body.indexOf('*/', blockCommentStart);
+    if (blockCommentEnd !== -1) {
+      body = (
+        body.slice(0, blockCommentStart) + body.slice(blockCommentEnd + 2)
+      ).trim();
+    } else {
+      body = body.slice(0, blockCommentStart).trim();
+    }
+  }
+  // Strip line comments (//)
+  const lineCommentIndex = body.indexOf('//');
+  if (lineCommentIndex !== -1) {
+    body = body.slice(0, lineCommentIndex).trim();
+  }
+  if (body.endsWith(';')) {
+    body = body.slice(0, -1).trim();
+  }
+  if (body.length === 0) {
+    return null;
+  }
+
+  const braceOpen = body.indexOf('{');
+  if (braceOpen === -1) {
+    // Simple path: use a::b::c -> module is the whole path.
+    // Strip trailing ` as <alias>` (e.g., `use std::fmt::Write as W`).
+    return { module: stripImportAlias(body), items: [] };
+  }
+
+  // Forward-scan to find the matching closing brace for the first opening
+  // brace, so nested groups (e.g., `std::{io::{Read, Write}}`) parse correctly.
+  let depth = 0;
+  let braceClose = -1;
+  for (let i = braceOpen; i < body.length; i++) {
+    if (body[i] === '{') depth++;
+    else if (body[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        braceClose = i;
+        break;
+      }
+    }
+  }
+  if (braceClose <= braceOpen) {
+    return null;
+  }
+
+  // Module path is everything before the first `{` group (minus trailing `::`)
+  const modulePath = body.slice(0, braceOpen).replace(/::$/, '').trim();
+  const itemsStr = body.slice(braceOpen + 1, braceClose).trim();
+  const items = splitRustImportItems(itemsStr)
+    .map((item) => stripImportAlias(item.trim()))
+    .filter((item) => item);
+
+  return { module: modulePath, items };
+}
+
+/**
+ * Splits a Rust use-group item list by top-level commas, ignoring commas
+ * inside nested brace groups (e.g., `{Read, Write}` inside `io::{Read, Write}`).
+ */
+function splitRustImportItems(itemsStr: string): string[] {
+  const items: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < itemsStr.length; i++) {
+    const ch = itemsStr[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    else if (ch === ',' && depth === 0) {
+      items.push(itemsStr.slice(start, i));
+      start = i + 1;
+    }
+  }
+  items.push(itemsStr.slice(start));
+  return items;
 }

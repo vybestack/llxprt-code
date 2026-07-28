@@ -30,7 +30,15 @@ export interface ASTNode {
 
 export interface Declaration {
   name: string;
-  type: 'function' | 'class' | 'variable' | 'import';
+  type:
+    | 'function'
+    | 'class'
+    | 'variable'
+    | 'import'
+    | 'struct'
+    | 'trait'
+    | 'enum'
+    | 'impl';
   line: number;
   column: number;
   signature?: string;
