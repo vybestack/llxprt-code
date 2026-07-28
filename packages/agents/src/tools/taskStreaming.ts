@@ -47,7 +47,7 @@ export function setupTaskStreaming(
     updateOutput?.({ mode: 'append', data });
   };
   const emitClosingSubagentTag = (): void => {
-    if (!xmlOutputOpen || !updateOutput) {
+    if (!xmlOutputOpen) {
       return;
     }
     const flushed = normalizer.flush();
@@ -57,8 +57,6 @@ export function setupTaskStreaming(
     emitAppend(`</subagent name="${subagentName}" id="${agentId}">\n`);
     xmlOutputOpen = false;
   };
-
-  const heartbeat = startHeartbeat(updateOutput);
 
   if (updateOutput) {
     emitAppend(`<subagent name="${subagentName}" id="${agentId}">\n`);
@@ -74,6 +72,11 @@ export function setupTaskStreaming(
       existingHandler?.(message);
     };
   }
+
+  // Start the heartbeat AFTER stream initialization so an exception during
+  // opening-tag emission cannot leave a running timer with no handle to
+  // stop it.
+  const heartbeat = startHeartbeat(updateOutput);
 
   return { emitClosingSubagentTag, heartbeat };
 }

@@ -137,14 +137,6 @@ describe('accumulateLiveOutput', () => {
     it('does not grow the accumulator across repeated status updates', () => {
       let acc: string | AnsiOutput | undefined = 'base';
       for (let seq = 1; seq <= 50; seq++) {
-        acc = accumulateLiveOutput(undefined, {
-          mode: 'status',
-          status: { kind: 'liveness', seq },
-        });
-      }
-      // Re-run against a real accumulator to prove no growth.
-      acc = 'base';
-      for (let seq = 1; seq <= 50; seq++) {
         acc = accumulateLiveOutput(acc, {
           mode: 'status',
           status: { kind: 'liveness', seq },

@@ -72,7 +72,10 @@ export function startTaskHeartbeat(
   updateOutput: ((update: LiveOutputUpdate) => void) | undefined,
   intervalMs: number = DEFAULT_HEARTBEAT_INTERVAL_MS,
 ): TaskHeartbeat {
-  if (updateOutput === undefined || !(intervalMs > 0)) {
+  if (
+    updateOutput === undefined ||
+    !(Number.isFinite(intervalMs) && intervalMs > 0)
+  ) {
     return { reset: () => {}, stop: () => {} };
   }
 
@@ -80,8 +83,22 @@ export function startTaskHeartbeat(
   let stopped = false;
   let timerId: ReturnType<typeof setTimeout> | null = null;
 
+  const arm = (): void => {
+    timerId = setTimeout(tick, intervalMs);
+  };
+
+  // Reading closure flags through these indirections defeats the linter's
+  // cross-callback narrowing so post-callback checks are not flagged as
+  // always-false/true. reset()/stop() invoked synchronously within
+  // updateOutput mutate these closures; tick() must respect that.
+  const readTimerId = (): ReturnType<typeof setTimeout> | null => timerId;
+  const isStopped = (): boolean => stopped;
+
   const tick = (): void => {
-    if (stopped) return;
+    if (isStopped()) return;
+    // This timer has fired; clear the id so a synchronous reset()/stop()
+    // invoked from within updateOutput is detectable after the callback.
+    timerId = null;
     seq += 1;
     heartbeatLogger.debug(() => `emit liveness seq=${seq}`);
     // The updateOutput callback is consumer-supplied and may throw on a
@@ -97,7 +114,11 @@ export function startTaskHeartbeat(
           `liveness updateOutput threw (seq=${seq}); continuing: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    timerId = setTimeout(tick, intervalMs);
+    // Re-check after the callback: if reset() armed a new timer (timerId no
+    // longer null), do not overwrite it. If stop() was called, do not arm.
+    if (!isStopped() && readTimerId() === null) {
+      arm();
+    }
   };
 
   const reset = (): void => {
@@ -105,7 +126,7 @@ export function startTaskHeartbeat(
     if (timerId !== null) {
       clearTimeout(timerId);
     }
-    timerId = setTimeout(tick, intervalMs);
+    arm();
   };
 
   const stop = (): void => {
@@ -116,6 +137,6 @@ export function startTaskHeartbeat(
     }
   };
 
-  timerId = setTimeout(tick, intervalMs);
+  arm();
   return { reset, stop };
 }

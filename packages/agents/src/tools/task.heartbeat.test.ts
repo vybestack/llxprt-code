@@ -206,6 +206,50 @@ describe('TaskHeartbeat unit', () => {
     expect(updates).toHaveLength(3);
     hb.stop();
   });
+
+  it('returns a no-op handle when interval is Infinity', () => {
+    const updates: LiveOutputUpdate[] = [];
+    const hb = startTaskHeartbeat(
+      (u) => updates.push(u),
+      Number.POSITIVE_INFINITY,
+    );
+    vi.advanceTimersByTime(DEFAULT_HEARTBEAT_INTERVAL_MS * 3);
+    expect(updates).toHaveLength(0);
+    hb.stop();
+  });
+
+  it('honors a synchronous stop() invoked during the updateOutput callback', () => {
+    const updates: LiveOutputUpdate[] = [];
+    const hb = startTaskHeartbeat((u) => {
+      updates.push(u);
+      if (updates.length === 1) {
+        hb.stop();
+      }
+    }, 100);
+
+    vi.advanceTimersByTime(100);
+    expect(updates).toHaveLength(1);
+    vi.advanceTimersByTime(1000);
+    expect(updates).toHaveLength(1);
+  });
+
+  it('honors a synchronous reset() invoked during the updateOutput callback', () => {
+    const updates: LiveOutputUpdate[] = [];
+    const hb = startTaskHeartbeat((u) => {
+      updates.push(u);
+      if (updates.length === 1) {
+        hb.reset();
+      }
+    }, 100);
+
+    vi.advanceTimersByTime(100);
+    expect(updates).toHaveLength(1);
+    vi.advanceTimersByTime(99);
+    expect(updates).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(updates).toHaveLength(2);
+    hb.stop();
+  });
 });
 
 describe('TaskTool heartbeat integration', () => {
