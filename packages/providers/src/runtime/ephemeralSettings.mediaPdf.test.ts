@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-vi.unmock('./providerAliases.js');
+vi.unmock('../composition/providerAliases.js');
 
 import {
   isValidEphemeralSetting,
