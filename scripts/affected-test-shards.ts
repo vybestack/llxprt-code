@@ -36,7 +36,7 @@ interface ObserverRule {
 }
 
 /** The checked-in import graph shape (validated by the checker). */
-interface GraphData {
+export interface GraphData {
   readonly packageToShard: Record<string, string>;
   readonly shardOrder: readonly string[];
   readonly shardTimingsSeconds: Record<string, number>;
@@ -77,7 +77,7 @@ export interface ReplayResult {
 }
 
 /** Reverse-dependency graph: package → packages that import it. */
-type ReverseGraph = Record<string, readonly string[]>;
+export type ReverseGraph = Record<string, readonly string[]>;
 
 /** Cached selection context derived from loaded graph data. */
 interface SelectionContext {
@@ -155,12 +155,12 @@ const DEV_DOCS_RE = /^dev-docs\//;
 const EVALS_RE = /^evals\//;
 
 /** Extracts the package name from a packages/<name>/... path. */
-function packageFromPath(p: string): string | undefined {
+export function packageFromPath(p: string): string | undefined {
   const m = p.match(/^packages\/([a-z0-9-]+)\//);
   return m ? m[1] : undefined;
 }
 
-function isTestPath(p: string): boolean {
+export function isTestPath(p: string): boolean {
   return TEST_FILE_RE.test(p);
 }
 
@@ -172,7 +172,7 @@ function isTestPath(p: string): boolean {
  * Builds a reverse-dependency map: for each package, which packages import it
  * (production or test-only). Used to compute the transitive reverse closure.
  */
-function buildReverseGraph(
+export function buildReverseGraph(
   importEdges: Record<string, readonly string[]>,
   testOnlyEdges: Record<string, readonly string[]>,
 ): ReverseGraph {
@@ -200,7 +200,10 @@ function buildReverseGraph(
  * Computes the transitive set of packages that (transitively) import `pkg`.
  * Uses BFS over the reverse graph.
  */
-function reverseClosure(pkg: string, reverseGraph: ReverseGraph): Set<string> {
+export function reverseClosure(
+  pkg: string,
+  reverseGraph: ReverseGraph,
+): Set<string> {
   const result = new Set<string>();
   const queue: string[] = [pkg];
   while (queue.length > 0) {
