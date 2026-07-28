@@ -23,9 +23,7 @@
     {
       "type": "line",
       "text": "/provider anthropic",
-      "submitKeys": [
-        "Enter"
-      ],
+      "submitKeys": ["Enter"],
       "postTypeMs": 800
     },
     {
@@ -35,9 +33,7 @@
     {
       "type": "line",
       "text": "/model",
-      "submitKeys": [
-        "Enter"
-      ],
+      "submitKeys": ["Enter"],
       "postTypeMs": 800
     },
     {
@@ -143,9 +139,7 @@
     {
       "type": "line",
       "text": "/model",
-      "submitKeys": [
-        "Enter"
-      ],
+      "submitKeys": ["Enter"],
       "postTypeMs": 800
     },
     {
@@ -259,9 +253,7 @@
     {
       "type": "line",
       "text": "/exit",
-      "submitKeys": [
-        "Enter"
-      ],
+      "submitKeys": ["Enter"],
       "postTypeMs": 500
     },
     {
