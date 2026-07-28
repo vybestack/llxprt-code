@@ -378,6 +378,48 @@ describe('generateContentResponseUtilities', () => {
         },
       ]);
     });
+
+    it('maps inlineData.displayName into MediaBlock.filename @issue:2608', () => {
+      const blocks = legacyPartsToBlocks([
+        {
+          inlineData: {
+            data: 'YWJj',
+            mimeType: 'application/pdf',
+            displayName: 'report.pdf',
+          },
+        },
+      ]);
+
+      expect(blocks).toStrictEqual([
+        {
+          type: 'media',
+          mimeType: 'application/pdf',
+          data: 'YWJj',
+          encoding: 'base64',
+          filename: 'report.pdf',
+        },
+      ]);
+    });
+
+    it('omits MediaBlock.filename when inlineData.displayName is absent @issue:2608', () => {
+      const blocks = legacyPartsToBlocks([
+        {
+          inlineData: {
+            data: 'YWJj',
+            mimeType: 'application/pdf',
+          },
+        },
+      ]);
+
+      expect(blocks).toStrictEqual([
+        {
+          type: 'media',
+          mimeType: 'application/pdf',
+          data: 'YWJj',
+          encoding: 'base64',
+        },
+      ]);
+    });
     it('wraps string llmContent in a single tool_response block', () => {
       const result = convertToFunctionResponse(
         'tool',
@@ -508,6 +550,27 @@ describe('generateContentResponseUtilities', () => {
         mimeType: 'text/plain',
         data: 'YWJj',
         encoding: 'base64',
+      });
+    });
+
+    it('preserves inlineData.displayName as MediaBlock.filename through convertToFunctionResponse @issue:2608', () => {
+      const result = convertToFunctionResponse('read_file', 'call-fname', [
+        {
+          inlineData: {
+            data: 'JVBERi0xLjQ=',
+            mimeType: 'application/pdf',
+            displayName: 'quarterly-report.pdf',
+          },
+        },
+      ]);
+
+      const mediaBlock = result.find((b) => b.type === 'media');
+      expect(mediaBlock).toStrictEqual({
+        type: 'media',
+        mimeType: 'application/pdf',
+        data: 'JVBERi0xLjQ=',
+        encoding: 'base64',
+        filename: 'quarterly-report.pdf',
       });
     });
 

@@ -408,6 +408,7 @@ async function processMediaFile(
       inlineData: {
         data: base64Data,
         mimeType,
+        displayName: path.basename(relativePathForDisplay),
       },
     },
     returnDisplay: `Read ${fileType} file: ${relativePathForDisplay}`,

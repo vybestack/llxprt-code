@@ -273,6 +273,14 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     persistToProfile: true,
   },
   {
+    key: 'media.pdf.enabled',
+    category: 'model-behavior',
+    description:
+      'Send PDF files as native input_file data to the model (true/false); when false, PDFs are replaced with a text notice',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  {
     key: 'rate-limit-throttle',
     category: 'model-behavior',
     description: 'Enable proactive rate limit throttling (on/off)',
