@@ -87,6 +87,8 @@ export interface ResolvedRecording {
   recordingService: SessionRecordingService;
   resumedHistory: IContent[] | null;
   resumedLockHandle: LockHandle | null;
+  /** The resumed session's ID, or null for new/fallback sessions. */
+  resumedSessionId: string | null;
 }
 
 export interface SessionRecordingSetup extends ResolvedRecording {
@@ -154,6 +156,39 @@ export async function bootstrapRuntimeAndConfig(
 }
 
 /**
+ * Release resumed recording and lock after a failed restoreHistory. Each
+ * step is independently caught so cleanup failures never prevent the
+ * fresh-session fallback (issue #1873).
+ */
+async function releaseResumedResources(
+  recordingService: SessionRecordingService,
+  lockHandle: LockHandle | null,
+): Promise<void> {
+  try {
+    await recordingService.dispose();
+  } catch (err) {
+    debugLogger.warn(
+      chalk.yellow(
+        `Failed to dispose resumed recording during fallback: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      ),
+    );
+  }
+  try {
+    await lockHandle?.release();
+  } catch (err) {
+    debugLogger.warn(
+      chalk.yellow(
+        `Failed to release session lock during fallback: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      ),
+    );
+  }
+}
+
+/**
  * @plan:PLAN-20260211-SESSIONRECORDING.P26
  * @pseudocode recording-integration.md lines 115-132
  *
@@ -173,37 +208,74 @@ export async function setupSessionRecording(
   // --list-sessions / --delete-session: handle early exits.
   await handleSessionListAndDelete(argv, chatsDir, projectHash);
 
-  const { recordingService, resumedHistory, resumedLockHandle } =
-    await createOrResumeRecording(config, projectHash, chatsDir);
+  const {
+    recordingService,
+    resumedHistory,
+    resumedLockHandle,
+    resumedSessionId,
+  } = await createOrResumeRecording(config, projectHash, chatsDir);
 
-  const recordingIntegration = new RecordingIntegration(recordingService);
+  let activeRecordingService = recordingService;
+  let activeLockHandle = resumedLockHandle;
+  let didFallback = false;
 
   if (resumedHistory && resumedHistory.length > 0) {
+    const agentClient = config.getAgentClient();
     try {
-      const agentClient = config.getAgentClient();
       await agentClient.restoreHistory(resumedHistory);
+      // Adoption happens here — AFTER a successful restoreHistory — so a
+      // corrupted session's ID is never adopted. TodoStore and other
+      // session-scoped services see only a successfully-resumed session ID.
+      if (resumedSessionId !== null) {
+        config.adoptSessionId(resumedSessionId);
+      }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
       debugLogger.warn(
-        chalk.yellow('Could not restore conversation history: ' + messageText),
+        chalk.yellow(
+          `Could not restore conversation history (session ${resumedSessionId ?? 'unknown'}): ${messageText}. ` +
+            'Falling back to a new session.',
+        ),
       );
+      // restoreHistory is not atomic — it may have partially populated the
+      // AgentClient's history before throwing. Reset so no half-restored
+      // items persist into the fresh session.
+      await agentClient.resetChat();
+      await releaseResumedResources(recordingService, resumedLockHandle);
+      // Fresh session with a new UUID in the same project's chatsDir.
+      // buildNewRecordingService generates a new sessionId so the recording
+      // is fully isolated from the corrupted resumed session.
+      activeRecordingService = buildNewRecordingService(
+        config,
+        projectHash,
+        chatsDir,
+      );
+      activeLockHandle = null;
+      didFallback = true;
     }
+  } else if (resumedSessionId !== null) {
+    // Resume succeeded with no restorable content — still adopt the session ID
+    // so future events append to the resumed session's file.
+    config.adoptSessionId(resumedSessionId);
   }
+
+  const recordingIntegration = new RecordingIntegration(activeRecordingService);
 
   registerCleanup(async () => {
     recordingIntegration.dispose();
     try {
-      await recordingService.dispose();
+      await activeRecordingService.dispose();
     } finally {
-      await resumedLockHandle?.release();
+      await activeLockHandle?.release();
     }
   });
 
   return {
-    recordingService,
+    recordingService: activeRecordingService,
     recordingIntegration,
-    resumedHistory,
-    resumedLockHandle,
+    resumedHistory: didFallback ? null : resumedHistory,
+    resumedLockHandle: activeLockHandle,
+    resumedSessionId: didFallback ? null : resumedSessionId,
   };
 }
 
@@ -238,6 +310,7 @@ export async function createOrResumeRecording(
       recordingService: buildNewRecordingService(config, projectHash, chatsDir),
       resumedHistory: null,
       resumedLockHandle: null,
+      resumedSessionId: null,
     };
   }
 
@@ -260,11 +333,10 @@ export async function createOrResumeRecording(
       recordingService: buildNewRecordingService(config, projectHash, chatsDir),
       resumedHistory: null,
       resumedLockHandle: null,
+      resumedSessionId: null,
     };
   }
 
-  // FIX-1336: Adopt the restored session's ID so TodoStore uses the correct file
-  config.adoptSessionId(resumeResult.metadata.sessionId);
   for (const warning of resumeResult.warnings) {
     debugLogger.warn(chalk.yellow(warning));
   }
@@ -272,5 +344,6 @@ export async function createOrResumeRecording(
     recordingService: resumeResult.recording,
     resumedHistory: resumeResult.history,
     resumedLockHandle: resumeResult.lockHandle,
+    resumedSessionId: resumeResult.metadata.sessionId,
   };
 }
