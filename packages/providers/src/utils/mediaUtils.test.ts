@@ -436,4 +436,8 @@ describe('inlineBase64ByteLength @issue:2608', () => {
       inlineBase64ByteLength(`data:application/pdf;base64,${unpadded}`),
     ).toBe(2);
   });
+
+  it('accepts case-insensitive base64 encoding tokens', () => {
+    expect(inlineBase64ByteLength('data:application/pdf;BASE64,YWJj')).toBe(3);
+  });
 });

@@ -30,6 +30,7 @@ import type {
   ResponsesInputItem,
   ResponsesContentPart,
 } from '../OpenAIResponsesTypes.js';
+import { PDF_AGGREGATE_MAX_BYTES } from '../../utils/mediaUtils.js';
 
 const stubConfig: ToolOutputSettingsProvider = {
   getEphemeralSettings: () => ({}),
@@ -357,8 +358,6 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
   });
 
   describe('aggregate 50 MB native PDF preflight', () => {
-    const MAX_BYTES = 50_000_000;
-
     function pdfOfSizeBytes(bytes: number, filename: string): MediaBlock {
       return {
         type: 'media',
@@ -381,7 +380,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
               speaker: 'tool',
               blocks: [
                 toolResponse('call_boundary'),
-                pdfOfSizeBytes(MAX_BYTES, 'big.pdf'),
+                pdfOfSizeBytes(PDF_AGGREGATE_MAX_BYTES, 'big.pdf'),
               ],
             },
           ],
@@ -391,7 +390,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
     });
 
     it('fails when aggregate native PDF payload is one byte over the boundary', () => {
-      const overBytes = MAX_BYTES + 1;
+      const overBytes = PDF_AGGREGATE_MAX_BYTES + 1;
       expect(() =>
         buildOpenAIResponsesInput(
           [
@@ -409,11 +408,13 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
           ],
           buildContext(),
         ),
-      ).toThrow(new RegExp(`${overBytes}.*${MAX_BYTES}.*50\\s*MB`, 'i'));
+      ).toThrow(
+        new RegExp(`${overBytes}.*${PDF_AGGREGATE_MAX_BYTES}.*50\\s*MB`, 'i'),
+      );
     });
 
     it('fails with an unambiguous error including exact actual/allowed bytes and 50 MB', () => {
-      const overBytes = MAX_BYTES + 1024;
+      const overBytes = PDF_AGGREGATE_MAX_BYTES + 1024;
       let thrown: unknown;
       try {
         buildOpenAIResponsesInput(
@@ -438,7 +439,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
       expect(thrown).toBeInstanceOf(Error);
       const message = String((thrown as Error).message);
       expect(message).toContain(String(overBytes));
-      expect(message).toContain(String(MAX_BYTES));
+      expect(message).toContain(String(PDF_AGGREGATE_MAX_BYTES));
       expect(message).toMatch(/50\s*MB/i);
     });
 
@@ -485,7 +486,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
               speaker: 'tool',
               blocks: [
                 toolResponse('call_disabled_huge'),
-                pdfOfSizeBytes(MAX_BYTES + 1024, 'huge.pdf'),
+                pdfOfSizeBytes(PDF_AGGREGATE_MAX_BYTES + 1024, 'huge.pdf'),
               ],
             },
           ],
@@ -502,7 +503,7 @@ describe('OpenAIResponsesInputBuilder PDF @issue:2608', () => {
               speaker: 'tool',
               blocks: [
                 toolResponse('call_orphan'),
-                pdfOfSizeBytes(MAX_BYTES + 1024, 'orphan.pdf'),
+                pdfOfSizeBytes(PDF_AGGREGATE_MAX_BYTES + 1024, 'orphan.pdf'),
               ],
             },
           ],

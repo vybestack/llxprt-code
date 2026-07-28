@@ -149,7 +149,7 @@ export function buildPdfDisabledNotice(media: MediaBlock): string {
  * Does not decode or allocate the payload; uses O(1)-memory length math.
  */
 export function inlineBase64ByteLength(data: string): number {
-  const dataMatch = data.match(/^data:[^;]*;base64,(.*)$/s);
+  const dataMatch = data.match(/^data:[^;]*;base64,(.*)$/is);
   if (dataMatch === null) return 0;
   const normalized = dataMatch[1].replaceAll(/\s/g, '');
   if (normalized === '') return 0;
