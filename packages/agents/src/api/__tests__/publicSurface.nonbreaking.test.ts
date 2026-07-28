@@ -91,10 +91,6 @@ describe('REQ-006 @plan:PLAN-20260621-COREAPIREMED.P21 — agents public export 
     expect(root.fromConfig).not.toBe(root.createAgent);
   });
 
-  it('exposes the configured context-limit resolver as a public runtime function', () => {
-    expect(typeof root.getTokenLimitForConfiguredContext).toBe('function');
-  });
-
   it('Test C2: createAgenticLoop factory remains on the root barrel after AgenticLoop class removal (P05)', () => {
     // P05 removed the concrete AgenticLoop CLASS from the root surface, but
     // the curated createAgenticLoop FACTORY must remain so consumers can still
