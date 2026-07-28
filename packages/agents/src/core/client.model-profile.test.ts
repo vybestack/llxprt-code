@@ -171,21 +171,26 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
-  const tokenLimit = vi.fn();
-  return {
-    tokenLimit,
-    resolveEffectiveContextLimit: vi.fn(
-      (model: string, userCtx?: number, provCtx?: number) => {
-        const ok = (v: unknown): v is number =>
-          typeof v === 'number' && Number.isFinite(v) && v > 0;
-        if (ok(userCtx)) return userCtx;
-        if (ok(provCtx)) return provCtx;
-        return tokenLimit(model);
-      },
-    ),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/tokenLimits.js',
+  async (importOriginal) => {
+    const actual = await importOriginal();
+    const tokenLimit = vi.fn();
+    return {
+      ...actual,
+      tokenLimit,
+      resolveEffectiveContextLimit: vi.fn(
+        (model: string, userCtx?: number, provCtx?: number) => {
+          const ok = (v: unknown): v is number =>
+            typeof v === 'number' && Number.isFinite(v) && v > 0;
+          if (ok(userCtx)) return userCtx;
+          if (ok(provCtx)) return provCtx;
+          return tokenLimit(model);
+        },
+      ),
+    };
+  },
+);
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),

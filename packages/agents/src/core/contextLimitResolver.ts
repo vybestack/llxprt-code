@@ -5,7 +5,9 @@
  */
 
 import {
+  isPositiveFiniteLimit,
   resolveEffectiveContextLimit,
+  resolveProviderReportedLimit,
   tokenLimit,
 } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 
@@ -28,18 +30,17 @@ function getConfiguredContextLimit(
   config: ContextLimitConfig,
 ): number | undefined {
   const rawContextLimit = config.getEphemeralSetting('context-limit');
-  return typeof rawContextLimit === 'number' &&
-    Number.isFinite(rawContextLimit) &&
-    rawContextLimit > 0
-    ? rawContextLimit
-    : undefined;
+  return isPositiveFiniteLimit(rawContextLimit) ? rawContextLimit : undefined;
 }
 
 /**
  * Resolves the active provider's effective context window when it exposes
  * getContextLimit() (e.g. a load-balancer pool's min-across-sub-profiles
- * limit). Returns undefined for providers that do not implement the method or
- * when no provider is active, so callers fall back to the model-name lookup.
+ * limit). Delegates positive-finite validation to the shared
+ * `resolveProviderReportedLimit` (issue #2270 DRY) so the acceptance predicate
+ * lives in exactly one place. Returns undefined for providers that do not
+ * implement the method or when no provider is active, so callers fall back to
+ * the model-name lookup.
  */
 function getProviderContextLimit(
   config: ContextLimitConfig,
@@ -47,10 +48,7 @@ function getProviderContextLimit(
   try {
     const providerManager = config.getContentGeneratorConfig()?.providerManager;
     const activeProvider = providerManager?.getActiveProvider?.();
-    const limit = activeProvider?.getContextLimit?.();
-    return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
-      ? limit
-      : undefined;
+    return resolveProviderReportedLimit(activeProvider?.getContextLimit?.());
   } catch {
     return undefined;
   }
