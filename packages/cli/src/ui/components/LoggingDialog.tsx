@@ -12,6 +12,7 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface LogEntry {
   timestamp: string;
@@ -336,7 +337,7 @@ const LoggingDialogHeader: React.FC<{
     <Box
       paddingX={1}
       paddingY={0}
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderBottom={false}
       borderLeft={false}
       borderRight={false}
@@ -393,7 +394,7 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
     <Box
       flexDirection="column"
       width={state.dialogWidth}
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
     >
       <LoggingDialogHeader

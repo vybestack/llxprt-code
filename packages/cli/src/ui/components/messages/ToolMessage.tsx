@@ -28,6 +28,7 @@ import {
 } from './ToolShared.js';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
 import type { ShellState } from '../../cliUiRuntime.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 export type { TextEmphasis } from './ToolShared.js';
 
@@ -288,7 +289,7 @@ function renderToolMessageContent(
   return (
     <Box
       width={terminalWidth}
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={borderColor}
       borderDimColor={borderDimColor}
       borderTop={false}

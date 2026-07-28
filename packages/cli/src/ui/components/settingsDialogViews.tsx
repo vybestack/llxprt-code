@@ -18,6 +18,7 @@ import type { PendingValue, SettingItem } from './settingsDialogTypes.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { Box, Text } from 'ink';
 import React from 'react';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface TextInputProps {
   focus: boolean;
@@ -168,7 +169,7 @@ export function SettingsDialogLayout(
 ): React.JSX.Element {
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="row"
       padding={1}
@@ -220,7 +221,7 @@ function SettingsDialogHeader({
         </Text>
       </Box>
       <Box
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={borderColor}
         paddingX={1}
         height={3}

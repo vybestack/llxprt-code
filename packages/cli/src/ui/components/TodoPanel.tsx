@@ -13,6 +13,7 @@ import { SemanticColors } from '../colors.js';
 import type { Todo as CoreTodo, Subtask } from '@vybestack/llxprt-code-core';
 import { truncateEnd } from '../utils/responsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface Todo extends CoreTodo {
   subtasks?: Subtask[];
@@ -142,7 +143,7 @@ const CollapsedTodoPanel: React.FC<CollapsedTodoPanelProps> = ({
     <Box
       flexDirection="column"
       width={width}
-      borderStyle="single"
+      borderStyle={getBorderStyle('single')}
       borderColor={SemanticColors.text.accent}
       borderTop={true}
       borderBottom={false}
@@ -230,7 +231,7 @@ const ExpandedTodoPanel: React.FC<ExpandedTodoPanelProps> = ({
     <Box
       flexDirection="column"
       width={width}
-      borderStyle="single"
+      borderStyle={getBorderStyle('single')}
       borderColor={SemanticColors.text.accent}
       borderTop={true}
       borderBottom={false}

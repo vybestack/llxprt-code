@@ -17,6 +17,7 @@ import {
 } from '../utils/displayUtils.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import type { ToolCallStats } from '@vybestack/llxprt-code-telemetry';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 const TOOL_NAME_COL_WIDTH = 25;
 const CALLS_COL_WIDTH = 8;
@@ -79,7 +80,7 @@ const ToolTableHeader: React.FC = () => (
 
 const TableDivider: React.FC = () => (
   <Box
-    borderStyle="single"
+    borderStyle={getBorderStyle('single')}
     borderBottom={true}
     borderTop={false}
     borderLeft={false}
@@ -172,7 +173,12 @@ const UserDecisionSummary: React.FC<UserDecisionSummaryProps> = ({
 );
 
 const EmptyToolStats: React.FC = () => (
-  <Box borderStyle="round" borderColor={Colors.Gray} paddingY={1} paddingX={2}>
+  <Box
+    borderStyle={getBorderStyle('round')}
+    borderColor={Colors.Gray}
+    paddingY={1}
+    paddingX={2}
+  >
     <Text color={Colors.Foreground}>
       No tool calls have been made in this session.
     </Text>
@@ -199,7 +205,7 @@ const ToolStatsContent: React.FC<ToolStatsContentProps> = ({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       paddingY={1}

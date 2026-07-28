@@ -17,6 +17,7 @@ import { Command, getDefaultKeyBindingHint } from '../../config/keyBindings.js';
 import { truncateEnd } from '../utils/responsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { QueuedSubmission } from '../hooks/agentStream/types.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface QueuedMessagesPanelProps {
   width: number;
@@ -279,7 +280,7 @@ function QueuedMessagesPanelShell({
       width={width}
       height={panelHeight}
       overflow="hidden"
-      borderStyle="single"
+      borderStyle={getBorderStyle('single')}
       borderColor={SemanticColors.text.accent}
       borderTop={panelHeight > 1}
       borderBottom={false}

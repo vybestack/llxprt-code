@@ -416,6 +416,50 @@ describe('SettingsSchema', () => {
       });
     });
 
+    describe('unicode', () => {
+      it('should be defined in SETTINGS_SCHEMA.ui.properties', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.unicode).toBeDefined();
+      });
+
+      it('should be an enum type', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.unicode.type).toBe('enum');
+      });
+
+      it('should default to "auto"', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.unicode.default).toBe('auto');
+      });
+
+      it('should expose three options (auto, force, off)', () => {
+        const options = SETTINGS_SCHEMA.ui.properties.unicode.options;
+        const values = options.map((option) => option.value);
+        expect(values).toStrictEqual(['auto', 'force', 'off']);
+      });
+
+      it('should be shown in the settings dialog', () => {
+        expect(SETTINGS_SCHEMA.ui.properties.unicode.showInDialog).toBe(true);
+      });
+
+      it('should accept "auto" via validation', () => {
+        const result = validateSettings({ ui: { unicode: 'auto' } });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept "force" via validation', () => {
+        const result = validateSettings({ ui: { unicode: 'force' } });
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept "off" via validation', () => {
+        const result = validateSettings({ ui: { unicode: 'off' } });
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject an unsupported value via validation', () => {
+        const result = validateSettings({ ui: { unicode: 'braille' } });
+        expect(result.success).toBe(false);
+      });
+    });
+
     describe('streamIdleTimeoutMs', () => {
       it('should be defined as a top-level setting in SETTINGS_SCHEMA', () => {
         expect(SETTINGS_SCHEMA.streamIdleTimeoutMs).toBeDefined();
