@@ -82,10 +82,10 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => activeRuntime,
 }));
 
-const DOWN = '[B';
+const DOWN = '\x1b[B';
 const ENTER = '\r';
-const ESC = '[27u';
-const RIGHT = '[C';
+const ESC = '\x1b[27u';
+const RIGHT = '\x1b[C';
 
 const DEFAULT_UNALLOWED: readonly string[] = [];
 const PARAM_KEYS = [
@@ -97,7 +97,6 @@ const PARAM_KEYS = [
   'presence_penalty',
 ] as const;
 const EPHEMERAL_KEYS = [
-  'context-limit',
   'reasoning.enabled',
   'reasoning.effort',
   'streaming',
@@ -108,9 +107,13 @@ function fieldIndex(
   key: string,
   unallowed: readonly string[] = DEFAULT_UNALLOWED,
 ): number {
+  // context-limit leads, then max_tokens, then remaining params + ephemerals.
   const keys = [
-    ...PARAM_KEYS.filter((k) => !unallowed.includes(k)),
-    ...EPHEMERAL_KEYS,
+    ...(['context-limit', 'max_tokens'] as const).filter(
+      (k) => !unallowed.includes(k),
+    ),
+    ...PARAM_KEYS.filter((k) => k !== 'max_tokens' && !unallowed.includes(k)),
+    ...EPHEMERAL_KEYS.filter((k) => !unallowed.includes(k)),
   ];
   const index = keys.indexOf(key as (typeof keys)[number]);
   if (index < 0) {
@@ -159,7 +162,7 @@ describe('<ModelConfigDialog />', () => {
     expect(output).toContain('gpt-5');
   });
 
-  it('renders max_tokens and context-limit at the top (field reorder)', () => {
+  it('renders context-limit first and max_tokens second (field reorder)', () => {
     const { lastFrame } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
@@ -168,8 +171,8 @@ describe('<ModelConfigDialog />', () => {
     expect(output).toBeDefined();
     const lines = output!.split('\n');
     const fieldLines = lines.filter((l) => l.includes('○') || l.includes('●'));
-    expect(fieldLines[0]).toContain('max_tokens');
-    expect(fieldLines[6]).toContain('context-limit');
+    expect(fieldLines[0]).toContain('context-limit');
+    expect(fieldLines[1]).toContain('max_tokens');
   });
 
   it('renders the model parameters section with current values (AC3)', () => {
@@ -281,39 +284,114 @@ describe('<ModelConfigDialog />', () => {
     });
   });
 
-  it('toggles reasoning.enabled with Enter (boolean select)', async () => {
+  it('toggles reasoning.enabled with Space (boolean select)', async () => {
+    setupRuntime({ ephemeralSettings: { 'reasoning.enabled': false } });
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // reasoning.enabled starts at true
-    expect(lastFrame()).toContain('true');
+    // reasoning.enabled starts at false
+    expect(lastFrame()).toContain('false');
 
     navigateToField(stdin, 'reasoning.enabled');
 
-    // Press Enter to toggle boolean
+    // Press Space to toggle boolean in list mode
     await act(async () => {
-      stdin.write(ENTER);
+      stdin.write(' ');
     });
 
-    await waitFor(() => {
-      expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
-        false,
-      );
-      expect(lastFrame()).toContain('false');
-    });
-
-    // Toggle back
-    await act(async () => {
-      stdin.write(ENTER);
-    });
-
-    // Assert the runtime state, not rendered text — the hint string
-    // "Enable thinking/reasoning (true/false)" always contains "true".
     await waitFor(() => {
       expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
         true,
       );
+    });
+
+    // Once ON, the field is immutable (forced-on behavior is not silently
+    // flippable): Space is a no-op and the value stays true.
+    await act(async () => {
+      stdin.write(' ');
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('always-on for this model');
+    });
+    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+      true,
+    );
+  });
+
+  it('reasoning.enabled=true is immutable — Enter does not toggle and shows the always-on hint', async () => {
+    // Default runtime has reasoning.enabled: true (forced on by model
+    // defaults). Enter/Space must NOT silently flip it; instead the field
+    // enters a read-only edit state with a visible reason.
+    const { lastFrame, stdin } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    navigateToField(stdin, 'reasoning.enabled');
+
+    await act(async () => {
+      stdin.write(ENTER);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('always-on for this model');
+    });
+    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+      true,
+    );
+
+    // Space in edit mode is also a no-op for an immutable boolean
+    await act(async () => {
+      stdin.write(' ');
+    });
+    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+      true,
+    );
+
+    // Esc exits edit mode without changing anything
+    await act(async () => {
+      stdin.write(ESC);
+    });
+    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+      true,
+    );
+  });
+
+  it('cycles reasoning.effort enum with Left/Right and Enter persists the selection', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    navigateToField(stdin, 'reasoning.effort');
+
+    // Enter enum edit mode (no inherited default → starts at first value)
+    act(() => {
+      stdin.write(ENTER);
+    });
+
+    expect(lastFrame()).toContain('[minimal]');
+
+    // Press Right to cycle to low
+    act(() => {
+      stdin.write(RIGHT);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('[low]');
+    });
+
+    // Press Enter to confirm — persists immediately (cycling already wrote
+    // the value to the runtime), so it must NOT stay "(not set)".
+    await act(async () => {
+      stdin.write(ENTER);
+    });
+
+    await waitFor(() => {
+      expect(activeRuntime.getEphemeralSettings()['reasoning.effort']).toBe(
+        'low',
+      );
+      expect(lastFrame()).toMatch(/reasoning\.effort\s+low/);
     });
   });
 
@@ -352,20 +430,18 @@ describe('<ModelConfigDialog />', () => {
     });
   });
 
-  it('shows validation error when committing an invalid ephemeral value', async () => {
+  it('shows validation error when committing an invalid context-limit value', async () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    navigateToField(stdin, 'reasoning.effort');
-
-    // Enter edit mode
+    // context-limit is the first field — a plain text-editor ephemeral.
     act(() => {
       stdin.write(ENTER);
     });
 
-    // Type an invalid value (reasoning.effort only accepts known enum values)
-    for (const ch of 'invalid-effort') {
+    // Type an invalid value (context-limit requires a positive integer)
+    for (const ch of 'not-a-number') {
       act(() => {
         stdin.write(ch);
       });
@@ -377,8 +453,11 @@ describe('<ModelConfigDialog />', () => {
     });
 
     await waitFor(() => {
-      expect(lastFrame()).toContain('must be one of');
+      expect(lastFrame()).toContain('positive integer');
     });
+    expect(activeRuntime.getEphemeralSettings()['context-limit']).toBe(
+      undefined,
+    );
   });
 
   it('closes on Escape from the list view (AC9)', async () => {
@@ -400,7 +479,7 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...props} />,
     );
 
-    // Enter edit mode on max_tokens (index 0)
+    // Enter edit mode on context-limit (index 0)
     act(() => {
       stdin.write(ENTER);
     });
@@ -414,6 +493,58 @@ describe('<ModelConfigDialog />', () => {
       expect(lastFrame()).toContain('Model Parameters');
     });
     expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('Escape in edit mode cancels without saving the edited value', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    navigateToField(stdin, 'temperature');
+
+    // Enter edit mode (pre-filled with current 0.7)
+    act(() => {
+      stdin.write(ENTER);
+    });
+
+    // Replace the value entirely (Ctrl+A + Ctrl+K clears the pre-fill)
+    act(() => {
+      stdin.write('\x01');
+      stdin.write('\x0b');
+    });
+    for (const ch of '9.9') {
+      act(() => {
+        stdin.write(ch);
+      });
+    }
+
+    // Esc must cancel — the runtime value stays 0.7
+    await act(async () => {
+      stdin.write(ESC);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('navigate');
+    });
+    expect(activeRuntime.getActiveModelParams().temperature).toBe(0.7);
+    expect(lastFrame()).not.toContain('9.9');
+  });
+
+  it('shows [Enter] save / [Esc] cancel hint while editing and list hints otherwise', async () => {
+    const { lastFrame, stdin } = renderWithProviders(
+      <ModelConfigDialog {...defaultProps()} />,
+    );
+
+    expect(lastFrame()).toContain('navigate');
+
+    act(() => {
+      stdin.write(ENTER);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('[Enter] save');
+      expect(lastFrame()).toContain('[Esc] cancel');
+    });
   });
 
   it('hides unallowed sampling params (e.g. kimi-k3 fixed params)', async () => {

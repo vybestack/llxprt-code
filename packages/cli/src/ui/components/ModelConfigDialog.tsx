@@ -26,7 +26,6 @@ const PARAM_KEYS = [
 ] as const;
 
 const EPHEMERAL_KEYS = [
-  'context-limit',
   'reasoning.enabled',
   'reasoning.effort',
   'streaming',
@@ -34,13 +33,13 @@ const EPHEMERAL_KEYS = [
 ] as const;
 
 const PARAM_HINTS: Record<string, string> = {
+  'context-limit': 'Positive integer token cap',
   max_tokens: 'Maximum output tokens',
   temperature: 'Sampling randomness (0.0-2.0)',
   top_p: 'Nucleus sampling (0.0-1.0)',
   top_k: 'Top-k sampling',
   frequency_penalty: 'Penalize frequent tokens',
   presence_penalty: 'Penalize present tokens',
-  'context-limit': 'Positive integer token cap',
   'reasoning.enabled': 'Enable thinking/reasoning',
   'reasoning.effort': 'minimal|low|medium|high|xhigh|max',
   streaming: 'enabled|disabled',
@@ -49,6 +48,7 @@ const PARAM_HINTS: Record<string, string> = {
 
 const BOOLEAN_EPHEMERALS = new Set(['reasoning.enabled']);
 const ENUM_EPHEMERALS: Record<string, readonly string[]> = {
+  'reasoning.effort': ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
   streaming: ['enabled', 'disabled'],
   'prompt-caching': ['off', '5m', '1h', '24h'],
 };
@@ -65,16 +65,25 @@ interface ConfigField {
 }
 
 function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
-  const paramFields = PARAM_KEYS.filter((key) => !unallowed.has(key)).map(
-    (key) => ({
+  const paramKeys = PARAM_KEYS.filter((key) => !unallowed.has(key));
+  const ephemeralKeys = EPHEMERAL_KEYS.filter((key) => !unallowed.has(key));
+
+  // context-limit leads the list, then max_tokens, then the rest.
+  const leadingKeys = [
+    { key: 'context-limit', kind: 'ephemeral' as const },
+    { key: 'max_tokens', kind: 'param' as const },
+  ].filter((e) => !unallowed.has(e.key));
+
+  const paramFields = paramKeys
+    .filter((key) => key !== 'max_tokens')
+    .map((key) => ({
       key,
       kind: 'param' as const,
       hint: PARAM_HINTS[key] ?? '',
       editor: 'text' as const,
-    }),
-  );
+    }));
 
-  const ephemeralFields = EPHEMERAL_KEYS.map((key) => {
+  const ephemeralFields = ephemeralKeys.map((key) => {
     let editor: EditorType = 'text';
     if (BOOLEAN_EPHEMERALS.has(key)) {
       editor = 'boolean';
@@ -90,7 +99,14 @@ function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
     };
   });
 
-  return [...paramFields, ...ephemeralFields];
+  const leadingFields = leadingKeys.map((e) => ({
+    key: e.key,
+    kind: e.kind,
+    hint: PARAM_HINTS[e.key] ?? '',
+    editor: 'text' as const,
+  }));
+
+  return [...leadingFields, ...paramFields, ...ephemeralFields];
 }
 
 export interface ModelConfigDialogProps {
@@ -148,6 +164,21 @@ function valueForField(
     return params[field.key] ?? ephemeral[field.key];
   }
   return ephemeral[field.key];
+}
+
+function isFieldImmutable(field: ConfigField, value: unknown): boolean {
+  // A boolean model-behavior switch is immutable while it is ON. The model
+  // (or its inherited alias defaults) forced the behavior on, so silently
+  // flipping it off would either be rejected by the API or would leave the
+  // user with no explanation. Show a reason instead of swallowing the key.
+  return field.editor === 'boolean' && value === true;
+}
+
+function immutableReasonFor(field: ConfigField): string | null {
+  if (field.key === 'reasoning.enabled') {
+    return 'always-on for this model';
+  }
+  return 'fixed for this model';
 }
 
 interface RuntimeReads {
@@ -220,15 +251,16 @@ const FieldRow: React.FC<{
 
   if (isEditing && field.editor === 'boolean') {
     const boolVal = currentValue === true;
+    const immutable = isFieldImmutable(field, currentValue);
     return (
       <Box>
         <Text color={color}>{indicator} </Text>
         <Text color={color}>{field.key.padEnd(22)}</Text>
         <Text color={SemanticColors.text.secondary}>
-          {boolVal ? 'true ' : 'false'}
+          {boolVal ? '[true ]' : '[false]'}
         </Text>
         <Text color={SemanticColors.text.secondary}>
-          {' (Space to toggle)'}
+          {immutable ? ` (${immutableReasonFor(field)})` : ' (Space toggle)'}
         </Text>
       </Box>
     );
@@ -261,7 +293,13 @@ const FieldRow: React.FC<{
       <Text color={color}>{indicator} </Text>
       <Text color={color}>{field.key.padEnd(22)}</Text>
       <Text color={SemanticColors.text.secondary}>{displayValue}</Text>
-      <Text color={SemanticColors.text.secondary}>{field.hint}</Text>
+      {isFieldImmutable(field, currentValue) ? (
+        <Text color={SemanticColors.text.secondary}>
+          {`(${immutableReasonFor(field)})`}
+        </Text>
+      ) : (
+        <Text color={SemanticColors.text.secondary}>{field.hint}</Text>
+      )}
     </Box>
   );
 };
@@ -325,11 +363,12 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
   }
   if (key.name === 'return') {
     if (field.editor === 'boolean') {
-      toggleBooleanValue(
-        field,
-        valueForField(field, d.params, d.ephemeral),
-        d.runtime,
-      );
+      const current = valueForField(field, d.params, d.ephemeral);
+      if (isFieldImmutable(field, current)) {
+        d.setEditingIndex(d.selectedIndex);
+        return;
+      }
+      toggleBooleanValue(field, current, d.runtime);
       d.forceRender();
       return;
     }
@@ -348,6 +387,13 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
     d.setEditingIndex(d.selectedIndex);
     return;
   }
+  if (isPlainLetter(key, 'space') && field.editor === 'boolean') {
+    const current = valueForField(field, d.params, d.ephemeral);
+    if (isFieldImmutable(field, current)) return;
+    toggleBooleanValue(field, current, d.runtime);
+    d.forceRender();
+    return;
+  }
   if (isPlainLetter(key, 'c') && field.kind === 'param') {
     d.runtime.clearActiveModelParam(field.key);
     d.forceRender();
@@ -358,8 +404,25 @@ function handleEditKey(key: Key, d: KeypressDispatch): void {
   const field = d.fields[d.editingIndex!];
 
   if (key.name === 'escape') {
+    // Esc always cancels the edit — never saves.
     d.setEditingIndex(null);
     d.setValidationError(null);
+    return;
+  }
+
+  if (field.editor === 'boolean') {
+    if (isPlainLetter(key, 'space')) {
+      const current = valueForField(field, d.params, d.ephemeral);
+      if (isFieldImmutable(field, current)) return;
+      toggleBooleanValue(field, current, d.runtime);
+      d.forceRender();
+      return;
+    }
+    if (key.name === 'return') {
+      d.setEditingIndex(null);
+      d.setValidationError(null);
+      return;
+    }
     return;
   }
 
@@ -454,6 +517,21 @@ const DialogHeader: React.FC<{
   </>
 );
 
+const DialogFooter: React.FC<{ isEditing: boolean }> = ({ isEditing }) => (
+  <Box marginTop={1}>
+    {isEditing ? (
+      <Text color={SemanticColors.text.secondary}>
+        {'[Enter] save  [Esc] cancel'}
+      </Text>
+    ) : (
+      <Text color={SemanticColors.text.secondary}>
+        {'\u2191'}/{'\u2193'} navigate Enter edit/toggle Space toggle(bool)
+        c=clear(param) Esc close
+      </Text>
+    )}
+  </Box>
+);
+
 export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   onClose,
 }) => {
@@ -528,11 +606,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
         </Box>
       )}
 
-      <Box marginTop={1}>
-        <Text color={SemanticColors.text.secondary}>
-          {'\u2191'}/{'\u2193'} navigate Enter edit c=clear(param) Esc close
-        </Text>
-      </Box>
+      <DialogFooter isEditing={editingIndex !== null} />
     </Box>
   );
 };
