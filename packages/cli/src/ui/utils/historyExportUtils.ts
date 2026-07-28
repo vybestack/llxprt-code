@@ -190,8 +190,7 @@ export async function exportHistoryForBugReport(
   // residual credentials/paths in the transcript from being world-readable.
   // Retry a few times if another process raced us for the same name.
   const maxAttempts = 3;
-  let lastError: unknown;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const random = nodeCrypto.randomBytes(8).toString('hex');
     const filename = `llxprt-bug-report-${timestamp}-${random}.md`;
@@ -206,7 +205,6 @@ export async function exportHistoryForBugReport(
       }
       return { filePath, sanitized };
     } catch (error) {
-      lastError = error;
       if (
         error instanceof Error &&
         'code' in error &&
@@ -218,8 +216,4 @@ export async function exportHistoryForBugReport(
       throw error;
     }
   }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('Failed to create exclusive bug report file');
 }
