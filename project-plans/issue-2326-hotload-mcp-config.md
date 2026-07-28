@@ -281,20 +281,25 @@ subsystem or generic abstraction is planned.
 ### Expanded scope budget
 
 - Pre-expansion scope: 23 paths, 1,247 net lines (+1,339/-92).
-- Final scope (consolidated): 40 paths, 1,823 net lines (+2,035/-212).
+- Pre-CI boundary scope: 40 paths, 1,823 net lines (+2,035/-212), measured
+  against the original branch base before rebasing.
+- CI exposed a stale affected-shards graph entry. The user approved the required
+  quality-tool data update and 41st path; after rebasing onto current main the
+  exact scope is 41 paths, 1,828 net lines (+2,027/-199).
 - Crossing the 25-file threshold requires the mandatory scope review below.
-- The 40-file / 2,500-net-line hard stop remains in force; the consolidated
-  scope sits at exactly 40 paths and 1,823 net lines.
+- The explicit approval covers exceeding the 40-file hard stop by this one graph
+  data path; the 2,500-net-line hard stop remains unexceeded.
 
 ### Mandatory scope review
 
 The expanded paths form one coherent boundary-repair slice: Core exposes the MCP
 runtime capabilities it owns; agents consumes narrow callbacks and Config methods;
 adjacent tests prove behavior and remove concrete-manager casts; and the public
-API documentation records the ownership rule. No dependency, workflow,
-quality-tool, test move, threshold, suppression, or unrelated behavior is added.
-The approved expansion remains below the hard scope budget and is accepted for
-implementation.
+API documentation records the ownership rule. No dependency, workflow, test
+move, threshold, suppression, or unrelated behavior is added. CI's affected-test
+shard guard required one matching quality-tool data update: removing the stale
+`agents -> mcp` test-only graph edge. The user explicitly approved that 41st path.
+The net-line scope remains below 2,500 and is accepted with no further expansion.
 
 ## Package-boundary remediation implementation status
 
@@ -353,18 +358,19 @@ lifecycle and exposes narrow capabilities that agents consumes.
 
 ### Final scope
 
-Branch base: c594a13fc. Changed paths and net-line counts below (from
-`git diff --stat`).
+Current branch base: latest `origin/main` after rebase. Changed paths and net-line
+counts below are measured against that merge base.
 
-- 40 total paths (committed + working tree, no untracked files after
-  consolidation): +2,035 / -212 (1,823 net changed lines).
+- 41 total paths: +2,027 / -199 (1,828 net changed lines).
 - The original helper abstraction (`configMcpCapabilities.ts`) and its standalone
   test, plus the standalone boundary test, were removed. Capability logic lives
   on the existing Core Config hierarchy; capability assertions were merged into
   `config.d.test.ts`; boundary assertions were merged into
   `mcp-discovery.spec.ts`. No standalone abstraction or test path remains.
-- Total: 40 paths, 1,823 net changed lines (within the 40-file / 2,500-net-line
-  hard budget).
+- The approved 41st path, `scripts/affected-test-shards.data.json`, removes the
+  stale test-only agents-to-MCP graph edge required by the CI drift guard.
+- Total: 41 paths, 1,828 net changed lines (approved beyond the 40-file stop and
+  within the 2,500-net-line hard budget).
 
 ### Verification evidence (focused)
 
