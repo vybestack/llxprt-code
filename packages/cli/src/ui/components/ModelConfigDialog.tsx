@@ -399,6 +399,20 @@ function commitFieldEdit(
   edit: PendingEdit,
   d: KeypressDispatch,
 ): string | null {
+  try {
+    return applyFieldEdit(field, edit, d);
+  } catch (e) {
+    // setEphemeralSetting/setActiveModelParam can throw (e.g. no active
+    // provider); surface the error instead of crashing the dialog.
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+function applyFieldEdit(
+  field: ConfigField,
+  edit: PendingEdit,
+  d: KeypressDispatch,
+): string | null {
   if (field.editor === 'boolean') {
     if (edit.boolValue !== null) {
       d.runtime.setEphemeralSetting(field.key, edit.boolValue);

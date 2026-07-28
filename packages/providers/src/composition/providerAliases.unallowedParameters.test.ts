@@ -92,8 +92,10 @@ describe('providerAliases unallowedParameters', () => {
         ],
       });
 
-      const config = entries.find((e) => e.alias === 'bad')?.config;
-      expect(config?.modelDefaults ?? []).toHaveLength(0);
+      const entry = entries.find((e) => e.alias === 'bad');
+      // The invalid RULE is stripped, but the alias entry itself is preserved.
+      expect(entry).toBeDefined();
+      expect(entry?.config.modelDefaults ?? []).toHaveLength(0);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('unallowedParameters'),
       );
@@ -112,8 +114,9 @@ describe('providerAliases unallowedParameters', () => {
         ],
       });
 
-      const config = entries.find((e) => e.alias === 'empty')?.config;
-      expect(config?.modelDefaults ?? []).toHaveLength(0);
+      const entry = entries.find((e) => e.alias === 'empty');
+      expect(entry).toBeDefined();
+      expect(entry?.config.modelDefaults ?? []).toHaveLength(0);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('unallowedParameters'),
       );
