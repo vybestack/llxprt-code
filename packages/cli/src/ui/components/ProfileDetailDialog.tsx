@@ -11,6 +11,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface ProfileDetailDialogProps {
   profileName: string;
@@ -397,7 +398,7 @@ const DeleteConfirmation: React.FC<{
   width: number;
 }> = ({ profileName, width }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.status.warning}
     flexDirection="column"
     padding={1}
@@ -425,7 +426,7 @@ const DeleteConfirmation: React.FC<{
 const ActionsBar: React.FC = () => (
   <Box
     marginTop={1}
-    borderStyle="single"
+    borderStyle={getBorderStyle('single')}
     borderTop
     borderBottom={false}
     borderLeft={false}
@@ -445,7 +446,7 @@ const ActionsBar: React.FC = () => (
 
 const LoadingState: React.FC = () => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.border.default}
     flexDirection="column"
     padding={1}
@@ -456,7 +457,7 @@ const LoadingState: React.FC = () => (
 
 const ErrorState: React.FC<{ error: string }> = ({ error }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.status.error}
     flexDirection="column"
     padding={1}
@@ -473,7 +474,7 @@ const ErrorState: React.FC<{ error: string }> = ({ error }) => (
 
 const NotFoundState: React.FC<{ profileName: string }> = ({ profileName }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.border.default}
     flexDirection="column"
     padding={1}
@@ -558,7 +559,7 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}

@@ -146,6 +146,7 @@ function injectStubModelResponse(
     performCompression: async () => PerformCompressionResult.SKIPPED_EMPTY,
     recordCompletedToolCalls: () => {},
     getLastPromptTokenCount: () => 0,
+    getProjectedPromptBaseline: () => 0,
   };
 }
 

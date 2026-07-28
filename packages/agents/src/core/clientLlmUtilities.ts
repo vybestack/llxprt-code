@@ -27,7 +27,7 @@ async function buildLightweightSystemPrompt(
   model: string,
 ): Promise<string> {
   const userMemory = config.getUserMemory();
-  const mcpInstructions = config.getMcpClientManager()?.getMcpInstructions();
+  const mcpInstructions = config.getMcpInstructions();
   const enabledToolNames = getEnabledToolNamesForPrompt(config);
   const includeSubagentDelegation =
     await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);

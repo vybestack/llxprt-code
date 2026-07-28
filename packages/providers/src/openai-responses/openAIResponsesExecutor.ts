@@ -337,6 +337,12 @@ function buildInput(
     (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
       'reasoning.includeInContext',
     );
+  const mediaPdfEnabledSetting =
+    (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
+    options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
+    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
+      'media.pdf.enabled',
+    );
   const outputLimiterConfig =
     options.config ??
     options.runtime?.config ??
@@ -349,6 +355,7 @@ function buildInput(
     outputLimiterConfig,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
     serverSideParentActive,
+    mediaPdfEnabled: mediaPdfEnabledSetting !== false,
   });
 }
 

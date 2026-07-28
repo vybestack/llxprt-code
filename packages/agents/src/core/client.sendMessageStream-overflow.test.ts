@@ -171,21 +171,26 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
-  const tokenLimit = vi.fn();
-  return {
-    tokenLimit,
-    resolveEffectiveContextLimit: vi.fn(
-      (model: string, userCtx?: number, provCtx?: number) => {
-        const ok = (v: unknown): v is number =>
-          typeof v === 'number' && Number.isFinite(v) && v > 0;
-        if (ok(userCtx)) return userCtx;
-        if (ok(provCtx)) return provCtx;
-        return tokenLimit(model);
-      },
-    ),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/tokenLimits.js',
+  async (importOriginal) => {
+    const actual = await importOriginal();
+    const tokenLimit = vi.fn();
+    return {
+      ...actual,
+      tokenLimit,
+      resolveEffectiveContextLimit: vi.fn(
+        (model: string, userCtx?: number, provCtx?: number) => {
+          const ok = (v: unknown): v is number =>
+            typeof v === 'number' && Number.isFinite(v) && v > 0;
+          if (ok(userCtx)) return userCtx;
+          if (ok(provCtx)) return provCtx;
+          return tokenLimit(model);
+        },
+      ),
+    };
+  },
+);
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
@@ -220,6 +225,16 @@ describe('AgentClient (client.ts)', () => {
   });
 
   describe('sendMessageStream', () => {
+    const baselineFns = (
+      n: number,
+    ): Pick<
+      ChatSession,
+      'getLastPromptTokenCount' | 'getProjectedPromptBaseline'
+    > => ({
+      getLastPromptTokenCount: vi.fn().mockReturnValue(n),
+      getProjectedPromptBaseline: vi.fn().mockReturnValue(n),
+    });
+
     beforeEach(() => {
       (
         client as unknown as {
@@ -243,7 +258,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         performCompression: vi
           .fn()
           .mockResolvedValue(PerformCompressionResult.FAILED),
@@ -308,7 +323,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         convertPartListUnionToIContent: vi
           .fn()
           .mockReturnValue({ speaker: 'human', blocks: [] }),
@@ -361,7 +376,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         convertPartListUnionToIContent: vi.fn().mockReturnValue({
           speaker: 'tool',
           blocks: [],
@@ -421,7 +436,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         estimatePendingTokens: estimateSpy,
       };
       client['chat'] = mockChat as ChatSession;
@@ -469,7 +484,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         convertPartListUnionToIContent: convertSpy,
         estimatePendingTokens: estimateSpy,
       };
@@ -513,7 +528,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -569,7 +584,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         estimatePendingTokens: vi
           .fn()
           .mockRejectedValue(new Error('tokenizer unavailable')),
@@ -614,7 +629,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -675,7 +690,7 @@ describe('AgentClient (client.ts)', () => {
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -721,7 +736,7 @@ describe('AgentClient (client.ts)', () => {
 
       const lastPromptTokenCount = 10000;
       const mockChat: Partial<ChatSession> = {
-        getLastPromptTokenCount: vi.fn().mockReturnValue(lastPromptTokenCount),
+        ...baselineFns(lastPromptTokenCount),
         getHistory: vi.fn().mockReturnValue([]),
       };
       client['chat'] = mockChat as ChatSession;
@@ -784,9 +799,8 @@ describe('AgentClient (client.ts)', () => {
         .mockReturnValueOnce(mockStream2);
 
       const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        ...baselineFns(0),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -853,9 +867,8 @@ describe('AgentClient (client.ts)', () => {
       mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
       const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        ...baselineFns(0),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -908,9 +921,8 @@ describe('AgentClient (client.ts)', () => {
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
       const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        ...baselineFns(0),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -975,9 +987,8 @@ describe('AgentClient (client.ts)', () => {
       );
 
       const mockChat: Partial<ChatSession> = {
-        addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        ...baselineFns(0),
       };
       client['chat'] = mockChat as ChatSession;
 

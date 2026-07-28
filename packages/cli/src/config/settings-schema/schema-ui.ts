@@ -1,6 +1,7 @@
 import { type WittyPhraseStyle } from '../../ui/constants/phrasesCollections.js';
 import type { MemoryImportFormat } from './types.js';
 import type { CustomTheme } from '../../ui/themes/theme.js';
+import type { UnicodeMode } from '../../ui/utils/unicodeSupport.js';
 import { CORE_SETTINGS_SCHEMA } from './schema-core.js';
 
 export const UI_SETTINGS_SCHEMA = {
@@ -405,6 +406,21 @@ export const UI_SETTINGS_SCHEMA = {
         description:
           'Render output in plain-text to be more screen reader accessible.',
         showInDialog: true,
+      },
+      unicode: {
+        type: 'enum',
+        label: 'Unicode Rendering',
+        category: 'UI',
+        requiresRestart: true,
+        default: 'auto',
+        description:
+          'Control rendering of Unicode box-drawing and spinner glyphs. Use "off" on terminals that show "?" for borders/spinners (e.g. legacy Windows PowerShell).',
+        showInDialog: true,
+        options: [
+          { value: 'auto', label: 'Auto-detect (recommended)' },
+          { value: 'force', label: 'Always use Unicode glyphs' },
+          { value: 'off', label: 'ASCII-only (safe fallback)' },
+        ] satisfies ReadonlyArray<{ value: UnicodeMode; label: string }>,
       },
     },
   },

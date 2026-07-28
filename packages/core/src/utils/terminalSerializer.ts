@@ -20,13 +20,40 @@ export type AnsiLine = AnsiToken[];
 export type AnsiOutput = AnsiLine[];
 
 /**
+ * A non-content liveness/status snapshot emitted across the public live-output
+ * stream boundary (issue #2540). Unlike `append` (text deltas) and `replace`
+ * (terminal snapshots), a `status` update carries no rendered content: it is
+ * a periodic liveness signal that keeps an outer stream-inactivity guard from
+ * firing while a healthy, otherwise-silent subagent waits on a long-running
+ * nested tool.
+ *
+ * Status is a snapshot, not an append — `accumulateLiveOutput` ignores it so
+ * retained output never grows with heartbeat strings.
+ */
+export interface LiveOutputStatus {
+  /**
+   * Kind of status signal. `liveness` is the periodic "still running"
+   * heartbeat; reserved for future non-liveness status without changing the
+   * union shape.
+   */
+  kind: 'liveness';
+  /**
+   * Monotonic counter so a snapshot consumer can coalesce or detect the most
+   * recent signal without storing an unbounded history.
+   */
+  seq: number;
+}
+
+/**
  * Explicit tagged update protocol for live-output streaming. Discriminated
  * by `mode`: text stream producers emit `append` (incremental deltas);
- * terminal-buffer producers emit `replace` (full snapshots).
+ * terminal-buffer producers emit `replace` (full snapshots);
+ * `status` emits a non-content liveness signal (issue #2540).
  */
 export type LiveOutputUpdate =
   | { mode: 'append'; data: string }
-  | { mode: 'replace'; data: AnsiOutput };
+  | { mode: 'replace'; data: AnsiOutput }
+  | { mode: 'status'; status: LiveOutputStatus };
 
 const enum Attribute {
   inverse = 1,

@@ -19,6 +19,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 const settingsPath = Storage.getGlobalSettingsPath();
 
@@ -85,7 +86,7 @@ interface StartupWarningsBoxProps {
 
 const StartupWarningsBox: FC<StartupWarningsBoxProps> = ({ warnings }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={theme.status.warning}
     paddingX={1}
     marginY={1}
@@ -112,7 +113,7 @@ const InitErrorBox: FC<InitErrorBoxProps> = ({ initError, history }) => {
   if (matchingHistoryError?.text) {
     return (
       <Box
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={theme.status.error}
         paddingX={1}
         marginBottom={1}
@@ -124,7 +125,7 @@ const InitErrorBox: FC<InitErrorBoxProps> = ({ initError, history }) => {
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={theme.status.error}
       paddingX={1}
       marginBottom={1}

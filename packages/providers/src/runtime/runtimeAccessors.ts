@@ -668,11 +668,19 @@ export function listProviders(): string[] {
   return getCliRuntimeServices().providerManager.listProviders();
 }
 
+/**
+ * The documented empty-state signal thrown by getActiveProviderName() when no
+ * provider is active. Exported so consumers can distinguish this expected
+ * condition from genuine runtime failures without matching raw strings.
+ */
+export const NO_ACTIVE_PROVIDER_ERROR_MESSAGE =
+  'No active provider is configured.';
+
 export function getActiveProviderName(): string {
   const { providerManager } = getCliRuntimeServices();
   const providerName = providerManager.getActiveProviderName();
   if (providerName === undefined) {
-    throw new Error('No active provider is configured.');
+    throw new Error(NO_ACTIVE_PROVIDER_ERROR_MESSAGE);
   }
   return providerName;
 }

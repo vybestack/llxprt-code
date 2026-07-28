@@ -11,6 +11,7 @@ import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
 import { CreateStep, type CreateWizardState } from './types.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface SubagentCreationWizardProps {
   profiles: string[];
@@ -123,7 +124,7 @@ function EditingFieldDisplay({
   return (
     <Box
       flexDirection="column"
-      borderStyle="single"
+      borderStyle={getBorderStyle('single')}
       borderColor="#00ff00"
       marginLeft={4}
       paddingX={1}

@@ -9,6 +9,7 @@ import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
 import { firstNonEmptyString } from '../../../utils/coalesce.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface HooksListProps {
   hooks: readonly HookRegistryEntry[];
@@ -17,7 +18,7 @@ interface HooksListProps {
 const SecurityWarning: React.FC = () => (
   <Box
     flexDirection="column"
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={Colors.Warning}
     paddingX={1}
     marginBottom={1}

@@ -388,6 +388,11 @@ function wrapInvocation(invocation: AnyToolInvocation): AgentToolInvocation {
                       .join('\n'),
                   );
                   break;
+                case 'status':
+                  // Non-content liveness signal (issue #2540); the public
+                  // string-only callback carries rendered content only, so the
+                  // heartbeat is intentionally not forwarded here.
+                  break;
                 default: {
                   const _exhaustive: never = update;
                   throw new Error(

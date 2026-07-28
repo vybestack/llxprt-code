@@ -299,7 +299,7 @@ export class HookRunner {
 
       const child = this.spawnHookProcess(hookConfig, input);
 
-      const timeoutHandle = this.setupKillTimeout(child, timeout, () => {
+      const timeoutControl = this.setupKillTimeout(child, timeout, () => {
         timedOut = true;
       });
 
@@ -314,7 +314,7 @@ export class HookRunner {
       });
 
       child.on('close', (exitCode) => {
-        clearTimeout(timeoutHandle);
+        timeoutControl.clear();
         const duration = Date.now() - startTime;
         if (timedOut) {
           resolve(
@@ -342,7 +342,7 @@ export class HookRunner {
       });
 
       child.on('error', (error) => {
-        clearTimeout(timeoutHandle);
+        timeoutControl.clear();
         resolve(
           this.errorResult(
             hookConfig,
@@ -373,20 +373,37 @@ export class HookRunner {
     };
   }
 
+  /**
+   * Sends SIGTERM after `timeout`, then escalates to SIGKILL if the child is
+   * still running. Do not use `child.killed` for escalation — Node sets that
+   * when a signal is *sent*, not when the process exits, so SIGTERM-ignoring
+   * hooks would never receive SIGKILL and could hang forever.
+   */
   private setupKillTimeout(
     child: ReturnType<typeof spawn>,
     timeout: number,
     onTimeout: () => void,
-  ): NodeJS.Timeout {
-    return setTimeout(() => {
+  ): { clear: () => void } {
+    let forceKillHandle: NodeJS.Timeout | undefined;
+    const timeoutHandle = setTimeout(() => {
       onTimeout();
       child.kill('SIGTERM');
-      setTimeout(() => {
-        if (!child.killed) {
+      forceKillHandle = setTimeout(() => {
+        // Still running only when both exit indicators remain null.
+        if (child.exitCode === null && child.signalCode === null) {
           child.kill('SIGKILL');
         }
       }, 5000);
     }, timeout);
+
+    return {
+      clear: () => {
+        clearTimeout(timeoutHandle);
+        if (forceKillHandle !== undefined) {
+          clearTimeout(forceKillHandle);
+        }
+      },
+    };
   }
 
   private timeoutResult(

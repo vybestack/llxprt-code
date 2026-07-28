@@ -31,6 +31,7 @@ import {
   buildTrustLevelOptions,
   findInitialTrustOptionIndex,
 } from '../trustDialogHelpers.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface PermissionsModifyTrustDialogProps {
   onExit: () => void;
@@ -50,7 +51,7 @@ const UpdatedPrompt: React.FC<UpdatedPromptProps> = ({
   <Box flexDirection="column">
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.AccentGreen}
       padding={1}
       width="100%"
@@ -98,7 +99,7 @@ const TrustForm: React.FC<TrustFormProps> = ({
   <Box flexDirection="column">
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       padding={1}
       width="100%"

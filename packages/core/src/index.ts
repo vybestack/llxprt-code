@@ -471,7 +471,6 @@ export {
   MCPDiscoveryState,
   McpClient,
   getAllMCPServerStatuses,
-  getMCPDiscoveryState,
   getMCPServerStatus,
   updateMCPServerStatus,
   addMCPStatusChangeListener,

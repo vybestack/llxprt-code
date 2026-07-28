@@ -168,6 +168,9 @@ jobs:
       has_tests: '${{ steps.select.outputs.has_tests }}'
       coverage_complete: '${{ steps.select.outputs.coverage_complete }}'
       full_run_reason: '${{ steps.select.outputs.full_run_reason }}'
+      lint_targets: '${{ steps.lint_select.outputs.lint_targets }}'
+      lint_full_run: '${{ steps.lint_select.outputs.lint_full_run }}'
+      lint_full_run_reason: '${{ steps.lint_select.outputs.lint_full_run_reason }}'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -221,6 +224,34 @@ jobs:
             --event "$event" \
             "${files_arg[@]}" \
             --output github-actions
+
+      - name: 'Select affected lint targets'
+        id: 'lint_select'
+        run: |
+          set +e
+          event='${{ github.event_name }}'
+          files_arg=()
+          if [[ "$event" == "pull_request" ]]; then
+            files_arg=(--files-from "${RUNNER_TEMP}/changed-files.txt")
+          fi
+          # The lint selector reuses the same import graph as the test-shard
+          # selector and writes lint_targets (JSON array of package dirs +
+          # integration-tests) and lint_full_run (true when fail-closed to a
+          # full root lint) directly to GITHUB_OUTPUT. The selector must NOT
+          # fail this job — on crash it writes a full-run fallback so that
+          # lint_javascript's step-level fail-closed logic lints the whole
+          # root tree.
+          node scripts/affected-lint-targets.ts \
+            --event "$event" \
+            "${files_arg[@]}" \
+            --output github-actions
+          select_rc=$?
+          if [[ "$select_rc" -ne 0 ]]; then
+            echo "lint_targets=[\".\"]" >> "$GITHUB_OUTPUT"
+            echo "lint_full_run=true" >> "$GITHUB_OUTPUT"
+            echo "lint_full_run_reason=lint selector failed (exit $select_rc)" >> "$GITHUB_OUTPUT"
+            echo "::warning::affected-lint-targets failed (exit $select_rc); falling back to full lint"
+          fi
   #
   lint_github_actions:
     name: 'Lint (GitHub Actions)'
@@ -282,7 +313,13 @@ jobs:
     runs-on: 'ubuntu-latest'
     needs:
       - 'skip_check'
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+      - 'shard_selector'
+    # Fail closed: run this required lint job even when shard_selector fails or
+    # is skipped, so the step-level fail-closed logic (full lint on non-success)
+    # is reachable. Without `!cancelled()`, GitHub Actions skips dependent jobs
+    # before evaluating `if` when a needed job fails, which would silently skip
+    # lint and allow un-linted code to merge.
+    if: ${{ !cancelled() && needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -399,19 +436,48 @@ jobs:
         run: |-
           npm run lint:agents-api-surface
 
+      # ESLint cache is CI opt-in only (issue #2710). The exact key hashes
+      # every linted source/config/type input so a changed cross-file type
+      # producer invalidates the cache of its consumers. There are no
+      # restore-keys: a partial match across a stale type input would be
+      # unsound.
+      - name: 'Restore ESLint cache'
+        id: 'eslint_cache'
+        if: ${{ needs.shard_selector.result == 'success' }}
+        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        with:
+          path: 'node_modules/.cache/eslint'
+          key: ${{ runner.os }}-eslint-${{ hashFiles('packages/*/src/**', 'packages/*/package.json', 'packages/*/tsconfig.json', 'scripts/**', 'evals/**', 'integration-tests/**', 'eslint.config.js', 'eslint-rules/**', 'package.json', 'package-lock.json', 'bun.lock', 'tsconfig.json', 'tsconfig.scripts.json', '*.js', 'test-setup/**', '.github/workflows/**', '.github/scripts/**') }}
+
       - name: 'Run linter'
         env:
-          NODE_OPTIONS: '--max-old-space-size=8192'
-        run: |-
-          npm run lint:ci
+          NODE_OPTIONS: '--max-old-space-size=12288'
+        run: |
+          set -euo pipefail
+          # Fail closed: if the selector did not succeed, or reported a full
+          # run, lint the whole root tree. Otherwise lint only the selected
+          # package targets (the runner always includes integration-tests).
+          selector_result='${{ needs.shard_selector.result }}'
+          lint_full_run='${{ needs.shard_selector.outputs.lint_full_run }}'
+          lint_targets='${{ needs.shard_selector.outputs.lint_targets }}'
+          lint_full_run_reason='${{ needs.shard_selector.outputs.lint_full_run_reason }}'
+          if [[ -n "$lint_full_run_reason" ]]; then
+            echo "::notice::Lint running full: $lint_full_run_reason"
+          fi
+          if [[ "$selector_result" == "success" && "$lint_full_run" != "true" && -n "$lint_targets" && "$lint_targets" != "null" ]]; then
+            # Scoped run: the runner derives --cache args centrally from the
+            # LLXPRT_LINT_CACHE env (it also reads the target list from env),
+            # so no cache flags are passed on the CLI.
+            LLXPRT_LINT_CACHE=true LLXPRT_LINT_TARGETS="$lint_targets" \
+              npm run lint:runner
+          else
+            # Full run: one root ESLint invocation covers integration-tests.
+            npm run lint:ci
+          fi
 
       - name: 'Run LSP package linter'
         run: |-
           cd packages/lsp && npx eslint .
-
-      - name: 'Run linter on integration tests'
-        run: |-
-          npx eslint integration-tests
 
       - name: 'Run formatter on integration tests'
         run: |-

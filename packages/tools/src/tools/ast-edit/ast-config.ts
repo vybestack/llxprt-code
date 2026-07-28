@@ -66,6 +66,7 @@ export class ASTConfig {
     java: 'java',
     cpp: 'cpp',
     c: 'c',
+    h: 'c',
     html: 'html',
     css: 'css',
     json: 'json',

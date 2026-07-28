@@ -10,6 +10,7 @@ import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 import { UnconfiguredPrivacyNotice } from './UnconfiguredPrivacyNotice.js';
 import type { ModelState } from '../cliUiRuntime.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface PrivacyNoticeProps {
   onExit: () => void;
@@ -59,7 +60,7 @@ const PrivacyNoticeText = ({
 };
 
 export const PrivacyNotice = ({ onExit, config }: PrivacyNoticeProps) => (
-  <Box borderStyle="round" padding={1} flexDirection="column">
+  <Box borderStyle={getBorderStyle('round')} padding={1} flexDirection="column">
     <PrivacyNoticeText config={config} onExit={onExit} />
   </Box>
 );

@@ -101,6 +101,7 @@ export {
   getUnallowedParametersForActiveModel,
   listProviders,
   getActiveProviderName,
+  NO_ACTIVE_PROVIDER_ERROR_MESSAGE,
 } from './runtimeAccessors.js';
 export type {
   CliRuntimeServices,

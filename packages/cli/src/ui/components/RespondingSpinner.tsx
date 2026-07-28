@@ -15,6 +15,7 @@ import {
   SCREEN_READER_LOADING,
   SCREEN_READER_RESPONDING,
 } from '../textConstants.js';
+import { getSpinnerType } from '../contexts/UnicodeRenderingContext.js';
 
 interface RespondingSpinnerProps {
   /**
@@ -35,7 +36,7 @@ export const RespondingSpinner: React.FC<RespondingSpinnerProps> = ({
     return isScreenReaderEnabled ? (
       <Text color={Colors.Foreground}>{SCREEN_READER_RESPONDING}</Text>
     ) : (
-      <Spinner type={spinnerType} />
+      <Spinner type={getSpinnerType(spinnerType)} />
     );
   } else if (nonRespondingDisplay) {
     return isScreenReaderEnabled ? (

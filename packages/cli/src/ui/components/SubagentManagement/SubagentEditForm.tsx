@@ -12,6 +12,7 @@ import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import type { SubagentInfo } from './types.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface SubagentEditFormProps {
   subagent: SubagentInfo;
@@ -125,7 +126,7 @@ function PromptEditorSection({
       <Box
         marginLeft={4}
         flexDirection="column"
-        borderStyle="single"
+        borderStyle={getBorderStyle('single')}
         borderColor={focusTarget === 'prompt' ? '#00ff00' : Colors.Gray}
         paddingX={1}
         height={editorHeight + 2}
