@@ -279,6 +279,7 @@ export class ToolRegistry {
   private config: IToolRegistryHost;
   private logger = debugLogger;
   private discoveryLock: Promise<void> | null = null;
+  private readonly activatedMcpServers: Set<string> = new Set();
 
   private readonly messageBus: IToolMessageBus;
 
@@ -303,6 +304,96 @@ export class ToolRegistry {
 
   private isToolActive(toolName: string, governance: ToolGovernance): boolean {
     return !isToolBlocked(toolName, governance);
+  }
+
+  private getEphemeralPath(key: string): unknown {
+    const ephemerals: unknown = this.config.getEphemeralSettings?.();
+    if (
+      ephemerals === null ||
+      typeof ephemerals !== 'object' ||
+      Array.isArray(ephemerals)
+    ) {
+      return undefined;
+    }
+
+    if (Reflect.has(ephemerals, key)) {
+      return Reflect.get(ephemerals, key);
+    }
+
+    const parts = key.split('.');
+    let current: unknown = ephemerals;
+    for (const part of parts) {
+      if (current === null || typeof current !== 'object') {
+        return undefined;
+      }
+      if (Array.isArray(current) || !Reflect.has(current, part)) {
+        return undefined;
+      }
+      current = Reflect.get(current, part);
+    }
+    return current;
+  }
+
+  private isLazyMcpEnabled(): boolean {
+    return this.getEphemeralPath('mcp.lazy') === true;
+  }
+
+  private getEagerServers(): Set<string> {
+    const raw = this.getEphemeralPath('mcp.eagerServers');
+    if (
+      Array.isArray(raw) &&
+      raw.every((v): v is string => typeof v === 'string')
+    ) {
+      return new Set(raw);
+    }
+    return new Set();
+  }
+
+  private getMcpServerNames(): Set<string> {
+    const servers = new Set<string>();
+    for (const tool of this.tools.values()) {
+      if (isDiscoveredMcpTool(tool)) {
+        servers.add(tool.serverName);
+      }
+    }
+    return servers;
+  }
+
+  listDeferredMcpServers(): string[] {
+    if (!this.isLazyMcpEnabled()) {
+      return [];
+    }
+    const eager = this.getEagerServers();
+    const deferred: string[] = [];
+    for (const server of this.getMcpServerNames()) {
+      if (!eager.has(server) && !this.activatedMcpServers.has(server)) {
+        deferred.push(server);
+      }
+    }
+    return deferred.sort();
+  }
+
+  activateMcpServer(name: string): void {
+    const knownServers = this.getMcpServerNames();
+    if (!knownServers.has(name)) {
+      throw new Error(
+        `Unknown MCP server "${name}". Known servers: ${Array.from(knownServers).sort().join(', ')}.`,
+      );
+    }
+    this.activatedMcpServers.add(name);
+  }
+
+  private shouldDeferMcpTool(
+    tool: AnyDeclarativeTool,
+    lazy: boolean,
+    eager: ReadonlySet<string>,
+  ): boolean {
+    return (
+      lazy &&
+      isDiscoveredMcpTool(tool) &&
+      !eager.has(tool.serverName) &&
+      !this.activatedMcpServers.has(tool.serverName)
+    );
   }
 
   /**
@@ -607,10 +698,15 @@ export class ToolRegistry {
   getFunctionDeclarations(): FunctionDeclaration[] {
     const governance = this.getToolGovernance();
     const transforms = this.getSchemaTransforms();
+    const lazy = this.isLazyMcpEnabled();
+    const eager = lazy ? this.getEagerServers() : new Set<string>();
 
     const declarations: FunctionDeclaration[] = [];
     this.tools.forEach((tool) => {
       if (this.isToolActive(tool.name, governance)) {
+        if (this.shouldDeferMcpTool(tool, lazy, eager)) {
+          return;
+        }
         declarations.push(this.applySchemaTransforms(tool.schema, transforms));
       }
     });
