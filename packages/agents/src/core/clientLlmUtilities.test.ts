@@ -44,7 +44,7 @@ const EMBEDDING_MODEL = 'embedding-model';
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
     getUserMemory: vi.fn().mockReturnValue(USER_MEMORY),
-    getMcpClientManager: vi.fn().mockReturnValue(undefined),
+    getMcpInstructions: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
     ...overrides,
   } as unknown as Config;

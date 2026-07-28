@@ -103,7 +103,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getUserMemory: vi.fn().mockReturnValue('user memory text'),
     getCoreMemory: vi.fn().mockReturnValue('core memory text'),
     getJitMemoryForPath: vi.fn().mockResolvedValue(null),
-    getMcpClientManager: vi.fn().mockReturnValue(undefined),
+    getMcpInstructions: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
     getWorkingDir: vi.fn().mockReturnValue('/workspace'),
     getSettingsService: vi.fn().mockReturnValue({}),

@@ -29,10 +29,8 @@ import fc from 'fast-check';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import { getMcpServerOAuthStatus } from '@vybestack/llxprt-code-core';
-import type {
-  McpOAuthStatus,
-  McpClientManager,
-} from '@vybestack/llxprt-code-core';
+import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-core';
 import { mcpServerRequiresOAuth } from '@vybestack/llxprt-code-core';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
 import { fakeServerConfig } from './helpers/fakeMcpManager.js';
@@ -77,7 +75,6 @@ function buildProjectionDeps(
   opts: ProjectionDepsOptions = {},
 ): ProjectionDeps {
   const fakeManager: FakeManager | undefined = opts.manager;
-  const managerAsCore = fakeManager as unknown as McpClientManager | undefined;
 
   const authSet = new Set<string>(opts.authenticated ?? []);
 
@@ -106,7 +103,22 @@ function buildProjectionDeps(
     markAuthenticated: (server: string) => {
       authSet.add(server);
     },
-    getManager: () => managerAsCore,
+    getMcpRuntimeStatus: () => ({
+      servers: opts.servers ?? {},
+      discoveryFailures: new Map<string, string>(),
+      discoveryState: MCPDiscoveryState.COMPLETED,
+    }),
+    ...(fakeManager !== undefined
+      ? {
+          refreshMcpServers: async (server?: string) => {
+            if (server !== undefined) {
+              await fakeManager.restartServer(server);
+            } else {
+              await fakeManager.restart();
+            }
+          },
+        }
+      : {}),
     getToolRegistry: () => undefined,
     getServerConfigs: () => opts.servers,
     getBlockedServers: () => [],

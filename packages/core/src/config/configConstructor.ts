@@ -204,6 +204,13 @@ export interface ConfigConstructorTarget {
         adminSkillsEnabled?: boolean;
       }>)
     | undefined;
+  _onReloadMcpServers:
+    | (() => Promise<{
+        mcpServers: Record<string, MCPServerConfig>;
+        blockedMcpServers: Array<{ name: string; extensionName: string }>;
+        settingsMcpServers: Record<string, MCPServerConfig>;
+      }>)
+    | undefined;
   outputSettings: OutputSettings;
   introspectionAgentSettings: IntrospectionAgentSettings;
   useWriteTodos: boolean;
@@ -474,6 +481,7 @@ function applyPolicyAndLifecycle(
   config.skillManager.setAdminSettings(config.adminSkillsEnabled);
   config.sanitizationConfig = params.sanitizationConfig;
   config._onReload = params.onReload;
+  config._onReloadMcpServers = params.onReloadMcpServers;
   config.outputSettings = params.outputSettings ?? {
     format: OutputFormat.TEXT,
   };

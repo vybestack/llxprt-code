@@ -127,7 +127,7 @@ export async function buildSystemInstruction(
     userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
   }
 
-  const mcpInstructions = config.getMcpClientManager()?.getMcpInstructions();
+  const mcpInstructions = config.getMcpInstructions();
   const includeSubagentDelegation =
     await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
   const interactionMode = config.isInteractive()
