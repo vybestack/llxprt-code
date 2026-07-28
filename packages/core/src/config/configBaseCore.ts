@@ -289,6 +289,15 @@ export abstract class ConfigBaseCore {
     this.taskToolRegistration = registration;
   }
   /**
+   * Public typed setter so the CLI composition root can inject the
+   * image-backend resolver (constructed from the providers package) without
+   * mutating a protected field via a cast. Core keeps the type loose to
+   * avoid importing providers.
+   */
+  setImageBackendResolver(resolver: (() => unknown) | null | undefined): void {
+    this.imageBackendResolver = resolver;
+  }
+  /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    */
@@ -303,6 +312,13 @@ export abstract class ConfigBaseCore {
    * @requirement REQ-INV-003
    */
   protected taskToolRegistration: TaskToolRegistration | undefined;
+  /**
+   * Injected image-backend resolver closure (suitable for GenerateImageTool's
+   * `resolveBackend` dependency). Typed loosely (`unknown`) so core does not
+   * import the providers package; the CLI composition root sets the concrete
+   * resolver from the providers package.
+   */
+  protected imageBackendResolver: (() => unknown) | null | undefined;
   protected postSkillDiscoveryToolRegistrar:
     | PostSkillDiscoveryToolRegistrar
     | undefined;
@@ -858,6 +874,9 @@ export abstract class ConfigBaseCore {
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined {
     return this.taskToolRegistration;
+  }
+  getImageBackendResolver(): (() => unknown) | null | undefined {
+    return this.imageBackendResolver;
   }
   getPostSkillDiscoveryToolRegistrar():
     | PostSkillDiscoveryToolRegistrar

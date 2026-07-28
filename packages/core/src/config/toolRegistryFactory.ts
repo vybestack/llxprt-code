@@ -137,6 +137,16 @@ export interface ToolRegistryHost {
    * Returns the injected TaskToolRegistration, or undefined to use core-local default.
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined;
+  /**
+   * Returns the injected image-backend resolver closure (suitable for
+   * GenerateImageTool's `resolveBackend` dependency), or undefined/null to
+   * register the tool with a null resolver (graceful "unavailable").
+   *
+   * The type is intentionally loose (`unknown`) so core does not need to
+   * import the providers package; the tool's own dependency injection
+   * enforces the structural contract at the composition root.
+   */
+  getImageBackendResolver?(): (() => unknown) | null | undefined;
 }
 
 function getTaskToolMissingReason(
@@ -408,10 +418,21 @@ function registerStandardTools(
   });
   registerCoreTool(DirectWebFetchTool, toolHostAdapter);
 
-  // Registered with a null backend resolver so the tool is present but
-  // gracefully reports unavailable (TOOL_DISABLED) until the Codex-aware
-  // resolver follow-up lands with the runtime auth wiring.
-  registerCoreTool(GenerateImageTool, { resolveBackend: () => null });
+  // The image-backend resolver is injected by the composition root (CLI layer)
+  // via the host. We wrap it in a lazy closure that reads from the host
+  // dynamically — the CLI sets the resolver AFTER config.initialize() creates
+  // the tool registry, so capturing the value eagerly would always see null.
+  // When absent (e.g. tests, non-Codex runtimes) the tool gracefully reports
+  // unavailable.
+  registerCoreTool(GenerateImageTool, {
+    resolveBackend: () => {
+      const resolver = host.getImageBackendResolver?.();
+      if (resolver === null || resolver === undefined) {
+        return null;
+      }
+      return resolver();
+    },
+  });
 
   void CoreIdeServiceAdapter;
   void CoreLspServiceAdapter;

@@ -24,6 +24,7 @@ import {
   applyCliSetArguments,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
 import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
@@ -297,6 +298,17 @@ async function setupRuntimeContext(
   // OAuthManager the Agent sees is the exact one assembled on the same bus — no
   // second OAuthManager is constructed or looked up.
   config.setRuntimeOAuthManager(finalRuntime.oauthManager);
+
+  // Wire the Codex image backend resolver. resolveBackend is called lazily
+  // (when the model invokes generate_image), so even though the tool registry
+  // was already created during config.initialize(), the lazy closure reads
+  // this resolver at invocation time.
+  config.setImageBackendResolver(
+    createCodexImageBackendResolver({
+      oauthManager: finalRuntime.oauthManager,
+      getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
+    }),
+  );
 
   logger.debug(
     () => `[bootstrap] Runtime context set, runtimeId=${bootstrapRuntimeId}`,

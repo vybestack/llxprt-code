@@ -125,6 +125,10 @@ export {
   formatCodexUsage,
 } from './openai/codexUsageInfo.js';
 export * from './openai/codexRateLimitReset.js';
+export {
+  createCodexImageBackendResolver,
+  type CodexImageBackendResolverDeps,
+} from './openai/codexImageBackendResolver.js';
 export * from './zai/usageInfo.js';
 export * from './synthetic/usageInfo.js';
 export * from './chutes/usageInfo.js';
