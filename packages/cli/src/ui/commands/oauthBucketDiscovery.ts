@@ -16,16 +16,15 @@ type BucketDiscoveryLogger = Pick<
  * Narrow interface for the OAuth manager surface required by bucket
  * discovery. Both the real OAuthManager and test doubles satisfy this.
  */
+export interface OAuthBucketDiscoveryTokenStore {
+  listBuckets(provider: string): Promise<string[]>;
+  getBucketStats(provider: string, bucket: string): Promise<BucketStats | null>;
+  getToken(provider: string, bucket?: string): Promise<unknown>;
+}
+
 export interface OAuthBucketDiscoveryManager {
   getSupportedProviders(): string[];
-  getTokenStore(): {
-    listBuckets(provider: string): Promise<string[]>;
-    getBucketStats(
-      provider: string,
-      bucket: string,
-    ): Promise<BucketStats | null>;
-    getToken(provider: string, bucket?: string): Promise<unknown>;
-  };
+  getTokenStore(): OAuthBucketDiscoveryTokenStore;
 }
 
 /** A single bucket with its (possibly null) usage statistics. */
@@ -48,9 +47,7 @@ const NO_OP_LOGGER: BucketDiscoveryLogger = {
 };
 
 async function collectBucketsForProvider(
-  tokenStore: OAuthBucketDiscoveryManager['getTokenStore'] extends () => infer T
-    ? T
-    : never,
+  tokenStore: OAuthBucketDiscoveryTokenStore,
   provider: string,
   log: BucketDiscoveryLogger,
 ): Promise<DiscoveredBucket[]> {
