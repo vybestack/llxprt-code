@@ -1,0 +1,272 @@
+{
+  "session": {
+    "name": "llxprt-model-config-userflow7",
+    "cwd": ".",
+    "size": {
+      "cols": 110,
+      "rows": 34
+    },
+    "startCommand": "bun scripts/start.ts"
+  },
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000,
+      "pollMs": 500
+    },
+    {
+      "type": "capture",
+      "label": "00-startup"
+    },
+    {
+      "type": "line",
+      "text": "/provider anthropic",
+      "submitKeys": [
+        "Enter"
+      ],
+      "postTypeMs": 800
+    },
+    {
+      "type": "wait",
+      "ms": 5000
+    },
+    {
+      "type": "line",
+      "text": "/model",
+      "submitKeys": [
+        "Enter"
+      ],
+      "postTypeMs": 800
+    },
+    {
+      "type": "wait",
+      "ms": 15000
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 10000
+    },
+    {
+      "type": "capture",
+      "label": "03-config-dialog"
+    },
+    {
+      "type": "key",
+      "key": "Down"
+    },
+    {
+      "type": "wait",
+      "ms": 700
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 1500
+    },
+    {
+      "type": "key",
+      "key": "3"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "2"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "0"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "0"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "0"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 800
+    },
+    {
+      "type": "capture",
+      "label": "04-staged-32000"
+    },
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "05-after-esc-cancel"
+    },
+    {
+      "type": "line",
+      "text": "/model",
+      "submitKeys": [
+        "Enter"
+      ],
+      "postTypeMs": 800
+    },
+    {
+      "type": "wait",
+      "ms": 15000
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 10000
+    },
+    {
+      "type": "capture",
+      "label": "06-dialog-reopened"
+    },
+    {
+      "type": "key",
+      "key": "Down"
+    },
+    {
+      "type": "wait",
+      "ms": 700
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 1500
+    },
+    {
+      "type": "key",
+      "key": "6"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "4"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "0"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "0"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "key",
+      "key": "0"
+    },
+    {
+      "type": "wait",
+      "ms": 250
+    },
+    {
+      "type": "wait",
+      "ms": 500
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 800
+    },
+    {
+      "type": "capture",
+      "label": "07-staged-64000"
+    },
+    {
+      "type": "key",
+      "key": "s"
+    },
+    {
+      "type": "wait",
+      "ms": 2000
+    },
+    {
+      "type": "capture",
+      "label": "08-after-save"
+    },
+    {
+      "type": "key",
+      "key": "C-c"
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "line",
+      "text": "/exit",
+      "submitKeys": [
+        "Enter"
+      ],
+      "postTypeMs": 500
+    },
+    {
+      "type": "wait",
+      "ms": 3000
+    }
+  ]
+}

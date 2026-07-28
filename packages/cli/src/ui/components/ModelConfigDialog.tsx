@@ -15,6 +15,28 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { TextInput } from './ProfileCreateWizard/TextInput.js';
 import { parseValue } from '../commands/setCommand.js';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
+import { getSettingSpec } from '@vybestack/llxprt-code-settings';
+
+// Pending values for one field, staged in the dialog until [Save] commits
+// them to the runtime. Cancel/Esc discards them wholesale.
+interface PendingEdit {
+  text: string;
+  enumIndex: number | null;
+  boolValue: boolean | null;
+}
+
+function pendingValueFor(
+  field: ConfigField,
+  edit: PendingEdit | undefined,
+): unknown {
+  if (edit === undefined) return undefined;
+  if (field.editor === 'boolean') return edit.boolValue ?? undefined;
+  if (field.editor === 'enum') {
+    if (edit.enumIndex === null) return undefined;
+    return field.enumValues?.[edit.enumIndex];
+  }
+  return edit.text === '' ? undefined : parseValue(edit.text);
+}
 
 const PARAM_KEYS = [
   'max_tokens',
@@ -47,22 +69,6 @@ const PARAM_HINTS: Record<string, string> = {
 };
 
 const BOOLEAN_EPHEMERALS = new Set(['reasoning.enabled']);
-const ENUM_EPHEMERALS: Record<string, readonly string[]> = {
-  'reasoning.effort': ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
-  streaming: ['enabled', 'disabled'],
-  'prompt-caching': ['off', '5m', '1h', '24h'],
-};
-
-type FieldKind = 'param' | 'ephemeral';
-type EditorType = 'text' | 'boolean' | 'enum';
-
-interface ConfigField {
-  key: string;
-  kind: FieldKind;
-  hint: string;
-  editor: EditorType;
-  enumValues?: readonly string[];
-}
 
 function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
   const paramKeys = PARAM_KEYS.filter((key) => !unallowed.has(key));
@@ -87,15 +93,20 @@ function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
     let editor: EditorType = 'text';
     if (BOOLEAN_EPHEMERALS.has(key)) {
       editor = 'boolean';
-    } else if (Object.hasOwn(ENUM_EPHEMERALS, key)) {
-      editor = 'enum';
+    } else {
+      const spec = getSettingSpec(key);
+      if (spec?.type === 'enum') {
+        editor = 'enum';
+      }
     }
+    const enumValues =
+      editor === 'enum' ? (getSettingSpec(key)?.enumValues ?? []) : undefined;
     return {
       key,
       kind: 'ephemeral' as const,
       hint: PARAM_HINTS[key] ?? '',
       editor,
-      enumValues: ENUM_EPHEMERALS[key],
+      enumValues,
     };
   });
 
@@ -107,6 +118,17 @@ function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
   }));
 
   return [...leadingFields, ...paramFields, ...ephemeralFields];
+}
+
+type FieldKind = 'param' | 'ephemeral';
+type EditorType = 'text' | 'boolean' | 'enum';
+
+interface ConfigField {
+  key: string;
+  kind: FieldKind;
+  hint: string;
+  editor: EditorType;
+  enumValues?: readonly string[];
 }
 
 export interface ModelConfigDialogProps {
@@ -122,35 +144,6 @@ function formatValue(value: unknown): string {
 interface CommitResult {
   success: boolean;
   message?: string;
-}
-
-function commitParam(
-  key: string,
-  raw: string,
-  setActiveModelParam: (key: string, value: unknown) => void,
-): CommitResult {
-  try {
-    setActiveModelParam(key, parseValue(raw));
-    return { success: true };
-  } catch (e) {
-    return {
-      success: false,
-      message: e instanceof Error ? e.message : String(e),
-    };
-  }
-}
-
-function commitEphemeral(
-  field: ConfigField,
-  raw: string,
-  setEphemeralSetting: (key: string, value: unknown) => void,
-): CommitResult {
-  const result = parseEphemeralSettingValue(field.key, raw);
-  if (!result.success) {
-    return { success: false, message: result.message };
-  }
-  setEphemeralSetting(field.key, result.value);
-  return { success: true };
 }
 
 function valueForField(
@@ -321,35 +314,166 @@ interface KeypressDispatch {
   ephemeral: Record<string, unknown>;
   forceRender: () => void;
   fields: readonly ConfigField[];
+  pendingEdits: Readonly<Record<string, PendingEdit>>;
+  setPendingEdit: (key: string, edit: PendingEdit) => void;
+  clearPendingEdits: () => void;
 }
 
-function toggleBooleanValue(
-  field: ConfigField,
-  current: unknown,
-  runtime: ReturnType<typeof useRuntimeApi>,
-): void {
-  if (field.kind !== 'ephemeral') return;
-  const next = current !== true;
-  runtime.setEphemeralSetting(field.key, next);
+// Resolves a field's displayed value: a staged pending edit wins, then the
+// committed runtime value (with the inherited-default fallback for params).
+function effectiveValueFor(field: ConfigField, d: KeypressDispatch): unknown {
+  const pending = pendingValueFor(field, d.pendingEdits[field.key]);
+  if (pending !== undefined) return pending;
+  return valueForField(field, d.params, d.ephemeral);
 }
 
-function cycleEnumValue(
+function togglePendingBoolean(field: ConfigField, d: KeypressDispatch): void {
+  const current = effectiveValueFor(field, d);
+  d.setPendingEdit(field.key, {
+    text: '',
+    enumIndex: null,
+    boolValue: current !== true,
+  });
+}
+
+function cyclePendingEnum(
   field: ConfigField,
   enumIndex: number,
   direction: 1 | -1,
-  runtime: ReturnType<typeof useRuntimeApi>,
 ): number {
   const values = field.enumValues ?? [];
   if (values.length === 0) return enumIndex;
-  const nextIndex = (enumIndex + direction + values.length) % values.length;
-  runtime.setEphemeralSetting(field.key, values[nextIndex]);
-  return nextIndex;
+  return (enumIndex + direction + values.length) % values.length;
+}
+
+function stageTextEdit(field: ConfigField, d: KeypressDispatch): void {
+  d.setPendingEdit(field.key, {
+    text: d.editValue,
+    enumIndex: null,
+    boolValue: null,
+  });
+  d.setEditingIndex(null);
+  d.setValidationError(null);
+}
+
+function stageEnumEdit(field: ConfigField, d: KeypressDispatch): void {
+  d.setPendingEdit(field.key, {
+    text: '',
+    enumIndex: d.enumIndex,
+    boolValue: null,
+  });
+  d.setEditingIndex(null);
+  d.setValidationError(null);
+}
+
+function stageClear(field: ConfigField, d: KeypressDispatch): void {
+  d.setPendingEdit(field.key, { text: '', enumIndex: null, boolValue: null });
+}
+
+function stageBooleanToggle(field: ConfigField, d: KeypressDispatch): void {
+  togglePendingBoolean(field, d);
+  d.setEditingIndex(null);
+  d.setValidationError(null);
+}
+
+// Validates staged text edits, then writes every pending value into the
+// runtime. Returns true when the commit succeeded (dialog may close).
+function commitPendingEdits(d: KeypressDispatch): boolean {
+  for (const field of d.fields) {
+    if (!(field.key in d.pendingEdits)) continue;
+    const edit = d.pendingEdits[field.key];
+    const error = commitFieldEdit(field, edit, d);
+    if (error !== null) {
+      d.setValidationError(`${field.key}: ${error}`);
+      return false;
+    }
+  }
+  d.clearPendingEdits();
+  d.setValidationError(null);
+  return true;
+}
+
+// Commits a single staged edit for a field. Returns an error message on
+// validation failure, or null when the write succeeded (or was a no-op).
+function commitFieldEdit(
+  field: ConfigField,
+  edit: PendingEdit,
+  d: KeypressDispatch,
+): string | null {
+  if (field.editor === 'boolean') {
+    if (edit.boolValue !== null) {
+      d.runtime.setEphemeralSetting(field.key, edit.boolValue);
+    }
+    return null;
+  }
+
+  if (field.editor === 'enum') {
+    if (edit.enumIndex !== null) {
+      const value = field.enumValues?.[edit.enumIndex];
+      if (value !== undefined) {
+        d.runtime.setEphemeralSetting(field.key, value);
+      }
+    }
+    return null;
+  }
+
+  const raw = edit.text;
+  if (raw === '') {
+    if (field.kind === 'param') {
+      d.runtime.clearActiveModelParam(field.key);
+    } else {
+      d.runtime.setEphemeralSetting(field.key, undefined);
+    }
+    return null;
+  }
+
+  if (field.kind === 'param') {
+    const result = commitParam(raw, (value) =>
+      d.runtime.setActiveModelParam(field.key, value),
+    );
+    return result.success ? null : (result.message ?? 'Invalid value');
+  }
+
+  const result = commitEphemeral(field, raw, (value) =>
+    d.runtime.setEphemeralSetting(field.key, value),
+  );
+  return result.success ? null : (result.message ?? 'Invalid value');
+}
+
+function commitParam(
+  raw: string,
+  setActiveModelParam: (value: unknown) => void,
+): CommitResult {
+  try {
+    setActiveModelParam(parseValue(raw));
+    return { success: true };
+  } catch (e) {
+    return {
+      success: false,
+      message: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+function commitEphemeral(
+  field: ConfigField,
+  raw: string,
+  setEphemeralSetting: (value: unknown) => void,
+): CommitResult {
+  const result = parseEphemeralSettingValue(field.key, raw);
+  if (!result.success) {
+    return { success: false, message: result.message };
+  }
+  setEphemeralSetting(result.value);
+  return { success: true };
 }
 
 function handleListKey(key: Key, d: KeypressDispatch): void {
   const field = d.fields[d.selectedIndex];
 
   if (key.name === 'escape') {
+    // Cancel: discard all pending edits and close — nothing is committed.
+    d.clearPendingEdits();
     d.onClose();
     return;
   }
@@ -363,23 +487,23 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
   }
   if (key.name === 'return') {
     if (field.editor === 'boolean') {
-      const current = valueForField(field, d.params, d.ephemeral);
+      const current = effectiveValueFor(field, d);
       if (isFieldImmutable(field, current)) {
         d.setEditingIndex(d.selectedIndex);
         return;
       }
-      toggleBooleanValue(field, current, d.runtime);
+      togglePendingBoolean(field, d);
       d.forceRender();
       return;
     }
     if (field.editor === 'enum') {
-      const current = valueForField(field, d.params, d.ephemeral);
+      const current = effectiveValueFor(field, d);
       const idx = field.enumValues?.indexOf(String(current)) ?? -1;
       d.setEnumIndex(idx >= 0 ? idx : 0);
       d.setEditingIndex(d.selectedIndex);
       return;
     }
-    const current = valueForField(field, d.params, d.ephemeral);
+    const current = effectiveValueFor(field, d);
     d.setEditValue(
       current === undefined || current === null ? '' : formatValue(current),
     );
@@ -388,15 +512,19 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
     return;
   }
   if (isPlainLetter(key, 'space') && field.editor === 'boolean') {
-    const current = valueForField(field, d.params, d.ephemeral);
+    const current = effectiveValueFor(field, d);
     if (isFieldImmutable(field, current)) return;
-    toggleBooleanValue(field, current, d.runtime);
+    togglePendingBoolean(field, d);
     d.forceRender();
     return;
   }
   if (isPlainLetter(key, 'c') && field.kind === 'param') {
-    d.runtime.clearActiveModelParam(field.key);
+    stageClear(field, d);
     d.forceRender();
+    return;
+  }
+  if (isPlainLetter(key, 's') && commitPendingEdits(d)) {
+    d.onClose();
   }
 }
 
@@ -404,7 +532,7 @@ function handleEditKey(key: Key, d: KeypressDispatch): void {
   const field = d.fields[d.editingIndex!];
 
   if (key.name === 'escape') {
-    // Esc always cancels the edit — never saves.
+    // Esc backs out of the field editor without staging the edit.
     d.setEditingIndex(null);
     d.setValidationError(null);
     return;
@@ -412,10 +540,9 @@ function handleEditKey(key: Key, d: KeypressDispatch): void {
 
   if (field.editor === 'boolean') {
     if (isPlainLetter(key, 'space')) {
-      const current = valueForField(field, d.params, d.ephemeral);
+      const current = effectiveValueFor(field, d);
       if (isFieldImmutable(field, current)) return;
-      toggleBooleanValue(field, current, d.runtime);
-      d.forceRender();
+      stageBooleanToggle(field, d);
       return;
     }
     if (key.name === 'return') {
@@ -428,22 +555,15 @@ function handleEditKey(key: Key, d: KeypressDispatch): void {
 
   if (field.editor === 'enum') {
     if (key.name === 'left') {
-      d.setEnumIndex((prev) => {
-        const next = cycleEnumValue(field, prev, -1, d.runtime);
-        return next;
-      });
+      d.setEnumIndex((prev) => cyclePendingEnum(field, prev, -1));
       return;
     }
     if (key.name === 'right') {
-      d.setEnumIndex((prev) => {
-        const next = cycleEnumValue(field, prev, 1, d.runtime);
-        return next;
-      });
+      d.setEnumIndex((prev) => cyclePendingEnum(field, prev, 1));
       return;
     }
     if (key.name === 'return') {
-      d.setEditingIndex(null);
-      d.setValidationError(null);
+      stageEnumEdit(field, d);
       return;
     }
     return;
@@ -453,32 +573,7 @@ function handleEditKey(key: Key, d: KeypressDispatch): void {
     return;
   }
 
-  if (field.kind === 'param') {
-    const result = commitParam(
-      field.key,
-      d.editValue,
-      d.runtime.setActiveModelParam,
-    );
-    if (!result.success) {
-      d.setValidationError(result.message ?? 'Invalid value');
-      return;
-    }
-    d.setEditingIndex(null);
-    d.setValidationError(null);
-    return;
-  }
-
-  const result = commitEphemeral(
-    field,
-    d.editValue,
-    d.runtime.setEphemeralSetting,
-  );
-  if (!result.success) {
-    d.setValidationError(result.message ?? 'Invalid value');
-    return;
-  }
-  d.setEditingIndex(null);
-  d.setValidationError(null);
+  stageTextEdit(field, d);
 }
 
 function isPlainLetter(key: Key, letter: string): boolean {
@@ -521,15 +616,70 @@ const DialogFooter: React.FC<{ isEditing: boolean }> = ({ isEditing }) => (
   <Box marginTop={1}>
     {isEditing ? (
       <Text color={SemanticColors.text.secondary}>
-        {'[Enter] save  [Esc] cancel'}
+        {'[Enter] stage  [Esc] back'}
       </Text>
     ) : (
       <Text color={SemanticColors.text.secondary}>
-        {'\u2191'}/{'\u2193'} navigate Enter edit/toggle Space toggle(bool)
-        c=clear(param) Esc close
+        {'↑/↓ navigate Enter edit Space toggle c=clear  [s]ave  [Esc]cancel'}
       </Text>
     )}
   </Box>
+);
+
+// Owns the pending-edit staging state for the dialog. Extracted from the
+// component body to keep the main component under the line-count budget.
+function usePendingEdits() {
+  const [pendingEdits, setPendingEdits] = useState<
+    Readonly<Record<string, PendingEdit>>
+  >({});
+  const setPendingEdit = useCallback((key: string, edit: PendingEdit) => {
+    setPendingEdits((prev) => ({ ...prev, [key]: edit }));
+  }, []);
+  const clearPendingEdits = useCallback(() => setPendingEdits({}), []);
+  return { pendingEdits, setPendingEdit, clearPendingEdits };
+}
+
+const FieldRows: React.FC<{
+  fields: readonly ConfigField[];
+  selectedIndex: number;
+  editingIndex: number | null;
+  editValue: string;
+  pendingEdits: Readonly<Record<string, PendingEdit>>;
+  reads: RuntimeReads;
+  enumIndex: number;
+  onEditChange: (value: string) => void;
+}> = ({
+  fields,
+  selectedIndex,
+  editingIndex,
+  editValue,
+  pendingEdits,
+  reads,
+  enumIndex,
+  onEditChange,
+}) => (
+  <>
+    {fields.map((field, i) => {
+      const pending = pendingValueFor(field, pendingEdits[field.key]);
+      const committed = valueForField(
+        field,
+        reads.modelParams,
+        reads.ephemeralSettings,
+      );
+      return (
+        <FieldRow
+          key={field.key}
+          field={field}
+          isSelected={selectedIndex === i}
+          isEditing={editingIndex === i}
+          editValue={editValue}
+          currentValue={pending !== undefined ? pending : committed}
+          enumIndex={enumIndex}
+          onEditChange={onEditChange}
+        />
+      );
+    })}
+  </>
 );
 
 export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
@@ -545,6 +695,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   const [editValue, setEditValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [enumIndex, setEnumIndex] = useState(0);
+  const { pendingEdits, setPendingEdit, clearPendingEdits } = usePendingEdits();
   const [, setRenderTick] = useState(0);
   const forceRender = useCallback(() => setRenderTick((t) => t + 1), []);
 
@@ -565,6 +716,9 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
     ephemeral: reads.ephemeralSettings,
     forceRender,
     fields,
+    pendingEdits,
+    setPendingEdit,
+    clearPendingEdits,
   });
 
   const dialogWidth = Math.min(width, 80);
@@ -583,22 +737,16 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
       />
 
       <SectionHeader label="Model Parameters" />
-      {fields.map((field, i) => (
-        <FieldRow
-          key={field.key}
-          field={field}
-          isSelected={selectedIndex === i}
-          isEditing={editingIndex === i}
-          editValue={editValue}
-          currentValue={valueForField(
-            field,
-            reads.modelParams,
-            reads.ephemeralSettings,
-          )}
-          enumIndex={enumIndex}
-          onEditChange={setEditValue}
-        />
-      ))}
+      <FieldRows
+        fields={fields}
+        selectedIndex={selectedIndex}
+        editingIndex={editingIndex}
+        editValue={editValue}
+        pendingEdits={pendingEdits}
+        reads={reads}
+        enumIndex={enumIndex}
+        onEditChange={setEditValue}
+      />
 
       {validationError !== null && (
         <Box marginTop={1}>

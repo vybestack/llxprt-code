@@ -87,6 +87,14 @@ const ENTER = '\r';
 const ESC = '\x1b[27u';
 const RIGHT = '\x1b[C';
 
+// Edits are STAGED in the dialog; nothing commits until [s]ave (list-mode
+// 's' key). Esc discards all staged edits and closes.
+async function saveDialog(stdin: { write: (data: string) => void }) {
+  await act(async () => {
+    stdin.write('s');
+  });
+}
+
 const DEFAULT_UNALLOWED: readonly string[] = [];
 const PARAM_KEYS = [
   'max_tokens',
@@ -274,13 +282,19 @@ describe('<ModelConfigDialog />', () => {
       stdin.write('c');
     });
 
-    // The runtime state must reflect the clear — rendered text alone is
-    // ambiguous because hints contain literal "true"/"false" strings.
+    // The clear is STAGED — runtime keeps the old value until [s]ave.
+    await waitFor(() => {
+      expect(lastFrame()).toContain('(not set)');
+    });
+    expect(activeRuntime.getActiveModelParams().temperature).toBe(0.7);
+
+    await saveDialog(stdin);
+
+    // After save the runtime state reflects the clear.
     await waitFor(() => {
       expect(activeRuntime.getActiveModelParams()).not.toHaveProperty(
         'temperature',
       );
-      expect(lastFrame()).toContain('(not set)');
     });
   });
 
@@ -300,24 +314,30 @@ describe('<ModelConfigDialog />', () => {
       stdin.write(' ');
     });
 
+    // Toggle is STAGED — the row shows the pending value, runtime unchanged.
+    await waitFor(() => {
+      expect(lastFrame()).toMatch(/reasoning\.enabled\s+true/);
+    });
+    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
+      false,
+    );
+
+    // The pending ON value renders as immutable-ON (forced-on behavior is
+    // not silently flippable): Space is a no-op.
+    await act(async () => {
+      stdin.write(' ');
+    });
+    await waitFor(() => {
+      expect(lastFrame()).toContain('always-on for this model');
+    });
+
+    await saveDialog(stdin);
+
     await waitFor(() => {
       expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
         true,
       );
     });
-
-    // Once ON, the field is immutable (forced-on behavior is not silently
-    // flippable): Space is a no-op and the value stays true.
-    await act(async () => {
-      stdin.write(' ');
-    });
-
-    await waitFor(() => {
-      expect(lastFrame()).toContain('always-on for this model');
-    });
-    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
-      true,
-    );
   });
 
   it('reasoning.enabled=true is immutable — Enter does not toggle and shows the always-on hint', async () => {
@@ -383,17 +403,25 @@ describe('<ModelConfigDialog />', () => {
       expect(lastFrame()).toContain('[low]');
     });
 
-    // Press Enter to confirm — persists immediately (cycling already wrote
-    // the value to the runtime), so it must NOT stay "(not set)".
+    // Press Enter — stages the cycled value; the row shows it but the
+    // runtime is unchanged until [s]ave.
     await act(async () => {
       stdin.write(ENTER);
     });
 
     await waitFor(() => {
+      expect(lastFrame()).toMatch(/reasoning\.effort\s+low/);
+    });
+    expect(
+      activeRuntime.getEphemeralSettings()['reasoning.effort'],
+    ).toBeUndefined();
+
+    await saveDialog(stdin);
+
+    await waitFor(() => {
       expect(activeRuntime.getEphemeralSettings()['reasoning.effort']).toBe(
         'low',
       );
-      expect(lastFrame()).toMatch(/reasoning\.effort\s+low/);
     });
   });
 
@@ -421,14 +449,17 @@ describe('<ModelConfigDialog />', () => {
       expect(lastFrame()).toContain('[disabled]');
     });
 
-    // Press Enter to confirm
+    // Press Enter to stage, then [s]ave to commit
     await act(async () => {
       stdin.write(ENTER);
     });
+    await saveDialog(stdin);
 
     // Value should be saved as disabled
     await waitFor(() => {
-      expect(lastFrame()).toContain('disabled');
+      expect(activeRuntime.getEphemeralSettings()['streaming']).toBe(
+        'disabled',
+      );
     });
   });
 
@@ -450,16 +481,56 @@ describe('<ModelConfigDialog />', () => {
       });
     }
 
-    // Save — should show validation error and stay in edit mode
+    // Enter stages the text edit — validation happens at [s]ave time.
     await act(async () => {
       stdin.write(ENTER);
     });
 
+    // Save — the staged invalid value fails validation; the dialog stays
+    // open with an error and the committed value is untouched.
+    await saveDialog(stdin);
+
     await waitFor(() => {
       expect(lastFrame()).toContain('positive integer');
     });
-    // The invalid commit must not overwrite the previously valid value.
     expect(activeRuntime.getEphemeralSettings()['context-limit']).toBe(4096);
+  });
+
+  it('Esc discards all staged edits and closes without committing', async () => {
+    const props = defaultProps();
+    const { stdin } = renderWithProviders(<ModelConfigDialog {...props} />);
+
+    // Stage a text edit: temperature 0.7 -> 9.9 (pre-fill cleared first)
+    navigateToField(stdin, 'temperature');
+    act(() => {
+      stdin.write(ENTER);
+    });
+    act(() => {
+      stdin.write('\x01');
+      stdin.write('\x0b');
+    });
+    for (const ch of '9.9') {
+      act(() => {
+        stdin.write(ch);
+      });
+    }
+    await act(async () => {
+      stdin.write(ENTER);
+    });
+
+    // Stage a boolean toggle: reasoning.enabled is true (immutable ON), so
+    // use a mutable default — toggle a fresh boolean from false.
+    // (reasoning.enabled seeded true in default runtime, so instead verify
+    // the staged text edit is discarded.)
+    await act(async () => {
+      stdin.write(ESC);
+    });
+
+    await waitFor(() => {
+      expect(props.onClose).toHaveBeenCalled();
+    });
+    // Runtime untouched: the staged 9.9 was discarded, not committed.
+    expect(activeRuntime.getActiveModelParams().temperature).toBe(0.7);
   });
 
   it('closes on Escape from the list view (AC9)', async () => {
@@ -532,7 +603,7 @@ describe('<ModelConfigDialog />', () => {
     expect(lastFrame()).not.toContain('9.9');
   });
 
-  it('shows [Enter] save / [Esc] cancel hint while editing and list hints otherwise', async () => {
+  it('shows [Enter] stage / [Esc] back hint while editing and [s]ave/[Esc]cancel in list mode', async () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
@@ -544,8 +615,18 @@ describe('<ModelConfigDialog />', () => {
     });
 
     await waitFor(() => {
-      expect(lastFrame()).toContain('[Enter] save');
-      expect(lastFrame()).toContain('[Esc] cancel');
+      expect(lastFrame()).toContain('[Enter] stage');
+      expect(lastFrame()).toContain('[Esc] back');
+    });
+
+    // Back to list mode — footer shows the explicit save/cancel affordance.
+    await act(async () => {
+      stdin.write(ESC);
+    });
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('[s]ave');
+      expect(lastFrame()).toContain('[Esc]cancel');
     });
   });
 
