@@ -15,6 +15,7 @@
 import type { HistoryItemStats } from '../types.js';
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   type CommandContext,
   type SlashCommand,
@@ -25,6 +26,8 @@ import { fetchAllQuotaInfo } from './statsQuota.js';
 import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatSessionSection } from './formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../types/SessionRecordingMetadata.js';
+
+const logger = new DebugLogger('llxprt:cli:stats');
 
 async function defaultSessionView(context: CommandContext): Promise<void> {
   const now = new Date();
@@ -179,7 +182,7 @@ async function bucketsSubcommandAction(
   }
 
   try {
-    const discovered = await discoverProviderBuckets(oauthManager);
+    const discovered = await discoverProviderBuckets(oauthManager, logger);
 
     if (discovered.length === 0) {
       context.ui.addItem(

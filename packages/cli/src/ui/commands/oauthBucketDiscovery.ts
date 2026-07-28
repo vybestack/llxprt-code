@@ -46,6 +46,14 @@ const NO_OP_LOGGER: BucketDiscoveryLogger = {
   log: () => {},
 };
 
+function sanitizeError(error: unknown): string {
+  const PATH_RE = /[\\/]\S+/g;
+  if (error instanceof Error && error.message) {
+    return error.message.replace(PATH_RE, '[path]');
+  }
+  return String(error).replace(PATH_RE, '[path]');
+}
+
 async function collectBucketsForProvider(
   tokenStore: OAuthBucketDiscoveryTokenStore,
   provider: string,
@@ -57,7 +65,7 @@ async function collectBucketsForProvider(
   } catch (error) {
     log.warn(
       () =>
-        `[oauthBucketDiscovery] Failed to list buckets for ${provider}: ${error instanceof Error ? error.message : String(error)}`,
+        `[oauthBucketDiscovery] Failed to list buckets for ${provider}: ${sanitizeError(error)}`,
     );
     return [];
   }
@@ -70,7 +78,7 @@ async function collectBucketsForProvider(
       } catch (error) {
         log.warn(
           () =>
-            `[oauthBucketDiscovery] Failed to read stats for ${provider}/${bucket}: ${error instanceof Error ? error.message : String(error)}`,
+            `[oauthBucketDiscovery] Failed to read stats for ${provider}/${bucket}: ${sanitizeError(error)}`,
         );
         return { bucket, stats: null };
       }
