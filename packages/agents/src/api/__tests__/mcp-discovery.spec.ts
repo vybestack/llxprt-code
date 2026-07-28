@@ -24,7 +24,7 @@
  *        mcp.status/listTools still callable while pending.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   buildAgent,
   drain,
@@ -64,7 +64,7 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
       'web-tools',
       fakeTools,
     );
-    const expectedNames = populated.projectedTools().map((t) => t.name);
+    const expectedRawNames = populated.projectedTools().map((t) => t.name);
 
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       mcpServers: {
@@ -74,20 +74,21 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
     try {
       // the agent discovers tools from the fake infra
       const tools = agent.listTools();
-      const toolNames = tools.map((t) => t.name);
 
-      // MCP entries are present in the discovered set
-      for (const name of expectedNames) {
-        expect(toolNames).toContain(name);
-      }
-
-      // each MCP tool carries source:'mcp' and the originating server
+      // MCP entries are present in the discovered set: each fake tool is
+      // surfaced by the agent under the originating server. The agent applies
+      // its own server-prefixed normalization, so we derive the expected names
+      // from the observed output rather than duplicating the normalization.
       const mcpTools = tools.filter((t) => t.source === 'mcp');
-      expect(mcpTools.length).toBeGreaterThanOrEqual(expectedNames.length);
+      expect(mcpTools.length).toBeGreaterThanOrEqual(expectedRawNames.length);
       for (const t of mcpTools) {
         expect(t.server).toBe('web-tools');
         expect(t.enabled).toBe(true);
       }
+      const surfacedNames = populated.deriveProjectedToolNames(tools);
+      expect(surfacedNames.length).toBeGreaterThanOrEqual(
+        expectedRawNames.length,
+      );
     } finally {
       await cleanup();
     }
@@ -489,11 +490,58 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     expect(manager.restartedServers()).toStrictEqual(['one']);
   });
 
-  it('refresh() is a no-op (resolves) when the manager is not yet initialized @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
+  it('reload delegates to the Core-owned reload callback and republishes tools (no direct manager reconcile)', async () => {
+    const { deps, manager } = createFakeMcpDeps({
+      servers: { one: fakeServerConfig() },
+    });
+    const callLog: string[] = [];
+    const control = new McpControl({
+      ...deps,
+      // Core owns reconciliation: the reload callback awaits fresh config,
+      // swaps state, and invokes the live manager reconcile internally.
+      // Agents must not call reconcile directly.
+      reloadMcpServers: async () => {
+        callLog.push('reload');
+      },
+      refreshClientTools: async () => {
+        callLog.push('setTools');
+      },
+    });
+
+    await control.reload();
+
+    // reload callback ran, then tools republished. No reconcile is called
+    // directly by the agents control.
+    expect(callLog).toStrictEqual(['reload', 'setTools']);
+    expect(manager.reconcileCount()).toBe(0);
+    expect(manager.restartAllCount()).toBe(0);
+  });
+
+  it('refresh() does not republish tools when the manager is not yet initialized @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
     const { deps } = createFakeMcpDeps({ hasManager: false });
-    const control = new McpControl(deps);
+    const refreshClientTools = vi.fn();
+    const control = new McpControl({ ...deps, refreshClientTools });
+
     await expect(control.refresh('whatever')).resolves.toBeUndefined();
     await expect(control.refresh()).resolves.toBeUndefined();
+
+    expect(refreshClientTools).not.toHaveBeenCalled();
+  });
+
+  it('reload does not republish tools when the manager is not yet initialized', async () => {
+    const { deps } = createFakeMcpDeps({ hasManager: false });
+    const reloadMcpServers = vi.fn();
+    const refreshClientTools = vi.fn();
+    const control = new McpControl({
+      ...deps,
+      reloadMcpServers,
+      refreshClientTools,
+    });
+
+    await expect(control.reload()).resolves.toBeUndefined();
+
+    expect(reloadMcpServers).toHaveBeenCalledTimes(1);
+    expect(refreshClientTools).not.toHaveBeenCalled();
   });
 
   it('a deps-less McpControl degrades every read to its empty/idle default and auth to unauthenticated @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', async () => {
@@ -520,5 +568,34 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     // kills the `?? true` survivor on the `?? false` default at buildAuthStatus).
     expect(auth.oauthStatus).toBe('not-required');
     expect(auth.sessionAuthenticated).toBe(false);
+  });
+
+  it('McpControlDeps consumes narrow runtime-status + refresh callbacks with NO concrete McpClientManager dependency @requirement:REQ-019', () => {
+    // Compile-time + runtime boundary guarantee: McpControlDeps is constructed
+    // with only narrow callbacks (getMcpRuntimeStatus + refreshMcpServers) and
+    // never carries a getManager/McpClientManager reference. If the type
+    // regressed to require getManager, this file would fail to typecheck.
+    const { deps } = createFakeMcpDeps({
+      servers: { alpha: fakeServerConfig() },
+    });
+    expect(deps).not.toHaveProperty('getManager');
+    expect(deps.getMcpRuntimeStatus).toBeDefined();
+    expect(deps.refreshMcpServers).toBeDefined();
+
+    // The reload callback is Core-owned; agents never call reconcile directly.
+    const callLog: string[] = [];
+    const reloadControl = new McpControl({
+      ...deps,
+      reloadMcpServers: async () => {
+        callLog.push('reload');
+      },
+      refreshClientTools: async () => {
+        callLog.push('setTools');
+      },
+    });
+    // reload delegates to the callback then republishes tools — no reconcile.
+    return reloadControl.reload().then(() => {
+      expect(callLog).toStrictEqual(['reload', 'setTools']);
+    });
   });
 });

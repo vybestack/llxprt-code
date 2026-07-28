@@ -229,6 +229,13 @@ export abstract class ConfigBaseCore {
         adminSkillsEnabled?: boolean;
       }>)
     | undefined;
+  protected readonly _onReloadMcpServers:
+    | (() => Promise<{
+        mcpServers: Record<string, MCPServerConfig>;
+        blockedMcpServers: Array<{ name: string; extensionName: string }>;
+        settingsMcpServers: Record<string, MCPServerConfig>;
+      }>)
+    | undefined;
   protected readonly outputSettings!: OutputSettings;
   protected readonly introspectionAgentSettings!: IntrospectionAgentSettings;
   protected readonly useWriteTodos!: boolean;
@@ -516,6 +523,47 @@ export abstract class ConfigBaseCore {
   }
   getMcpClientManager(): McpClientManager | undefined {
     return this.mcpClientManager;
+  }
+  getMcpRuntimeStatus():
+    | {
+        readonly servers: Record<string, MCPServerConfig>;
+        readonly discoveryFailures: ReadonlyMap<string, string>;
+        readonly discoveryState: ReturnType<
+          McpClientManager['getDiscoveryState']
+        >;
+      }
+    | undefined {
+    const manager = this.mcpClientManager;
+    if (manager === undefined) {
+      return undefined;
+    }
+    return {
+      servers: manager.getMcpServers(),
+      discoveryFailures: manager.getDiscoveryFailures(),
+      discoveryState: manager.getDiscoveryState(),
+    };
+  }
+  async refreshMcpServers(server?: string): Promise<void> {
+    const manager = this.mcpClientManager;
+    if (manager === undefined) {
+      return;
+    }
+    if (server === undefined) {
+      await manager.restart();
+    } else {
+      await manager.restartServer(server);
+    }
+  }
+  async awaitMcpDiscoveryGate(): Promise<ReadonlyMap<string, string>> {
+    const manager = this.mcpClientManager;
+    if (manager === undefined) {
+      return new Map();
+    }
+    await manager.whenDiscoverySettled();
+    return manager.getDiscoveryFailures();
+  }
+  getMcpInstructions(): string | undefined {
+    return this.mcpClientManager?.getMcpInstructions();
   }
   getAllowedMcpServers(): string[] | undefined {
     return this.allowedMcpServers;

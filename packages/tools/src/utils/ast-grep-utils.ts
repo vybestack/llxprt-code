@@ -76,6 +76,7 @@ export const LANGUAGE_MAP: Record<string, string | Lang> = {
   java: 'java',
   cpp: 'cpp',
   c: 'c',
+  h: 'c',
   html: Lang.Html,
   css: Lang.Css,
   json: 'json',

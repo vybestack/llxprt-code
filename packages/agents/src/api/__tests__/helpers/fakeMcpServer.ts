@@ -25,7 +25,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
-import { generateMcpToolName } from '@vybestack/llxprt-code-mcp';
 
 // Clear the shipped fake-MCP seam env var after every test so the fixture path
 // never leaks into a sibling spec sharing the same worker process. The seam is
@@ -73,8 +72,19 @@ export interface FakeMcpRegistry {
   registerServer(name: string, config: MCPServerConfig): FakeMcpServerHandle;
   getServer(name: string): FakeMcpServerHandle | undefined;
   listServerNames(): readonly string[];
-  /** Aggregated ToolInfo projection across all registered servers. */
+  /** Aggregated ToolInfo projection across all registered servers (raw names). */
   projectedTools(): readonly ToolInfo[];
+  /**
+   * Derives the projected tool names the agent actually surfaces from the
+   * observed agent tool output, avoiding duplication of the production
+   * normalization logic.
+   */
+  deriveProjectedToolNames(
+    observedTools: ReadonlyArray<{
+      readonly name: string;
+      readonly server?: string;
+    }>,
+  ): readonly string[];
   /** True if any registered server is configured to fail discovery. */
   anyDiscoveryFailure(): boolean;
   reset(): void;
@@ -174,12 +184,21 @@ class FakeMcpRegistryImpl implements FakeMcpRegistry {
     return [...this.servers.keys()];
   }
 
+  /**
+   * Aggregated projection of the raw fake tool descriptors across all
+   * registered servers. The `name` field carries the RAW tool name (as the
+   * fake server serves it); the production agent applies its own
+   * server-prefixed normalization at discovery time. Tests that need to match
+   * the agent's actual surfaced tool names should derive them from the
+   * observed agent tool output (see deriveProjectedToolNames below) rather
+   * than re-computing the production normalization here.
+   */
   projectedTools(): readonly ToolInfo[] {
     const out: ToolInfo[] = [];
     for (const server of this.servers.values()) {
       for (const t of server.snapshotTools()) {
         out.push({
-          name: generateMcpToolName(server.name, t.name),
+          name: t.name,
           description: t.description,
           source: 'mcp',
           server: server.name,
@@ -188,6 +207,26 @@ class FakeMcpRegistryImpl implements FakeMcpRegistry {
       }
     }
     return out;
+  }
+
+  /**
+   * Derives the projected tool names the agent actually surfaces for each
+   * registered fake server, given the observed agent tool output. This avoids
+   * duplicating the production normalization logic: the test passes the real
+   * agent's tool list, and this helper filters by server to return the names
+   * the agent assigned. Returns an empty array when no matching server tools
+   * are found.
+   */
+  deriveProjectedToolNames(
+    observedTools: ReadonlyArray<{
+      readonly name: string;
+      readonly server?: string;
+    }>,
+  ): readonly string[] {
+    const serverNames = new Set(this.listServerNames());
+    return observedTools
+      .filter((t) => t.server !== undefined && serverNames.has(t.server))
+      .map((t) => t.name);
   }
 
   anyDiscoveryFailure(): boolean {

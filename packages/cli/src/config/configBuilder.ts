@@ -60,6 +60,11 @@ export interface ConfigBuildInput {
     name: string;
     extensionName: string;
   }>;
+  readonly reloadMcpServers?: () => Promise<{
+    mcpServers: Record<string, MCPServerConfig>;
+    blockedMcpServers: Array<{ name: string; extensionName: string }>;
+    settingsMcpServers: Record<string, MCPServerConfig>;
+  }>;
   readonly excludeTools: readonly string[];
   readonly memoryContent: string;
   readonly fileCount: number;
@@ -344,6 +349,7 @@ export function buildConfig(input: ConfigBuildInput): Config {
   return new Config({
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
+    onReloadMcpServers: input.reloadMcpServers,
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
     // The concrete factories are constructed once via the curated public

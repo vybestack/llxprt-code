@@ -266,6 +266,7 @@ describe('AgentClient (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -334,6 +335,7 @@ describe('AgentClient (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -382,6 +384,7 @@ describe('AgentClient (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -423,6 +426,7 @@ describe('AgentClient (client.ts)', () => {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
       };
       client['chat'] = mockChat as ChatSession;
 

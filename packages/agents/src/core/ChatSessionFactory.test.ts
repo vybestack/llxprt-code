@@ -104,7 +104,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     getUserMemory: vi.fn().mockReturnValue('user memory text'),
     getCoreMemory: vi.fn().mockReturnValue('core memory text'),
     getJitMemoryForPath: vi.fn().mockResolvedValue(null),
-    getMcpClientManager: vi.fn().mockReturnValue(undefined),
+    getMcpInstructions: vi.fn().mockReturnValue(undefined),
     isInteractive: vi.fn().mockReturnValue(true),
     getWorkingDir: vi.fn().mockReturnValue('/workspace'),
     getSettingsService: vi.fn().mockReturnValue({}),
@@ -254,9 +254,7 @@ describe('buildSystemInstruction', () => {
 
   it('includes MCP instructions when available', async () => {
     const config = makeConfig({
-      getMcpClientManager: vi.fn().mockReturnValue({
-        getMcpInstructions: vi.fn().mockReturnValue('use the mcp tool'),
-      }),
+      getMcpInstructions: vi.fn().mockReturnValue('use the mcp tool'),
     });
 
     await buildSystemInstruction(config, [], [], MODEL);

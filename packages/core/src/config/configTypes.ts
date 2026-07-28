@@ -471,6 +471,11 @@ export interface ConfigParameters {
     disabledSkills?: string[];
     adminSkillsEnabled?: boolean;
   }>;
+  onReloadMcpServers?: () => Promise<{
+    mcpServers: Record<string, MCPServerConfig>;
+    blockedMcpServers: Array<{ name: string; extensionName: string }>;
+    settingsMcpServers: Record<string, MCPServerConfig>;
+  }>;
   outputSettings?: OutputSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
