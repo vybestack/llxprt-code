@@ -43,6 +43,8 @@ export class ASTQueryExtractor {
         this.extractPythonDeclarations(sgRoot, declarations);
       } else if (extension === 'rs') {
         this.extractRustDeclarations(sgRoot, declarations);
+      } else if (extension === 'c' || extension === 'h') {
+        this.extractCDeclarations(sgRoot, declarations);
       } else {
         return this.fallbackExtraction(content, extension);
       }
@@ -183,6 +185,68 @@ export class ASTQueryExtractor {
     });
   }
 
+  private extractCDeclarations(
+    sgRoot: ReturnType<ReturnType<typeof parse>['root']>,
+    declarations: EnhancedDeclaration[],
+  ): void {
+    sgRoot.findAll({ rule: { kind: 'function_definition' } }).forEach((n) => {
+      const fdec = n.find({ rule: { kind: 'function_declarator' } });
+      const nameNode = fdec?.find({ rule: { kind: 'identifier' } });
+      const paramsNode = fdec?.find({ rule: { kind: 'parameter_list' } });
+      if (nameNode != null) {
+        const signature = paramsNode != null ? paramsNode.text() : '()';
+        declarations.push(
+          this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+        );
+      }
+    });
+
+    // Function prototypes: `void init(Vec *v);` parse as `declaration` nodes
+    // containing a `function_declarator` child (no body). Function-pointer
+    // variables (`void (*fp)(int);`) also contain a `function_declarator`, but
+    // its name sits inside a `parenthesized_declarator` rather than a direct
+    // `identifier` child — those are variables, not prototypes, so skip them.
+    sgRoot.findAll({ rule: { kind: 'declaration' } }).forEach((n) => {
+      const fdec = n.find({ rule: { kind: 'function_declarator' } });
+      if (fdec == null) return;
+      const nameNode = fdec.children().find((c) => c.kind() === 'identifier');
+      if (nameNode == null) return;
+      const paramsNode = fdec.find({ rule: { kind: 'parameter_list' } });
+      const signature = paramsNode != null ? paramsNode.text() : '()';
+      declarations.push(
+        this.nodeToDeclaration(n, nameNode.text(), 'function', signature),
+      );
+    });
+
+    sgRoot.findAll({ rule: { kind: 'struct_specifier' } }).forEach((n) => {
+      const nameNode = n.children().find((c) => c.kind() === 'type_identifier');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'struct'));
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'union_specifier' } }).forEach((n) => {
+      const nameNode = n.children().find((c) => c.kind() === 'type_identifier');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'union'));
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'enum_specifier' } }).forEach((n) => {
+      const nameNode = n.children().find((c) => c.kind() === 'type_identifier');
+      if (nameNode != null) {
+        declarations.push(this.nodeToDeclaration(n, nameNode.text(), 'enum'));
+      }
+    });
+
+    sgRoot.findAll({ rule: { kind: 'type_definition' } }).forEach((n) => {
+      const name = findCTypedefName(n);
+      if (name !== null) {
+        declarations.push(this.nodeToDeclaration(n, name, 'typedef'));
+      }
+    });
+  }
+
   private buildSignature(
     paramsNode: ReturnType<ReturnType<typeof parse>['root']> | null,
     returnTypeNode: ReturnType<ReturnType<typeof parse>['root']> | null,
@@ -307,4 +371,56 @@ function extractWordAfterKeyword(line: string, keyword: string): string | null {
   const after = line.slice(idx + keyword.length);
   const match = after.trimStart().match(/^[A-Za-z_$][\w$]*/);
   return match ? match[0] : null;
+}
+
+/**
+ * Resolves the declared name of a C typedef.
+ *
+ * Tree-sitter C represents the declarator differently depending on the
+ * typedef form:
+ * - Simple: `typedef unsigned long size_t;` → a `type_identifier` child
+ *   is the declared name.
+ * - Function pointer: `typedef int (*compare_fn)(int, int);` → the name
+ *   sits inside a nested `pointer_declarator`→`type_identifier`.
+ * Returns null for anonymous typedefs without a declarator name.
+ */
+function findCTypedefName(
+  typedefNode: ReturnType<ReturnType<typeof parse>['root']>,
+): string | null {
+  const direct = typedefNode
+    .children()
+    .find((c) => c.kind() === 'type_identifier');
+  if (direct != null) {
+    return direct.text();
+  }
+  const pointerDeclarator = typedefNode.find({
+    rule: { kind: 'pointer_declarator' },
+  });
+  const pointerName = pointerDeclarator?.find({
+    rule: { kind: 'type_identifier' },
+  });
+  if (pointerName != null) {
+    return pointerName.text();
+  }
+  const arrayDeclarator = typedefNode.find({
+    rule: { kind: 'array_declarator' },
+  });
+  const arrayName = arrayDeclarator?.find({
+    rule: { kind: 'type_identifier' },
+  });
+  if (arrayName != null) {
+    return arrayName.text();
+  }
+  // `typedef unsigned long size_t;` — the grammar assigns the declared
+  // name to a trailing `primitive_type` (not `type_identifier`). The last
+  // primitive_type child before the semicolon is the typedef name.
+  const primitiveChildren = typedefNode
+    .children()
+    .filter(
+      (c) => c.kind() === 'primitive_type' || c.kind() === 'type_identifier',
+    );
+  if (primitiveChildren.length > 0) {
+    return primitiveChildren[primitiveChildren.length - 1].text();
+  }
+  return null;
 }
