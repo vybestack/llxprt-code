@@ -36,4 +36,5 @@ export const IDE_EXECUTABLE_NAMES: readonly string[] = [
   'trae.exe',
   'trae',
   'sublime_text.exe',
+  'sublime_text',
 ] as const;
