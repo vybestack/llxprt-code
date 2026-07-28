@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
-
-// This test needs real config files, not the global mock
-vi.unmock('./providerAliases.js');
+import { describe, it, expect } from 'vitest';
 
 import { loadProviderAliasEntries } from './providerAliases.js';
 import * as fs from 'fs';
@@ -121,5 +118,14 @@ describe('Codex provider alias', () => {
       expect(model).toBeDefined();
       expect(model?.contextWindow).toBe(262144);
     }
+  });
+
+  it('pins media.pdf.enabled=false in ephemeralSettings @issue:2608', () => {
+    const aliases = loadProviderAliasEntries();
+    const codexAlias = aliases.find((a) => a.alias === 'codex');
+
+    expect(codexAlias?.config.ephemeralSettings['media.pdf.enabled']).toBe(
+      false,
+    );
   });
 });

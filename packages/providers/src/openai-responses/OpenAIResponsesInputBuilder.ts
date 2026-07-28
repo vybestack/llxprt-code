@@ -28,6 +28,10 @@ import {
   normalizeMediaToDataUri,
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
+  buildPdfDisabledNotice,
+  inlineBase64ByteLength,
+  resolvePdfFilename,
+  PDF_AGGREGATE_MAX_BYTES,
 } from '../utils/mediaUtils.js';
 import type {
   ResponsesContentPart,
@@ -46,6 +50,7 @@ export interface ResponsesInputBuildContext {
    * which may be on without an active parent (#207).
    */
   serverSideParentActive?: boolean;
+  mediaPdfEnabled: boolean;
 }
 
 const OPENAI_RESPONSES_REASONING_ID_KEY = 'openai.responses.reasoningId';
@@ -61,6 +66,7 @@ export function buildOpenAIResponsesInput(
     reasoningIdCounter += 1;
     return id;
   };
+  const mediaPdfEnabled = isMediaPdfEnabled(context);
 
   for (const item of patchedContent) {
     appendInputForContent(
@@ -69,10 +75,46 @@ export function buildOpenAIResponsesInput(
       patchedContent,
       context,
       nextReasoningId,
+      mediaPdfEnabled,
     );
   }
 
+  enforcePdfAggregateLimit(input, context);
   return input;
+}
+
+function isMediaPdfEnabled(context: ResponsesInputBuildContext): boolean {
+  return context.mediaPdfEnabled !== false;
+}
+
+function enforcePdfAggregateLimit(
+  input: ResponsesInputItem[],
+  context: ResponsesInputBuildContext,
+): void {
+  const userItems = input.filter(
+    (
+      item,
+    ): item is { role: 'user'; content?: string | ResponsesContentPart[] } =>
+      'role' in item && item.role === 'user',
+  );
+  const fileParts = userItems.flatMap((item) =>
+    Array.isArray(item.content) ? item.content : [],
+  );
+  const total = fileParts
+    .filter(
+      (part): part is Extract<ResponsesContentPart, { type: 'input_file' }> =>
+        part.type === 'input_file',
+    )
+    .reduce((sum, part) => sum + inlineBase64ByteLength(part.file_data), 0);
+  if (total > PDF_AGGREGATE_MAX_BYTES) {
+    context.debug(
+      () =>
+        `PDF aggregate preflight failed: ${total} bytes exceeds ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB) limit`,
+    );
+    throw new Error(
+      `Native PDF input payload (${total} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,
+    );
+  }
 }
 
 function appendInputForContent(
@@ -81,9 +123,10 @@ function appendInputForContent(
   patchedContent: IContent[],
   context: ResponsesInputBuildContext,
   nextReasoningId: () => string,
+  mediaPdfEnabled: boolean,
 ): void {
   if (item.speaker === 'human') {
-    appendHumanInput(input, item);
+    appendHumanInput(input, item, mediaPdfEnabled);
     return;
   }
 
@@ -92,16 +135,17 @@ function appendInputForContent(
     return;
   }
 
-  appendToolInput(input, item, patchedContent, context);
+  appendToolInput(input, item, patchedContent, context, mediaPdfEnabled);
 }
 
 function appendHumanInput(
   input: ResponsesInputItem[],
   content: IContent,
+  mediaPdfEnabled: boolean,
 ): void {
   const hasMedia = content.blocks.some((block) => block.type === 'media');
   if (hasMedia) {
-    const parts = buildMediaAwareParts(content.blocks);
+    const parts = buildMediaAwareParts(content.blocks, mediaPdfEnabled);
     if (parts.length > 0) input.push({ role: 'user', content: parts });
     return;
   }
@@ -178,10 +222,13 @@ function appendToolInput(
   content: IContent,
   patchedContent: IContent[],
   context: ResponsesInputBuildContext,
+  mediaPdfEnabled: boolean,
 ): void {
   const mediaBlocks = content.blocks.filter(
     (block): block is MediaBlock => block.type === 'media',
   );
+
+  let emittedOutput = false;
 
   for (const toolResponseBlock of content.blocks.filter(
     (block) => block.type === 'tool_response',
@@ -209,8 +256,17 @@ function appendToolInput(
         context.outputLimiterConfig,
       ),
     });
+    emittedOutput = true;
+  }
 
-    appendToolMediaInput(input, mediaBlocks);
+  // Media is emitted once per tool turn, not once per tool_response.
+  // recordCompletedToolHistory flattens all parallel responses + media into
+  // a single tool IContent; emitting inside the loop above would duplicate
+  // media N times for N responses.
+  if (emittedOutput && mediaBlocks.length > 0) {
+    const mediaParts = buildMediaParts(mediaBlocks, mediaPdfEnabled);
+    if (mediaParts.length > 0)
+      input.push({ role: 'user', content: mediaParts });
   }
 }
 
@@ -236,16 +292,6 @@ function getLimitedToolOutput(
     message?: string;
   };
   return limited.content ?? limited.message ?? '';
-}
-
-function appendToolMediaInput(
-  input: ResponsesInputItem[],
-  mediaBlocks: MediaBlock[],
-): void {
-  if (mediaBlocks.length === 0) return;
-
-  const mediaParts = buildMediaParts(mediaBlocks);
-  if (mediaParts.length > 0) input.push({ role: 'user', content: mediaParts });
 }
 
 function hasMatchingToolCall(
@@ -280,32 +326,42 @@ function hasMatchingToolResponse(
 
 function buildMediaAwareParts(
   blocks: IContent['blocks'],
+  mediaPdfEnabled: boolean,
 ): ResponsesContentPart[] {
   const parts: ResponsesContentPart[] = [];
   for (const block of blocks) {
     if (block.type === 'text' && block.text) {
       parts.push({ type: 'input_text', text: block.text });
     } else if (block.type === 'media') {
-      parts.push(convertMediaBlock(block));
+      parts.push(convertMediaBlock(block, mediaPdfEnabled));
     }
   }
   return parts;
 }
 
-function buildMediaParts(mediaBlocks: MediaBlock[]): ResponsesContentPart[] {
-  return mediaBlocks.map(convertMediaBlock);
+function buildMediaParts(
+  mediaBlocks: MediaBlock[],
+  mediaPdfEnabled: boolean,
+): ResponsesContentPart[] {
+  return mediaBlocks.map((block) => convertMediaBlock(block, mediaPdfEnabled));
 }
 
-function convertMediaBlock(media: MediaBlock): ResponsesContentPart {
+function convertMediaBlock(
+  media: MediaBlock,
+  mediaPdfEnabled: boolean,
+): ResponsesContentPart {
   const category = classifyMediaBlock(media);
   if (category === 'image') {
     return { type: 'input_image', image_url: normalizeMediaToDataUri(media) };
   }
   if (category === 'pdf') {
+    if (!mediaPdfEnabled) {
+      return { type: 'input_text', text: buildPdfDisabledNotice(media) };
+    }
     return {
       type: 'input_file',
       file_data: normalizeMediaToDataUri(media),
-      ...(media.filename ? { filename: media.filename } : {}),
+      filename: resolvePdfFilename(media),
     };
   }
   return {
