@@ -36,6 +36,7 @@ import {
   DirectWebFetchTool,
   MemoryTool,
   ShellTool,
+  GenerateImageTool,
 } from '@vybestack/llxprt-code-tools';
 
 import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
@@ -406,6 +407,11 @@ function registerStandardTools(
     settingsService: settingsServiceAdapter,
   });
   registerCoreTool(DirectWebFetchTool, toolHostAdapter);
+
+  // Registered with a null backend resolver so the tool is present but
+  // gracefully reports unavailable (TOOL_DISABLED) until the Codex-aware
+  // resolver follow-up lands with the runtime auth wiring.
+  registerCoreTool(GenerateImageTool, { resolveBackend: () => null });
 
   void CoreIdeServiceAdapter;
   void CoreLspServiceAdapter;
