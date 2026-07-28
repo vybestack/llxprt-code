@@ -63,6 +63,12 @@ function findStepByName(
   return job.steps.find((step) => step.name === name);
 }
 
+function requireStepById(job: WorkflowJob, id: string): WorkflowStep {
+  const step = job.steps.find((s) => s.id === id);
+  expect(step, `review job should have a step with id "${id}"`).toBeTruthy();
+  return step as WorkflowStep;
+}
+
 function stepRunText(job: WorkflowJob, name: string): string {
   const step = findStepByName(job, name);
   return step ? String(step.run ?? step.with?.['script'] ?? '') : '';
@@ -108,15 +114,15 @@ function evalStepIf(
       return outcome === value ? 'TRUE' : 'FALSE';
     },
   );
-  // Output comparisons (steps.X.outputs.Y == 'value') are resolved from the
-  // optional `outputs` map (stepOutcomes.outputs[stepId][outputName]). When an
-  // output is not provided, it resolves to TRUE so install/quota gating logic
-  // can be tested in isolation without modeling every upstream gate.
   const outputs = stepOutcomes.outputs ?? {};
   normalized = normalized.replace(
     /steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*==\s*'([^']*)'/g,
     (_match, stepId: string, outputName: string, expected: string) => {
       const actual = outputs[stepId]?.[outputName];
+      // Missing outputs default to TRUE so that install/quota gating
+      // expressions can be tested in isolation without modeling every
+      // upstream gate. Critical outputs (should_review, selected_key)
+      // are always provided by tests that exercise those paths.
       if (actual === undefined) {
         return 'TRUE';
       }
@@ -520,12 +526,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
 
   describe('non-blocking review job (Issue #2778)', () => {
     function stepById(id: string): WorkflowStep {
-      const step = reviewJob.steps.find((s) => s.id === id);
-      expect(
-        step,
-        `review job should have a step with id "${id}"`,
-      ).toBeTruthy();
-      return step as WorkflowStep;
+      return requireStepById(reviewJob, id);
     }
 
     function stepByName(name: string): WorkflowStep {
