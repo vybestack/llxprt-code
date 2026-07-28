@@ -101,18 +101,24 @@ export async function discoverProviderBuckets(
     return [];
   }
   const tokenStore = oauthManager.getTokenStore();
-  const results: DiscoveredProvider[] = [];
 
-  for (const provider of supportedProviders) {
-    const discoveredBuckets = await collectBucketsForProvider(
-      tokenStore,
-      provider,
-      log,
-    );
-    if (discoveredBuckets.length > 0) {
-      results.push({ provider, buckets: discoveredBuckets });
-    }
-  }
+  const providerResults = await Promise.all(
+    supportedProviders.map(
+      async (provider): Promise<DiscoveredProvider | null> => {
+        const discoveredBuckets = await collectBucketsForProvider(
+          tokenStore,
+          provider,
+          log,
+        );
+        if (discoveredBuckets.length === 0) {
+          return null;
+        }
+        return { provider, buckets: discoveredBuckets };
+      },
+    ),
+  );
 
-  return results;
+  return providerResults.filter(
+    (result): result is DiscoveredProvider => result !== null,
+  );
 }

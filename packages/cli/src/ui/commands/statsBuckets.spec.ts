@@ -242,6 +242,39 @@ describe('/stats buckets subcommand', () => {
     expect(lastItem.text).not.toContain('No OAuth buckets available');
   });
 
+  it('does not hide buckets from one provider when getBucketStats throws for another', async () => {
+    const tokenStore = {
+      listBuckets: vi.fn(async () => ['default']),
+      getBucketStats: vi.fn(async (provider: string) => {
+        if (provider === 'codex') {
+          throw new Error('codex stats read failure');
+        }
+        return {
+          bucket: 'default',
+          requestCount: 3,
+          percentage: 100,
+          lastUsed: 1700000000000,
+        };
+      }),
+    };
+    maybeGetCliOAuthManagerMock.mockReturnValue({
+      getSupportedProviders: () => ['codex', 'claudecode'],
+      getTokenStore: () => tokenStore,
+    });
+
+    await getBucketsSubCommand().action!(mockContext, '');
+
+    const lastItem = getBucketResultItem(mockContext);
+
+    expect(lastItem.type).toBe(MessageType.INFO);
+    expect(lastItem.text).toContain('claudecode');
+    expect(lastItem.text).toContain('default');
+    expect(lastItem.text).toContain('codex');
+    expect(lastItem.text).toContain('unavailable');
+    expect(lastItem.text).not.toContain('OAuth is not available or configured');
+    expect(lastItem.text).not.toContain('No OAuth buckets available');
+  });
+
   it('shows real request count and percentage from attributed bucket stats', async () => {
     const tokenStore = makeTokenStore({
       codex: {
