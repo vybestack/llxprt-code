@@ -43,12 +43,6 @@ console otherwise. The SDK constructs only `File*Exporter` or
 `Console*Exporter`; no OTLP or network exporter is imported anywhere in the
 source, so there is no code path that could transmit this data.
 
-> **Inert flags:** `--telemetry-target`, `--telemetry-otlp-endpoint`, and
-> `--telemetry-otlp-protocol` are still accepted for backward compatibility but
-> currently have **no effect** — no exporter reads them. Pointing them at a
-> collector will not send anything. Use `--telemetry-outfile` to choose where
-> output is written.
-
 ## Enable telemetry
 
 Telemetry is controlled by the `telemetry.enabled` setting.

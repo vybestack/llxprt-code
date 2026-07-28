@@ -1358,19 +1358,18 @@ The following settings remain at the top level of the `settings.json` file.
   - **Example:** `"preferredEditor": "vscode"`
 
 - **`telemetry`** (object)
-  - **Description:** Configures logging and metrics collection for LLxprt Code. For more information, see [Telemetry](../telemetry.md). Telemetry data is always local (file or console); the SDK does not construct OTLP/network exporters.
-  - **Default:** `{"enabled": false, "target": "local", "logPrompts": true}`
+  - **Description:** Configures local logging and metrics collection for LLxprt Code. For more information, see [Telemetry](../telemetry.md). Telemetry is written only to a configured local file or the console.
+  - **Default:** `{"enabled": false, "logPrompts": true}`
   - **Properties:**
     - **`enabled`** (boolean): Whether or not telemetry is enabled. Defaults to `false`.
-    - **`target`** (string): Intended destination category. Note: regardless of this setting, data is only written locally (file or console); no OTLP or network exporter is constructed by the SDK.
-    - **`otlpEndpoint`** (string): Read into configuration but not currently used by the SDK (no OTLP exporter is constructed).
     - **`logPrompts`** (boolean): Controls whether user prompt text is included in the `user_prompt` log event. Does not affect hook I/O logging (hook input/output is always included in `hook_call` events when telemetry is enabled).
+    - **`outfile`** (string): Optional local file path for traces, metrics, and logs. Without it, telemetry is written to the console.
   - **Example:**
     ```json
     "telemetry": {
       "enabled": true,
-      "target": "local",
-      "logPrompts": false
+      "logPrompts": false,
+      "outfile": "/var/log/llxprt/telemetry.jsonl"
     }
     ```
 - **`usageStatisticsEnabled`** (boolean):

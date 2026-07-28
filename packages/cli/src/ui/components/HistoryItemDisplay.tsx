@@ -167,7 +167,6 @@ function renderInfoViews(
           osVersion={itemForDisplay.osVersion}
           sandboxEnv={itemForDisplay.sandboxEnv}
           modelVersion={itemForDisplay.modelVersion}
-          gcpProject={itemForDisplay.gcpProject}
           ideClient={itemForDisplay.ideClient}
           provider={itemForDisplay.provider}
           baseURL={itemForDisplay.baseURL}

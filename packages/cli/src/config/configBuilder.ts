@@ -10,7 +10,6 @@ import {
   normalizeShellReplacement,
   type ApprovalMode,
   type OutputFormat,
-  type TelemetryTarget,
   type SandboxConfig,
   type PolicyEngineConfig,
   type MCPServerConfig,
@@ -87,12 +86,6 @@ function buildTelemetryConfig(argv: CliArgs, settings: Settings) {
   const telemetrySettings = settings.telemetry;
   return {
     enabled: argv.telemetry ?? telemetrySettings?.enabled,
-    target: (argv.telemetryTarget ??
-      telemetrySettings?.target) as TelemetryTarget,
-    otlpEndpoint:
-      argv.telemetryOtlpEndpoint ??
-      process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-      telemetrySettings?.otlpEndpoint,
     logPrompts: argv.telemetryLogPrompts ?? telemetrySettings?.logPrompts,
     outfile: argv.telemetryOutfile ?? telemetrySettings?.outfile,
     ...buildTelemetryRedactionConfig(telemetrySettings),

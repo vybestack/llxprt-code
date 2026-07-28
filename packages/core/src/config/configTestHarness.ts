@@ -137,9 +137,6 @@ export function buildTelemetryMockBody() {
     initializeTelemetry: vi.fn(),
     logCliConfiguration: vi.fn(),
     StartSessionEvent: MockStartSessionEvent,
-    DEFAULT_TELEMETRY_TARGET: 'local',
-    DEFAULT_OTLP_ENDPOINT: 'http://localhost:4317',
-    TelemetryTarget: { GCP: 'gcp', LOCAL: 'local' },
   };
 }
 

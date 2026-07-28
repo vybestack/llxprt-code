@@ -43,8 +43,6 @@ export interface TelemetryConfig extends SessionConfig {
   getTelemetryEnabled(): boolean;
   getTelemetryLogPromptsEnabled(): boolean;
   getTelemetryOutfile(): string | undefined;
-  getTelemetryTarget(): string;
-  getTelemetryOtlpEndpoint(): string;
   getDebugMode(): boolean;
   getConversationLoggingEnabled(): boolean;
   getSessionId(): string;

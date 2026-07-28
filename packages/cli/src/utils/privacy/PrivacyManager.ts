@@ -12,15 +12,10 @@ export interface PrivacyConfig {
   getConversationLoggingEnabled(): boolean;
   getResponseLoggingEnabled(): boolean;
   getTelemetryLogPromptsEnabled(): boolean;
-  getTelemetryTarget(): 'local' | 'remote' | string;
   getConversationLogPath(): string;
   getConversationRetentionDays(): number;
   getMaxConversationsStored(): number;
   getRedactionConfig(): RedactionConfig;
-  getTelemetrySettings(): {
-    remoteConsentGiven?: boolean;
-    [key: string]: unknown;
-  };
 }
 
 export class PrivacyManager {
@@ -36,20 +31,7 @@ export class PrivacyManager {
    * Check if conversation logging is permitted based on privacy settings
    */
   isLoggingPermitted(): boolean {
-    // Must be explicitly enabled
-    if (!this.config.getConversationLoggingEnabled()) {
-      return false;
-    }
-
-    // Check for privacy constraints
-    if (
-      this.config.getTelemetryTarget() === 'remote' &&
-      !this.hasRemoteConsent()
-    ) {
-      return false;
-    }
-
-    return true;
+    return this.config.getConversationLoggingEnabled();
   }
 
   /**
@@ -99,11 +81,6 @@ export class PrivacyManager {
     };
   }
 
-  private hasRemoteConsent(): boolean {
-    // Check if user has explicitly consented to remote data transmission
-    return this.config.getTelemetrySettings().remoteConsentGiven ?? false;
-  }
-
   private getDataCollectionDescription(): string[] {
     const collected = [];
 
@@ -127,15 +104,7 @@ export class PrivacyManager {
   }
 
   private getStorageDescription(): string {
-    const target = this.config.getTelemetryTarget();
-    switch (target) {
-      case 'local':
-        return `Data stored locally on your machine at ${this.config.getConversationLogPath()}`;
-      case 'remote':
-        return 'Data transmitted to configured remote telemetry service';
-      default:
-        return 'Data stored according to your telemetry configuration';
-    }
+    return `Data stored locally on your machine at ${this.config.getConversationLogPath()}`;
   }
 
   private getRetentionDescription(): string {

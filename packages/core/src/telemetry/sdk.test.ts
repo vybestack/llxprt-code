@@ -4,114 +4,104 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Group B: flushTelemetry tests
- * @plan PLAN-20250219-GMERGE021.R4
- * @requirement REQ-R4-2 (flushTelemetry implementation)
- *
- * These tests verify that flushTelemetry function exists and behaves correctly.
- * These tests WILL FAIL in RED phase because flushTelemetry does not exist yet.
- */
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { metrics, trace } from '@opentelemetry/api';
+import { logs } from '@opentelemetry/api-logs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { TelemetryConfig } from '@vybestack/llxprt-code-telemetry/telemetry/index.js';
 import {
-  initializeTelemetry,
-  shutdownTelemetry,
-  isTelemetrySdkInitialized,
   flushTelemetry,
+  initializeTelemetry,
+  isTelemetrySdkInitialized,
+  shutdownTelemetry,
 } from './sdk.js';
-import { Config } from '../config/config.js';
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('@opentelemetry/sdk-node');
-vi.mock('../config/config.js');
+function createTelemetryConfig(outfile: string): TelemetryConfig {
+  return {
+    getTelemetryEnabled: () => true,
+    getTelemetryLogPromptsEnabled: () => false,
+    getTelemetryOutfile: () => outfile,
+    getDebugMode: () => false,
+    getConversationLoggingEnabled: () => false,
+    getSessionId: () => 'local-sdk-lifecycle',
+    getModel: () => 'test-model',
+    getEmbeddingModel: () => undefined,
+    getSandbox: () => undefined,
+    getCoreTools: () => undefined,
+    getApprovalMode: () => 'default',
+    getContentGeneratorConfig: () => undefined,
+    getFileFilteringRespectGitIgnore: () => true,
+    getMcpServers: () => undefined,
+  };
+}
 
-describe('flushTelemetry', () => {
-  let mockConfig: Config;
-  let mockNodeSdk: NodeSDK & { forceFlush?: () => Promise<void> };
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-
-    mockConfig = new Config({
-      sessionId: 'test-session-id',
-      model: 'test-model',
-      targetDir: '/test/dir',
-      debugMode: false,
-      cwd: '/test/dir',
-      ideClient: IdeClient.getInstance(false),
-    });
-    vi.spyOn(mockConfig, 'getTelemetryEnabled').mockReturnValue(true);
-    vi.spyOn(mockConfig, 'getSessionId').mockReturnValue('test-session-id');
-
-    mockNodeSdk = {
-      start: vi.fn(),
-      shutdown: vi.fn().mockResolvedValue(undefined),
-      forceFlush: vi.fn().mockResolvedValue(undefined),
-    } as unknown as NodeSDK & { forceFlush?: () => Promise<void> };
-
-    vi.mocked(NodeSDK).mockImplementation(() => mockNodeSdk);
-  });
+describe('local telemetry SDK lifecycle', () => {
+  const directories: string[] = [];
 
   afterEach(async () => {
-    // Ensure we shut down telemetry even if a test fails
     if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(mockConfig);
+      await shutdownTelemetry(createTelemetryConfig(''));
+    }
+    for (const directory of directories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 
-  it('should resolve without error when SDK not initialized', async () => {
-    // Don't initialize telemetry - call flushTelemetry on uninitialized SDK
-    await expect(flushTelemetry()).resolves.toBeUndefined();
+  it('does nothing when flushed or shut down before initialization', async () => {
+    const config = createTelemetryConfig('');
 
-    // Should not have called forceFlush
-    expect(mockNodeSdk.forceFlush).not.toHaveBeenCalled();
+    await expect(flushTelemetry()).resolves.toBeUndefined();
+    await expect(shutdownTelemetry(config)).resolves.toBeUndefined();
+    expect(isTelemetrySdkInitialized()).toBe(false);
   });
 
-  it('should call forceFlush on the SDK when initialized', async () => {
-    // Initialize telemetry first
-    initializeTelemetry(mockConfig);
+  it('initializes idempotently and flushes all local signals to the configured file', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-telemetry-sdk-'));
+    directories.push(directory);
+    const firstOutfile = join(directory, 'first.jsonl');
+    const ignoredOutfile = join(directory, 'ignored.jsonl');
+    const config = createTelemetryConfig(firstOutfile);
 
-    // Call flushTelemetry
+    initializeTelemetry(config);
+    initializeTelemetry(createTelemetryConfig(ignoredOutfile));
+    const span = trace.getTracer('local-sdk-test').startSpan('local-sdk-span');
+    expect(span.isRecording()).toBe(true);
+    span.end();
+    metrics
+      .getMeter('local-sdk-test')
+      .createCounter('local-sdk-counter')
+      .add(1);
+    logs.getLogger('local-sdk-test').emit({ body: 'pending-local-log' });
     await flushTelemetry();
+    await shutdownTelemetry(config);
 
-    // Assert forceFlush was called
-    expect(mockNodeSdk.forceFlush).toHaveBeenCalledTimes(1);
+    const telemetry = readFileSync(firstOutfile, 'utf8');
+    expect(telemetry).toContain('local-sdk-span');
+    expect(telemetry).toContain('local-sdk-counter');
+    expect(telemetry).toContain('pending-local-log');
+    expect(() => readFileSync(ignoredOutfile, 'utf8')).toThrow(
+      /ENOENT|no such file/i,
+    );
   });
 
-  it('should guard against concurrent calls', async () => {
-    // Initialize telemetry
-    initializeTelemetry(mockConfig);
+  it('supports repeated shutdown and a later fresh initialization', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-telemetry-restart-'));
+    directories.push(directory);
+    const firstConfig = createTelemetryConfig(join(directory, 'first.jsonl'));
+    const secondOutfile = join(directory, 'second.jsonl');
+    const secondConfig = createTelemetryConfig(secondOutfile);
 
-    // Make forceFlush take some time
-    let resolveFlush: (() => void) | undefined;
-    const flushPromise = new Promise<void>((resolve) => {
-      resolveFlush = resolve;
-    });
-    vi.mocked(mockNodeSdk.forceFlush!).mockReturnValue(flushPromise);
+    initializeTelemetry(firstConfig);
+    await shutdownTelemetry(firstConfig);
+    await shutdownTelemetry(firstConfig);
+    initializeTelemetry(secondConfig);
+    logs.getLogger('local-sdk-test').emit({ body: 'after-restart' });
+    await flushTelemetry();
+    await shutdownTelemetry(secondConfig);
 
-    // Call flushTelemetry twice simultaneously
-    const flush1 = flushTelemetry();
-    const flush2 = flushTelemetry();
-
-    // Resolve the mock flush
-    resolveFlush!();
-    await Promise.all([flush1, flush2]);
-
-    // Assert only one forceFlush call was made (concurrent guard)
-    expect(mockNodeSdk.forceFlush).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not throw if forceFlush fails', async () => {
-    // Initialize telemetry
-    initializeTelemetry(mockConfig);
-
-    // Mock forceFlush to throw
-    const error = new Error('Flush failed');
-    vi.mocked(mockNodeSdk.forceFlush!).mockRejectedValueOnce(error);
-
-    // Assert flushTelemetry resolves without throwing
-    await expect(flushTelemetry()).resolves.toBeUndefined();
+    expect(readFileSync(secondOutfile, 'utf8')).toContain('after-restart');
+    expect(isTelemetrySdkInitialized()).toBe(false);
   });
 });

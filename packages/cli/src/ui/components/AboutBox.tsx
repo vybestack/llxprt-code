@@ -18,7 +18,6 @@ interface AboutBoxProps {
   osVersion: string;
   sandboxEnv: string;
   modelVersion: string;
-  gcpProject: string;
   keyfile: string;
   key: string;
   ideClient: string;
@@ -73,7 +72,6 @@ const AboutBoxContent: React.FC<{
   provider: string;
   sandboxEnv: string;
   osVersion: string;
-  gcpProject: string;
   baseURL: string;
   ideClient: string;
 }> = ({
@@ -82,7 +80,6 @@ const AboutBoxContent: React.FC<{
   provider,
   sandboxEnv,
   osVersion,
-  gcpProject,
   baseURL,
   ideClient,
 }) => (
@@ -97,7 +94,6 @@ const AboutBoxContent: React.FC<{
     <ConditionalInfoRow label="Base URL" value={baseURL} />
     <InfoRow label="Sandbox" value={sandboxEnv} />
     <InfoRow label="OS" value={osVersion} />
-    <ConditionalInfoRow label="GCP Project" value={gcpProject} />
     <ConditionalInfoRow label="IDE Client" value={ideClient} />
   </>
 );
@@ -107,7 +103,6 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
   osVersion,
   sandboxEnv,
   modelVersion,
-  gcpProject,
   ideClient,
   provider,
   baseURL,
@@ -127,7 +122,6 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
       provider={provider}
       sandboxEnv={sandboxEnv}
       osVersion={osVersion}
-      gcpProject={gcpProject}
       baseURL={baseURL}
       ideClient={ideClient}
     />

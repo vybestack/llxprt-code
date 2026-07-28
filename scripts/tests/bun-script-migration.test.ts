@@ -115,7 +115,6 @@ describe('Issue #2242: package.json scripts use Bun for converted .ts scripts', 
     ['lint:cli-boundary', 'scripts/check-cli-import-boundary.ts'],
     ['prepare:package', 'scripts/prepare-package.ts'],
     ['release:version', 'scripts/version.ts'],
-    ['telemetry', 'scripts/telemetry.ts'],
     ['check:lockfile', 'scripts/check-lockfile.ts'],
     ['clean', 'scripts/clean.ts'],
   ];

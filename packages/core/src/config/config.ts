@@ -574,14 +574,8 @@ export class Config extends ConfigBase {
     };
   }
 
-  getTelemetrySettings(): TelemetrySettings & {
-    remoteConsentGiven?: boolean;
-    [key: string]: unknown;
-  } {
-    return {
-      ...this.telemetrySettings,
-      remoteConsentGiven: this.telemetrySettings.remoteConsentGiven,
-    };
+  getTelemetrySettings(): TelemetrySettings {
+    return { ...this.telemetrySettings };
   }
 
   updateTelemetrySettings(settings: Partial<TelemetrySettings>): void {

@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { globSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repoRoot } from './doc-guard-helpers.ts';
 
@@ -87,12 +87,36 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     expect(configCtor).toContain('initializeTelemetry');
   });
 
-  it('sdk.ts constructs no OTLP exporter (network exporters are disabled)', () => {
-    const sdk = readSrc('packages/telemetry/src/telemetry/sdk.ts');
-    expect(sdk).not.toMatch(/OTLPExporter/);
-    expect(sdk).not.toMatch(/OTLPTraceExporter/);
-    expect(sdk).not.toMatch(/OTLPMetricExporter/);
-    expect(sdk).not.toMatch(/OTLPLogExporter/);
+  it('active dependencies and source contain no remote telemetry SDK or exporter', () => {
+    const activeSource = globSync('packages/*/src/**/*.{ts,tsx,js,mjs,cjs}', {
+      cwd: repoRoot,
+    });
+    const inspected = [
+      'package.json',
+      'packages/telemetry/package.json',
+      'package-lock.json',
+      'bun.lock',
+      ...activeSource,
+    ]
+      .map(readSrc)
+      .join('\n');
+
+    expect(inspected).not.toMatch(/@opentelemetry\/sdk-node/);
+    expect(inspected).not.toMatch(
+      /@opentelemetry\/exporter-[^"'\s]+-otlp-[^"'\s]+/,
+    );
+    expect(inspected).not.toMatch(/OTLP(?:Trace|Metric|Log)?Exporter/);
+  });
+
+  it('dedicated remote telemetry collector scripts are absent', () => {
+    for (const script of [
+      'scripts/telemetry.ts',
+      'scripts/telemetry_gcp.js',
+      'scripts/local_telemetry.js',
+      'scripts/telemetry_utils.js',
+    ]) {
+      expect(() => readSrc(script)).toThrow();
+    }
   });
 
   it('sdk.ts uses File*Exporter when an outfile is set and Console*Exporter otherwise', () => {
@@ -105,20 +129,11 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     expect(sdk).toContain('ConsoleMetricExporter');
   });
 
-  it('sdk.ts registers only HttpInstrumentation (no custom spans)', () => {
+  it('sdk.ts creates exactly one HTTP instrumentation and no custom spans', () => {
     const sdk = readSrc('packages/telemetry/src/telemetry/sdk.ts');
-    // The doc claims HTTP is the ONLY instrumentation, so assert the exact
-    // contents of the instrumentations array. Merely checking that
-    // HttpInstrumentation is present would still pass if another
-    // instrumentation were added later, silently invalidating the doc.
-    const registered = sdk.match(/instrumentations:\s*\[([^\]]*)\]/);
-    expect(registered).not.toBeNull();
-    // Split on non-identifier characters instead of a backtracking-prone
-    // regex, then keep the Instrumentation class names.
-    const names = (registered as RegExpMatchArray)[1]
-      .split(/[^A-Za-z0-9_]+/)
-      .filter((token) => token.endsWith('Instrumentation'));
-    expect(names).toEqual(['HttpInstrumentation']);
+    const constructions = sdk.match(/new HttpInstrumentation\s*\(/g) ?? [];
+    expect(constructions).toHaveLength(1);
+    expect(sdk).not.toMatch(/new \w+Instrumentation\s*\([^)]/);
     expect(sdk).not.toMatch(/startSpan\s*\(/);
   });
 
