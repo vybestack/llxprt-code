@@ -90,15 +90,15 @@ End-to-end replay is verified by the issue #1604 loadSession replay suite:
 
 ## Test Results Summary
 
-| Suite | Tests | Result |
-|-------|-------|--------|
-| `zed-tool-kind.test.ts` | 43 | ✅ all pass |
-| `zedIntegration.toolCall.test.ts` | 6 | ✅ all pass |
-| `zedIntegration.prompt.test.ts` | 21 | ✅ all pass |
-| `sessionControl.recording.behavior.test.ts` | 5 | ✅ all pass |
-| `zedIntegration.loadSession.test.ts` | 18 | ✅ all pass |
-| `zed-session-replay.test.ts` | 24 | ✅ all pass |
-| **Total** | **117** | **✅ all pass** |
+| Suite                                       | Tests   | Result          |
+| ------------------------------------------- | ------- | --------------- |
+| `zed-tool-kind.test.ts`                     | 43      | ✅ all pass     |
+| `zedIntegration.toolCall.test.ts`           | 6       | ✅ all pass     |
+| `zedIntegration.prompt.test.ts`             | 21      | ✅ all pass     |
+| `sessionControl.recording.behavior.test.ts` | 5       | ✅ all pass     |
+| `zedIntegration.loadSession.test.ts`        | 18      | ✅ all pass     |
+| `zed-session-replay.test.ts`                | 24      | ✅ all pass     |
+| **Total**                                   | **117** | **✅ all pass** |
 
 ## Conclusion
 
