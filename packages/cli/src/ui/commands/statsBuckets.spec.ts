@@ -60,6 +60,7 @@ function getBucketResultItem(context: CommandContext): {
     'No OAuth buckets available',
     'OAuth is not available or configured',
     'Failed to retrieve bucket statistics',
+    'Usage data unavailable',
   ];
   const bucketItem = items.find((item) => {
     const text = item.text ?? '';
@@ -136,11 +137,7 @@ describe('/stats buckets subcommand', () => {
 
     await getBucketsSubCommand().action!(mockContext, '');
 
-    const calls = vi.mocked(mockContext.ui.addItem).mock.calls;
-    const lastItem = calls[calls.length - 1]?.[0] as {
-      type: MessageType;
-      text?: string;
-    };
+    const lastItem = getBucketResultItem(mockContext);
 
     expect(lastItem.type).toBe(MessageType.INFO);
     expect(lastItem.text).toContain('claudecode');

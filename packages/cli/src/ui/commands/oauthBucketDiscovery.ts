@@ -55,7 +55,7 @@ async function collectBucketsForProvider(
   try {
     buckets = await tokenStore.listBuckets(provider);
   } catch (error) {
-    log.debug(
+    log.warn(
       () =>
         `[oauthBucketDiscovery] Failed to list buckets for ${provider}: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -68,7 +68,7 @@ async function collectBucketsForProvider(
         const stats = await tokenStore.getBucketStats(provider, bucket);
         return { bucket, stats };
       } catch (error) {
-        log.debug(
+        log.warn(
           () =>
             `[oauthBucketDiscovery] Failed to read stats for ${provider}/${bucket}: ${error instanceof Error ? error.message : String(error)}`,
         );
