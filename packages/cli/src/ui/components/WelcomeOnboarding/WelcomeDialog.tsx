@@ -21,6 +21,7 @@ import type {
   WelcomeActions,
   ModelInfo,
 } from '../../hooks/useWelcomeOnboarding.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface WelcomeDialogProps {
   state: WelcomeState;
@@ -147,7 +148,7 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.AccentCyan}
       padding={1}
       width="100%"

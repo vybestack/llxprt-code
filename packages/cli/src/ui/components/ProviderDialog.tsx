@@ -10,6 +10,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateEnd } from '../utils/responsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface ProviderDialogProps {
   providers: string[];
@@ -263,7 +264,7 @@ function ProviderDialogFrame(props: ProviderDialogViewProps) {
     </Box>
   ) : (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}

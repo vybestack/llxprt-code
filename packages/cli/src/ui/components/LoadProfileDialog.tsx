@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface LoadProfileDialogProps {
   profiles: string[];
@@ -59,7 +60,7 @@ const ProfileGrid: React.FC<ProfileGridProps> = ({
 
 const LoadingState: React.FC = () => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={Colors.Gray}
     flexDirection="column"
     padding={1}
@@ -70,7 +71,7 @@ const LoadingState: React.FC = () => (
 
 const EmptyState: React.FC = () => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={Colors.Gray}
     flexDirection="column"
     padding={1}
@@ -133,7 +134,7 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}

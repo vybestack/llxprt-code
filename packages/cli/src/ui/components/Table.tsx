@@ -7,6 +7,7 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 export interface Column<T> {
   key: string;
@@ -62,7 +63,7 @@ export function Table<T>({ data, columns }: TableProps<T>) {
 
       {/* Divider */}
       <Box
-        borderStyle="single"
+        borderStyle={getBorderStyle('single')}
         borderBottom={true}
         borderTop={false}
         borderLeft={false}

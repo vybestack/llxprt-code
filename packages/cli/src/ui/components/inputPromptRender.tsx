@@ -20,6 +20,7 @@ import type { TextBuffer } from './shared/text-buffer.js';
 import { Box, Text } from 'ink';
 import chalk from 'chalk';
 import type React from 'react';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 // ---------------------------------------------------------------------------
 // Render helpers
@@ -380,7 +381,7 @@ export const PromptInputBox: React.FC<PromptInputBoxProps> = ({
   additionalLines,
 }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={shellModeActive ? theme.status.warning : theme.border.focused}
     paddingX={1}
   >

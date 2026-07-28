@@ -49,6 +49,9 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
     const { Box, Text, render } = inkModule;
     const Spinner = spinnerModule.default;
     const { theme } = colorsModule;
+    const { getSpinnerType } = await import(
+      './ui/contexts/UnicodeRenderingContext.js'
+    );
 
     const InitializingComponent = () => {
       const [total, setTotal] = React.useState(initialTotal);
@@ -79,7 +82,7 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
         React.createElement(
           Text,
           { color: theme.text.primary },
-          React.createElement(Spinner),
+          React.createElement(Spinner, { type: getSpinnerType('dots') }),
           ' ',
           message,
         ),

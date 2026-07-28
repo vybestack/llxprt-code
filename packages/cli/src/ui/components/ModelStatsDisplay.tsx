@@ -18,6 +18,7 @@ import {
   type SessionMetrics,
 } from '../contexts/SessionContext.js';
 import { Table, type Column } from './Table.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface StatRowData {
   metric: string;
@@ -215,7 +216,7 @@ export const ModelStatsDisplay: React.FC = () => {
   if (activeModels.length === 0) {
     return (
       <Box
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={theme.border.default}
         paddingY={1}
         paddingX={2}
@@ -244,7 +245,7 @@ export const ModelStatsDisplay: React.FC = () => {
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}
