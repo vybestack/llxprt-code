@@ -9,6 +9,7 @@ import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { type AppState } from '../reducers/appReducer.js';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseProviderDialogParams {
@@ -76,6 +77,28 @@ function addProviderError(
   });
 }
 
+function isNoActiveProviderSignal(error: unknown): boolean {
+  return (
+    error instanceof Error && error.message === NO_ACTIVE_PROVIDER_ERROR_MESSAGE
+  );
+}
+
+/**
+ * Resolves the active provider name for selector state. Only the documented
+ * empty-state signal thrown by getActiveProviderName() is treated as "no
+ * selection"; any other runtime failure propagates so callers can report it.
+ */
+function resolveActiveProviderName(runtime: RuntimeApi): string {
+  try {
+    return runtime.getActiveProviderName();
+  } catch (e) {
+    if (isNoActiveProviderSignal(e)) {
+      return '';
+    }
+    throw e;
+  }
+}
+
 export const useProviderDialog = ({
   addMessage,
   onProviderChange,
@@ -90,13 +113,18 @@ export const useProviderDialog = ({
   const [currentProvider, setCurrentProvider] = useState<string>('');
 
   const openDialog = useCallback(() => {
+    let loadedProviders: string[];
+    let activeProvider: string;
     try {
-      setProviders(runtime.listProviders());
-      setCurrentProvider(runtime.getActiveProviderName());
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'provider' });
+      loadedProviders = runtime.listProviders();
+      activeProvider = resolveActiveProviderName(runtime);
     } catch (e) {
       addProviderError(addMessage, 'Failed to load providers', e);
+      return;
     }
+    setProviders(loadedProviders);
+    setCurrentProvider(activeProvider);
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'provider' });
   }, [addMessage, appDispatch, runtime]);
 
   const closeDialog = useCallback(
@@ -107,7 +135,7 @@ export const useProviderDialog = ({
   const handleSelect = useCallback(
     async (providerName: string) => {
       try {
-        const prev = runtime.getActiveProviderName();
+        const prev = resolveActiveProviderName(runtime);
         /**
          * @plan:PLAN-20250218-STATELESSPROVIDER.P06
          * @requirement:REQ-SP-005
