@@ -36,12 +36,9 @@ import {
   updateMCPServerStatus,
   getMCPServerStatus,
   getAllMCPServerStatuses,
-  getMCPDiscoveryState,
 } from './mcp-status.js';
 import { MCP_DEFAULT_TIMEOUT_MSEC, createTransport } from './mcp-transport.js';
 import {
-  discoverMcpTools,
-  connectAndDiscover,
   discoverTools,
   discoverResources,
   discoverPrompts,
@@ -67,11 +64,8 @@ export {
   updateMCPServerStatus,
   getMCPServerStatus,
   getAllMCPServerStatuses,
-  getMCPDiscoveryState,
   MCP_DEFAULT_TIMEOUT_MSEC,
   createTransport,
-  discoverMcpTools,
-  connectAndDiscover,
   discoverTools,
   discoverResources,
   discoverPrompts,
