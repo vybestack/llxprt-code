@@ -120,6 +120,14 @@ function buildFields(unallowed: ReadonlySet<string>): readonly ConfigField[] {
   return [...leadingFields, ...paramFields, ...ephemeralFields];
 }
 
+const KEY_COLUMN_WIDTH = Math.max(
+  22,
+  ...PARAM_KEYS.map((k) => k.length),
+  ...EPHEMERAL_KEYS.map((k) => k.length),
+  'context-limit'.length,
+  'max_tokens'.length,
+);
+
 type FieldKind = 'param' | 'ephemeral';
 type EditorType = 'text' | 'boolean' | 'enum';
 
@@ -182,7 +190,7 @@ interface RuntimeReads {
   unallowedParameters: ReadonlySet<string>;
 }
 
-function useRuntimeReads(
+function readRuntimeSnapshot(
   runtime: ReturnType<typeof useRuntimeApi>,
 ): RuntimeReads {
   return {
@@ -231,7 +239,7 @@ const FieldRow: React.FC<{
     return (
       <Box>
         <Text color={color}>{indicator} </Text>
-        <Text color={color}>{field.key.padEnd(22)}</Text>
+        <Text color={color}>{field.key.padEnd(KEY_COLUMN_WIDTH)}</Text>
         <TextInput
           value={editValue}
           onChange={onEditChange}
@@ -248,7 +256,7 @@ const FieldRow: React.FC<{
     return (
       <Box>
         <Text color={color}>{indicator} </Text>
-        <Text color={color}>{field.key.padEnd(22)}</Text>
+        <Text color={color}>{field.key.padEnd(KEY_COLUMN_WIDTH)}</Text>
         <Text color={SemanticColors.text.secondary}>
           {boolVal ? '[true ]' : '[false]'}
         </Text>
@@ -264,7 +272,7 @@ const FieldRow: React.FC<{
     return (
       <Box>
         <Text color={color}>{indicator} </Text>
-        <Text color={color}>{field.key.padEnd(22)}</Text>
+        <Text color={color}>{field.key.padEnd(KEY_COLUMN_WIDTH)}</Text>
         {values.map((v, i) => (
           <Text
             key={v}
@@ -284,7 +292,7 @@ const FieldRow: React.FC<{
   return (
     <Box>
       <Text color={color}>{indicator} </Text>
-      <Text color={color}>{field.key.padEnd(22)}</Text>
+      <Text color={color}>{field.key.padEnd(KEY_COLUMN_WIDTH)}</Text>
       <Text color={SemanticColors.text.secondary}>{displayValue}</Text>
       {isFieldImmutable(field, currentValue) ? (
         <Text color={SemanticColors.text.secondary}>
@@ -697,7 +705,7 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
 }) => {
   const runtime = useRuntimeApi();
   const { width } = useResponsive();
-  const reads = useRuntimeReads(runtime);
+  const reads = readRuntimeSnapshot(runtime);
   const fields = buildFields(reads.unallowedParameters);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
