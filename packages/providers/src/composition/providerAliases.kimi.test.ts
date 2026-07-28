@@ -37,16 +37,16 @@ describe('builtin kimi provider alias', () => {
     // The broad rule MUST come before the kimi-k3/k3-256k rules so
     // array-order precedence lets the specific keys win for those models.
     const patterns = (entry?.config.modelDefaults ?? []).map((r) => r.pattern);
-    expect(patterns.indexOf('kimi|k3')).toBeLessThan(
+    expect(patterns.indexOf('^kimi|^k3')).toBeLessThan(
       patterns.indexOf('kimi-k3'),
     );
-    expect(patterns.indexOf('kimi|k3')).toBeLessThan(
+    expect(patterns.indexOf('^kimi|^k3')).toBeLessThan(
       patterns.indexOf('k3-256k'),
     );
 
     // Broad rule — locate by pattern rather than array index.
     const broadRule = entry?.config.modelDefaults?.find(
-      (rule) => rule.pattern === 'kimi|k3',
+      (rule) => rule.pattern === '^kimi|^k3',
     );
     expect(broadRule).toBeDefined();
 

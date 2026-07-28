@@ -58,12 +58,14 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
   return {
     state,
     setActiveModel: vi.fn(async () => {
+      callSequence.push('setActiveModel');
       if (state.setActiveModelShouldFail) {
         throw new Error('setActiveModel failed');
       }
       return state.activeModelResult;
     }),
     setProvider: vi.fn(async () => {
+      callSequence.push('setProvider');
       if (state.setProviderShouldFail) {
         throw new Error('setProvider failed');
       }
@@ -79,6 +81,7 @@ let mockUiActions: {
   openModelConfigDialog: ReturnType<typeof vi.fn>;
 };
 let mockAddItem: ReturnType<typeof vi.fn>;
+let callSequence: string[];
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => fakeRuntime,
@@ -108,6 +111,7 @@ function makeModel(provider: string, id: string): HydratedModel {
 describe('useModelDialogHandler', () => {
   beforeEach(() => {
     mockAddItem = vi.fn();
+    callSequence = [];
     mockUiActions = {
       closeModelsDialog: vi.fn(),
       openModelConfigDialog: vi.fn(),
@@ -155,9 +159,7 @@ describe('useModelDialogHandler', () => {
     expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
     expect(fakeRuntime.setProvider).toHaveBeenCalledWith('anthropic');
     expect(fakeRuntime.setActiveModel).toHaveBeenCalledWith('claude-sonnet');
-    expect(fakeRuntime.setProvider.mock.invocationCallOrder[0]).toBeLessThan(
-      fakeRuntime.setActiveModel.mock.invocationCallOrder[0],
-    );
+    expect(callSequence).toStrictEqual(['setProvider', 'setActiveModel']);
     expect(recordProviderSwitch).toHaveBeenCalledWith(
       'anthropic',
       'claude-sonnet',

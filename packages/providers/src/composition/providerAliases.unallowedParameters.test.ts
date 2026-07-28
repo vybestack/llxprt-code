@@ -114,6 +114,9 @@ describe('providerAliases unallowedParameters', () => {
 
       const config = entries.find((e) => e.alias === 'empty')?.config;
       expect(config?.modelDefaults ?? []).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('unallowedParameters'),
+      );
     });
 
     it('keeps rules without unallowedParameters unchanged', async () => {

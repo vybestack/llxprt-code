@@ -244,9 +244,19 @@ describe('<ModelConfigDialog />', () => {
 
     navigateToField(stdin, 'temperature');
 
-    // Enter edit mode
+    // Enter edit mode — the editor pre-fills the current value (0.7) with the
+    // cursor at the end.
     act(() => {
       stdin.write(ENTER);
+    });
+
+    // ctrl+a moves the cursor home, ctrl+k deletes to end of line — together
+    // they clear the pre-filled value, matching real terminal usage.
+    act(() => {
+      stdin.write('\x01');
+    });
+    act(() => {
+      stdin.write('\x0b');
     });
 
     // Type a new value
@@ -264,6 +274,7 @@ describe('<ModelConfigDialog />', () => {
     // The rendered output must reflect the new value (not the old 0.7)
     await waitFor(() => {
       expect(lastFrame()).toContain('0.9');
+      expect(lastFrame()).not.toContain('0.70.9');
     });
   });
 
@@ -469,9 +480,19 @@ describe('<ModelConfigDialog />', () => {
       <ModelConfigDialog {...defaultProps()} />,
     );
 
-    // context-limit is the first field — a plain text-editor ephemeral.
+    // Enter edit mode — the editor pre-fills the current value (4096) with
+    // the cursor at the end.
     act(() => {
       stdin.write(ENTER);
+    });
+
+    // Clear the pre-filled value (ctrl+a home, ctrl+k kill-to-end) before
+    // typing the invalid replacement.
+    act(() => {
+      stdin.write('\x01');
+    });
+    act(() => {
+      stdin.write('\x0b');
     });
 
     // Type an invalid value (context-limit requires a positive integer)
