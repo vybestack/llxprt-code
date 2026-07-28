@@ -3,7 +3,6 @@
  * @requirement:REQ-013
  */
 
-import type { McpClientManager } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
 import type { MCPOAuthConfig } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md lines 01-04
@@ -71,12 +70,25 @@ export interface McpResourceRegistryView {
 }
 
 /**
- * Callback bundle injected by AgentImpl so McpControl can read the per-agent
- * MCP auth state plus the REAL discovery/status/tools surface (the configured
- * McpClientManager + tool registry).
+ * Narrow runtime status snapshot Core exposes to agents so listServers /
+ * status / discoveryState never reach the concrete McpClientManager. Core owns
+ * the manager lifecycle and provides this read-only view.
+ */
+export interface McpRuntimeStatusView {
+  readonly servers: Record<string, MCPServerConfig>;
+  readonly discoveryFailures: ReadonlyMap<string, string>;
+  readonly discoveryState: MCPDiscoveryState;
+}
+
+/**
+ * Callback bundle injected by AgentImpl so McpControl reads MCP runtime state
+ * through narrow agent-owned callbacks rather than the concrete manager. Core
+ * owns the manager lifecycle and supplies the runtime-status snapshot, the
+ * refresh/restart capability, and the Core-owned reload callback.
  *
  * @plan:PLAN-20260617-COREAPI.P22
  * @requirement:REQ-013
+ * @requirement:REQ-019
  */
 export interface McpControlDeps {
   /** Returns true when the named server was authenticated via mcpLogin. */
@@ -90,8 +102,20 @@ export interface McpControlDeps {
    * (or the manager path is a no-op) the control simply does not record.
    */
   readonly markAuthenticated?: (server: string) => void;
-  /** Resolves the live McpClientManager (undefined before initialize). */
-  readonly getManager: () => McpClientManager | undefined;
+  /**
+   * @requirement:REQ-019
+   * Resolves the live MCP runtime-status snapshot (configured servers,
+   * discovery failures, discovery state). Optional + undefined-safe: when
+   * absent listServers returns [] and discoveryState returns 'idle'.
+   */
+  readonly getMcpRuntimeStatus?: () => McpRuntimeStatusView | undefined;
+  /**
+   * @requirement:REQ-019
+   * Refreshes one server (when named) or all configured servers via the
+   * Core-owned manager capability. Optional + undefined-safe: when absent
+   * refresh is a no-op (matches the previous no-manager semantics).
+   */
+  readonly refreshMcpServers?: (server?: string) => Promise<void>;
   /** Resolves the live tool registry view for discovered-tool projection. */
   readonly getToolRegistry: () => McpToolRegistryView | undefined;
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Raw configured MCP servers. */
@@ -107,6 +131,12 @@ export interface McpControlDeps {
   readonly getResourceRegistry?: () => McpResourceRegistryView | undefined;
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Re-publishes client tool declarations. */
   readonly refreshClientTools?: () => Promise<void>;
+  /**
+   * @requirement:REQ-019
+   * Core-owned reload callback: awaits fresh config, swaps MCP/blocked state,
+   * rebuilds trusted rules, and invokes the live manager reconcile exactly
+   * once when initialized. Agents must not call reconcile directly.
+   */
   readonly reloadMcpServers?: () => Promise<void>;
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Performs the real OAuth handshake. */
   readonly performOAuth?: (
@@ -186,27 +216,26 @@ export class McpControl implements AgentMcpControl {
   constructor(private readonly deps?: McpControlDeps) {}
 
   /**
-   * Reads the configured servers from the live manager and projects each into
-   * the public McpServerInfo (status mapped from the core server status; tools
-   * grouped from the registry).
+   * Reads the configured servers from the live runtime-status snapshot and
+   * projects each into the public McpServerInfo (status mapped from the core
+   * server status; tools grouped from the registry).
    *
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
+   * @requirement:REQ-019
    */
   listServers(): readonly McpServerInfo[] {
-    const manager = this.deps?.getManager();
-    if (manager === undefined) {
+    const status = this.deps?.getMcpRuntimeStatus?.();
+    if (status === undefined) {
       return [];
     }
-    const servers = manager.getMcpServers();
-    const failures = manager.getDiscoveryFailures();
     const toolsByServer = this.toolsByServer();
-    return Object.entries(servers).map(([name, config]) => {
+    return Object.entries(status.servers).map(([name, config]) => {
       const toolNames = (toolsByServer[name] ?? []).map((t) => t.name);
       const info: McpServerInfo = {
         name,
         config,
-        status: mapServerStatus(name, failures),
+        status: mapServerStatus(name, status.discoveryFailures),
         ...(toolNames.length > 0 ? { tools: toolNames } : {}),
         ...(typeof config.type === 'string' ? { transport: config.type } : {}),
       };
@@ -317,52 +346,63 @@ export class McpControl implements AgentMcpControl {
    *
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
+   * @requirement:REQ-019
    */
   discoveryState(): PublicMcpDiscoveryState {
-    const manager = this.deps?.getManager();
-    if (manager === undefined) {
+    const status = this.deps?.getMcpRuntimeStatus?.();
+    if (status === undefined) {
       return 'idle';
     }
-    const serverNames = Object.keys(manager.getMcpServers());
+    const serverNames = Object.keys(status.servers);
     return mapDiscoveryState(
-      manager.getDiscoveryState(),
+      status.discoveryState,
       serverNames,
-      manager.getDiscoveryFailures(),
+      status.discoveryFailures,
     );
   }
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P14
    * @requirement:REQ-006
+   * @requirement:REQ-019
    * @pseudocode lines 30-41
    *
    * Re-runs discovery for a single server (when named) or all configured
-   * servers, then re-publishes the agent client's tool declarations
-   * (R-REFRESH-PARITY). Delegates to the REAL McpClientManager restart paths.
+   * servers via the narrow refresh callback, then re-publishes the agent
+   * client's tool declarations (R-REFRESH-PARITY). Delegates to the Core-owned
+   * manager restart capability — agents never reaches the manager directly.
    */
   async refresh(server?: string): Promise<void> {
-    const manager = this.deps?.getManager();
-    if (manager === undefined) {
+    if (this.deps?.getMcpRuntimeStatus?.() === undefined) {
       return;
     }
-    if (server !== undefined) {
-      await manager.restartServer(server);
-    } else {
-      await manager.restart();
+    const refresh = this.deps.refreshMcpServers;
+    if (refresh === undefined) {
+      return;
     }
-    if (this.deps?.refreshClientTools !== undefined) {
+    await refresh(server);
+    if (this.deps.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();
     }
   }
 
+  /**
+   * @requirement:REQ-019
+   * Delegates to the Core-owned reload callback (which awaits fresh config,
+   * swaps MCP/blocked state, rebuilds trusted rules, and invokes the live
+   * manager reconcile exactly once when initialized), then re-publishes the
+   * agent client's tool declarations. Agents must not call reconcile directly.
+   */
   async reload(): Promise<void> {
-    await this.deps?.reloadMcpServers?.();
-    const manager = this.deps?.getManager();
-    if (manager === undefined) {
+    const deps = this.deps;
+    if (deps === undefined) {
       return;
     }
-    await manager.reconcileConfiguredMcpServers();
-    await this.deps?.refreshClientTools?.();
+    await deps.reloadMcpServers?.();
+    if (deps.getMcpRuntimeStatus?.() === undefined) {
+      return;
+    }
+    await deps.refreshClientTools?.();
   }
 
   /**
@@ -387,9 +427,9 @@ export class McpControl implements AgentMcpControl {
     const oauthConfig = serverConfig.oauth ?? { enabled: false };
     const mcpServerUrl = serverConfig.httpUrl ?? serverConfig.url;
     await performOAuth(server, oauthConfig, mcpServerUrl);
-    const manager = this.deps?.getManager();
-    if (manager !== undefined) {
-      await manager.restartServer(server);
+    const refresh = this.deps?.refreshMcpServers;
+    if (refresh !== undefined) {
+      await refresh(server);
     }
     if (this.deps?.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();

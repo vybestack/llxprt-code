@@ -414,7 +414,15 @@ console.log(status.hasKey, status.maskedKey); // true 'sk-l•••••••
 #### `agent.mcp` — `AgentMcpControl`
 
 **Runtime-only** view of MCP servers: `listServers()`, `status()`,
-`toolsByServer()`, `auth(server)`, `discoveryState()`, `refresh(server?)`.
+`toolsByServer()`, `auth(server)`, `discoveryState()`, `refresh(server?)`,
+`reload()`.
+
+> **Core owns the MCP manager lifecycle.** The agents package does not import
+> or reference the concrete `McpClientManager`. All MCP runtime behavior is
+> surfaced through narrow Core-owned `Config` capabilities
+> (`getMcpRuntimeStatus`, `refreshMcpServers`, `awaitMcpDiscoveryGate`,
+> `getMcpInstructions`) and a Core-owned reload callback. Agents consumes these
+> capabilities; it never reaches the manager directly.
 
 OAuth + detailed inspection (added by #2143):
 
@@ -498,6 +506,20 @@ for (const server of detail.servers) {
 > (or all servers when called with no argument) **and** re-publishes its tool
 > declarations (`setTools` parity), so the live tool list tracks server
 > restarts without a separate manual publish step.
+>
+> **Reload (hot-apply config).** `agent.mcp.reload()` hot-applies MCP
+> configuration changes without restarting the process. It delegates to the
+> Core-owned `Config.reloadMcpServers()` callback, which: awaits the fresh
+> config, swaps MCP and blocked-server state in place, rebuilds MCP trusted
+> policy rules from `settingsMcpServers`, and invokes the live manager's
+> `reconcileConfiguredMcpServers()` exactly once when initialized. After the
+> reload completes, the agent re-publishes its client tool declarations.
+> Throws when reload composition is unwired. The error is:
+>
+>     MCP server reload is not available in this composition.
+>
+> Agents must not call `reconcileConfiguredMcpServers` directly — Core owns that
+> reconciliation.
 >
 > **Runtime-only.** `agent.mcp` reflects the _live_ connection set. Durable
 > MCP server add/remove is **not** here — it lives on the

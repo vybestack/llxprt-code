@@ -34,10 +34,8 @@ import type {
   McpPromptRegistryView,
   McpResourceRegistryView,
 } from '../control/mcpControl.js';
-import type {
-  McpClientManager,
-  McpOAuthStatus,
-} from '@vybestack/llxprt-code-core';
+import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-core';
 import { fakeServerConfig } from './helpers/fakeMcpManager.js';
 
 // ─── Observable-ordering deps builder (the no-mock-theater seam) ────────────
@@ -92,7 +90,6 @@ function buildOrderingDeps(
   } = {},
 ): McpControlDeps {
   const fakeManager: FakeManager | undefined = opts.manager;
-  const managerAsCore = fakeManager as unknown as McpClientManager | undefined;
 
   // Real per-agent auth marker: the SAME set is read by isMcpAuthenticated and
   // written by markAuthenticated, mirroring agentImpl's authState.mcpAuth wiring.
@@ -144,7 +141,22 @@ function buildOrderingDeps(
             authSet.add(server);
           },
         }),
-    getManager: () => managerAsCore,
+    getMcpRuntimeStatus: () => ({
+      servers: opts.servers ?? {},
+      discoveryFailures: new Map<string, string>(),
+      discoveryState: MCPDiscoveryState.COMPLETED,
+    }),
+    ...(fakeManager !== undefined
+      ? {
+          refreshMcpServers: async (server?: string) => {
+            if (server !== undefined) {
+              await fakeManager.restartServer(server);
+            } else {
+              await fakeManager.restart();
+            }
+          },
+        }
+      : {}),
     getToolRegistry: () => toolRegistry,
     getServerConfigs: () => opts.servers,
     getBlockedServers: () => opts.blocked ?? [],

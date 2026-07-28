@@ -12,12 +12,12 @@
  * Lives under __tests__/helpers/ so deep imports of core/mcp types are
  * permitted here while staying excluded from the T17 boundary scan.
  *
- * Builds a fully-controllable `McpControlDeps` backed by an in-memory manager
- * view. The manager view drives the SAME public methods the production
- * McpClientManager exposes (getMcpServers / getDiscoveryFailures /
- * getDiscoveryState / restartServer / restart) plus the global core server
- * status channel (updateMCPServerStatus). McpControl reads these exactly as it
- * does in production — no production code reads anything from this fake.
+ * Builds a fully-controllable `McpControlDeps` backed by an in-memory
+ * runtime-status view. The view drives the SAME narrow callbacks the
+ * production Config capabilities expose (getMcpRuntimeStatus /
+ * refreshMcpServers) plus the global core server status channel
+ * (updateMCPServerStatus). McpControl reads these exactly as it does in
+ * production — no production code reads anything from this fake.
  */
 
 import {
@@ -25,11 +25,11 @@ import {
   MCPDiscoveryState,
   updateMCPServerStatus,
 } from '@vybestack/llxprt-code-core';
-import type { McpClientManager } from '@vybestack/llxprt-code-core';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   McpControlDeps,
   McpToolRegistryView,
+  McpRuntimeStatusView,
 } from '../../control/mcpControl.js';
 
 export { MCPServerStatus, MCPDiscoveryState };
@@ -42,7 +42,7 @@ export interface FakeRegistryTool {
   readonly enabled?: boolean;
 }
 
-/** Controllable in-memory state for a fake MCP manager view. */
+/** Controllable in-memory state for a fake MCP runtime-status view. */
 export interface FakeMcpManagerView {
   setServers(servers: Record<string, MCPServerConfig>): void;
   setDiscoveryState(state: MCPDiscoveryState): void;
@@ -50,7 +50,7 @@ export interface FakeMcpManagerView {
   clearFailures(): void;
   /** Number of restart() calls observed (for sequencing assertions). */
   restartAllCount(): number;
-  /** Servers passed to restartServer(name), in call order. */
+  /** Servers passed to refresh/restart(name), in call order. */
   restartedServers(): readonly string[];
   reconcileCount(): number;
 }
@@ -163,7 +163,7 @@ export interface FakeMcpDepsOptions {
   readonly servers?: Record<string, MCPServerConfig>;
   readonly tools?: readonly FakeRegistryTool[];
   readonly authenticatedServers?: readonly string[];
-  /** When false, getManager() returns undefined (pre-initialize path). */
+  /** When false, the runtime-status snapshot is omitted (pre-initialize path). */
   readonly hasManager?: boolean;
   /** When false, getToolRegistry() returns undefined (pre-initialize path). */
   readonly hasRegistry?: boolean;
@@ -171,9 +171,10 @@ export interface FakeMcpDepsOptions {
 
 /**
  * Builds an McpControlDeps + a handle to mutate the underlying fake manager.
- * The McpClientManager type is structurally satisfied by FakeManager for the
- * methods McpControl actually invokes; the single cast is isolated here in the
- * infra helper (never in a consumer spec).
+ * The deps are wired to the SAME narrow callbacks the production Config
+ * capabilities expose (getMcpRuntimeStatus, refreshMcpServers). The fake
+ * manager is driven entirely through those callbacks — no concrete
+ * McpClientManager reference is needed.
  */
 export function createFakeMcpDeps(
   opts: FakeMcpDepsOptions = {},
@@ -187,10 +188,32 @@ export function createFakeMcpDeps(
   const hasManager = opts.hasManager ?? true;
   const hasRegistry = opts.hasRegistry ?? true;
 
+  const statusView: McpRuntimeStatusView | undefined = hasManager
+    ? {
+        get servers() {
+          return manager.getMcpServers();
+        },
+        get discoveryFailures() {
+          return manager.getDiscoveryFailures();
+        },
+        get discoveryState() {
+          return manager.getDiscoveryState();
+        },
+      }
+    : undefined;
+
   const deps: McpControlDeps = {
     isMcpAuthenticated: (server: string): boolean => authed.has(server),
-    getManager: (): McpClientManager | undefined =>
-      hasManager ? (manager as unknown as McpClientManager) : undefined,
+    getMcpRuntimeStatus: () => statusView,
+    refreshMcpServers: async (server?: string) => {
+      if (hasManager) {
+        if (server !== undefined) {
+          await manager.restartServer(server);
+        } else {
+          await manager.restart();
+        }
+      }
+    },
     getToolRegistry: (): McpToolRegistryView | undefined =>
       hasRegistry ? registry : undefined,
   };

@@ -31,6 +31,7 @@ server, remove a deleted server, or replace a changed server configuration.
 | A8 | Reload honors folder trust: configuration can be refreshed in memory, but no MCP server is connected or discovered while the folder is untrusted. | RED-first manager behavior test reloads while untrusted and observes zero connections/artifacts. Existing trust transition tests remain green. | No trust-boundary regression. |
 | A9 | Trusted-server policy rules and blocked-server status are synchronized to the newly accepted effective MCP configuration before reconciliation. | RED-first Config behavior tests add/remove trusted and filtered servers and observe policy/block state. | Removed rules do not persist and newly trusted servers receive only the existing MCP-trusted policy behavior. |
 | A10 | `/mcp reload` is discoverable as a distinct built-in subcommand, reports a pending reload message, reloads slash commands after success, and returns current MCP status. | RED-first `mcpCommand` behavior tests cover registration, missing config/agent, success, `Error`, and non-`Error` rejection. Command/API mapping test covers the public agent route. | CLI tests and tmux harness demonstrate the command and resulting status. |
+| A11 | The agents package exposes MCP runtime behavior through agent-owned callbacks and Core `Config` capabilities rather than depending on the concrete `McpClientManager` implementation or importing the MCP package directly. | Boundary-focused tests prove Core owns reload/reconciliation, discovery waiting, instruction access, and manager-backed status/refresh wiring while agents contains no concrete-manager type reference or direct MCP package import. | Agents architecture gates pass, package manifests remain unchanged, and structural searches find no concrete `McpClientManager` import, type reference, or `getMcpClientManager()` call in `packages/agents/src` production or test code (comments, docstrings, and property-name strings are not violations). |
 
 ## Explicit user-visible semantics
 
@@ -60,7 +61,11 @@ server, remove a deleted server, or replace a changed server configuration.
 4. **Agent and CLI entry point (RED→GREEN):** expose additive `agent.mcp.reload()`
    orchestration and `/mcp reload`; re-publish tool declarations and commands
    after success while preserving `/mcp refresh`.
-5. **Documentation and evidence:** document reload versus refresh, run focused
+5. **Authorized package-boundary repair (RED→GREEN):** keep MCP lifecycle
+   ownership in Core, replace the agents package's concrete manager view with
+   narrow agent-owned callbacks, route discovery/instruction reads through
+   Core-owned `Config` capabilities, and remove the test-only direct MCP import.
+6. **Documentation and evidence:** document reload versus refresh, run focused
    and full gates, exercise the command in the tmux harness, and record exact-head
    review/CI evidence in this ledger.
 
@@ -245,4 +250,149 @@ Open Code Review (PR, CI): 12 findings (7 inline, 5 summary-only). Dispositioned
 | F9: toMatchObject on potentially-undefined row | In-scope-Fix | Added `expect(row).toBeDefined()` before `toMatchObject` in the reload command-map test. |
 | F10: Error-path tests missing addItem assertion | In-scope-Fix | Added `expect(context.ui.addItem).toHaveBeenCalledWith(...)` to both error-path tests. |
 | F11: Subcommand list in error message | Reject | Outside acceptance matrix scope; the existing error message format is adequate. |
+
+## Authorized package-boundary scope expansion
+
+An architectural boundary check after the candidate PR was green found that the
+new agents reload orchestration directly called the concrete MCP client manager.
+The underlying concrete-manager coupling predated this issue, but the new
+operation deepened it. The intended package direction is `agents -> core -> mcp`:
+agents declares Core but not MCP, while Core owns and constructs the manager.
+
+The user explicitly authorized expanding this PR to repair the boundary across
+the agents package as needed. The approved repair keeps the public
+`AgentMcpControl.reload()` API but:
+
+- moves reload reconciliation into the Core-owned `Config.reloadMcpServers()`
+  lifecycle;
+- replaces the concrete manager dependency in `McpControlDeps` with narrow
+  agent-owned status and refresh callbacks;
+- routes the model-turn discovery gate and MCP instruction reads through
+  Core-owned `Config` capabilities;
+- removes concrete manager casts from adjacent agents tests and the test-only
+  direct `@vybestack/llxprt-code-mcp` import; and
+- updates `dev-docs/agent-api.md` with the reload contract and ownership rule.
+
+No dependency, workflow, quality-tool, lint/complexity threshold, suppression,
+or unrelated behavior change is authorized. The repair may add Core Config
+methods because the user explicitly approved this boundary expansion; no new
+subsystem or generic abstraction is planned.
+
+### Expanded scope budget
+
+- Pre-expansion scope: 23 paths, 1,247 net lines (+1,339/-92).
+- Final scope (consolidated): 40 paths, 1,823 net lines (+2,035/-212).
+- Crossing the 25-file threshold requires the mandatory scope review below.
+- The 40-file / 2,500-net-line hard stop remains in force; the consolidated
+  scope sits at exactly 40 paths and 1,823 net lines.
+
+### Mandatory scope review
+
+The expanded paths form one coherent boundary-repair slice: Core exposes the MCP
+runtime capabilities it owns; agents consumes narrow callbacks and Config methods;
+adjacent tests prove behavior and remove concrete-manager casts; and the public
+API documentation records the ownership rule. No dependency, workflow,
+quality-tool, test move, threshold, suppression, or unrelated behavior is added.
+The approved expansion remains below the hard scope budget and is accepted for
+implementation.
+
+## Package-boundary remediation implementation status
+
+The authorized boundary repair (issue #2326 / PR #2796) is implemented. The
+agents package no longer imports or references the concrete `McpClientManager`
+and contains no `@vybestack/llxprt-code-mcp` import. Core owns the MCP manager
+lifecycle and exposes narrow capabilities that agents consumes.
+
+### Changes by area
+
+**Core Config capabilities (packages/core/src/config/config.ts and configBaseCore.ts):**
+- `reloadMcpServers()` invokes the live manager's
+  `reconcileConfiguredMcpServers()` exactly once after the state swap (when
+  initialized). Agents must not call reconcile directly.
+- `getMcpRuntimeStatus()` exposes a read-only snapshot of configured servers,
+  discovery failures, and discovery state, and returns undefined when the
+  manager is uninitialized.
+- `refreshMcpServers(server?)` restarts one or all servers via the manager and
+  no-ops when uninitialized.
+- `awaitMcpDiscoveryGate()` performs the bounded discovery wait and returns
+  per-server failures, or an empty map when uninitialized.
+- `getMcpInstructions()` exposes aggregated MCP instructions, or undefined when
+  uninitialized.
+- The four narrow manager capabilities are simple Core-owned accessors on
+  `ConfigBaseCore`; the reload state/policy/reconciliation lifecycle remains on
+  `Config`. This avoids unrelated formatting/refactors in `config.ts` while
+  keeping the concrete manager entirely behind Core.
+
+**Agents control rewrite (packages/agents/src/api/control/):**
+- `mcpControl.ts` — `McpControlDeps` replaces `getManager` with narrow
+  `getMcpRuntimeStatus` + `refreshMcpServers` callbacks. No `McpClientManager`
+  import or reference.
+- `mcpControlWiring.ts` — wires callbacks to `Config.getMcpRuntimeStatus()` and
+  `Config.refreshMcpServers()`. No `getMcpClientManager` call.
+
+**Agents consumers:**
+- `agentImpl.ts` — discovery gate uses `Config.awaitMcpDiscoveryGate()`.
+- `clientLlmUtilities.ts`, `ChatSessionFactory.ts`, `subagentRuntimeSetup.ts` —
+  use `Config.getMcpInstructions()`.
+
+**Tests:**
+- Core: capabilities tested directly in `config.d.test.ts` (11 tests added to
+  the existing file) — RED→GREEN proof for all five capabilities plus reload
+  reconciliation ownership.
+- Agents: boundary assertions consolidated into `mcp-discovery.spec.ts` — proves
+  narrow callback usage, no-manager semantics, and reload delegation.
+- Updated `fakeMcpManager.ts`, `mcpOAuth.behavior.test.ts`,
+  `mcpProjection.behavior.test.ts`, `mcp-discovery.spec.ts` — removed all
+  concrete-manager casts; wired to narrow callbacks.
+- `fakeMcpServer.ts` — removed test-only `generateMcpToolName` import from
+  `@vybestack/llxprt-code-mcp`; tests derive projected tool names from observed
+  agent output via `deriveProjectedToolNames()`.
+- Updated all Config mocks across agents tests (`getMcpClientManager` →
+  `getMcpInstructions` / `getMcpRuntimeStatus` / `awaitMcpDiscoveryGate` /
+  `refreshMcpServers`).
+
+### Final scope
+
+Branch base: c594a13fc. Changed paths and net-line counts below (from
+`git diff --stat`).
+
+- 40 total paths (committed + working tree, no untracked files after
+  consolidation): +2,035 / -212 (1,823 net changed lines).
+- The original helper abstraction (`configMcpCapabilities.ts`) and its standalone
+  test, plus the standalone boundary test, were removed. Capability logic lives
+  on the existing Core Config hierarchy; capability assertions were merged into
+  `config.d.test.ts`; boundary assertions were merged into
+  `mcp-discovery.spec.ts`. No standalone abstraction or test path remains.
+- Total: 40 paths, 1,823 net changed lines (within the 40-file / 2,500-net-line
+  hard budget).
+
+### Verification evidence (focused)
+
+- Core typecheck: `cd packages/core && npx tsc --noEmit` → exit 0.
+- Agents typecheck: `cd packages/agents && npx tsc --noEmit` → exit 0.
+- Core config tests: capability tests consolidated into `config.d.test.ts`
+  (reload reconciliation + getMcpRuntimeStatus/refreshMcpServers/
+  awaitMcpDiscoveryGate/getMcpInstructions), config.folderTrustMcpWiring,
+  config-lsp-integration, config.ideTrustLive unchanged at HEAD.
+- Agents API tests: boundary assertions consolidated into `mcp-discovery.spec.ts`
+  (narrow-callback boundary, no-manager semantics, reload delegation, compile-time
+  no-McpClientManager guarantee). No-manager refresh/reload preserve the prior
+  lifecycle: persisted reload state is still applied, but tools are not
+  republished without a live manager.
+- ESLint: all touched TS files clean (no errors, no warnings).
+- Prettier: all touched files formatted.
+- `git diff --check`: clean (no whitespace errors).
+- Agents API surface snapshot: PASS (exported names match).
+- Boundary scan: no `@vybestack/llxprt-code-mcp` import, no `McpClientManager`
+  type import/cast, no `getMcpClientManager` call in agents/src.
+- Full root verification: format, lint, ESLint guard, CLI boundary, agents API
+  surface, agents-neutral gate, typecheck, build, and all workspace tests passed.
+- Smoke: `bun scripts/start.ts --profile-load stepfun-37` passed and returned a
+  three-line haiku. The legacy `node scripts/start.js` command is unavailable
+  because this checkout has no `scripts/start.js`.
+
+### Informational findings
+
+| Finding | Classification | Resolution |
+| --- | --- | --- |
 | F12: Coverage warning | Informational | No action needed; coverage is above thresholds. |

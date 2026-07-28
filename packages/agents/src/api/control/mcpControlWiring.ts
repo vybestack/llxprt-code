@@ -56,7 +56,8 @@ export function buildMcpControlDeps(
   return {
     isMcpAuthenticated,
     markAuthenticated,
-    getManager: () => config.getMcpClientManager(),
+    getMcpRuntimeStatus: () => config.getMcpRuntimeStatus(),
+    refreshMcpServers: (server?: string) => config.refreshMcpServers(server),
     // @plan:ISSUE-2376 — project the real registry tools (AnyDeclarativeTool)
     // into the McpToolRegistryView element shape by reusing
     // projectRegistryTool (the same helper toolControl.ts list() uses), so

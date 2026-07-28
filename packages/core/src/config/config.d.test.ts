@@ -11,6 +11,7 @@ import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import { initializeTestConfig } from '../test-utils/config.js';
 import { type HoistedConfigMocks } from './configTestHarness.js';
 
@@ -28,6 +29,53 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
 const mockLoadJitSubdirectoryMemory =
   hoistedConfigMocks.loadJitSubdirectoryMemory;
 const mockCoreEvents = hoistedConfigMocks.coreEvents;
+
+const mcpInstances: Array<{
+  getMcpServers: ReturnType<typeof vi.fn>;
+  getDiscoveryFailures: ReturnType<typeof vi.fn>;
+  getDiscoveryState: ReturnType<typeof vi.fn>;
+  whenDiscoverySettled: ReturnType<typeof vi.fn>;
+  restart: ReturnType<typeof vi.fn>;
+  restartServer: ReturnType<typeof vi.fn>;
+  reconcileConfiguredMcpServers: ReturnType<typeof vi.fn>;
+  getMcpInstructions: ReturnType<typeof vi.fn>;
+  startConfiguredMcpServers: ReturnType<typeof vi.fn>;
+  onFolderTrustGained: ReturnType<typeof vi.fn>;
+  onFolderTrustRevoked: ReturnType<typeof vi.fn>;
+  quarantineForTrustRevocation: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+}> = [];
+
+vi.mock('@vybestack/llxprt-code-mcp', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-mcp')>();
+  return {
+    ...actual,
+    McpClientManager: vi.fn().mockImplementation(() => {
+      const mock = {
+        getMcpServers: vi.fn().mockReturnValue({}),
+        getDiscoveryFailures: vi
+          .fn()
+          .mockReturnValue(new Map<string, string>()),
+        getDiscoveryState: vi
+          .fn()
+          .mockReturnValue(MCPDiscoveryState.NOT_STARTED),
+        whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
+        restart: vi.fn().mockResolvedValue(undefined),
+        restartServer: vi.fn().mockResolvedValue(undefined),
+        reconcileConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+        getMcpInstructions: vi.fn().mockReturnValue(''),
+        startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+        onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
+        onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
+        quarantineForTrustRevocation: vi.fn(),
+        stop: vi.fn().mockResolvedValue(undefined),
+      };
+      mcpInstances.push(mock);
+      return mock;
+    }),
+  };
+});
 
 vi.mock('fs', async (importOriginal) => {
   const h = await import('./configTestHarness.js');
@@ -770,6 +818,135 @@ describe('Config getHookSystem', () => {
       await config.reloadSkills();
 
       expect(skillManager.setAdminSettings).toHaveBeenCalledWith(false);
+    });
+  });
+});
+
+describe('Config MCP runtime capabilities (agents boundary)', () => {
+  const baseParams: ConfigParameters = {
+    sessionId: 'test',
+    targetDir: '.',
+    debugMode: false,
+    model: 'test-model',
+    cwd: '.',
+  };
+
+  beforeEach(() => {
+    mcpInstances.length = 0;
+  });
+
+  describe('reloadMcpServers reconciliation ownership', () => {
+    it('swaps MCP/blocked state then invokes the live manager reconcile exactly once', async () => {
+      const config = new Config({
+        ...baseParams,
+        trustedFolder: true,
+        mcpServers: { stale: { command: 'stale' } },
+        onReloadMcpServers: vi.fn().mockResolvedValue({
+          mcpServers: { fresh: { command: 'fresh' } },
+          blockedMcpServers: [{ name: 'blocked', extensionName: 'ext' }],
+          settingsMcpServers: { fresh: { command: 'fresh' } },
+        }),
+      });
+      await initializeTestConfig(config);
+      const manager = mcpInstances[0];
+
+      await config.reloadMcpServers();
+
+      expect(config.getMcpServers()).toStrictEqual({
+        fresh: { command: 'fresh' },
+      });
+      expect(config.getBlockedMcpServers()).toStrictEqual([
+        { name: 'blocked', extensionName: 'ext' },
+      ]);
+      expect(manager.reconcileConfiguredMcpServers).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips reconciliation when the manager is not initialized', async () => {
+      const config = new Config({
+        ...baseParams,
+        mcpServers: { stale: { command: 'stale' } },
+        onReloadMcpServers: vi.fn().mockResolvedValue({
+          mcpServers: { fresh: { command: 'fresh' } },
+          blockedMcpServers: [],
+          settingsMcpServers: { fresh: { command: 'fresh' } },
+        }),
+      });
+      await config.reloadMcpServers();
+      expect(config.getMcpServers()).toStrictEqual({
+        fresh: { command: 'fresh' },
+      });
+      expect(mcpInstances).toHaveLength(0);
+    });
+  });
+
+  describe('getMcpRuntimeStatus', () => {
+    it('exposes servers, failures, and state without exposing the manager', async () => {
+      const config = new Config({ ...baseParams, trustedFolder: true });
+      await initializeTestConfig(config);
+      const manager = mcpInstances[0];
+      const failures = new Map<string, string>([['srv', 'boom']]);
+      manager.getMcpServers.mockReturnValue({ srv: { command: 'run' } });
+      manager.getDiscoveryFailures.mockReturnValue(failures);
+      manager.getDiscoveryState.mockReturnValue(MCPDiscoveryState.COMPLETED);
+
+      const status = config.getMcpRuntimeStatus();
+      expect(status).toStrictEqual({
+        servers: { srv: { command: 'run' } },
+        discoveryFailures: failures,
+        discoveryState: MCPDiscoveryState.COMPLETED,
+      });
+
+      const uninit = new Config(baseParams);
+      expect(uninit.getMcpRuntimeStatus()).toBeUndefined();
+    });
+  });
+
+  describe('refreshMcpServers', () => {
+    it('delegates restart(name)/restart() to the live manager; no-op when un-initialized', async () => {
+      const config = new Config({ ...baseParams, trustedFolder: true });
+      await initializeTestConfig(config);
+      const manager = mcpInstances[0];
+
+      await config.refreshMcpServers('srv');
+      expect(manager.restartServer).toHaveBeenCalledWith('srv');
+      expect(manager.restart).not.toHaveBeenCalled();
+
+      await config.refreshMcpServers();
+      expect(manager.restart).toHaveBeenCalledTimes(1);
+
+      const uninit = new Config(baseParams);
+      await expect(uninit.refreshMcpServers()).resolves.toBeUndefined();
+      await expect(uninit.refreshMcpServers('srv')).resolves.toBeUndefined();
+      expect(mcpInstances).toHaveLength(1);
+    });
+  });
+
+  describe('awaitMcpDiscoveryGate', () => {
+    it('awaits whenDiscoverySettled and returns failures; empty map when un-initialized', async () => {
+      const config = new Config({ ...baseParams, trustedFolder: true });
+      await initializeTestConfig(config);
+      const manager = mcpInstances[0];
+      const failures = new Map<string, string>([['srv', 'timeout']]);
+      manager.whenDiscoverySettled.mockResolvedValue(undefined);
+      manager.getDiscoveryFailures.mockReturnValue(failures);
+      const result = await config.awaitMcpDiscoveryGate();
+      expect(manager.whenDiscoverySettled).toHaveBeenCalledTimes(1);
+      expect(result).toBe(failures);
+
+      const uninit = new Config(baseParams);
+      expect((await uninit.awaitMcpDiscoveryGate()).size).toBe(0);
+    });
+  });
+
+  describe('getMcpInstructions', () => {
+    it('returns the live manager instructions; undefined when un-initialized', async () => {
+      const config = new Config({ ...baseParams, trustedFolder: true });
+      await initializeTestConfig(config);
+      mcpInstances[0].getMcpInstructions.mockReturnValue('do things');
+      expect(config.getMcpInstructions()).toBe('do things');
+
+      const uninit = new Config(baseParams);
+      expect(uninit.getMcpInstructions()).toBeUndefined();
     });
   });
 });

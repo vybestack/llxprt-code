@@ -481,11 +481,14 @@ export class AgentImpl implements Agent {
   }
 
   /**
-   * Builds the McpControl wired to read the per-agent mcpAuth set plus the live
-   * McpClientManager + tool registry so listServers/status/toolsByServer/
-   * discoveryState/refresh project the REAL discovery surface.
+   * Builds the McpControl wired to read the per-agent mcpAuth set plus the
+   * Core-owned MCP runtime capabilities (runtime-status snapshot, refresh,
+   * reload) and tool registry so listServers/status/toolsByServer/
+   * discoveryState/refresh project the REAL discovery surface without
+   * agents reaching the concrete manager.
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
+   * @requirement:REQ-019
    */
   private buildMcpControl(): McpControl {
     // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode Dependencies/buildMcpControl
@@ -546,8 +549,10 @@ export class AgentImpl implements Agent {
    * warning notice (issue #2516). `mcpDiscovery:'skip'` opts out (returns no
    * failures without awaiting). Non-blocking methods (mcp.status/discoveryState,
    * listTools) remain callable throughout.
+   *
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
+   * @requirement:REQ-019
    */
   private async awaitMcpDiscoveryGate(
     opts?: TurnOptions,
@@ -555,12 +560,7 @@ export class AgentImpl implements Agent {
     if (opts?.mcpDiscovery === 'skip') {
       return new Map();
     }
-    const manager = this.deps.config.getMcpClientManager();
-    if (manager === undefined) {
-      return new Map();
-    }
-    await manager.whenDiscoverySettled();
-    return manager.getDiscoveryFailures();
+    return this.deps.config.awaitMcpDiscoveryGate();
   }
 
   /**

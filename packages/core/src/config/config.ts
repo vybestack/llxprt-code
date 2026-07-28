@@ -457,6 +457,7 @@ export class Config extends ConfigBase {
         this.policyEngine.addRule(rule);
       }
     }
+    await this.mcpClientManager?.reconcileConfiguredMcpServers();
   }
 
   async reloadSkills(): Promise<void> {
