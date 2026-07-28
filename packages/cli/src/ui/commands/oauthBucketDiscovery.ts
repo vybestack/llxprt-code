@@ -19,7 +19,6 @@ type BucketDiscoveryLogger = Pick<
 export interface OAuthBucketDiscoveryTokenStore {
   listBuckets(provider: string): Promise<string[]>;
   getBucketStats(provider: string, bucket: string): Promise<BucketStats | null>;
-  getToken(provider: string, bucket?: string): Promise<unknown>;
 }
 
 export interface OAuthBucketDiscoveryManager {
@@ -46,8 +45,9 @@ const NO_OP_LOGGER: BucketDiscoveryLogger = {
   log: () => {},
 };
 
+const PATH_RE = /[\\/]\S+/g;
+
 function sanitizeError(error: unknown): string {
-  const PATH_RE = /[\\/]\S+/g;
   if (error instanceof Error && error.message) {
     return error.message.replace(PATH_RE, '[path]');
   }
