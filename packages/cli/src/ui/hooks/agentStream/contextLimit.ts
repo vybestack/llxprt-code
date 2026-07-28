@@ -8,7 +8,7 @@ import {
   resolveEffectiveContextLimit,
   resolveProviderReportedLimit,
   resolveUserContextLimit,
-} from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+} from '@vybestack/llxprt-code-core';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
