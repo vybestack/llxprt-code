@@ -240,5 +240,11 @@ describe('useModelDialogHandler', () => {
     await waitFor(() => {
       expect(mockUiActions.openModelConfigDialog).toHaveBeenCalledTimes(1);
     });
+
+    // Verify the error path was genuinely exercised: addItem WAS invoked
+    // (and threw), and the dialog opened anyway.
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'info' }),
+    );
   });
 });

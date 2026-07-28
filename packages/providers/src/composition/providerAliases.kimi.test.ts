@@ -37,16 +37,16 @@ describe('builtin kimi provider alias', () => {
     // The broad rule MUST come before the kimi-k3/k3-256k rules so
     // array-order precedence lets the specific keys win for those models.
     const patterns = (entry?.config.modelDefaults ?? []).map((r) => r.pattern);
-    expect(patterns.indexOf('^kimi|^k3')).toBeLessThan(
+    expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
       patterns.indexOf('kimi-k3'),
     );
-    expect(patterns.indexOf('^kimi|^k3')).toBeLessThan(
+    expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
       patterns.indexOf('k3-256k'),
     );
 
     // Broad rule — locate by pattern rather than array index.
     const broadRule = entry?.config.modelDefaults?.find(
-      (rule) => rule.pattern === '^kimi|^k3',
+      (rule) => rule.pattern === '^kimi|^k3-256k$',
     );
     expect(broadRule).toBeDefined();
 
@@ -70,6 +70,15 @@ describe('builtin kimi provider alias', () => {
       'frequency_penalty',
       'presence_penalty',
     ]);
+
+    // The broad pattern must NOT bleed kimi's suppression onto foreign
+    // models that merely contain 'k3' or 'kimi' as substrings.
+    const broadRegex = new RegExp(broadRule!.pattern);
+    expect(broadRegex.test('k3-256k')).toBe(true);
+    expect(broadRegex.test('kimi-k3')).toBe(true);
+    expect(broadRegex.test('claude-k3')).toBe(false);
+    expect(broadRegex.test('k3-foreign-model')).toBe(false);
+    expect(broadRegex.test('qwen-k3')).toBe(false);
   });
 
   it('ships a k3-256k modelDefaults rule with 256K geometry', () => {

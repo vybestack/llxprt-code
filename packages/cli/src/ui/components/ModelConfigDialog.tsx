@@ -312,7 +312,6 @@ interface KeypressDispatch {
   validationError: string | null;
   params: Record<string, unknown>;
   ephemeral: Record<string, unknown>;
-  forceRender: () => void;
   fields: readonly ConfigField[];
   pendingEdits: Readonly<Record<string, PendingEdit>>;
   setPendingEdit: (key: string, edit: PendingEdit) => void;
@@ -493,7 +492,6 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
         return;
       }
       togglePendingBoolean(field, d);
-      d.forceRender();
       return;
     }
     if (field.editor === 'enum') {
@@ -515,12 +513,10 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
     const current = effectiveValueFor(field, d);
     if (isFieldImmutable(field, current)) return;
     togglePendingBoolean(field, d);
-    d.forceRender();
     return;
   }
   if (isPlainLetter(key, 'c') && field.kind === 'param') {
     stageClear(field, d);
-    d.forceRender();
     return;
   }
   if (isPlainLetter(key, 's') && commitPendingEdits(d)) {
@@ -696,8 +692,6 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [enumIndex, setEnumIndex] = useState(0);
   const { pendingEdits, setPendingEdit, clearPendingEdits } = usePendingEdits();
-  const [, setRenderTick] = useState(0);
-  const forceRender = useCallback(() => setRenderTick((t) => t + 1), []);
 
   useModelConfigKeypress({
     onClose,
@@ -714,7 +708,6 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
     validationError,
     params: reads.modelParams,
     ephemeral: reads.ephemeralSettings,
-    forceRender,
     fields,
     pendingEdits,
     setPendingEdit,
