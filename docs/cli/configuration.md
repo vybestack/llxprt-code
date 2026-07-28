@@ -484,6 +484,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Requires restart:** Yes
 
+- **`ui.unicode`** (enum):
+  - **Description:** Control rendering of Unicode box-drawing and spinner glyphs. Use "off" on terminals that show "?" for borders/spinners (e.g. legacy Windows PowerShell).
+  - **Default:** `"auto"`
+  - **Values:** `"auto"`, `"force"`, `"off"`
+  - **Requires restart:** Yes
+
 #### `ide`
 
 - **`ide.enabled`** (boolean):
