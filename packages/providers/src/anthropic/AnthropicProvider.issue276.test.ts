@@ -3,9 +3,10 @@
  *
  * Verifies that AnthropicProvider behaves correctly with OAuth tokens vs API keys
  * through public APIs only (getModels, generateChatCompletion).
- * OAuth tokens (sk-ant-oat*) trigger: hardcoded model list, tool name prefixing,
- * OAuth beta headers, SDK authToken construction. API keys trigger: API-fetched
- * models, no tool prefixing, no OAuth headers, SDK apiKey construction.
+ * Both OAuth tokens (sk-ant-oat*) and API keys dynamically list models via the
+ * Anthropic models endpoint. OAuth tokens additionally trigger: token auth (not
+ * apiKey), OAuth beta headers, and tool name prefixing. API keys use apiKey
+ * auth, no beta headers, and no tool prefixing.
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -26,7 +27,6 @@ import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { OAUTH_MODELS } from './AnthropicModelData.js';
 
 vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
@@ -179,8 +179,8 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       ...overrides,
     });
 
-  describe('getModels: OAuth token returns hardcoded model list', () => {
-    it('returns the OAUTH_MODELS list when authenticated with an OAuth token', async () => {
+  describe('getModels: OAuth and API-key tokens both dynamically list models', () => {
+    it('lists the dynamic mock model ID when authenticated with an OAuth token', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
         undefined,
@@ -189,15 +189,16 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
       const models = await oauthProvider.getModels();
 
-      const oauthModelIds = OAUTH_MODELS.map((m) => m.id);
-      const returnedModelIds = models.map((m) => m.id);
-      expect(returnedModelIds).toStrictEqual(oauthModelIds);
+      expect(models.length).toBeGreaterThan(0);
+      expect(models.some((m) => m.id === 'claude-sonnet-4-5-20250929')).toBe(
+        true,
+      );
       models.forEach((model) => {
         expect(model.provider).toBe('anthropic');
       });
     });
 
-    it('does not call client.beta.models.list when using an OAuth token', async () => {
+    it('calls client.beta.models.list when using an OAuth token (dynamic path, no static catalog)', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
         undefined,
@@ -206,7 +207,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
       await oauthProvider.getModels();
 
-      expect(mockBetaModelsList).not.toHaveBeenCalled();
+      expect(mockBetaModelsList).toHaveBeenCalled();
     });
 
     it('fetches models from the API when authenticated with a regular API key', async () => {
@@ -222,10 +223,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(models.some((m) => m.id === 'claude-sonnet-4-5-20250929')).toBe(
         true,
       );
-      const oauthModelIds = OAUTH_MODELS.map((m) => m.id);
-      const returnedModelIds = models.map((m) => m.id);
-
-      expect(returnedModelIds).not.toStrictEqual(oauthModelIds);
     });
 
     it('calls client.beta.models.list when using a regular API key', async () => {

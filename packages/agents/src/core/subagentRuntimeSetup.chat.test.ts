@@ -101,7 +101,7 @@ describe('createChatObject', () => {
       contentGenerator: {},
       environmentContextLoader: async () => [],
       foregroundConfig: {
-        getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        getMcpInstructions: () => undefined,
       } as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
@@ -132,7 +132,7 @@ describe('createChatObject', () => {
       contentGenerator: {},
       environmentContextLoader: async () => [],
       foregroundConfig: {
-        getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        getMcpInstructions: () => undefined,
       } as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
@@ -163,7 +163,7 @@ describe('createChatObject', () => {
       contentGenerator: {},
       environmentContextLoader: async () => [],
       foregroundConfig: {
-        getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        getMcpInstructions: () => undefined,
       } as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
@@ -194,7 +194,7 @@ describe('createChatObject', () => {
       contentGenerator: {},
       environmentContextLoader: async () => [],
       foregroundConfig: {
-        getMcpClientManager: () => ({ getMcpInstructions: () => undefined }),
+        getMcpInstructions: () => undefined,
       } as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };

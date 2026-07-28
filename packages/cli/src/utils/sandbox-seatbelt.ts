@@ -133,12 +133,11 @@ export function buildSeatbeltArgs(
   cliArgs: string[] = [],
 ): string[] {
   // Resolve canonical config/data/cache/log roots via the shared path
-  // resolver (Storage delegates to path-resolver.ts — the SINGLE authority).
-  // These are passed as dedicated params so .sb profiles grant writes to the
-  // exact canonical roots instead of the legacy HOME_DIR/.llxprt path.
-  // CACHE_DIR resolves through Storage.getGlobalCacheDir() (honoring
-  // LLXPRT_CACHE_HOME → LLXPRT_CONFIG_HOME → platform cache), NOT the Darwin
-  // per-user cache dir, so .sb profiles and runtime agree on one cache root.
+  // resolver (Storage delegates to path-resolver.ts). These are passed as
+  // dedicated params so .sb profiles grant writes to the exact canonical
+  // roots instead of the legacy HOME_DIR/.llxprt path. CACHE_DIR resolves
+  // through Storage.getGlobalCacheDir() (honoring LLXPRT_CACHE_HOME →
+  // LLXPRT_CONFIG_HOME → platform cache), NOT the Darwin per-user cache dir.
   const configDir = resolveRealpathSync(Storage.getGlobalConfigDir());
   const dataDir = resolveRealpathSync(Storage.getGlobalDataDir());
   const cacheDir = resolveRealpathSync(Storage.getGlobalCacheDir());
@@ -193,25 +192,18 @@ export function buildSeatbeltArgs(
 
 /**
  * Resolves the canonical real path for a directory, creating it first if it
- * does not exist (so realpathSync does not fail on a fresh install where the
- * canonical config/data/log dirs have not yet been materialized). Falls back
- * to `path.resolve` when the path cannot be resolved (e.g. a parent is
- * inaccessible), matching the conservative behavior of the original code.
+ * does not exist (so realpathSync does not fail on a fresh install). Uses mode
+ * 0o700 so auto-created canonical roots — including DATA_DIR which can hold
+ * OAuth fallback files — are not world-readable.
  */
 function resolveRealpathSync(dirPath: string): string {
   try {
     return fs.realpathSync(dirPath);
   } catch {
-    // The directory does not exist yet. Create it so the sandbox profile
-    // grants writes to a real path, then resolve. Use a restrictive mode
-    // (0o700) so auto-created canonical roots — including DATA_DIR which
-    // can hold OAuth fallback files — are not world-readable.
     try {
       fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
       return fs.realpathSync(dirPath);
     } catch {
-      // Creation failed (permissions, etc.) — fall back to a lexical resolve
-      // so the sandbox still launches with a best-effort path.
       return path.resolve(dirPath);
     }
   }
@@ -229,6 +221,12 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
     ...process.env,
     ...getPassthroughEnvVars(process.env),
   };
+
+  // O15: The seatbelt child must NEVER inherit capability transport markers
+  // from the parent, even if the parent env still contains them.
+  delete sandboxEnv['LLXPRT_CAPABILITY_TOKEN'];
+  delete sandboxEnv['LLXPRT_CAPABILITY_FD'];
+  delete sandboxEnv['LLXPRT_CREDENTIAL_SOCKET'];
 
   if (!proxyCommand) {
     return { sandboxEnv };

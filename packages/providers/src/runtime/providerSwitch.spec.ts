@@ -124,6 +124,50 @@ describe('providerSwitch', () => {
       expect(result.infoMessages).toStrictEqual([]);
     });
 
+    it('registers the claudecode OAuth identity for lazy authentication when switched directly', async () => {
+      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { maybeGetCliOAuthManager } = await import('./runtimeAccessors.js');
+      const { ensureOAuthProviderRegistered } = await import(
+        '../composition/index.js'
+      );
+      const oauthManager = {
+        isOAuthEnabled: vi.fn(() => true),
+      };
+      (
+        maybeGetCliOAuthManager as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue(oauthManager);
+
+      await switchActiveProvider('claudecode', {});
+
+      expect(ensureOAuthProviderRegistered).toHaveBeenCalledWith(
+        'claudecode',
+        oauthManager,
+        undefined,
+        undefined,
+      );
+      expect(ensureOAuthProviderRegistered).not.toHaveBeenCalledWith(
+        'anthropic',
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('does not register an OAuth identity for API-key-only anthropic', async () => {
+      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { maybeGetCliOAuthManager } = await import('./runtimeAccessors.js');
+      const { ensureOAuthProviderRegistered } = await import(
+        '../composition/index.js'
+      );
+      (
+        maybeGetCliOAuthManager as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue({ isOAuthEnabled: vi.fn(() => false) });
+
+      await switchActiveProvider('anthropic', {});
+
+      expect(ensureOAuthProviderRegistered).not.toHaveBeenCalled();
+    });
+
     it('should throw error when provider name is empty string', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
 

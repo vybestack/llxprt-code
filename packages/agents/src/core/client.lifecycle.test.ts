@@ -423,12 +423,12 @@ describe('AgentClient (client.ts)', () => {
       const config = client['config'] as unknown as {
         getUserMemory: () => string;
         getCoreMemory: () => string;
-        getMcpClientManager: () => unknown;
+        getMcpInstructions: () => unknown;
         isInteractive: () => boolean;
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('');
       vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
+      vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
 
       vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
@@ -469,12 +469,12 @@ describe('AgentClient (client.ts)', () => {
       const config = client['config'] as unknown as {
         getUserMemory: () => string;
         getCoreMemory: () => string;
-        getMcpClientManager: () => unknown;
+        getMcpInstructions: () => unknown;
         isInteractive: () => boolean;
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('');
       vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
+      vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(false);
 
       vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);

@@ -484,10 +484,10 @@ function resolveProviderBaseUrl(context: ProviderSwitchContext): void {
   context.finalBaseUrl = finalBaseUrl;
 }
 
-async function handleAnthropicOAuth(
+async function handleClaudeCodeOAuth(
   context: ProviderSwitchContext,
 ): Promise<void> {
-  if (context.name !== 'anthropic') {
+  if (context.name !== 'claudecode') {
     return;
   }
 
@@ -497,7 +497,7 @@ async function handleAnthropicOAuth(
   }
 
   ensureOAuthProviderRegistered(
-    'anthropic',
+    'claudecode',
     oauthManager,
     undefined,
     context.addItem,
@@ -518,33 +518,33 @@ async function handleAnthropicOAuth(
     }
 
     logger.debug(
-      () => `[cli-runtime] Anthropic OAuth check: hasNonOAuth=${hasNonOAuth}`,
+      () => `[cli-runtime] Claude Code OAuth check: hasNonOAuth=${hasNonOAuth}`,
     );
 
-    if (!oauthManager.isOAuthEnabled('anthropic')) {
-      await oauthManager.toggleOAuthEnabled('anthropic');
+    if (!oauthManager.isOAuthEnabled('claudecode')) {
+      await oauthManager.toggleOAuthEnabled('claudecode');
     }
 
-    logger.debug(() => '[cli-runtime] Initiating Anthropic OAuth flow');
-    await oauthManager.authenticate('anthropic', undefined, {
+    logger.debug(() => '[cli-runtime] Initiating Claude Code OAuth flow');
+    await oauthManager.authenticate('claudecode', undefined, {
       signalAuthCompletion: true,
     });
     context.infoMessages.push(
-      'Anthropic OAuth authentication completed. Use /auth anthropic to view status.',
+      'Claude Code OAuth authentication completed. Use /auth claudecode to view status.',
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     context.infoMessages.push(
-      `Anthropic OAuth authentication failed: ${message}`,
+      `Claude Code OAuth authentication failed: ${message}`,
     );
     logger.warn(
-      () => `[cli-runtime] Anthropic OAuth authentication failed: ${message}`,
+      () => `[cli-runtime] Claude Code OAuth authentication failed: ${message}`,
     );
   }
 }
 
-function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
-  if (context.name !== 'anthropic') {
+function applyClaudeCodeOAuthDefaults(context: ProviderSwitchContext): void {
+  if (context.name !== 'claudecode') {
     return;
   }
 
@@ -552,7 +552,7 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
   const authOnlyEnabled =
     context.authOnlyBeforeSwitch === true ||
     context.authOnlyBeforeSwitch === 'true';
-  const oauthIsEnabled = oauthManager?.isOAuthEnabled('anthropic') ?? false;
+  const oauthIsEnabled = oauthManager?.isOAuthEnabled('claudecode') ?? false;
 
   if (!authOnlyEnabled && !oauthIsEnabled) {
     return;
@@ -565,7 +565,7 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
     );
     logger.debug(
       () =>
-        `[cli-runtime] Preserved user-set context-limit=${context.contextLimitBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
+        `[cli-runtime] Preserved user-set context-limit=${context.contextLimitBeforeSwitch} for Claude Code OAuth mode (Issue #181)`,
     );
   }
 
@@ -576,7 +576,7 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
     );
     logger.debug(
       () =>
-        `[cli-runtime] Preserved user-set max_tokens=${context.maxTokensBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
+        `[cli-runtime] Preserved user-set max_tokens=${context.maxTokensBeforeSwitch} for Claude Code OAuth mode (Issue #181)`,
     );
   } else if (
     typeof context.maxOutputTokensBeforeSwitch === 'number' &&
@@ -587,9 +587,10 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
       'maxOutputTokens',
       context.maxOutputTokensBeforeSwitch,
     );
+    context.preAliasEphemeralKeys.add('maxOutputTokens');
     logger.debug(
       () =>
-        `[cli-runtime] Restored maxOutputTokens=${context.maxOutputTokensBeforeSwitch} for Anthropic OAuth mode (Issue #1769)`,
+        `[cli-runtime] Restored maxOutputTokens=${context.maxOutputTokensBeforeSwitch} for Claude Code OAuth mode (Issue #1769)`,
     );
   }
 
@@ -832,8 +833,8 @@ export async function switchActiveProvider(
   activateProviderContext(context);
   await switchSettingsProvider(context);
   resolveProviderBaseUrl(context);
-  await handleAnthropicOAuth(context);
-  applyAnthropicOAuthDefaults(context);
+  await handleClaudeCodeOAuth(context);
+  applyClaudeCodeOAuthDefaults(context);
   applyAliasEphemeralSettings(context);
   applyModelDefaults(context);
   addProviderInfoMessages(context);

@@ -449,6 +449,10 @@ export function createCompletionChannel(
         ctx.onMessage(textOutput);
         break;
       }
+      case 'status':
+        // Non-content liveness signal (issue #2540); not forwarded to the
+        // message channel, which is append-only model-facing text.
+        break;
       default: {
         const _exhaustive: never = update;
         throw new Error(

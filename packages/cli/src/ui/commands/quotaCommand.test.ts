@@ -237,7 +237,7 @@ describe('quotaCommand', () => {
 
       const lastItem = getLastUiItem(mockContext);
       expect(lastItem.type).toBe(MessageType.INFO);
-      expect(lastItem.text).toContain('Anthropic Quota Information');
+      expect(lastItem.text).toContain('Claude Code Quota Information');
     });
   });
 

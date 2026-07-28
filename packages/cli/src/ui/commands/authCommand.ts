@@ -322,6 +322,21 @@ export class AuthCommandExecutor {
     const action = parts.length > 1 ? rawAction.toLowerCase() : undefined;
     const provider = rawProvider.toLowerCase();
 
+    // `/auth anthropic` is not an OAuth identity (issue #2274): the Claude.ai
+    // subscription OAuth flow lives under `claudecode`, and Anthropic API keys
+    // are configured via `/provider anthropic` + `/key`/`/keyfile`. Redirect
+    // users instead of touching OAuth manager state.
+    if (provider === 'anthropic') {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content:
+          'Anthropic API keys and Claude Code subscription OAuth are now separate.\n' +
+          'For Claude.ai subscription OAuth, run: /auth claudecode\n' +
+          'For Anthropic API-key access, run: /provider anthropic, then /key or /keyfile',
+      };
+    }
+
     // Check if provider is supported before processing actions
     const supportedProviders = this.oauthManager.getSupportedProviders();
     if (!supportedProviders.includes(provider)) {
@@ -568,6 +583,7 @@ export class AuthCommandExecutor {
       // Check if --all flag specified
       if (bucketOrFlag === '--all') {
         await this.oauthManager.logoutAllBuckets(provider);
+        this.clearProviderCache(provider);
         return {
           type: 'message',
           messageType: 'info',

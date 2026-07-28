@@ -428,18 +428,18 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   async getAnthropicUsageInfo(
     bucket?: string,
   ): Promise<Record<string, unknown> | null> {
-    const provider = this.providerRegistry.getProvider('anthropic');
+    const provider = this.providerRegistry.getProvider('claudecode');
     if (!provider) {
       return null;
     }
 
     const sessionMetadata =
-      await this.getCurrentProfileSessionMetadata('anthropic');
+      await this.getCurrentProfileSessionMetadata('claudecode');
 
     const bucketToUse =
       bucket ??
       (await this.getCurrentProfileSessionBucket(
-        'anthropic',
+        'claudecode',
         sessionMetadata,
       )) ??
       'default';

@@ -53,6 +53,14 @@ export function extractImports(content: string, language: string): Import[] {
         items: extractPythonImportItems(trimmed),
         line: index + 1,
       });
+    } else if (language === 'rust' && isRustUseDeclaration(trimmed)) {
+      const parsed = parseRustUseDeclaration(trimmed);
+      if (parsed) {
+        imports.push({ ...parsed, line: index + 1 });
+      }
+    } else if (language === 'c' && isCIncludeDirective(trimmed)) {
+      const module = extractCIncludeModule(trimmed);
+      imports.push({ module, items: [], line: index + 1 });
     }
   });
 
@@ -131,14 +139,15 @@ function extractPythonImportModule(line: string): string {
 /**
  * Strips a trailing ` as <alias>` from a single import item using linear token
  * scanning (avoids regex backtracking on whitespace-heavy input).
- * Example: `join as j` -> `join`.
+ * Accepts Rust raw identifiers (`r#type`) as valid alias names.
+ * Example: `join as j` -> `join`, `Write as r#type` -> `Write`.
  */
 function stripImportAlias(item: string): string {
   const tokens = item.split(/\s+/);
   if (
     tokens.length >= 3 &&
     tokens[tokens.length - 2] === 'as' &&
-    /^\w+$/.test(tokens[tokens.length - 1])
+    /^(?:r#)?\w+$/.test(tokens[tokens.length - 1])
   ) {
     return tokens.slice(0, tokens.length - 2).join(' ');
   }
@@ -166,4 +175,179 @@ function extractPythonImportItems(line: string): string[] {
     .split(',')
     .map((item) => stripImportAlias(item.trim()))
     .filter((item) => item);
+}
+
+/**
+ * Parses a Rust `use` declaration into a module path and imported items.
+ * Handles:
+ * - `use std::collections::HashMap;`  -> { module: 'std::collections', items: ['HashMap'] }
+ * - `use std::io::{Read, Write};`     -> { module: 'std::io', items: ['Read', 'Write'] }
+ * - `use std::fs::{self};`            -> { module: 'std::fs', items: ['self'] }
+ * - `use std::io::*;`                 -> { module: 'std::io', items: ['*'] }
+ *
+ * Simple and grouped forms normalize to the same representation:
+ * `use a::b::c` and `use a::b::{c}` both produce { module: 'a::b', items: ['c'] }.
+ *
+ * Uses linear string scanning to avoid polynomial backtracking.
+ * Returns null if the line is not a valid use declaration.
+ */
+function isRustUseDeclaration(line: string): boolean {
+  return /^use\s+/.test(line) || /^pub(?:\s*\([^)]*\))?\s+use\s+/.test(line);
+}
+
+function parseRustUseDeclaration(
+  line: string,
+): { module: string; items: string[] } | null {
+  // Strip leading visibility + "use" keyword: "use ", "pub use ",
+  // "pub(crate) use", "pub(super) use", "pub(in path) use".
+  let body = line
+    .replace(/^pub(?:\s*\([^)]*\))?\s+use\s+/, '')
+    .replace(/^use\s+/, '')
+    .trim();
+
+  // Strip block comments first (/* ... */) so that a `//` inside a block
+  // comment does not prematurely trigger the line-comment strip below.
+  const blockCommentStart = body.indexOf('/*');
+  if (blockCommentStart !== -1) {
+    const blockCommentEnd = body.indexOf('*/', blockCommentStart);
+    if (blockCommentEnd !== -1) {
+      body = (
+        body.slice(0, blockCommentStart) + body.slice(blockCommentEnd + 2)
+      ).trim();
+    } else {
+      body = body.slice(0, blockCommentStart).trim();
+    }
+  }
+  // Strip line comments (//)
+  const lineCommentIndex = body.indexOf('//');
+  if (lineCommentIndex !== -1) {
+    body = body.slice(0, lineCommentIndex).trim();
+  }
+  if (body.endsWith(';')) {
+    body = body.slice(0, -1).trim();
+  }
+  if (body.length === 0) {
+    return null;
+  }
+
+  const braceOpen = body.indexOf('{');
+  if (braceOpen === -1) {
+    // Simple path: normalize to match the grouped form so that
+    // `use a::b::c` and `use a::b::{c}` produce identical results.
+    return normalizeRustSimplePath(stripImportAlias(body));
+  }
+
+  // Forward-scan to find the matching closing brace for the first opening
+  // brace, so nested groups (e.g., `std::{io::{Read, Write}}`) parse correctly.
+  let depth = 0;
+  let braceClose = -1;
+  for (let i = braceOpen; i < body.length; i++) {
+    if (body[i] === '{') depth++;
+    else if (body[i] === '}') {
+      depth--;
+      if (depth === 0) {
+        braceClose = i;
+        break;
+      }
+    }
+  }
+  if (braceClose <= braceOpen) {
+    return null;
+  }
+
+  // Module path is everything before the first `{` group (minus trailing `::`)
+  const modulePath = body.slice(0, braceOpen).replace(/::$/, '').trim();
+  const itemsStr = body.slice(braceOpen + 1, braceClose).trim();
+  const items = splitRustImportItems(itemsStr)
+    .map((item) => stripImportAlias(item.trim()))
+    .filter((item) => item);
+
+  return { module: modulePath, items };
+}
+
+/**
+ * Normalizes a simple (brace-less) Rust use path into the same module/items
+ * representation as a grouped use, so `use a::b::c` matches `use a::b::{c}`.
+ *
+ * - A trailing glob (`::*`) is split into items: `['*']`.
+ * - Otherwise the last `::`-separated segment becomes the imported item.
+ * - Single-segment paths (no `::`) stay as module-only: `use std` -> { module: 'std', items: [] }.
+ */
+function normalizeRustSimplePath(path: string): {
+  module: string;
+  items: string[];
+} {
+  if (path.endsWith('::*')) {
+    const module = path.slice(0, -3);
+    return { module, items: ['*'] };
+  }
+  const lastSep = path.lastIndexOf('::');
+  if (lastSep === -1) {
+    return { module: path, items: [] };
+  }
+  const module = path.slice(0, lastSep);
+  const item = path.slice(lastSep + 2);
+  return { module, items: [item] };
+}
+
+/**
+ * Splits a Rust use-group item list by top-level commas, ignoring commas
+ * inside nested brace groups (e.g., `{Read, Write}` inside `io::{Read, Write}`).
+ */
+function splitRustImportItems(itemsStr: string): string[] {
+  const items: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < itemsStr.length; i++) {
+    const ch = itemsStr[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    else if (ch === ',' && depth === 0) {
+      items.push(itemsStr.slice(start, i));
+      start = i + 1;
+    }
+  }
+  items.push(itemsStr.slice(start));
+  return items;
+}
+
+/**
+ * Detects a C #include preprocessor directive.
+ * Matches `#include <stdio.h>` and `#include "myheader.h"`.
+ * Uses linear scanning to avoid regex backtracking.
+ */
+function isCIncludeDirective(line: string): boolean {
+  const hashIdx = line.indexOf('#');
+  if (hashIdx === -1) return false;
+  // Reject lines where the #include is inside a comment (e.g., `// #include <x.h>`)
+  const beforeHash = line.slice(0, hashIdx).trim();
+  if (beforeHash.length > 0) return false;
+  const includeIdx = line.indexOf('include');
+  if (includeIdx === -1 || includeIdx < hashIdx) return false;
+  const afterInclude = line.slice(includeIdx + 'include'.length);
+  const trimmed = afterInclude.trimStart();
+  return trimmed.startsWith('<') || trimmed.startsWith('"');
+}
+
+/**
+ * Extracts the module path from a C #include directive.
+ * Strips the angle brackets or double quotes, leaving the bare header name
+ * (e.g., `stdio.h` or `myheader.h`).
+ */
+function extractCIncludeModule(line: string): string {
+  const angleOpen = line.indexOf('<');
+  if (angleOpen !== -1) {
+    const angleClose = line.indexOf('>', angleOpen + 1);
+    if (angleClose !== -1) {
+      return line.slice(angleOpen + 1, angleClose);
+    }
+  }
+  const quoteOpen = line.indexOf('"');
+  if (quoteOpen !== -1) {
+    const quoteClose = line.indexOf('"', quoteOpen + 1);
+    if (quoteClose !== -1) {
+      return line.slice(quoteOpen + 1, quoteClose);
+    }
+  }
+  return 'unknown';
 }

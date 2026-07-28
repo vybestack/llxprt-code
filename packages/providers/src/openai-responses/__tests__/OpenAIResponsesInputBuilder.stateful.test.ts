@@ -40,6 +40,7 @@ function buildContext(
     includeReasoningInContext: true,
     outputLimiterConfig: stubConfig,
     debug: () => {},
+    mediaPdfEnabled: true,
     ...overrides,
   };
 }

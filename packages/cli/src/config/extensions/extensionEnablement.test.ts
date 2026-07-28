@@ -426,6 +426,75 @@ describe('ExtensionEnablementManager', () => {
       expect(manager.isEnabled('ext-b', '/any/path')).toBe(false);
     });
   });
+
+  describe('malformed enablement config', () => {
+    let coreEventsEmitSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      coreEventsEmitSpy = vi.spyOn(coreEvents, 'emitFeedback');
+    });
+
+    afterEach(() => {
+      coreEventsEmitSpy.mockRestore();
+    });
+
+    function writeEnablementConfig(content: string): void {
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(configDir, 'extension-enablement.json'),
+        content,
+      );
+    }
+
+    it.each([
+      ['null root', 'null'],
+      ['array root', '[]'],
+      ['string root', '"oops"'],
+      ['non-object extension entry', '{"ext-test":"bad"}'],
+      ['non-array overrides', '{"ext-test":{"overrides":{}}}'],
+      ['non-string override rules', '{"ext-test":{"overrides":[1,2]}}'],
+    ])(
+      'should ignore %s and keep extensions enabled by default',
+      (_label, content) => {
+        writeEnablementConfig(content);
+        const localManager = new ExtensionEnablementManager(configDir);
+
+        expect(localManager.isEnabled('ext-test', '/any/path')).toBe(true);
+        expect(coreEventsEmitSpy).toHaveBeenCalledWith(
+          'error',
+          'Invalid extension enablement config; ignoring malformed file.',
+        );
+      },
+    );
+
+    it.each([
+      ['truncated JSON', '{bad'],
+      ['empty file', ''],
+      ['whitespace only', '   '],
+    ])('should fall back when the file has %s', (_label, content) => {
+      writeEnablementConfig(content);
+      const localManager = new ExtensionEnablementManager(configDir);
+
+      expect(localManager.isEnabled('ext-test', '/any/path')).toBe(true);
+      expect(coreEventsEmitSpy).toHaveBeenCalledWith(
+        'error',
+        'Failed to read extension enablement config.',
+        expect.anything(),
+      );
+    });
+
+    it('should still apply valid config shapes', () => {
+      writeEnablementConfig(
+        JSON.stringify({
+          'ext-test': { overrides: ['!/any/path/'] },
+        }),
+      );
+      const localManager = new ExtensionEnablementManager(configDir);
+
+      expect(localManager.isEnabled('ext-test', '/any/path')).toBe(false);
+      expect(coreEventsEmitSpy).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('Override', () => {

@@ -1295,6 +1295,7 @@ The following settings remain at the top level of the `settings.json` file.
 
 - **`mcpServers`** (object):
   - **Description:** Configures connections to one or more Model-Context Protocol (MCP) servers for discovering and using custom tools. LLxprt Code attempts to connect to each configured MCP server to discover available tools. If multiple MCP servers expose a tool with the same name, the tool names will be prefixed with the server alias you defined in the configuration (e.g., `serverAlias__actualToolName`) to avoid conflicts. Note that the system might strip certain schema properties from MCP tool definitions for compatibility. At least one of `command`, `url`, or `httpUrl` must be provided. If multiple are specified, the order of precedence is `httpUrl`, then `url`, then `command`.
+  - **Reloading:** Run `/mcp reload` in an active interactive session after changing persisted MCP settings. The command adds, removes, or reconnects affected servers without restarting the session while preserving startup profile, extension, administrative, and command-line restrictions. `/mcp refresh` only reconnects servers already loaded in memory.
   - **Default:** Empty
   - **Properties:**
     - **`<SERVER_NAME>`** (object): The server parameters for the named server.

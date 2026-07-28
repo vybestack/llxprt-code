@@ -586,6 +586,16 @@ export interface AgentMcpControl {
    * `toolRegistry.discoverAllTools()` access (see #2376).
    */
   refresh(server?: string): Promise<void>;
+  /**
+   * Re-reads persisted MCP config and reconciles active clients without
+   * restarting the session. Connects newly added servers, disconnects
+   * removed servers, and restarts changed servers; unchanged servers
+   * remain connected. Throws when MCP reload is unavailable in the
+   * current composition (e.g., a2a-server, createAgent). Unlike
+   * refresh, this re-reads settings from disk rather than re-running
+   * discovery from in-memory config.
+   */
+  reload(): Promise<void>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   authenticate(server: string): Promise<McpServerAuthStatus>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006

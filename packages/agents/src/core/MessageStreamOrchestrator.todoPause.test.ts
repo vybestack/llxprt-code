@@ -101,6 +101,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
 } {
   const mockChat = {
     getLastPromptTokenCount: vi.fn().mockReturnValue(100),
+    getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
   };

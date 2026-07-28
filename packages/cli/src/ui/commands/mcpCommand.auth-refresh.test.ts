@@ -50,6 +50,16 @@ function assertMessageAction(
   }
 }
 
+function requireCommandAction(name: string) {
+  const action = mcpCommand.subCommands?.find(
+    (command) => command.name === name,
+  )?.action;
+  if (action === undefined) {
+    throw new Error(`Expected ${name} command action`);
+  }
+  return action;
+}
+
 describe('mcpCommand', () => {
   let mockConfig: {
     getMcpServers: ReturnType<typeof vi.fn>;
@@ -57,12 +67,18 @@ describe('mcpCommand', () => {
   };
 
   const createMockAgent = (
-    refresh: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
-  ): Agent =>
-    ({
+    options: {
+      refresh?: ReturnType<typeof vi.fn>;
+      reload?: ReturnType<typeof vi.fn>;
+    } = {},
+  ): Agent => {
+    const refresh = options.refresh ?? vi.fn().mockResolvedValue(undefined);
+    const reload = options.reload ?? vi.fn().mockResolvedValue(undefined);
+    return {
       mcp: {
         details: vi.fn().mockResolvedValue({ servers: [], blockedServers: [] }),
         refresh,
+        reload,
         status: vi.fn(),
         listServers: vi.fn().mockReturnValue([]),
         toolsByServer: vi.fn().mockReturnValue({}),
@@ -82,7 +98,8 @@ describe('mcpCommand', () => {
         onToolUpdate: vi.fn(),
         setEditorCallbacks: vi.fn(),
       },
-    }) as unknown as Agent;
+    } as unknown as Agent;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -255,6 +272,106 @@ describe('mcpCommand', () => {
     });
   });
 
+  describe('reload subcommand', () => {
+    it('reloads MCP configuration and displays the resulting status', async () => {
+      const reload = vi.fn().mockResolvedValue(undefined);
+      const context = createMockCommandContext({
+        services: {
+          config: {
+            getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
+            getBlockedMcpServers: vi.fn().mockReturnValue([]),
+          },
+          agent: createMockAgent({ reload }),
+        },
+      });
+      context.ui.reloadCommands = vi.fn();
+      const reloadAction = requireCommandAction('reload');
+      const result = await reloadAction(context, '');
+
+      expect(context.ui.addItem).toHaveBeenCalledWith(
+        { type: 'info', text: 'Reloading MCP configuration from disk...' },
+        expect.any(Number),
+      );
+      expect(reload).toHaveBeenCalledOnce();
+      expect(context.ui.reloadCommands).toHaveBeenCalledOnce();
+      assertMessageAction(result);
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('Configured MCP servers:');
+    });
+
+    it('reports a reload failure without reloading commands', async () => {
+      const reload = vi.fn().mockRejectedValue(new Error('settings invalid'));
+      const context = createMockCommandContext({
+        services: {
+          config: {
+            getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
+            getBlockedMcpServers: vi.fn().mockReturnValue([]),
+          },
+          agent: createMockAgent({ reload }),
+        },
+      });
+      context.ui.reloadCommands = vi.fn();
+      const reloadAction = requireCommandAction('reload');
+      const result = await reloadAction(context, '');
+
+      expect(context.ui.addItem).toHaveBeenCalledWith(
+        { type: 'info', text: 'Reloading MCP configuration from disk...' },
+        expect.any(Number),
+      );
+      assertMessageAction(result);
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain('Failed to reload MCP configuration');
+      expect(result.content).toContain('settings invalid');
+      expect(context.ui.reloadCommands).not.toHaveBeenCalled();
+    });
+
+    it('stringifies a non-Error reload rejection', async () => {
+      const reload = vi.fn().mockRejectedValue('transport closed');
+      const context = createMockCommandContext({
+        services: { config: mockConfig, agent: createMockAgent({ reload }) },
+      });
+      context.ui.reloadCommands = vi.fn();
+      const reloadAction = requireCommandAction('reload');
+      const result = await reloadAction(context, '');
+
+      expect(context.ui.addItem).toHaveBeenCalledWith(
+        { type: 'info', text: 'Reloading MCP configuration from disk...' },
+        expect.any(Number),
+      );
+      assertMessageAction(result);
+      expect(result.content).toContain('transport closed');
+      expect(context.ui.reloadCommands).not.toHaveBeenCalled();
+    });
+
+    it('rejects reload when configuration is unavailable', async () => {
+      const context = createMockCommandContext({
+        services: { config: null, agent: createMockAgent() },
+      });
+      const reloadAction = requireCommandAction('reload');
+      const result = await reloadAction(context, '');
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Configuration not loaded.',
+      });
+    });
+
+    it('rejects reload when the agent is unavailable', async () => {
+      const context = createMockCommandContext({
+        services: { config: mockConfig, agent: null },
+      });
+      const reloadAction = requireCommandAction('reload');
+      const result = await reloadAction(context, '');
+
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Could not retrieve tools from the agent.',
+      });
+    });
+  });
+
   describe('refresh subcommand', () => {
     it('should refresh the list of tools and display the status', async () => {
       const refresh = vi.fn().mockResolvedValue(undefined);
@@ -265,7 +382,7 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
           },
-          agent: createMockAgent(refresh),
+          agent: createMockAgent({ refresh }),
         },
       });
       context.ui.reloadCommands = vi.fn();
@@ -301,7 +418,7 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
           },
-          agent: createMockAgent(refresh),
+          agent: createMockAgent({ refresh }),
         },
       });
       context.ui.reloadCommands = vi.fn();
@@ -335,7 +452,7 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
           },
-          agent: createMockAgent(refresh),
+          agent: createMockAgent({ refresh }),
         },
       });
       context.ui.reloadCommands = vi.fn();
@@ -362,7 +479,7 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
           },
-          agent: createMockAgent(refresh),
+          agent: createMockAgent({ refresh }),
         },
       });
       context.ui.reloadCommands = vi.fn();

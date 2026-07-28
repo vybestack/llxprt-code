@@ -8,7 +8,6 @@ import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from './turn.js';
-import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
 
 /**
  * Shared overflow threshold: the guard trips when the estimated request
@@ -31,6 +30,7 @@ export interface PreflightOverflowContext {
   promptId: string;
   estimatedRequestTokenCount: number;
   remainingTokenCount: number;
+  configuredContextLimit: number;
 }
 
 /**
@@ -58,8 +58,18 @@ export async function resolvePreflightOverflow(
     return true;
   }
 
-  const { getChat, getEffectiveModelIdentity, config, logger } = deps;
+  const { getChat, logger } = deps;
   const chat = getChat();
+
+  const fitsProjectedBaseline = (): boolean => {
+    const newRemaining =
+      ctx.configuredContextLimit - chat.getProjectedPromptBaseline();
+    return (
+      ctx.estimatedRequestTokenCount <=
+      newRemaining * CONTEXT_OVERFLOW_THRESHOLD
+    );
+  };
+
   try {
     const result = await chat.performCompression(ctx.promptId, {
       bypassCooldown: true,
@@ -70,24 +80,16 @@ export async function resolvePreflightOverflow(
         () =>
           '[preflight] automatic compression failed during context-overflow recovery',
       );
-      return false;
     }
-    // Recompute remaining capacity from the (possibly reduced) baseline. Use
-    // the projected baseline (API-observed count, or the history-derived
-    // estimate when compression just nulled lastPromptTokenCount) — NOT
-    // getLastPromptTokenCount(), which returns 0 right after compression.
-    const newRemaining =
-      getTokenLimitForConfiguredContext(
-        getEffectiveModelIdentity().model,
-        config,
-      ) - chat.getProjectedPromptBaseline();
-    if (newRemaining <= 0) {
+    if (fitsProjectedBaseline()) {
       return true;
     }
-    return (
-      ctx.estimatedRequestTokenCount <=
-      newRemaining * CONTEXT_OVERFLOW_THRESHOLD
+
+    await chat.enforceContextWindow(
+      ctx.estimatedRequestTokenCount,
+      ctx.promptId,
     );
+    return fitsProjectedBaseline();
   } catch (error) {
     logger.warn(
       () =>

@@ -121,3 +121,43 @@ export function normalizeMediaToDataUri(media: MediaBlock): string {
     : 'data:image/*;base64,';
   return `${prefix}${media.data}`;
 }
+
+export const PDF_DEFAULT_FILENAME = 'document.pdf';
+
+export const PDF_AGGREGATE_MAX_BYTES = 50_000_000;
+
+export function resolvePdfFilename(media: MediaBlock): string {
+  const name = media.filename;
+  if (name === undefined || name.trim() === '') return PDF_DEFAULT_FILENAME;
+  return name;
+}
+
+export function buildPdfDisabledNotice(media: MediaBlock): string {
+  return (
+    `The PDF "${resolvePdfFilename(media)}" was not read because native PDF input is disabled for this provider. ` +
+    `Extract its text or render pages to images, then provide that content instead.`
+  );
+}
+
+/**
+ * Computes the decoded byte length of an inline base64 data URI.
+ *
+ * Counts only actual `data:*;base64,` payloads — bare URLs or non-base64
+ * data URIs return 0. This avoids miscounting URL-referenced `file_data`
+ * fields as inline base64 bytes during aggregate limit checks.
+ *
+ * Does not decode or allocate the payload; uses O(1)-memory length math.
+ */
+export function inlineBase64ByteLength(data: string): number {
+  const dataMatch = data.match(/^data:[^;]*;base64,(.*)$/is);
+  if (dataMatch === null) return 0;
+  const normalized = dataMatch[1].replaceAll(/\s/g, '');
+  if (normalized === '') return 0;
+  let padding = 0;
+  if (normalized.endsWith('==')) {
+    padding = 2;
+  } else if (normalized.endsWith('=')) {
+    padding = 1;
+  }
+  return Math.floor((normalized.length * 3) / 4) - padding;
+}

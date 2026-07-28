@@ -11,7 +11,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     value: 'anthropic',
     label: 'Anthropic',
     needsBaseUrl: false,
-    supportsOAuth: true,
+    supportsOAuth: false,
     knownModels: [
       'claude-opus-5',
       'claude-sonnet-5',
@@ -19,6 +19,13 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
       'claude-haiku-4-5-20251001',
       'claude-opus-4-5-20251101',
     ],
+  },
+  {
+    value: 'claudecode',
+    label: 'Claude Code (Claude.ai OAuth)',
+    needsBaseUrl: false,
+    supportsOAuth: true,
+    knownModels: ['claude-opus-5', 'claude-sonnet-4-20250514'],
   },
   {
     value: 'gemini',
@@ -167,6 +174,11 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
 
 export const PARAMETER_DEFAULTS: Record<string, AdvancedParams> = {
   anthropic: {
+    temperature: 0.7,
+    maxTokens: 4096,
+    contextLimit: 200000,
+  },
+  claudecode: {
     temperature: 0.7,
     maxTokens: 4096,
     contextLimit: 200000,

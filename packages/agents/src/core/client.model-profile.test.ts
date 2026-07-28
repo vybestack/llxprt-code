@@ -372,6 +372,7 @@ describe('AgentClient (client.ts)', () => {
               getTotalTokens: vi.fn().mockReturnValue(0),
             }),
             getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+            getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
             setTools: vi.fn(),
           } as unknown as ChatSession;
         });
@@ -408,6 +409,7 @@ describe('AgentClient (client.ts)', () => {
           getTotalTokens: vi.fn().mockReturnValue(0),
         }),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
       };
       client['chat'] = mockChat as ChatSession;
       getModelSpy = vi.spyOn(client['config'], 'getModel');
