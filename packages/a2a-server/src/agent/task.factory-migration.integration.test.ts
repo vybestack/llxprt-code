@@ -152,6 +152,7 @@ function injectStubModelResponse(
     getHistory: () => [],
     addHistory: () => {},
     getLastPromptTokenCount: () => 0,
+    getProjectedPromptBaseline: () => 0,
   };
 }
 

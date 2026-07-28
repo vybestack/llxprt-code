@@ -15,9 +15,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { ChatSession } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
+import {
+  buildRuntimeContext,
+  buildMockContentGenerator,
+  makeUserMessage,
+  makeAiText,
+} from './__tests__/chatSession-density-helpers.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   fromAsync,
@@ -175,11 +182,17 @@ vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
   return {
     tokenLimit,
     resolveEffectiveContextLimit: vi.fn(
-      (model: string, userCtx?: number, provCtx?: number) => {
+      (
+        model: string,
+        userCtx?: number,
+        provCtx?: number,
+        resolveTokenLimit?: (model: string) => number,
+      ) => {
         const ok = (v: unknown): v is number =>
           typeof v === 'number' && Number.isFinite(v) && v > 0;
         if (ok(userCtx)) return userCtx;
         if (ok(provCtx)) return provCtx;
+        if (resolveTokenLimit) return resolveTokenLimit(model);
         return tokenLimit(model);
       },
     ),
@@ -198,66 +211,81 @@ vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 const MOCKED_TOKEN_LIMIT = 1000;
 const PREFLIGHT_BASELINE = 900;
 const OVERFLOW_REQUEST_CHARS = 400;
+const THRESHOLD = 0.95;
 
 interface OverflowScenario {
-  /** Post-compression projected baseline; omit when recovery never rechecks. */
-  projectedBaseline?: number;
-  /** Compression outcome: a result enum value, or an Error to reject with. */
   compressionResult: PerformCompressionResult | Error;
-  /** Whether the turn should proceed (sets up a content stream on Turn.run). */
-  proceeds: boolean;
+  postCompressionBaseline?: number;
+  postEnforcementBaseline?: number;
+  enforcementError?: Error;
+  initialProjectedBaseline?: number;
+  lastPromptTokenCount?: number;
 }
 
 interface OverflowScenarioHandle {
-  mockChat: Partial<ChatSession>;
   request: ContentBlock[];
   estimatedRequestTokenCount: number;
   remainingTokenCount: number;
 }
 
-/** Builds the shared mockChat/generator/request scaffolding for one scenario. */
 function buildOverflowScenario(
   client: AgentClient,
   scenario: OverflowScenario,
 ): OverflowScenarioHandle {
   vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+
+  const initialBaseline =
+    scenario.initialProjectedBaseline ?? PREFLIGHT_BASELINE;
+  const observedCount = scenario.lastPromptTokenCount ?? initialBaseline;
   vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
-    PREFLIGHT_BASELINE,
+    observedCount,
   );
+
+  let currentBaseline = initialBaseline;
 
   const mockChat: Partial<ChatSession> = {
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
-    getLastPromptTokenCount: vi.fn().mockReturnValue(PREFLIGHT_BASELINE),
+    getLastPromptTokenCount: vi.fn().mockReturnValue(observedCount),
+    getProjectedPromptBaseline: vi
+      .fn()
+      .mockImplementation(() => currentBaseline),
     performCompression:
       scenario.compressionResult instanceof Error
         ? vi.fn().mockRejectedValue(scenario.compressionResult)
-        : vi.fn().mockResolvedValue(scenario.compressionResult),
+        : vi.fn().mockImplementation(() => {
+            if (scenario.postCompressionBaseline !== undefined) {
+              currentBaseline = scenario.postCompressionBaseline;
+            }
+            return Promise.resolve(
+              scenario.compressionResult as PerformCompressionResult,
+            );
+          }),
+    enforceContextWindow: scenario.enforcementError
+      ? vi.fn().mockRejectedValue(scenario.enforcementError)
+      : vi.fn().mockImplementation(() => {
+          if (scenario.postEnforcementBaseline !== undefined) {
+            currentBaseline = scenario.postEnforcementBaseline;
+          }
+          return Promise.resolve();
+        }),
   };
-  if (scenario.projectedBaseline !== undefined) {
-    mockChat.getProjectedPromptBaseline = vi
-      .fn()
-      .mockReturnValue(scenario.projectedBaseline);
-  }
   client['chat'] = mockChat as ChatSession;
   client['contentGenerator'] = {
     countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
   } as Partial<ContentGenerator> as ContentGenerator;
 
-  if (scenario.proceeds) {
-    mockTurnRunFn.mockReturnValue(
-      (async function* () {
-        yield { type: AgentEventType.Content, value: 'ok' };
-      })(),
-    );
-  }
+  mockTurnRunFn.mockReturnValue(
+    (async function* () {
+      yield { type: AgentEventType.Content, value: 'ok' };
+    })(),
+  );
 
   const longText = 'a'.repeat(OVERFLOW_REQUEST_CHARS);
   return {
-    mockChat,
     request: [{ type: 'text' as const, text: longText }],
     estimatedRequestTokenCount: Math.floor(longText.length / 4),
-    remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
+    remainingTokenCount: MOCKED_TOKEN_LIMIT - initialBaseline,
   };
 }
 
@@ -297,12 +325,9 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
     });
 
     it('should recover via automatic compression and proceed instead of bailing on a small overflow (issue 2402)', async () => {
-      // Initial preflight baseline (900) overflows; the post-compression
-      // projected baseline (100) fits, so the turn proceeds.
-      const { mockChat, request } = buildOverflowScenario(client, {
-        projectedBaseline: 100,
+      const { request } = buildOverflowScenario(client, {
+        postCompressionBaseline: 100,
         compressionResult: PerformCompressionResult.COMPRESSED,
-        proceeds: true,
       });
 
       const events = await fromAsync(
@@ -313,75 +338,19 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         ),
       );
 
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: AgentEventType.Content, value: 'ok' }),
+      );
       expect(events).not.toContainEqual(
         expect.objectContaining({
           type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
-      expect(mockTurnRunFn).toHaveBeenCalled();
-      // The recovery is an automatic compression, reported as 'auto' (matching
-      // the downstream hard-limit paths), not 'manual'.
-      expect(mockChat.performCompression).toHaveBeenCalledWith(
-        'prompt-id-overflow-recovered',
-        { bypassCooldown: true, trigger: 'auto' },
-      );
     });
 
-    it('should bail with ContextWindowWillOverflow when compression fails (issue 2402)', async () => {
-      const handle = buildOverflowScenario(client, {
-        compressionResult: PerformCompressionResult.FAILED,
-        proceeds: false,
-      });
-
-      const events = await fromAsync(
-        client.sendMessageStream(
-          handle.request,
-          new AbortController().signal,
-          'prompt-id-overflow-compression-failed',
-        ),
-      );
-
-      expect(events).toContainEqual({
-        type: AgentEventType.ContextWindowWillOverflow,
-        value: {
-          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
-          remainingTokenCount: handle.remainingTokenCount,
-        },
-      });
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
-    });
-
-    it('should still bail when compression does not reduce enough (issue 2402)', async () => {
-      // Partial reduction (900 → 950) but not enough: newRemaining = 50,
-      // estimated 100 > 50 * 0.95 → still overflows → bail.
-      const handle = buildOverflowScenario(client, {
-        projectedBaseline: 950,
-        compressionResult: PerformCompressionResult.COMPRESSED,
-        proceeds: false,
-      });
-
-      const events = await fromAsync(
-        client.sendMessageStream(
-          handle.request,
-          new AbortController().signal,
-          'prompt-id-overflow-compression-insufficient',
-        ),
-      );
-
-      expect(events).toContainEqual({
-        type: AgentEventType.ContextWindowWillOverflow,
-        value: {
-          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
-          remainingTokenCount: handle.remainingTokenCount,
-        },
-      });
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
-    });
-
-    it('should bail when performCompression throws during recovery (issue 2402)', async () => {
+    it('should bail with ContextWindowWillOverflow when compression throws during recovery (issue 2402)', async () => {
       const handle = buildOverflowScenario(client, {
         compressionResult: new Error('boom'),
-        proceeds: false,
       });
 
       const events = await fromAsync(
@@ -392,23 +361,24 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         ),
       );
 
-      expect(events).toContainEqual({
-        type: AgentEventType.ContextWindowWillOverflow,
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(overflowEvents[0]).toMatchObject({
         value: {
           estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
           remainingTokenCount: handle.remainingTokenCount,
         },
       });
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
     });
 
     it('should bail when compression is skipped because history is empty (issue 2402)', async () => {
-      // SKIPPED_EMPTY: nothing to compress → baseline unchanged → still
-      // overflows. Must not falsely recover.
       const handle = buildOverflowScenario(client, {
-        projectedBaseline: PREFLIGHT_BASELINE,
+        postCompressionBaseline: PREFLIGHT_BASELINE,
         compressionResult: PerformCompressionResult.SKIPPED_EMPTY,
-        proceeds: false,
+        enforcementError: new Error('unrecoverable'),
       });
 
       const events = await fromAsync(
@@ -419,43 +389,365 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         ),
       );
 
-      expect(events).toContainEqual({
-        type: AgentEventType.ContextWindowWillOverflow,
-        value: {
-          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
-          remainingTokenCount: handle.remainingTokenCount,
-        },
-      });
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
     });
 
-    it('should proceed when compression drives remaining capacity non-positive, deferring to the downstream path (issue 2402)', async () => {
-      // After compression the projected baseline (1005) exceeds the 1000-token
-      // limit, making remaining capacity negative → defer to downstream,
-      // mirroring the negative-remaining guard (issue #2139).
-      buildOverflowScenario(client, {
-        projectedBaseline: 1005,
-        compressionResult: PerformCompressionResult.COMPRESSED,
-        proceeds: true,
+    it('should recover via context-window enforcement when ordinary compression is a no-op (issue 2755 A1)', async () => {
+      const ENFORCEMENT_TOKEN_LIMIT = 10_000;
+      vi.mocked(tokenLimit).mockReturnValue(ENFORCEMENT_TOKEN_LIMIT);
+
+      const historyService = new HistoryService();
+      const fillText = 'x'.repeat(12_000);
+      historyService.add(makeUserMessage(fillText), 'test-model');
+      historyService.add(makeAiText(fillText), 'test-model');
+      historyService.add(makeUserMessage(fillText), 'test-model');
+      await historyService.waitForTokenUpdates();
+
+      const runtimeContext = buildRuntimeContext(historyService, {
+        compressionStrategy: 'one-shot',
+        contextLimit: ENFORCEMENT_TOKEN_LIMIT,
       });
+
+      const realChat = new ChatSession(
+        runtimeContext,
+        buildMockContentGenerator(),
+        { maxOutputTokens: 100 },
+        [],
+      );
+      client['chat'] = realChat;
+      client['contentGenerator'] = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      } as Partial<ContentGenerator> as ContentGenerator;
+
+      mockTurnRunFn.mockReturnValue(
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
+
       const request: ContentBlock[] = [
-        { type: 'text', text: 'a'.repeat(OVERFLOW_REQUEST_CHARS) },
+        { type: 'text', text: 'x'.repeat(4_000) },
       ];
 
       const events = await fromAsync(
         client.sendMessageStream(
           request,
           new AbortController().signal,
-          'prompt-id-overflow-defer',
+          'prompt-id-enforcement-recover-noop',
         ),
       );
 
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: AgentEventType.Content, value: 'ok' }),
+      );
       expect(events).not.toContainEqual(
         expect.objectContaining({
           type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
-      expect(mockTurnRunFn).toHaveBeenCalled();
+      expect(realChat.getHistory().length).toBe(2);
+    });
+
+    it('should recover via enforcement when compression succeeded but was insufficient (issue 2755 A2)', async () => {
+      const { request } = buildOverflowScenario(client, {
+        postCompressionBaseline: 950,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        postEnforcementBaseline: 100,
+      });
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          request,
+          new AbortController().signal,
+          'prompt-id-enforcement-recover-insufficient',
+        ),
+      );
+
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: AgentEventType.Content, value: 'ok' }),
+      );
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: AgentEventType.ContextWindowWillOverflow,
+        }),
+      );
+    });
+
+    it('should recover via enforcement even when ordinary compression returns FAILED (issue 2755 A1 FAILED fallback)', async () => {
+      const { request } = buildOverflowScenario(client, {
+        postCompressionBaseline: PREFLIGHT_BASELINE,
+        compressionResult: PerformCompressionResult.FAILED,
+        postEnforcementBaseline: 100,
+      });
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          request,
+          new AbortController().signal,
+          'prompt-id-enforcement-recover-failed',
+        ),
+      );
+
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: AgentEventType.Content, value: 'ok' }),
+      );
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: AgentEventType.ContextWindowWillOverflow,
+        }),
+      );
+    });
+
+    it('should bail with exactly one overflow guard when enforcement cannot recover (issue 2755 A3)', async () => {
+      const handle = buildOverflowScenario(client, {
+        postCompressionBaseline: 950,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        enforcementError: new Error('unrecoverable'),
+      });
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-enforcement-unrecoverable',
+        ),
+      );
+
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+    });
+
+    it('should bail with exactly one overflow guard when compression is insufficient and enforcement leaves the baseline too large (issue 2755 A7)', async () => {
+      const handle = buildOverflowScenario(client, {
+        postCompressionBaseline: 950,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        postEnforcementBaseline: 950,
+      });
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-enforcement-still-too-large',
+        ),
+      );
+
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+    });
+
+    it('should bail when the projected baseline exceeds the configured limit even after enforcement (issue 2755 A3 negative-remaining)', async () => {
+      const handle = buildOverflowScenario(client, {
+        postCompressionBaseline: MOCKED_TOKEN_LIMIT + 50,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        postEnforcementBaseline: MOCKED_TOKEN_LIMIT + 50,
+      });
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          handle.request,
+          new AbortController().signal,
+          'prompt-id-negative-remaining',
+        ),
+      );
+
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+    });
+
+    it('should not grant a false full-window allowance when the last observed count is cleared but history is large (issue 2755 A4 consecutive)', async () => {
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(0);
+
+      const currentBaseline = PREFLIGHT_BASELINE;
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi
+          .fn()
+          .mockImplementation(() => currentBaseline),
+        performCompression: vi
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve(PerformCompressionResult.NOOP),
+          ),
+        enforceContextWindow: vi
+          .fn()
+          .mockRejectedValue(new Error('unrecoverable')),
+      };
+      client['chat'] = mockChat as ChatSession;
+      client['contentGenerator'] = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      } as Partial<ContentGenerator> as ContentGenerator;
+
+      const longText = 'a'.repeat(OVERFLOW_REQUEST_CHARS);
+      const request: ContentBlock[] = [{ type: 'text', text: longText }];
+      const signal = new AbortController().signal;
+
+      const events1 = await fromAsync(
+        client.sendMessageStream(request, signal, 'prompt-id-first-turn'),
+      );
+
+      const overflowEvents1 = events1.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents1).toHaveLength(1);
+      expect(overflowEvents1[0]).toMatchObject({
+        value: {
+          remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
+        },
+      });
+      expect(events1.some((e) => e.type === AgentEventType.Content)).toBe(
+        false,
+      );
+
+      const events2 = await fromAsync(
+        client.sendMessageStream(request, signal, 'prompt-id-second-turn'),
+      );
+
+      const overflowEvents2 = events2.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents2).toHaveLength(1);
+      expect(overflowEvents2[0]).toMatchObject({
+        value: {
+          remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
+        },
+      });
+    });
+
+    it('should use the same configured context limit for initial capacity and post-recovery recheck (issue 2755 A7 exact-limit parity)', async () => {
+      const injectedLimit = 842;
+      const injectedResolver = vi.fn(() => injectedLimit);
+
+      client = (
+        await setupAgentClient({
+          mockChatCreateFn,
+          mockGenerateContentFn,
+          mockEmbedContentFn,
+          resolveTokenLimit: injectedResolver,
+        })
+      ).client;
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      (
+        client as unknown as {
+          todoContinuationService: { todoToolsAvailable: boolean };
+        }
+      ).todoContinuationService.todoToolsAvailable = true;
+
+      const baselineForRecovery = 750;
+      const currentBaseline = baselineForRecovery;
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+        getProjectedPromptBaseline: vi
+          .fn()
+          .mockImplementation(() => currentBaseline),
+        performCompression: vi
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve(PerformCompressionResult.COMPRESSED),
+          ),
+        enforceContextWindow: vi
+          .fn()
+          .mockRejectedValue(new Error('unrecoverable')),
+      };
+      client['chat'] = mockChat as ChatSession;
+      client['contentGenerator'] = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      } as Partial<ContentGenerator> as ContentGenerator;
+      mockTurnRunFn.mockReturnValue(
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
+
+      const requestCharsForParity = 540;
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ type: 'text', text: 'a'.repeat(requestCharsForParity) }],
+          new AbortController().signal,
+          'prompt-id-parity',
+        ),
+      );
+
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+    });
+
+    it('should proceed exactly at the threshold boundary where estimated equals remaining * 0.95 (issue 2755 A7 exact threshold)', async () => {
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+
+      const fitBaseline = 500;
+      const requestChars = Math.floor(
+        (MOCKED_TOKEN_LIMIT - fitBaseline) * THRESHOLD * 4,
+      );
+      const exactEstimate = Math.floor(requestChars / 4);
+
+      let currentBaseline = PREFLIGHT_BASELINE;
+
+      const mockChat: Partial<ChatSession> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(PREFLIGHT_BASELINE),
+        getProjectedPromptBaseline: vi
+          .fn()
+          .mockImplementation(() => currentBaseline),
+        performCompression: vi.fn().mockImplementation(() => {
+          currentBaseline = fitBaseline;
+          return Promise.resolve(PerformCompressionResult.COMPRESSED);
+        }),
+        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+      };
+      client['chat'] = mockChat as ChatSession;
+      client['contentGenerator'] = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      } as Partial<ContentGenerator> as ContentGenerator;
+      mockTurnRunFn.mockReturnValue(
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ type: 'text', text: 'a'.repeat(requestChars) }],
+          new AbortController().signal,
+          'prompt-id-threshold-exact',
+        ),
+      );
+
+      const fitRemaining = MOCKED_TOKEN_LIMIT - fitBaseline;
+      expect(exactEstimate).toBe(Math.floor(fitRemaining * THRESHOLD));
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: AgentEventType.Content, value: 'ok' }),
+      );
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: AgentEventType.ContextWindowWillOverflow,
+        }),
+      );
     });
   });
 });
