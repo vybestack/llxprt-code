@@ -11,7 +11,6 @@ import {
   type ToolResult,
   type LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
-import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   SubagentOrchestrator,
@@ -47,6 +46,8 @@ import {
   formatSuccessDisplay,
 } from './taskResultHelpers.js';
 import { executeAsyncTask } from './taskAsyncExecution.js';
+import { startTaskHeartbeat, type TaskHeartbeat } from './taskHeartbeat.js';
+import { setupTaskStreaming } from './taskStreaming.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -488,7 +489,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
     }
 
-    const { emitClosingSubagentTag } = this.setupStreaming(
+    const { emitClosingSubagentTag, heartbeat } = this.setupStreaming(
       launchResult,
       agentId,
       scope,
@@ -519,6 +520,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         abortState.aborted,
       );
     } finally {
+      heartbeat.stop();
       emitClosingSubagentTag();
     }
   }
@@ -549,41 +551,16 @@ class TaskToolInvocation extends BaseToolInvocation<
     agentId: string,
     scope: SubAgentScope,
     updateOutput?: (update: LiveOutputUpdate) => void,
-  ): { emitClosingSubagentTag: () => void } {
+  ): { emitClosingSubagentTag: () => void; heartbeat: TaskHeartbeat } {
     const subagentName =
       launchRequestName(launchResult) || this.normalized.subagentName;
-    let xmlOutputOpen = false;
-    const normalizer = createStreamNormalizer();
-    const emitAppend = (data: string): void => {
-      updateOutput?.({ mode: 'append', data });
-    };
-    const emitClosingSubagentTag = () => {
-      if (!xmlOutputOpen || !updateOutput) {
-        return;
-      }
-      const flushed = normalizer.flush();
-      if (flushed !== undefined) {
-        emitAppend(flushed);
-      }
-      emitAppend(`</subagent name="${subagentName}" id="${agentId}">\n`);
-      xmlOutputOpen = false;
-    };
-
-    if (updateOutput) {
-      emitAppend(`<subagent name="${subagentName}" id="${agentId}">\n`);
-      xmlOutputOpen = true;
-
-      const existingHandler = scope.onMessage;
-      scope.onMessage = (message: string) => {
-        const delta = normalizer.push(message);
-        if (delta !== undefined) {
-          emitAppend(delta);
-        }
-        existingHandler?.(message);
-      };
-    }
-
-    return { emitClosingSubagentTag };
+    return setupTaskStreaming(
+      subagentName,
+      agentId,
+      scope,
+      updateOutput,
+      startTaskHeartbeat,
+    );
   }
 
   private async runSubagent(

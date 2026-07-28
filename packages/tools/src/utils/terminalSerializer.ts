@@ -37,10 +37,23 @@ export type AnsiLine = AnsiToken[];
 export type AnsiOutput = AnsiLine[];
 
 /**
+ * A non-content liveness/status snapshot emitted across the public live-output
+ * stream boundary (issue #2540). See the equivalent definition in
+ * packages/core — kept structurally identical so tool files do not need the
+ * @xterm/headless dependency.
+ */
+export interface LiveOutputStatus {
+  kind: 'liveness';
+  seq: number;
+}
+
+/**
  * Explicit tagged update protocol for live-output streaming. Discriminated
  * by `mode`: text stream producers emit `append` (incremental deltas);
- * terminal-buffer producers emit `replace` (full snapshots).
+ * terminal-buffer producers emit `replace` (full snapshots);
+ * `status` emits a non-content liveness signal (issue #2540).
  */
 export type LiveOutputUpdate =
   | { mode: 'append'; data: string }
-  | { mode: 'replace'; data: AnsiOutput };
+  | { mode: 'replace'; data: AnsiOutput }
+  | { mode: 'status'; status: LiveOutputStatus };

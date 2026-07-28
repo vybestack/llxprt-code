@@ -115,4 +115,48 @@ describe('accumulateLiveOutput', () => {
       expect(acc).toBe(third);
     });
   });
+
+  describe('status mode (liveness, issue #2540)', () => {
+    const status = {
+      mode: 'status' as const,
+      status: { kind: 'liveness' as const, seq: 1 },
+    };
+
+    it('preserves an existing string accumulator unchanged', () => {
+      expect(accumulateLiveOutput('existing', status)).toBe('existing');
+    });
+
+    it('preserves an existing AnsiOutput accumulator unchanged', () => {
+      expect(accumulateLiveOutput(ansiSnapshot, status)).toBe(ansiSnapshot);
+    });
+
+    it('returns empty string for an undefined accumulator', () => {
+      expect(accumulateLiveOutput(undefined, status)).toBe('');
+    });
+
+    it('does not grow the accumulator across repeated status updates', () => {
+      let acc: string | AnsiOutput | undefined = 'base';
+      for (let seq = 1; seq <= 50; seq++) {
+        acc = accumulateLiveOutput(acc, {
+          mode: 'status',
+          status: { kind: 'liveness', seq },
+        });
+      }
+      expect(acc).toBe('base');
+    });
+
+    it('status after append keeps the accumulated text', () => {
+      let acc: string | AnsiOutput | undefined = undefined;
+      acc = accumulateLiveOutput(acc, { mode: 'append', data: 'kept' });
+      acc = accumulateLiveOutput(acc, status);
+      expect(acc).toBe('kept');
+    });
+
+    it('append after status appends onto the preserved text', () => {
+      let acc: string | AnsiOutput | undefined = 'pre';
+      acc = accumulateLiveOutput(acc, status);
+      acc = accumulateLiveOutput(acc, { mode: 'append', data: '-post' });
+      expect(acc).toBe('pre-post');
+    });
+  });
 });
