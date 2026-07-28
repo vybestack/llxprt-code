@@ -237,19 +237,42 @@ export async function setupSessionRecording(
             'Falling back to a new session.',
         ),
       );
+      // Release resources FIRST so cleanup runs even if resetChat or
+      // buildNewRecordingService throw (issue #1873).
+      await releaseResumedResources(recordingService, resumedLockHandle);
       // restoreHistory is not atomic — it may have partially populated the
       // AgentClient's history before throwing. Reset so no half-restored
       // items persist into the fresh session.
-      await agentClient.resetChat();
-      await releaseResumedResources(recordingService, resumedLockHandle);
+      try {
+        await agentClient.resetChat();
+      } catch (resetErr) {
+        debugLogger.warn(
+          chalk.yellow(
+            `Failed to reset chat after restoreHistory failure: ${
+              resetErr instanceof Error ? resetErr.message : String(resetErr)
+            }`,
+          ),
+        );
+      }
       // Fresh session with a new UUID in the same project's chatsDir.
       // buildNewRecordingService generates a new sessionId so the recording
       // is fully isolated from the corrupted resumed session.
-      activeRecordingService = buildNewRecordingService(
-        config,
-        projectHash,
-        chatsDir,
-      );
+      try {
+        activeRecordingService = buildNewRecordingService(
+          config,
+          projectHash,
+          chatsDir,
+        );
+      } catch (buildErr) {
+        // This should be unreachable (construction just stores config),
+        // but if it throws we must not leave the session without a
+        // recording service — rethrow so startup fails loudly.
+        throw new Error(
+          `Failed to create fallback recording service: ${
+            buildErr instanceof Error ? buildErr.message : String(buildErr)
+          }`,
+        );
+      }
       activeLockHandle = null;
       didFallback = true;
     }
