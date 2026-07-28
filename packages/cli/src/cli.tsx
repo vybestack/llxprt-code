@@ -55,7 +55,9 @@ import {
   ExitCodes,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
   runStartupMigration,
   reportStartupResult,
@@ -242,6 +244,20 @@ async function constructForegroundAgentAndDispatch(
  * Zed/ACP is the exception: it runs its own runtime and constructs per-session
  * Agents via `fromConfig` internally, so no foreground Agent is built for it.
  */
+function prepareSandboxCredentialStartup(workspaceRoot: string): void {
+  const sandboxSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
+  const capabilityFd = process.env.LLXPRT_CAPABILITY_FD;
+  if (sandboxSocket !== undefined || capabilityFd !== undefined) {
+    createTokenStore();
+  }
+  if (sandboxSocket !== undefined) {
+    applySandboxBashrc(
+      `${workspaceRoot}/.llxprt/sandbox.bashrc`,
+      workspaceRoot,
+    );
+  }
+}
+
 export async function main() {
   configureEarlyDebugLogging();
 
@@ -251,6 +267,8 @@ export async function main() {
   const cleanupStdio = setupProcessLifecycle();
 
   const workspaceRoot = process.cwd();
+  prepareSandboxCredentialStartup(workspaceRoot);
+
   const settings = loadSettings(workspaceRoot);
 
   await maybeRelaunchForMemory(settings);

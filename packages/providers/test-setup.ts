@@ -23,3 +23,4 @@ setProviderRuntimeStateFactory(() => new SettingsService());
 // and alter token-store behaviour).
 delete process.env.LLXPRT_CREDENTIAL_SOCKET;
 delete process.env.LLXPRT_CAPABILITY_TOKEN;
+delete process.env.LLXPRT_CAPABILITY_FD;

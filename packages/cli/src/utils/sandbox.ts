@@ -5,9 +5,7 @@
  */
 
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ConsolePatcher } from '../ui/utils/ConsolePatcher.js';
-import { stopProxy } from '@vybestack/llxprt-code-providers/auth.js';
 import type { PortForwardingResult } from './sandbox-ssh.js';
 import {
   buildSandboxEnvArgs,
@@ -51,20 +49,43 @@ function createSandboxConsolePatcher(cliConfig?: Config): ConsolePatcher {
   });
 }
 
-async function handleSandboxStartError(error: unknown): Promise<never> {
-  await stopProxy();
-  debugLogger.error('Sandbox error:', error);
-  throw error;
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
 }
 
-function cleanupSandboxStart(
+/**
+ * Runs the per-step credential/proxy cleanup and returns any non-idempotent
+ * error, or undefined when cleanup succeeds. Used by start_sandbox so cleanup
+ * errors are surfaced alongside the primary sandbox error via AggregateError.
+ *
+ * @plan project-plans/issue-1954-sandbox-hardening.md (AC10)
+ */
+function runSandboxCleanup(
   patcher: ConsolePatcher,
   portForwardingResult: PortForwardingResult | undefined,
   credentialProxyBridgeCleanup: (() => void) | undefined,
-): void {
-  portForwardingResult?.cleanup?.();
-  credentialProxyBridgeCleanup?.();
-  patcher.cleanup();
+): Error | undefined {
+  const errors: unknown[] = [];
+  try {
+    portForwardingResult?.cleanup?.();
+  } catch (err) {
+    errors.push(err);
+  }
+  try {
+    credentialProxyBridgeCleanup?.();
+  } catch (err) {
+    errors.push(err);
+  }
+  try {
+    patcher.cleanup();
+  } catch (err) {
+    errors.push(err);
+  }
+  if (errors.length === 1) return toError(errors[0]);
+  if (errors.length > 1) {
+    return new AggregateError(errors, 'Sandbox cleanup failed');
+  }
+  return undefined;
 }
 
 export async function start_sandbox(
@@ -79,33 +100,45 @@ export async function start_sandbox(
   const patcher = createSandboxConsolePatcher(cliConfig);
   patcher.patch();
 
+  let primaryError: unknown;
+  let exitCode: number | undefined;
   try {
     if (config.command === 'sandbox-exec') {
-      const exitCode = await runSeatbeltSandbox(
+      exitCode = await runSeatbeltSandbox(config, nodeArgs, cliConfig, cliArgs);
+    } else {
+      const result = await runContainerSandbox(
         config,
         nodeArgs,
         cliConfig,
         cliArgs,
       );
-      return exitCode;
+      portForwardingResult = result.portForwardingResult;
+      credentialProxyBridgeCleanup = result.credentialProxyBridgeCleanup;
+      exitCode = result.exitCode;
     }
-
-    const result = await runContainerSandbox(
-      config,
-      nodeArgs,
-      cliConfig,
-      cliArgs,
-    );
-    portForwardingResult = result.portForwardingResult;
-    credentialProxyBridgeCleanup = result.credentialProxyBridgeCleanup;
-    return result.exitCode;
   } catch (error) {
-    return await handleSandboxStartError(error);
-  } finally {
-    cleanupSandboxStart(
-      patcher,
-      portForwardingResult,
-      credentialProxyBridgeCleanup,
+    primaryError = error;
+  }
+
+  // AC10: attempt every cleanup step, then surface both the primary sandbox
+  // error and any non-idempotent credential cleanup failure via AggregateError
+  // so neither is swallowed.
+  const cleanupFailure = runSandboxCleanup(
+    patcher,
+    portForwardingResult,
+    credentialProxyBridgeCleanup,
+  );
+  if (primaryError !== undefined && cleanupFailure !== undefined) {
+    throw new AggregateError(
+      [toError(primaryError), cleanupFailure],
+      'Sandbox failed and cleanup also failed',
     );
   }
+  if (primaryError !== undefined) {
+    throw primaryError;
+  }
+  if (cleanupFailure !== undefined) {
+    throw cleanupFailure;
+  }
+  return exitCode as number;
 }
