@@ -279,14 +279,16 @@ describe('ast_edit Rust declaration extraction', () => {
 });
 
 describe('ast_edit Rust import extraction', () => {
-  it('extracts simple use declarations', () => {
+  it('normalizes simple use declarations into module + item', () => {
     const code = 'use std::collections::HashMap;\nuse std::io::Read;\n';
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(2);
-    expect(imports[0].module).toBe('std::collections::HashMap');
+    expect(imports[0].module).toBe('std::collections');
+    expect(imports[0].items).toEqual(['HashMap']);
     expect(imports[0].line).toBe(1);
-    expect(imports[1].module).toBe('std::io::Read');
+    expect(imports[1].module).toBe('std::io');
+    expect(imports[1].items).toEqual(['Read']);
     expect(imports[1].line).toBe(2);
   });
 
@@ -319,23 +321,44 @@ describe('ast_edit Rust import extraction', () => {
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(1);
-    expect(imports[0].module).toBe('std::fmt');
+    expect(imports[0].module).toBe('std');
+    expect(imports[0].items).toEqual(['fmt']);
   });
 
-  it('strips trailing as-alias from simple use paths', () => {
+  it('strips trailing as-alias and normalizes simple use paths', () => {
     const code = 'use std::fmt::Write as W;\n';
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(1);
-    expect(imports[0].module).toBe('std::fmt::Write');
+    expect(imports[0].module).toBe('std::fmt');
+    expect(imports[0].items).toEqual(['Write']);
   });
 
-  it('extracts pub use re-exports', () => {
+  it('strips raw-identifier aliases from simple use paths', () => {
+    const code = 'use std::fmt::Write as r#type;\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::fmt');
+    expect(imports[0].items).toEqual(['Write']);
+  });
+
+  it('strips raw-identifier aliases from grouped use paths', () => {
+    const code = 'use std::fmt::{Write as r#type};\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::fmt');
+    expect(imports[0].items).toEqual(['Write']);
+  });
+
+  it('extracts pub use re-exports with module/item normalization', () => {
     const code = 'pub use crate::utils::helper;\n';
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(1);
-    expect(imports[0].module).toBe('crate::utils::helper');
+    expect(imports[0].module).toBe('crate::utils');
+    expect(imports[0].items).toEqual(['helper']);
     expect(imports[0].line).toBe(1);
   });
 
@@ -362,10 +385,11 @@ describe('ast_edit Rust import extraction', () => {
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(1);
-    expect(imports[0].module).toBe('std::fs');
+    expect(imports[0].module).toBe('std');
+    expect(imports[0].items).toEqual(['fs']);
   });
 
-  it('extracts visibility-qualified use declarations', () => {
+  it('extracts visibility-qualified use declarations with module/item split', () => {
     const code = [
       'pub use crate::utils::helper;\n',
       'pub(crate) use std::fs::File;\n',
@@ -375,9 +399,12 @@ describe('ast_edit Rust import extraction', () => {
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(3);
-    expect(imports[0].module).toBe('crate::utils::helper');
-    expect(imports[1].module).toBe('std::fs::File');
-    expect(imports[2].module).toBe('std::io::Read');
+    expect(imports[0].module).toBe('crate::utils');
+    expect(imports[0].items).toEqual(['helper']);
+    expect(imports[1].module).toBe('std::fs');
+    expect(imports[1].items).toEqual(['File']);
+    expect(imports[2].module).toBe('std::io');
+    expect(imports[2].items).toEqual(['Read']);
   });
 
   it('handles block comments containing // in use declarations', () => {
@@ -385,6 +412,82 @@ describe('ast_edit Rust import extraction', () => {
     const imports = extractImports(code, 'rust');
 
     expect(imports).toHaveLength(1);
-    expect(imports[0].module).toBe('std::fs');
+    expect(imports[0].module).toBe('std');
+    expect(imports[0].items).toEqual(['fs']);
+  });
+
+  // --- Glob imports (issue #2797 Part 1) ---
+
+  it('recognizes glob operator in simple use declarations', () => {
+    const code = 'use std::io::*;\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::io');
+    expect(imports[0].items).toEqual(['*']);
+  });
+
+  it('recognizes glob operator in grouped use declarations', () => {
+    const code = 'use std::io::{*};\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::io');
+    expect(imports[0].items).toEqual(['*']);
+  });
+
+  it('represents simple glob and grouped glob identically', () => {
+    const simple = extractImports('use std::io::*;\n', 'rust');
+    const grouped = extractImports('use std::io::{*};\n', 'rust');
+
+    expect(simple[0].module).toBe(grouped[0].module);
+    expect(simple[0].items).toEqual(grouped[0].items);
+  });
+
+  it('preserves glob alongside named items in a grouped use', () => {
+    const code = 'use std::io::{Read, *};\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::io');
+    expect(imports[0].items).toEqual(['Read', '*']);
+  });
+
+  it('handles glob in deeply nested module paths', () => {
+    const code = 'use std::collections::hash_map::*;\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::collections::hash_map');
+    expect(imports[0].items).toEqual(['*']);
+  });
+
+  // --- Simple vs grouped normalization (issue #2797 Part 2) ---
+
+  it('normalizes single-item simple and grouped forms identically', () => {
+    const simple = extractImports('use std::io::Read;\n', 'rust');
+    const grouped = extractImports('use std::io::{Read};\n', 'rust');
+
+    expect(simple[0].module).toBe('std::io');
+    expect(simple[0].items).toEqual(['Read']);
+    expect(simple[0]).toEqual(grouped[0]);
+  });
+
+  it('normalizes multi-segment simple paths into module + last item', () => {
+    const code = 'use std::collections::HashMap;\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std::collections');
+    expect(imports[0].items).toEqual(['HashMap']);
+  });
+
+  it('keeps single-segment paths as module with no items', () => {
+    const code = 'use std;\n';
+    const imports = extractImports(code, 'rust');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('std');
+    expect(imports[0].items).toEqual([]);
   });
 });

@@ -136,14 +136,15 @@ function extractPythonImportModule(line: string): string {
 /**
  * Strips a trailing ` as <alias>` from a single import item using linear token
  * scanning (avoids regex backtracking on whitespace-heavy input).
- * Example: `join as j` -> `join`.
+ * Accepts Rust raw identifiers (`r#type`) as valid alias names.
+ * Example: `join as j` -> `join`, `Write as r#type` -> `Write`.
  */
 function stripImportAlias(item: string): string {
   const tokens = item.split(/\s+/);
   if (
     tokens.length >= 3 &&
     tokens[tokens.length - 2] === 'as' &&
-    /^\w+$/.test(tokens[tokens.length - 1])
+    /^(?:r#)?\w+$/.test(tokens[tokens.length - 1])
   ) {
     return tokens.slice(0, tokens.length - 2).join(' ');
   }
@@ -176,9 +177,13 @@ function extractPythonImportItems(line: string): string[] {
 /**
  * Parses a Rust `use` declaration into a module path and imported items.
  * Handles:
- * - `use std::collections::HashMap;`  -> { module: 'std::collections::HashMap', items: [] }
+ * - `use std::collections::HashMap;`  -> { module: 'std::collections', items: ['HashMap'] }
  * - `use std::io::{Read, Write};`     -> { module: 'std::io', items: ['Read', 'Write'] }
  * - `use std::fs::{self};`            -> { module: 'std::fs', items: ['self'] }
+ * - `use std::io::*;`                 -> { module: 'std::io', items: ['*'] }
+ *
+ * Simple and grouped forms normalize to the same representation:
+ * `use a::b::c` and `use a::b::{c}` both produce { module: 'a::b', items: ['c'] }.
  *
  * Uses linear string scanning to avoid polynomial backtracking.
  * Returns null if the line is not a valid use declaration.
@@ -224,9 +229,9 @@ function parseRustUseDeclaration(
 
   const braceOpen = body.indexOf('{');
   if (braceOpen === -1) {
-    // Simple path: use a::b::c -> module is the whole path.
-    // Strip trailing ` as <alias>` (e.g., `use std::fmt::Write as W`).
-    return { module: stripImportAlias(body), items: [] };
+    // Simple path: normalize to match the grouped form so that
+    // `use a::b::c` and `use a::b::{c}` produce identical results.
+    return normalizeRustSimplePath(stripImportAlias(body));
   }
 
   // Forward-scan to find the matching closing brace for the first opening
@@ -255,6 +260,31 @@ function parseRustUseDeclaration(
     .filter((item) => item);
 
   return { module: modulePath, items };
+}
+
+/**
+ * Normalizes a simple (brace-less) Rust use path into the same module/items
+ * representation as a grouped use, so `use a::b::c` matches `use a::b::{c}`.
+ *
+ * - A trailing glob (`::*`) is split into items: `['*']`.
+ * - Otherwise the last `::`-separated segment becomes the imported item.
+ * - Single-segment paths (no `::`) stay as module-only: `use std` -> { module: 'std', items: [] }.
+ */
+function normalizeRustSimplePath(path: string): {
+  module: string;
+  items: string[];
+} {
+  if (path.endsWith('::*')) {
+    const module = path.slice(0, -3);
+    return { module, items: ['*'] };
+  }
+  const lastSep = path.lastIndexOf('::');
+  if (lastSep === -1) {
+    return { module: path, items: [] };
+  }
+  const module = path.slice(0, lastSep);
+  const item = path.slice(lastSep + 2);
+  return { module, items: [item] };
 }
 
 /**
