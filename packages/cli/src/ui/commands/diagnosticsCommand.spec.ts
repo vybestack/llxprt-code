@@ -61,6 +61,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => mockTokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -108,6 +109,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => mockTokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -150,6 +152,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
         getTokenStore: vi.fn(() => mockTokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -204,6 +207,7 @@ describe('diagnosticsCommand OAuth token display', () => {
           provider === 'github' ? authenticatedToken : null,
         ),
         getTokenStore: vi.fn(() => mockTokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -256,6 +260,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => mockTokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -294,6 +299,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -332,6 +338,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -367,6 +374,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -408,6 +416,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -447,6 +456,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -491,6 +501,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => providerToken),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -529,6 +540,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -568,6 +580,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => providerToken),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -606,6 +619,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
