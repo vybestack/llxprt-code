@@ -87,7 +87,7 @@ export function getBorderStyle(
   if (supported) {
     return style;
   }
-  return ASCII_BORDER_STYLES[style] ?? ASCII_BORDER_STYLES.single;
+  return ASCII_BORDER_STYLES[style];
 }
 
 export function getSpinnerType<T extends string>(
