@@ -370,7 +370,9 @@ describe('<ModelConfigDialog />', () => {
       stdin.write(ENTER);
     });
 
-    expect(lastFrame()).toContain('[minimal]');
+    await waitFor(() => {
+      expect(lastFrame()).toContain('[minimal]');
+    });
 
     // Press Right to cycle to low
     act(() => {
@@ -431,6 +433,7 @@ describe('<ModelConfigDialog />', () => {
   });
 
   it('shows validation error when committing an invalid context-limit value', async () => {
+    setupRuntime({ ephemeralSettings: { 'context-limit': 4096 } });
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
@@ -455,9 +458,8 @@ describe('<ModelConfigDialog />', () => {
     await waitFor(() => {
       expect(lastFrame()).toContain('positive integer');
     });
-    expect(activeRuntime.getEphemeralSettings()['context-limit']).toBe(
-      undefined,
-    );
+    // The invalid commit must not overwrite the previously valid value.
+    expect(activeRuntime.getEphemeralSettings()['context-limit']).toBe(4096);
   });
 
   it('closes on Escape from the list view (AC9)', async () => {
