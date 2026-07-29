@@ -34,7 +34,7 @@ async function execute(command: string) {
 describe.runIf(process.platform === 'win32')(
   'HookRunner PowerShell exit propagation',
   () => {
-    it('preserves a final native exit code 2', async () => {
+    it('preserves a final native command exit code 2 under PowerShell', async () => {
       const result = await execute("cmd /c 'exit 2'");
       expect(result.exitCode).toBe(2);
       expect(result.success).toBe(false);
@@ -46,13 +46,13 @@ describe.runIf(process.platform === 'win32')(
       expect(result.success).toBe(false);
     });
 
-    it('ignores stale native failure after a successful final command', async () => {
+    it('ignores a stale native failure after PowerShell succeeds', async () => {
       const result = await execute("cmd /c 'exit 2'; Write-Output 'recovered'");
       expect(result.exitCode).toBe(0);
       expect(result.success).toBe(true);
     });
 
-    it('reports a successful native command', async () => {
+    it('reports a successful native command under PowerShell', async () => {
       const result = await execute("cmd /c 'exit 0'");
       expect(result.exitCode).toBe(0);
       expect(result.success).toBe(true);

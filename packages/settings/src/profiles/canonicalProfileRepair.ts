@@ -376,6 +376,47 @@ function repairOneCandidate(candidate: RepairCandidate): boolean {
   }
 }
 
+function runAndClose(
+  fd: number,
+  operation: () => void,
+  aggregateMessage: string,
+): void {
+  let operationFailed = false;
+  let operationError: unknown;
+  try {
+    operation();
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
+  }
+
+  try {
+    fs.closeSync(fd);
+  } catch (closeError) {
+    if (operationFailed) {
+      throw new AggregateError([operationError, closeError], aggregateMessage);
+    }
+    throw closeError;
+  }
+
+  if (operationFailed) {
+    throw operationError;
+  }
+}
+
+function cleanupAfterFailure(
+  tempPath: string,
+  operationError: unknown,
+  aggregateMessage: string,
+): never {
+  try {
+    cleanupTemp(tempPath);
+  } catch (cleanupError) {
+    throw new AggregateError([operationError, cleanupError], aggregateMessage);
+  }
+  throw operationError;
+}
+
 /** Write and fsync an exclusive same-directory replacement temp file. */
 function writeReplacementTemp(
   dir: string,
@@ -386,18 +427,19 @@ function writeReplacementTemp(
   const tmpPath = uniqueTempPath(dir, base, '.repair.tmp');
   try {
     const fd = fs.openSync(tmpPath, 'wx', 0o600);
-    try {
-      fs.writeFileSync(fd, content, { encoding: 'utf-8' });
-      if ((mode & 0o777) !== 0o600) {
-        fs.chmodSync(tmpPath, mode & 0o777);
-      }
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
+    runAndClose(
+      fd,
+      () => {
+        fs.writeFileSync(fd, content, { encoding: 'utf-8' });
+        if ((mode & 0o777) !== 0o600) {
+          fs.chmodSync(tmpPath, mode & 0o777);
+        }
+        fs.fsyncSync(fd);
+      },
+      'profile replacement write and close failed',
+    );
   } catch (error) {
-    cleanupTemp(tmpPath);
-    throw error;
+    cleanupAfterFailure(tmpPath, error, 'profile replacement cleanup failed');
   }
   return tmpPath;
 }
@@ -436,18 +478,19 @@ function copyAndFsyncExclusive(source: string, dest: string): boolean {
     throw error;
   }
   try {
-    try {
-      fs.writeFileSync(destFd, content);
-      if (sourceMode !== 0o600) {
-        fs.chmodSync(dest, sourceMode);
-      }
-      fs.fsyncSync(destFd);
-    } finally {
-      fs.closeSync(destFd);
-    }
+    runAndClose(
+      destFd,
+      () => {
+        fs.writeFileSync(destFd, content);
+        if (sourceMode !== 0o600) {
+          fs.chmodSync(dest, sourceMode);
+        }
+        fs.fsyncSync(destFd);
+      },
+      'profile backup write and close failed',
+    );
   } catch (error) {
-    cleanupTemp(dest);
-    throw error;
+    cleanupAfterFailure(dest, error, 'profile backup cleanup failed');
   }
   return true;
 }

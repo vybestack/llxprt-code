@@ -16,7 +16,7 @@ describe('resolveBunEntry', () => {
     );
 
     const result = await resolveBunEntry({
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: path.resolve('/repo/packages/cli/src/launcher'),
       pathChecker,
     });
 
@@ -27,7 +27,7 @@ describe('resolveBunEntry', () => {
     const pathChecker = vi.fn(async () => false);
 
     const result = await resolveBunEntry({
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: path.resolve('/repo/packages/cli/src/launcher'),
       pathChecker,
     });
 
@@ -40,7 +40,7 @@ describe('resolveBunEntry', () => {
     });
 
     const result = await resolveBunEntry({
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: path.resolve('/repo/packages/cli/src/launcher'),
       pathChecker,
     });
 
@@ -62,7 +62,7 @@ describe('resolveBunEntry', () => {
     const pathChecker = vi.fn(async () => true);
 
     const result = await resolveBunEntry({
-      moduleDir: '/repo/packages/cli/src/launcher',
+      moduleDir: path.resolve('/repo/packages/cli/src/launcher'),
       pathChecker,
     });
 
@@ -77,7 +77,9 @@ describe('resolveBunEntry', () => {
       );
 
       const result = await resolveBunEntry({
-        moduleDir: '/inst/@vybestack/llxprt-code/dist/src/launcher',
+        moduleDir: path.resolve(
+          '/inst/@vybestack/llxprt-code/dist/src/launcher',
+        ),
         pathChecker,
       });
 
@@ -90,7 +92,7 @@ describe('resolveBunEntry', () => {
       const pathChecker = vi.fn(async () => true);
 
       const result = await resolveBunEntry({
-        moduleDir: '/repo/packages/cli/dist/src/launcher',
+        moduleDir: path.resolve('/repo/packages/cli/dist/src/launcher'),
         pathChecker,
       });
 
@@ -101,17 +103,22 @@ describe('resolveBunEntry', () => {
       const pathChecker = vi.fn(
         async (target: string) =>
           target ===
-          '/global/lib/node_modules/@vybestack/llxprt-code/dist/index.js',
+          path.resolve(
+            '/global/lib/node_modules/@vybestack/llxprt-code/dist/index.js',
+          ),
       );
 
       const result = await resolveBunEntry({
-        moduleDir:
+        moduleDir: path.resolve(
           '/global/lib/node_modules/@vybestack/llxprt-code/dist/src/launcher',
+        ),
         pathChecker,
       });
 
       expect(result).toBe(
-        '/global/lib/node_modules/@vybestack/llxprt-code/dist/index.js',
+        path.resolve(
+          '/global/lib/node_modules/@vybestack/llxprt-code/dist/index.js',
+        ),
       );
     });
 
@@ -119,7 +126,9 @@ describe('resolveBunEntry', () => {
       const pathChecker = vi.fn(async () => false);
 
       const result = await resolveBunEntry({
-        moduleDir: '/inst/@vybestack/llxprt-code/dist/src/launcher',
+        moduleDir: path.resolve(
+          '/inst/@vybestack/llxprt-code/dist/src/launcher',
+        ),
         pathChecker,
       });
 
@@ -199,7 +208,9 @@ describe('resolveBunEntry', () => {
       );
 
       const result = await resolveBunEntry({
-        moduleDir: '/pkg/@vybestack/llxprt-code/dist/src/launcher',
+        moduleDir: path.resolve(
+          '/pkg/@vybestack/llxprt-code/dist/src/launcher',
+        ),
         pathChecker,
       });
 

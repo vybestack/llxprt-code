@@ -222,8 +222,7 @@ describe('toolkeyfileCommand', () => {
         expect(result.type).toBe('message');
         expect(result.messageType).toBe('info');
         expect(result.content).toContain("Keyfile set for 'Exa Search'");
-        expect(result.content).toContain(fakeHome);
-        expect(result.content).not.toContain('~');
+        expect(result.content).toContain(homeKeyPath);
       } finally {
         await fs.rm(fakeHome, { recursive: true, force: true });
       }

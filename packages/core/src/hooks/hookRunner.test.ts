@@ -163,6 +163,8 @@ describe('HookRunner', () => {
           expect(spawn).toHaveBeenCalledWith(
             expect.stringMatching(/powershell/i),
             expect.arrayContaining([
+              expect.stringContaining('[Convert]::FromBase64String'),
+              expect.stringContaining('Invoke-Expression $hookCommand'),
               expect.stringContaining('$global:LASTEXITCODE = 0'),
               expect.stringContaining('$hookSucceeded = $?'),
               expect.stringContaining('if ($hookSucceeded) { exit 0 }'),

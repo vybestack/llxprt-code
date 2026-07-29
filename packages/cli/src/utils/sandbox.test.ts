@@ -14,6 +14,7 @@ import {
   isSandboxDebugModeEnabled,
   shouldAllocateSandboxTty,
 } from './sandbox.js';
+import { getContainerPath } from './sandbox-env.js';
 import { buildSandboxCommandArgs } from './sandbox-exec.js';
 
 import fs from 'node:fs';
@@ -422,12 +423,13 @@ describe('mountGitConfigFiles', () => {
   });
 
   it('does not duplicate mount when host and container home are identical (R3.4)', () => {
+    const sameContainerHome = getContainerPath(hostHome);
+    const gitConfig = path.join(hostHome, '.gitconfig');
     existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) =>
-        String(p) === path.posix.join(containerHome, '.gitconfig'),
+      (p: fs.PathLike) => String(p) === gitConfig,
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, containerHome, containerHome);
+    mountGitConfigFiles(args, hostHome, sameContainerHome);
     const volumeArgs = args.filter(
       (a) => a.includes('.gitconfig') && a.includes(':ro'),
     );

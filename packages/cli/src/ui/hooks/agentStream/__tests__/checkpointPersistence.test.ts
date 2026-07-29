@@ -136,9 +136,10 @@ describe('createToolCheckpoint', () => {
     const fsOps = makeFsOps();
     const onDebugMessage = vi.fn();
 
+    const checkpointDir = path.resolve('/tmp/checkpoints');
     await createToolCheckpoint(
       makeRestorableTool('c1', 'replace', '/project/src/foo.ts'),
-      '/tmp/checkpoints',
+      checkpointDir,
       gitService as unknown as GitService,
       makeFakeAgent(agentClient),
       mockHistory,
@@ -147,9 +148,7 @@ describe('createToolCheckpoint', () => {
     );
 
     expect(fsOps.writeFile).toHaveBeenCalledOnce();
-    expect(fsOps.writeFile.mock.calls[0][0]).toContain(
-      path.resolve('/tmp/checkpoints'),
-    );
+    expect(fsOps.writeFile.mock.calls[0][0]).toContain(checkpointDir);
     expect(fsOps.writeFile.mock.calls[0][0]).toContain('foo.ts');
     expect(fsOps.writeFile.mock.calls[0][0]).toContain('replace');
     const writtenContent = JSON.parse(fsOps.writeFile.mock.calls[0][1]);

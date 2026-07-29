@@ -243,7 +243,14 @@ process.exit(0);
       const scriptContent = `import process from 'node:process';
 
 const timer = setInterval(() => {}, 1000);
-setTimeout(() => { clearInterval(timer); process.exit(0); }, 2000);
+setTimeout(() => {
+  clearInterval(timer);
+  process.stdout.write(JSON.stringify({
+    decision: 'block',
+    reason: 'This result must not be observed when timeout enforcement works',
+  }));
+  process.exit(2);
+}, 2000);
 `;
 
       const scriptPath = createHookScript('slow-hook.ts', scriptContent);
