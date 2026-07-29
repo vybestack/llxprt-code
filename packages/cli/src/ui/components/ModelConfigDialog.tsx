@@ -171,7 +171,7 @@ function isFieldImmutable(field: ConfigField, value: unknown): boolean {
   // A boolean model-behavior switch is immutable while it is ON. The model
   // (or its inherited alias defaults) forced the behavior on, so silently
   // flipping it off would either be rejected by the API or would leave the
-  // user with no explanation. Show a reason instead of swallowing the key.
+  // user with no explanation. The row renders the reason in the list.
   return field.editor === 'boolean' && value === true;
 }
 
@@ -510,7 +510,6 @@ function handleListKey(key: Key, d: KeypressDispatch): void {
     if (field.editor === 'boolean') {
       const current = effectiveValueFor(field, d);
       if (isFieldImmutable(field, current)) {
-        d.setEditingIndex(d.selectedIndex);
         return;
       }
       togglePendingBoolean(field, d);

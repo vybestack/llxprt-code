@@ -353,8 +353,8 @@ describe('<ModelConfigDialog />', () => {
 
   it('reasoning.enabled=true is immutable — Enter does not toggle and shows the always-on hint', async () => {
     // Default runtime has reasoning.enabled: true (forced on by model
-    // defaults). Enter/Space must NOT silently flip it; instead the field
-    // enters a read-only edit state with a visible reason.
+    // defaults). Enter/Space must NOT silently flip it or enter edit mode;
+    // the always-on reason is visible directly in the list row.
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
@@ -372,21 +372,15 @@ describe('<ModelConfigDialog />', () => {
       true,
     );
 
-    // Space in edit mode is also a no-op for an immutable boolean
+    // Space is also a no-op for an immutable boolean
     await act(async () => {
       stdin.write(' ');
     });
     expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
       true,
     );
-
-    // Esc exits edit mode without changing anything
-    await act(async () => {
-      stdin.write(ESC);
-    });
-    expect(activeRuntime.getEphemeralSettings()['reasoning.enabled']).toBe(
-      true,
-    );
+    // No edit mode was entered: the editor footer hint is absent
+    expect(lastFrame()).not.toContain('[Enter] stage');
   });
 
   it('cycles reasoning.effort enum with Left/Right and Enter persists the selection', async () => {
