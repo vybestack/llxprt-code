@@ -53,7 +53,6 @@ export { fromConfig } from './fromConfig.js';
 export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';
 export { toConfigParameters, AdapterError } from './agentConfig.adapter.js';
-export { getTokenLimitForConfiguredContext } from '../core/contextLimitResolver.js';
 // Curated engine helpers consumed by the CLI display layer (tool-completion
 // partitioning and response assembly). These were previously reachable only
 // through the internals barrel; curating them here keeps the CLI on the

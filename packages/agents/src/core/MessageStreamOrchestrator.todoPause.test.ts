@@ -109,6 +109,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
+    getContextLimit: vi.fn(() => tokenLimit()),
   };
 
   const providerManager = {

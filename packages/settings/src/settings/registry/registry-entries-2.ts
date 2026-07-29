@@ -405,6 +405,31 @@ export const REGISTRY_ENTRIES_PART_2: readonly SettingSpec[] = [
       { value: 'false', description: 'Disable per-turn token usage logging' },
     ],
   },
+  {
+    key: 'mcp.lazy',
+    category: 'cli-behavior',
+    description:
+      'Defer MCP server tool schemas from the model until a server is activated via the activate_mcp_server tool. ' +
+      'Reduces token overhead for large MCP tool sets.',
+    type: 'boolean',
+    default: false,
+    persistToProfile: true,
+    completionOptions: [
+      { value: 'true', description: 'Enable lazy MCP schema loading' },
+      {
+        value: 'false',
+        description: 'Publish all MCP schemas eagerly (default)',
+      },
+    ],
+  },
+  {
+    key: 'mcp.eagerServers',
+    category: 'cli-behavior',
+    description:
+      'List of MCP server names that stay eager (schemas always published) while mcp.lazy is enabled.',
+    type: 'string-array',
+    persistToProfile: true,
+  },
 ];
 
 function validateTaskMaxAsync(value: unknown): ValidationResult {

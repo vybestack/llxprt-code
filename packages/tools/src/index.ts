@@ -135,6 +135,7 @@ export {
   LS_TOOL_NAME,
   MEMORY_TOOL_NAME,
   ACTIVATE_SKILL_TOOL_NAME,
+  ACTIVATE_MCP_SERVER_TOOL_NAME,
   READ_FILE_TOOL,
   WRITE_FILE_TOOL,
   EDIT_TOOL,
@@ -331,6 +332,11 @@ export {
   ActivateSkillTool,
   type ActivateSkillToolParams,
 } from './tools/activate-skill.js';
+
+export {
+  ActivateMcpServerTool,
+  type ActivateMcpServerToolParams,
+} from './tools/activate-mcp-server.js';
 
 export {
   CodeSearchTool,
