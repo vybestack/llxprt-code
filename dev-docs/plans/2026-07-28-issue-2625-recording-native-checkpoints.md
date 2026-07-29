@@ -164,12 +164,12 @@ No additional subsystem, service, public abstraction, or path is authorized by t
 
 ## Scope ledger
 
-| Measure | Planned | Final candidate |
-| --- | ---: | ---: |
-| Changed paths | 51 | 58 |
-| Insertions | — | 5,377 |
-| Deletions | — | 3,023 |
-| Net changed lines | +2,000 to +2,450 | +2,354 |
+| Measure           |          Planned | Final candidate |
+| ----------------- | ---------------: | --------------: |
+| Changed paths     |               51 |              58 |
+| Insertions        |                — |           5,377 |
+| Deletions         |                — |           3,023 |
+| Net changed lines | +2,000 to +2,450 |          +2,354 |
 
 - Target: no more than 25 files or 1,500 net changed lines.
 - Mandatory scope review: completed because the grounded forecast exceeded the target.
