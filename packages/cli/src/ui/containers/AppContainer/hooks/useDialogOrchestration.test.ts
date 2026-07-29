@@ -115,4 +115,22 @@ describe('useDialogOrchestration', () => {
 
     expect(result.current.isSessionBrowserDialogOpen).toBe(false);
   });
+
+  it('opens and closes model config dialog', () => {
+    const { result } = renderHook(() => useDialogOrchestration());
+
+    expect(result.current.isModelConfigDialogOpen).toBe(false);
+
+    act(() => {
+      result.current.openModelConfigDialog();
+    });
+
+    expect(result.current.isModelConfigDialogOpen).toBe(true);
+
+    act(() => {
+      result.current.closeModelConfigDialog();
+    });
+
+    expect(result.current.isModelConfigDialogOpen).toBe(false);
+  });
 });

@@ -331,6 +331,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -388,6 +389,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -431,6 +433,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -519,6 +522,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -568,6 +572,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -611,6 +616,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 
@@ -660,6 +666,7 @@ describe('Agent Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+        getContextLimit: vi.fn().mockReturnValue(1000000),
       };
       client['chat'] = mockChat as ChatSession;
 

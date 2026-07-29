@@ -39,6 +39,35 @@ export interface StaticModelEntry {
 export interface ModelDefaultRule {
   pattern: string;
   ephemeralSettings: Record<string, unknown>;
+  /**
+   * Model parameters the matched model does not accept (e.g. fixed sampling
+   * params on Kimi K3 / Claude 5). UIs should hide these; matched rules merge
+   * as a union across all matching modelDefaults entries.
+   */
+  unallowedParameters?: string[];
+}
+
+/**
+ * Compute the union of unallowedParameters from modelDefaults rules that
+ * match a model name. Returns an empty Set when no rules declare them.
+ */
+export function computeUnallowedParameters(
+  modelName: string,
+  modelDefaultRules: ModelDefaultRule[],
+): Set<string> {
+  const unallowed = new Set<string>();
+  for (const rule of modelDefaultRules) {
+    if (!rule.unallowedParameters) {
+      continue;
+    }
+    const regex = new RegExp(rule.pattern, 'i');
+    if (regex.test(modelName)) {
+      for (const param of rule.unallowedParameters) {
+        unallowed.add(param);
+      }
+    }
+  }
+  return unallowed;
 }
 
 /**
@@ -159,6 +188,17 @@ function isValidModelDefaultRule(
   ) {
     debugLogger.warn(
       `[ProviderAliases] Skipping modelDefaults entry with invalid ephemeralSettings in ${filePath}`,
+    );
+    return false;
+  }
+
+  if (
+    rule.unallowedParameters !== undefined &&
+    (!Array.isArray(rule.unallowedParameters) ||
+      rule.unallowedParameters.some((p) => typeof p !== 'string' || p === ''))
+  ) {
+    debugLogger.warn(
+      `[ProviderAliases] Skipping modelDefaults entry with invalid unallowedParameters in ${filePath}`,
     );
     return false;
   }

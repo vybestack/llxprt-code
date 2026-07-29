@@ -53,6 +53,7 @@ const makeParams = (): UIStateParams => ({
   isSubagentDialogOpen: false,
   isModelsDialogOpen: false,
   isSessionBrowserDialogOpen: false,
+  isModelConfigDialogOpen: false,
 
   // Dialog data
   providerOptions: [],
@@ -249,6 +250,7 @@ describe('buildUIState', () => {
     params.isSubagentDialogOpen = true;
     params.isModelsDialogOpen = true;
     params.isSessionBrowserDialogOpen = true;
+    params.isModelConfigDialogOpen = true;
 
     const result = buildUIState(params);
 
@@ -272,6 +274,7 @@ describe('buildUIState', () => {
     expect(result.isSubagentDialogOpen).toBe(true);
     expect(result.isModelsDialogOpen).toBe(true);
     expect(result.isSessionBrowserDialogOpen).toBe(true);
+    expect(result.isModelConfigDialogOpen).toBe(true);
   });
 
   it('maps token metrics correctly', () => {

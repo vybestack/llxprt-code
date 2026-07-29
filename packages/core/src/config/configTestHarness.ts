@@ -83,6 +83,7 @@ export function buildToolsMockBody(actual: typeof ToolsModule) {
     getAllTools: vi.fn(() => []),
     getTool: vi.fn(),
     getFunctionDeclarations: vi.fn(() => []),
+    listDeferredMcpServers: vi.fn(() => []),
   }));
   ToolRegistryMock.prototype.registerTool = registerToolMock;
   ToolRegistryMock.prototype.unregisterTool = vi.fn();
@@ -91,6 +92,7 @@ export function buildToolsMockBody(actual: typeof ToolsModule) {
   ToolRegistryMock.prototype.getAllTools = vi.fn(() => []);
   ToolRegistryMock.prototype.getTool = vi.fn();
   ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
+  ToolRegistryMock.prototype.listDeferredMcpServers = vi.fn(() => []);
   return {
     ...actual,
     ToolRegistry: ToolRegistryMock,

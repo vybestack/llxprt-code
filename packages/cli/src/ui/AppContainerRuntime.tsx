@@ -242,6 +242,7 @@ function buildUIStateParamsCore(
     isSubagentDialogOpen: d.isSubagentDialogOpen,
     isModelsDialogOpen: d.isModelsDialogOpen,
     isSessionBrowserDialogOpen: d.isSessionBrowserDialogOpen,
+    isModelConfigDialogOpen: d.isModelConfigDialogOpen,
     providerOptions: d.isCreateProfileDialogOpen
       ? d.createProfileProviders
       : d.providerOptions,
@@ -387,6 +388,8 @@ function buildUIActionsParams(r: HookResults) {
     closeSubagentDialog: d.closeSubagentDialog,
     openModelsDialog: d.openModelsDialog,
     closeModelsDialog: d.closeModelsDialog,
+    openModelConfigDialog: d.openModelConfigDialog,
+    closeModelConfigDialog: d.closeModelConfigDialog,
     openSessionBrowserDialog: d.openSessionBrowserDialog,
     closeSessionBrowserDialog: d.closeSessionBrowserDialog,
     onWorkspaceMigrationDialogOpen: d.onWorkspaceMigrationDialogOpen,

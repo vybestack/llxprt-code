@@ -198,6 +198,31 @@ export type TodoContext = CommandContext & {
 };
 
 /**
+ * Parse saved task-list file content, handling both the current envelope
+ * format ({ todos: [...], paused: boolean }) and the legacy bare-array
+ * format. Returns the todos array, or an empty array when the content is
+ * neither a valid array nor an envelope object with a todos array.
+ */
+export function parseTodoFileContent(content: string): Todo[] {
+  const rawData: unknown = JSON.parse(content);
+
+  if (Array.isArray(rawData)) {
+    return rawData as Todo[];
+  }
+
+  if (
+    typeof rawData === 'object' &&
+    rawData !== null &&
+    'todos' in rawData &&
+    Array.isArray((rawData as { todos: unknown }).todos)
+  ) {
+    return (rawData as { todos: Todo[] }).todos;
+  }
+
+  return [];
+}
+
+/**
  * Apply a status change to a single parent task and report the result.
  */
 export function applyStatusChange(
