@@ -6,7 +6,7 @@
 
 export class FailoverState {
   private index = 0;
-  private generation = 0;
+  private owner = Symbol();
 
   getIndex(): number {
     return this.index;
@@ -16,23 +16,23 @@ export class FailoverState {
     this.index = 0;
   }
 
-  claim(): { generation: number; startIndex: number } {
-    this.generation++;
-    return { generation: this.generation, startIndex: this.index };
+  claim(): { owner: symbol; startIndex: number } {
+    this.owner = Symbol();
+    return { owner: this.owner, startIndex: this.index };
   }
 
-  setIfOwner(generation: number, index: number): void {
-    if (generation === this.generation) {
+  setIfOwner(owner: symbol, index: number): void {
+    if (owner === this.owner) {
       this.index = index;
     }
   }
 
   advanceFrom(
-    generation: number,
+    owner: symbol,
     currentIndex: number,
     profileCount: number,
   ): false {
-    this.setIfOwner(generation, (currentIndex + 1) % profileCount);
+    this.setIfOwner(owner, (currentIndex + 1) % profileCount);
     return false;
   }
 }

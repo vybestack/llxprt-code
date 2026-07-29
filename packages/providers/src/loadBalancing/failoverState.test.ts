@@ -13,8 +13,8 @@ describe('FailoverState', () => {
     const olderRequest = state.claim();
     const newerRequest = state.claim();
 
-    state.setIfOwner(newerRequest.generation, 2);
-    state.setIfOwner(olderRequest.generation, 0);
+    state.setIfOwner(newerRequest.owner, 2);
+    state.setIfOwner(olderRequest.owner, 0);
 
     expect(state.getIndex()).toBe(2);
   });
@@ -24,8 +24,8 @@ describe('FailoverState', () => {
     const olderRequest = state.claim();
     const newerRequest = state.claim();
 
-    state.setIfOwner(newerRequest.generation, 1);
-    state.setIfOwner(olderRequest.generation, 2);
+    state.setIfOwner(newerRequest.owner, 1);
+    state.setIfOwner(olderRequest.owner, 2);
 
     expect(state.getIndex()).toBe(1);
   });
@@ -35,8 +35,8 @@ describe('FailoverState', () => {
     const olderRequest = state.claim();
     const newerRequest = state.claim();
 
-    state.setIfOwner(newerRequest.generation, 2);
-    state.advanceFrom(olderRequest.generation, 0, 3);
+    state.setIfOwner(newerRequest.owner, 2);
+    state.advanceFrom(olderRequest.owner, 0, 3);
     const followingRequest = state.claim();
 
     expect(followingRequest.startIndex).toBe(2);
