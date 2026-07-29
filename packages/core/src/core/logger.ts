@@ -11,6 +11,7 @@ import {
   writeFileSync,
   appendFileSync,
   renameSync,
+  unlinkSync,
 } from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';
@@ -213,7 +214,17 @@ export class Logger {
     }
     const tmpPath = `${this.logFilePath}.migration.${process.pid}.${Date.now()}.tmp`;
     writeFileSync(tmpPath, this._toJsonl(entries), 'utf-8');
-    renameSync(tmpPath, this.logFilePath);
+    try {
+      renameSync(tmpPath, this.logFilePath);
+    } catch (error) {
+      // Clean up the orphaned temp file so it doesn't accumulate on disk.
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        // Ignore cleanup failure.
+      }
+      throw error;
+    }
   }
 
   private _appendJsonlSync(entry: LogEntry): void {
@@ -376,19 +387,28 @@ export class Logger {
     } catch {
       return;
     }
-    const staleBackups = entries.filter((entry) => {
-      if (!entry.startsWith(baseName) || !entry.endsWith('.bak')) {
+    const staleFiles = entries.filter((entry) => {
+      if (!entry.startsWith(baseName)) {
         return false;
       }
-      const match = entry.match(/\.(\d+)\.bak$/);
-      return match !== null && Number(match[1]) < cutoffMs;
+      // Old corruption backups: logs.json.<reason>.<timestamp>.bak
+      if (entry.endsWith('.bak')) {
+        const match = entry.match(/\.(\d+)\.bak$/);
+        return match !== null && Number(match[1]) < cutoffMs;
+      }
+      // Orphaned migration temp files: logs.json.migration.<pid>.<ts>.tmp
+      if (entry.endsWith('.tmp')) {
+        const match = entry.match(/\.(\d+)\.tmp$/);
+        return match !== null && Number(match[1]) < cutoffMs;
+      }
+      return false;
     });
-    for (const backup of staleBackups) {
+    for (const file of staleFiles) {
       try {
-        await fs.unlink(path.join(dir, backup));
-        debugLogger.debug(`Pruned old log backup ${backup}`);
+        await fs.unlink(path.join(dir, file));
+        debugLogger.debug(`Pruned old log file ${file}`);
       } catch {
-        // Deletion is best-effort; a locked or already-removed backup is fine.
+        // Deletion is best-effort; a locked or already-removed file is fine.
       }
     }
   }

@@ -70,7 +70,7 @@ async function makeReadableSpan(name: string): Promise<ReadableSpan> {
  * Produce a real ReadableLogRecord using the logs SDK so the exporter gets a
  * genuine record shape.
  */
-function makeReadableLogRecord(body: string): ReadableLogRecord {
+async function makeReadableLogRecord(body: string): Promise<ReadableLogRecord> {
   const exporter = new InMemoryLogRecordExporter();
   const loggerProvider = new LoggerProvider({
     processors: [new SimpleLogRecordProcessor(exporter)],
@@ -85,7 +85,7 @@ function makeReadableLogRecord(body: string): ReadableLogRecord {
     throw new Error('Expected at least one finished log record');
   }
   // Release SDK background resources (processors, scheduled exports).
-  void loggerProvider.shutdown();
+  await loggerProvider.shutdown();
   return records[0];
 }
 
@@ -151,7 +151,7 @@ describe('FileLogExporter serialization format', () => {
   it('writes compact JSON (no pretty-print indentation)', async () => {
     const outfile = createOutfilePath('logs.jsonl');
     const exporter = new FileLogExporter(outfile);
-    const record = makeReadableLogRecord('compact-log-body');
+    const record = await makeReadableLogRecord('compact-log-body');
 
     const result = await new Promise<ExportResult>((resolve) => {
       exporter.export([record], resolve);
