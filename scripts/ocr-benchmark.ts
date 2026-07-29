@@ -22,7 +22,7 @@
  *     ~/.opencodereview/config.json)
  *
  * Usage:
- *   node scripts/ocr-benchmark.ts --from SHA1 --to SHA2 \
+ *   bun scripts/ocr-benchmark.ts --from SHA1 --to SHA2 \
  *     --concurrency 2,4,8 --label "canary-v1.7.15"
  *
  * The --concurrency flag accepts a comma-separated list so a single
@@ -75,7 +75,7 @@ const processTimeoutMs =
 
 if (!fromSha || !toSha) {
   process.stderr.write(
-    'Usage: node scripts/ocr-benchmark.ts --from SHA1 --to SHA2 ' +
+    'Usage: bun scripts/ocr-benchmark.ts --from SHA1 --to SHA2 ' +
       '--concurrency 2,4,8 [--label NAME] [--timeout 20] [--output FILE]\n',
   );
   process.exit(1);

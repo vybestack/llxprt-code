@@ -28,6 +28,7 @@ import {
   asOptionalRecord,
   asRecord,
   asString,
+  asOptionalString,
   parseJsonObject,
 } from './typed-test-helpers.ts';
 
@@ -61,7 +62,7 @@ function deriveLifecycleEntryScripts(): string[] {
   const scripts = asOptionalRecord(pkg.scripts) ?? {};
   const entries: string[] = [];
   for (const hook of LIFECYCLE_HOOKS) {
-    const command = asString(scripts[hook]);
+    const command = asOptionalString(scripts[hook]);
     expect(
       command,
       `package.json scripts.${hook} is expected to be defined so the ` +

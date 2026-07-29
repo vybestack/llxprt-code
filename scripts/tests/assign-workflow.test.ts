@@ -8,7 +8,7 @@
  * Structural/config tests for the /assign automation.
  *
  * Behavioral tests (executing the real scripts against a fake gh) live in
- * assign-workflow-behaviors.test.js. This file validates workflow YAML
+ * assign-workflow-behaviors.test.ts. This file validates workflow YAML
  * structure, script presence, and documentation consistency.
  */
 

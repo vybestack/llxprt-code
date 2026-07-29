@@ -615,6 +615,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
             },
           }),
         ).rejects.toThrow(/monitor failed to start.*timed out/i);
+        expect(spawned).toBeDefined();
         expect(
           spawned?.child.exitCode ?? spawned?.child.signalCode,
         ).not.toBeNull();

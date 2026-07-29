@@ -40,9 +40,12 @@ function bunAvailable() {
     });
     cachedBunAvailable = true;
   } catch (error) {
-    const e = asRecord(error);
+    const code =
+      typeof error === 'object' && error !== null
+        ? Reflect.get(error, 'code')
+        : undefined;
     const isMissingOrDenied =
-      e?.code === 'ENOENT' || e?.code === 'EACCES' || e?.code === 'ENOEXEC';
+      code === 'ENOENT' || code === 'EACCES' || code === 'ENOEXEC';
     if (!isMissingOrDenied) {
       throw error;
     }

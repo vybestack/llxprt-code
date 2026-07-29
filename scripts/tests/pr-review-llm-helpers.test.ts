@@ -162,8 +162,8 @@ describe('runLlxprtPromptWithParse', () => {
 
   it('passes the raw response to the parse-failure artifact saver on final failure', async () => {
     const llm = async () => 'totally not json';
-    let savedRaw = null;
-    let savedPhase = null;
+    let savedRaw: string | null = null;
+    let savedPhase: string | null = null;
     const saveFn = async (phase: string, raw: string) => {
       savedRaw = raw;
       savedPhase = phase;

@@ -12,7 +12,6 @@ import {
   asString,
   asVmFunction,
   jobSteps,
-  asExecError,
   workflowJobOptional,
 } from './typed-test-helpers.ts';
 import type { WorkflowDocument } from './typed-test-helpers.ts';
@@ -37,8 +36,9 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
       return {
         readFileSync: (name: string): string => {
           if (!(name in files)) {
-            const err = new Error(`ENOENT: ${name}`);
-            asExecError(err).code = 'ENOENT';
+            const err = Object.assign(new Error(`ENOENT: ${name}`), {
+              code: 'ENOENT',
+            });
             throw err;
           }
           return files[name];
@@ -93,8 +93,9 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
     it('returns null when a file cannot be read', () => {
       const fakeFs = {
         readFileSync: (): string => {
-          const error = new Error('EACCES: denied');
-          asExecError(error).code = 'EACCES';
+          const error = Object.assign(new Error('EACCES: denied'), {
+            code: 'EACCES',
+          });
           throw error;
         },
       };

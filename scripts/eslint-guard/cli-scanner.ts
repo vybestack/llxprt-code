@@ -33,7 +33,7 @@ const CLI_TEST_SUFFIXES = [
 ];
 
 function isCliProductionTypeScriptFile(filePath: string) {
-  if (!/\.(?:ts|tsx)$/.test(filePath)) {
+  if (!/\.(?:mts|cts|ts|tsx)$/.test(filePath)) {
     return false;
   }
   const normalized = filePath.replace(/\\/g, '/');

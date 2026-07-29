@@ -813,7 +813,10 @@ function advanceTemplateExpr(
   }
   if (ch === '}') {
     return {
-      state: { ...state, exprDepth: state.exprDepth - 1 },
+      state: {
+        ...state,
+        exprDepth: state.exprDepth > 0 ? state.exprDepth - 1 : 0,
+      },
       advance: i + 1,
       done: false,
     };

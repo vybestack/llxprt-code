@@ -439,11 +439,13 @@ describe('.github/workflows/ocr-review.yml', () => {
       'github.rest.issues.deleteComment({',
       'Failed to post OCR sticky summary; continuing without failing the workflow',
     ]);
+    const stderrSectionIndex = postScript.indexOf(
+      'function stderrSection(title, fileName) {',
+    );
+    expect(stderrSectionIndex).toBeGreaterThan(-1);
     expect(
       postScript.indexOf("sanitizeExcerpt(readTrimmed(fileName, ''))"),
-    ).toBeGreaterThan(
-      postScript.indexOf('function stderrSection(title, fileName) {'),
-    );
+    ).toBeGreaterThan(stderrSectionIndex);
     expect(postScript).not.toContain('core.setFailed(`OpenCodeReview failed');
     expect(
       postScript.indexOf('core.setFailed(`OCR policy failure:'),

@@ -14,7 +14,7 @@ function runHarness(scriptName: string, extraArgs: string[] = []) {
   const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
 
   const result = spawnSync(
-    'node',
+    'bun',
     [harnessPath, '--script', scriptPath, '--assert', ...extraArgs],
     {
       encoding: 'utf8',

@@ -68,10 +68,8 @@ function resolveOtelDir(
 
   // The snippet imports the module and prints its OTEL_DIR export.
   const result = spawnSync(
-    process.execPath,
+    'bun',
     [
-      '--experimental-vm-modules',
-      '--input-type=module',
       '-e',
       `import('${MODULE_PATH}').then(m => process.stdout.write(m.OTEL_DIR))`,
     ],
@@ -127,7 +125,7 @@ function runIsolatedTelemetryUtility(
         body,
       ].join('\n'),
     );
-    return spawnSync(process.execPath, [runner], {
+    return spawnSync('bun', [runner], {
       cwd: directory,
       encoding: 'utf8',
       timeout: 30_000,

@@ -128,7 +128,7 @@ export function listTsFiles(rootDir: string): string[] {
     const fullPath = join(rootDir, entry.name);
     if (entry.isDirectory()) {
       results.push(...listTsFiles(fullPath));
-    } else if (entry.isFile() && /\.(?:ts|tsx)$/.test(entry.name)) {
+    } else if (entry.isFile() && /\.(?:mts|cts|ts|tsx)$/.test(entry.name)) {
       results.push(fullPath);
     }
   }

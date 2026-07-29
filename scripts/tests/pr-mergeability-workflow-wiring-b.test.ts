@@ -381,9 +381,7 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
     expect(linuxConcurrency?.['cancel-in-progress']).toBe(true);
     expect(macConcurrency?.['cancel-in-progress']).toBe(true);
     expect(linuxConcurrency?.group).toContain('${{ matrix.sandbox }}');
-    expect(macJob?.continue_on_error ?? macJob?.['continue-on-error']).toBe(
-      true,
-    );
+    expect(macJob?.['continue-on-error']).toBe(true);
     const linuxStrategy = asOptionalRecord(linuxJob?.strategy);
     const linuxMatrix = asOptionalRecord(linuxStrategy?.matrix);
     expect(linuxMatrix?.sandbox).toContain('sandbox:none');

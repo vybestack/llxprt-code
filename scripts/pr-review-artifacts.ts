@@ -208,11 +208,15 @@ export function buildArtifactContext(
   const changedFiles = Number(pr.changedFiles ?? numstat.length);
   const changedFilePaths = deriveChangedFilePaths(numstat, diffs);
   const prAuthor = recordSchema.safeParse(pr.author);
+  const authorLogin =
+    prAuthor.success && typeof prAuthor.data.login === 'string'
+      ? prAuthor.data.login
+      : undefined;
   return {
     prContext: {
       number: pr.number,
       title: pr.title,
-      author: prAuthor.success ? prAuthor.data.login : undefined,
+      author: authorLogin,
       body: pr.body,
       baseRefName: pr.baseRefName,
       headRefName: pr.headRefName,

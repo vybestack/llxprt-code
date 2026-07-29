@@ -10,6 +10,7 @@ import { expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { asRecord } from './typed-test-helpers.ts';
+import type { WorkflowJob, WorkflowStep } from './typed-test-helpers.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 export const WORKFLOW_PATH = '.github/workflows/ocr-review.yml';
@@ -22,19 +23,6 @@ export function normalize(value: string | undefined): string {
   return String(value ?? '')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-interface WorkflowStep {
-  name?: string;
-  run?: string;
-  with?: { script?: string; [key: string]: unknown };
-  env?: Record<string, unknown>;
-  id?: string;
-  [key: string]: unknown;
-}
-
-interface WorkflowJob {
-  steps?: WorkflowStep[];
 }
 
 export function commandText(step: WorkflowStep | undefined): string {

@@ -40,6 +40,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as nodePath from 'path';
 import {
   createFakeRepo,
@@ -426,11 +428,8 @@ describe('K3: ambiguous marker POST ownership-aware rollback', () => {
     'removes label on TERM signal after applied-error label POST',
     { timeout: 30000 },
     () => {
-      const hookFile = nodePath.join(
-        process.cwd(),
-        'tmp',
-        `assign-signal-k3-${process.pid}`,
-      );
+      const hookDir = mkdtempSync(nodePath.join(tmpdir(), 'assign-signal-k3-'));
+      const hookFile = nodePath.join(hookDir, 'hook');
       const repo = createFakeRepo(
         defaultStateWith({
           issues: { 42: makeIssue({ number: 42, assignees: [] }) },
@@ -477,27 +476,31 @@ describe('K3: ambiguous marker POST ownership-aware rollback', () => {
         SIGNAL_HOOK: hookFile,
       };
 
-      let status = 0;
       try {
-        execFileSync(
-          'bash',
-          [
-            '-c',
-            'rm -f "$SIGNAL_HOOK"; bash "$ASSIGN_SCRIPT" >/dev/null 2>&1 & pid=$!; found=false; for _ in $(seq 1 500); do if [[ -f "$SIGNAL_HOOK" ]]; then found=true; break; fi; sleep 0.01; done; if [[ "$found" != true ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; exit 99; fi; kill -TERM "$pid"; wait "$pid"',
-          ],
-          { env, stdio: ['ignore', 'pipe', 'pipe'] },
-        );
-      } catch (error: unknown) {
-        const errRecord = asRecord(error);
-        status =
-          typeof errRecord['status'] === 'number' ? errRecord['status'] : 1;
-      }
+        let status = 0;
+        try {
+          execFileSync(
+            'bash',
+            [
+              '-c',
+              'rm -f "$SIGNAL_HOOK"; bash "$ASSIGN_SCRIPT" >/dev/null 2>&1 & pid=$!; found=false; for _ in $(seq 1 500); do if [[ -f "$SIGNAL_HOOK" ]]; then found=true; break; fi; sleep 0.01; done; if [[ "$found" != true ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; exit 99; fi; kill -TERM "$pid"; wait "$pid"',
+            ],
+            { env, stdio: ['ignore', 'pipe', 'pipe'] },
+          );
+        } catch (error: unknown) {
+          const errRecord = asRecord(error);
+          status =
+            typeof errRecord['status'] === 'number' ? errRecord['status'] : 1;
+        }
 
-      const state = repo.readState();
-      expect(status).not.toBe(0);
-      expect(stateIssue(state, '42')._label_names).not.toContain(
-        'auto-assigned',
-      );
+        const state = repo.readState();
+        expect(status).not.toBe(0);
+        expect(stateIssue(state, '42')._label_names).not.toContain(
+          'auto-assigned',
+        );
+      } finally {
+        rmSync(hookDir, { recursive: true, force: true });
+      }
     },
   );
 });

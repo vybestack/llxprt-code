@@ -440,10 +440,10 @@ describe('validateReconciliation — invariants', () => {
   it('rejects delimiter-collision category coverage adversaries', () => {
     const record = validRecord({
       findings: {
-        by_category: { a: 1, 'b\\u0000c': 1 },
+        by_category: { a: 1, 'b\u0000c': 1 },
         by_severity: { high: 2 },
         by_category_severity: {
-          'a\\u0000b': { high: 1 },
+          'a\u0000b': { high: 1 },
           c: { high: 1 },
         },
       },

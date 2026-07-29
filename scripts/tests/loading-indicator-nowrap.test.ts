@@ -34,7 +34,7 @@ const extractArtifactsPath = (text: string) => {
 runTest('loading indicator does not wrap (tmux)', () => {
   const repoRoot = getRepoRoot();
   const result = spawnSync(
-    'node',
+    'bun',
     [
       'scripts/tmux-harness.ts',
       '--script',

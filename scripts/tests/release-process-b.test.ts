@@ -420,8 +420,8 @@ describe('.github/workflows/nightly.yml', () => {
     ).toBeTruthy();
     nightlyParsed = asRecord(parseWorkflowYaml(nightlyYml));
     const jobs = asOptionalRecord(nightlyParsed.jobs);
-    windowsCiJob = asRecord(jobs?.windows_ci ?? undefined);
-    notifyFailureJob = asRecord(jobs?.notify_failure ?? undefined);
+    windowsCiJob = asOptionalRecord(jobs?.windows_ci);
+    notifyFailureJob = asOptionalRecord(jobs?.notify_failure);
   });
 
   it('defines the expected nightly workflow structure', () => {

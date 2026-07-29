@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   readFileSync,
@@ -210,7 +210,7 @@ function setupTapRepo(token: string | undefined): string {
     runCommand(`git clone ${tapRepoBase} ${tapDir}`, { stdio: 'ignore' });
     if (token) {
       const tapRepoAuth = `https://${token}@github.com/vybestack/homebrew-tap.git`;
-      execSync(`git remote set-url origin ${tapRepoAuth}`, {
+      execFileSync('git', ['remote', 'set-url', 'origin', tapRepoAuth], {
         cwd: tapDir,
         stdio: 'ignore',
       });

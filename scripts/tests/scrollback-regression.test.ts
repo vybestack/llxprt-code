@@ -28,7 +28,7 @@ const extractArtifactsPath = (text: string) => {
 runTest('scrollback regression (tmux baseline)', () => {
   const repoRoot = getRepoRoot();
   const result = spawnSync(
-    'node',
+    'bun',
     [
       'scripts/tmux-harness.ts',
       '--script',

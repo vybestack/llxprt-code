@@ -535,7 +535,7 @@ export function registerCleanup(
       ? getLogFileDescriptors()
       : [];
     logFileDescriptors.forEach((fd: number | null) => {
-      if (fd) {
+      if (fd !== null) {
         try {
           fs.closeSync(fd);
         } catch (_) {

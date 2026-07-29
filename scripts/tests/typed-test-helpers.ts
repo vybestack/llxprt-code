@@ -204,8 +204,12 @@ function parseFakeComment(raw: unknown): FakeComment {
   const body = rec['body'];
   const userRec = asRecord(rec['user']);
   return {
+    ...rec,
     id: asNumber(rec['id']),
-    issue_number: asNumber(rec['issue_number']),
+    issue_number:
+      rec['issue_number'] === undefined
+        ? undefined
+        : asNumber(rec['issue_number']),
     body:
       typeof body === 'string' || Array.isArray(body)
         ? body
@@ -214,8 +218,8 @@ function parseFakeComment(raw: unknown): FakeComment {
       login: asString(userRec['login']),
       type: asString(userRec['type']),
     },
-    created_at: asString(rec['created_at']),
-    updated_at: asString(rec['updated_at']),
+    created_at: asOptionalString(rec['created_at']),
+    updated_at: asOptionalString(rec['updated_at']),
   };
 }
 
@@ -602,23 +606,26 @@ export interface ExecError {
 /**
  * Narrow an unknown caught value to an ExecError-like object.
  * Validates shape at runtime without type assertions.
+ *
+ * Reads known keys directly via Reflect.get because Error.message (and
+ * Error.stack) are non-enumerable own properties that Object.entries skips.
  */
 export function asExecError(error: unknown): ExecError {
   if (error !== null && typeof error === 'object' && !Array.isArray(error)) {
-    const rec: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(error)) {
-      rec[key] = val;
-    }
+    const stderr = Reflect.get(error, 'stderr');
+    const stdout = Reflect.get(error, 'stdout');
+    const status = Reflect.get(error, 'status');
+    const code = Reflect.get(error, 'code');
+    const signal = Reflect.get(error, 'signal');
+    const message = Reflect.get(error, 'message');
     return {
-      stderr: typeof rec['stderr'] === 'string' ? rec['stderr'] : undefined,
-      stdout: typeof rec['stdout'] === 'string' ? rec['stdout'] : undefined,
-      status: typeof rec['status'] === 'number' ? rec['status'] : undefined,
+      stderr: typeof stderr === 'string' ? stderr : undefined,
+      stdout: typeof stdout === 'string' ? stdout : undefined,
+      status: typeof status === 'number' ? status : undefined,
       code:
-        typeof rec['code'] === 'string' || typeof rec['code'] === 'number'
-          ? rec['code']
-          : undefined,
-      signal: typeof rec['signal'] === 'string' ? rec['signal'] : undefined,
-      message: typeof rec['message'] === 'string' ? rec['message'] : undefined,
+        typeof code === 'string' || typeof code === 'number' ? code : undefined,
+      signal: typeof signal === 'string' ? signal : undefined,
+      message: typeof message === 'string' ? message : undefined,
     };
   }
   return { message: String(error) };
@@ -626,6 +633,9 @@ export function asExecError(error: unknown): ExecError {
 
 /**
  * Extract a string field from an unknown error object.
+ *
+ * Reads the field directly via Reflect.get because Error.message (and
+ * Error.stack) are non-enumerable own properties that Object.entries skips.
  */
 export function errorField(error: unknown, field: string): string {
   if (
@@ -634,11 +644,7 @@ export function errorField(error: unknown, field: string): string {
     typeof error === 'object' &&
     Object.prototype.hasOwnProperty.call(error, field)
   ) {
-    const rec: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(error)) {
-      rec[key] = val;
-    }
-    const value = rec[field];
+    const value = Reflect.get(error, field);
     return value === undefined || value === null ? 'none' : String(value);
   }
   return 'none';
