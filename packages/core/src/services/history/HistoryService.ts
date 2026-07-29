@@ -66,6 +66,17 @@ import {
 // Preserve the CompressionConfig export from the same path for consumers.
 export type { CompressionConfig };
 
+type MutationFailure = { failed: false } | { failed: true; error: unknown };
+
+type QueuedHistoryMutation =
+  | { kind: 'synchronous'; execute: () => void }
+  | {
+      kind: 'asynchronous';
+      execute: () => Promise<void>;
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    };
+
 /**
  * Service for managing conversation history in a provider-agnostic way.
  * All history is stored as IContent. Providers are responsible for converting
@@ -81,6 +92,8 @@ export class HistoryService
   private tokenizerCache = new Map<string, ITokenizer>();
   private tokenizerLock: Promise<void> = Promise.resolve();
   private syncGeneration: number = 0;
+  private historyMutationInProgress = false;
+  private historyMutationQueue: QueuedHistoryMutation[] = [];
   private logger = new DebugLogger('llxprt:history:service');
 
   /**
@@ -266,6 +279,88 @@ export class HistoryService
     this.syncGeneration++;
   }
 
+  private runSynchronousHistoryMutation(execute: () => void): void {
+    if (this.historyMutationInProgress) {
+      this.historyMutationQueue.push({ kind: 'synchronous', execute });
+      return;
+    }
+
+    this.historyMutationInProgress = true;
+    let failure: MutationFailure = { failed: false };
+    try {
+      execute();
+    } catch (error: unknown) {
+      failure = { failed: true, error };
+    }
+    const queuedFailure = this.drainSynchronousHistoryMutations();
+    this.historyMutationInProgress = false;
+    this.processHistoryMutationQueue();
+
+    if (failure.failed) throw failure.error;
+    if (queuedFailure.failed) throw queuedFailure.error;
+  }
+
+  private drainSynchronousHistoryMutations(): MutationFailure {
+    let failure: MutationFailure = { failed: false };
+    while (this.historyMutationQueue[0]?.kind === 'synchronous') {
+      const mutation = this.historyMutationQueue.shift();
+      if (mutation?.kind !== 'synchronous') break;
+      try {
+        mutation.execute();
+      } catch (error: unknown) {
+        if (!failure.failed) failure = { failed: true, error };
+      }
+    }
+    return failure;
+  }
+
+  private enqueueAsynchronousHistoryMutation(
+    execute: () => Promise<void>,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.historyMutationQueue.push({
+        kind: 'asynchronous',
+        execute,
+        resolve,
+        reject,
+      });
+      this.processHistoryMutationQueue();
+    });
+  }
+
+  private processHistoryMutationQueue(): void {
+    if (this.historyMutationInProgress) return;
+    const mutation = this.historyMutationQueue.shift();
+    if (mutation === undefined) return;
+    if (mutation.kind === 'synchronous') {
+      this.runSynchronousHistoryMutation(mutation.execute);
+      return;
+    }
+
+    this.historyMutationInProgress = true;
+    void mutation.execute().then(
+      () =>
+        this.completeAsynchronousHistoryMutation(mutation, { failed: false }),
+      (error: unknown) =>
+        this.completeAsynchronousHistoryMutation(mutation, {
+          failed: true,
+          error,
+        }),
+    );
+  }
+
+  private completeAsynchronousHistoryMutation(
+    mutation: Extract<QueuedHistoryMutation, { kind: 'asynchronous' }>,
+    failure: MutationFailure,
+  ): void {
+    const queuedFailure = this.drainSynchronousHistoryMutations();
+    this.historyMutationInProgress = false;
+    const result = failure.failed ? failure : queuedFailure;
+    if (result.failed) mutation.reject(result.error);
+    else mutation.resolve();
+    this.processHistoryMutationQueue();
+  }
+
   resetTokenAccounting(): void {
     this.invalidatePendingSyncs();
     this.baseTokenOffset = 0;
@@ -288,13 +383,16 @@ export class HistoryService
       logQueuedDuringCompression(this.logger, content);
 
       this.pendingOperations.push(() => {
-        this.addInternal(content, modelName);
+        this.runSynchronousHistoryMutation(() => {
+          this.addInternal(content, modelName);
+        });
       });
       return;
     }
 
-    // Otherwise, add immediately
-    this.addInternal(content, modelName);
+    this.runSynchronousHistoryMutation(() => {
+      this.addInternal(content, modelName);
+    });
   }
 
   private addInternal(content: IContent, modelName?: string): void {
@@ -309,6 +407,7 @@ export class HistoryService
     const hasBlocks =
       Array.isArray(content.blocks) && content.blocks.length > 0;
     if (hasValidSpeaker && hasBlocks) {
+      const generation = this.syncGeneration;
       this.history.push(content);
 
       this.logger.debug(
@@ -319,7 +418,7 @@ export class HistoryService
       this.emit('contentAdded', content);
 
       // Update token count asynchronously but atomically
-      void this.updateTokenCount(content, modelName);
+      void this.updateTokenCount(content, modelName, generation);
     } else if (!hasValidSpeaker) {
       this.logger.debug('Content rejected - invalid speaker:', content.speaker);
     } else {
@@ -336,6 +435,7 @@ export class HistoryService
   private async updateTokenCount(
     content: IContent,
     modelName?: string,
+    generation = this.syncGeneration,
   ): Promise<void> {
     // Use a lock to prevent race conditions
     this.tokenizerLock = this.tokenizerLock.then(async () => {
@@ -346,6 +446,7 @@ export class HistoryService
         content,
         defaultModel,
       );
+      if (generation !== this.syncGeneration) return;
 
       // Atomically update the total
       this.totalTokens += contentTokens;
@@ -404,6 +505,15 @@ export class HistoryService
         Array.isArray(content.blocks) &&
         content.blocks.length > 0,
     );
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      this.replaceAllInternal(accepted, modelName),
+    );
+  }
+
+  private async replaceAllInternal(
+    accepted: IContent[],
+    modelName?: string,
+  ): Promise<void> {
     await this.waitForTokenUpdates();
     const replacementTokens = await this.estimateTokensForContents(
       accepted,
@@ -640,13 +750,16 @@ export class HistoryService
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
       this.pendingOperations.push(() => {
-        this.clearInternal();
+        this.runSynchronousHistoryMutation(() => {
+          this.clearInternal();
+        });
       });
       return;
     }
 
-    // Otherwise, clear immediately
-    this.clearInternal();
+    this.runSynchronousHistoryMutation(() => {
+      this.clearInternal();
+    });
   }
 
   private clearInternal(): void {
