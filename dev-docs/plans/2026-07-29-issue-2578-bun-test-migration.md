@@ -10,17 +10,17 @@ ledger.
 
 ## Acceptance Matrix
 
-| # | Behavior | Evidence |
-|---|----------|----------|
-| AC1 | Inventory accounts for every repository test file | `dev-docs/test-runner-inventory.md` |
-| AC2 | Standard full test command runs all tests under Bun | `npm run test` → workspace test scripts use `bun test` |
-| AC3 | No migrated test is launched by Vitest or needs precompiled JS | Workspace test scripts use `bun test` directly on .ts files |
-| AC4 | Existing test coverage preserved (no silent drops/skips) | Pass/fail counts match between vitest and bun per workspace |
-| AC5 | Workspace setup, pretest guards, JUnit, coverage functional | bunfig.toml preload + junit reporter configured per workspace |
-| AC6 | CI runs complete Bun-native suite on required platforms | CI workflow updated; fails if test file omitted from manifest |
-| AC7 | Compatibility helpers linked to concrete tests | Each shim addition references the test file that needs it |
-| AC8 | Remaining Vitest usage enumerated and proven unrelated | Documented in inventory |
-| AC9 | One canonical command for complete suite | Documented in CONTRIBUTING.md and dev-docs/bun.md |
+| #   | Behavior                                                       | Evidence                                                      |
+| --- | -------------------------------------------------------------- | ------------------------------------------------------------- |
+| AC1 | Inventory accounts for every repository test file              | `dev-docs/test-runner-inventory.md`                           |
+| AC2 | Standard full test command runs all tests under Bun            | `npm run test` → workspace test scripts use `bun test`        |
+| AC3 | No migrated test is launched by Vitest or needs precompiled JS | Workspace test scripts use `bun test` directly on .ts files   |
+| AC4 | Existing test coverage preserved (no silent drops/skips)       | Pass/fail counts match between vitest and bun per workspace   |
+| AC5 | Workspace setup, pretest guards, JUnit, coverage functional    | bunfig.toml preload + junit reporter configured per workspace |
+| AC6 | CI runs complete Bun-native suite on required platforms        | CI workflow updated; fails if test file omitted from manifest |
+| AC7 | Compatibility helpers linked to concrete tests                 | Each shim addition references the test file that needs it     |
+| AC8 | Remaining Vitest usage enumerated and proven unrelated         | Documented in inventory                                       |
+| AC9 | One canonical command for complete suite                       | Documented in CONTRIBUTING.md and dev-docs/bun.md             |
 
 ## Explicit Non-Goals
 
@@ -64,18 +64,18 @@ by 15 test files across the repo.
 
 ## Scope Ledger
 
-| Item | Status | Notes |
-|------|--------|-------|
-| vi.clearAllTimers compat fix | Slice 1 | Used by 15 test files |
-| telemetry workspace migration | Slice 1 | 11 test files |
-| test-utils workspace migration | Slice 1 | 5 test files (1 vitest-specific retained) |
-| Checked-in inventory | Slice 1 | dev-docs/test-runner-inventory.md |
-| bun-test-manifest update | Slice 1 | Add telemetry + test-utils entries |
-| Documentation update | Slice 1 | dev-docs/bun.md |
-| Remaining 11 workspaces | Deferred | ~1,996 files - future PRs |
-| scripts/tests (97 files) | Deferred | Future PR |
-| evals (2 files) | Deferred | Future PR |
-| integration-tests (26 files) | Deferred | Future PR |
+| Item                           | Status   | Notes                                     |
+| ------------------------------ | -------- | ----------------------------------------- |
+| vi.clearAllTimers compat fix   | Slice 1  | Used by 15 test files                     |
+| telemetry workspace migration  | Slice 1  | 11 test files                             |
+| test-utils workspace migration | Slice 1  | 5 test files (1 vitest-specific retained) |
+| Checked-in inventory           | Slice 1  | dev-docs/test-runner-inventory.md         |
+| bun-test-manifest update       | Slice 1  | Add telemetry + test-utils entries        |
+| Documentation update           | Slice 1  | dev-docs/bun.md                           |
+| Remaining 11 workspaces        | Deferred | ~1,996 files - future PRs                 |
+| scripts/tests (97 files)       | Deferred | Future PR                                 |
+| evals (2 files)                | Deferred | Future PR                                 |
+| integration-tests (26 files)   | Deferred | Future PR                                 |
 
 ## Enumerated Vitest Retention (AC8)
 
