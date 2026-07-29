@@ -146,7 +146,6 @@
     "scripts/tests/pr-mergeability-workflow-wiring.test.js",
     "scripts/tests/pr-review-llm-helpers.test.js",
     "scripts/tests/pr-review-walkthrough-prompts.test.js",
-    "scripts/tests/pr-review-walkthrough-workflow.test.js",
     "scripts/tests/pr-review-walkthrough.test.js",
     "scripts/tests/pr-workflow-concurrency.test.js",
     "scripts/tests/preflight-ci.test.js",

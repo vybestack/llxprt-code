@@ -103,6 +103,7 @@ describe('IdeClient', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
   });
 
   describe('connect', () => {
@@ -346,6 +347,66 @@ describe('IdeClient', () => {
             },
           },
         }),
+      );
+      expect(ideClient.getConnectionStatus().status).toBe(
+        IDEConnectionStatus.Connected,
+      );
+    });
+  });
+
+  describe('issue #2656 — Windows stale-env + live-port-file recovery', () => {
+    // This composed behavioral test proves the end-to-end recovery path:
+    // the real IDE PID (29396, Code.exe main) is identified, the live port
+    // file keyed to that PID is found in the temp dir, and its metadata
+    // (port 64365 + auth token + workspace) is used INSTEAD of the stale
+    // LLXPRT_CODE_IDE_SERVER_PORT env value (49975, a dead port).
+    //
+    // The client test harness mocks `getIdeProcessInfo` directly (the
+    // established pattern in this file), so we inject {pid: 29396} here.
+    // process-utils.test.ts already proves the REAL getIdeProcessInfo walks
+    // the issue's exact process tree and returns 29396; this test focuses on
+    // the downstream PID→port-file resolution and stale-env bypass.
+    it('uses the live port file keyed to the Code main PID instead of the stale env port', async () => {
+      vi.mocked(getIdeProcessInfo).mockResolvedValue({
+        pid: 29396,
+        command: 'C:\\Program Files\\Microsoft VS Code\\Code.exe',
+      });
+      process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '49975';
+
+      const liveFile = {
+        port: 64365,
+        workspacePath: '/test/workspace',
+        authToken: 'token-xyz',
+        ideInfo: { name: 'vscode', displayName: 'VS Code' },
+      };
+      (
+        vi.mocked(fs.promises.readdir) as Mock<
+          (path: fs.PathLike) => Promise<string[]>
+        >
+      ).mockResolvedValue(['llxprt-ide-server-29396-64365.json']);
+      vi.mocked(fs.promises.readFile).mockResolvedValue(
+        JSON.stringify(liveFile),
+      );
+
+      IdeClient.resetInstance();
+      const ideClient = await IdeClient.getInstance();
+      await ideClient.connect();
+
+      // The live file (port 64365) must be selected; the stale env port
+      // (49975) must NOT be used.
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        new URL('http://127.0.0.1:64365/mcp'),
+        expect.objectContaining({
+          requestInit: {
+            headers: {
+              Authorization: 'Bearer token-xyz',
+            },
+          },
+        }),
+      );
+      expect(StreamableHTTPClientTransport).not.toHaveBeenCalledWith(
+        new URL('http://127.0.0.1:49975/mcp'),
+        expect.anything(),
       );
       expect(ideClient.getConnectionStatus().status).toBe(
         IDEConnectionStatus.Connected,

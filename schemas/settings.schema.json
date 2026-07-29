@@ -647,6 +647,14 @@
           "markdownDescription": "Render output in plain-text to be more screen reader accessible.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
           "default": false,
           "type": "boolean"
+        },
+        "unicode": {
+          "title": "Unicode Rendering",
+          "description": "Control rendering of Unicode box-drawing and spinner glyphs. Use \"off\" on terminals that show \"?\" for borders/spinners (e.g. legacy Windows PowerShell).",
+          "markdownDescription": "Control rendering of Unicode box-drawing and spinner glyphs. Use \"off\" on terminals that show \"?\" for borders/spinners (e.g. legacy Windows PowerShell).\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `auto`",
+          "default": "auto",
+          "type": "string",
+          "enum": ["auto", "force", "off"]
         }
       },
       "additionalProperties": false

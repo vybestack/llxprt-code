@@ -49,6 +49,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -86,6 +87,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -123,6 +125,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -160,6 +163,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
         getTokenStore: vi.fn(() => tokenStore),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -222,6 +226,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         peekStoredToken: vi.fn(async () => {
           throw new Error('Token store error');
         }),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -278,6 +283,7 @@ describe('diagnosticsCommand OAuth token display (edges)', () => {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getSessionBucket: vi.fn(() => undefined),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({

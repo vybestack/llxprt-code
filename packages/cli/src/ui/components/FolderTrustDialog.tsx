@@ -15,6 +15,7 @@ import * as process from 'node:process';
 import * as path from 'node:path';
 import { DebugLogger, ExitCodes } from '@vybestack/llxprt-code-core';
 import { FolderTrustChoice, buildTrustOptions } from '../trustDialogHelpers.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 const debug = DebugLogger.getLogger('llxprt:ui:folder-trust-dialog');
 
@@ -134,7 +135,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
     <Box flexDirection="column" width="100%">
       <Box
         flexDirection="column"
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={Colors.AccentYellow}
         padding={1}
         marginLeft={1}
