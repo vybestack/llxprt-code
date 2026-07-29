@@ -152,12 +152,14 @@ describe('HookRunner', () => {
             },
           );
 
-          await hookRunner.executeHook(
+          const result = await hookRunner.executeHook(
             commandConfig,
             HookEventName.BeforeTool,
             mockInput,
           );
 
+          expect(result.success).toBe(false);
+          expect(result.exitCode).toBe(2);
           expect(spawn).toHaveBeenCalledWith(
             expect.stringMatching(/powershell/i),
             expect.arrayContaining([
