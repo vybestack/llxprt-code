@@ -33,7 +33,10 @@ import {
   type SessionRecordingServiceConfig,
   type SessionEventType,
   type SessionRecordLine,
+  type RecordingCheckpointInfo,
+  type SessionForkedPayload,
 } from './types.js';
+import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
@@ -54,10 +57,36 @@ export class SessionRecordingService {
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
   private readonly sessionId: string;
+  private readonly projectHash: string;
   private readonly chatsDir: string;
   private preContentBuffer: SessionRecordLine[] = [];
   private chatsDirWatcher: FSWatcher | null = null;
   private sessionTitle: string | null | undefined;
+  private lockHandle: LockHandle | null = null;
+
+  static async createLocked(
+    config: SessionRecordingServiceConfig,
+  ): Promise<SessionRecordingService> {
+    const lockHandle = await SessionLockManager.acquire(
+      config.chatsDir,
+      config.sessionId,
+    );
+    try {
+      const recording = new SessionRecordingService(config);
+      recording.adoptLock(lockHandle);
+      return recording;
+    } catch (error: unknown) {
+      await lockHandle.release();
+      throw error;
+    }
+  }
+
+  adoptLock(lockHandle: LockHandle): void {
+    if (this.lockHandle !== null) {
+      throw new Error('Session recording already owns a lock');
+    }
+    this.lockHandle = lockHandle;
+  }
 
   /**
    * @plan PLAN-20260211-SESSIONRECORDING.P05
@@ -66,6 +95,7 @@ export class SessionRecordingService {
    */
   constructor(config: SessionRecordingServiceConfig) {
     this.sessionId = config.sessionId;
+    this.projectHash = config.projectHash;
     this.chatsDir = config.chatsDir;
 
     const startPayload = {
@@ -306,6 +336,24 @@ export class SessionRecordingService {
     return this.sessionId;
   }
 
+  ownsLockFor(sessionId: string): boolean {
+    return (
+      this.active && this.sessionId === sessionId && this.lockHandle !== null
+    );
+  }
+
+  getChatsDir(): string {
+    return this.chatsDir;
+  }
+
+  getProjectHash(): string {
+    return this.projectHash;
+  }
+
+  getLockHandle(): LockHandle | null {
+    return this.lockHandle;
+  }
+
   /**
    * Initialize for resuming an existing session file.
    * Sets the file path and sequence counter so new events append correctly.
@@ -345,6 +393,9 @@ export class SessionRecordingService {
       this.chatsDirWatcher.close();
       this.chatsDirWatcher = null;
     }
+    const lockHandle = this.lockHandle;
+    this.lockHandle = null;
+    await lockHandle?.release();
   }
 
   /**
@@ -500,5 +551,98 @@ export class SessionRecordingService {
 
   getSessionMetadataTitle(): string | null | undefined {
     return this.sessionTitle;
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable checkpoint / session-name / fork lifecycle operations.
+  //
+  // These operations flush to disk before resolving and reject on
+  // inactive/failed recorders rather than silently succeeding.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Create an immutable checkpoint at the current recording sequence.
+   * The checkpoint is flushed before the promise resolves.
+   * Rejects if the conversation is empty/unmaterialized or the recorder is inactive.
+   */
+  async createCheckpoint(name: string): Promise<RecordingCheckpointInfo> {
+    if (!this.active) {
+      throw new Error('Cannot create checkpoint: recording is not active');
+    }
+    if (!this.materialized) {
+      throw new Error(
+        'Cannot create checkpoint: conversation has no content yet',
+      );
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Cannot create checkpoint: name must not be empty');
+    }
+
+    const checkpointId = crypto.randomUUID();
+    const sequence = this.seq + 1;
+    this.enqueue('checkpoint_created', { checkpointId, name: trimmed });
+    await this.flushAndRequireActive('create checkpoint');
+
+    return { checkpointId, name: trimmed, sequence };
+  }
+
+  /**
+   * Delete (tombstone) a checkpoint by stable ID.
+   * The lifecycle event is flushed before the promise resolves.
+   */
+  async deleteCheckpoint(checkpointId: string): Promise<void> {
+    if (!this.active) {
+      throw new Error('Cannot delete checkpoint: recording is not active');
+    }
+    this.enqueue('checkpoint_deleted', { checkpointId });
+    await this.flushAndRequireActive('delete checkpoint');
+  }
+
+  /**
+   * Rename a checkpoint by stable ID.
+   * Only display metadata changes; the watermark and ID are unaffected.
+   */
+  async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
+    if (!this.active) {
+      throw new Error('Cannot rename checkpoint: recording is not active');
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Cannot rename checkpoint: name must not be empty');
+    }
+    this.enqueue('checkpoint_renamed', { checkpointId, name: trimmed });
+    await this.flushAndRequireActive('rename checkpoint');
+  }
+
+  /**
+   * Assign or clear the mutable session name.
+   * Pass `null` to clear the name.
+   */
+  async setSessionName(name: string | null): Promise<void> {
+    if (!this.active) {
+      throw new Error('Cannot set session name: recording is not active');
+    }
+    const resolved = name === null ? null : name.trim();
+    if (resolved !== null && resolved.length === 0) {
+      throw new Error('Cannot set session name: name must not be empty');
+    }
+    this.enqueue('session_named', { name: resolved });
+    await this.flushAndRequireActive('set session name');
+  }
+
+  private async flushAndRequireActive(operation: string): Promise<void> {
+    await this.flush();
+    if (!this.isActive()) {
+      throw new Error(`Cannot ${operation}: recording failed during flush`);
+    }
+  }
+
+  /**
+   * Record ancestry metadata when seeding a forked child session.
+   * The child recording is self-contained after this.
+   */
+  recordSessionFork(payload: SessionForkedPayload): void {
+    this.enqueue('session_forked', payload);
   }
 }

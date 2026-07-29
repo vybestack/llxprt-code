@@ -501,12 +501,12 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(continueCommand.schema).toBeDefined();
       expect(Array.isArray(continueCommand.schema)).toBe(true);
 
-      // First schema item is for session argument
-      const sessionArg = continueCommand.schema![0];
-      expect(sessionArg.kind).toBe('value');
+      // First schema item is for the unified session/checkpoint target argument
+      const targetArg = continueCommand.schema![0];
+      expect(targetArg.kind).toBe('value');
       // Type guard for ValueArgument which has 'name' property
-      assertType(sessionArg, isValueArgument);
-      expect(sessionArg.name).toBe('session');
+      assertType(targetArg, isValueArgument);
+      expect(targetArg.name).toBe('target');
 
       // CLI flags (--continue, --list-sessions) are handled in config.ts
       // and cli.tsx before the REPL starts, so no conflict

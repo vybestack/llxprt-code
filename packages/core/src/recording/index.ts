@@ -67,3 +67,19 @@ export {
   type DeleteSessionResult,
   type DeleteSessionError,
 } from './sessionManagement.js';
+export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
+export {
+  SessionTransitionService,
+  type ForkResult,
+  type ForkError,
+} from './SessionTransitionService.js';
+export {
+  replaySessionThroughSequence,
+  foldCheckpointMetadata,
+} from './ReplayEngine.js';
+export {
+  HistoryMutationService,
+  countHumanTurns,
+  type HistoryMutationResult,
+  type HistoryMutationError,
+} from './HistoryMutationService.js';

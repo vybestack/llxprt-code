@@ -36,6 +36,9 @@ import {
   type ContentPayload,
   type RewindPayload,
   type ProviderSwitchPayload,
+  type CheckpointMetadataView,
+  type SessionForkedPayload,
+  type SessionRecordLine,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 
@@ -56,6 +59,8 @@ interface ReplayAccumulators {
   malformedCount: number;
   _unknownEventCount: number;
   unparseableLineCount: number;
+  /** Raw metadata event lines for post-replay folding. */
+  rawMetadataEvents: SessionRecordLine[];
 }
 
 // @pseudocode line 11-17: Initialize accumulators
@@ -72,6 +77,7 @@ function createAccumulators(): ReplayAccumulators {
     malformedCount: 0,
     _unknownEventCount: 0,
     unparseableLineCount: 0,
+    rawMetadataEvents: [],
   };
 }
 
@@ -391,10 +397,38 @@ function applyParsedEvent(
   return dispatchEvent(
     eventType,
     payload,
+    typeof parsed.ts === 'string' ? parsed.ts : '',
     acc,
     acc.lineNumber,
     expectedProjectHash,
   );
+}
+
+/**
+ * Collect a checkpoint/session-name/fork metadata event for post-replay folding.
+ * These events never modify history.
+ */
+function collectMetadataEvent(
+  acc: ReplayAccumulators,
+  seq: number,
+  timestamp: string,
+  type: string,
+  payload: Record<string, unknown>,
+  lineNumber: number,
+): void {
+  acc.rawMetadataEvents.push({
+    v: 1,
+    seq,
+    ts: timestamp,
+    type: type as SessionRecordLine['type'],
+    payload,
+  });
+  if (!('checkpointId' in payload) && type !== 'session_named') {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed ${type} event (missing checkpointId), skipping`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +439,7 @@ function applyParsedEvent(
 function dispatchEvent(
   eventType: string,
   payload: Record<string, unknown>,
+  timestamp: string,
   acc: ReplayAccumulators,
   lineNumber: number,
   expectedProjectHash: string,
@@ -432,6 +467,21 @@ function dispatchEvent(
       break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);
+      break;
+    case 'checkpoint_created':
+    case 'checkpoint_renamed':
+    case 'checkpoint_deleted':
+    case 'session_forked':
+    case 'session_named':
+      // Metadata events never affect history; collected for post-replay folding.
+      collectMetadataEvent(
+        acc,
+        acc.lastSeq,
+        timestamp,
+        eventType,
+        payload,
+        lineNumber,
+      );
       break;
     default: {
       acc._unknownEventCount++;
@@ -486,6 +536,9 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   }
 
   // @pseudocode line 161-169: Return success result
+  const folded = foldCheckpointMetadata(acc.rawMetadataEvents);
+  const sessionName = deriveSessionName(acc.rawMetadataEvents);
+  const ancestry = deriveAncestry(acc.rawMetadataEvents);
   return {
     ok: true,
     history: acc.history,
@@ -494,7 +547,114 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
     eventCount: acc.eventCount,
     warnings: acc.warnings,
     sessionEvents: acc.sessionEvents,
+    checkpoints: folded,
+    sessionName,
+    ancestry,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Metadata folding helpers (checkpoint lifecycle + session name)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fold checkpoint lifecycle events into a stable view ordered by sequence.
+ * Each checkpoint is tracked by stable `checkpointId`. Created events set
+ * the name, watermark, and createdAt; renamed events update the name;
+ * deleted events set `deleted: true`.
+ */
+export function foldCheckpointMetadata(
+  events: readonly SessionRecordLine[],
+): CheckpointMetadataView[] {
+  const byId = new Map<string, CheckpointMetadataView>();
+
+  for (const line of events) {
+    foldCheckpointLine(line, byId);
+  }
+
+  return Array.from(byId.values()).sort((a, b) => a.sequence - b.sequence);
+}
+
+function foldCheckpointLine(
+  line: SessionRecordLine,
+  byId: Map<string, CheckpointMetadataView>,
+): void {
+  if (typeof line.payload !== 'object' || line.payload === null) return;
+  const payload = line.payload;
+  const checkpointId =
+    'checkpointId' in payload ? payload.checkpointId : undefined;
+  if (typeof checkpointId !== 'string' || checkpointId.length === 0) return;
+  const existing = byId.get(checkpointId);
+  const name = 'name' in payload ? payload.name : undefined;
+  if (
+    line.type === 'checkpoint_created' &&
+    typeof name === 'string' &&
+    existing === undefined
+  ) {
+    byId.set(checkpointId, {
+      checkpointId,
+      name,
+      sequence: line.seq,
+      deleted: false,
+      createdAt: line.ts,
+    });
+  } else if (
+    line.type === 'checkpoint_renamed' &&
+    typeof name === 'string' &&
+    existing !== undefined
+  ) {
+    byId.set(checkpointId, { ...existing, name });
+  } else if (line.type === 'checkpoint_deleted' && existing !== undefined) {
+    byId.set(checkpointId, { ...existing, deleted: true });
+  }
+}
+
+function isSessionForkedPayload(value: unknown): value is SessionForkedPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('parentSessionId' in value) || !('parentSequence' in value)) {
+    return false;
+  }
+  if (!('checkpointId' in value) || !('checkpointName' in value)) return false;
+  return (
+    typeof value.parentSessionId === 'string' &&
+    typeof value.parentSequence === 'number' &&
+    typeof value.checkpointId === 'string' &&
+    typeof value.checkpointName === 'string'
+  );
+}
+
+function deriveAncestry(
+  events: readonly SessionRecordLine[],
+): SessionForkedPayload | undefined {
+  for (const line of events) {
+    if (
+      line.type === 'session_forked' &&
+      isSessionForkedPayload(line.payload)
+    ) {
+      return line.payload;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Derive the most recent mutable session name from `session_named` events.
+ * Returns `null` if the last event clears the name, or `undefined` if no
+ * `session_named` event exists.
+ */
+function deriveSessionName(
+  events: readonly SessionRecordLine[],
+): string | null | undefined {
+  let result: string | null | undefined = undefined;
+  for (const line of events) {
+    if (line.type !== 'session_named') continue;
+    const payload = line.payload as Record<string, unknown>;
+    const name = payload.name;
+    if (name === null || typeof name === 'string') {
+      result = name;
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -548,6 +708,75 @@ export async function replaySession(
     }
   } catch (streamError: unknown) {
     // @pseudocode line 141-142
+    const message =
+      streamError instanceof Error ? streamError.message : String(streamError);
+    return {
+      ok: false,
+      error: `Failed to read file: ${message}`,
+      warnings: acc.warnings,
+    };
+  }
+
+  return finalizeReplay(acc);
+}
+
+async function applyBoundedReplayLine(
+  rawLine: string,
+  maxSequence: number,
+  expectedProjectHash: string,
+  acc: ReplayAccumulators,
+): Promise<ReplayResult | 'complete' | undefined> {
+  if (rawLine.trim() === '') return undefined;
+  const parsed = parseLine(rawLine, acc.lineNumber, acc);
+  if (parsed === null) return undefined;
+  if (typeof parsed.seq === 'number' && parsed.seq > maxSequence) {
+    return 'complete';
+  }
+  return applyParsedEvent(parsed, acc, expectedProjectHash);
+}
+
+/**
+ * Replay a session through an inclusive maximum sequence number.
+ * Events with `seq > maxSequence` are ignored entirely (not even parsed).
+ * Used for checkpoint fork creation: replay through the checkpoint watermark.
+ */
+export async function replaySessionThroughSequence(
+  filePath: string,
+  expectedProjectHash: string,
+  maxSequence: number,
+): Promise<ReplayResult> {
+  const acc = createAccumulators();
+
+  try {
+    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    const reader = readline.createInterface({ input: stream });
+
+    for await (let rawLine of reader) {
+      acc.lineNumber++;
+      acc.totalLines = acc.lineNumber;
+
+      if (acc.lineNumber === 1 && rawLine.startsWith('\uFEFF')) {
+        rawLine = rawLine.slice(1);
+      }
+
+      const outcome = await applyBoundedReplayLine(
+        rawLine,
+        maxSequence,
+        expectedProjectHash,
+        acc,
+      );
+      if (outcome === 'complete') {
+        reader.close();
+        stream.destroy();
+        return finalizeReplay(acc);
+      }
+      if (outcome !== undefined) {
+        reader.close();
+        stream.destroy();
+        return outcome;
+      }
+    }
+  } catch (streamError: unknown) {
     const message =
       streamError instanceof Error ? streamError.message : String(streamError);
     return {

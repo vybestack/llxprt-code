@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fsPromises from 'fs/promises';
 import React from 'react';
+import { dirname } from 'node:path';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import type {
@@ -16,83 +16,83 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import {
-  decodeTagName,
-  EmojiFilter,
-  type EmojiFilterMode,
-  INITIAL_HISTORY_LENGTH,
+  CheckpointService,
+  HistoryMutationService,
+  SessionDiscovery,
+  getProjectHash,
+  type ContinueTarget,
   type IContent,
+  type SessionRecordingService,
   type TextBlock,
-  type CheckpointContent,
 } from '@vybestack/llxprt-code-core';
-import path from 'path';
 import type {
-  HistoryItemChatList,
   ChatDetail,
+  HistoryItemChatList,
   HistoryItemWithoutId,
 } from '../types.js';
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import {
-  iContentToCheckpoint,
-  checkpointToIContent,
-} from './checkpointContentValidation.js';
 
-/**
- * Resolve emoji filter mode setting, defaulting to 'auto' for invalid values.
- */
-function resolveEmojiFilterMode(setting: unknown): EmojiFilterMode {
-  // Check for invalid/falsy values that should default to 'auto'
-  const isInvalid =
-    setting === undefined ||
-    setting === null ||
-    setting === false ||
-    setting === '';
-  const isNumericInvalid = setting === 0 || Number.isNaN(setting);
+function getProjectHashForContext(context: CommandContext): string | null {
+  const recording = getRecording(context);
+  if (recording !== null) return recording.getProjectHash();
+  const config = context.services.config;
+  return config ? getProjectHash(config.getProjectRoot()) : null;
+}
+function getRecording(context: CommandContext): SessionRecordingService | null {
+  return (
+    context.recordingSwapCallbacks?.getCurrentRecording() ??
+    context.recordingIntegration?.getRecordingService() ??
+    null
+  );
+}
 
-  if (isInvalid || isNumericInvalid) {
-    return 'auto';
-  }
-  return setting as EmojiFilterMode;
+function getChatsDir(context: CommandContext): string | null {
+  const recording = getRecording(context);
+  if (recording !== null) return recording.getChatsDir();
+  return context.services.config?.storage.getProjectChatsDir() ?? null;
+}
+
+function resolveCheckpoint(
+  ref: string,
+  checkpoints: ReadonlyArray<Extract<ContinueTarget, { kind: 'checkpoint' }>>,
+): Extract<ContinueTarget, { kind: 'checkpoint' }> | null {
+  const exactId = checkpoints.find(
+    (checkpoint) => checkpoint.checkpointId === ref,
+  );
+  if (exactId !== undefined) return exactId;
+  const names = checkpoints.filter(
+    (checkpoint) => checkpoint.checkpointName === ref,
+  );
+  return names.length === 1 ? names[0] : null;
+}
+
+async function listProjectCheckpoints(
+  context: CommandContext,
+): Promise<Array<Extract<ContinueTarget, { kind: 'checkpoint' }>>> {
+  const projectHash = getProjectHashForContext(context);
+  if (projectHash === null) return [];
+  const chatsDir = getChatsDir(context);
+  if (chatsDir === null) return [];
+  const targets = await SessionDiscovery.listContinueTargets(
+    chatsDir,
+    projectHash,
+  );
+  return targets.filter(
+    (target): target is Extract<ContinueTarget, { kind: 'checkpoint' }> =>
+      target.kind === 'checkpoint',
+  );
 }
 
 const getSavedChatTags = async (
   context: CommandContext,
-  mtSortDesc: boolean,
 ): Promise<ChatDetail[]> => {
-  const cfg = context.services.config;
-  const tempDir = cfg?.storage.getProjectTempDir();
-  if (!tempDir) {
-    return [];
-  }
-  try {
-    const file_head = 'checkpoint-';
-    const file_tail = '.json';
-    const files = await fsPromises.readdir(tempDir);
-    const chatDetails: ChatDetail[] = [];
-
-    for (const file of files) {
-      if (file.startsWith(file_head) && file.endsWith(file_tail)) {
-        const filePath = path.join(tempDir, file);
-        const stats = await fsPromises.stat(filePath);
-        const tagName = file.slice(file_head.length, -file_tail.length);
-        chatDetails.push({
-          name: decodeTagName(tagName),
-          mtime: stats.mtime.toISOString(),
-        });
-      }
-    }
-
-    chatDetails.sort((a, b) =>
-      mtSortDesc
-        ? b.mtime.localeCompare(a.mtime)
-        : a.mtime.localeCompare(b.mtime),
-    );
-
-    return chatDetails;
-  } catch {
-    return [];
-  }
+  const checkpoints = await listProjectCheckpoints(context);
+  return checkpoints.map((checkpoint) => ({
+    name: checkpoint.checkpointName,
+    mtime: checkpoint.source.lastModified.toISOString(),
+  }));
 };
 
 const checkpointSuggestionDescription = 'Saved conversation checkpoint';
@@ -101,13 +101,8 @@ const chatTagSchema: CommandArgumentSchema = [
     kind: 'value',
     name: 'tag',
     description: 'Select saved checkpoint',
-    /**
-     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
-     * @requirement:REQ-004
-     * Schema completer replaces legacy checkpoint completion.
-     */
     completer: withFuzzyFilter(async (ctx) => {
-      const chatDetails = await getSavedChatTags(ctx, true);
+      const chatDetails = await getSavedChatTags(ctx);
       return chatDetails.map((chat) => ({
         value: chat.name,
         description: checkpointSuggestionDescription,
@@ -121,7 +116,7 @@ const listCommand: SlashCommand = {
   description: 'List saved conversation checkpoints',
   kind: CommandKind.BUILT_IN,
   action: async (context): Promise<void> => {
-    const chatDetails = await getSavedChatTags(context, false);
+    const chatDetails = await getSavedChatTags(context);
 
     const item: HistoryItemChatList = {
       type: MessageType.CHAT_LIST,
@@ -147,19 +142,40 @@ const saveCommand: SlashCommand = {
       };
     }
 
-    const { logger, config } = context.services;
-    await logger.initialize();
+    const recording = getRecording(context);
+    const projectHash = getProjectHashForContext(context);
+    if (!recording || projectHash === null) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'No recording available to create checkpoint.',
+      };
+    }
 
-    // Check for overwrite confirmation first
-    if (context.overwriteConfirmed !== true) {
-      const exists = await logger.checkpointExists(tag);
-      if (exists) {
+    try {
+      await new CheckpointService().createCheckpoint(
+        recording,
+        projectHash,
+        tag,
+        context.overwriteConfirmed === true,
+      );
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Checkpoint saved: ${tag}.`,
+      };
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (
+        context.overwriteConfirmed !== true &&
+        detail.includes('already exists')
+      ) {
         return {
           type: 'confirm_action',
           prompt: React.createElement(
             Text,
             null,
-            'A checkpoint with the tag ',
+            'A session or checkpoint named ',
             React.createElement(Text, { color: Colors.AccentPurple }, tag),
             ' already exists. Do you want to overwrite it?',
           ),
@@ -168,35 +184,12 @@ const saveCommand: SlashCommand = {
           },
         };
       }
-    }
-
-    const client = config?.getAgentClient();
-    // Check if chat is initialized before accessing it
-    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'No chat history available to save.',
+        content: `Failed to save checkpoint: ${detail}`,
       };
     }
-
-    const chat = client.getChat();
-    const history = chat.getHistory();
-    if (history.length > INITIAL_HISTORY_LENGTH) {
-      const checkpointData: CheckpointContent[] =
-        history.map(iContentToCheckpoint);
-      await logger.saveCheckpoint(checkpointData, tag);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Conversation checkpoint saved with tag: ${decodeTagName(tag)}.`,
-      };
-    }
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: 'No conversation found to save.',
-    };
   },
 };
 
@@ -218,64 +211,10 @@ const resumeCommand: SlashCommand = {
       };
     }
 
-    const { logger, config } = context.services;
-    await logger.initialize();
-
-    // Get emoji filter mode from settings
-    const emojiFilterSetting = config?.getEphemeralSetting('emojifilter');
-    // Determine emoji filter mode - use 'auto' for falsy/invalid values
-    const emojiFilterMode = resolveEmojiFilterMode(emojiFilterSetting);
-
-    // Create emoji filter if not in 'allowed' mode
-    const emojiFilter =
-      emojiFilterMode !== 'allowed'
-        ? new EmojiFilter({ mode: emojiFilterMode })
-        : undefined;
-
-    const checkpoint = await logger.loadCheckpoint(tag);
-    let conversation: IContent[] = checkpoint.history.map((item) =>
-      checkpointToIContent(item),
-    );
-
-    // Apply emoji filtering if needed
-    if (emojiFilter) {
-      conversation = conversation.map((ic) => ({
-        ...ic,
-        blocks: ic.blocks.map((b) => {
-          if (b.type === 'text') {
-            const filterResult = emojiFilter.filterText(b.text);
-            return { ...b, text: filterResult.filtered as string };
-          }
-          return b;
-        }),
-      }));
-    }
-
-    if (conversation.length === 0) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `No saved checkpoint found with tag: ${decodeTagName(tag)}.`,
-      };
-    }
-
-    // Convert checkpoint history to UI history items for display
-    // Use LoadHistoryActionReturn to properly sync both UI and client history
-    const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
-      const text = content.blocks
-        .filter((b) => b.type === 'text')
-        .map((b) => b.text)
-        .join('');
-      return {
-        type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
-        text,
-      };
-    });
-
+    // /chat resume is an alias of /continue — both enter the same transition service
     return {
-      type: 'load_history',
-      history: uiHistory,
-      clientHistory: conversation,
+      type: 'perform_resume',
+      sessionRef: tag,
     };
   },
 };
@@ -300,10 +239,7 @@ const deleteCommand: SlashCommand = {
       };
     }
 
-    const { logger } = context.services;
-    await logger.initialize();
-
-    if (force === false && context.overwriteConfirmed !== true) {
+    if (!force && context.overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: React.createElement(
@@ -319,23 +255,78 @@ const deleteCommand: SlashCommand = {
       };
     }
 
-    if (!(await logger.checkpointExists(tag))) {
+    const recording = getRecording(context);
+    const checkpoints = await listProjectCheckpoints(context);
+    const target = resolveCheckpoint(tag, checkpoints);
+    if (!target) {
       return {
         type: 'message',
         messageType: 'info',
-        content: `No saved checkpoint found with tag: ${decodeTagName(tag)}.`,
+        content: `No checkpoint found with tag: ${tag}.`,
       };
     }
 
-    await logger.deleteCheckpoint(tag);
-
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Deleted checkpoint: ${decodeTagName(tag)}`,
-    };
+    try {
+      const service = new CheckpointService();
+      if (recording?.getSessionId() === target.source.sessionId) {
+        await service.deleteCheckpoint(
+          recording,
+          target.source.projectHash,
+          target.checkpointId,
+        );
+      } else {
+        await service.deleteCheckpointClosed(
+          target.source.filePath,
+          target.source.projectHash,
+          getChatsDir(context) ?? dirname(target.source.filePath),
+          target.source.sessionId,
+          target.checkpointId,
+        );
+      }
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Deleted checkpoint: ${tag}`,
+      };
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to delete checkpoint: ${detail}`,
+      };
+    }
   },
 };
+
+async function renameCheckpointTarget(
+  context: CommandContext,
+  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+  newName: string,
+  projectHash: string,
+): Promise<void> {
+  const recording = getRecording(context);
+  const service = new CheckpointService();
+  if (recording?.getSessionId() === target.source.sessionId) {
+    await service.renameCheckpoint(
+      recording,
+      projectHash,
+      target.checkpointId,
+      newName,
+      context.overwriteConfirmed === true,
+    );
+    return;
+  }
+  await service.renameCheckpointClosed(
+    target.source.filePath,
+    projectHash,
+    getChatsDir(context) ?? dirname(target.source.filePath),
+    target.source.sessionId,
+    target.checkpointId,
+    newName,
+    context.overwriteConfirmed === true,
+  );
+}
 
 const renameCommand: SlashCommand = {
   name: 'rename',
@@ -354,25 +345,45 @@ const renameCommand: SlashCommand = {
     }
 
     const [oldTag, newTag] = parts;
-    const { logger } = context.services;
-    await logger.initialize();
 
-    if (!(await logger.checkpointExists(oldTag))) {
+    const checkpoints = await listProjectCheckpoints(context);
+    const target = resolveCheckpoint(oldTag, checkpoints);
+    if (!target) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `No checkpoint found with tag: ${decodeTagName(oldTag)}`,
+        content: `No checkpoint found with tag: ${oldTag}`,
       };
     }
 
-    if (await logger.checkpointExists(newTag)) {
-      if (context.overwriteConfirmed !== true) {
+    const projectHash = getProjectHashForContext(context);
+    if (projectHash === null) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Project context is unavailable.',
+      };
+    }
+
+    try {
+      await renameCheckpointTarget(context, target, newTag, projectHash);
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Renamed checkpoint from ${oldTag} to ${newTag}`,
+      };
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (
+        context.overwriteConfirmed !== true &&
+        detail.includes('already exists')
+      ) {
         return {
           type: 'confirm_action',
           prompt: React.createElement(
             Text,
             null,
-            'A checkpoint with the tag ',
+            'A session or checkpoint named ',
             React.createElement(Text, { color: Colors.AccentPurple }, newTag),
             ' already exists. Do you want to overwrite it?',
           ),
@@ -381,20 +392,12 @@ const renameCommand: SlashCommand = {
           },
         };
       }
-      // If confirmed, delete the target checkpoint first
-      await logger.deleteCheckpoint(newTag);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to rename checkpoint: ${detail}`,
+      };
     }
-
-    // Implement rename by loading, saving to new tag, and deleting old
-    const checkpoint = await logger.loadCheckpoint(oldTag);
-    await logger.saveCheckpoint(checkpoint.history, newTag, checkpoint.context);
-    await logger.deleteCheckpoint(oldTag);
-
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Renamed checkpoint from ${decodeTagName(oldTag)} to ${decodeTagName(newTag)}`,
-    };
   },
 };
 
@@ -404,7 +407,6 @@ const clearCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context): Promise<MessageActionReturn | void> => {
     const client = context.services.config?.getAgentClient();
-    // Check if chat is initialized before clearing
     if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
@@ -415,7 +417,27 @@ const clearCommand: SlashCommand = {
 
     const chat = client.getChat();
     const history = chat.getHistory();
-    if (history.length <= INITIAL_HISTORY_LENGTH) {
+
+    const recording = getRecording(context);
+    if (!recording) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'No recording available for durable clear.',
+      };
+    }
+
+    const mutator = new HistoryMutationService();
+    const result = await mutator.clear(history, recording);
+
+    if (!result.ok) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to clear history: ${result.error}`,
+      };
+    }
+    if (result.itemsRemoved === 0) {
       return {
         type: 'message',
         messageType: 'info',
@@ -423,22 +445,13 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    // Clear both the chat history and the UI display
-    chat.clearHistory();
+    chat.setHistory(result.remainingHistory);
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
-    // Note: context.ui.clear() clears the screen, so we don't return a message
-    // The clear is visible to the user through the UI reset itself
     return undefined;
   },
 };
 
-/**
- * Restore the conversation based on the number of turns to go back.
- * @param context The slash command context.
- * @param turns Number of turns to restore (negative number).
- * @returns A LoadHistoryActionReturn to sync both UI and client history.
- */
 const restoreHistory = async (
   context: CommandContext,
   turns: number,
@@ -464,12 +477,31 @@ const restoreHistory = async (
     };
   }
 
-  // Calculate how many entries to keep
-  // Each turn typically has 2 entries (user + assistant), plus initial system/user
-  const entriesToRemove = turnsToRestore * 2;
-  const minEntries = 2; // Keep at least the initial entries
+  const recording = getRecording(context);
+  if (!recording) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'No recording available for durable restore.',
+    };
+  }
 
-  if (currentHistory.length <= minEntries + entriesToRemove) {
+  const mutator = new HistoryMutationService();
+  const result = await mutator.restore(
+    currentHistory,
+    turnsToRestore,
+    recording,
+  );
+
+  if (!result.ok) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Failed to restore history: ${result.error}`,
+    };
+  }
+
+  if (result.itemsRemoved === 0) {
     return {
       type: 'message',
       messageType: 'info',
@@ -477,26 +509,27 @@ const restoreHistory = async (
     };
   }
 
-  // Create new history by removing the last N turns
-  const newHistory = currentHistory.slice(0, -entriesToRemove);
+  // Apply the new history only after persistence succeeds
+  chat.setHistory(result.remainingHistory);
 
   // Convert to UI history items for display
-  const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
-    const textBlocks = content.blocks.filter(
-      (b): b is TextBlock => b.type === 'text',
-    );
-    const text = textBlocks.map((b) => b.text).join('');
-    return {
-      type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
-      text,
-    };
-  });
+  const uiHistory: HistoryItemWithoutId[] = result.remainingHistory.map(
+    (content: IContent) => {
+      const textBlocks = content.blocks.filter(
+        (b): b is TextBlock => b.type === 'text',
+      );
+      const text = textBlocks.map((b) => b.text).join('');
+      return {
+        type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
+        text,
+      };
+    },
+  );
 
-  // Use LoadHistoryActionReturn to properly sync both UI and client history
   return {
     type: 'load_history',
     history: uiHistory,
-    clientHistory: newHistory,
+    clientHistory: result.remainingHistory,
   };
 };
 
@@ -529,6 +562,71 @@ const restoreCommand: SlashCommand = {
   },
 };
 
+const nameCommand: SlashCommand = {
+  name: 'name',
+  description: 'Name the active session. Usage: /chat name <name>',
+  kind: CommandKind.BUILT_IN,
+  action: async (context, args): Promise<SlashCommandActionReturn> => {
+    const name = args.trim();
+    if (!name) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Missing name. Usage: /chat name <name>',
+      };
+    }
+
+    const recording = getRecording(context);
+    const projectHash = getProjectHashForContext(context);
+    if (!recording || projectHash === null) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'No active recording to name.',
+      };
+    }
+
+    try {
+      await new CheckpointService().setSessionName(
+        recording,
+        projectHash,
+        name,
+        context.overwriteConfirmed === true,
+      );
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Session named: ${name}`,
+      };
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (
+        context.overwriteConfirmed !== true &&
+        detail.includes('already exists')
+      ) {
+        return {
+          type: 'confirm_action',
+          prompt: React.createElement(
+            Text,
+            null,
+            'A session or checkpoint named ',
+            React.createElement(Text, { color: Colors.AccentPurple }, name),
+            ' already exists. Do you want to overwrite it?',
+          ),
+          originalInvocation: {
+            raw: context.invocation?.raw ?? `/chat name ${name}`,
+          },
+        };
+      }
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to name session: ${detail}`,
+      };
+    }
+  },
+};
+
 const debugCommand: SlashCommand = {
   name: 'debug',
   description: 'Show chat diagnostics and debug information',
@@ -539,11 +637,9 @@ const debugCommand: SlashCommand = {
 
     const debugInfo: string[] = [];
 
-    // Chat initialization status
     const chatInitialized = client?.hasChatInitialized() ?? false;
     debugInfo.push(`Chat initialized: ${chatInitialized}`);
 
-    // History information
     if (chatInitialized && client) {
       try {
         const chat = client.getChat();
@@ -556,7 +652,6 @@ const debugCommand: SlashCommand = {
       debugInfo.push('History entries: 0 (chat not initialized)');
     }
 
-    // Model information
     if (config) {
       try {
         const model = config.getModel();
@@ -568,12 +663,12 @@ const debugCommand: SlashCommand = {
       debugInfo.push('Current model: unavailable (config not initialized)');
     }
 
-    // Checkpoint directory information
-    const checkpointDir = config?.storage.getProjectTempDir();
-    if (checkpointDir) {
-      debugInfo.push(`Checkpoint directory: ${checkpointDir}`);
+    const recording = getRecording(context);
+    if (recording?.getFilePath()) {
+      debugInfo.push(`Recording file: ${recording.getFilePath()}`);
+      debugInfo.push(`Session ID: ${recording.getSessionId()}`);
     } else {
-      debugInfo.push('Checkpoint directory: unavailable');
+      debugInfo.push('Recording: not active');
     }
 
     return {
@@ -596,6 +691,7 @@ export const chatCommand: SlashCommand = {
     renameCommand,
     clearCommand,
     restoreCommand,
+    nameCommand,
     debugCommand,
   ],
   action: async (): Promise<MessageActionReturn> => ({
@@ -604,11 +700,12 @@ export const chatCommand: SlashCommand = {
     content: `Available /chat commands:
 • list - List all saved conversation checkpoints
 • save <tag> - Save current conversation with a tag
-• resume <tag> - Resume a saved conversation
+• resume <tag> - Resume a saved conversation (alias of /continue)
 • delete <tag> [--force] - Delete a saved checkpoint
 • rename <old_tag> <new_tag> - Rename a checkpoint
 • clear - Clear current conversation history
 • restore <number> - Restore conversation to N turns ago
+• name <name> - Name the active session
 • debug - Show chat diagnostics and debug information`,
   }),
 };

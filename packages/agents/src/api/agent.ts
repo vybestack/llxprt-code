@@ -345,11 +345,24 @@ export interface IdeStatus {
   readonly modeEnabled: boolean;
 }
 
-export interface SessionCheckpoint {
-  readonly id: string;
+export interface CheckpointInfo {
+  readonly checkpointId: string;
+  readonly name: string;
+  readonly sessionId: string;
+  readonly sequence: number;
   readonly createdAt: string;
-  readonly label?: string;
-  readonly messageCount: number;
+}
+
+export interface SessionInfo {
+  readonly id: string;
+  readonly name: string | null;
+  readonly title?: string | null;
+  readonly createdAt: string;
+  readonly modifiedAt: string;
+  readonly parentSessionId?: string;
+  readonly parentSequence?: number;
+  readonly checkpointId?: string;
+  readonly checkpointName?: string;
 }
 
 export interface SessionRecordingState {
@@ -670,9 +683,15 @@ export interface AgentSessionControl {
     target: 'latest' | string,
     options?: { readonly prefix?: boolean },
   ): Promise<readonly AgentHistoryItem[]>;
-  createCheckpoint(label?: string): Promise<SessionCheckpoint>;
-  restoreCheckpoint(id: string): Promise<void>;
-  listCheckpoints(): readonly SessionCheckpoint[];
+  createCheckpoint(name: string): Promise<CheckpointInfo>;
+  forkFromCheckpoint(ref: string): Promise<SessionInfo>;
+  listCheckpoints(): Promise<readonly CheckpointInfo[]>;
+  renameCheckpoint(ref: string, name: string): Promise<void>;
+  deleteCheckpoint(ref: string): Promise<void>;
+  nameCurrentSession(name: string): Promise<void>;
+  resumeSession(ref: string): Promise<SessionInfo>;
+  listSessions(): Promise<readonly SessionInfo[]>;
+  deleteSession(ref: string): Promise<void>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
 }

@@ -13,6 +13,8 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
+import { SessionDiscovery } from '@vybestack/llxprt-code-core';
+import { basename } from 'node:path';
 
 /**
  * Schema for /continue command tab completion
@@ -22,16 +24,56 @@ import type { CommandArgumentSchema } from './schema/types.js';
 const continueSchema: CommandArgumentSchema = [
   {
     kind: 'value' as const,
-    name: 'session',
-    description: 'Session ID, index, or "latest"',
+    name: 'target',
+    description: 'Session/checkpoint name, session ID, index, or "latest"',
     completer: async (ctx: CommandContext) => {
-      // In non-interactive mode, return empty (graceful handling)
       const config = ctx.services.config;
-      if (config == null || config.isInteractive() !== true) {
-        return [];
+      if (config?.isInteractive() !== true) return [];
+      const latest = {
+        value: 'latest',
+        description: 'Most recent session',
+      };
+      const storage = config.storage as
+        | Partial<typeof config.storage>
+        | undefined;
+      if (
+        typeof storage?.getProjectChatsDir !== 'function' ||
+        typeof storage.getProjectTempDir !== 'function'
+      ) {
+        return [latest];
       }
-      // Return at minimum 'latest'
-      return [{ value: 'latest', description: 'Most recent session' }];
+      let targets: Awaited<
+        ReturnType<typeof SessionDiscovery.listContinueTargets>
+      >;
+      try {
+        targets = await SessionDiscovery.listContinueTargets(
+          storage.getProjectChatsDir(),
+          basename(storage.getProjectTempDir()),
+        );
+      } catch {
+        return [latest];
+      }
+      return [
+        latest,
+        ...targets.flatMap((target) => {
+          if (target.kind === 'checkpoint') {
+            return [
+              {
+                value: target.checkpointName,
+                description: 'Recording checkpoint',
+              },
+            ];
+          }
+          return target.session.name
+            ? [
+                {
+                  value: target.session.name,
+                  description: 'Named session',
+                },
+              ]
+            : [];
+        }),
+      ];
     },
   },
 ];

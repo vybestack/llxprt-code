@@ -30,10 +30,12 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import {
   SESSION_TITLE_MAX_LENGTH,
+  type ContinueResolution,
+  type ContinueTarget,
   type SessionSummary,
   type SessionStartPayload,
 } from './types.js';
-import { readSessionHeader } from './ReplayEngine.js';
+import { readSessionHeader, replaySession } from './ReplayEngine.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
@@ -147,6 +149,103 @@ export class SessionDiscovery {
     });
 
     return summaries;
+  }
+
+  static async listContinueTargets(
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<ContinueTarget[]> {
+    const sessions = await this.listSessions(chatsDir, projectHash);
+    const sessionTargets: ContinueTarget[] = [];
+    const checkpointTargets: ContinueTarget[] = [];
+
+    for (const summary of sessions) {
+      const replay = await replaySession(summary.filePath, projectHash);
+      if (!replay.ok) {
+        continue;
+      }
+      const namedSummary = { ...summary, name: replay.sessionName };
+      sessionTargets.push({ kind: 'session', session: namedSummary });
+      for (const checkpoint of replay.checkpoints ?? []) {
+        if (!checkpoint.deleted) {
+          checkpointTargets.push({
+            kind: 'checkpoint',
+            source: namedSummary,
+            checkpointId: checkpoint.checkpointId,
+            checkpointName: checkpoint.name,
+            sequence: checkpoint.sequence,
+          });
+        }
+      }
+    }
+
+    return [...sessionTargets, ...checkpointTargets];
+  }
+
+  static resolveContinueRef(
+    ref: string,
+    targets: readonly ContinueTarget[],
+  ): ContinueResolution | SessionResolutionError {
+    const checkpointIdMatches = targets.filter(
+      (target) => target.kind === 'checkpoint' && target.checkpointId === ref,
+    );
+    if (checkpointIdMatches.length === 1) {
+      return { target: checkpointIdMatches[0] };
+    }
+    if (checkpointIdMatches.length > 1) {
+      return { error: `Ambiguous checkpoint ID '${ref}'` };
+    }
+
+    const namedMatches = targets.filter((target) =>
+      target.kind === 'session'
+        ? target.session.name === ref
+        : target.checkpointName === ref,
+    );
+    if (namedMatches.length === 1) {
+      return { target: namedMatches[0] };
+    }
+    if (namedMatches.length > 1) {
+      return { error: `Ambiguous continue target name '${ref}'` };
+    }
+
+    const sessions = targets
+      .filter(
+        (target): target is Extract<ContinueTarget, { kind: 'session' }> =>
+          target.kind === 'session',
+      )
+      .map((target) => target.session);
+    if (ref === 'latest' && sessions.length > 0) {
+      return { target: { kind: 'session', session: sessions[0] } };
+    }
+    const resolved = this.resolveSessionRef(ref, sessions);
+    return 'session' in resolved
+      ? { target: { kind: 'session', session: resolved.session } }
+      : resolved;
+  }
+
+  static async validateAvailableName(
+    name: string,
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<string> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Name must not be empty');
+    }
+    if (trimmed === 'latest' || /^[1-9]\d*$/.test(trimmed)) {
+      throw new Error(`Name '${trimmed}' is reserved`);
+    }
+    const targets = await this.listContinueTargets(chatsDir, projectHash);
+    const duplicate = targets.some((target) =>
+      target.kind === 'session'
+        ? target.session.name === trimmed ||
+          target.session.sessionId === trimmed
+        : target.checkpointName === trimmed,
+    );
+    if (duplicate) {
+      throw new Error(`Name '${trimmed}' already exists`);
+    }
+    return trimmed;
   }
 
   /**

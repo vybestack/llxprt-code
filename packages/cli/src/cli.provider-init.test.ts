@@ -5,6 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
@@ -200,20 +204,24 @@ function makeResumeResult(historyText = 'resumed'): ResumeResult {
 
 describe('cli main provider initialization', () => {
   const originalIsTTY = process.stdin.isTTY;
+  let projectTempDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    projectTempDir = await mkdtemp(join(tmpdir(), 'cli-provider-init-'));
     dynamicSettingsRegistry.reset();
     process.stdin.isTTY = true;
     vi.restoreAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await rm(projectTempDir, { recursive: true, force: true });
     process.stdin.isTTY = originalIsTTY;
     dynamicSettingsRegistry.reset();
     vi.resetModules();
   });
 
   it('initializes content generator config before interactive provider usage', async () => {
+    const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
@@ -244,13 +252,13 @@ describe('cli main provider initialization', () => {
       setEphemeralSetting: vi.fn(),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => 'session-1'),
+      getSessionId: vi.fn(() => freshSessionId),
       adoptSessionId: vi.fn(),
       getQuestion: vi.fn(() => ''),
       getExperimentalZedIntegration: vi.fn(() => false),
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
-      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getProjectTempDir: vi.fn(() => projectTempDir),
       getContinueSessionRef: vi.fn(() => null),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -301,6 +309,7 @@ describe('cli main provider initialization', () => {
   });
 
   it('falls back to a fresh session and does not adopt corrupted session ID when restoreHistory fails during --continue flow (issue #1873)', async () => {
+    const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
@@ -338,13 +347,13 @@ describe('cli main provider initialization', () => {
       setEphemeralSetting: vi.fn(),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => 'session-1'),
+      getSessionId: vi.fn(() => freshSessionId),
       adoptSessionId,
       getQuestion: vi.fn(() => ''),
       getExperimentalZedIntegration: vi.fn(() => false),
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
-      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getProjectTempDir: vi.fn(() => projectTempDir),
       getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -430,6 +439,7 @@ describe('cli main provider initialization', () => {
   });
 
   it('adopts the resumed session ID and does not release resources when restoreHistory succeeds during --continue flow (issue #1873)', async () => {
+    const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
@@ -465,13 +475,13 @@ describe('cli main provider initialization', () => {
       setEphemeralSetting: vi.fn(),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => 'session-1'),
+      getSessionId: vi.fn(() => freshSessionId),
       adoptSessionId,
       getQuestion: vi.fn(() => ''),
       getExperimentalZedIntegration: vi.fn(() => false),
       getZedIntegrationEnabled: vi.fn(() => false),
       getTrustedFolder: vi.fn(() => true),
-      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getProjectTempDir: vi.fn(() => projectTempDir),
       getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],

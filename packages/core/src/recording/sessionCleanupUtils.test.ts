@@ -83,13 +83,20 @@ function writeSessionFile(
  * Returns the absolute path to the created lock file.
  */
 function writeLockFile(sessionFilePath: string, pid: number): string {
-  const lockPath = SessionLockManager.getLockPathFromFilePath(sessionFilePath);
+  const firstLine = fs.readFileSync(sessionFilePath, 'utf-8').split('\n')[0];
+  const header = JSON.parse(firstLine) as {
+    payload: { sessionId: string };
+  };
+  const lockPath = SessionLockManager.getLockPath(
+    path.dirname(sessionFilePath),
+    header.payload.sessionId,
+  );
   fs.writeFileSync(
     lockPath,
     JSON.stringify({
       pid,
       timestamp: new Date().toISOString(),
-      sessionId: 'test',
+      sessionId: header.payload.sessionId,
     }),
   );
   return lockPath;
@@ -364,6 +371,25 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
       },
     );
 
+    itProp(
+      'keeps a live full-ID lock before its recording materializes',
+      async () => {
+        const lockPath = path.join(chatsDir, 'new-active-session.lock');
+        fs.writeFileSync(
+          lockPath,
+          JSON.stringify({
+            pid: process.pid,
+            timestamp: new Date().toISOString(),
+            sessionId: 'new-active-session',
+          }),
+        );
+
+        const count = await cleanupStaleLocks(chatsDir);
+
+        expect(count).toBe(0);
+        expect(fs.existsSync(lockPath)).toBe(true);
+      },
+    );
     /**
      * Test 9: cleanupStaleLocks removes stale .lock (dead PID) but preserves .jsonl
      * @plan PLAN-20260211-SESSIONRECORDING.P16
@@ -895,7 +921,10 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
             ...withinRetentionPaths,
             ...outsideRetentionPaths,
           ]) {
-            const entry = makeEntry(sessionPath, path.basename(sessionPath));
+            const header = JSON.parse(
+              fs.readFileSync(sessionPath, 'utf-8').split('\n')[0],
+            ) as { payload: { sessionId: string } };
+            const entry = makeEntry(sessionPath, header.payload.sessionId);
             const result = await shouldDeleteSession(entry);
             // stale-lock-only — not 'delete'. The retention policy decides deletion.
             expect(result).toBe('stale-lock-only');

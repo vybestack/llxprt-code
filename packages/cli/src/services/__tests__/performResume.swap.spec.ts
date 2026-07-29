@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { HistoryService } from '../../../../core/src/services/history/HistoryService.js';
 import {
   performResume,
   SessionRecordingService,
@@ -26,7 +27,6 @@ import {
   createTestSession,
   countFileEvents,
   readJsonlFile,
-  extractSessionId,
   PROJECT_HASH,
   assertResumeOk,
   assertResumeError,
@@ -301,6 +301,36 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
       collectLock(lockHandles, newLock);
     });
+
+    it('cleans the prepared recording when rollback history restoration throws', async () => {
+      const targetId = 'target-for-rollback-cleanup';
+      await createTestSession(chatsDir, {
+        sessionId: targetId,
+        contents: [makeContent('replacement history')],
+      });
+
+      const historyService = new HistoryService();
+      historyService.add(makeContent('previous history'));
+      let shouldThrow = false;
+      historyService.on('contentAdded', () => {
+        if (shouldThrow) throw new Error('rollback restore failed');
+      });
+      const context = makeResumeContext(chatsDir, {
+        currentSessionId: 'current-before-rollback',
+      });
+      context.historyService = historyService;
+      context.recordingCallbacks.setRecording = () => {
+        shouldThrow = true;
+        throw new Error('commit failed');
+      };
+
+      const result = await performResume(targetId, context);
+      expect(result).toStrictEqual({
+        ok: false,
+        error: 'Failed to commit session transition: commit failed',
+      });
+      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+    });
   });
 
   describe('"latest" Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
@@ -317,11 +347,11 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       const lock1 = await SessionLockManager.acquire(
         chatsDir,
-        extractSessionId(session1.filePath),
+        session1.sessionId,
       );
       const lock2 = await SessionLockManager.acquire(
         chatsDir,
-        extractSessionId(session2.filePath),
+        session2.sessionId,
       );
       lockHandles.push(lock1, lock2);
 

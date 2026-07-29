@@ -465,17 +465,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      */
     itProp('returns error when target session is locked', async () => {
       const sessionId = 'locked-session';
-      const { filePath } = await createTestSession(chatsDir, {
+      await createTestSession(chatsDir, {
         sessionId,
         projectHash: PROJECT_HASH,
       });
 
-      // Extract the file identifier for locking
-      const fileBasename = path.basename(filePath);
-      const lockId = fileBasename
-        .replace(/^session-/, '')
-        .replace(/\.jsonl$/, '');
-      const handle = await SessionLockManager.acquire(chatsDir, lockId);
+      const handle = await SessionLockManager.acquire(chatsDir, sessionId);
       lockHandles.push(handle);
 
       const result = await resumeSession(
@@ -513,11 +508,10 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           contents: [makeContent('newer locked content')],
         });
 
-        const fileBasename = path.basename(newer.filePath);
-        const lockId = fileBasename
-          .replace(/^session-/, '')
-          .replace(/\.jsonl$/, '');
-        const handle = await SessionLockManager.acquire(chatsDir, lockId);
+        const handle = await SessionLockManager.acquire(
+          chatsDir,
+          newer.sessionId,
+        );
         lockHandles.push(handle);
 
         const result = await resumeSession(makeResumeRequest(chatsDir));
@@ -550,13 +544,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         projectHash: PROJECT_HASH,
       });
 
-      // Lock both
-      for (const s of [s1, s2]) {
-        const fileBasename = path.basename(s.filePath);
-        const lockId = fileBasename
-          .replace(/^session-/, '')
-          .replace(/\.jsonl$/, '');
-        const handle = await SessionLockManager.acquire(chatsDir, lockId);
+      // Lock both by their full header session identities.
+      for (const session of [s1, s2]) {
+        const handle = await SessionLockManager.acquire(
+          chatsDir,
+          session.sessionId,
+        );
         lockHandles.push(handle);
       }
 

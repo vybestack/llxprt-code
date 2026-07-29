@@ -11,10 +11,13 @@ import {
   type Config,
   SessionRecordingService,
   RecordingIntegration,
+  SessionDiscovery,
+  SessionTransitionService,
   resumeSession,
   listSessions,
   deleteSession,
   getProjectHash,
+  type ContinueTarget,
   type IContent,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
@@ -258,7 +261,7 @@ export async function setupSessionRecording(
       // buildNewRecordingService generates a new sessionId so the recording
       // is fully isolated from the corrupted resumed session.
       try {
-        activeRecordingService = buildNewRecordingService(
+        activeRecordingService = await buildNewRecordingService(
           config,
           projectHash,
           chatsDir,
@@ -302,20 +305,64 @@ export async function setupSessionRecording(
   };
 }
 
-/** Build a fresh SessionRecordingService for the current run. */
+/** Build and lock a fresh SessionRecordingService for the current run. */
 export function buildNewRecordingService(
   config: Config,
   projectHash: string,
   chatsDir: string,
-): SessionRecordingService {
-  return new SessionRecordingService({
-    sessionId,
+): Promise<SessionRecordingService> {
+  return SessionRecordingService.createLocked({
+    sessionId: config.getSessionId(),
     projectHash,
     chatsDir,
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
     provider: config.getProvider() ?? 'unknown',
     model: config.getModel(),
   });
+}
+
+function startupCheckpointTarget(
+  continueRef: string,
+  targets: readonly ContinueTarget[],
+): Extract<ContinueTarget, { kind: 'checkpoint' }> | null {
+  const resolved = SessionDiscovery.resolveContinueRef(continueRef, targets);
+  if ('error' in resolved) {
+    const matchesCheckpoint = targets.some(
+      (target) =>
+        target.kind === 'checkpoint' &&
+        (target.checkpointId === continueRef ||
+          target.checkpointName === continueRef),
+    );
+    if (matchesCheckpoint) throw new Error(resolved.error);
+    return null;
+  }
+  if (resolved.target.kind !== 'checkpoint') return null;
+  return resolved.target;
+}
+
+async function forkStartupCheckpoint(
+  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+  config: Config,
+  projectHash: string,
+  chatsDir: string,
+): Promise<ResolvedRecording> {
+  const result = await new SessionTransitionService().forkFromCheckpoint(
+    target,
+    chatsDir,
+    projectHash,
+    config.getProvider() ?? 'unknown',
+    config.getModel(),
+    [...config.getWorkspaceContext().getDirectories()],
+  );
+  if (!result.ok) {
+    throw new Error(`Failed to fork checkpoint: ${result.error}`);
+  }
+  return {
+    recordingService: result.recording,
+    resumedHistory: result.history,
+    resumedLockHandle: result.lockHandle,
+    resumedSessionId: result.metadata.sessionId,
+  };
 }
 
 /**
@@ -330,11 +377,29 @@ export async function createOrResumeRecording(
   const continueRef = config.getContinueSessionRef();
   if (!continueRef) {
     return {
-      recordingService: buildNewRecordingService(config, projectHash, chatsDir),
+      recordingService: await buildNewRecordingService(
+        config,
+        projectHash,
+        chatsDir,
+      ),
       resumedHistory: null,
       resumedLockHandle: null,
       resumedSessionId: null,
     };
+  }
+
+  const targets = await SessionDiscovery.listContinueTargets(
+    chatsDir,
+    projectHash,
+  );
+  const checkpointTarget = startupCheckpointTarget(continueRef, targets);
+  if (checkpointTarget !== null) {
+    return forkStartupCheckpoint(
+      checkpointTarget,
+      config,
+      projectHash,
+      chatsDir,
+    );
   }
 
   const resumeResult = await resumeSession({
@@ -353,7 +418,11 @@ export async function createOrResumeRecording(
       ),
     );
     return {
-      recordingService: buildNewRecordingService(config, projectHash, chatsDir),
+      recordingService: await buildNewRecordingService(
+        config,
+        projectHash,
+        chatsDir,
+      ),
       resumedHistory: null,
       resumedLockHandle: null,
       resumedSessionId: null,

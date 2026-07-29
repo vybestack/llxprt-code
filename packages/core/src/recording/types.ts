@@ -33,6 +33,11 @@ export const SESSION_TITLE_MAX_LENGTH = 120;
 
 /**
  * The event types that can appear in a session JSONL file.
+ *
+ * Metadata event types (`checkpoint_created`, `checkpoint_renamed`,
+ * `checkpoint_deleted`, `session_forked`, `session_named`) never appear in
+ * model history. They are folded by {@link foldCheckpointMetadata} and surfaced
+ * separately from `IContent[]` in the replay result.
  */
 export type SessionEventType =
   | 'session_start'
@@ -42,7 +47,12 @@ export type SessionEventType =
   | 'provider_switch'
   | 'session_event'
   | 'session_metadata'
-  | 'directories_changed';
+  | 'directories_changed'
+  | 'checkpoint_created'
+  | 'checkpoint_renamed'
+  | 'checkpoint_deleted'
+  | 'session_forked'
+  | 'session_named';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -148,6 +158,76 @@ export interface DirectoriesChangedPayload {
 }
 
 // ---------------------------------------------------------------------------
+// Checkpoint and session-branching metadata event payloads.
+//
+// These metadata events are append-only and never enter model history.
+// Checkpoint lifecycle is folded by stable `checkpointId`, not mutable name.
+// ---------------------------------------------------------------------------
+
+/** Payload for `checkpoint_created` — the envelope `seq` is the branch watermark. */
+export interface CheckpointCreatedPayload {
+  checkpointId: string;
+  name: string;
+}
+
+/** Payload for `checkpoint_renamed` — display metadata only; ID/watermark fixed. */
+export interface CheckpointRenamedPayload {
+  checkpointId: string;
+  name: string;
+}
+
+/** Payload for `checkpoint_deleted` — tombstones the reference only. */
+export interface CheckpointDeletedPayload {
+  checkpointId: string;
+}
+
+/**
+ * Payload for `session_forked` — records ancestry in a self-contained child.
+ * The child does not depend on the parent file for future replay.
+ */
+export interface SessionForkedPayload {
+  parentSessionId: string;
+  parentSequence: number;
+  checkpointId: string;
+  checkpointName: string;
+}
+
+/** Payload for `session_named` — `null` clears the mutable session name. */
+export interface SessionNamedPayload {
+  name: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Folded metadata views
+// ---------------------------------------------------------------------------
+
+/**
+ * Folded view of a checkpoint after applying all lifecycle events.
+ * `sequence` is the envelope `seq` of `checkpoint_created` and is the
+ * inclusive branch watermark for replay-through-sequence.
+ */
+export interface CheckpointMetadataView {
+  readonly checkpointId: string;
+  readonly name: string;
+  readonly sequence: number;
+  readonly deleted: boolean;
+  readonly createdAt: string;
+}
+
+/** Lightweight checkpoint info returned by lifecycle operations. */
+export interface RecordingCheckpointInfo {
+  readonly checkpointId: string;
+  readonly name: string;
+  readonly sequence: number;
+}
+
+/** Lightweight session info returned by session management operations. */
+export interface SessionInfo {
+  readonly sessionId: string;
+  readonly name: string | null;
+}
+
+// ---------------------------------------------------------------------------
 // Service configuration
 // ---------------------------------------------------------------------------
 
@@ -194,6 +274,9 @@ export interface SessionMetadata {
 /**
  * Discriminated union result from the replay engine.
  * `ok: true` carries the full replay data; `ok: false` carries an error.
+ *
+ * `checkpoints` and `sessionName` are folded from metadata events and never
+ * appear in `history`.
  */
 export type ReplayResult =
   | {
@@ -204,6 +287,12 @@ export type ReplayResult =
       eventCount: number;
       warnings: string[];
       sessionEvents: SessionEventPayload[];
+      /** Checkpoints folded from lifecycle metadata events. */
+      checkpoints?: readonly CheckpointMetadataView[];
+      /** Mutable session name from the most recent `session_named` event. */
+      sessionName?: string | null;
+      /** Self-contained child ancestry from the `session_forked` event. */
+      ancestry?: SessionForkedPayload;
     }
   | {
       ok: false;
@@ -241,4 +330,19 @@ export interface SessionSummary {
    * Used for stable ordering independent of file `lastModified` mutations.
    */
   createdAt?: string;
+  name?: string | null;
+}
+
+export type ContinueTarget =
+  | { kind: 'session'; session: SessionSummary }
+  | {
+      kind: 'checkpoint';
+      source: SessionSummary;
+      checkpointId: string;
+      checkpointName: string;
+      sequence: number;
+    };
+
+export interface ContinueResolution {
+  target: ContinueTarget;
 }

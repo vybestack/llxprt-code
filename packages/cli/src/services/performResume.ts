@@ -27,14 +27,17 @@
 import {
   SessionDiscovery,
   SessionLockManager,
+  SessionTransitionService,
   resumeSession,
   RecordingIntegration,
+  type ContinueTarget,
   type IContent,
   type SessionRecordingService,
   type LockHandle,
   type SessionMetadata,
   type SessionSummary,
 } from '@vybestack/llxprt-code-core';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
@@ -64,6 +67,8 @@ export interface ResumeContext {
   currentModel: string;
   workspaceDirs: string[];
   recordingCallbacks: RecordingSwapCallbacks;
+  historyService?: HistoryService | null;
+  adoptSessionId?: (sessionId: string) => void;
   logger?: DebugLogger;
 }
 
@@ -120,6 +125,82 @@ async function findResumableSession(
   return undefined;
 }
 
+async function resumeCheckpointTarget(
+  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+  context: ResumeContext,
+): Promise<PerformResumeResult> {
+  const { chatsDir, projectHash, recordingCallbacks } = context;
+  const currentRecording = recordingCallbacks.getCurrentRecording();
+  if (currentRecording?.getSessionId() === target.source.sessionId) {
+    await currentRecording.flush();
+  }
+  const fork = await new SessionTransitionService().forkFromCheckpoint(
+    target,
+    chatsDir,
+    projectHash,
+    context.currentProvider,
+    context.currentModel,
+    context.workspaceDirs,
+    currentRecording,
+  );
+  if (!fork.ok) return fork;
+  const committed = await commitPreparedTransition(
+    fork.recording,
+    fork.lockHandle,
+    fork.metadata,
+    fork.history,
+    context,
+    true,
+  );
+  if (!committed.ok) return committed;
+  return {
+    ok: true,
+    history: fork.history,
+    metadata: fork.metadata,
+    warnings: [],
+  };
+}
+
+async function resumeLivingSession(
+  target: Extract<ContinueTarget, { kind: 'session' }>,
+  context: ResumeContext,
+): Promise<PerformResumeResult> {
+  const { chatsDir, projectHash, currentSessionId } = context;
+  if (target.session.sessionId === currentSessionId) {
+    return { ok: false, error: 'That session is already active.' };
+  }
+  if (await SessionLockManager.isLocked(chatsDir, target.session.sessionId)) {
+    return {
+      ok: false,
+      error: `Session ${target.session.sessionId} is in use by another process.`,
+    };
+  }
+  const result = await resumeSession({
+    continueRef: target.session.sessionId,
+    projectHash,
+    chatsDir,
+    currentProvider: context.currentProvider,
+    currentModel: context.currentModel,
+    workspaceDirs: context.workspaceDirs,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+  const committed = await commitPreparedTransition(
+    result.recording,
+    result.lockHandle,
+    result.metadata,
+    result.history,
+    context,
+    false,
+  );
+  if (!committed.ok) return committed;
+  return {
+    ok: true,
+    history: result.history,
+    metadata: result.metadata,
+    warnings: result.warnings,
+  };
+}
+
 /**
  * Performs session resume with all side effects.
  *
@@ -135,114 +216,128 @@ export async function performResume(
   sessionRef: string,
   context: ResumeContext,
 ): Promise<PerformResumeResult> {
-  const {
+  const { chatsDir, projectHash, currentSessionId } = context;
+
+  const targets = await SessionDiscovery.listContinueTargets(
     chatsDir,
     projectHash,
-    currentSessionId,
-    recordingCallbacks,
-    logger,
-  } = context;
-
-  // 1. List all sessions
-  const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
-
-  // 2. Resolve session reference
-  const targetSession = await resolveTargetSession(
+  );
+  const target = await resolveTarget(
     sessionRef,
-    sessions,
+    targets,
     chatsDir,
     currentSessionId,
   );
-  if (!targetSession) {
+  if (!target) {
     return {
       ok: false,
       error: 'No resumable sessions found (all locked, empty, or current).',
     };
   }
-  if (targetSession instanceof Error) {
-    return { ok: false, error: targetSession.message };
+  if (target instanceof Error) {
+    return { ok: false, error: target.message };
   }
 
-  // 3. Check same-session
-  if (targetSession.sessionId === currentSessionId) {
-    return { ok: false, error: 'That session is already active.' };
-  }
-
-  // 4. Check locked
-  if (await SessionLockManager.isLocked(chatsDir, targetSession.sessionId)) {
-    return {
-      ok: false,
-      error: `Session ${targetSession.sessionId} is in use by another process.`,
-    };
-  }
-
-  // 5. Acquire new session (before disposing old)
-  const resumeResult = await resumeSession({
-    continueRef: targetSession.sessionId,
-    projectHash,
-    chatsDir,
-    currentProvider: context.currentProvider,
-    currentModel: context.currentModel,
-    workspaceDirs: context.workspaceDirs,
-  });
-
-  if (resumeResult.ok === false) {
-    return { ok: false, error: resumeResult.error };
-  }
-
-  // 6. Dispose old infrastructure (ordered)
-  await disposeOldInfrastructure(recordingCallbacks, logger);
-
-  // 7. Create new integration and install
-  const newRecording = resumeResult.recording;
-  const newLock = resumeResult.lockHandle;
-  const newIntegration = new RecordingIntegration(newRecording);
-
-  recordingCallbacks.setRecording(
-    newRecording,
-    newIntegration,
-    newLock,
-    resumeResult.metadata,
-  );
-
-  // 8. Return success
-  return {
-    ok: true,
-    history: resumeResult.history,
-    metadata: resumeResult.metadata,
-    warnings: resumeResult.warnings,
-  };
+  return target.kind === 'checkpoint'
+    ? resumeCheckpointTarget(target, context)
+    : resumeLivingSession(target, context);
 }
 
-async function resolveTargetSession(
+async function resolveTarget(
   sessionRef: string,
-  sessions: SessionSummary[],
+  targets: ContinueTarget[],
   chatsDir: string,
   currentSessionId: string,
-): Promise<SessionSummary | Error | null> {
+): Promise<ContinueTarget | Error | null> {
+  const sessions = targets
+    .filter(
+      (target): target is Extract<ContinueTarget, { kind: 'session' }> =>
+        target.kind === 'session',
+    )
+    .map((target) => target.session);
   if (sessionRef === 'latest') {
     const session = await findResumableSession(
       sessions,
       chatsDir,
       currentSessionId,
     );
-    return session ?? null;
+    return session ? { kind: 'session', session } : null;
   }
-  const resolved = SessionDiscovery.resolveSessionRef(sessionRef, sessions);
+  const resolved = SessionDiscovery.resolveContinueRef(sessionRef, targets);
   if ('error' in resolved) {
     return new Error(resolved.error);
   }
-  return resolved.session;
+  return resolved.target;
 }
 
-async function disposeOldInfrastructure(
-  recordingCallbacks: RecordingSwapCallbacks,
+async function commitPreparedTransition(
+  recording: SessionRecordingService,
+  lockHandle: LockHandle,
+  metadata: SessionMetadata,
+  history: IContent[],
+  context: ResumeContext,
+  discardOnFailure: boolean,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const callbacks = context.recordingCallbacks;
+  const oldRecording = callbacks.getCurrentRecording();
+  const oldIntegration = callbacks.getCurrentIntegration();
+  const oldLock = callbacks.getCurrentLockHandle();
+  const historyService = context.historyService ?? null;
+  const previousHistory = historyService?.getAll() ?? null;
+  const integration = new RecordingIntegration(recording);
+  oldIntegration?.unsubscribeFromHistory();
+  try {
+    if (historyService !== null) {
+      historyService.clear();
+      historyService.addAll(history);
+      integration.subscribeToHistory(historyService);
+    }
+    context.adoptSessionId?.(metadata.sessionId);
+    callbacks.setRecording(recording, integration, lockHandle, metadata);
+  } catch (error: unknown) {
+    integration.dispose();
+    if (historyService !== null && previousHistory !== null) {
+      try {
+        historyService.clear();
+        historyService.addAll(previousHistory);
+      } catch {
+        void 0;
+      }
+      try {
+        oldIntegration?.subscribeToHistory(historyService);
+      } catch {
+        void 0;
+      }
+    }
+    context.adoptSessionId?.(context.currentSessionId);
+    const filePath = discardOnFailure ? recording.getFilePath() : null;
+    await recording.dispose().catch(() => undefined);
+    await lockHandle.release().catch(() => undefined);
+    if (filePath !== null) {
+      const { unlink } = await import('node:fs/promises');
+      await unlink(filePath).catch(() => undefined);
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      error: `Failed to commit session transition: ${detail}`,
+    };
+  }
+  await disposeInfrastructure(
+    oldIntegration,
+    oldRecording,
+    oldLock,
+    context.logger,
+  );
+  return { ok: true };
+}
+
+async function disposeInfrastructure(
+  oldIntegration: RecordingIntegration | null,
+  oldRecording: SessionRecordingService | null,
+  oldLock: LockHandle | null,
   logger?: DebugLogger,
 ): Promise<void> {
-  const oldIntegration = recordingCallbacks.getCurrentIntegration();
-  const oldRecording = recordingCallbacks.getCurrentRecording();
-  const oldLock = recordingCallbacks.getCurrentLockHandle();
-
   if (oldIntegration) {
     try {
       oldIntegration.dispose();

@@ -92,15 +92,31 @@ vi.mock('../../hooks/useSessionBrowser.js', () => ({
 function createMockSession(
   overrides: Partial<EnrichedSessionSummary> = {},
 ): EnrichedSessionSummary {
+  const sessionId = `session-${Math.random().toString(36).slice(2, 10)}`;
+  const filePath = '/test/chats/test-session.jsonl';
   const defaults: EnrichedSessionSummary = {
-    sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
-    filePath: '/test/chats/test-session.jsonl',
+    sessionId,
+    filePath,
     projectHash: 'test-project-hash',
     startTime: '2025-02-14T10:00:00Z',
     lastModified: new Date('2025-02-14T12:00:00Z'),
     fileSize: 1024,
     provider: 'anthropic',
     model: 'claude-opus-4-5-20251101',
+    target: {
+      kind: 'session',
+      session: {
+        sessionId,
+        filePath,
+        projectHash: 'test-project-hash',
+        startTime: '2025-02-14T10:00:00Z',
+        lastModified: new Date('2025-02-14T12:00:00Z'),
+        fileSize: 1024,
+        provider: 'anthropic',
+        model: 'claude-opus-4-5-20251101',
+      },
+    },
+    targetKey: `session:${sessionId}`,
     previewState: 'loaded' as PreviewState,
     firstUserMessage: 'Write me a haiku about coding',
     isLocked: false,

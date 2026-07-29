@@ -9,14 +9,11 @@
  * @requirement:REQ-010
  *
  * SessionControl implements the public `agent.session` surface (REQ-010),
- * mapping checkpoint create/restore/list, recording swap, and resume onto the
- * real core session machinery WITHOUT any deep CLI imports:
+ * mapping checkpoint lifecycle, recording swap, and resume onto the real core
+ * session machinery WITHOUT any deep CLI imports:
  *
- * - Checkpoint trio is backed by the core Logger (checkpoint-<tag>.json files
- *   under the project storage temp dir). The client's getHistory() already
- *   returns Gemini Content[], so SAVE persists that Content[] directly to the
- *   Logger (no conversion). Only RESTORE bridges back: ContentConverters
- *   converts the loaded Content[] to IContent[] before the client restore path.
+ * - Checkpoints are append-only recording metadata. Forks are prepared by the
+ *   canonical transition service before the active recording is replaced.
  * - Recording is backed by SessionRecordingService; setRecording(true) starts a
  *   service and seeds it with the current history so a file is materialized,
  *   then subscribes a RecordingIntegration to the client's HistoryService so
@@ -30,31 +27,35 @@
  *   restored IContent[] so callers (e.g. the Zed loadSession path) can replay it.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 import {
-  Logger,
-  SessionRecordingService,
+  CheckpointService,
+  HistoryMutationService,
   RecordingIntegration,
+  SessionDiscovery,
+  SessionRecordingService,
+  SessionTransitionService,
+  deleteSession as deleteRecordedSession,
+  replaySession,
   resumeSession,
   CONTINUE_LATEST,
+  type ContinueTarget,
+  type ReplayResult,
   type ResumeRequest,
+  type SessionSummary,
   type LockHandle,
-  type CheckpointContent,
 } from '@vybestack/llxprt-code-core';
-import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
   AgentSessionControl,
-  SessionCheckpoint,
+  CheckpointInfo,
+  SessionInfo,
   SessionRecordingState,
 } from '../agent.js';
 
-const CHECKPOINT_PREFIX = 'checkpoint-';
-const CHECKPOINT_SUFFIX = '.json';
 const RECORDING_FORMAT = 'jsonl';
 
 /**
@@ -65,14 +66,6 @@ const RECORDING_FORMAT = 'jsonl';
  * @requirement:REQ-010
  */
 const logger = new DebugLogger('llxprt:agents:session-control');
-
-/**
- * The shape of a parsed checkpoint file payload (Logger.saveCheckpoint writes
- * `{ history, context? }`). Loosely validated when reading the listing.
- */
-interface CheckpointFilePayload {
-  readonly history?: unknown;
-}
 
 /**
  * Callback bundle injected by AgentImpl so SessionControl can drive the core
@@ -95,15 +88,6 @@ export interface SessionControlDeps {
 }
 
 export class SessionControl implements AgentSessionControl {
-  /**
-   * The initialized core Logger, created lazily on first checkpoint use and
-   * reused thereafter. The Logger persists checkpoint-<tag>.json files under
-   * the project storage temp dir.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private logger: Logger | undefined;
-
   /**
    * The live recording service when recording is enabled, or null when it is
    * disabled. getRecording reflects this directly.
@@ -222,7 +206,20 @@ export class SessionControl implements AgentSessionControl {
     // FINDING A1: serialize through the op-chain mutex so a concurrent
     // resume/setRecording/dispose cannot interleave their multi-await
     // recording/integration/lock swaps (use-after-free / orphaned lock).
-    return this.runExclusive(() => this.resumeInternal(target));
+    return this.runExclusive(async () => {
+      if (target === 'latest') return this.resumeInternal(target);
+      await this.ensureSubscribed();
+      const targets = await this.continueTargets();
+      const resolved = SessionDiscovery.resolveContinueRef(target, targets);
+      if ('error' in resolved) {
+        throw new Error(`Failed to resume session: ${resolved.error}`);
+      }
+      if (resolved.target.kind === 'checkpoint') {
+        await this.forkTarget(resolved.target);
+        return this.deps.resolveClient().getHistory();
+      }
+      return this.resumeInternal(resolved.target.session.sessionId);
+    });
   }
 
   /**
@@ -286,9 +283,10 @@ export class SessionControl implements AgentSessionControl {
       await this.releaseLockQuietly(result.lockHandle);
       throw error;
     }
-    // restoreHistory with NO integration subscribed (no double-record). On
-    // failure the resumed resources are released and state stays disabled.
+    // restoreHistory appends into the live HistoryService, so clear the prior
+    // in-memory history after detaching integrations and before restoring.
     try {
+      await this.deps.resolveClient().resetChat();
       await this.deps.resolveClient().restoreHistory(result.history);
     } catch (error) {
       await this.disposeServiceQuietly(result.recording);
@@ -456,86 +454,196 @@ export class SessionControl implements AgentSessionControl {
     }
   }
 
-  /**
-   * Creates a checkpoint of the live conversation history. The live history is
-   * obtained via the client's getHistory() (which returns Gemini Content[]) and
-   * persisted directly via the core Logger under the tag (defaulting to a
-   * timestamped tag when no label is supplied); no conversion is needed on save.
-   * The returned SessionCheckpoint reflects the tag, the save timestamp, and the
-   * saved message count.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  async createCheckpoint(label?: string): Promise<SessionCheckpoint> {
-    const logger = await this.getLogger();
-    const tag = label ?? `checkpoint-${Date.now()}`;
-    const history = await this.deps.resolveClient().getHistory();
-    // Convert neutral IContent[] to the legacy checkpoint format ({role, parts}).
-    const checkpointHistory = ContentConverters.toGeminiContents(history);
-    await logger.saveCheckpoint(
-      checkpointHistory as unknown as CheckpointContent[],
-      tag,
-    );
-    return {
-      id: tag,
-      createdAt: new Date().toISOString(),
-      label: tag,
-      messageCount: history.length,
-    };
-  }
-
-  /**
-   * Restores a previously created checkpoint by id (tag). The persisted Gemini
-   * Content[] history is converted to IContent[] and fed through the SAME
-   * client restore path the public restoreHistory uses, so the next turn (and
-   * getHistory) observe the restored conversation.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  async restoreCheckpoint(id: string): Promise<void> {
-    const logger = await this.getLogger();
-    const { history } = await logger.loadCheckpoint(id);
-    // Checkpoint files store the legacy Google Content shape ({role, parts}).
-    // Convert to neutral IContent[] at this boundary.
-    const items = ContentConverters.toIContents(
-      history as unknown as Parameters<typeof ContentConverters.toIContents>[0],
-    );
-    await this.deps.resolveClient().restoreHistory(items);
-  }
-
-  /**
-   * Lists the checkpoints persisted under the project storage temp dir. Each
-   * checkpoint-<encodedTag>.json file maps to a SessionCheckpoint: id/label is
-   * the decoded tag, createdAt is the file mtime ISO string, and messageCount
-   * is the length of the saved history array.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  listCheckpoints(): readonly SessionCheckpoint[] {
-    const dir = this.deps.config.storage.getProjectTempDir();
-    const entries = this.safeReadDir(dir);
-    const checkpoints: SessionCheckpoint[] = [];
-    for (const entry of entries) {
-      if (
-        !entry.startsWith(CHECKPOINT_PREFIX) ||
-        !entry.endsWith(CHECKPOINT_SUFFIX)
-      ) {
-        continue;
+  async createCheckpoint(name: string): Promise<CheckpointInfo> {
+    return this.runExclusive(async () => {
+      await this.ensureSubscribed();
+      if (this.recording === null) {
+        await this.startRecording();
       }
-      const encodedTag = entry.slice(
-        CHECKPOINT_PREFIX.length,
-        entry.length - CHECKPOINT_SUFFIX.length,
+      const recording = this.requireRecording();
+      const created = await new CheckpointService().createCheckpoint(
+        recording,
+        this.persistenceProjectHash(),
+        name,
       );
-      const tag = this.decodeTag(encodedTag);
-      const abs = join(dir, entry);
-      checkpoints.push({
-        id: tag,
-        createdAt: this.fileMtimeIso(abs),
-        label: tag,
-        messageCount: this.readCheckpointMessageCount(abs),
-      });
-    }
-    return checkpoints;
+      const replay = await this.replayRecording(recording);
+      const checkpoint = replay.checkpoints?.find(
+        (candidate) => candidate.checkpointId === created.checkpointId,
+      );
+      if (checkpoint === undefined) {
+        throw new Error('Created checkpoint was not durable');
+      }
+      return {
+        checkpointId: checkpoint.checkpointId,
+        name: checkpoint.name,
+        sessionId: recording.getSessionId(),
+        sequence: checkpoint.sequence,
+        createdAt: checkpoint.createdAt,
+      };
+    });
+  }
+
+  async forkFromCheckpoint(ref: string): Promise<SessionInfo> {
+    return this.runExclusive(async () => {
+      await this.ensureSubscribed();
+      const target = await this.resolveCheckpointTarget(ref);
+      return this.forkTarget(target);
+    });
+  }
+
+  async listCheckpoints(): Promise<readonly CheckpointInfo[]> {
+    return this.runExclusive(async () => {
+      const targets = await this.continueTargets();
+      const checkpoints: CheckpointInfo[] = [];
+      for (const target of targets) {
+        if (target.kind === 'checkpoint') {
+          const replay = await replaySession(
+            target.source.filePath,
+            this.persistenceProjectHash(),
+          );
+          const checkpoint = replay.ok
+            ? replay.checkpoints?.find(
+                (candidate) => candidate.checkpointId === target.checkpointId,
+              )
+            : undefined;
+          if (checkpoint !== undefined && !checkpoint.deleted) {
+            checkpoints.push({
+              checkpointId: checkpoint.checkpointId,
+              name: checkpoint.name,
+              sessionId: target.source.sessionId,
+              sequence: checkpoint.sequence,
+              createdAt: checkpoint.createdAt,
+            });
+          }
+        }
+      }
+      return checkpoints;
+    });
+  }
+
+  async renameCheckpoint(ref: string, name: string): Promise<void> {
+    await this.runExclusive(async () => {
+      const target = await this.resolveCheckpointTarget(ref);
+      const trimmedName = name.trim();
+      if (target.checkpointName === trimmedName) return;
+      if (this.recording?.getSessionId() === target.source.sessionId) {
+        await new CheckpointService().renameCheckpoint(
+          this.recording,
+          this.persistenceProjectHash(),
+          target.checkpointId,
+          trimmedName,
+        );
+        return;
+      }
+      const validatedName = await SessionDiscovery.validateAvailableName(
+        trimmedName,
+        this.chatsDir(),
+        this.persistenceProjectHash(),
+      );
+      await new CheckpointService().renameCheckpointClosed(
+        target.source.filePath,
+        this.persistenceProjectHash(),
+        this.chatsDir(),
+        target.source.sessionId,
+        target.checkpointId,
+        validatedName,
+      );
+    });
+  }
+
+  async deleteCheckpoint(ref: string): Promise<void> {
+    await this.runExclusive(async () => {
+      const target = await this.resolveCheckpointTarget(ref);
+      if (this.recording?.getSessionId() === target.source.sessionId) {
+        await new CheckpointService().deleteCheckpoint(
+          this.recording,
+          this.persistenceProjectHash(),
+          target.checkpointId,
+        );
+        return;
+      }
+      await new CheckpointService().deleteCheckpointClosed(
+        target.source.filePath,
+        this.persistenceProjectHash(),
+        this.chatsDir(),
+        target.source.sessionId,
+        target.checkpointId,
+      );
+    });
+  }
+
+  async nameCurrentSession(name: string): Promise<void> {
+    await this.runExclusive(async () => {
+      if (this.recording === null) await this.startRecording();
+      const recording = this.requireRecording();
+      const replay = await this.replayRecording(recording);
+      if (replay.sessionName === name.trim()) return;
+      await new CheckpointService().setSessionName(
+        recording,
+        this.persistenceProjectHash(),
+        name,
+      );
+    });
+  }
+
+  async resumeSession(ref: string): Promise<SessionInfo> {
+    return this.runExclusive(async () => {
+      const targets = await this.continueTargets();
+      const resolved = SessionDiscovery.resolveContinueRef(ref, targets);
+      if ('error' in resolved) throw new Error(resolved.error);
+      if (resolved.target.kind === 'checkpoint') {
+        return this.forkTarget(resolved.target);
+      }
+      await this.resumeInternal(resolved.target.session.sessionId);
+      return this.currentSessionInfo();
+    });
+  }
+
+  async listSessions(): Promise<readonly SessionInfo[]> {
+    return this.runExclusive(async () => {
+      const targets = await this.continueTargets();
+      const sessions: SessionInfo[] = [];
+      for (const target of targets) {
+        if (target.kind !== 'session') continue;
+        sessions.push(await this.sessionInfoFor(target.session));
+      }
+      return sessions;
+    });
+  }
+
+  async deleteSession(ref: string): Promise<void> {
+    await this.runExclusive(async () => {
+      const result = await deleteRecordedSession(
+        ref,
+        this.chatsDir(),
+        this.persistenceProjectHash(),
+      );
+
+      if (!result.ok) throw new Error(result.error);
+    });
+  }
+
+  async clearHistory(): Promise<void> {
+    await this.runExclusive(async () => {
+      const client = this.deps.resolveClient();
+      const history = await client.getHistory();
+      const recording = this.requireRecording();
+      const result = await new HistoryMutationService().clear(
+        history,
+        recording,
+      );
+      if (!result.ok) throw new Error(result.error);
+      const historyService = client.getHistoryService();
+      this.integration?.unsubscribeFromHistory();
+      try {
+        await client.resetChat();
+        await client.restoreHistory(result.remainingHistory);
+      } finally {
+        if (historyService !== null && this.integration !== null) {
+          this.integration.subscribeToHistory(historyService);
+        }
+      }
+    });
   }
 
   /**
@@ -577,6 +685,150 @@ export class SessionControl implements AgentSessionControl {
     };
   }
 
+  private requireRecording(): SessionRecordingService {
+    if (this.recording?.isActive() !== true) {
+      throw new Error('No active recording');
+    }
+    return this.recording;
+  }
+
+  private async replayRecording(
+    recording: SessionRecordingService,
+  ): Promise<Extract<ReplayResult, { ok: true }>> {
+    const filePath = recording.getFilePath();
+    if (filePath === null) throw new Error('Recording is not materialized');
+    const replay = await replaySession(filePath, this.persistenceProjectHash());
+    if (!replay.ok) throw new Error(replay.error);
+    return replay;
+  }
+
+  private continueTargets(): Promise<ContinueTarget[]> {
+    return SessionDiscovery.listContinueTargets(
+      this.chatsDir(),
+      this.persistenceProjectHash(),
+    );
+  }
+
+  private async resolveCheckpointTarget(
+    ref: string,
+  ): Promise<Extract<ContinueTarget, { kind: 'checkpoint' }>> {
+    const targets = await this.continueTargets();
+    const exact = targets.filter(
+      (target): target is Extract<ContinueTarget, { kind: 'checkpoint' }> =>
+        target.kind === 'checkpoint' &&
+        (target.checkpointId === ref || target.checkpointName === ref),
+    );
+    if (exact.length === 1) return exact[0];
+    if (exact.length > 1)
+      throw new Error(`Ambiguous checkpoint reference '${ref}'`);
+    throw new Error(`Checkpoint '${ref}' not found`);
+  }
+
+  private async forkTarget(
+    target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+  ): Promise<SessionInfo> {
+    if (this.recording?.getSessionId() === target.source.sessionId) {
+      await this.recording.flush();
+    }
+    const activeSource =
+      this.recording?.getSessionId() === target.source.sessionId
+        ? this.recording
+        : this.deps.config.getSessionRecordingService();
+    const result = await new SessionTransitionService().forkFromCheckpoint(
+      target,
+      this.chatsDir(),
+      this.persistenceProjectHash(),
+      this.deps.getProvider(),
+      this.deps.getModel(),
+      this.workspaceDirs(),
+      activeSource,
+    );
+    if (!result.ok) throw new Error(result.error);
+    try {
+      await this.teardownPriorBeforeResume();
+    } catch (error) {
+      await this.disposeServiceQuietly(result.recording);
+      await this.releaseLockQuietly(result.lockHandle);
+      throw error;
+    }
+    try {
+      await this.deps.resolveClient().resetChat();
+      await this.deps.resolveClient().restoreHistory(result.history);
+    } catch (error) {
+      await this.disposeServiceQuietly(result.recording);
+      await this.releaseLockQuietly(result.lockHandle);
+      throw error;
+    }
+    const integration = new RecordingIntegration(result.recording);
+    let subscribed: boolean;
+    try {
+      subscribed = this.attachIntegrationToHistory(integration);
+    } catch (error) {
+      this.disposeIntegrationQuietly(integration);
+      await this.disposeServiceQuietly(result.recording);
+      await this.releaseLockQuietly(result.lockHandle);
+      throw error;
+    }
+    this.recording = result.recording;
+    this.deps.config.setSessionRecordingService(result.recording);
+    this.integration = integration;
+    this.integrationNeedsSubscribe = !subscribed;
+    this.currentLockHandle = result.lockHandle;
+    return this.currentSessionInfo();
+  }
+
+  private async currentSessionInfo(): Promise<SessionInfo> {
+    const recording = this.requireRecording();
+    const targets = await this.continueTargets();
+    const target = targets.find(
+      (candidate) =>
+        candidate.kind === 'session' &&
+        candidate.session.sessionId === recording.getSessionId(),
+    );
+    if (target?.kind === 'session') return this.sessionInfoFor(target.session);
+    const replay = await this.replayRecording(recording);
+    return this.sessionInfoFromReplay(
+      recording.getSessionId(),
+      replay,
+      new Date().toISOString(),
+    );
+  }
+
+  private async sessionInfoFor(summary: SessionSummary): Promise<SessionInfo> {
+    const replay = await replaySession(
+      summary.filePath,
+      this.persistenceProjectHash(),
+    );
+    if (!replay.ok) throw new Error(replay.error);
+    return this.sessionInfoFromReplay(
+      summary.sessionId,
+      replay,
+      summary.lastModified.toISOString(),
+    );
+  }
+
+  private sessionInfoFromReplay(
+    id: string,
+    replay: Extract<ReplayResult, { ok: true }>,
+    modifiedAt: string,
+  ): SessionInfo {
+    return {
+      id,
+      name: replay.sessionName ?? null,
+      title: replay.metadata.title,
+      createdAt: replay.metadata.startTime,
+      modifiedAt,
+      ...(replay.ancestry === undefined
+        ? {}
+        : {
+            parentSessionId: replay.ancestry.parentSessionId,
+            parentSequence: replay.ancestry.parentSequence,
+            checkpointId: replay.ancestry.checkpointId,
+            checkpointName: replay.ancestry.checkpointName,
+          }),
+    };
+  }
+
   // ─── Recording helpers ───────────────────────────────────────────────────
 
   /**
@@ -612,7 +864,7 @@ export class SessionControl implements AgentSessionControl {
     // survive across the fresh service swap.
     await this.ensureSubscribed();
     await this.stopRecording();
-    const service = new SessionRecordingService({
+    const service = await SessionRecordingService.createLocked({
       sessionId: this.deps.sessionId(),
       projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
@@ -803,109 +1055,6 @@ export class SessionControl implements AgentSessionControl {
     await this.guard(errors, () => this.releaseLockHandle());
     if (errors.length > 0) {
       throw errors[0];
-    }
-  }
-
-  // ─── Checkpoint helpers ──────────────────────────────────────────────────
-
-  /**
-   * Returns the initialized core Logger, constructing + initializing it once
-   * and reusing it thereafter.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private async getLogger(): Promise<Logger> {
-    if (this.logger === undefined) {
-      const logger = new Logger(
-        this.deps.sessionId(),
-        this.deps.config.storage,
-      );
-      await logger.initialize();
-      this.logger = logger;
-    }
-    return this.logger;
-  }
-
-  /**
-   * Reads the saved history length from a checkpoint file, returning 0 when the
-   * file is unreadable or its history is not an array.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private readCheckpointMessageCount(absPath: string): number {
-    const payload = this.readCheckpointPayload(absPath);
-    if (payload === undefined || !Array.isArray(payload.history)) {
-      return 0;
-    }
-    return payload.history.length;
-  }
-
-  /**
-   * Reads + parses a checkpoint file payload, returning undefined when the file
-   * is missing or not valid JSON.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private readCheckpointPayload(
-    absPath: string,
-  ): CheckpointFilePayload | undefined {
-    let raw: string;
-    try {
-      raw = readFileSync(absPath, 'utf8');
-    } catch {
-      return undefined;
-    }
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed !== 'object' || parsed === null) {
-        return undefined;
-      }
-      return parsed as CheckpointFilePayload;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Returns a file's mtime as an ISO string, falling back to the current time
-   * when the file cannot be stat'd.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private fileMtimeIso(absPath: string): string {
-    try {
-      return statSync(absPath).mtime.toISOString();
-    } catch {
-      return new Date().toISOString();
-    }
-  }
-
-  /**
-   * Decodes a percent-encoded checkpoint tag (the Logger encodes tags via
-   * encodeURIComponent). Falls back to the raw value on malformed encoding.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private decodeTag(encoded: string): string {
-    try {
-      return decodeURIComponent(encoded);
-    } catch {
-      return encoded;
-    }
-  }
-
-  /**
-   * Reads a directory's entry names, returning an empty array when the
-   * directory does not exist or is unreadable (the deterministic empty path
-   * before any checkpoint is saved).
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private safeReadDir(dir: string): readonly string[] {
-    try {
-      return readdirSync(dir);
-    } catch {
-      return [];
     }
   }
 

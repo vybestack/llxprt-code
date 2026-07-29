@@ -36,6 +36,7 @@ import * as path from 'node:path';
 import {
   SessionRecordingService,
   SessionLockManager,
+  replaySession,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -73,6 +74,15 @@ function makeContent(
   speaker: IContent['speaker'] = 'human',
 ): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
+}
+
+function requireReplaySuccess(
+  result: Awaited<ReturnType<typeof replaySession>>,
+): asserts result is Extract<
+  Awaited<ReturnType<typeof replaySession>>,
+  { ok: true }
+> {
+  if (!result.ok) throw new Error(result.error);
 }
 
 /**
@@ -138,6 +148,7 @@ function makeHookProps(
     chatsDir,
     projectHash: PROJECT_HASH,
     currentSessionId: overrides.currentSessionId ?? 'current-session-id',
+    activeRecording: overrides.activeRecording,
     onSelect:
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
@@ -270,6 +281,62 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(sessionIds).toContain('has-content');
     });
 
+    it('lists session and checkpoint rows and tombstones only the checkpoint', async () => {
+      const sessionId = 'checkpoint-source-session';
+      const recording = await SessionRecordingService.createLocked(
+        makeConfig(chatsDir, { sessionId }),
+      );
+      recording.recordContent(makeContent('branch content'));
+      const checkpoint = await recording.createCheckpoint('branch-point');
+
+      try {
+        const props = makeHookProps(chatsDir, {
+          currentSessionId: 'different-current-session',
+          activeRecording: recording,
+        });
+        const { result } = renderHook(() => useSessionBrowser(props));
+
+        await waitFor(() => {
+          expect(result.current.sessions).toHaveLength(2);
+        });
+        expect(
+          result.current.sessions.map((row) => row.target.kind),
+        ).toStrictEqual(['session', 'checkpoint']);
+        expect(result.current.sessions[1].checkpointName).toBe('branch-point');
+
+        result.current.handleKeypress('', makeKey('tab'));
+        await waitFor(() => {
+          expect(result.current.isSearching).toBe(false);
+        });
+        result.current.handleKeypress('', makeKey('down'));
+        await waitFor(() => {
+          expect(result.current.selectedIndex).toBe(1);
+        });
+        result.current.handleKeypress('', makeKey('delete'));
+        await waitFor(() => {
+          expect(result.current.deleteConfirmIndex).toBe(1);
+        });
+        result.current.handleKeypress('y', makeKey('y'));
+
+        await waitFor(() => {
+          expect(result.current.deleteConfirmIndex).toBeNull();
+          expect(result.current.error).toBeNull();
+          expect(result.current.sessions).toHaveLength(1);
+        });
+        expect(result.current.sessions[0].target.kind).toBe('session');
+        const replay = await replaySession(
+          recording.getFilePath()!,
+          PROJECT_HASH,
+        );
+        requireReplaySuccess(replay);
+        const deleted = replay.checkpoints?.find(
+          (candidate) => candidate.checkpointId === checkpoint.checkpointId,
+        );
+        expect(deleted?.deleted).toBe(true);
+      } finally {
+        await recording.dispose();
+      }
+    });
     /**
      * Test 5: Skipped count populated (REQ-SB-008)
      * GIVEN: Some sessions are unreadable or filtered

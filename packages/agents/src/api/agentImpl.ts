@@ -927,6 +927,10 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async resetChat(): Promise<void> {
+    if (this.session.getRecording().enabled) {
+      await this.session.clearHistory();
+      return;
+    }
     const client = this.deps.resolveClient();
     await client.resetChat();
   }

@@ -6,11 +6,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  CheckpointService,
   SessionDiscovery,
   SessionLockManager,
   deleteSession,
 } from '@vybestack/llxprt-code-core';
-import type { SessionSummary } from '@vybestack/llxprt-code-core';
+import type {
+  ContinueTarget,
+  SessionSummary,
+} from '@vybestack/llxprt-code-core';
 import type { Key } from './useKeypress.js';
 import type {
   EnrichedSessionSummary,
@@ -85,7 +89,7 @@ export function useSessionBrowserController(
   const { refs, setters } = useBrowserRefsAndSetters();
   const generationRef = useRef(0);
   const previewCacheRef = useRef<PreviewCache>(new Map());
-  const selectedSessionIdRef = useRef<string | null>(null);
+  const selectedTargetKeyRef = useRef<string | null>(null);
   const derived = useDerivedState(core.sessions, refs);
   const loadPreviewsForPage = usePreviewLoader(
     generationRef,
@@ -107,7 +111,7 @@ export function useSessionBrowserController(
       setters,
       generationRef,
       previewCacheRef,
-      selectedSessionIdRef,
+      selectedTargetKeyRef,
       loadPreviewsForPage,
     }),
     [
@@ -116,15 +120,15 @@ export function useSessionBrowserController(
       setters,
       generationRef,
       previewCacheRef,
-      selectedSessionIdRef,
+      selectedTargetKeyRef,
       loadPreviewsForPage,
     ],
   );
   const loadSessions = useSessionLoader(props, loaderDeps);
   const executeResume = useResumeExecutor(props, setters);
   const deleteDeps = useMemo(
-    () => ({ setters, selectedSessionIdRef, loadSessions }),
-    [setters, selectedSessionIdRef, loadSessions],
+    () => ({ setters, selectedTargetKeyRef, loadSessions }),
+    [setters, selectedTargetKeyRef, loadSessions],
   );
   const executeDelete = useDeleteExecutor(props, deleteDeps);
   const handleKeypress = useSessionKeypressHandler({
@@ -267,7 +271,7 @@ function useDerivedState(
     getSortedSessions,
     getPaginationValues,
     previewPageKey: values.pageItems
-      .map((session) => session.sessionId)
+      .map((session) => session.targetKey)
       .join('|'),
     refreshPagination: getPaginationValues,
   };
@@ -285,6 +289,9 @@ function filterSessions(
       session.firstUserMessage ?? '',
       session.provider,
       session.model,
+      session.name ?? '',
+      session.checkpointName ?? '',
+      session.sessionId,
     ];
     return fields.some((field) => field.toLowerCase().includes(lowerTerm));
   });
@@ -346,7 +353,7 @@ function usePreviewLoader(
       );
       await Promise.allSettled(
         currentPageItems
-          .filter((session) => !previewCacheRef.current.has(session.sessionId))
+          .filter((session) => !previewCacheRef.current.has(session.targetKey))
           .map((session) =>
             loadPreview(
               session,
@@ -373,27 +380,27 @@ async function loadPreview(
     const text = await SessionDiscovery.readFirstUserMessage(session.filePath);
     if (generation !== generationRef.current) return;
     const state: PreviewState = text !== null ? 'loaded' : 'none';
-    previewCacheRef.current.set(session.sessionId, { text, state });
-    updateSessionPreview(setSessions, session.sessionId, text, state);
+    previewCacheRef.current.set(session.targetKey, { text, state });
+    updateSessionPreview(setSessions, session.targetKey, text, state);
   } catch {
     if (generation !== generationRef.current) return;
-    previewCacheRef.current.set(session.sessionId, {
+    previewCacheRef.current.set(session.targetKey, {
       text: null,
       state: 'error',
     });
-    updateSessionPreview(setSessions, session.sessionId, undefined, 'error');
+    updateSessionPreview(setSessions, session.targetKey, undefined, 'error');
   }
 }
 
 function updateSessionPreview(
   setSessions: React.Dispatch<React.SetStateAction<EnrichedSessionSummary[]>>,
-  sessionId: string,
+  targetKey: string,
   text: string | null | undefined,
   state: PreviewState,
 ): void {
   setSessions((prev) =>
     prev.map((session) =>
-      session.sessionId === sessionId
+      session.targetKey === targetKey
         ? {
             ...session,
             firstUserMessage: text ?? undefined,
@@ -410,7 +417,7 @@ interface LoaderDeps {
   setters: BrowserSetters;
   generationRef: React.MutableRefObject<number>;
   previewCacheRef: React.MutableRefObject<PreviewCache>;
-  selectedSessionIdRef: React.MutableRefObject<string | null>;
+  selectedTargetKeyRef: React.MutableRefObject<string | null>;
   loadPreviewsForPage: (
     generation: number,
     sessionsToUse: EnrichedSessionSummary[],
@@ -427,19 +434,26 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
   return useCallback(async () => {
     const currentGen = beginSessionLoad(deps);
     try {
-      const result = await SessionDiscovery.listSessionsDetailed(
-        props.chatsDir,
-        props.projectHash,
-      );
+      const [detailed, targets] = await Promise.all([
+        SessionDiscovery.listSessionsDetailed(
+          props.chatsDir,
+          props.projectHash,
+        ),
+        SessionDiscovery.listContinueTargets(props.chatsDir, props.projectHash),
+      ]);
       if (currentGen !== deps.generationRef.current) return;
-      const filtered = await filterDetailedSessions(
-        result.sessions,
+      const filtered = await filterContinueTargets(
+        targets,
         currentGen,
         props.currentSessionId,
         processSession,
       );
       if (filtered === null) return;
-      const pageToLoad = finishSessionLoad(result.skippedCount, filtered, deps);
+      const pageToLoad = finishSessionLoad(
+        detailed.skippedCount,
+        filtered,
+        deps,
+      );
       await deps.loadPreviewsForPage(currentGen, filtered.sessions, pageToLoad);
     } catch (loadError) {
       if (currentGen !== deps.generationRef.current) return;
@@ -469,20 +483,20 @@ interface FilteredSessionsResult {
   skippedCount: number;
 }
 
-async function filterDetailedSessions(
-  sessions: SessionSummary[],
+async function filterContinueTargets(
+  targets: ContinueTarget[],
   currentGen: number,
   currentSessionId: string,
-  processSession: (
-    session: SessionSummary,
+  processTarget: (
+    target: ContinueTarget,
     currentGen: number,
     currentSessionId: string,
   ) => Promise<{ enriched: EnrichedSessionSummary } | { skipped: true } | null>,
 ): Promise<FilteredSessionsResult | null> {
   const filtered: EnrichedSessionSummary[] = [];
   let skippedCount = 0;
-  for (const session of sessions) {
-    const result = await processSession(session, currentGen, currentSessionId);
+  for (const target of targets) {
+    const result = await processTarget(target, currentGen, currentSessionId);
     if (result === null) return null;
     if ('skipped' in result) skippedCount++;
     else filtered.push(result.enriched);
@@ -506,16 +520,16 @@ function restoreSelectionAfterLoad(
   deps: LoaderDeps,
 ): number {
   let pageToLoad = 0;
-  if (deps.selectedSessionIdRef.current) {
+  if (deps.selectedTargetKeyRef.current) {
     const idx = filtered.findIndex(
-      (session) => session.sessionId === deps.selectedSessionIdRef.current,
+      (session) => session.targetKey === deps.selectedTargetKeyRef.current,
     );
     if (idx >= 0) {
       deps.setters.setSelectedIndex(idx % PAGE_SIZE);
       pageToLoad = Math.floor(idx / PAGE_SIZE);
       deps.setters.setPage(pageToLoad);
     }
-    deps.selectedSessionIdRef.current = null;
+    deps.selectedTargetKeyRef.current = null;
   }
   return pageToLoad;
 }
@@ -527,37 +541,55 @@ function useSessionProcessor(
 ) {
   return useCallback(
     async (
-      session: SessionSummary,
+      target: ContinueTarget,
       currentGen: number,
       currentSessionId: string,
     ): Promise<
       { enriched: EnrichedSessionSummary } | { skipped: true } | null
     > => {
-      if (session.sessionId === currentSessionId) return { skipped: true };
+      const source = target.kind === 'session' ? target.session : target.source;
+      if (target.kind === 'session' && source.sessionId === currentSessionId) {
+        return { skipped: true };
+      }
       const hasContent = await SessionDiscovery.hasContentEvents(
-        session.filePath,
+        source.filePath,
       );
       if (currentGen !== generationRef.current) return null;
       if (!hasContent) return { skipped: true };
-      const locked = await SessionLockManager.isLocked(
-        chatsDir,
-        session.sessionId,
-      );
+      const sourceIsCurrent = source.sessionId === currentSessionId;
+      const locked = sourceIsCurrent
+        ? false
+        : await SessionLockManager.isLocked(chatsDir, source.sessionId);
       if (currentGen !== generationRef.current) return null;
-      const cached = previewCacheRef.current.get(session.sessionId);
-      return { enriched: buildEnrichedSession(session, locked, cached) };
+      const targetKey = getTargetKey(target);
+      const cached = previewCacheRef.current.get(targetKey);
+      return {
+        enriched: buildEnrichedSession(target, source, locked, cached),
+      };
     },
     [chatsDir, generationRef, previewCacheRef],
   );
 }
 
+function getTargetKey(target: ContinueTarget): string {
+  return target.kind === 'session'
+    ? `session:${target.session.sessionId}`
+    : `checkpoint:${target.checkpointId}`;
+}
+
 function buildEnrichedSession(
-  session: SessionSummary,
+  target: ContinueTarget,
+  source: SessionSummary,
   locked: boolean,
   cached: { text: string | null; state: PreviewState } | undefined,
 ): EnrichedSessionSummary {
   return {
-    ...session,
+    ...source,
+    target,
+    targetKey: getTargetKey(target),
+    ...(target.kind === 'checkpoint'
+      ? { checkpointName: target.checkpointName }
+      : {}),
     isLocked: locked,
     previewState: cached ? cached.state : 'loading',
     firstUserMessage: cached?.text ?? undefined,
@@ -584,7 +616,7 @@ async function executeResumeSession(
   setters.setIsResuming(true);
   setters.setError(null);
   try {
-    const resumeResult = await props.onSelect(session);
+    const resumeResult = await props.onSelect(session.target);
     setters.setIsResuming(false);
     if (resumeResult.ok) props.onClose();
     else setters.setError(resumeResult.error);
@@ -598,7 +630,7 @@ function useDeleteExecutor(
   props: UseSessionBrowserProps,
   deps: {
     setters: BrowserSetters;
-    selectedSessionIdRef: React.MutableRefObject<string | null>;
+    selectedTargetKeyRef: React.MutableRefObject<string | null>;
     loadSessions: () => Promise<void>;
   },
 ): (session: EnrichedSessionSummary) => void {
@@ -615,22 +647,31 @@ async function executeDeleteSession(
   props: UseSessionBrowserProps,
   deps: {
     setters: BrowserSetters;
-    selectedSessionIdRef: React.MutableRefObject<string | null>;
+    selectedTargetKeyRef: React.MutableRefObject<string | null>;
     loadSessions: () => Promise<void>;
   },
 ): Promise<void> {
-  deps.selectedSessionIdRef.current = session.sessionId;
+  deps.selectedTargetKeyRef.current = session.targetKey;
   try {
-    const locked = await SessionLockManager.isLocked(
-      props.chatsDir,
-      session.sessionId,
-    );
-    if (locked) {
-      deps.setters.setError('Cannot delete: session is in use');
-      deps.setters.setDeleteConfirmIndex(null);
-      return;
+    if (session.target.kind === 'checkpoint') {
+      await deleteCheckpointTarget(session.target, props);
+    } else {
+      const locked = await SessionLockManager.isLocked(
+        props.chatsDir,
+        session.target.session.sessionId,
+      );
+      if (locked) {
+        deps.setters.setError('Cannot delete: session is in use');
+        deps.setters.setDeleteConfirmIndex(null);
+        return;
+      }
+      const result = await deleteSession(
+        session.target.session.sessionId,
+        props.chatsDir,
+        props.projectHash,
+      );
+      if (!result.ok) throw new Error(result.error);
     }
-    await deleteSession(session.sessionId, props.chatsDir, props.projectHash);
     deps.setters.setDeleteConfirmIndex(null);
     await deps.loadSessions();
   } catch (err) {
@@ -639,6 +680,26 @@ async function executeDeleteSession(
   }
 }
 
+async function deleteCheckpointTarget(
+  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+  props: UseSessionBrowserProps,
+): Promise<void> {
+  if (props.activeRecording?.getSessionId() === target.source.sessionId) {
+    await new CheckpointService().deleteCheckpoint(
+      props.activeRecording,
+      props.projectHash,
+      target.checkpointId,
+    );
+    return;
+  }
+  await new CheckpointService().deleteCheckpointClosed(
+    target.source.filePath,
+    props.projectHash,
+    props.chatsDir,
+    target.source.sessionId,
+    target.checkpointId,
+  );
+}
 function useSessionBrowserEffects(params: {
   isLoading: boolean;
   derived: DerivedState;

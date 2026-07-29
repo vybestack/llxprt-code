@@ -103,6 +103,7 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   const contract = {
     getHistory: async () => [...seed],
     getHistoryService: () => historyService,
+    resetChat: async () => undefined,
     restoreHistory: async () => {
       restoreCalls += 1;
     },

@@ -191,13 +191,13 @@ export async function getAllJsonlSessionFiles(
 export async function shouldDeleteSession(
   entry: JsonlSessionFileEntry,
 ): Promise<'delete' | 'skip' | 'stale-lock-only'> {
-  let lockPath: string;
-  try {
-    lockPath = SessionLockManager.getLockPathFromFilePath(entry.filePath);
-  } catch {
-    // File name doesn't match session-<id>.jsonl pattern — safe to delete
+  if (entry.sessionInfo === null) {
     return 'delete';
   }
+  const lockPath = SessionLockManager.getLockPath(
+    path.dirname(entry.filePath),
+    entry.sessionInfo.id,
+  );
 
   let lockExists: boolean;
   try {
@@ -245,29 +245,6 @@ export async function cleanupStaleLocks(chatsDir: string): Promise<number> {
 
   for (const lockFileName of lockFiles) {
     const lockPath = path.join(chatsDir, lockFileName);
-
-    const sessionId = lockFileName.replace(/\.lock$/, '');
-    const dataFileName = `session-${sessionId}.jsonl`;
-    const dataPath = path.join(chatsDir, dataFileName);
-
-    let dataExists: boolean;
-    try {
-      await fs.access(dataPath);
-      dataExists = true;
-    } catch {
-      dataExists = false;
-    }
-
-    if (!dataExists) {
-      try {
-        await fs.unlink(lockPath);
-        cleaned++;
-      } catch {
-        // Best-effort
-      }
-      continue;
-    }
-
     const pid = await readLockPid(lockPath);
     const isStale = pid === null || !isPidAlive(pid);
 
