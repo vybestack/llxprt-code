@@ -315,7 +315,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         keyringLoader: async () => mockKeyring,
       });
 
-      await expect(store.set('linux-key', 'my-secret')).rejects.toThrow(
+      await expect(store.set('unverified-key', 'my-secret')).rejects.toThrow(
         'EEXIST',
       );
     });

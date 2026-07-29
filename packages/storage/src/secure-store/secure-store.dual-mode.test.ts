@@ -320,6 +320,7 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
     const files = await fs.readdir(tempDir);
     const encFiles = files.filter((f) => f.endsWith('.enc'));
     expect(encFiles).not.toContain('keyring-only-no-artifact.enc');
+    expect(await keyringStore.get('keyring-only-no-artifact')).toBe('kr');
   });
 
   it('keyring-absent write produces an encrypted envelope (cleartext absent, AES-256-GCM)', async () => {

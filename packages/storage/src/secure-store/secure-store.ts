@@ -456,7 +456,7 @@ export class SecureStore {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
           const msg = error instanceof Error ? error.message : String(error);
           this.logger.debug(
-            () => `[set] key='${key}' fallback cleanup failed: ${msg}`,
+            () => `[secure-store] key='${key}' fallback cleanup failed: ${msg}`,
           );
         }
       }
