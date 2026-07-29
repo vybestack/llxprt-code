@@ -39,47 +39,38 @@ const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'check-copyright-year.ts');
 const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
 
-// Fail fast if bun is missing rather than a cryptic ENOENT later.
+// Detect Bun availability at module scope so pure-logic tests still run in
+// environments without Bun, while only the end-to-end subprocess tests skip.
+let BUN_AVAILABLE = true;
 try {
   execFileSync(RUNTIME, ['--version'], { encoding: 'utf8', stdio: 'pipe' });
 } catch {
-  throw new Error(
-    `[copyright-year] Runtime "${RUNTIME}" not found. Set BUN_EXECUTABLE or install bun.`,
-  );
+  BUN_AVAILABLE = false;
 }
 
 const CURRENT_YEAR = new Date().getUTCFullYear();
 const PREVIOUS_YEAR = CURRENT_YEAR - 1;
 
-const VYBESTACK_HEADER_2026 = [
-  '/**',
-  ' * @license',
-  ` * Copyright ${CURRENT_YEAR} Vybestack LLC`,
-  ' * SPDX-License-Identifier: Apache-2.0',
-  ' */',
-  '',
-  'export const x = 1;',
-].join('\n');
+/** Build a copyright header fixture for the given company and year. */
+function copyrightHeader(
+  company: 'Vybestack' | 'Google',
+  year: number,
+): string {
+  return [
+    '/**',
+    ' * @license',
+    ` * Copyright ${year} ${company} LLC`,
+    ' * SPDX-License-Identifier: Apache-2.0',
+    ' */',
+    '',
+    'export const x = 1;',
+  ].join('\n');
+}
 
-const VYBESTACK_HEADER_2025 = VYBESTACK_HEADER_2026.replace(
-  `Copyright ${CURRENT_YEAR}`,
-  `Copyright ${PREVIOUS_YEAR}`,
-);
-
-const GOOGLE_HEADER_2026 = [
-  '/**',
-  ' * @license',
-  ` * Copyright ${CURRENT_YEAR} Google LLC`,
-  ' * SPDX-License-Identifier: Apache-2.0',
-  ' */',
-  '',
-  'export const x = 1;',
-].join('\n');
-
-const GOOGLE_HEADER_2025 = GOOGLE_HEADER_2026.replace(
-  `Copyright ${CURRENT_YEAR}`,
-  `Copyright ${PREVIOUS_YEAR}`,
-);
+const VYBESTACK_HEADER_2026 = copyrightHeader('Vybestack', CURRENT_YEAR);
+const VYBESTACK_HEADER_2025 = copyrightHeader('Vybestack', PREVIOUS_YEAR);
+const GOOGLE_HEADER_2026 = copyrightHeader('Google', CURRENT_YEAR);
+const GOOGLE_HEADER_2025 = copyrightHeader('Google', PREVIOUS_YEAR);
 
 interface ScriptResult {
   readonly code: number;
@@ -413,135 +404,157 @@ describe('checkCopyrightYears', () => {
 // End-to-end against a REAL temp git repo
 // ---------------------------------------------------------------------------
 
-describe('end-to-end guard behavior (temp git repo)', () => {
-  it('FAILS an added file with a stale Vybestack year (B1)', async () => {
-    const { code, stderr } = await withTempGitRepo(async ({ root, write }) => {
-      write('scripts/new.ts', VYBESTACK_HEADER_2025);
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add stale'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(1);
-    expect(stderr).toContain('copyright-year guard FAILED');
-    expect(stderr).toContain('scripts/new.ts');
-    expect(stderr).toContain(String(PREVIOUS_YEAR));
-    expect(stderr).toContain(String(CURRENT_YEAR));
-  }, 30_000);
+describe.skipIf(!BUN_AVAILABLE)(
+  'end-to-end guard behavior (temp git repo)',
+  () => {
+    it('FAILS an added file with a stale Vybestack year (B1)', async () => {
+      const { code, stderr } = await withTempGitRepo(
+        async ({ root, write }) => {
+          write('scripts/new.ts', VYBESTACK_HEADER_2025);
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add stale'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(1);
+      expect(stderr).toContain('copyright-year guard FAILED');
+      expect(stderr).toContain('scripts/new.ts');
+      expect(stderr).toContain(String(PREVIOUS_YEAR));
+      expect(stderr).toContain(String(CURRENT_YEAR));
+    }, 30_000);
 
-  it('PASSES an added file with the correct Vybestack year (B2)', async () => {
-    const { code, stdout } = await withTempGitRepo(async ({ root, write }) => {
-      write('scripts/new.ts', VYBESTACK_HEADER_2026);
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add correct'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(0);
-    expect(stdout).toContain('copyright-year guard passed');
-  }, 30_000);
+    it('PASSES an added file with the correct Vybestack year (B2)', async () => {
+      const { code, stdout } = await withTempGitRepo(
+        async ({ root, write }) => {
+          write('scripts/new.ts', VYBESTACK_HEADER_2026);
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add correct'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain('copyright-year guard passed');
+    }, 30_000);
 
-  it('PASSES an added file with no copyright header (B3)', async () => {
-    const { code, stdout } = await withTempGitRepo(async ({ root, write }) => {
-      write('scripts/no-header.ts', 'export const x = 1;\n');
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add no header'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(0);
-    expect(stdout).toContain('copyright-year guard passed');
-  }, 30_000);
+    it('PASSES an added file with no copyright header (B3)', async () => {
+      const { code, stdout } = await withTempGitRepo(
+        async ({ root, write }) => {
+          write('scripts/no-header.ts', 'export const x = 1;\n');
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add no header'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain('copyright-year guard passed');
+    }, 30_000);
 
-  it('ignores a modified file with a stale year (B4)', async () => {
-    const { code, stdout } = await withTempGitRepo(async ({ root, write }) => {
-      // Baseline: a file with a stale year committed in the first commit.
-      write('scripts/existing.ts', VYBESTACK_HEADER_2025);
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add stale baseline'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      // Modify the file (still stale year, but not a new file).
-      write('scripts/existing.ts', VYBESTACK_HEADER_2025 + '\n// changed\n');
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'modify existing'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(0);
-    expect(stdout).toContain('copyright-year guard passed');
-  }, 30_000);
+    it('ignores a modified file with a stale year (B4)', async () => {
+      const { code, stdout } = await withTempGitRepo(
+        async ({ root, write }) => {
+          // Baseline: a file with a stale year committed in the first commit.
+          write('scripts/existing.ts', VYBESTACK_HEADER_2025);
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add stale baseline'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          // Modify the file (still stale year, but not a new file).
+          write(
+            'scripts/existing.ts',
+            VYBESTACK_HEADER_2025 + '\n// changed\n',
+          );
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'modify existing'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain('copyright-year guard passed');
+    }, 30_000);
 
-  it('FAILS an added file with a stale Google LLC year (B5)', async () => {
-    const { code, stderr } = await withTempGitRepo(async ({ root, write }) => {
-      write('scripts/new.ts', GOOGLE_HEADER_2025);
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add stale google'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(1);
-    expect(stderr).toContain('copyright-year guard FAILED');
-    expect(stderr).toContain('scripts/new.ts');
-  }, 30_000);
+    it('FAILS an added file with a stale Google LLC year (B5)', async () => {
+      const { code, stderr } = await withTempGitRepo(
+        async ({ root, write }) => {
+          write('scripts/new.ts', GOOGLE_HEADER_2025);
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add stale google'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(1);
+      expect(stderr).toContain('copyright-year guard FAILED');
+      expect(stderr).toContain('scripts/new.ts');
+    }, 30_000);
 
-  it('PASSES an added file with the correct Google LLC year (B6)', async () => {
-    const { code, stdout } = await withTempGitRepo(async ({ root, write }) => {
-      write('scripts/new.ts', GOOGLE_HEADER_2026);
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add correct google'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(0);
-    expect(stdout).toContain('copyright-year guard passed');
-  }, 30_000);
+    it('PASSES an added file with the correct Google LLC year (B6)', async () => {
+      const { code, stdout } = await withTempGitRepo(
+        async ({ root, write }) => {
+          write('scripts/new.ts', GOOGLE_HEADER_2026);
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add correct google'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain('copyright-year guard passed');
+    }, 30_000);
 
-  it('does not crash on an added binary file (B7)', async () => {
-    // Write a fake "binary" file (a PNG-like header) and commit it.
-    const { code, stdout } = await withTempGitRepo(async ({ root, write }) => {
-      // Minimal PNG-like bytes
-      write('assets/icon.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add png'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(0);
-    expect(stdout).toContain('copyright-year guard passed');
-  }, 30_000);
+    it('does not crash on an added binary file (B7)', async () => {
+      // Write a fake "binary" file (a PNG-like header) and commit it.
+      const { code, stdout } = await withTempGitRepo(
+        async ({ root, write }) => {
+          // Minimal PNG-like bytes
+          write('assets/icon.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add png'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(0);
+      expect(stdout).toContain('copyright-year guard passed');
+    }, 30_000);
 
-  it('reports multiple violations sorted by path', async () => {
-    const { code, stderr } = await withTempGitRepo(async ({ root, write }) => {
-      write('scripts/zzz.ts', VYBESTACK_HEADER_2025);
-      write('scripts/aaa.ts', VYBESTACK_HEADER_2025);
-      execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
-      execFileSync('git', ['commit', '-q', '-m', 'add two stale'], {
-        cwd: root,
-        encoding: 'utf8',
-      });
-      return runGuard(root);
-    });
-    expect(code).toBe(1);
-    const zzzIdx = stderr.indexOf('scripts/zzz.ts');
-    const aaaIdx = stderr.indexOf('scripts/aaa.ts');
-    expect(zzzIdx).toBeGreaterThan(-1);
-    expect(aaaIdx).toBeGreaterThan(-1);
-    expect(aaaIdx).toBeLessThan(zzzIdx);
-  }, 30_000);
-});
+    it('reports multiple violations sorted by path', async () => {
+      const { code, stderr } = await withTempGitRepo(
+        async ({ root, write }) => {
+          write('scripts/zzz.ts', VYBESTACK_HEADER_2025);
+          write('scripts/aaa.ts', VYBESTACK_HEADER_2025);
+          execFileSync('git', ['add', '.'], { cwd: root, encoding: 'utf8' });
+          execFileSync('git', ['commit', '-q', '-m', 'add two stale'], {
+            cwd: root,
+            encoding: 'utf8',
+          });
+          return runGuard(root);
+        },
+      );
+      expect(code).toBe(1);
+      const zzzIdx = stderr.indexOf('scripts/zzz.ts');
+      const aaaIdx = stderr.indexOf('scripts/aaa.ts');
+      expect(zzzIdx).toBeGreaterThan(-1);
+      expect(aaaIdx).toBeGreaterThan(-1);
+      expect(aaaIdx).toBeLessThan(zzzIdx);
+    }, 30_000);
+  },
+);
