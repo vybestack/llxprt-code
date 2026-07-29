@@ -219,7 +219,7 @@ function writeMarker(
       // creation through fsync (the same fd writes and fsyncs).
       const markerFd = fs.openSync(tmpPath, 'wx');
       try {
-        fs.writeFileSync(markerFd, payload, { encoding: 'utf-8' });
+        fs.writeSync(markerFd, payload, undefined, 'utf-8');
         fs.fsyncSync(markerFd);
       } finally {
         fs.closeSync(markerFd);

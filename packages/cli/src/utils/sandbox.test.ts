@@ -388,7 +388,8 @@ describe('mountGitConfigFiles', () => {
     mountGitConfigFiles(args, hostHome, containerHome);
     const volumeArg = args.find(
       (a) =>
-        a.includes(path.join('.config', 'git', 'config')) && a.includes(':ro'),
+        a.includes(path.posix.join('.config', 'git', 'config')) &&
+        a.includes(':ro'),
     );
     expect(volumeArg).toBeDefined();
   });
@@ -490,7 +491,9 @@ describe('mountGitConfigFiles', () => {
     );
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, containerHome);
-    const vol = args.find((a) => a.includes(path.join('.ssh', 'known_hosts')));
+    const vol = args.find((a) =>
+      a.includes(path.posix.join('.ssh', 'known_hosts')),
+    );
     expect(vol).toBeDefined();
     expect(vol).toMatch(/:ro$/);
   });
