@@ -51,6 +51,8 @@ import { CoreSubagentServiceAdapter } from '../tools-adapters/CoreSubagentServic
 import { CoreAsyncTaskServiceAdapter } from '../tools-adapters/CoreAsyncTaskServiceAdapter.js';
 import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
 import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
+import { persistBase64ImageResult } from '../services/image/ImageGenerationService.js';
+import type { ImageResult } from '../services/image/ImageGenerationService.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -432,6 +434,8 @@ function registerStandardTools(
       }
       return resolver();
     },
+    persistImageResult: (result: ImageResult) =>
+      persistBase64ImageResult(result, config.getTargetDir()),
   });
 
   void CoreIdeServiceAdapter;

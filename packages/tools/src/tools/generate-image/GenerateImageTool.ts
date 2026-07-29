@@ -51,7 +51,6 @@ export interface ImageGenerationBackendLike {
 
 export interface GenerateImageToolParams {
   readonly prompt: string;
-  readonly model?: string;
   readonly background?: 'auto' | 'transparent' | 'opaque';
   readonly quality?: 'auto' | 'high' | 'medium' | 'low';
   readonly size?: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
@@ -65,6 +64,16 @@ export interface GenerateImageToolDependencies {
    * image-capable backend is registered (e.g. non-Codex active provider).
    */
   readonly resolveBackend: () => ImageGenerationBackendLike | null;
+  /**
+   * Persistence capability. The tool ALWAYS persists the normalized backend
+   * result to the workspace and surfaces the returned absolute path in the
+   * textual hint and display — there is no success branch without
+   * persistence. The tools package is a leaf workspace package with zero
+   * workspace deps, so this is structurally typed; the composition root in
+   * core supplies a closure rooted at the workspace target directory backed
+   * by the shared image service.
+   */
+  readonly persistImageResult: (result: ImageBackendResult) => Promise<string>;
 }
 
 /**
@@ -109,11 +118,6 @@ export class GenerateImageTool extends BaseDeclarativeTool<
             type: 'string',
             enum: ['auto', '1024x1024', '1024x1536', '1536x1024'],
             description: "Image dimensions (default: 'auto')",
-          },
-          model: {
-            type: 'string',
-            description:
-              'Model to use (defaults to gpt-image-2 for the Codex backend)',
           },
           n: {
             type: 'integer',
@@ -210,7 +214,6 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
       const result = await backend.generate(
         {
           prompt: this.params.prompt,
-          model: this.params.model,
           background: this.params.background,
           quality: this.params.quality,
           size: this.params.size,
@@ -220,20 +223,7 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
         signal,
       );
 
-      // A6: return an inline-data image part plus a textual reference hint.
-      const caption = result.caption ?? this.params.prompt;
-      const inlinePart = {
-        inlineData: {
-          mimeType: result.mimeType,
-          data: result.data,
-        },
-      };
-      const textPart = `Image generated. Caption: ${caption}`;
-
-      return {
-        llmContent: [inlinePart, textPart],
-        returnDisplay: `Generated image: ${caption}`,
-      };
+      return await this.buildImageSuccessResult(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
@@ -259,5 +249,46 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
         },
       };
     }
+  }
+
+  private async buildImageSuccessResult(
+    result: ImageBackendResult,
+  ): Promise<ToolResult> {
+    const caption = result.caption ?? this.params.prompt;
+    const inlinePart = {
+      inlineData: {
+        mimeType: result.mimeType,
+        data: result.data,
+      },
+    };
+
+    // Persistence is mandatory: there is no success branch without it. A
+    // persistence failure is surfaced as a tool execution failure so the
+    // model never observes a success that left nothing on disk.
+    let savedPath: string;
+    try {
+      savedPath = await this.dependencies.persistImageResult(result);
+    } catch (persistError) {
+      const persistMessage =
+        persistError instanceof Error
+          ? persistError.message
+          : String(persistError);
+      return {
+        llmContent: `Image generated but failed to save: ${persistMessage}`,
+        returnDisplay: `Image generated but failed to save.`,
+        error: {
+          message: persistMessage,
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+
+    const textPart = `Image generated. Caption: ${caption}
+Saved to: ${savedPath}`;
+    return {
+      llmContent: [inlinePart, textPart],
+      returnDisplay: `Generated image: ${caption}
+Saved to: ${savedPath}`,
+    };
   }
 }

@@ -118,7 +118,12 @@ export class CodexImageBackend implements ImageGenerationBackend {
     const endpoint = buildCodexImageGenerateEndpoint(this.getBaseUrl());
 
     const body = {
-      model: request.model ?? CODEX_IMAGE_MODEL,
+      // Force the canonical model regardless of any caller-supplied value.
+      // The backend-neutral request contract may carry an optional `model`,
+      // but this adapter is the trust boundary that decides what is actually
+      // sent to the Codex endpoint. Ignoring request.model prevents a model
+      // override via the tool schema or any other caller.
+      model: CODEX_IMAGE_MODEL,
       prompt: request.prompt,
       background: request.background ?? 'auto',
       quality: request.quality ?? 'auto',

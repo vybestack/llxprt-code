@@ -258,6 +258,31 @@ describe('CodexImageBackend', () => {
     });
   });
 
+  describe('model immutability', () => {
+    it('forces model gpt-image-2 even when request.model is a different/malicious value', async () => {
+      const { fetchImpl, captured } = makeStubFetch({
+        status: 200,
+        body: { data: [{ b64_json: 'aGVsbG8=' }] },
+      });
+      const backend = makeBackend({ fetchImpl });
+
+      await backend.generate(
+        {
+          prompt: 'a serene mountain lake',
+          model: 'gpt-evil-override' as string,
+        } as ImageGenerateRequest,
+        new AbortController().signal,
+      );
+
+      const body = JSON.parse(captured()?.init.body as string) as Record<
+        string,
+        unknown
+      >;
+      expect(body['model']).toBe('gpt-image-2');
+      expect(body['model']).not.toBe('gpt-evil-override');
+    });
+  });
+
   describe('A7 — abort propagation', () => {
     it('surfaces an abort error when the signal is already aborted', async () => {
       const { fetchImpl } = makeStubFetch({

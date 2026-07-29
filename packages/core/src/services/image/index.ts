@@ -13,5 +13,7 @@ export type {
 export {
   ImageGenerationError,
   ImageValidationError,
+  ImagePersistenceError,
   validateImagePrompt,
+  persistBase64ImageResult,
 } from './ImageGenerationService.js';
