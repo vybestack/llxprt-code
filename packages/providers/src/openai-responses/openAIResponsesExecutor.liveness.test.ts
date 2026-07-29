@@ -205,7 +205,9 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     }
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-    await fsp.rm(tempDumpDir, { recursive: true, force: true });
+    if (tempDumpDir) {
+      await fsp.rm(tempDumpDir, { recursive: true, force: true });
+    }
   });
 
   async function readDumpedRequest(): Promise<{
