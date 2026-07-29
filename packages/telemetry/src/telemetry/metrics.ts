@@ -221,12 +221,12 @@ export function recordModelRoutingMetrics(
 }
 
 /**
- * Resets all module-level metric state for testing. Under Vitest, tests used
- * vi.resetModules() to obtain a fresh module instance per test; under Bun's
- * isolated-process model, each test file shares one module instance, so
- * module state must be reset explicitly between tests.
+ * Resets all module-level metric state. Called from `shutdownTelemetry` so
+ * that a subsequent re-initialization creates fresh instruments on a
+ * replacement provider. Also used between tests under Bun's single-module
+ * process model (Vitest used vi.resetModules() instead).
  */
-export function resetMetricsForTesting(): void {
+export function resetMetricsState(): void {
   cliMeter = undefined;
   toolCallCounter = undefined;
   toolCallLatencyHistogram = undefined;

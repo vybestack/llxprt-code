@@ -40,7 +40,7 @@ import {
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 import { SERVICE_NAME } from './constants.js';
-import { initializeMetrics, resetMetricsForTesting } from './metrics.js';
+import { initializeMetrics, resetMetricsState } from './metrics.js';
 import {
   FileLogExporter,
   FileMetricExporter,
@@ -140,7 +140,7 @@ function registerProviders(nextProviders: TelemetryProviders): void {
 export function initializeTelemetry(config: TelemetryConfig): void {
   if (telemetryInitialized || shuttingDown || !config.getTelemetryEnabled()) {
     if (process.env.VERBOSE === 'true' && config.getTelemetryEnabled()) {
-      debugLogger.error(
+      debugLogger.log(
         `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
       );
     }
@@ -148,7 +148,7 @@ export function initializeTelemetry(config: TelemetryConfig): void {
   }
 
   if (process.env.VERBOSE === 'true') {
-    debugLogger.error(
+    debugLogger.log(
       `[TELEMETRY] Initializing with outfile: ${config.getTelemetryOutfile()}`,
     );
   }
@@ -224,7 +224,7 @@ export async function shutdownTelemetry(
     trace.disable();
     logs.disable();
     metrics.disable();
-    resetMetricsForTesting();
+    resetMetricsState();
     shuttingDown = false;
   }
 }
