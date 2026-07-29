@@ -294,11 +294,12 @@ describe('Orchestrator unit tests against real implementation', () => {
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 20 }),
         async (name) => {
-          const clean = name.replace(/\//g, '_');
-          const out = await orchestrator.checkFile(
-            path.join(os.tmpdir(), `${clean}.ts`),
-            'TYPE_ERROR',
-          );
+          const clean = Buffer.from(name).toString('hex');
+          const outsidePath = path.join(os.tmpdir(), `${clean}.ts`);
+          expect(
+            path.relative(WORKSPACE_ROOT, outsidePath).startsWith('..'),
+          ).toBe(true);
+          const out = await orchestrator.checkFile(outsidePath, 'TYPE_ERROR');
           expect(out).toEqual([]);
         },
       ),

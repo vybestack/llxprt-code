@@ -118,9 +118,12 @@ describe('Settings Loading and Merging', () => {
     vi.resetAllMocks();
 
     // Set environment variables to override system paths
-    process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
-    process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
-      '/mock/system/system-defaults.json';
+    process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = pathActual.resolve(
+      '/mock/system/settings.json',
+    );
+    process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH = pathActual.resolve(
+      '/mock/system/system-defaults.json',
+    );
 
     mockFsExistsSync = vi.mocked(fs.existsSync);
     mockFsMkdirSync = vi.mocked(fs.mkdirSync);
@@ -135,8 +138,8 @@ describe('Settings Loading and Merging', () => {
       (p: fs.PathOrFileDescriptor) => {
         // Handle system paths specifically
         if (
-          p === '/mock/system/settings.json' ||
-          p === '/mock/system/system-defaults.json'
+          p === pathActual.resolve('/mock/system/settings.json') ||
+          p === pathActual.resolve('/mock/system/system-defaults.json')
         ) {
           return '{}'; // Return valid empty JSON for system paths
         }
@@ -424,7 +427,9 @@ describe('Settings Loading and Merging', () => {
     });
 
     describe('when LLXPRT_CODE_SYSTEM_SETTINGS_PATH is set', () => {
-      const MOCK_ENV_SYSTEM_SETTINGS_PATH = '/mock/env/system/settings.json';
+      const MOCK_ENV_SYSTEM_SETTINGS_PATH = pathActual.resolve(
+        '/mock/env/system/settings.json',
+      );
 
       beforeEach(() => {
         process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH =

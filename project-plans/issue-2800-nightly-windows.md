@@ -106,7 +106,7 @@ log contains the same three native worker crashes.
 
 1. Keep the existing two-fork Windows Vitest parallelism while correcting the
    proven source, path, and fixture defects.
-2. Raise only the Windows Bun native smoke job timeout from 15 to 30 minutes.
+2. Preserve the Windows Bun native smoke job's 15-minute timeout so a leaked handle remains visible as a job failure.
 3. Validate the full nightly Windows jobs. If the libuv assertion remains, stop
    and shape a dedicated test-worker isolation investigation before proposing a
    concurrency change, retry, suppression, or production watcher change.
@@ -144,12 +144,32 @@ log contains the same three native worker crashes.
 29. `scripts/no-new-js-allowlist.json` (related micro-expansion — allowlist update)
 30. `project-plans/issue-2800-nightly-windows.md`
 31. `tsconfig.scripts.json` (user-rule micro-expansion — typecheck include)
-32. `scripts/tests/nightly-bun-native-smoke.test.js` (related micro-expansion — assertions updated to match `.ts` path and `timeout-minutes:30`)
+32. `scripts/tests/nightly-bun-native-smoke.test.js` (related micro-expansion — assertions updated to match the `.ts` path and restored 15-minute bound)
 33. `packages/core/src/recording/SessionRecordingService.ts` (A8 remediation — canonical Windows watcher path)
 34. `packages/core/src/recording/SessionRecordingService.test.ts` (A8 Windows temp-root regression)
 35. `packages/core/src/hooks/hookRunner.ts` (A6 remediation — preserve native exit codes through PowerShell)
 36. `packages/core/src/hooks/hookRunner.test.ts` (A6 Windows exit-code regression)
 37. `scripts/tests/bun-script-migration.test.ts` (current-main ancestry correction — exclude historical plan records from active stale-script scanning)
+38. `packages/cli/src/__tests__/wizard-saveProfile.test.ts`
+39. `packages/cli/src/config/memoryReconciliation.test.ts`
+40. `packages/cli/src/config/pathMigration.freshStart.test.ts`
+41. `packages/cli/src/config/settings.env.test.ts`
+42. `packages/cli/src/config/settings.part3.test.ts`
+43. `packages/cli/src/config/settingsLoader.trust.test.ts`
+44. `packages/cli/src/launcher/bun-entry-resolver.test.ts`
+45. `packages/cli/src/ui/commands/toolkeyfileCommand.test.ts`
+46. `packages/cli/src/ui/hooks/agentStream/__tests__/checkpointPersistence.test.ts`
+47. `packages/cli/src/ui/hooks/permissionsModifyTrustDialog.behavior.test.tsx`
+48. `packages/cli/src/utils/gitUtils.test.ts`
+49. `packages/cli/src/utils/handleAutoUpdate.test.ts`
+50. `packages/cli/src/utils/sandbox-bashrc.test.ts`
+51. `packages/cli/src/utils/sandbox-entrypoint.test.ts`
+52. `packages/cli/src/utils/sandbox-seatbelt.test.ts`
+53. `packages/cli/src/utils/sandbox.test.ts`
+54. `packages/cli/src/zed-integration/zed-path-resolver.test.ts`
+55. `packages/cli/src/zed-integration/zedIntegration.terminal.test.ts`
+56. `packages/cli/src/utils/sandbox-env.ts` (review remediation — POSIX Docker destination paths)
+57. `packages/core/src/hooks/hookRunner.windows.test.ts` (review remediation — real Windows PowerShell exit behavior)
 
 The following paths were added as approved related micro-expansions during
 remediation:
@@ -160,7 +180,7 @@ remediation:
 - `scripts/no-new-js-allowlist.json` (allowlist update)
 - `packages/settings/src/profiles/__tests__/canonicalProfileRepair.test.ts` (new behavioral read-only test)
 - `tsconfig.scripts.json` (added `scripts/bun-native-modules-smoke.ts` to include list so typecheck covers it)
-- `scripts/tests/nightly-bun-native-smoke.test.js` (updated assertions to match `.ts` path and `timeout-minutes:30` — required by the workflow YAML diff)
+- `scripts/tests/nightly-bun-native-smoke.test.js` (updated assertions to match the `.ts` path and restored 15-minute workflow bound)
 - `packages/core/src/recording/SessionRecordingService.ts` and its test (causal A8 remediation for libuv issue 5010)
 - `packages/core/src/hooks/hookRunner.ts` and its test (causal A6 remediation for PowerShell collapsing native exit code 2)
 - `scripts/tests/bun-script-migration.test.ts` (current main added a historical plan that correctly references a retired script; inherited focused fix from issue 2692)
@@ -175,12 +195,13 @@ remediation:
 | LSP URI, fixtures, and workspace boundary | 6 | +249 | Complete. |
 | POSIX fd/signal boundary | 4 | +68 | Complete. |
 | Portable hook fixtures | 2 | -82 | Complete. |
-| Bun smoke TypeScript rename and coverage | 4 | +23 | Complete (related micro-expansion). |
-| Workflow references and timeout | 2 | 0 | Complete (related micro-expansion). |
+| Bun smoke TypeScript rename and coverage | 4 | +18 | Complete (related micro-expansion); harness must terminate naturally. |
+| Workflow references and timeout | 2 | 0 | Complete (related micro-expansion); original 15-minute bound retained. |
 | Windows watcher remediation | 2 | +42 | Complete; authoritative Windows validation pending. |
 | PowerShell hook exit-code remediation | 2 | +26 | Complete; authoritative Windows validation pending. |
 | Current-main stale-script guard correction | 1 | +4 | Complete; focused migration test pending. |
-| **Total** | **36 Git diff paths** | **+1938 / -1107 (net +831)** | **Within hard stop (<40 files, <2500 net).** |
+| Remaining deterministic Windows portability | 18 | +144 | Complete; 311 focused tests pass with two forks. |
+| **Total** | **57 paths** | **+2845 / -1681 (net +1164)** | **User-approved expansion above the 40-path hard stop; net remains below 2500.** |
 
 ### Scope review (mandatory threshold crossed at >25 paths)
 
@@ -221,31 +242,27 @@ micro-expansions per the user directive:
    `scripts/start.js`. The focused issue 2692 fix excludes `dev-docs/plans` from
    the active-surface scanner while continuing to scan active documentation.
 
-**Hard stop check:** the remediation expands the existing 31-path diff to 36
-paths. The final diff has 1,938 additions and 1,107 deletions, for net +831.
-This remains below the hard stops of 40 paths and 2,500 net lines. No
-dependencies, lockfiles, public abstractions, quality-tool weakening, or
-`.llxprt/` changes were introduced.
+**Hard stop check:** exact-head nightly run `30422349718` exposed 72 additional
+deterministic Windows portability failures across 18 test paths. The user
+explicitly authorized continuing after being told that proper remediation would
+exceed the 40-path hard stop. The resulting diff has 57 paths, 2,845 additions,
+and 1,681 deletions, for net +1,164. The path expansion is approved and the net
+line total remains below 2,500. No dependencies, lockfiles, public abstractions,
+quality-tool weakening, or `.llxprt/` changes were introduced.
 `VITEST_MAX_FORKS=2` is preserved. No ESLint/TypeScript suppressions or severity
 downgrades were added.
 
 Unplanned paths and behavior include the async profile writer, trusted-folder
-production code, prompt-loader production/tests, Vitest configuration,
-dependencies/lockfiles, public APIs, quality rules, other workflows, retries,
-source exclusions, and allowlist expansion.
+production code, Vitest configuration, dependencies/lockfiles, public APIs,
+quality rules, other workflows, retries, source exclusions, and allowlist
+expansion.
 
-## Approval request
+## Approved workflow boundary
 
-The only planned workflow diff is:
-
-```diff
--    timeout-minutes: 15
-+    timeout-minutes: 30
-```
-
-The existing two-fork Windows Vitest setting remains unchanged. The timeout
-change allows the already-passing native smoke enough job lifetime to perform
-output capture and cleanup.
+The existing two-fork Windows Vitest setting and the native-smoke job's original
+15-minute bound remain unchanged. The smoke harness now tears down its PTY
+resources and must terminate naturally; it no longer uses a successful
+`process.exit(0)` to mask retained handles.
 
 ## Review finding ledger
 
@@ -286,7 +303,7 @@ from the focused remediation pass:
 | U2 | All e2e hook fixtures are `.cjs` invoked via `node`, not `.ts` via `bun` | hooks-e2e.integration.test.ts | **Blocker-Fix** | Fixed: converted all six issue-introduced fixtures (`block-etc-writes.ts`, `block-etc-allow-others.ts`, `sanitize-paths.ts`, `slow-hook.ts`, `content-filter.ts`, `content-filter-allow.ts`) to TypeScript with ESM imports, invoked as `bun "path"`. No `.cjs`, `require()`, shebang, or chmod remains. Malformed-input try/catch retained (fail-fast exit 1). |
 | U3 | Timeout fixture runs 10s (indefinite/orphan risk) | hooks-e2e.integration.test.ts | **Blocker-Fix** | Fixed: reduced self-expiry from 10s to 2s — safely beyond the 500ms hook timeout but bounded. |
 | U4 | Durability code has catch-swallow around stat/chmod and explanatory comments | canonicalProfileRepair.ts, memoryReconciliation.ts | **Blocker-Fix** | Fixed: removed all newly added explanatory comments. Removed catch-swallow around `statSync`/`chmodSync` in both files — internal local filesystem operations now fail fast. Source mode computed before copy/create; writable descriptor used through write+fsync; source mode applied afterward. Partially-created targets cleaned up consistently with existing semantics (no fallback layers). Read-only behavioral test preserved. |
-| U5 | Low-value comments added to smoke harness | bun-native-modules-smoke.ts | **In-scope-Fix** | Fixed: removed newly added low-value comments (resolve-pending, kill-explanation, explicit-exit). Retained TypeScript/Bun conversion and deterministic exit/resource teardown. Added null-check for `tree` to satisfy strict typecheck. |
+| U5 | Low-value comments added to smoke harness | bun-native-modules-smoke.ts | **In-scope-Fix** | Fixed: removed newly added low-value comments. Retained TypeScript/Bun conversion, deterministic resource teardown, and natural success termination. Added null-check for `tree` to satisfy strict typecheck. |
 | U6 | `tsconfig.scripts.json` does not include the new smoke script | tsconfig.scripts.json | **In-scope-Fix** | Fixed: added `scripts/bun-native-modules-smoke.ts` to the include list so typecheck covers it. |
 
 ### Rejected OCR claims
@@ -306,6 +323,7 @@ from the focused remediation pass:
 - **A8 worker crash — Blocker-Fix:** Exact-head nightly run `30414719240`
   reproduced `Assertion failed: !_wcsnicmp(filename, dir, dirlen), file
   src\win\fs-event.c, line 72` once in each core, agents, and CLI workspace,
+
   followed by `ERR_IPC_CHANNEL_CLOSED`. The common real
   `SessionRecordingService` watcher was passed the 8.3-short spelling returned
   by Windows `os.tmpdir()`, while `ReadDirectoryChangesW` returned the long
@@ -318,6 +336,27 @@ from the focused remediation pass:
   PowerShell command block. Added focused runner coverage and normalized the
   existing input-override path assertion. Authoritative Windows validation is
   required on the next exact-head run.
+
+### Final workspace OCR findings (14 comments, all classified)
+
+- **In-scope-Fix:** preserved the permissions normalization test's raw `..`
+  segment using native separators, deduplicated the settings path import,
+  centralized the auto-update config-home fixture, and replaced the custom
+  `bashIt` alias with established `it.skipIf` calls.
+- **Reject:** the Bun entry resolver already emits the same drive-relative
+  native shape from `path.join` and `path.resolve` for the tested rooted inputs;
+  the OCR drive-prefix claim does not match Node's Windows path semantics.
+- **Reject:** the Zed separator findings contradict exact Windows run
+  `30422349718`, whose production output contains native backslashes; native
+  `path.join` expectations fix those observed failures.
+- **Reject:** unconditional ConPTY `kill()` after the exit event is intentional
+  resource teardown and must fail if the terminal cannot be released; swallowing
+  that failure would hide the leak this issue is testing.
+- **Reject:** restoring successful `process.exit(0)` would mask retained native
+  handles. The smoke must terminate naturally while the workflow's 15-minute
+  bound remains fail-closed.
+- **Reject:** the proposed `posixEach` helper recreates the unbound Vitest
+  `.each` failure already observed; inline `it.skipIf(...).each` is correct.
 
 ## Exact-head completion checklist
 

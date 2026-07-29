@@ -177,7 +177,6 @@ async function checkNodePty(): Promise<void> {
   let ptyProcess: IPty | undefined;
   const disposables: IDisposable[] = [];
   let exitPromise: ExitPromise | undefined;
-  let didExit = false;
   try {
     const nodePty = await import('@lydell/node-pty');
     const spawn = nodePty.default?.spawn ?? nodePty.spawn;
@@ -215,7 +214,6 @@ async function checkNodePty(): Promise<void> {
 
     disposables.push(
       ptyProcess.onExit((exitInfo: ExitInfo) => {
-        didExit = true;
         exitPromise!.resolve(exitInfo);
       }),
     );
@@ -244,9 +242,7 @@ async function checkNodePty(): Promise<void> {
       disposable.dispose();
     }
     exitPromise?.resolve(null);
-    if (ptyProcess && !didExit) {
-      ptyProcess.kill();
-    }
+    ptyProcess?.kill();
   }
 }
 
@@ -338,4 +334,3 @@ if (skippedChecks > 0) {
 } else {
   console.log('\nAll native-module smoke checks passed under Bun.');
 }
-process.exit(0);

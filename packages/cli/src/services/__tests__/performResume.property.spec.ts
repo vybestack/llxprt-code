@@ -267,10 +267,19 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
     context: ReturnType<typeof makeResumeContext>,
   ): Promise<void> {
     const recording = context.recordingCallbacks.getCurrentRecording();
-    if (recording) {
-      await recording.dispose();
+    const results = await Promise.allSettled([
+      recording?.dispose() ?? Promise.resolve(),
+      releaseLock(context.recordingCallbacks.getCurrentLockHandle()),
+    ]);
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length === 1) {
+      throw failures[0];
     }
-    await releaseLock(context.recordingCallbacks.getCurrentLockHandle());
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Failed to dispose resumed session');
+    }
   }
 
   describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {

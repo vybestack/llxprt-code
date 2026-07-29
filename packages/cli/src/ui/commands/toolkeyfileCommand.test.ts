@@ -24,6 +24,12 @@ import { assertDefined } from '../../test-utils/assertions.js';
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
 
 const mockKeyfileStore = new Map<string, string>();
+const mockedHomedir = vi.hoisted(() => vi.fn());
+
+vi.mock('node:os', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:os')>();
+  return { ...original, homedir: mockedHomedir };
+});
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
@@ -50,6 +56,8 @@ describe('toolkeyfileCommand', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    const actualOs = await vi.importActual<typeof import('node:os')>('node:os');
+    mockedHomedir.mockReturnValue(actualOs.homedir());
     mockKeyfileStore.clear();
     context = createMockCommandContext();
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'toolkeyfile-test-'));
@@ -193,8 +201,7 @@ describe('toolkeyfileCommand', () => {
       const fakeHome = await fs.mkdtemp(
         path.join(os.tmpdir(), 'toolkeyfile-home-'),
       );
-      const originalHome = process.env.HOME;
-      process.env.HOME = fakeHome;
+      mockedHomedir.mockReturnValue(fakeHome);
       try {
         const homeKeyDir = path.join(fakeHome, '.toolkeyfile-test-tmp');
         const homeKeyPath = path.join(homeKeyDir, 'exa-key.txt');
@@ -218,11 +225,6 @@ describe('toolkeyfileCommand', () => {
         expect(result.content).toContain(fakeHome);
         expect(result.content).not.toContain('~');
       } finally {
-        if (originalHome === undefined) {
-          delete process.env.HOME;
-        } else {
-          process.env.HOME = originalHome;
-        }
         await fs.rm(fakeHome, { recursive: true, force: true });
       }
     });

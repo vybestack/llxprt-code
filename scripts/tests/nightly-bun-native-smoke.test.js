@@ -84,7 +84,7 @@ describe('nightly Windows Bun native-module smoke', () => {
   it('runs the committed native-module harness in a bounded least-privilege Windows job', () => {
     expect(smokeJob['runs-on']).toBe('windows-latest');
     expect(smokeJob.permissions).toEqual({ contents: 'read' });
-    expect(smokeJob['timeout-minutes']).toBe(30);
+    expect(smokeJob['timeout-minutes']).toBe(15);
     expect(stepNamed(smokeJob, 'Checkout').with?.['persist-credentials']).toBe(
       false,
     );

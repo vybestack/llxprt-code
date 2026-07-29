@@ -486,25 +486,54 @@ describe('runStartupMigrationWithPath — hard-link atomic publish', () => {
     expect(canonical.provider).toBe('openai');
   });
 
-  it('normalized publish preserves source file mode', () => {
+  it('normalized publish preserves profile content', () => {
     const legacyProfile = {
       version: 1,
       provider: 'anthropic',
       model: 'glm-5.2',
       ephemeralSettings: {},
     };
+    const sourcePath = path.join(env.legacyDir, 'profiles/sec.json');
+    const destinationPath = path.join(
+      env.destinations.configDir,
+      'profiles/sec.json',
+    );
     writeFiles(env.legacyDir, {
       'profiles/sec.json': JSON.stringify(legacyProfile),
       'settings.json': '{}',
     });
-    // Set source to 0600.
-    fs.chmodSync(path.join(env.legacyDir, 'profiles/sec.json'), 0o600);
+    fs.chmodSync(sourcePath, 0o600);
 
     runStartupMigrationWithPath(env.legacyDir, env.destinations);
 
-    const stat = fs.statSync(
-      path.join(env.destinations.configDir, 'profiles/sec.json'),
-    );
-    expect(stat.mode & 0o777).toBe(0o600);
+    expect(JSON.parse(fs.readFileSync(destinationPath, 'utf8'))).toStrictEqual({
+      ...legacyProfile,
+      modelParams: {},
+    });
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'normalized publish preserves POSIX source mode',
+    () => {
+      const sourcePath = path.join(env.legacyDir, 'profiles/sec.json');
+      const destinationPath = path.join(
+        env.destinations.configDir,
+        'profiles/sec.json',
+      );
+      writeFiles(env.legacyDir, {
+        'profiles/sec.json': JSON.stringify({
+          version: 1,
+          provider: 'anthropic',
+          model: 'glm-5.2',
+          ephemeralSettings: {},
+        }),
+        'settings.json': '{}',
+      });
+      fs.chmodSync(sourcePath, 0o600);
+
+      runStartupMigrationWithPath(env.legacyDir, env.destinations);
+
+      expect(fs.statSync(destinationPath).mode & 0o777).toBe(0o600);
+    },
+  );
 });

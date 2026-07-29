@@ -26,13 +26,14 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import { debugLogger } from '../utils/debugLogger.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionRecordLine,
@@ -748,29 +749,29 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
   // -------------------------------------------------------------------------
 
   if (process.platform === 'win32') {
-    it('records filesystem changes under the Windows temp directory', async () => {
+    it('reports removal through the canonical Windows temp watcher', async () => {
+      const errorSpy = vi
+        .spyOn(debugLogger, 'error')
+        .mockImplementation(() => {});
       const config = makeConfig({ chatsDir });
       service = new SessionRecordingService(config);
 
-      service.recordContent(makeContent('before watcher event'));
-      await service.flush();
+      try {
+        service.recordContent(makeContent('materialize watcher'));
+        await service.flush();
+        await fs.rm(chatsDir, { recursive: true, force: true });
 
-      const probePath = path.join(chatsDir, 'probe.tmp');
-      await fs.writeFile(probePath, 'probe');
-      await fs.rename(probePath, path.join(chatsDir, 'probe-renamed.tmp'));
-
-      service.recordContent(makeContent('after watcher event'));
-      await service.flush();
-
-      const events = await readJsonlFile(service.getFilePath()!);
-      expect(
-        events
-          .filter((event) => event.type === 'content')
-          .map((event) => (event.payload as { content: IContent }).content),
-      ).toStrictEqual([
-        makeContent('before watcher event'),
-        makeContent('after watcher event'),
-      ]);
+        await vi.waitFor(
+          () => {
+            expect(errorSpy).toHaveBeenCalledWith(
+              expect.stringContaining('chatsDir was removed'),
+            );
+          },
+          { timeout: 5000 },
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   }
 

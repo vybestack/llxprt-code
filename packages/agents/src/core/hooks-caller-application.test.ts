@@ -27,7 +27,10 @@
  * - Every line of production code is written in response to a failing test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolCall, SuccessfulToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
@@ -229,10 +232,26 @@ function createTestScheduler(config: Config) {
 }
 
 describe('Hook Caller Application', () => {
+  const hookFixtureDirectories: string[] = [];
+
+  function createHookCommand(source: string): string {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-agent-hook-'));
+    hookFixtureDirectories.push(directory);
+    const fixturePath = join(directory, 'hook.ts');
+    writeFileSync(fixturePath, source);
+    return `bun "${fixturePath.split('\\').join('/')}"`;
+  }
+
   beforeEach(() => {
     // Reset tracking state
     TrackingToolInvocation.executionCount = 0;
     TrackingToolInvocation.lastArgs = undefined;
+  });
+
+  afterEach(() => {
+    for (const directory of hookFixtureDirectories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   /**
@@ -251,7 +270,9 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that blocks execution (exit code 2 = block)
       const config = createConfigWithHook({
         event: 'BeforeTool',
-        command: `node -e "process.stderr.write('Tool blocked by policy'); process.exit(2)"`,
+        command: createHookCommand(
+          `process.stderr.write('Tool blocked by policy');\nprocess.exit(2);\n`,
+        ),
       });
 
       const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
@@ -304,7 +325,9 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that modifies the path argument
       const config = createConfigWithHook({
         event: 'BeforeTool',
-        command: `node -e "process.stdout.write(JSON.stringify({decision: 'allow', hookSpecificOutput: {tool_input: {path: '/safe/sanitized/path'}}}))"`,
+        command: createHookCommand(
+          `process.stdout.write(JSON.stringify({ decision: 'allow', hookSpecificOutput: { tool_input: { path: '/safe/sanitized/path' } } }));\n`,
+        ),
       });
 
       const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
@@ -351,7 +374,9 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that provides additional context
       const config = createConfigWithHook({
         event: 'AfterTool',
-        command: `node -e "process.stdout.write(JSON.stringify({decision: 'allow', systemMessage: 'Security scan: file contents verified safe'}))"`,
+        command: createHookCommand(
+          `process.stdout.write(JSON.stringify({ decision: 'allow', systemMessage: 'Security scan: file contents verified safe' }));\n`,
+        ),
       });
 
       const hookResult = await triggerAfterToolHook(
@@ -411,7 +436,9 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that suppresses output display
       const config = createConfigWithHook({
         event: 'AfterTool',
-        command: `node -e "process.stdout.write(JSON.stringify({decision: 'allow', suppressOutput: true}))"`,
+        command: createHookCommand(
+          `process.stdout.write(JSON.stringify({ decision: 'allow', suppressOutput: true }));\n`,
+        ),
       });
 
       const hookResult = await triggerAfterToolHook(

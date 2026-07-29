@@ -163,12 +163,13 @@ describe('HookRunner', () => {
           expect(spawn).toHaveBeenCalledWith(
             expect.stringMatching(/powershell/i),
             expect.arrayContaining([
+              expect.stringContaining('$global:LASTEXITCODE = 0'),
               expect.stringContaining('$hookSucceeded = $?'),
-              expect.stringContaining('$hookExitCode = $LASTEXITCODE'),
+              expect.stringContaining('if ($hookSucceeded) { exit 0 }'),
               expect.stringContaining(
-                'if (-not $hookSucceeded -and ($null -eq $hookExitCode -or $hookExitCode -eq 0)) { exit 1 }',
+                'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
               ),
-              expect.stringContaining('exit $hookExitCode'),
+              expect.stringContaining('exit 1'),
             ]),
             expect.objectContaining({ shell: false }),
           );

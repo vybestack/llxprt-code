@@ -13,6 +13,7 @@
  * checkpointing, missing file_path arg, and multiple tools.
  */
 
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
@@ -146,7 +147,9 @@ describe('createToolCheckpoint', () => {
     );
 
     expect(fsOps.writeFile).toHaveBeenCalledOnce();
-    expect(fsOps.writeFile.mock.calls[0][0]).toContain('/tmp/checkpoints');
+    expect(fsOps.writeFile.mock.calls[0][0]).toContain(
+      path.resolve('/tmp/checkpoints'),
+    );
     expect(fsOps.writeFile.mock.calls[0][0]).toContain('foo.ts');
     expect(fsOps.writeFile.mock.calls[0][0]).toContain('replace');
     const writtenContent = JSON.parse(fsOps.writeFile.mock.calls[0][1]);

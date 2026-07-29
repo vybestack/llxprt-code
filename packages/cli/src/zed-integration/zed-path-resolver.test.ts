@@ -77,7 +77,7 @@ describe('ZedPathResolver - recursive glob search', () => {
       .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
-    expect(text).toContain('@src/deep/target-file.ts');
+    expect(text).toContain(`@${path.join('src', 'deep', 'target-file.ts')}`);
     // The resolved path must NOT contain the absolute tmpDir (which would
     // indicate path.relative was applied to an already-relative entry).
     expect(text).not.toContain(tmpDir);
@@ -146,9 +146,11 @@ describe('ZedPathResolver - recursive glob search', () => {
       .filter((p): p is ContentBlock & { type: 'text' } => p.type === 'text')
       .map((p) => p.text)
       .join('');
-    expect(text).toContain('@zzz/fallback-target-file.ts');
+    expect(text).toContain(`@${path.join('zzz', 'fallback-target-file.ts')}`);
     expect(text).toContain('visible');
-    expect(text).not.toContain('@aaa/fallback-target-file.ts');
+    expect(text).not.toContain(
+      `@${path.join('aaa', 'fallback-target-file.ts')}`,
+    );
     expect(text).not.toContain('ignored');
   });
 
@@ -181,8 +183,8 @@ describe('ZedPathResolver - recursive glob search', () => {
       .map((p) => p.text)
       .join('');
     expect(text).toContain('@src/*.ts');
-    expect(text).toContain('Content from @src/a.ts');
-    expect(text).toContain('Content from @src/b.ts');
+    expect(text).toContain(`Content from @${path.join('src', 'a.ts')}`);
+    expect(text).toContain(`Content from @${path.join('src', 'b.ts')}`);
     expect(text).toContain('first');
     expect(text).toContain('second');
     expect(text).not.toContain('ignored');
@@ -222,9 +224,9 @@ describe('ZedPathResolver - recursive glob search', () => {
       .join('');
     expect(text).toContain('@src/file?.ts');
     expect(text).toContain('@src/file{2,3}.ts');
-    expect(text).toContain('Content from @src/file1.ts');
-    expect(text).toContain('Content from @src/file2.ts');
-    expect(text).toContain('Content from @src/file3.ts');
+    expect(text).toContain(`Content from @${path.join('src', 'file1.ts')}`);
+    expect(text).toContain(`Content from @${path.join('src', 'file2.ts')}`);
+    expect(text).toContain(`Content from @${path.join('src', 'file3.ts')}`);
     expect(text).toContain('question');
     expect(text).toContain('brace-a');
     expect(text).toContain('brace-b');

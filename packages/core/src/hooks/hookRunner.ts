@@ -526,7 +526,7 @@ export class HookRunner {
 
     const shellCommand =
       shellConfig.shell === 'powershell'
-        ? `& { ${command}; $hookSucceeded = $?; $hookExitCode = $LASTEXITCODE; if (-not $hookSucceeded -and ($null -eq $hookExitCode -or $hookExitCode -eq 0)) { exit 1 }; exit $hookExitCode }`
+        ? `& { $global:LASTEXITCODE = 0; ${command}; $hookSucceeded = $?; if ($hookSucceeded) { exit 0 }; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; exit 1 }`
         : command;
 
     // SECURITY: Use explicit shell executable with shell: false
