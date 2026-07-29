@@ -61,6 +61,7 @@ async function makeReadableSpan(name: string): Promise<ReadableSpan> {
   span.setAttribute('test.attr', 'value');
   span.end();
   await provider.forceFlush();
+  await provider.shutdown();
   // The SDK's span object satisfies ReadableSpan after end().
   return span as unknown as ReadableSpan;
 }
@@ -83,6 +84,8 @@ function makeReadableLogRecord(body: string): ReadableLogRecord {
   if (records.length === 0) {
     throw new Error('Expected at least one finished log record');
   }
+  // Release SDK background resources (processors, scheduled exports).
+  void loggerProvider.shutdown();
   return records[0];
 }
 
@@ -188,7 +191,13 @@ describe('FileMetricExporter serialization format', () => {
     const content = readOutfile(outfile);
     expect(content).not.toContain('\n  ');
     const parsed = JSON.parse(content.trim());
-    expect(parsed.resource).toBeDefined();
+    // Validate the actual metric data structure, not just resource presence.
+    expect(parsed.scopeMetrics).toStrictEqual([]);
+    // The OTel Resource serializes attributes as _rawAttributes key/value
+    // pairs when JSON.stringify'd.
+    expect(parsed.resource._rawAttributes).toStrictEqual([
+      ['service.name', 'test-service'],
+    ]);
   });
 
   it('reports CUMULATIVE aggregation temporality', () => {

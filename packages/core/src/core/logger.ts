@@ -107,6 +107,7 @@ export class Logger {
   private messageId = 0; // Instance-specific counter for the next messageId
   private initialized = false;
   private logs: LogEntry[] = []; // In-memory cache, ideally reflects the last known state of the file
+  private _formatMigrated = false; // True once legacy format check/migration has run
 
   constructor(
     sessionId: string,
@@ -130,13 +131,31 @@ export class Logger {
     return null;
   }
 
+  /**
+   * Parse JSONL content, preserving valid entries even when some lines are
+   * corrupted. Only throws when every line fails to parse, signaling total
+   * corruption so the caller can back up the file and start fresh.
+   */
   private _parseJsonl(trimmed: string): LogEntry[] {
-    return trimmed
+    const lines = trimmed
       .split('\n')
       .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as unknown)
-      .filter(isValidLogEntry);
+      .filter((line) => line.length > 0);
+    const entries: LogEntry[] = [];
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line) as unknown;
+        if (isValidLogEntry(parsed)) {
+          entries.push(parsed);
+        }
+      } catch {
+        debugLogger.debug('Skipping unparseable JSONL line in log file');
+      }
+    }
+    if (entries.length === 0 && lines.length > 0) {
+      throw new SyntaxError('All JSONL lines failed to parse');
+    }
+    return entries;
   }
 
   private _toJsonl(entries: LogEntry[]): string {
@@ -149,29 +168,42 @@ export class Logger {
     }
     try {
       const fileContent = readFileSync(this.logFilePath, 'utf-8');
-      const trimmed = fileContent.trim();
-      if (trimmed.length === 0) {
-        return [];
-      }
-      const legacy = this._parseLegacyJsonArray(trimmed);
-      if (legacy !== null) {
-        return legacy;
-      }
-      return this._parseJsonl(trimmed);
+      return this._parseLogContentSync(fileContent.trim());
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
         return [];
       }
-      if (error instanceof SyntaxError) {
+      throw error;
+    }
+  }
+
+  /**
+   * Shared post-read parsing logic used by both the sync and async read
+   * paths. Handles the legacy JSON-array format, JSONL, and corruption
+   * recovery. On total corruption (all lines fail to parse) it backs up the
+   * file via the provided function and returns an empty array.
+   */
+  private _parseLogContentSync(trimmed: string): LogEntry[] {
+    if (trimmed.length === 0) {
+      return [];
+    }
+    const legacy = this._parseLegacyJsonArray(trimmed);
+    if (legacy !== null) {
+      return legacy;
+    }
+    try {
+      return this._parseJsonl(trimmed);
+    } catch (parseError) {
+      if (parseError instanceof SyntaxError) {
         debugLogger.debug(
           `Invalid JSON line in log file ${this.logFilePath}. Backing up and starting fresh.`,
-          error,
+          parseError,
         );
         this._backupCorruptedLogFileSync('malformed_line');
         return [];
       }
-      throw error;
+      throw parseError;
     }
   }
 
@@ -228,8 +260,11 @@ export class Logger {
       throw new Error('Log file path not set during update attempt.');
     }
 
-    if (this._isLegacyFormat()) {
-      this._migrateLegacyToJsonl();
+    if (!this._formatMigrated) {
+      if (this._isLegacyFormat()) {
+        this._migrateLegacyToJsonl();
+      }
+      this._formatMigrated = true;
     }
 
     const currentLogsOnDisk = this._readLogFileSync();
@@ -309,14 +344,6 @@ export class Logger {
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
-        return [];
-      }
-      if (error instanceof SyntaxError) {
-        debugLogger.debug(
-          `Invalid JSON in log file ${this.logFilePath}. Backing up and starting fresh.`,
-          error,
-        );
-        await this._backupCorruptedLogFile('invalid_json');
         return [];
       }
       debugLogger.debug(
@@ -643,6 +670,7 @@ export class Logger {
     this.logs = [];
     this.sessionId = undefined;
     this.messageId = 0;
+    this._formatMigrated = false;
   }
 }
 

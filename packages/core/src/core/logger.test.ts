@@ -77,12 +77,20 @@ async function readLogFile(): Promise<LogEntry[]> {
     if (trimmed.startsWith('[')) {
       return JSON.parse(trimmed) as LogEntry[];
     }
-    // JSONL format: one JSON object per line.
-    return trimmed
+    // JSONL format: one JSON object per line. Skip lines that fail to
+    // parse, mirroring the production parser's resilience behavior.
+    const entries: LogEntry[] = [];
+    for (const line of trimmed
       .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as LogEntry);
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)) {
+      try {
+        entries.push(JSON.parse(line) as LogEntry);
+      } catch {
+        // Skip unparseable lines (partial corruption test case).
+      }
+    }
+    return entries;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];
@@ -228,9 +236,12 @@ describe('Logger', () => {
       expect(logsFromFile.length).toBe(1);
     });
 
-    it('should handle malformed JSONL in log file by backing it up and starting fresh', async () => {
-      // A JSONL line that cannot be parsed triggers a backup.
-      await fs.writeFile(TEST_LOG_FILE_PATH, 'this is not valid json\n');
+    it('should handle fully-corrupted JSONL by backing it up and starting fresh', async () => {
+      // Every line is unparseable — triggers total-corruption backup.
+      await fs.writeFile(
+        TEST_LOG_FILE_PATH,
+        'this is not valid json\nalso not json\n',
+      );
       const consoleDebugSpy = vi
         .spyOn(debugLogger, 'debug')
         .mockImplementation(() => {});
@@ -252,6 +263,54 @@ describe('Logger', () => {
             f.endsWith('.bak'),
         ),
       ).toBe(true);
+      newLogger.close();
+    });
+
+    it('should preserve valid JSONL entries when some lines are corrupted', async () => {
+      // Mix of valid and invalid lines — valid entries must survive.
+      const validEntry1: LogEntry = {
+        sessionId: 'partial-corruption',
+        messageId: 0,
+        timestamp: new Date('2025-01-01T10:00:00.000Z').toISOString(),
+        type: MessageSenderType.USER,
+        message: 'Valid1',
+      };
+      const validEntry2: LogEntry = {
+        sessionId: 'partial-corruption',
+        messageId: 1,
+        timestamp: new Date('2025-01-01T10:00:05.000Z').toISOString(),
+        type: MessageSenderType.USER,
+        message: 'Valid2',
+      };
+      const corruptedContent =
+        JSON.stringify(validEntry1) +
+        '\n' +
+        'THIS LINE IS BROKEN\n' +
+        JSON.stringify(validEntry2) +
+        '\n';
+      await fs.writeFile(TEST_LOG_FILE_PATH, corruptedContent);
+
+      const newLogger = new Logger(
+        'partial-corruption',
+        new Storage(process.cwd()),
+      );
+      await newLogger.initialize();
+
+      const logContent = await readLogFile();
+      expect(logContent).toHaveLength(2);
+      expect(logContent[0].message).toBe('Valid1');
+      expect(logContent[1].message).toBe('Valid2');
+
+      // No backup file should have been created since valid entries were
+      // recovered.
+      const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
+      expect(
+        dirContents.some(
+          (f) =>
+            f.startsWith(LOG_FILE_NAME + '.malformed_line') &&
+            f.endsWith('.bak'),
+        ),
+      ).toBe(false);
       newLogger.close();
     });
     it('should migrate a legacy pretty-printed JSON array to JSONL on first write', async () => {
@@ -306,10 +365,13 @@ describe('Logger', () => {
 
       // Verify no corruption backup was created
       const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
-      expect(dirContents.some((f) => f.includes('.malformed_line'))).toBe(
-        false,
-      );
-      expect(dirContents.some((f) => f.includes('.invalid_json'))).toBe(false);
+      expect(
+        dirContents.some(
+          (f) =>
+            f.startsWith(LOG_FILE_NAME + '.malformed_line') &&
+            f.endsWith('.bak'),
+        ),
+      ).toBe(false);
 
       newLogger.close();
     });
@@ -333,10 +395,13 @@ describe('Logger', () => {
       expect(rawContent.trim().startsWith('[')).toBe(false);
 
       const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
-      expect(dirContents.some((f) => f.includes('.malformed_line'))).toBe(
-        false,
-      );
-      expect(dirContents.some((f) => f.includes('.invalid_json'))).toBe(false);
+      expect(
+        dirContents.some(
+          (f) =>
+            f.startsWith(LOG_FILE_NAME + '.malformed_line') &&
+            f.endsWith('.bak'),
+        ),
+      ).toBe(false);
 
       newLogger.close();
     });
@@ -447,20 +512,21 @@ describe('Logger', () => {
       await fs.unlink(logFilePath);
       await fs.mkdir(logFilePath);
 
-      await logger.logMessage(MessageSenderType.USER, 'test fail write');
+      try {
+        await logger.logMessage(MessageSenderType.USER, 'test fail write');
 
-      expect(consoleDebugSpy).toHaveBeenCalledWith(
-        'Error appending to log file:',
-        expect.any(Error),
-      );
-      // The failed message did not further increment messageId beyond the setup message's increment
-      expect(logger['messageId']).toBe(initialMessageId + 1);
-      // The failed message was not added to the in-memory cache (only the setup message was)
-      expect(logger['logs'].length).toBe(initialLogCount + 1);
-
-      // Restore: remove the directory and recreate the file
-      await fs.rmdir(logFilePath);
-      await fs.writeFile(logFilePath, '', 'utf-8');
+        expect(consoleDebugSpy).toHaveBeenCalledWith(
+          'Error appending to log file:',
+          expect.any(Error),
+        );
+        // The failed message did not further increment messageId beyond the setup message's increment
+        expect(logger['messageId']).toBe(initialMessageId + 1);
+        // The failed message was not added to the in-memory cache (only the setup message was)
+        expect(logger['logs'].length).toBe(initialLogCount + 1);
+      } finally {
+        // Restore: remove the directory so subsequent tests get a clean path
+        await fs.rmdir(logFilePath);
+      }
     });
   });
 
