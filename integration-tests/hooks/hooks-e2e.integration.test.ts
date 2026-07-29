@@ -49,7 +49,7 @@ function createRealConfig(options: {
     hooks: [
       {
         type: 'command' as HookType.Command,
-        command: `bun "${options.scriptPath.split('\\').join('/')}"`,
+        command: `bun "${options.scriptPath}"`,
         timeout: options.timeout ?? 5000,
       },
     ],
