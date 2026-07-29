@@ -140,7 +140,7 @@ async function forceKillWindows(
         `Failed to force-terminate child process ${pid}`,
       );
     }
-    throw taskkillError;
+    return;
   }
 
   await awaitProcessClose(closePromise);

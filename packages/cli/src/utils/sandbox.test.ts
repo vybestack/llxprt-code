@@ -15,6 +15,7 @@ import {
   shouldAllocateSandboxTty,
 } from './sandbox.js';
 import { buildSandboxCommandArgs } from './sandbox-exec.js';
+import { getContainerPath } from './sandbox-env.js';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -454,7 +455,7 @@ describe('mountGitConfigFiles', () => {
     const args: string[] = [];
     mountGitConfigFiles(args, hostHome, hostHome);
 
-    const expectedTarget = `${gitConfig.replaceAll(path.sep, path.posix.sep)}:ro`;
+    const expectedTarget = `${getContainerPath(gitConfig)}:ro`;
     const volumeArgs = args.filter(
       (a) => a.includes('.gitconfig') && a.endsWith(':ro'),
     );

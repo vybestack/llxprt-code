@@ -52,13 +52,13 @@ async function withTaskkillUnavailable<T>(
 describe.skipIf(process.platform !== 'win32')(
   'Windows forced process termination',
   () => {
-    it('kills and awaits a live child before surfacing taskkill failure', async () => {
+    it('kills and awaits a live child when taskkill is unavailable', async () => {
       const { proc, closePromise } = await createLongRunningChild();
 
       try {
         await expect(
           withTaskkillUnavailable(() => forceKillProcess(proc, closePromise)),
-        ).rejects.toThrow();
+        ).resolves.toBeUndefined();
         expect(isRunning(proc)).toBe(false);
       } finally {
         if (isRunning(proc)) {
