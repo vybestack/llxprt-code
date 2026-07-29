@@ -219,3 +219,20 @@ export function recordModelRoutingMetrics(
   // Placeholder implementation for model routing metrics
   // This would record metrics about model selection and routing decisions
 }
+
+/**
+ * Resets all module-level metric state for testing. Under Vitest, tests used
+ * vi.resetModules() to obtain a fresh module instance per test; under Bun's
+ * isolated-process model, each test file shares one module instance, so
+ * module state must be reset explicitly between tests.
+ */
+export function resetMetricsForTesting(): void {
+  cliMeter = undefined;
+  toolCallCounter = undefined;
+  toolCallLatencyHistogram = undefined;
+  apiRequestCounter = undefined;
+  apiRequestLatencyHistogram = undefined;
+  tokenUsageCounter = undefined;
+  fileOperationCounter = undefined;
+  isMetricsInitialized = false;
+}
