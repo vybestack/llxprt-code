@@ -26,8 +26,6 @@ const {
   const createCounter = vi.fn();
   const createHistogram = vi.fn();
 
-  const counterInstance = { add: counterAdd };
-  const histogramInstance = { record: histogramRecord };
   const meterInstance = {
     createCounter,
     createHistogram,
