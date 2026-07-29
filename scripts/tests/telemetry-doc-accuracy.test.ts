@@ -141,7 +141,7 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     const constructions = sdk.match(/new HttpInstrumentation\s*\(/g) ?? [];
     expect(constructions).toHaveLength(1);
     expect(sdk).not.toMatch(/new \w+Instrumentation\s*\([^)]/);
-    expect(sdk).not.toMatch(/startSpan\s*\(/);
+    expect(sdk).not.toMatch(/\bstartSpan\s*\(/);
   });
 
   it('docs/telemetry.md states the telemetry.enabled default is false', () => {

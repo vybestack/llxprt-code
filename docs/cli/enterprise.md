@@ -450,7 +450,6 @@ to a remote collector. For more information, see the
 {
   "telemetry": {
     "enabled": true,
-    "target": "local",
     "outfile": "/var/log/llxprt/telemetry.jsonl",
     "logPrompts": false
   }
@@ -544,7 +543,6 @@ CLI.
   },
   "telemetry": {
     "enabled": true,
-    "target": "local",
     "logPrompts": false
   },
   "advanced": {

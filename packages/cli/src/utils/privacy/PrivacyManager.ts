@@ -15,6 +15,8 @@ export interface PrivacyConfig {
   getConversationLogPath(): string;
   getConversationRetentionDays(): number;
   getMaxConversationsStored(): number;
+  getTelemetryOutfile(): string | undefined;
+  getTelemetryEnabled(): boolean;
   getRedactionConfig(): RedactionConfig;
 }
 
@@ -104,7 +106,16 @@ export class PrivacyManager {
   }
 
   private getStorageDescription(): string {
-    return `Data stored locally on your machine at ${this.config.getConversationLogPath()}`;
+    const destinations: string[] = [
+      `Conversation logs at ${this.config.getConversationLogPath()}`,
+    ];
+    const telemetryOutfile = this.config.getTelemetryOutfile();
+    if (this.config.getTelemetryEnabled() && telemetryOutfile) {
+      destinations.push(`Telemetry at ${telemetryOutfile}`);
+    } else if (this.config.getTelemetryEnabled()) {
+      destinations.push('Telemetry to console output');
+    }
+    return `Data stored locally on your machine: ${destinations.join(', ')}`;
   }
 
   private getRetentionDescription(): string {

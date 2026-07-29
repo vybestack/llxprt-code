@@ -40,7 +40,7 @@ import {
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 import { SERVICE_NAME } from './constants.js';
-import { initializeMetrics } from './metrics.js';
+import { initializeMetrics, resetMetricsState } from './metrics.js';
 import {
   FileLogExporter,
   FileMetricExporter,
@@ -224,6 +224,7 @@ export async function shutdownTelemetry(
     trace.disable();
     logs.disable();
     metrics.disable();
+    resetMetricsState();
     shuttingDown = false;
   }
 }

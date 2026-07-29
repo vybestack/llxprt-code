@@ -16,6 +16,8 @@ interface PrivacyConfigOptions {
   responseLoggingEnabled?: boolean;
   promptLoggingEnabled?: boolean;
   redactionConfig?: RedactionConfig;
+  telemetryEnabled?: boolean;
+  telemetryOutfile?: string | undefined;
 }
 
 const noRedaction: RedactionConfig = {
@@ -35,6 +37,8 @@ function createConfig(options: PrivacyConfigOptions = {}): PrivacyConfig {
     getConversationLogPath: () => '/tmp/conversations',
     getConversationRetentionDays: () => 30,
     getMaxConversationsStored: () => 100,
+    getTelemetryOutfile: () => options.telemetryOutfile,
+    getTelemetryEnabled: () => options.telemetryEnabled ?? false,
     getRedactionConfig: () => options.redactionConfig ?? noRedaction,
   };
 }
@@ -75,7 +79,7 @@ describe('PrivacyManager local-only behavior', () => {
       'Performance metrics',
     ]);
     expect(disclosure.storageLocation).toBe(
-      'Data stored locally on your machine at /tmp/conversations',
+      'Data stored locally on your machine: Conversation logs at /tmp/conversations',
     );
     expect(disclosure.storageLocation).not.toMatch(/remote|service/i);
     expect(disclosure.retentionPolicy).toBe(
@@ -131,5 +135,42 @@ describe('PrivacyManager local-only behavior', () => {
     expect(
       manager.getRedactor().redactResponseContent(content, 'global'),
     ).toContain('[REDACTED-API-KEY]');
+  });
+
+  it('discloses telemetry file output when telemetry is enabled with outfile', () => {
+    const disclosure = new PrivacyManager(
+      createConfig({
+        telemetryEnabled: true,
+        telemetryOutfile: '/tmp/telemetry.jsonl',
+      }),
+    ).generatePrivacyDisclosure();
+
+    expect(disclosure.storageLocation).toContain(
+      'Telemetry at /tmp/telemetry.jsonl',
+    );
+    expect(disclosure.storageLocation).toContain('Conversation logs at');
+  });
+
+  it('discloses telemetry console output when telemetry is enabled without outfile', () => {
+    const disclosure = new PrivacyManager(
+      createConfig({
+        telemetryEnabled: true,
+        telemetryOutfile: undefined,
+      }),
+    ).generatePrivacyDisclosure();
+
+    expect(disclosure.storageLocation).toContain('Telemetry to console output');
+  });
+
+  it('omits telemetry destination when telemetry is disabled', () => {
+    const disclosure = new PrivacyManager(
+      createConfig({
+        telemetryEnabled: false,
+        telemetryOutfile: '/tmp/telemetry.jsonl',
+      }),
+    ).generatePrivacyDisclosure();
+
+    expect(disclosure.storageLocation).not.toContain('Telemetry');
+    expect(disclosure.storageLocation).toContain('Conversation logs at');
   });
 });

@@ -97,6 +97,17 @@ export function initializeMetrics(config: TelemetryConfig): void {
   isMetricsInitialized = true;
 }
 
+export function resetMetricsState(): void {
+  cliMeter = undefined;
+  toolCallCounter = undefined;
+  toolCallLatencyHistogram = undefined;
+  apiRequestCounter = undefined;
+  apiRequestLatencyHistogram = undefined;
+  tokenUsageCounter = undefined;
+  fileOperationCounter = undefined;
+  isMetricsInitialized = false;
+}
+
 export function recordToolCallMetrics(
   config: ISessionConfig,
   functionName: string,

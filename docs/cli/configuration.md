@@ -1633,7 +1633,6 @@ The following settings remain at the top level of the `settings.json` file.
   },
   "telemetry": {
     "enabled": true,
-    "target": "local",
     "logPrompts": true
   },
   "usageStatisticsEnabled": true,
