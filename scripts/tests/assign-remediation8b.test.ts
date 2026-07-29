@@ -13,8 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { execFileSync, spawn, type ChildProcess } from 'child_process';
-import { existsSync, rmSync } from 'fs';
+import { execFileSync } from 'child_process';
 import * as nodePath from 'path';
 import { asRecord, stateIssue, stateOpLog } from './typed-test-helpers.ts';
 import {
@@ -31,43 +30,6 @@ import {
 
 function defaultStateWith(overrides: Record<string, unknown>) {
   return { ...defaultState(), ...overrides };
-}
-
-function waitForHook(hookFile: string, child: ChildProcess): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      clearInterval(poll);
-      reject(new Error(`Timed out waiting for signal hook: ${hookFile}`));
-    }, 5000);
-    const poll = setInterval(() => {
-      if (existsSync(hookFile)) {
-        clearInterval(poll);
-        clearTimeout(timeout);
-        resolve();
-        return;
-      }
-      if (child.exitCode !== null || child.signalCode !== null) {
-        clearInterval(poll);
-        clearTimeout(timeout);
-        reject(
-          new Error('Assignment script exited before creating signal hook'),
-        );
-      }
-    }, 10);
-  });
-}
-
-function waitForExit(child: ChildProcess): Promise<number> {
-  return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code, signal) => {
-      if (code !== null) {
-        resolve(code);
-        return;
-      }
-      reject(new Error(`Assignment script exited from signal ${signal}`));
-    });
-  });
 }
 
 // ===========================================================================
@@ -391,12 +353,7 @@ describe('F14: fake-gh label filter ALL-label subset', () => {
     it(
       'rolls back bot-owned mutations when TERM arrives after assignee mutation',
       { timeout: 30000 },
-      async () => {
-        const hookFile = nodePath.join(
-          process.cwd(),
-          'tmp',
-          `assign-signal-${process.pid}`,
-        );
+      () => {
         const repo = createFakeRepo(
           defaultStateWith({
             issues: { 42: makeIssue({ number: 42, assignees: [] }) },
@@ -409,47 +366,20 @@ describe('F14: fake-gh label filter ALL-label subset', () => {
                 endpoint: 'repos/test/repo/issues/42/assignees',
                 on_nth: 1,
                 timing: 'post',
-                action: 'pause',
-                hook_file: hookFile,
-                seconds: 0.5,
+                action: 'signal_parent',
+                signal: 'SIGTERM',
               },
             ],
           }),
         );
-        const assignScript = nodePath.join(
-          import.meta.dirname,
-          '../..',
-          '.github/scripts/assign-issue.sh',
-        );
-        const env = {
-          ...process.env,
-          GH_TOKEN: 'fake-token',
-          GITHUB_TOKEN: 'fake-token',
-          GITHUB_REPOSITORY: 'test/repo',
-          ISSUE_NUMBER: '42',
-          COMMENTER_LOGIN: 'alice',
-          GH_FAKE_STATE: repo.stateFile,
-          ASSIGN_ELECTION_DELAY: '0',
-          PATH: `${repo.binDir}${nodePath.delimiter}${process.env.PATH}`,
-        };
+        const result = repo.runAssign({
+          issueNumber: 42,
+          commenter: 'alice',
+          extraEnv: { ASSIGN_ELECTION_DELAY: '0' },
+        });
 
-        rmSync(hookFile, { force: true });
-        const child = spawn('bash', [assignScript], { env, stdio: 'ignore' });
-        const exit = waitForExit(child);
-        let status = 0;
-        try {
-          await waitForHook(hookFile, child);
-          expect(child.kill('SIGTERM')).toBe(true);
-          status = await exit;
-        } finally {
-          if (child.exitCode === null && child.signalCode === null) {
-            child.kill('SIGKILL');
-          }
-        }
-
-        const state = repo.readState();
-        expect(status).not.toBe(0);
-        const issue42 = asRecord(state.issues['42']);
+        expect(result.status).toBe(143);
+        const issue42 = asRecord(result.state.issues['42']);
         expect(issue42._assignees).not.toContain('alice');
         expect(issue42._label_names).not.toContain('auto-assigned');
       },
