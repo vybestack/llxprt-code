@@ -392,6 +392,10 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     expect(result).toBe('sk-fallback-value');
   });
 
+  /**
+   * @plan PLAN-20260211-SECURESTORE.P11
+   * @requirement R9.1
+   */
   it('removes an existing provider-key fallback after a verified keyring write', async () => {
     const fallbackStore = new SecureStore('llxprt-code-provider-keys', {
       keyringLoader: async () => null,
