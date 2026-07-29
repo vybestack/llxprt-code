@@ -525,7 +525,7 @@ describe('Logger', () => {
         expect(logger['logs'].length).toBe(initialLogCount + 1);
       } finally {
         // Restore: remove the directory so subsequent tests get a clean path
-        await fs.rmdir(logFilePath);
+        await fs.rm(logFilePath, { recursive: true, force: true });
       }
     });
   });

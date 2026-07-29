@@ -193,11 +193,12 @@ describe('FileMetricExporter serialization format', () => {
     const parsed = JSON.parse(content.trim());
     // Validate the actual metric data structure, not just resource presence.
     expect(parsed.scopeMetrics).toStrictEqual([]);
-    // The OTel Resource serializes attributes as _rawAttributes key/value
-    // pairs when JSON.stringify'd.
-    expect(parsed.resource._rawAttributes).toStrictEqual([
-      ['service.name', 'test-service'],
-    ]);
+    // Behavior-level: the serialized resource should round-trip the same
+    // attributes as the source resource (avoiding coupling to OTel SDK
+    // internals like _rawAttributes).
+    expect(JSON.stringify(resourceMetrics.resource)).toBe(
+      JSON.stringify(parsed.resource),
+    );
   });
 
   it('reports CUMULATIVE aggregation temporality', () => {
