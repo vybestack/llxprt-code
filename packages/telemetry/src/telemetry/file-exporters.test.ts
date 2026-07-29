@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   BasicTracerProvider,
   SimpleSpanProcessor,
+  InMemorySpanExporter,
   type ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
 import {
@@ -71,18 +72,29 @@ describe('FileSpanExporter', () => {
 });
 
 /**
- * Produce a real, fully-formed ReadableSpan using a tracer provider so the
+ * Produce a real, fully-formed ReadableSpan via the SDK pipeline so the
  * exporter serializes genuine telemetry data rather than a hand-rolled stub.
+ * Uses InMemorySpanExporter to capture the finished ReadableSpan from the
+ * pipeline instead of casting a raw Span.
  */
 async function makeReadableSpan(name: string): Promise<ReadableSpan> {
-  const provider = new BasicTracerProvider();
+  const memExporter = new InMemorySpanExporter();
+  const provider = new BasicTracerProvider({
+    spanProcessors: [new SimpleSpanProcessor(memExporter)],
+  });
   const tracer = provider.getTracer('test-tracer');
   const span = tracer.startSpan(name);
   span.setAttribute('test.attr', 'value');
   span.end();
   await provider.forceFlush();
+  // Capture spans before shutdown — InMemorySpanExporter clears its buffer
+  // on shutdown.
+  const finished = memExporter.getFinishedSpans();
   await provider.shutdown();
-  return span as unknown as ReadableSpan;
+  if (finished.length === 0) {
+    throw new Error('Expected at least one finished span');
+  }
+  return finished[0];
 }
 
 /**

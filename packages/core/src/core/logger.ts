@@ -12,6 +12,10 @@ import {
   appendFileSync,
   renameSync,
   unlinkSync,
+  statSync,
+  openSync,
+  readSync,
+  closeSync,
 } from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';
@@ -143,20 +147,41 @@ export class Logger {
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
     const entries: LogEntry[] = [];
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line) as unknown;
-        if (isValidLogEntry(parsed)) {
-          entries.push(parsed);
-        }
-      } catch {
-        debugLogger.debug('Skipping unparseable JSONL line in log file');
+    let skipped = 0;
+    let firstSkippedLine = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const result = this._tryParseJsonlLine(lines[i]);
+      if (result.valid) {
+        entries.push(result.entry);
+      } else {
+        skipped++;
+        if (firstSkippedLine === -1) firstSkippedLine = i + 1;
       }
+    }
+    if (skipped > 0) {
+      debugLogger.debug(
+        `Skipped ${skipped} unparseable/invalid JSONL line(s) in log file` +
+          (firstSkippedLine > -1 ? ` (first at line ${firstSkippedLine})` : ''),
+      );
     }
     if (entries.length === 0 && lines.length > 0) {
       throw new SyntaxError('All JSONL lines failed to parse');
     }
     return entries;
+  }
+
+  private _tryParseJsonlLine(
+    line: string,
+  ): { valid: true; entry: LogEntry } | { valid: false } {
+    try {
+      const parsed = JSON.parse(line) as unknown;
+      if (isValidLogEntry(parsed)) {
+        return { valid: true, entry: parsed };
+      }
+    } catch {
+      // Fall through to invalid.
+    }
+    return { valid: false };
   }
 
   private _toJsonl(entries: LogEntry[]): string {
@@ -175,6 +200,10 @@ export class Logger {
       if (nodeError.code === 'ENOENT') {
         return [];
       }
+      debugLogger.debug(
+        `Failed to read or parse log file ${this.logFilePath}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -201,7 +230,12 @@ export class Logger {
           `Invalid JSON line in log file ${this.logFilePath}. Backing up and starting fresh.`,
           parseError,
         );
-        this._backupCorruptedLogFileSync('malformed_line');
+        const backedUp = this._backupCorruptedLogFileSync('malformed_line');
+        if (!backedUp) {
+          debugLogger.debug(
+            'Backup of corrupted log file failed — preserving original file on disk and returning empty cache.',
+          );
+        }
         return [];
       }
       throw parseError;
@@ -213,8 +247,8 @@ export class Logger {
       throw new Error('Log file path not set during write attempt.');
     }
     const tmpPath = `${this.logFilePath}.migration.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(tmpPath, this._toJsonl(entries), 'utf-8');
     try {
+      writeFileSync(tmpPath, this._toJsonl(entries), 'utf-8');
       renameSync(tmpPath, this.logFilePath);
     } catch (error) {
       // Clean up the orphaned temp file so it doesn't accumulate on disk.
@@ -231,17 +265,57 @@ export class Logger {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during append attempt.');
     }
+    this._ensureTrailingNewline();
     appendFileSync(this.logFilePath, JSON.stringify(entry) + '\n', 'utf-8');
   }
 
-  private _backupCorruptedLogFileSync(reason: string): void {
+  /**
+   * Ensure the file ends with a newline before appending. Without this,
+   * appending to a file whose last line lacks a trailing LF (common after
+   * crashes or manual edits) would concatenate two records onto one line.
+   */
+  private _ensureTrailingNewline(): void {
     if (!this.logFilePath) return;
-    const backupPath = `${this.logFilePath}.${reason}.${Date.now()}.bak`;
+    try {
+      const stat = statSync(this.logFilePath);
+      if (stat.size === 0) return;
+      const fd = openSync(this.logFilePath, 'r');
+      try {
+        const buf = Buffer.alloc(1);
+        readSync(fd, buf, 0, 1, stat.size - 1);
+        if (buf[0] !== 0x0a) {
+          appendFileSync(this.logFilePath, '\n', 'utf-8');
+        }
+      } finally {
+        closeSync(fd);
+      }
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'ENOENT') {
+        throw error;
+      }
+      // File doesn't exist yet — nothing to terminate.
+    }
+  }
+
+  private _backupCorruptedLogFileSync(reason: string): boolean {
+    if (!this.logFilePath) return false;
+    const backupPath = `${this.logFilePath}.${reason}.${process.pid}.${Date.now()}.bak`;
     try {
       renameSync(this.logFilePath, backupPath);
       debugLogger.debug(`Backed up corrupted log file to ${backupPath}`);
-    } catch {
-      // Rename failed (e.g., file doesn't exist); primary error already handled.
+      return true;
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      // ENOENT is benign — file was already gone.
+      if (nodeError.code === 'ENOENT') {
+        return true;
+      }
+      debugLogger.debug(
+        `Failed to back up corrupted log file to ${backupPath}:`,
+        error,
+      );
+      return false;
     }
   }
 
@@ -261,7 +335,21 @@ export class Logger {
     if (!this.logFilePath) {
       return;
     }
-    const entries = this._readLogFileSync();
+    // Read the raw file content for potential backup.
+    let rawContent: string | null = null;
+    try {
+      rawContent = readFileSync(this.logFilePath, 'utf-8');
+    } catch {
+      // Can't read — nothing to migrate.
+      return;
+    }
+    const entries = this._parseLogContentSync(rawContent.trim());
+    // If the parsed entries don't match the raw content, preserve the
+    // original as a backup before rewriting.
+    const serialized = this._toJsonl(entries);
+    if (serialized.trim() !== rawContent.trim() && entries.length > 0) {
+      this._backupCorruptedLogFileSync('pre_migration');
+    }
     this._writeJsonlAtomicSync(entries);
   }
 
@@ -365,14 +453,23 @@ export class Logger {
     }
   }
 
-  private async _backupCorruptedLogFile(reason: string): Promise<void> {
-    if (!this.logFilePath) return;
-    const backupPath = `${this.logFilePath}.${reason}.${Date.now()}.bak`;
+  private async _backupCorruptedLogFile(reason: string): Promise<boolean> {
+    if (!this.logFilePath) return false;
+    const backupPath = `${this.logFilePath}.${reason}.${process.pid}.${Date.now()}.bak`;
     try {
       await fs.rename(this.logFilePath, backupPath);
       debugLogger.debug(`Backed up corrupted log file to ${backupPath}`);
-    } catch {
-      // Rename failed (e.g., file doesn't exist); primary error already handled.
+      return true;
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'ENOENT') {
+        return true;
+      }
+      debugLogger.debug(
+        `Failed to back up corrupted log file to ${backupPath}:`,
+        error,
+      );
+      return false;
     }
   }
 
