@@ -63,6 +63,10 @@ function computeClearCut(history: readonly IContent[]): {
     }
   }
 
+  if (!foundHuman) {
+    return { cutIndex: history.length, removed: [] };
+  }
+
   return {
     cutIndex,
     removed: history.slice(cutIndex),

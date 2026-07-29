@@ -99,12 +99,18 @@ interface FakeClient {
 
 function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   let historyService: HistoryService | null = new HistoryService();
+  let history = [...seed];
   let restoreCalls = 0;
   const contract = {
-    getHistory: async () => [...seed],
+    getHistory: async () => [...history],
     getHistoryService: () => historyService,
+    setHistory: async (nextHistory: IContent[]) => {
+      history = [...nextHistory];
+      restoreCalls += 1;
+    },
     resetChat: async () => undefined,
-    restoreHistory: async () => {
+    restoreHistory: async (nextHistory: IContent[]) => {
+      history = [...nextHistory];
       restoreCalls += 1;
     },
   } as unknown as AgentClientContract;
@@ -210,7 +216,8 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       );
 
       const config = buildFakeConfig(projectRoot);
-      const client = buildFakeClient([humanText('live turn')]);
+      const liveHistory = [humanText('live turn')];
+      const client = buildFakeClient(liveHistory);
       const control = new SessionControl(
         buildDeps(config, client.contract, sessionId),
       );
@@ -310,7 +317,8 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       );
 
       const config = buildFakeConfig(projectRoot);
-      const client = buildFakeClient([humanText('live turn')]);
+      const liveHistory = [humanText('live turn')];
+      const client = buildFakeClient(liveHistory);
 
       // A HistoryService whose 'on' throws so the post-restore integration
       // subscribe fails DURING resume (after the resumed recording + lock were
@@ -338,12 +346,9 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       // resume MUST reject with the subscribe failure (not silently half-enable).
       await expect(control.resume('latest')).rejects.toThrow('subscribe boom');
 
-      // FINDING A2: Config was NOT left pointing at the resumed recording
-      // service — half-enabled recording (turns silently dropped) cannot occur.
       expect(config.getSessionRecordingService()).toBeUndefined();
-
-      // getRecording reflects cleanly disabled state.
       expect(control.getRecording().enabled).toBe(false);
+      expect(await client.contract.getHistory()).toStrictEqual(liveHistory);
 
       // The adopted session lock was released: NO lock file remains on disk.
       expect(remainingLockFiles(projectRoot)).toStrictEqual([]);

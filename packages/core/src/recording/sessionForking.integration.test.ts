@@ -166,6 +166,49 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
         }
       }
     });
+
+    it('uses checkpoint metadata refreshed under the source lock for ancestry', async () => {
+      const parent = new SessionRecordingService(makeConfig(chatsDir()));
+      parent.recordContent(makeContent('A', 'human'));
+      const checkpoint = await parent.createCheckpoint('authoritative-name');
+      await parent.dispose();
+
+      const result = await new SessionTransitionService().forkFromCheckpoint(
+        {
+          kind: 'checkpoint',
+          source: {
+            sessionId: parent.getSessionId(),
+            filePath: parent.getFilePath()!,
+            projectHash: PROJECT_HASH,
+            startTime: new Date().toISOString(),
+            lastModified: new Date(),
+            fileSize: 0,
+            provider: 'anthropic',
+            model: 'claude-4',
+          },
+          checkpointId: checkpoint.checkpointId,
+          checkpointName: 'stale-name',
+          sequence: checkpoint.sequence + 99,
+        },
+        chatsDir(),
+        PROJECT_HASH,
+        'anthropic',
+        'claude-4',
+        ['/test/workspace'],
+      );
+      requireForkSuccess(result);
+      await result.recording.dispose();
+      const replay = await replaySession(
+        result.recording.getFilePath()!,
+        PROJECT_HASH,
+      );
+      requireReplaySuccess(replay);
+      expect(replay.ancestry).toMatchObject({
+        checkpointName: 'authoritative-name',
+        parentSequence: checkpoint.sequence,
+      });
+      await result.lockHandle.release();
+    });
   });
 
   describe('A2: source and child remain independent', () => {
@@ -441,32 +484,35 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
         parent.getSessionId(),
       );
 
-      const result = await new SessionTransitionService().forkFromCheckpoint(
-        {
-          kind: 'checkpoint',
-          source: {
-            sessionId: parent.getSessionId(),
-            filePath: parent.getFilePath()!,
-            projectHash: PROJECT_HASH,
-            startTime: new Date().toISOString(),
-            lastModified: new Date(),
-            fileSize: 0,
-            provider: 'anthropic',
-            model: 'claude-4',
+      try {
+        const result = await new SessionTransitionService().forkFromCheckpoint(
+          {
+            kind: 'checkpoint',
+            source: {
+              sessionId: parent.getSessionId(),
+              filePath: parent.getFilePath()!,
+              projectHash: PROJECT_HASH,
+              startTime: new Date().toISOString(),
+              lastModified: new Date(),
+              fileSize: 0,
+              provider: 'anthropic',
+              model: 'claude-4',
+            },
+            checkpointId: cp.checkpointId,
+            checkpointName: cp.name,
+            sequence: cp.sequence,
           },
-          checkpointId: cp.checkpointId,
-          checkpointName: cp.name,
-          sequence: cp.sequence,
-        },
-        chatsDir(),
-        PROJECT_HASH,
-        'anthropic',
-        'claude-4',
-        ['/test/workspace'],
-      );
+          chatsDir(),
+          PROJECT_HASH,
+          'anthropic',
+          'claude-4',
+          ['/test/workspace'],
+        );
 
-      expect(result).toMatchObject({ ok: false });
-      await sourceLock.release();
+        expect(result).toMatchObject({ ok: false });
+      } finally {
+        await sourceLock.release();
+      }
     });
   });
 
@@ -505,12 +551,23 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       );
       requireForkSuccess(fork);
 
-      // Lock is held by the fork
-      const isLocked = await SessionLockManager.isLocked(
-        chatsDir(),
-        fork.recording.getSessionId(),
+      const checkpointService = new CheckpointService();
+      await checkpointService.setSessionName(
+        fork.recording,
+        PROJECT_HASH,
+        'forked-child',
       );
-      expect(isLocked).toBe(true);
+      await checkpointService.createCheckpoint(
+        fork.recording,
+        PROJECT_HASH,
+        'child-checkpoint',
+      );
+      await expect(
+        SessionLockManager.acquire(chatsDir(), fork.recording.getSessionId()),
+      ).rejects.toThrow('Session is in use by another process');
+      expect(fork.recording.ownsLockFor(fork.recording.getSessionId())).toBe(
+        true,
+      );
 
       try {
         await fork.recording.dispose();
@@ -518,12 +575,24 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
         await fork.lockHandle.release();
       }
 
-      // Lock is released after disposal
-      const isLockedAfter = await SessionLockManager.isLocked(
-        chatsDir(),
-        fork.recording.getSessionId(),
+      expect(
+        await SessionLockManager.isLocked(
+          chatsDir(),
+          fork.recording.getSessionId(),
+        ),
+      ).toBe(false);
+
+      const childReplay = await replaySession(
+        fork.recording.getFilePath()!,
+        PROJECT_HASH,
       );
-      expect(isLockedAfter).toBe(false);
+      requireReplaySuccess(childReplay);
+      expect(childReplay.sessionName).toBe('forked-child');
+      expect(
+        childReplay.checkpoints?.some(
+          (checkpoint) => checkpoint.name === 'child-checkpoint',
+        ),
+      ).toBe(true);
     });
   });
 

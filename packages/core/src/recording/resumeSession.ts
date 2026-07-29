@@ -199,6 +199,13 @@ export async function resumeSession(
       error: `Failed to replay session: ${replayResult.error}`,
     };
   }
+  if (replayResult.sequenceCorrupt) {
+    await lockedSession.lockHandle.release();
+    return {
+      ok: false,
+      error: 'Failed to replay session: recording has non-monotonic sequences',
+    };
+  }
 
   // Steps 5-7: Initialize recording for append
   const recording = initializeRecordingForResume(

@@ -19,7 +19,11 @@ import { type IContent } from '../services/history/IContent.js';
 import { replaySession, replaySessionThroughSequence } from './ReplayEngine.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { type ContinueTarget, type SessionMetadata } from './types.js';
+import {
+  type CheckpointMetadataView,
+  type ContinueTarget,
+  type SessionMetadata,
+} from './types.js';
 
 export type { ContinueTarget } from './types.js';
 
@@ -45,7 +49,13 @@ interface ForkRuntime {
 }
 
 type CheckpointTarget = Extract<ContinueTarget, { kind: 'checkpoint' }>;
-type HistoryResult = { ok: true; history: IContent[] } | ForkError;
+type HistoryResult =
+  | {
+      ok: true;
+      history: IContent[];
+      checkpoint: CheckpointMetadataView;
+    }
+  | ForkError;
 
 async function loadCheckpointHistory(
   target: CheckpointTarget,
@@ -56,6 +66,12 @@ async function loadCheckpointHistory(
     return {
       ok: false,
       error: `Failed to replay source session: ${fullReplay.error}`,
+    };
+  }
+  if (fullReplay.sequenceCorrupt) {
+    return {
+      ok: false,
+      error: 'Failed to replay source session: non-monotonic sequences',
     };
   }
   const liveCheckpoint = fullReplay.checkpoints?.find(
@@ -79,7 +95,21 @@ async function loadCheckpointHistory(
       error: `Failed to replay source through checkpoint: ${boundedReplay.error}`,
     };
   }
-  return { ok: true, history: boundedReplay.history };
+  if (boundedReplay.sequenceCorrupt) {
+    return {
+      ok: false,
+      error:
+        'Failed to replay source through checkpoint: non-monotonic sequences',
+    };
+  }
+  if (boundedReplay.history.length === 0) {
+    return { ok: false, error: 'Checkpoint has no conversation history' };
+  }
+  return {
+    ok: true,
+    history: boundedReplay.history,
+    checkpoint: liveCheckpoint,
+  };
 }
 
 async function cleanupFailedChild(
@@ -96,6 +126,7 @@ async function cleanupFailedChild(
 
 async function materializeChild(
   target: CheckpointTarget,
+  checkpoint: CheckpointMetadataView,
   history: IContent[],
   runtime: ForkRuntime,
 ): Promise<ForkResult | ForkError> {
@@ -112,22 +143,27 @@ async function materializeChild(
     });
     recording.recordSessionFork({
       parentSessionId: target.source.sessionId,
-      parentSequence: target.sequence,
-      checkpointId: target.checkpointId,
-      checkpointName: target.checkpointName,
+      parentSequence: checkpoint.sequence,
+      checkpointId: checkpoint.checkpointId,
+      checkpointName: checkpoint.name,
     });
     for (const content of history) recording.recordContent(content);
     await recording.flush();
     if (!recording.isActive()) {
       throw new Error('Child recording failed during flush');
     }
+    const childFilePath = recording.getFilePath();
+    if (childFilePath === null) {
+      throw new Error('Child recording did not materialize');
+    }
+    await fs.access(childFilePath);
   } catch (error: unknown) {
     await cleanupFailedChild(recording, null);
     const detail = error instanceof Error ? error.message : String(error);
     return { ok: false, error: `Failed to create child session: ${detail}` };
   }
 
-  const lockHandle = recording.releaseLockOwnership();
+  const lockHandle = recording.getOwnedLockHandle();
   if (lockHandle === null) {
     await cleanupFailedChild(recording, null);
     return { ok: false, error: 'Failed to retain child session lock' };
@@ -176,13 +212,18 @@ export class SessionTransitionService {
     try {
       const history = await loadCheckpointHistory(target, projectHash);
       if (!history.ok) return history;
-      return await materializeChild(target, history.history, {
-        chatsDir,
-        projectHash,
-        provider: currentProvider,
-        model: currentModel,
-        workspaceDirs,
-      });
+      return await materializeChild(
+        target,
+        history.checkpoint,
+        history.history,
+        {
+          chatsDir,
+          projectHash,
+          provider: currentProvider,
+          model: currentModel,
+          workspaceDirs,
+        },
+      );
     } finally {
       await sourceLock?.release().catch(() => undefined);
     }

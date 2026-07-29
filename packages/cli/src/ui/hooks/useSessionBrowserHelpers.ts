@@ -441,16 +441,17 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
   return useCallback(async () => {
     const currentGen = beginSessionLoad(deps);
     try {
-      const targets = await SessionDiscovery.listContinueTargets(
+      const detailed = await SessionDiscovery.listContinueTargetsDetailed(
         props.chatsDir,
         props.projectHash,
       );
       if (currentGen !== deps.generationRef.current) return;
       const filtered = await filterContinueTargets(
-        targets,
+        detailed.targets,
         currentGen,
         props.currentSessionId,
         processSession,
+        detailed.skippedCount,
       );
       if (filtered === null) return;
       const pageToLoad = finishSessionLoad(filtered, deps);
@@ -492,9 +493,10 @@ async function filterContinueTargets(
     currentGen: number,
     currentSessionId: string,
   ) => Promise<{ enriched: EnrichedSessionSummary } | { skipped: true } | null>,
+  initialSkippedCount = 0,
 ): Promise<FilteredSessionsResult | null> {
   const filtered: EnrichedSessionSummary[] = [];
-  let skippedCount = 0;
+  let skippedCount = initialSkippedCount;
   for (const target of targets) {
     const result = await processTarget(target, currentGen, currentSessionId);
     if (result === null) return null;

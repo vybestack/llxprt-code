@@ -302,19 +302,29 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         expect(
           result.current.sessions.map((row) => row.target.kind),
         ).toStrictEqual(['session', 'checkpoint']);
-        expect(result.current.sessions[1].checkpointName).toBe('branch-point');
+        const checkpointRowIndex = result.current.sessions.findIndex(
+          (row) =>
+            row.target.kind === 'checkpoint' &&
+            row.target.checkpointId === checkpoint.checkpointId,
+        );
+        expect(checkpointRowIndex).toBeGreaterThanOrEqual(0);
+        expect(result.current.sessions[checkpointRowIndex].checkpointName).toBe(
+          'branch-point',
+        );
 
         result.current.handleKeypress('', makeKey('tab'));
         await waitFor(() => {
           expect(result.current.isSearching).toBe(false);
         });
-        result.current.handleKeypress('', makeKey('down'));
+        for (let index = 0; index < checkpointRowIndex; index += 1) {
+          result.current.handleKeypress('', makeKey('down'));
+        }
         await waitFor(() => {
-          expect(result.current.selectedIndex).toBe(1);
+          expect(result.current.selectedIndex).toBe(checkpointRowIndex);
         });
         result.current.handleKeypress('', makeKey('delete'));
         await waitFor(() => {
-          expect(result.current.deleteConfirmIndex).toBe(1);
+          expect(result.current.deleteConfirmIndex).toBe(checkpointRowIndex);
         });
         result.current.handleKeypress('y', makeKey('y'));
 
@@ -357,6 +367,25 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
       // Current session should be counted in skipped
       expect(result.current.skippedCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('includes malformed JSONL recordings in skippedCount', async () => {
+      await createTestSession(chatsDir, { sessionId: 'visible-session' });
+      await fs.writeFile(
+        path.join(chatsDir, 'session-malformed.jsonl'),
+        '{not valid json}\n',
+        'utf-8',
+      );
+
+      const { result } = renderHook(() =>
+        useSessionBrowser(makeHookProps(chatsDir)),
+      );
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.skippedCount).toBe(1);
+      expect(result.current.sessions).toHaveLength(1);
     });
 
     /**

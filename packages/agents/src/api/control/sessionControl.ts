@@ -273,87 +273,72 @@ export class SessionControl implements AgentSessionControl {
     if (!result.ok) {
       throw new Error(`Failed to resume session: ${result.error}`);
     }
-    // Tear down the prior recording/integration/lock BEFORE restoreHistory (see
-    // step 3 in the doc). On a prior-teardown failure, release the freshly
-    // acquired resumed resources (still only in locals) and rethrow so neither
-    // the prior nor the resumed resources leak, ending cleanly disabled.
-    try {
-      await this.teardownPriorBeforeResume();
-    } catch (error) {
-      await this.disposeServiceQuietly(result.recording);
-      await this.releaseLockQuietly(result.lockHandle);
-      throw error;
-    }
-    // restoreHistory appends into the live HistoryService, so clear the prior
-    // in-memory history after detaching integrations and before restoring.
-    try {
-      await this.deps.resolveClient().resetChat();
-      await this.deps.resolveClient().restoreHistory(result.history);
-    } catch (error) {
-      await this.disposeServiceQuietly(result.recording);
-      await this.releaseLockQuietly(result.lockHandle);
-      throw error;
-    }
-    // FINDING A2: subscribe BEFORE committing. On subscribe failure dispose the
-    // integration + resumed recording, release the resumed lock, and rethrow —
-    // the fields/Config are never pointed at a non-integrated resumed service.
-    const integration = new RecordingIntegration(result.recording);
-    let subscribed: boolean;
-    try {
-      subscribed = this.attachIntegrationToHistory(integration);
-    } catch (error) {
-      this.disposeIntegrationQuietly(integration);
-      await this.disposeServiceQuietly(result.recording);
-      await this.releaseLockQuietly(result.lockHandle);
-      throw error;
-    }
-    // Commit the resumed resources only now that the integration is live.
-    this.recording = result.recording;
-    this.deps.config.setSessionRecordingService(result.recording);
-    this.integration = integration;
-    this.integrationNeedsSubscribe = !subscribed;
-    this.currentLockHandle = result.lockHandle;
+    await this.commitPreparedSession(
+      result.recording,
+      result.lockHandle,
+      result.history,
+    );
     return result.history;
   }
 
-  /**
-   * Disposes the prior integration (unsubscribing it so an imminent
-   * restoreHistory does not double-record into the prior file), then disposes
-   * the prior recording service and releases the prior session lock, clearing
-   * all three fields. Each step is guarded so a single failure does not skip the
-   * others; the first collected failure is rethrown so the caller (resumeInternal)
-   * can release the freshly acquired resumed resources and surface the failure.
-   * The fields are cleared to null up front so that even on a partial-teardown
-   * throw no field is left referencing a disposed/released resource.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private async teardownPriorBeforeResume(): Promise<void> {
+  private async commitPreparedSession(
+    recording: SessionRecordingService,
+    lockHandle: LockHandle,
+    history: IContent[],
+  ): Promise<void> {
     const priorRecording = this.recording;
     const priorIntegration = this.integration;
     const priorLockHandle = this.currentLockHandle;
-    this.recording = null;
-    this.integration = null;
-    this.integrationNeedsSubscribe = false;
-    this.currentLockHandle = null;
-    this.deps.config.setSessionRecordingService(undefined);
-    const errors: unknown[] = [];
-    if (priorIntegration !== null) {
-      this.guardSync(errors, () => priorIntegration.dispose());
-    }
-    await this.guard(errors, async () => {
-      if (priorRecording !== null) {
-        await priorRecording.dispose();
+    const priorNeedsSubscribe = this.integrationNeedsSubscribe;
+    const client = this.deps.resolveClient();
+    const priorHistory = await client.getHistory();
+    const integration = new RecordingIntegration(recording);
+    let historyReplacementAttempted = false;
+    try {
+      historyReplacementAttempted = true;
+      await client.setHistory(history);
+      const subscribed = this.attachIntegrationToHistory(integration);
+      this.deps.config.setSessionRecordingService(recording);
+      this.recording = recording;
+      this.integration = integration;
+      this.integrationNeedsSubscribe = !subscribed;
+      this.currentLockHandle = lockHandle;
+    } catch (error: unknown) {
+      this.disposeIntegrationQuietly(integration);
+      this.recording = priorRecording;
+      this.integration = priorIntegration;
+      this.integrationNeedsSubscribe = priorNeedsSubscribe;
+      this.currentLockHandle = priorLockHandle;
+      let rollbackError: unknown;
+      try {
+        this.deps.config.setSessionRecordingService(
+          priorRecording ?? undefined,
+        );
+        if (historyReplacementAttempted) {
+          await client.setHistory(priorHistory);
+        }
+      } catch (failure: unknown) {
+        rollbackError = failure;
       }
-    });
-    await this.guard(errors, async () => {
-      if (priorLockHandle !== null) {
-        await priorLockHandle.release();
-      }
-    });
-    if (errors.length > 0) {
-      throw errors[0];
+      await this.disposeServiceQuietly(recording);
+      await this.releaseLockQuietly(lockHandle);
+      if (rollbackError !== undefined) throw rollbackError;
+      throw error;
     }
+
+    this.disposeIntegrationQuietlyIfPresent(priorIntegration);
+    if (priorRecording !== null) {
+      await this.disposeServiceQuietly(priorRecording);
+    }
+    if (priorLockHandle !== null) {
+      await this.releaseLockQuietly(priorLockHandle);
+    }
+  }
+
+  private disposeIntegrationQuietlyIfPresent(
+    integration: RecordingIntegration | null,
+  ): void {
+    if (integration !== null) this.disposeIntegrationQuietly(integration);
   }
 
   /**
@@ -633,7 +618,7 @@ export class SessionControl implements AgentSessionControl {
       if (
         this.recording?.getSessionId() === resolved.target.session.sessionId
       ) {
-        await this.teardownActiveSession();
+        throw new Error('Cannot delete the active session');
       }
       const result = await deleteRecordedSession(
         resolved.target.session.sessionId,
@@ -767,36 +752,11 @@ export class SessionControl implements AgentSessionControl {
       activeSource,
     );
     if (!result.ok) throw new Error(result.error);
-    try {
-      await this.teardownPriorBeforeResume();
-    } catch (error) {
-      await this.disposeServiceQuietly(result.recording);
-      await this.releaseLockQuietly(result.lockHandle);
-      throw error;
-    }
-    try {
-      await this.deps.resolveClient().resetChat();
-      await this.deps.resolveClient().restoreHistory(result.history);
-    } catch (error) {
-      await this.disposeServiceQuietly(result.recording);
-      await this.releaseLockQuietly(result.lockHandle);
-      throw error;
-    }
-    const integration = new RecordingIntegration(result.recording);
-    let subscribed: boolean;
-    try {
-      subscribed = this.attachIntegrationToHistory(integration);
-    } catch (error) {
-      this.disposeIntegrationQuietly(integration);
-      await this.disposeServiceQuietly(result.recording);
-      await this.releaseLockQuietly(result.lockHandle);
-      throw error;
-    }
-    this.recording = result.recording;
-    this.deps.config.setSessionRecordingService(result.recording);
-    this.integration = integration;
-    this.integrationNeedsSubscribe = !subscribed;
-    this.currentLockHandle = result.lockHandle;
+    await this.commitPreparedSession(
+      result.recording,
+      result.lockHandle,
+      result.history,
+    );
     return this.currentSessionInfo();
   }
 
@@ -925,7 +885,7 @@ export class SessionControl implements AgentSessionControl {
     this.integrationNeedsSubscribe = !subscribed;
   }
 
-  private resubscribeIntegration(): unknown {
+  private resubscribeIntegration(): Error | undefined {
     const integration = this.integration;
     if (integration === null) return undefined;
     try {
@@ -934,7 +894,7 @@ export class SessionControl implements AgentSessionControl {
       return undefined;
     } catch (error: unknown) {
       this.integrationNeedsSubscribe = true;
-      return error;
+      return error instanceof Error ? error : new Error(String(error));
     }
   }
 

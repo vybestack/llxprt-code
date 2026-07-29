@@ -194,7 +194,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
           second.getSessionId(),
           'shared-name',
         ),
-      ).rejects.toThrow("Name 'shared-name' already exists");
+      ).rejects.toThrow(/already exists/);
       expect(
         await service.listCheckpoints(second.getFilePath()!, PROJECT_HASH),
       ).toHaveLength(0);
@@ -356,8 +356,40 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
 
       // Prior bytes unchanged
       const priorBytes = afterLines.slice(0, beforeLines.length).join('\n');
+
       const originalBytes = beforeLines.join('\n');
       expect(priorBytes).toBe(originalBytes);
     });
+  });
+
+  it('does not append closed metadata to a sequence-corrupt recording', async () => {
+    const svc = new SessionRecordingService(makeConfig(chatsDir()));
+    svc.recordContent(makeContent('A', 'human'));
+    const checkpoint = await svc.createCheckpoint('foo');
+    await svc.dispose();
+    const filePath = svc.getFilePath()!;
+    const original = await fs.readFile(filePath, 'utf-8');
+    const lines = original.trim().split('\n');
+    const lowerSequenceEvent = {
+      ...(JSON.parse(lines[1]) as Record<string, unknown>),
+      seq: 1,
+    };
+    await fs.appendFile(
+      filePath,
+      `${JSON.stringify(lowerSequenceEvent)}\n`,
+      'utf-8',
+    );
+    const corruptBytes = await fs.readFile(filePath, 'utf-8');
+
+    await expect(
+      new CheckpointService().deleteCheckpointClosed(
+        filePath,
+        PROJECT_HASH,
+        chatsDir(),
+        svc.getSessionId(),
+        checkpoint.checkpointId,
+      ),
+    ).rejects.toThrow('sequence-corrupt recording');
+    expect(await fs.readFile(filePath, 'utf-8')).toBe(corruptBytes);
   });
 });

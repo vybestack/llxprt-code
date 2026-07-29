@@ -132,7 +132,12 @@ async function resumeCheckpointTarget(
   const { chatsDir, projectHash, recordingCallbacks } = context;
   const currentRecording = recordingCallbacks.getCurrentRecording();
   if (currentRecording?.getSessionId() === target.source.sessionId) {
-    await currentRecording.flush();
+    try {
+      await currentRecording.flush();
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: `Failed to flush source session: ${detail}` };
+    }
   }
   const fork = await new SessionTransitionService().forkFromCheckpoint(
     target,
@@ -271,15 +276,14 @@ async function resolveTarget(
   return resolved.target;
 }
 
-function restorePreviousHistory(
+async function restorePreviousHistory(
   historyService: HistoryService,
   previousHistory: IContent[] | null,
   logger?: DebugLogger,
-): void {
+): Promise<void> {
   if (previousHistory === null) return;
   try {
-    historyService.clear();
-    historyService.addAll(previousHistory);
+    await historyService.replaceAll(previousHistory);
   } catch (error: unknown) {
     logger?.warn(`Failed to restore prior session history: ${error}`);
   }
@@ -301,28 +305,35 @@ async function commitPreparedTransition(
   const previousHistory =
     historyService === null ? null : [...historyService.getAll()];
   const integration = new RecordingIntegration(recording);
-  oldIntegration?.unsubscribeFromHistory();
   try {
     if (historyService !== null) {
-      historyService.clear();
-      historyService.addAll(history);
+      await historyService.replaceAll(history);
       integration.subscribeToHistory(historyService);
     }
     context.adoptSessionId?.(metadata.sessionId);
     callbacks.setRecording(recording, integration, lockHandle, metadata);
   } catch (error: unknown) {
-    integration.dispose();
-    if (historyService !== null) {
-      restorePreviousHistory(historyService, previousHistory, context.logger);
-      try {
-        oldIntegration?.subscribeToHistory(historyService);
-      } catch (resubscribeError: unknown) {
-        context.logger?.warn(
-          `Failed to restore prior recording subscription: ${resubscribeError}`,
-        );
-      }
+    try {
+      integration.dispose();
+    } catch (disposeError: unknown) {
+      context.logger?.warn(
+        `Failed to dispose prepared recording integration: ${disposeError}`,
+      );
     }
-    context.adoptSessionId?.(context.currentSessionId);
+    if (historyService !== null) {
+      await restorePreviousHistory(
+        historyService,
+        previousHistory,
+        context.logger,
+      );
+    }
+    try {
+      context.adoptSessionId?.(context.currentSessionId);
+    } catch (adoptError: unknown) {
+      context.logger?.warn(
+        `Failed to restore prior session identifier: ${adoptError}`,
+      );
+    }
     const filePath = discardOnFailure ? recording.getFilePath() : null;
     await recording.dispose().catch(() => undefined);
     await lockHandle.release().catch(() => undefined);
@@ -336,12 +347,18 @@ async function commitPreparedTransition(
       error: `Failed to commit session transition: ${detail}`,
     };
   }
-  await disposeInfrastructure(
-    oldIntegration,
-    oldRecording,
-    oldLock,
-    context.logger,
-  );
+  try {
+    await disposeInfrastructure(
+      oldIntegration,
+      oldRecording,
+      oldLock,
+      context.logger,
+    );
+  } catch (cleanupError: unknown) {
+    context.logger?.warn(
+      `Failed to dispose prior recording infrastructure: ${cleanupError}`,
+    );
+  }
   return { ok: true };
 }
 

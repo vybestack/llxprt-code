@@ -13,8 +13,9 @@
  * compliance.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HistoryService } from '../../../../core/src/services/history/HistoryService.js';
+import { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import {
   performResume,
   SessionRecordingService,
@@ -300,6 +301,87 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
       collectLock(lockHandles, newLock);
+    });
+
+    it('restores exact prior history when a replacement listener throws', async () => {
+      const targetId = 'target-for-listener-failure';
+      await createTestSession(chatsDir, {
+        sessionId: targetId,
+        contents: [makeContent('replacement history')],
+      });
+      const previousHistory = [
+        makeContent('previous first'),
+        makeContent('previous second', 'ai'),
+      ];
+      const historyService = new HistoryService();
+      historyService.addAll(previousHistory);
+      await historyService.waitForTokenUpdates();
+      let shouldThrow = true;
+      historyService.on('tokensUpdated', () => {
+        if (shouldThrow) {
+          shouldThrow = false;
+          throw new Error('history listener failed');
+        }
+      });
+      const context = makeResumeContext(chatsDir, {
+        currentSessionId: 'current-before-listener-failure',
+      });
+      context.historyService = historyService;
+
+      const result = await performResume(targetId, context);
+
+      expect(result).toStrictEqual({
+        ok: false,
+        error: 'Failed to commit session transition: history listener failed',
+      });
+      expect(historyService.getAll()).toStrictEqual(previousHistory);
+      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+    });
+
+    it('continues rollback when prepared disposal and session ID restoration fail', async () => {
+      const targetId = 'target-for-independent-rollback';
+      await createTestSession(chatsDir, {
+        sessionId: targetId,
+        contents: [makeContent('replacement history')],
+      });
+      const historyService = new HistoryService();
+      historyService.add(makeContent('previous history'));
+      const context = makeResumeContext(chatsDir, {
+        currentSessionId: 'current-before-independent-rollback',
+      });
+      context.historyService = historyService;
+      const adoptionOutcomes: Array<() => void> = [
+        () => undefined,
+        () => {
+          throw new Error('restore session ID failed');
+        },
+      ];
+      context.adoptSessionId = () => adoptionOutcomes.shift()?.();
+      context.recordingCallbacks.setRecording = () => {
+        throw new Error('commit failed');
+      };
+      const disposeSpy = vi
+        .spyOn(RecordingIntegration.prototype, 'dispose')
+        .mockImplementationOnce(() => {
+          throw new Error('prepared disposal failed');
+        });
+
+      try {
+        const result = await performResume(targetId, context);
+
+        expect(result).toStrictEqual({
+          ok: false,
+          error: 'Failed to commit session transition: commit failed',
+        });
+        expect(historyService.getAll()).toStrictEqual([
+          makeContent('previous history'),
+        ]);
+        expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(
+          false,
+        );
+      } finally {
+        disposeSpy.mockRestore();
+      }
     });
 
     it('cleans the prepared recording when rollback history restoration throws', async () => {

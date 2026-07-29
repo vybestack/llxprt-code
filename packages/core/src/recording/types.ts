@@ -284,6 +284,7 @@ export type ReplayResult =
       history: IContent[];
       metadata: SessionMetadata;
       lastSeq: number;
+      sequenceCorrupt: boolean;
       eventCount: number;
       warnings: string[];
       sessionEvents: SessionEventPayload[];

@@ -155,34 +155,63 @@ export class SessionDiscovery {
     chatsDir: string,
     projectHash: string,
   ): Promise<ContinueTarget[]> {
-    const sessions = await this.listSessions(chatsDir, projectHash);
-    const sessionTargets: ContinueTarget[] = [];
-    const checkpointTargets: ContinueTarget[] = [];
+    return (await this.listContinueTargetsDetailed(chatsDir, projectHash))
+      .targets;
+  }
 
-    for (const summary of sessions) {
-      const replay = await replaySession(summary.filePath, projectHash);
-      if (!replay.ok) {
-        debugLogger.debug(
-          `Skipping unreadable session recording ${summary.filePath}: ${replay.error}`,
-        );
-        continue;
-      }
-      const namedSummary = { ...summary, name: replay.sessionName };
-      sessionTargets.push({ kind: 'session', session: namedSummary });
-      for (const checkpoint of replay.checkpoints ?? []) {
-        if (!checkpoint.deleted) {
-          checkpointTargets.push({
+  static async listContinueTargetsDetailed(
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<{ targets: ContinueTarget[]; skippedCount: number }> {
+    const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
+    const sessionTargets: Array<ContinueTarget | null> = Array.from(
+      { length: detailed.sessions.length },
+      () => null,
+    );
+    const checkpointTargets: ContinueTarget[][] = Array.from(
+      { length: detailed.sessions.length },
+      () => [],
+    );
+    let nextIndex = 0;
+    let skippedCount = detailed.skippedCount;
+    const worker = async (): Promise<void> => {
+      while (nextIndex < detailed.sessions.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const summary = detailed.sessions[index];
+        const replay = await replaySession(summary.filePath, projectHash);
+        if (!replay.ok || replay.sequenceCorrupt) {
+          const detail = replay.ok ? 'non-monotonic sequences' : replay.error;
+          debugLogger.debug(
+            `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
+          );
+          skippedCount += 1;
+          continue;
+        }
+        const namedSummary = { ...summary, name: replay.sessionName };
+        sessionTargets[index] = { kind: 'session', session: namedSummary };
+        checkpointTargets[index] = (replay.checkpoints ?? [])
+          .filter((checkpoint) => !checkpoint.deleted)
+          .map((checkpoint) => ({
             kind: 'checkpoint',
             source: namedSummary,
             checkpointId: checkpoint.checkpointId,
             checkpointName: checkpoint.name,
             sequence: checkpoint.sequence,
-          });
-        }
+          }));
       }
-    }
-
-    return [...sessionTargets, ...checkpointTargets];
+    };
+    const workerCount = Math.min(8, detailed.sessions.length);
+    await Promise.all(Array.from({ length: workerCount }, worker));
+    return {
+      targets: [
+        ...sessionTargets.filter(
+          (target): target is ContinueTarget => target !== null,
+        ),
+        ...checkpointTargets.flat(),
+      ],
+      skippedCount,
+    };
   }
 
   static resolveContinueRef(
@@ -244,14 +273,17 @@ export class SessionDiscovery {
   ): Promise<string> {
     const trimmed = this.validateName(name);
     const targets = await this.listContinueTargets(chatsDir, projectHash);
-    const duplicate = targets.some((target) =>
+    const conflict = targets.find((target) =>
       target.kind === 'session'
         ? target.session.name === trimmed ||
           target.session.sessionId === trimmed
         : target.checkpointName === trimmed,
     );
-    if (duplicate) {
-      throw new Error(`Name '${trimmed}' already exists`);
+    if (conflict) {
+      const kind = conflict.kind === 'session' ? 'session' : 'checkpoint';
+      throw new Error(
+        `Name '${trimmed}' already exists (conflicts with a ${kind})`,
+      );
     }
     return trimmed;
   }

@@ -74,6 +74,6 @@ describe('recording bootstrap checkpoint resolution', () => {
 
     await expect(
       createOrResumeRecording(config, PROJECT_HASH, chatsDir),
-    ).rejects.toThrow("Ambiguous continue target name 'duplicate-name'");
+    ).rejects.toThrow(/Ambiguous continue target name/);
   });
 });

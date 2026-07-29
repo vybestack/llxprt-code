@@ -154,6 +154,45 @@ describe('durable history mutation @plan:2026-07-28-issue-2625', () => {
       expect(replay.history).toStrictEqual([history[0]]);
     });
 
+    it('clear leaves agent-only history unchanged when no human turn exists', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir()));
+      const history: IContent[] = [
+        makeContent('system response', 'ai'),
+        makeContent('tool result', 'tool'),
+      ];
+      for (const item of history) svc.recordContent(item);
+      await svc.flush();
+
+      const result = await new HistoryMutationService().clear(history, svc);
+      requireMutationSuccess(result);
+      expect(result.remainingHistory).toStrictEqual(history);
+      expect(result.itemsRemoved).toBe(0);
+
+      await svc.dispose();
+      const replay = await replaySession(svc.getFilePath()!, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.history).toStrictEqual(history);
+    });
+
+    it('rejects a checkpoint after a durable rewind removes all history', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir()));
+      const history = [makeContent('only turn', 'human')];
+      svc.recordContent(history[0]);
+      await svc.flush();
+      const mutation = await new HistoryMutationService().restore(
+        history,
+        1,
+        svc,
+      );
+      requireMutationSuccess(mutation);
+      expect(mutation.remainingHistory).toStrictEqual([]);
+
+      await expect(svc.createCheckpoint('empty')).rejects.toThrow(
+        'conversation has no content yet',
+      );
+      await svc.dispose();
+    });
+
     it('restore removes last N human turns with tool-heavy content', async () => {
       const svc = new SessionRecordingService(makeConfig(chatsDir()));
       // A turn = human + ai + tool entries

@@ -37,6 +37,7 @@ import {
   type SessionForkedPayload,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
+import { replaySession } from './ReplayEngine.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
@@ -352,10 +353,8 @@ export class SessionRecordingService {
     return this.projectHash;
   }
 
-  releaseLockOwnership(): LockHandle | null {
-    const lockHandle = this.lockHandle;
-    this.lockHandle = null;
-    return lockHandle;
+  getOwnedLockHandle(): LockHandle | null {
+    return this.active ? this.lockHandle : null;
   }
 
   /**
@@ -585,6 +584,28 @@ export class SessionRecordingService {
       throw new Error('Cannot create checkpoint: name must not be empty');
     }
 
+    await this.flushAndRequireActive('create checkpoint');
+    const filePath = this.filePath;
+    if (filePath === null) {
+      throw new Error(
+        'Cannot create checkpoint: conversation has no content yet',
+      );
+    }
+    const replay = await replaySession(filePath, this.projectHash);
+    if (!replay.ok) {
+      throw new Error(`Cannot create checkpoint: ${replay.error}`);
+    }
+    if (replay.sequenceCorrupt) {
+      throw new Error(
+        'Cannot create checkpoint: recording has non-monotonic sequences',
+      );
+    }
+    if (replay.history.length === 0) {
+      throw new Error(
+        'Cannot create checkpoint: conversation has no content yet',
+      );
+    }
+
     const checkpointId = crypto.randomUUID();
     const sequence = this.seq + 1;
     this.enqueue('checkpoint_created', { checkpointId, name: trimmed });
@@ -659,6 +680,9 @@ export class SessionRecordingService {
    * The child recording is self-contained after this.
    */
   recordSessionFork(payload: SessionForkedPayload): void {
+    if (!this.active) {
+      throw new Error('Cannot record session fork: recording is inactive');
+    }
     this.enqueue('session_forked', payload);
   }
 }

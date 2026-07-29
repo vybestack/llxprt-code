@@ -187,7 +187,9 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
         .split('\n')
         .map((line) => JSON.parse(line) as { type: string });
       expect(lines.filter((line) => line.type === 'rewind')).toHaveLength(1);
-      expect(lines.filter((line) => line.type === 'content')).toHaveLength(4);
+      expect(lines.filter((line) => line.type === 'content')).toHaveLength(
+        history.length,
+      );
 
       await agent.session.resume('latest');
       expect((await agent.getHistory()).map(messageText)).toStrictEqual([
@@ -315,6 +317,82 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
       // The resumed recording is active and installed as the live recording.
       const afterResume = agent.session.getRecording();
       expect(afterResume.enabled).toBe(true);
+    });
+  });
+
+  it('exposes checkpoint rename/delete, session naming/listing, and safe deletion through the public API', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+      await agent.setHistory([
+        textMessage('user', 'lifecycle source'),
+        textMessage('model', 'lifecycle reply'),
+      ]);
+      const checkpoint = await agent.session.createCheckpoint('before-rename');
+      const activePath = agent.session.getRecording().path;
+
+      await expect(
+        agent.session.deleteSession(checkpoint.sessionId),
+      ).rejects.toThrow('Cannot delete the active session');
+      expect(agent.session.getRecording()).toMatchObject({
+        enabled: true,
+        path: activePath,
+      });
+      expect(await agent.session.listCheckpoints()).toContainEqual(checkpoint);
+
+      await agent.session.renameCheckpoint(
+        checkpoint.checkpointId,
+        'after-rename',
+      );
+      expect(await agent.session.listCheckpoints()).toContainEqual({
+        ...checkpoint,
+        name: 'after-rename',
+      });
+      await agent.session.nameCurrentSession('named-session');
+      expect(await agent.session.listSessions()).toContainEqual(
+        expect.objectContaining({
+          id: checkpoint.sessionId,
+          name: 'named-session',
+        }),
+      );
+
+      await agent.session.deleteCheckpoint(checkpoint.checkpointId);
+      expect(await agent.session.listCheckpoints()).not.toContainEqual(
+        expect.objectContaining({ checkpointId: checkpoint.checkpointId }),
+      );
+      await agent.session.setRecording({ enabled: false });
+      await agent.session.deleteSession(checkpoint.sessionId);
+      expect(await agent.session.listSessions()).not.toContainEqual(
+        expect.objectContaining({ id: checkpoint.sessionId }),
+      );
+    });
+  });
+
+  it('resumes a named session by explicit public API reference', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+      const seeded = [
+        textMessage('user', 'explicit resume source'),
+        textMessage('model', 'explicit resume reply'),
+      ];
+      await agent.setHistory(seeded);
+      await agent.session.setRecording({ enabled: true });
+      await agent.session.nameCurrentSession('explicit-resume');
+      const session = (await agent.session.listSessions()).find(
+        (candidate) => candidate.name === 'explicit-resume',
+      );
+      expect(session).toBeDefined();
+      await agent.session.setRecording({ enabled: false });
+      await agent.setHistory([textMessage('user', 'replacement live history')]);
+
+      const resumed = await agent.session.resumeSession('explicit-resume');
+
+      expect(resumed).toMatchObject({
+        id: session?.id,
+        name: 'explicit-resume',
+      });
+      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
+        'explicit resume source',
+        'explicit resume reply',
+      ]);
+      expect(agent.session.getRecording().enabled).toBe(true);
     });
   });
 });

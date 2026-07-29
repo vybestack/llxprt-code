@@ -81,6 +81,9 @@ async function appendEvent(
 ): Promise<void> {
   const replay = await replaySession(filePath, projectHash);
   if (!replay.ok) throw new Error(replay.error);
+  if (replay.sequenceCorrupt) {
+    throw new Error('Cannot append metadata to a sequence-corrupt recording');
+  }
   const event: SessionRecordLine = {
     v: 1,
     seq: replay.lastSeq + 1,
@@ -300,6 +303,16 @@ export class CheckpointService {
       try {
         const replay = await replaySession(filePath, projectHash);
         if (!replay.ok) throw new Error(replay.error);
+        if (replay.sequenceCorrupt) {
+          throw new Error(
+            'Cannot append metadata to a sequence-corrupt recording',
+          );
+        }
+        if (replay.history.length === 0) {
+          throw new Error(
+            'Cannot create checkpoint: conversation has no content yet',
+          );
+        }
         const checkpointId = randomUUID();
         const sequence = replay.lastSeq + 1;
         const event: SessionRecordLine = {

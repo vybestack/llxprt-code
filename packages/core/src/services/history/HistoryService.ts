@@ -397,6 +397,37 @@ export class HistoryService
     }
   }
 
+  async replaceAll(contents: IContent[], modelName?: string): Promise<void> {
+    const accepted = contents.filter(
+      (content) =>
+        ['human', 'ai', 'tool'].includes(content.speaker) &&
+        Array.isArray(content.blocks) &&
+        content.blocks.length > 0,
+    );
+    await this.waitForTokenUpdates();
+    const replacementTokens = await this.estimateTokensForContents(
+      accepted,
+      modelName,
+    );
+    const previousHistory = this.history;
+    const previousTokens = this.totalTokens;
+    this.invalidatePendingSyncs();
+    this.history = [...accepted];
+    this.totalTokens = replacementTokens;
+    try {
+      this.emit('tokensUpdated', {
+        totalTokens: this.getTotalTokens(),
+        addedTokens: replacementTokens - previousTokens,
+        contentId: null,
+      });
+    } catch (error: unknown) {
+      this.invalidatePendingSyncs();
+      this.history = previousHistory;
+      this.totalTokens = previousTokens;
+      throw error;
+    }
+  }
+
   /**
    * Estimate total tokens for hypothetical contents without mutating history.
    */

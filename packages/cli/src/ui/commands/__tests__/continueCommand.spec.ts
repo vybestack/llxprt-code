@@ -363,8 +363,11 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         );
         expect(values).toContain('release-ready');
       } finally {
-        await recording.dispose();
-        await rm(root, { recursive: true, force: true });
+        try {
+          await recording.dispose();
+        } finally {
+          await rm(root, { recursive: true, force: true });
+        }
       }
     });
   });

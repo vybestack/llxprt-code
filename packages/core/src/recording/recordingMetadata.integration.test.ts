@@ -228,10 +228,9 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       svc.recordContent(makeContent('A', 'human')); // seq 2
       svc.recordContent(makeContent('B', 'ai')); // seq 3
       svc.recordContent(makeContent('C', 'human')); // seq 4
-      const checkpointPromise = svc.createCheckpoint('atC'); // seq 5
+      const checkpoint = await svc.createCheckpoint('atC'); // seq 5
       svc.recordContent(makeContent('D', 'ai')); // seq 6
       svc.recordContent(makeContent('E', 'human')); // seq 7
-      const checkpoint = await checkpointPromise;
       await svc.flush();
       await svc.dispose();
 
@@ -292,6 +291,58 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
         });
       }
     });
+
+    it('skips events without valid sequence numbers during bounded replay', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      const checkpoint = await svc.createCheckpoint('atA');
+
+      await svc.dispose();
+      const filePath = svc.getFilePath()!;
+      const malformed = JSON.stringify({
+        v: 1,
+        ts: '2026-01-01T00:00:00.000Z',
+        type: 'content',
+        payload: { content: makeContent('invalid', 'ai') },
+      });
+      await fs.appendFile(filePath, `${malformed}\n`, 'utf-8');
+
+      const result = await replaySessionThroughSequence(
+        filePath,
+        PROJECT_HASH,
+        checkpoint.sequence,
+      );
+      requireReplaySuccess(result);
+      expect(result.history).toStrictEqual([makeContent('A', 'human')]);
+      expect(result.warnings).toContain(
+        'Line 4: malformed sequence number, skipping',
+      );
+    });
+  });
+
+  it('keeps the maximum sequence and marks [1,5,3] recordings corrupt', async () => {
+    const svc = new SessionRecordingService(makeConfig(chatsDir));
+    svc.recordContent(makeContent('A', 'human'));
+    await svc.dispose();
+    const filePath = svc.getFilePath()!;
+    const events = await readJsonlFile(filePath);
+    const header = { ...events[0], seq: 1 };
+    const high = { ...events[1], seq: 5 };
+    const low = {
+      ...events[1],
+      seq: 3,
+      payload: { content: makeContent('late lower sequence', 'ai') },
+    };
+    await fs.writeFile(
+      filePath,
+      `${[header, high, low].map((event) => JSON.stringify(event)).join('\n')}\n`,
+      'utf-8',
+    );
+
+    const replay = await replaySession(filePath, PROJECT_HASH);
+    requireReplaySuccess(replay);
+    expect(replay.lastSeq).toBe(5);
+    expect(replay.sequenceCorrupt).toBe(true);
   });
 
   describe('checkpoint metadata folding', () => {
@@ -323,6 +374,33 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       const events = await readJsonlFile(svc.getFilePath()!);
       const live = foldCheckpointMetadata(events).filter((c) => !c.deleted);
       expect(live).toHaveLength(0);
+    });
+
+    it('warns when lifecycle metadata references an unknown checkpoint', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      await svc.flush();
+      await svc.dispose();
+      const filePath = svc.getFilePath()!;
+      const events = await readJsonlFile(filePath);
+      const lastSeq = events.at(-1)?.seq ?? 0;
+      await fs.appendFile(
+        filePath,
+        `${JSON.stringify({
+          v: 1,
+          seq: lastSeq + 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          type: 'checkpoint_renamed',
+          payload: { checkpointId: 'missing', name: 'renamed' },
+        })}\n`,
+        'utf-8',
+      );
+
+      const replay = await replaySession(filePath, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.warnings).toContain(
+        `Sequence ${lastSeq + 1}: checkpoint_renamed references unknown checkpoint missing`,
+      );
     });
     it('does not revive a tombstoned checkpoint when a duplicate create event is encountered', () => {
       const events: SessionRecordLine[] = [

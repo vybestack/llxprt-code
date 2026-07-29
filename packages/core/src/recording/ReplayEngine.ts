@@ -51,6 +51,7 @@ interface ReplayAccumulators {
   history: IContent[];
   metadata: SessionMetadata | null;
   lastSeq: number;
+  sequenceCorrupt: boolean;
   eventCount: number;
   warnings: string[];
   sessionEvents: SessionEventPayload[];
@@ -69,6 +70,7 @@ function createAccumulators(): ReplayAccumulators {
     history: [],
     metadata: null,
     lastSeq: 0,
+    sequenceCorrupt: false,
     eventCount: 0,
     warnings: [],
     sessionEvents: [],
@@ -120,7 +122,7 @@ function trackSequence(
         `Line ${lineNumber}: non-monotonic seq ${seq} (expected > ${lastSeq})`,
       );
     }
-    return seq;
+    return Math.max(lastSeq, seq);
   }
   return lastSeq;
 }
@@ -366,6 +368,21 @@ function applyParsedEvent(
   if (parsed === null) {
     return undefined;
   }
+  if (
+    typeof parsed.seq !== 'number' ||
+    !Number.isSafeInteger(parsed.seq) ||
+    parsed.seq < 0
+  ) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${acc.lineNumber}: malformed sequence number, skipping`,
+    );
+    return undefined;
+  }
+  const eventSequence = parsed.seq;
+  if (eventSequence <= acc.lastSeq && acc.eventCount > 0) {
+    acc.sequenceCorrupt = true;
+  }
   // @pseudocode line 44-48: Track sequence numbers
   acc.lastSeq = trackSequence(
     parsed,
@@ -398,6 +415,7 @@ function applyParsedEvent(
     eventType,
     payload,
     typeof parsed.ts === 'string' ? parsed.ts : '',
+    eventSequence,
     acc,
     acc.lineNumber,
     expectedProjectHash,
@@ -416,6 +434,8 @@ function collectMetadataEvent(
   payload: Record<string, unknown>,
   lineNumber: number,
 ): void {
+  // session_named events apply to the session itself, not a checkpoint,
+  // so they intentionally omit checkpointId.
   if (!('checkpointId' in payload) && type !== 'session_named') {
     acc.malformedCount++;
     acc.warnings.push(
@@ -441,6 +461,7 @@ function dispatchEvent(
   eventType: string,
   payload: Record<string, unknown>,
   timestamp: string,
+  eventSequence: number,
   acc: ReplayAccumulators,
   lineNumber: number,
   expectedProjectHash: string,
@@ -477,7 +498,7 @@ function dispatchEvent(
       // Metadata events never affect history; collected for post-replay folding.
       collectMetadataEvent(
         acc,
-        acc.lastSeq,
+        eventSequence,
         timestamp,
         eventType,
         payload,
@@ -537,6 +558,7 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   }
 
   // @pseudocode line 161-169: Return success result
+  appendCheckpointMetadataWarnings(acc.rawMetadataEvents, acc.warnings);
   const folded = foldCheckpointMetadata(acc.rawMetadataEvents);
   const sessionName = deriveSessionName(acc.rawMetadataEvents);
   const ancestry = deriveAncestry(acc.rawMetadataEvents);
@@ -545,6 +567,7 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
     history: acc.history,
     metadata: acc.metadata,
     lastSeq: acc.lastSeq,
+    sequenceCorrupt: acc.sequenceCorrupt,
     eventCount: acc.eventCount,
     warnings: acc.warnings,
     sessionEvents: acc.sessionEvents,
@@ -557,6 +580,35 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
 // ---------------------------------------------------------------------------
 // Metadata folding helpers (checkpoint lifecycle + session name)
 // ---------------------------------------------------------------------------
+
+function appendCheckpointMetadataWarnings(
+  events: readonly SessionRecordLine[],
+  warnings: string[],
+): void {
+  const knownIds = new Set<string>();
+  for (const line of events) {
+    const checkpointId = extractCheckpointId(line);
+    if (checkpointId === null) continue;
+    if (line.type === 'checkpoint_created') {
+      knownIds.add(checkpointId);
+    } else if (
+      (line.type === 'checkpoint_renamed' ||
+        line.type === 'checkpoint_deleted') &&
+      !knownIds.has(checkpointId)
+    ) {
+      warnings.push(
+        `Sequence ${line.seq}: ${line.type} references unknown checkpoint ${checkpointId}`,
+      );
+    }
+  }
+}
+
+function extractCheckpointId(line: SessionRecordLine): string | null {
+  if (typeof line.payload !== 'object' || line.payload === null) return null;
+  const checkpointId =
+    'checkpointId' in line.payload ? line.payload.checkpointId : undefined;
+  return typeof checkpointId === 'string' ? checkpointId : null;
+}
 
 /**
  * Fold checkpoint lifecycle events into a stable view ordered by sequence.
@@ -674,41 +726,40 @@ function deriveSessionName(
  * @param expectedProjectHash - Must match the file's projectHash
  * @returns ReplayResult discriminated union — ok: true with data, or ok: false with error
  */
-export async function replaySession(
+type LineProcessorResult = ReplayResult | 'complete' | undefined;
+
+async function readSessionStream(
   filePath: string,
   expectedProjectHash: string,
+  processLine: (
+    rawLine: string,
+    acc: ReplayAccumulators,
+  ) => LineProcessorResult,
 ): Promise<ReplayResult> {
   const acc = createAccumulators();
-
-  // @pseudocode line 20-21: Open file as line-by-line stream
   try {
     const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
     const reader = readline.createInterface({ input: stream });
 
-    // @pseudocode line 24: Process each line
     for await (let rawLine of reader) {
-      // @pseudocode line 25-26
       acc.lineNumber++;
       acc.totalLines = acc.lineNumber;
-
-      // @pseudocode line 28b-28e: Strip UTF-8 BOM on first line
       if (acc.lineNumber === 1 && rawLine.startsWith('\uFEFF')) {
         rawLine = rawLine.slice(1);
       }
-
-      // @pseudocode line 28: Skip empty lines and unparseable lines
-      const trimmed = rawLine.trim();
-      const parsed =
-        trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
-      const earlyReturn = applyParsedEvent(parsed, acc, expectedProjectHash);
-      if (earlyReturn !== undefined) {
+      const outcome = processLine(rawLine, acc);
+      if (outcome === 'complete') {
         reader.close();
         stream.destroy();
-        return earlyReturn;
+        return finalizeReplay(acc);
+      }
+      if (outcome !== undefined) {
+        reader.close();
+        stream.destroy();
+        return outcome;
       }
     }
   } catch (streamError: unknown) {
-    // @pseudocode line 141-142
     const message =
       streamError instanceof Error ? streamError.message : String(streamError);
     return {
@@ -717,8 +768,28 @@ export async function replaySession(
       warnings: acc.warnings,
     };
   }
-
   return finalizeReplay(acc);
+}
+
+/**
+ * @plan PLAN-20260211-SESSIONRECORDING.P08
+ * @requirement REQ-RPL-002, REQ-RPL-003, REQ-RPL-005, REQ-RPL-006, REQ-RPL-007, REQ-RPL-008
+ * @pseudocode replay-engine.md lines 10-169
+ *
+ * @param filePath - Path to the .jsonl session file
+ * @param expectedProjectHash - Must match the file's projectHash
+ * @returns ReplayResult discriminated union — ok: true with data, or ok: false with error
+ */
+export async function replaySession(
+  filePath: string,
+  expectedProjectHash: string,
+): Promise<ReplayResult> {
+  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) => {
+    const trimmed = rawLine.trim();
+    const parsed =
+      trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
+    return applyParsedEvent(parsed, acc, expectedProjectHash);
+  });
 }
 
 function applyBoundedReplayLine(
@@ -746,48 +817,9 @@ export async function replaySessionThroughSequence(
   expectedProjectHash: string,
   maxSequence: number,
 ): Promise<ReplayResult> {
-  const acc = createAccumulators();
-
-  try {
-    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-    const reader = readline.createInterface({ input: stream });
-
-    for await (let rawLine of reader) {
-      acc.lineNumber++;
-      acc.totalLines = acc.lineNumber;
-
-      if (acc.lineNumber === 1 && rawLine.startsWith('\uFEFF')) {
-        rawLine = rawLine.slice(1);
-      }
-
-      const outcome = applyBoundedReplayLine(
-        rawLine,
-        maxSequence,
-        expectedProjectHash,
-        acc,
-      );
-      if (outcome === 'complete') {
-        reader.close();
-        stream.destroy();
-        return finalizeReplay(acc);
-      }
-      if (outcome !== undefined) {
-        reader.close();
-        stream.destroy();
-        return outcome;
-      }
-    }
-  } catch (streamError: unknown) {
-    const message =
-      streamError instanceof Error ? streamError.message : String(streamError);
-    return {
-      ok: false,
-      error: `Failed to read file: ${message}`,
-      warnings: acc.warnings,
-    };
-  }
-
-  return finalizeReplay(acc);
+  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) =>
+    applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
+  );
 }
 
 /**

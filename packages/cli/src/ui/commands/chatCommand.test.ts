@@ -16,6 +16,7 @@ import {
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { assertDefined } from '../../test-utils/assertions.js';
 import { chatCommand } from './chatCommand.js';
+import { createCompletionHandler } from './schema/index.js';
 import type { CommandContext, SlashCommand } from './types.js';
 
 const PROJECT_HASH = 'chat-command-checkpoints';
@@ -34,6 +35,26 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     const result = chatCommand.subCommands?.find((item) => item.name === name);
     assertDefined(result);
     return result;
+  };
+
+  const completionValues = async (
+    commandName: string,
+    partial: string,
+  ): Promise<string[]> => {
+    const schema = command(commandName).schema;
+    assertDefined(schema);
+    const handler = createCompletionHandler(schema);
+    const result = await handler(
+      context,
+      {
+        args: partial,
+        completedArgs: [],
+        partialArg: partial,
+        commandPathLength: 2,
+      },
+      `/chat ${commandName} ${partial}`,
+    );
+    return result.suggestions.map((option) => option.value);
   };
 
   beforeEach(async () => {
@@ -142,5 +163,137 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       'name',
       'debug',
     ]);
+  });
+
+  it('rejects /chat save without a tag', async () => {
+    expect(await command('save').action?.(context, '')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Missing tag. Usage: /chat save <tag>',
+    });
+  });
+
+  it('rejects /chat resume without a tag', async () => {
+    expect(await command('resume').action?.(context, '   ')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Missing tag. Usage: /chat resume <tag>',
+    });
+  });
+
+  it('rejects /chat delete without a tag', async () => {
+    expect(await command('delete').action?.(context, '')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Missing tag. Usage: /chat delete <tag>',
+    });
+  });
+
+  it('prompts for confirmation before deleting a checkpoint', async () => {
+    expect(
+      await command('delete').action?.(context, 'milestone'),
+    ).toMatchObject({
+      type: 'confirm_action',
+    });
+  });
+
+  it('requests overwrite confirmation when saving a duplicate checkpoint name', async () => {
+    await command('save').action?.(context, 'dupe');
+
+    const result = await command('save').action?.(context, 'dupe');
+
+    expect(result).toMatchObject({ type: 'confirm_action' });
+  });
+
+  it('replaces a duplicate checkpoint after overwrite confirmation', async () => {
+    await command('save').action?.(context, 'dupe');
+    context.overwriteConfirmed = true;
+
+    const result = await command('save').action?.(context, 'dupe');
+    const replay = await replaySession(
+      recording.getFilePath() ?? '',
+      PROJECT_HASH,
+    );
+
+    expect({
+      result,
+      checkpoints: replay.checkpoints?.filter(
+        (checkpoint) => checkpoint.deleted !== true,
+      ),
+    }).toStrictEqual({
+      result: {
+        type: 'message',
+        messageType: 'info',
+        content: 'Checkpoint saved: dupe.',
+      },
+      checkpoints: [expect.objectContaining({ name: 'dupe', deleted: false })],
+    });
+  });
+
+  it('reports an error when saving an empty recording', async () => {
+    await recording.dispose();
+    recording = await SessionRecordingService.createLocked({
+      sessionId: crypto.randomUUID(),
+      projectHash: PROJECT_HASH,
+      chatsDir,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
+    });
+
+    expect(await command('save').action?.(context, 'empty')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Failed to save checkpoint: Cannot create checkpoint: conversation has no content yet',
+    });
+  });
+
+  it('treats an initialized empty history as having nothing to clear', async () => {
+    Object.assign(context.services.config, {
+      getAgentClient: () => ({
+        hasChatInitialized: () => true,
+        getChat: () => ({
+          getHistory: () => [],
+          setHistory: () => undefined,
+        }),
+      }),
+    });
+
+    expect(await command('clear').action?.(context, '')).toStrictEqual({
+      type: 'message',
+      messageType: 'info',
+      content: 'No conversation to clear.',
+    });
+  });
+
+  it('completes checkpoint names for /chat resume', async () => {
+    await command('save').action?.(context, 'alpha');
+    await command('save').action?.(context, 'beta');
+
+    expect(await completionValues('resume', 'alph')).toStrictEqual(['alpha']);
+  });
+
+  it('completes checkpoint names for /chat delete', async () => {
+    await command('save').action?.(context, 'alpha');
+    await command('save').action?.(context, 'beta');
+
+    expect(await completionValues('delete', 'b')).toStrictEqual(['beta']);
+  });
+
+  it('reports recording-native debug information', async () => {
+    const result = await command('debug').action?.(context, '');
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'info',
+      content: `Chat Debug Information:
+• Chat initialized: false
+• History entries: 0 (chat not initialized)
+• Current model: unavailable
+• Recording file: ${recording.getFilePath()}
+• Session ID: ${recording.getSessionId()}`,
+    });
   });
 });
