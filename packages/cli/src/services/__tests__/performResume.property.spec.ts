@@ -263,6 +263,16 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
   // Property-Based Tests (≥30% = 8+ out of 26+)
   // =========================================================================
 
+  async function disposeResumedSession(
+    context: ReturnType<typeof makeResumeContext>,
+  ): Promise<void> {
+    const recording = context.recordingCallbacks.getCurrentRecording();
+    if (recording) {
+      await recording.dispose();
+    }
+    await releaseLock(context.recordingCallbacks.getCurrentLockHandle());
+  }
+
   describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
     /**
      * Test 25: Property: result is always discriminated union
@@ -300,8 +310,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
 
               expectResultDiscriminated(result, expect);
 
-              const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              await releaseLock(newLock);
+              await disposeResumedSession(context);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -396,8 +405,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
               expect(result.metadata.sessionId).toBe(sessionId);
               expect(Array.isArray(result.warnings)).toBe(true);
 
-              const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              await releaseLock(newLock);
+              await disposeResumedSession(context);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -495,8 +503,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
                 );
               }
 
-              const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              await releaseLock(newLock);
+              await disposeResumedSession(context);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -541,8 +548,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
               expect(result.ok).toBe(true);
 
               assertResumeOk(result);
-              const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              await releaseLock(newLock);
+              await disposeResumedSession(context);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -585,8 +591,7 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
               assertResumeOk(result);
               expect(result.metadata.sessionId).toBe(sessionId);
 
-              const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              await releaseLock(newLock);
+              await disposeResumedSession(context);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
