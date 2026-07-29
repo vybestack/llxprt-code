@@ -46,6 +46,7 @@ import {
   listAvailableModels,
   getActiveProviderMetrics,
   isCliRuntimeStatelessReady,
+  getUnallowedParametersForActiveModel,
 } from './runtimeAccessors.js';
 
 /**
@@ -208,6 +209,54 @@ describe('runtimeAccessors', () => {
         'temperature',
         undefined,
       );
+    });
+  });
+
+  describe('getUnallowedParametersForActiveModel', () => {
+    const useProviderModel = (provider: string, model: string) => {
+      vi.mocked(mockConfig.getProvider).mockReturnValue(provider);
+      vi.mocked(mockConfig.getModel).mockReturnValue(model);
+      vi.mocked(mockSettingsService.getProviderSettings).mockReturnValue({
+        model,
+      });
+    };
+
+    it('returns the kimi alias sampling params for kimi-k3', () => {
+      useProviderModel('kimi', 'kimi-k3');
+      setupCompleteRuntime();
+
+      const result = getUnallowedParametersForActiveModel();
+      expect(result).toStrictEqual(
+        expect.arrayContaining([
+          'temperature',
+          'top_p',
+          'top_k',
+          'frequency_penalty',
+          'presence_penalty',
+        ]),
+      );
+    });
+
+    it('returns the kimi alias sampling params for k3-256k (broad rule match)', () => {
+      useProviderModel('kimi', 'k3-256k');
+      setupCompleteRuntime();
+
+      expect(getUnallowedParametersForActiveModel()).toContain('temperature');
+    });
+
+    it('returns an empty array for a model whose alias has no unallowed rules', () => {
+      useProviderModel('openai', 'gpt-4');
+      setupCompleteRuntime();
+
+      expect(getUnallowedParametersForActiveModel()).toStrictEqual([]);
+    });
+
+    it('returns an empty array when there is no active provider', () => {
+      vi.mocked(mockConfig.getProvider).mockReturnValue('');
+      vi.mocked(mockSettingsService.get).mockReturnValue(undefined);
+      setupCompleteRuntime();
+
+      expect(getUnallowedParametersForActiveModel()).toStrictEqual([]);
     });
   });
 

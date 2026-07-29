@@ -174,6 +174,7 @@ vi.mock(
     getAliasFilePath: (alias: string) =>
       `/mock/home/.llxprt/providers/${alias}.config`,
     writeProviderAliasConfig: vi.fn(),
+    computeUnallowedParameters: () => new Set<string>(),
   }),
 );
 

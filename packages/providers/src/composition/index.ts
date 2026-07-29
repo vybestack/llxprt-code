@@ -37,6 +37,7 @@ export {
   loadProviderAliasEntries,
   getAliasFilePath,
   writeProviderAliasConfig,
+  computeUnallowedParameters,
 } from './providerAliases.js';
 export type {
   ProviderAliasSource,

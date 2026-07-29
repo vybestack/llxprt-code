@@ -239,6 +239,7 @@ function createBaseUIState() {
     isSubagentDialogOpen: false,
     isModelsDialogOpen: false,
     isSessionBrowserDialogOpen: false,
+    isModelConfigDialogOpen: false,
     showPrivacyNotice: false,
 
     rootUiRef: { current: null },
@@ -256,6 +257,33 @@ describe('DefaultAppLayout', () => {
     mockUseUIState.mockReturnValue({
       ...createBaseUIState(),
       isSessionBrowserDialogOpen: true,
+    } as never);
+
+    render(
+      <DefaultAppLayout
+        uiRuntime={buildUiRuntimeFromSource(createConfigStub() as never)}
+        slashCommandRuntime={buildSlashCommandRuntime(
+          createConfigStub() as never,
+        )}
+        settings={createSettingsStub() as never}
+        startupWarnings={[]}
+        version={'0.0.0-test'}
+        nightly={false}
+        mainControlsRef={{ current: null }}
+        availableTerminalHeight={40}
+        contextFileNames={[]}
+        updateInfo={null}
+      />,
+    );
+
+    expect(dialogManagerRenderSpy).toHaveBeenCalledTimes(1);
+    expect(composerRenderSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders DialogManager when model config dialog is the only active dialog', () => {
+    mockUseUIState.mockReturnValue({
+      ...createBaseUIState(),
+      isModelConfigDialogOpen: true,
     } as never);
 
     render(

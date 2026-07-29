@@ -117,6 +117,7 @@ const mockRuntimeApi: MockRuntimeApi = {
   getLoadBalancerStats: () => null,
   getLoadBalancerLastSelected: () => null,
   getAllLoadBalancerStats: () => [],
+  getUnallowedParametersForActiveModel: () => [],
 };
 
 interface MockRuntimeContextBridge {

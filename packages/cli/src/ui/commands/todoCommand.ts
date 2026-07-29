@@ -34,6 +34,7 @@ import {
   undoAllTodos,
   undoRangeOfTodos,
   undoSingleTodo,
+  parseTodoFileContent,
 } from './todoOperations.js';
 import {
   formatTodoList,
@@ -455,7 +456,7 @@ export const todoCommand: SlashCommand = {
 
           const selectedFile = files[sessionNum - 1];
           const content = fs.readFileSync(selectedFile.path, 'utf8');
-          const todos: Todo[] = JSON.parse(content);
+          const todos: Todo[] = parseTodoFileContent(content);
 
           context.todoContext.updateTodos(todos);
 
