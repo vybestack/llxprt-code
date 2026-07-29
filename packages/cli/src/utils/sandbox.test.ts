@@ -435,6 +435,33 @@ describe('mountGitConfigFiles', () => {
     expect(volumeArgs).toHaveLength(1);
   });
 
+  it('produces exact forward-slash container-side target paths (R3.8)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
+    existsSyncSpy.mockImplementation(
+      (p: fs.PathLike) => String(p) === gitConfig,
+    );
+    const args: string[] = [];
+    mountGitConfigFiles(args, hostHome, containerHome);
+
+    expect(args).toContain(`${gitConfig}:/home/node/.gitconfig:ro`);
+  });
+
+  it('normalizes a host-shaped container home before constructing its target (R3.9)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
+    existsSyncSpy.mockImplementation(
+      (p: fs.PathLike) => String(p) === gitConfig,
+    );
+    const args: string[] = [];
+    mountGitConfigFiles(args, hostHome, hostHome);
+
+    const expectedTarget = `${gitConfig.replaceAll(path.sep, path.posix.sep)}:ro`;
+    const volumeArgs = args.filter(
+      (a) => a.includes('.gitconfig') && a.endsWith(':ro'),
+    );
+    expect(volumeArgs).toHaveLength(1);
+    expect(volumeArgs[0]).toBe(`${gitConfig}:${expectedTarget}`);
+  });
+
   it('all mounts use :ro mode (R3.5)', () => {
     existsSyncSpy.mockImplementation((p: fs.PathLike) => {
       const s = String(p);

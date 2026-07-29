@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as path from 'node:path';
+import * as os from 'node:os';
+import * as fs from 'node:fs';
 
-import { createLspClient } from '../src/service/lsp-client';
+import {
+  createLspClient,
+  LspRequestTimeoutError,
+} from '../src/service/lsp-client';
 import type { LspServerConfig } from '../src/types';
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
@@ -10,6 +15,32 @@ const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
 const FIXTURE_PATH = fileURLToPath(
   new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
 );
+
+const createdClients: Array<ReturnType<typeof createLspClient>> = [];
+const temporaryDirectories: string[] = [];
+
+function createPidFile(): string {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lsp-pid-'));
+  temporaryDirectories.push(directory);
+  return path.join(directory, 'pid.txt');
+}
+
+function readPid(pidFilePath: string): number {
+  const pid = Number.parseInt(fs.readFileSync(pidFilePath, 'utf8').trim(), 10);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error(`Invalid PID in ${pidFilePath}`);
+  }
+  return pid;
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function createConfig(args: string[] = []): { config: LspServerConfig } {
   return {
@@ -22,19 +53,13 @@ function createConfig(args: string[] = []): { config: LspServerConfig } {
   };
 }
 
-const createdClients: Array<ReturnType<typeof createLspClient>> = [];
-
 afterEach(async () => {
   await Promise.all(
-    createdClients.map(async (client) => {
-      try {
-        await client.shutdown();
-      } catch {
-        // ignore cleanup errors in failing-stub phase
-      }
-    }),
+    createdClients.splice(0).map((client) => client.shutdown()),
   );
-  createdClients.length = 0;
+  for (const directory of temporaryDirectories.splice(0)) {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 describe('LspClient integration with fake LSP server', () => {
@@ -182,6 +207,73 @@ describe('LspClient integration with fake LSP server', () => {
     await client.initialize();
     await expect(client.shutdown()).resolves.toBeUndefined();
     expect(client.isAlive()).toBe(false);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P10
+   * @requirement:REQ-LIFE-010
+   * @scenario:Force-terminate child process when server ignores exit notification
+   * @given:A server that acknowledges `shutdown` but ignores the `exit`
+   *        notification (does not self-terminate)
+   * @when:shutdown is invoked
+   * @then:shutdown resolves, the client reports not alive, the child process
+   *        is externally gone (PID no longer alive), and the call completes
+   *        well under the 5-second caller budget
+   */
+  it('terminates child process even when server ignores exit notification', async () => {
+    const pidFile = createPidFile();
+    const client = createLspClient(
+      createConfig(['--ignore-exit-notification', '--write-pid', pidFile]),
+      WORKSPACE_ROOT,
+    );
+    createdClients.push(client);
+
+    await client.initialize();
+
+    const pid = readPid(pidFile);
+    expect(isPidAlive(pid)).toBe(true);
+
+    const start = Date.now();
+    await expect(client.shutdown()).resolves.toBeUndefined();
+    const elapsed = Date.now() - start;
+
+    expect(client.isAlive()).toBe(false);
+    expect(isPidAlive(pid)).toBe(false);
+    expect(elapsed).toBeLessThan(5_000);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P10
+   * @requirement:REQ-LIFE-010
+   * @scenario:Force-terminate child process when server never answers shutdown
+   * @given:A server that ignores the `shutdown` request entirely (never
+   *        responds), causing the protocol timeout to fire
+   * @when:shutdown is invoked
+   * @then:shutdown rejects after cleanup, the client reports not alive, the
+   *        child process is externally gone (PID no longer alive), and the call
+   *        completes under the 5-second caller budget with the primary
+   *        LspRequestTimeoutError.
+   */
+  it('force-terminates and surfaces timeout when server ignores shutdown request', async () => {
+    const pidFile = createPidFile();
+    const client = createLspClient(
+      createConfig(['--ignore-shutdown', '--write-pid', pidFile]),
+      WORKSPACE_ROOT,
+    );
+    createdClients.push(client);
+
+    await client.initialize();
+
+    const pid = readPid(pidFile);
+    expect(isPidAlive(pid)).toBe(true);
+
+    const start = Date.now();
+    await expect(client.shutdown()).rejects.toThrow(LspRequestTimeoutError);
+    const elapsed = Date.now() - start;
+
+    expect(client.isAlive()).toBe(false);
+    expect(isPidAlive(pid)).toBe(false);
+    expect(elapsed).toBeLessThan(5_000);
   });
 
   /**

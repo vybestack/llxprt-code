@@ -73,13 +73,13 @@ export function mountGitConfigFiles(
     const containerHostPath = getContainerPath(hostPath);
     args.push('--volume', `${hostPath}:${containerHostPath}:ro`);
 
-    const containerAltPath =
-      containerHomePath === hostHomedir
-        ? containerHostPath
-        : path.posix.join(
-            containerHomePath,
-            relPath.split(path.sep).join(path.posix.sep),
-          );
+    // The bind source stays host-native, but the container-side destination
+    // is a Linux path and must always be built with path.posix so it never
+    // contains backslashes on Windows hosts.
+    const containerAltPath = path.posix.join(
+      getContainerPath(containerHomePath),
+      relPath.split(path.sep).join(path.posix.sep),
+    );
     if (containerAltPath !== containerHostPath) {
       args.push('--volume', `${hostPath}:${containerAltPath}:ro`);
     }

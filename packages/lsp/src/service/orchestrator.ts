@@ -338,15 +338,18 @@ export class Orchestrator {
 
   public async shutdown(): Promise<void> {
     const clients = [...this.clients.values()];
-    await Promise.all(
+
+    const results = await Promise.all(
       clients.map(async (client) => {
         try {
           await client.shutdown();
-        } catch {
-          // best-effort cleanup
+          return null;
+        } catch (error: unknown) {
+          return error;
         }
       }),
     );
+    const errors = results.filter((result) => result !== null);
 
     this.clients.clear();
     this.brokenServers.clear();
@@ -357,6 +360,16 @@ export class Orchestrator {
     this.diagnosticsByFile.clear();
     this.diagnosticEvents.length = 0;
     this.diagnosticEpoch = 0;
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        'One or more LSP clients failed during shutdown',
+      );
+    }
   }
 
   private normalizeAbsolutePath(path: string): string {

@@ -410,9 +410,6 @@ export class PromptLoader {
       scanInProgress = true;
       try {
         const currentFiles = await this.collectMarkdownFiles(baseDir);
-        if (stopped) {
-          return;
-        }
         for (const [filePath, mtimeMs] of currentFiles) {
           const previousMtime = knownFiles.get(filePath);
           if (previousMtime === undefined) {

@@ -10,6 +10,7 @@ import {
   isPublishDiagnosticsParams,
   parsePublishDiagnostics,
 } from './lsp-diagnostic-parser.js';
+import { observeProcessClose, shutdownProcess } from './process-termination.js';
 import type { LspServerConfig } from '../types.js';
 
 export class LspRequestTimeoutError extends Error {
@@ -76,6 +77,8 @@ const DEBOUNCE_MS = 120;
 const DEADLINE_SAFETY_MARGIN_MS = 5;
 const TOUCH_CRASH_OBSERVATION_WINDOW_MS = 25;
 const HEADER_SEPARATOR = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a]);
+const SHUTDOWN_PROTOCOL_TIMEOUT_MS = 2_000;
+const SHUTDOWN_CLOSE_GRACE_MS = 1_000;
 
 const toSymbolKind = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0;
@@ -107,6 +110,7 @@ export class LspClient {
   private firstTouchPending = true;
   private shuttingDown = false;
   private stdinWriteErrored = false;
+  private processClose: Promise<void> | null = null;
   private readonly documentVersions = new Map<string, number>();
   private readonly diagnosticsByFile = new Map<string, Diagnostic[]>();
 
@@ -157,6 +161,7 @@ export class LspClient {
     });
 
     this.process = proc;
+    this.processClose = observeProcessClose(proc);
     this.alive = true;
 
     proc.on('exit', (exitCode) => {
@@ -532,27 +537,32 @@ export class LspClient {
     return this.firstTouchPending;
   }
 
+  /** @plan PLAN-20250212-LSP.P12 @requirement REQ-LIFE-010 */
   public async shutdown(): Promise<void> {
     if (!this.process) {
       this.alive = false;
       return;
     }
-
+    const proc = this.process;
+    const processClose = this.processClose ?? observeProcessClose(proc);
     this.shuttingDown = true;
-
+    let primaryError: Error | null = null;
     try {
       if (this.initialized && this.isAlive()) {
-        await this.sendRequest('shutdown', {});
-        this.sendNotification('exit', {});
+        await this.sendRequest(
+          'shutdown',
+          {},
+          {
+            timeoutMs: SHUTDOWN_PROTOCOL_TIMEOUT_MS,
+          },
+        );
+        await this.writeMessage({
+          jsonrpc: '2.0',
+          method: 'exit',
+        });
       }
-    } catch {
-      // best-effort shutdown behavior
-    }
-
-    try {
-      this.process.kill();
-    } catch {
-      /* already exited */
+    } catch (error: unknown) {
+      primaryError = error instanceof Error ? error : new Error(String(error));
     }
 
     for (const { cleanup, reject } of this.pending.values()) {
@@ -562,6 +572,15 @@ export class LspClient {
     this.pending.clear();
     this.alive = false;
     this.initialized = false;
+
+    await shutdownProcess(
+      proc,
+      processClose,
+      SHUTDOWN_CLOSE_GRACE_MS,
+      primaryError,
+    );
+    this.process = null;
+    this.processClose = null;
   }
 
   private ensureReady(): void {

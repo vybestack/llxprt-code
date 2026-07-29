@@ -33,15 +33,10 @@ const createdOrchestrators: ReturnType<typeof createOrchestrator>[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    createdOrchestrators.map(async (orchestrator) => {
-      try {
-        await orchestrator.shutdown();
-      } catch {
-        // ignore cleanup errors during red-phase TDD
-      }
-    }),
+    createdOrchestrators
+      .splice(0)
+      .map((orchestrator) => orchestrator.shutdown()),
   );
-  createdOrchestrators.length = 0;
 });
 
 describe('Orchestrator integration with real registry/language map/client paths', () => {
@@ -379,5 +374,71 @@ describe('Orchestrator integration with real registry/language map/client paths'
       'm-server',
       'z-server',
     ]);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P17
+   * @scenario:shutdown error aggregation
+   * @given:Two initialized servers that both ignore the shutdown request,
+   *        causing LspRequestTimeoutError in each client
+   * @when:orchestrator.shutdown() is called
+   * @then:shutdown rejects with an AggregateError containing both failures
+   *        rather than swallowing them, proving cleanup attempts all clients
+   *        before propagating
+   */
+  it('propagates an AggregateError when multiple clients fail during shutdown', async () => {
+    const orchestrator = createOrchestrator(
+      createConfig([
+        createFakeServer('fail-a', ['.ts'], ['--ignore-shutdown']),
+        createFakeServer('fail-b', ['.tsx'], ['--ignore-shutdown']),
+      ]),
+      WORKSPACE_ROOT,
+    );
+    createdOrchestrators.push(orchestrator);
+
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/b.tsx'),
+      'const y = TYPE_ERROR',
+    );
+
+    let thrown: unknown = null;
+    try {
+      await orchestrator.shutdown();
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const aggregate = thrown as AggregateError;
+    expect(aggregate.errors).toHaveLength(2);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P17
+   * @scenario:single client shutdown error propagation
+   * @given:One initialized server that ignores the shutdown request
+   * @when:orchestrator.shutdown() is called
+   * @then:shutdown rejects with the single underlying error (not wrapped in
+   *        an AggregateError when there is only one failure)
+   */
+  it('propagates a single error when one client fails during shutdown', async () => {
+    const orchestrator = createOrchestrator(
+      createConfig([
+        createFakeServer('fail-single', ['.ts'], ['--ignore-shutdown']),
+      ]),
+      WORKSPACE_ROOT,
+    );
+    createdOrchestrators.push(orchestrator);
+
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/single.ts'),
+      'const x = TYPE_ERROR',
+    );
+
+    await expect(orchestrator.shutdown()).rejects.toThrow(/timed out/);
   });
 });

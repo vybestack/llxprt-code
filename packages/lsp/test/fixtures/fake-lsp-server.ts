@@ -1,6 +1,7 @@
 /* @plan PLAN-20250212-LSP.P10 */
 
 import { createInterface } from 'node:readline';
+import { writeFileSync } from 'node:fs';
 
 type Severity = 1 | 2 | 3 | 4;
 
@@ -34,12 +35,19 @@ type FakeServerMode = {
   crashOnMethod?: string;
   delayRespondMs?: number;
   emitActiveTouchCount?: boolean;
+  ignoreExitNotification?: boolean;
+  ignoreShutdown?: boolean;
+  pidFilePath?: string;
 };
 
 const mode: FakeServerMode = parseMode(process.argv.slice(2));
 const documents = new Map<string, string>();
 let initialized = false;
 let activeTouchHandlers = 0;
+
+if (mode.pidFilePath) {
+  writeFileSync(mode.pidFilePath, String(process.pid));
+}
 
 function parseMode(args: string[]): FakeServerMode {
   const parsed: FakeServerMode = {};
@@ -108,6 +116,26 @@ function parseMode(args: string[]): FakeServerMode {
 
     if (arg === '--emit-active-touch-count') {
       parsed.emitActiveTouchCount = true;
+      continue;
+    }
+
+    if (arg === '--ignore-exit-notification') {
+      parsed.ignoreExitNotification = true;
+      continue;
+    }
+
+    if (arg === '--ignore-shutdown') {
+      parsed.ignoreShutdown = true;
+      continue;
+    }
+
+    if (arg === '--write-pid') {
+      const pidPath = args[i + 1];
+      if (typeof pidPath !== 'string' || pidPath.length === 0) {
+        throw new Error('--write-pid requires a path');
+      }
+      parsed.pidFilePath = pidPath;
+      i += 1;
       continue;
     }
   }
@@ -233,6 +261,9 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
   }
 
   if (message.method === 'shutdown') {
+    if (mode.ignoreShutdown) {
+      return;
+    }
     send({
       jsonrpc: '2.0',
       id: message.id,
@@ -242,7 +273,10 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
   }
 
   if (message.method === 'exit') {
-    process.exit(0);
+    if (!mode.ignoreExitNotification) {
+      process.exit(0);
+    }
+    return;
   }
 
   if (!initialized) {
