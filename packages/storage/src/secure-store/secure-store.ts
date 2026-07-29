@@ -294,21 +294,21 @@ export class SecureStore {
   // ─── Keyring Loading ──────────────────────────────────────────────────────
 
   private async getKeyring(): Promise<KeyringAdapter | null> {
-    if (this.keyringLoadAttempted) {
-      return this.keyringInstance ?? null;
-    }
+    if (this.keyringLoadAttempted) return this.keyringInstance ?? null;
     this.keyringLoadAttempted = true;
     try {
-      const adapter = await this.keyringLoaderFn();
-      this.keyringInstance = adapter;
+      this.keyringInstance = await this.keyringLoaderFn();
       this.logger.debug(
-        () => `[keyring] @napi-rs/keyring loaded=${adapter !== null}`,
+        () =>
+          `[keyring] @napi-rs/keyring loaded=${this.keyringInstance !== null}`,
       );
-      return adapter;
+      return this.keyringInstance;
     } catch (error) {
       this.keyringInstance = null;
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.debug(() => `[keyring] @napi-rs/keyring load failed: ${msg}`);
+      this.logger.debug(
+        () =>
+          `[keyring] @napi-rs/keyring load failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return null;
     }
   }
@@ -323,18 +323,11 @@ export class SecureStore {
         'Provide a non-empty key name',
       );
     }
-    if (key.includes('/') || key.includes('\\')) {
+    if (key.includes('/') || key.includes('\\') || key.includes('\0')) {
       throw new SecureStoreError(
-        `Key contains path separator: ${key}`,
+        `Key contains path separator or null byte: ${key}`,
         'CORRUPT',
-        'Key names must not contain path separators',
-      );
-    }
-    if (key.includes('\0')) {
-      throw new SecureStoreError(
-        'Key contains null byte',
-        'CORRUPT',
-        'Key names must not contain null bytes',
+        'Key names must not contain path separators or null bytes',
       );
     }
     if (
@@ -384,7 +377,6 @@ export class SecureStore {
   // ─── Availability Probe ──────────────────────────────────────────────────
 
   async isKeychainAvailable(): Promise<boolean> {
-    // Check cache — honor both positive and negative results within TTL
     if (this.probeCache !== null) {
       const elapsed = Date.now() - this.probeCache.timestamp;
       if (elapsed < this.PROBE_TTL_MS) {
@@ -394,7 +386,6 @@ export class SecureStore {
         return this.probeCache.available;
       }
     }
-
     const adapter = await this.getKeyring();
     if (adapter === null) {
       this.probeCache = { available: false, timestamp: Date.now() };
@@ -403,7 +394,6 @@ export class SecureStore {
       );
       return false;
     }
-
     const testAccount =
       '__securestore_probe__' + crypto.randomUUID().substring(0, 8);
     const testValue = 'probe-' + Date.now();
@@ -416,15 +406,11 @@ export class SecureStore {
       await adapter.deletePassword(this.serviceName, testAccount);
       const probeOk = retrieved === testValue;
       this.probeCache = { available: probeOk, timestamp: Date.now() };
-      if (!probeOk) {
-        this.logger.debug(
-          () => '[probe] keyring probe value mismatch — marking unavailable',
-        );
-      } else {
-        this.logger.debug(
-          () => '[probe] keyring available — OS keychain active',
-        );
-      }
+      this.logger.debug(() =>
+        probeOk
+          ? '[probe] keyring available — OS keychain active'
+          : '[probe] keyring probe value mismatch — marking unavailable',
+      );
       return probeOk;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -434,7 +420,6 @@ export class SecureStore {
       } else {
         this.probeCache = { available: false, timestamp: Date.now() };
       }
-
       return false;
     }
   }
@@ -459,6 +444,52 @@ export class SecureStore {
       }
     }
     return deleted;
+  }
+
+  /**
+   * Best-effort stale keyring clear — swallows errors because the caller
+   * throws UNAVAILABLE regardless.
+   */
+  private async safeClearStaleKeyring(
+    adapter: KeyringAdapter,
+    key: string,
+  ): Promise<void> {
+    try {
+      await clearMismatchedKeyringValue(adapter, this.serviceName, key);
+    } catch {
+      // Best-effort — caller throws UNAVAILABLE regardless.
+    }
+  }
+
+  /** Compensating transaction: write fallback, clear stale, roll back on failure. */
+  private async writeFallbackAndClearStale(
+    adapter: KeyringAdapter,
+    key: string,
+    value: string,
+    verification: { hasStaleValue: boolean },
+  ): Promise<void> {
+    this.logger.debug(
+      () =>
+        `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
+    );
+    await this.writeFallbackFile(key, value);
+    if (!verification.hasStaleValue) return;
+    let cleared = false;
+    try {
+      cleared = await clearMismatchedKeyringValue(
+        adapter,
+        this.serviceName,
+        key,
+      );
+    } catch {
+      cleared = false;
+    }
+    if (!cleared) {
+      await this.deleteFallbackFiles(key);
+      throw this.unavailableError(
+        'Mismatched keyring value could not be removed',
+      );
+    }
   }
 
   private unavailableError(message: string): SecureStoreError {
@@ -507,32 +538,14 @@ export class SecureStore {
 
       this.recordKeyringFailure();
       if (this.fallbackPolicy === 'deny') {
-        if (result.hasStaleValue)
-          await clearMismatchedKeyringValue(adapter, this.serviceName, key);
+        if (result.hasStaleValue) {
+          await this.safeClearStaleKeyring(adapter, key);
+        }
         throw this.unavailableError(
           'Keyring write could not be verified and fallback is denied',
         );
       }
-      // Compensating transaction: write the fallback first so the credential
-      // is durable, then clear the stale keyring value. Reads are
-      // keyring-authoritative, so a stale entry that cannot be removed would
-      // shadow the fallback. If the clear fails, remove the orphaned fallback
-      // and throw UNAVAILABLE. deleteFallbackFiles logs non-ENOENT errors but
-      // does not propagate them — the keyring failure is the actionable error.
-      this.logger.debug(
-        () =>
-          `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
-      );
-      await this.writeFallbackFile(key, value);
-      if (
-        result.hasStaleValue &&
-        !(await clearMismatchedKeyringValue(adapter, this.serviceName, key))
-      ) {
-        await this.deleteFallbackFiles(key);
-        throw this.unavailableError(
-          'Mismatched keyring value could not be removed',
-        );
-      }
+      await this.writeFallbackAndClearStale(adapter, key, value, result);
       return;
     }
 
@@ -559,8 +572,6 @@ export class SecureStore {
 
   async get(key: string): Promise<string | null> {
     this.validateKey(key);
-
-    // Try keyring first (authoritative)
     const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
@@ -581,8 +592,6 @@ export class SecureStore {
           () =>
             `[get] key='${key}' keyring read failed (${classified}): ${msg}`,
         );
-        // Re-throw non-transient, non-availability errors so callers know
-        // the keyring is actively denying access (not just missing).
         if (
           classified !== 'UNAVAILABLE' &&
           classified !== 'NOT_FOUND' &&
@@ -601,23 +610,20 @@ export class SecureStore {
       );
     }
 
-    // Try fallback file
+    // Try fallback file (current path, then legacy)
     let fallbackValue = await this.readFallbackFile(key);
     if (fallbackValue === null) {
-      // Try legacy unencoded path
       const legacyPath = this.getLegacyFallbackFilePath(key);
       if (legacyPath !== this.getFallbackFilePath(key)) {
         fallbackValue = await this.readFallbackFileAtPath(legacyPath);
       }
     }
-
     if (fallbackValue !== null) {
       this.logger.debug(
         () => `[get] key='${key}' → found in encrypted fallback file`,
       );
       return fallbackValue;
     }
-
     this.logger.debug(() => `[get] key='${key}' → not found anywhere`);
     return null;
   }
@@ -686,35 +692,29 @@ export class SecureStore {
     creds: Array<{ account: string; password: string }>,
   ): void {
     for (const cred of creds) {
-      if (!cred.account.startsWith('__securestore_probe__')) {
+      if (!cred.account.startsWith('__securestore_probe__'))
         keys.add(cred.account);
-      }
     }
   }
 
   private addFallbackFileKeys(keys: Set<string>, files: string[]): void {
     for (const file of files) {
-      if (!file.endsWith('.enc')) {
-        continue;
-      }
-      this.addDecodedFallbackKey(keys, file.slice(0, -4));
+      if (file.endsWith('.enc'))
+        this.addDecodedFallbackKey(keys, file.slice(0, -4));
     }
   }
 
   private addDecodedFallbackKey(keys: Set<string>, keyInFile: string): void {
-    // First try decoding as the new sanitizer (which uses %XX for reserved chars)
-    // or as encodeURIComponent (previous version). decodeURIComponent handles both.
     try {
       const decodedKey = decodeURIComponent(keyInFile);
       this.validateKey(decodedKey);
       keys.add(decodedKey);
     } catch {
-      // If decoding fails, it might be a legacy raw key filename.
       try {
         this.validateKey(keyInFile);
         keys.add(keyInFile);
       } catch {
-        // Truly malformed filename — skip
+        // Malformed filename — skip
       }
     }
   }
@@ -748,7 +748,6 @@ export class SecureStore {
       await fs.access(filePath);
       return true;
     } catch {
-      // Try legacy path
       const legacyPath = this.getLegacyFallbackFilePath(key);
       if (legacyPath !== filePath) {
         try {
@@ -772,15 +771,12 @@ export class SecureStore {
     const machineSecret = await this.machineSecretLoaderFn();
     const useV2 = machineSecret !== null;
 
-    // Never downgrade an existing v:2 file to v:1. If the machine secret is
-    // unavailable, inspect the existing target envelope; if it is v:2, refuse
-    // to overwrite it with a weaker v:1 envelope rather than silently
-    // destroying the stronger root of trust. v:1 fallback is still allowed for
-    // new files or existing v:1 files.
+    // Never downgrade an existing v:2 file to v:1 when the machine secret is
+    // unavailable — refuse rather than destroying the stronger root of trust.
     if (!useV2) {
-      const finalPathForCheck = this.getFallbackFilePath(key);
-      const existingVersion =
-        await this.readExistingEnvelopeVersion(finalPathForCheck);
+      const existingVersion = await this.readExistingEnvelopeVersion(
+        this.getFallbackFilePath(key),
+      );
       if (existingVersion === 2) {
         throw new SecureStoreError(
           'Refusing to overwrite v:2 fallback file with a weaker v:1 envelope while the machine secret is unavailable',
@@ -802,7 +798,6 @@ export class SecureStore {
       cipher.final(),
     ]);
     const authTag = cipher.getAuthTag();
-
     const ciphertext = Buffer.concat([salt, iv, authTag, encrypted]);
     const envelope: Envelope = {
       v: useV2 ? 2 : 1,
@@ -824,9 +819,7 @@ export class SecureStore {
       await fd.writeFile(JSON.stringify(envelope));
       await fd.sync();
       await fd.close();
-
       await this.renameWithRetry(tempPath, finalPath);
-
       await fs.chmod(finalPath, 0o600);
     } catch (error) {
       await fd.close().catch(() => {});
@@ -835,13 +828,6 @@ export class SecureStore {
     }
   }
 
-  /**
-   * Reads only the version field of an existing fallback envelope without
-   * attempting decryption. Returns the version (1 or 2) if the file exists
-   * and parses as a valid envelope, or null if it does not exist or is not
-   * a recognized envelope. Used by writeFallbackFile to detect v:2 files
-   * that must not be downgraded to v:1.
-   */
   private async readExistingEnvelopeVersion(
     filePath: string,
   ): Promise<number | null> {
@@ -849,21 +835,15 @@ export class SecureStore {
     try {
       content = await fs.readFile(filePath, 'utf8');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return null;
-      }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(content);
+      const parsed = JSON.parse(content);
+      return isValidEnvelope(parsed) ? parsed.v : null;
     } catch {
       return null;
     }
-    if (!isValidEnvelope(parsed)) {
-      return null;
-    }
-    return parsed.v;
   }
 
   private async renameWithRetry(
@@ -903,13 +883,9 @@ export class SecureStore {
     try {
       content = await fs.readFile(filePath, 'utf8');
     } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code === 'ENOENT') {
-        return null;
-      }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
-
     let envelope: unknown;
     try {
       envelope = JSON.parse(content);
@@ -920,7 +896,6 @@ export class SecureStore {
         'Re-save the key or re-authenticate',
       );
     }
-
     const env = envelope as Record<string, unknown>;
     if (typeof env.v !== 'number' || !ENVELOPE_VERSIONS.has(env.v)) {
       throw new SecureStoreError(
@@ -931,7 +906,6 @@ export class SecureStore {
         'upgrade to the latest version or re-save the key',
       );
     }
-
     if (!isValidEnvelope(envelope)) {
       throw new SecureStoreError(
         'Fallback file envelope is malformed',
@@ -939,13 +913,11 @@ export class SecureStore {
         'Re-save the key or re-authenticate',
       );
     }
-
     const ciphertext = Buffer.from(envelope.data, 'base64');
     const salt = ciphertext.subarray(0, SALT_LEN);
     const iv = ciphertext.subarray(SALT_LEN, SALT_LEN + 12);
     const authTag = ciphertext.subarray(28, 44);
     const encryptedData = ciphertext.subarray(44);
-
     let kdfInput: string;
     if (envelope.v === 2) {
       const machineSecret = await this.machineSecretLoaderFn();
@@ -961,15 +933,13 @@ export class SecureStore {
       kdfInput = deriveV1KdfInput(this.serviceName);
     }
     const decKey = await scryptAsync(kdfInput, salt, 32, SCRYPT_PARAMS);
-
     try {
       const decipher = crypto.createDecipheriv('aes-256-gcm', decKey, iv);
       decipher.setAuthTag(authTag);
-      const decrypted = Buffer.concat([
+      return Buffer.concat([
         decipher.update(encryptedData),
         decipher.final(),
-      ]);
-      return decrypted.toString('utf8');
+      ]).toString('utf8');
     } catch {
       throw new SecureStoreError(
         'Failed to decrypt fallback file',

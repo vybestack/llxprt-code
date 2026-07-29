@@ -327,46 +327,52 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
 
   // A verified keyring write must also remove pre-existing stale current and
   // legacy fallback artifacts for the same credential (issue #2556 cleanup).
-  it('keyring-present verified write removes pre-existing stale current and legacy fallback artifacts', async () => {
-    // Seed stale fallback artifacts using a keyring-absent store. A
-    // colon-bearing key exercises both sanitized and legacy paths.
-    const seeder = createStore('diverge', tempDir, absentLoader, 'allow');
-    const colonKey = 'ns:account';
-    await seeder.set(colonKey, 'stale-value');
+  // Skipped on Windows because legacy fallback paths use unsanitized
+  // characters that are invalid in Windows filenames.
+  const legacyCleanupDescribe =
+    process.platform === 'win32' ? describe.skip : describe;
+  legacyCleanupDescribe('stale artifact cleanup (POSIX only)', () => {
+    it('keyring-present verified write removes pre-existing stale current and legacy fallback artifacts', async () => {
+      // Seed stale fallback artifacts using a keyring-absent store. A
+      // colon-bearing key exercises both sanitized and legacy paths.
+      const seeder = createStore('diverge', tempDir, absentLoader, 'allow');
+      const colonKey = 'ns:account';
+      await seeder.set(colonKey, 'stale-value');
 
-    const colonCurrent = path.join(tempDir, 'ns%3Aaccount.enc');
-    const colonLegacy = path.join(tempDir, 'ns:account.enc');
-    // Move the sanitized file to the legacy path, then re-seed the current.
-    await fs.rename(colonCurrent, colonLegacy);
-    await seeder.set(colonKey, 'stale-value-2');
-    // Now both current and legacy artifacts coexist on disk.
-    expect(
-      await fs.access(colonCurrent).then(
-        () => true,
-        () => false,
-      ),
-    ).toBe(true);
-    expect(
-      await fs.access(colonLegacy).then(
-        () => true,
-        () => false,
-      ),
-    ).toBe(true);
+      const colonCurrent = path.join(tempDir, 'ns%3Aaccount.enc');
+      const colonLegacy = path.join(tempDir, 'ns:account.enc');
+      // Move the sanitized file to the legacy path, then re-seed the current.
+      await fs.rename(colonCurrent, colonLegacy);
+      await seeder.set(colonKey, 'stale-value-2');
+      // Now both current and legacy artifacts coexist on disk.
+      expect(
+        await fs.access(colonCurrent).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(true);
+      expect(
+        await fs.access(colonLegacy).then(
+          () => true,
+          () => false,
+        ),
+      ).toBe(true);
 
-    // Perform a verified write with a keyring-present store.
-    const keyringStore = createStore(
-      'diverge',
-      tempDir,
-      presentLoader,
-      'allow',
-    );
-    await keyringStore.set(colonKey, 'fresh-keyring-value');
+      // Perform a verified write with a keyring-present store.
+      const keyringStore = createStore(
+        'diverge',
+        tempDir,
+        presentLoader,
+        'allow',
+      );
+      await keyringStore.set(colonKey, 'fresh-keyring-value');
 
-    // Both stale artifacts must be gone.
-    await expect(fs.access(colonCurrent)).rejects.toThrow('ENOENT');
-    await expect(fs.access(colonLegacy)).rejects.toThrow('ENOENT');
-    // The value is now authoritative in the keyring.
-    expect(await keyringStore.get(colonKey)).toBe('fresh-keyring-value');
+      // Both stale artifacts must be gone.
+      await expect(fs.access(colonCurrent)).rejects.toThrow('ENOENT');
+      await expect(fs.access(colonLegacy)).rejects.toThrow('ENOENT');
+      // The value is now authoritative in the keyring.
+      expect(await keyringStore.get(colonKey)).toBe('fresh-keyring-value');
+    });
   });
 
   it('keyring-absent write produces an encrypted envelope (cleartext absent, AES-256-GCM)', async () => {

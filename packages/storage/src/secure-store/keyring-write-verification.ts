@@ -50,7 +50,9 @@ export async function clearMismatchedKeyringValue(
         return true;
       }
     } catch {
-      return false;
+      // A throw on read-back after delete is inconclusive — the backend may
+      // not have propagated the deletion yet. Continue retrying instead of
+      // treating this as a durable failure.
     }
     await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
   }

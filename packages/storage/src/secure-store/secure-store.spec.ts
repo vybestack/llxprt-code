@@ -252,6 +252,30 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       // No fallback artifact should be left on disk after a failed clear.
       expect(await fallbackFileExists('stuck-key')).toBe(false);
     });
+
+    it('should reject without a fallback when deletePassword throws during stale clear', async () => {
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => 'stale-wrong-value',
+        setPassword: async () => {
+          /* accepts but does not replace the stale value */
+        },
+        deletePassword: async () => {
+          throw new Error('keyring delete error');
+        },
+      };
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      const error = await store
+        .set('throw-delete-key', 'correct-value')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('UNAVAILABLE');
+      expect(await fallbackFileExists('throw-delete-key')).toBe(false);
+    });
     it('should recover from fallback when keyring read-back throws', async () => {
       const mockKeyring: KeyringAdapter = {
         getPassword: async () => {
