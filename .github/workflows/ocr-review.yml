@@ -484,6 +484,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+
       - name: Fetch PR head and compute merge-base
         shell: bash
         env:
@@ -4650,12 +4653,12 @@ jobs:
         run: |
           set -euo pipefail
           export GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-$RUNNER_TEMP/ocr-step-summary.md}"
-          if node scripts/ocr-telemetry.js; then
+          if bun scripts/ocr-telemetry.ts; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "phase=telemetry; reason=OCR telemetry producer failed" >> ocr-infrastructure-failure.txt
-          if node scripts/ocr-telemetry.js --failure "OCR telemetry producer failed"; then
+          if bun scripts/ocr-telemetry.ts --failure "OCR telemetry producer failed"; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -4727,12 +4730,12 @@ jobs:
           OCR_TELEMETRY_STATE: failed
         run: |
           set -euo pipefail
-          if ! node scripts/ocr-telemetry.js --redact ocr-telemetry.json || \
-             ! node scripts/ocr-telemetry.js --validate ocr-telemetry.json; then
+          if ! bun scripts/ocr-telemetry.ts --redact ocr-telemetry.json || \
+             ! bun scripts/ocr-telemetry.ts --validate ocr-telemetry.json; then
             echo "phase=telemetry; reason=post-redaction telemetry validation failed" >> ocr-infrastructure-failure.txt
-            node scripts/ocr-telemetry.js --failure "post-redaction telemetry validation failed"
-            node scripts/ocr-telemetry.js --redact ocr-telemetry.json
-            node scripts/ocr-telemetry.js --validate ocr-telemetry.json
+            bun scripts/ocr-telemetry.ts --failure "post-redaction telemetry validation failed"
+            bun scripts/ocr-telemetry.ts --redact ocr-telemetry.json
+            bun scripts/ocr-telemetry.ts --validate ocr-telemetry.json
           fi
           echo "valid=true" >> "$GITHUB_OUTPUT"
 

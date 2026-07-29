@@ -1,6 +1,6 @@
 # tmux harness
 
-`scripts/tmux-harness.js` is an automation harness for the Ink-based terminal UI (in `packages/cli`).
+`scripts/tmux-harness.ts` is an automation harness for the Ink-based terminal UI (in `packages/cli`).
 
 It runs `bun scripts/start.ts` inside a tmux session (a real TTY), sends keystrokes, and captures both the rendered screen and scrollback to artifact files. This lets us reproduce UI-only bugs (like scrollback redraw spam) without manually launching the app and eyeballing it.
 
@@ -12,15 +12,15 @@ It runs `bun scripts/start.ts` inside a tmux session (a real TTY), sends keystro
 
 ## Quickstart
 
-- Haiku smoke test: `node scripts/tmux-harness.js`
-- Scrollback redraw reproduction: `node scripts/tmux-harness.js --scenario scrollback`
-- Scrollback redraw baseline (asserts): `node scripts/tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
-- LLM/tool scrollback baseline (LLXPRT): `node scripts/tmux-harness.js --script scripts/tmux-script.llm-tool-scrollback-realistic.llxprt.json`
-- LLM/tool scrollback baseline (Gemini CLI, expected to pass): `node scripts/tmux-harness.js --script scripts/tmux-script.llm-tool-scrollback-realistic.gemini.json`
-- Scroll gap regression (LLXPRT): `node scripts/tmux-harness.js --script scripts/tmux-script.llm-scroll-gap-regression.llxprt.json`
-- `/clear` regression (LLXPRT): `node scripts/tmux-harness.js --script scripts/tmux-script.clear-keeps-input.llxprt.json`
-- Scripted run: `node scripts/tmux-harness.js --script scripts/tmux-script.example.json`
-- Scripted run (macros): `node scripts/tmux-harness.js --script scripts/tmux-script.macros.example.json`
+- Haiku smoke test: `bun scripts/tmux-harness.ts`
+- Scrollback redraw reproduction: `bun scripts/tmux-harness.ts --scenario scrollback`
+- Scrollback redraw baseline (asserts): `bun scripts/tmux-harness.ts --scenario scrollback --rows 20 --cols 100 --assert`
+- LLM/tool scrollback baseline (LLXPRT): `bun scripts/tmux-harness.ts --script scripts/tmux-script.llm-tool-scrollback-realistic.llxprt.json`
+- LLM/tool scrollback baseline (Gemini CLI, expected to pass): `bun scripts/tmux-harness.ts --script scripts/tmux-script.llm-tool-scrollback-realistic.gemini.json`
+- Scroll gap regression (LLXPRT): `bun scripts/tmux-harness.ts --script scripts/tmux-script.llm-scroll-gap-regression.llxprt.json`
+- `/clear` regression (LLXPRT): `bun scripts/tmux-harness.ts --script scripts/tmux-script.clear-keeps-input.llxprt.json`
+- Scripted run: `bun scripts/tmux-harness.ts --script scripts/tmux-script.example.json`
+- Scripted run (macros): `bun scripts/tmux-harness.ts --script scripts/tmux-script.macros.example.json`
 
 ## Artifacts
 
@@ -93,4 +93,4 @@ These may be brittle across UI changes; prefer macros + runner primitives for an
 
 ## Scrollback load generator
 
-The `--scenario scrollback` scenario uses `scripts/scrollback-load.js` to emit a predictable stream of lines over time.
+The `--scenario scrollback` scenario uses `scripts/scrollback-load.ts` to emit a predictable stream of lines over time.

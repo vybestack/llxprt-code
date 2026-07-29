@@ -10,54 +10,54 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { diffFromGit, parseArgs } from './eslint-guard/git.mjs';
-import { checkDiff } from './eslint-guard/check-diff.mjs';
+import { diffFromGit, parseArgs } from './eslint-guard/git.ts';
+import { checkDiff } from './eslint-guard/check-diff.ts';
 import {
   scanCliProductionTypeEscapes,
   checkCliSourcePolicy,
-} from './eslint-guard/cli-scanner.mjs';
+} from './eslint-guard/cli-scanner.ts';
 import {
   scanModuleDirectives,
   scanCoreDirectives,
   scanRootTypeScriptSuppressions,
-} from './eslint-guard/scanners.mjs';
-import { scanRepositoryLintEscapeHatches } from './eslint-guard/config-scanner.mjs';
+} from './eslint-guard/scanners.ts';
+import { scanRepositoryLintEscapeHatches } from './eslint-guard/config-scanner.ts';
 import {
   checkModuleCentralBypassesInConfig,
   checkCoreCentralBypassesInConfig,
   checkModuleDirectiveScopesInConfig,
   checkCoreDirectiveScopesInConfig,
-} from './eslint-guard/bypass-detector.mjs';
-import { formatViolations } from './eslint-guard/violations.mjs';
+} from './eslint-guard/bypass-detector.ts';
+import { formatViolations } from './eslint-guard/violations.ts';
 
-export { checkDiff } from './eslint-guard/check-diff.mjs';
-export { extractRuleKey } from './eslint-guard/rule-config.mjs';
+export { checkDiff } from './eslint-guard/check-diff.ts';
+export { extractRuleKey } from './eslint-guard/rule-config.ts';
 export {
   hasInlineEslintDirective,
   hasTypeScriptSuppression,
-} from './eslint-guard/directive-scanner.mjs';
+} from './eslint-guard/directive-scanner.ts';
 export {
   scanCliProductionTypeEscapes,
   checkCliSourcePolicy,
-} from './eslint-guard/cli-scanner.mjs';
+} from './eslint-guard/cli-scanner.ts';
 export {
   scanModuleDirectives,
   scanCoreDirectives,
   scanPackageDirectives,
   scanPackageTypeScriptSuppressions,
   scanRootTypeScriptSuppressions,
-} from './eslint-guard/scanners.mjs';
+} from './eslint-guard/scanners.ts';
 export {
   scanRepositoryLintEscapeHatches,
   extractScopeArray,
-} from './eslint-guard/config-scanner.mjs';
+} from './eslint-guard/config-scanner.ts';
 export {
   checkModuleCentralBypassesInConfig,
   checkCoreCentralBypassesInConfig,
   checkModuleDirectiveScopesInConfig,
   checkCoreDirectiveScopesInConfig,
-} from './eslint-guard/bypass-detector.mjs';
-export { formatViolations } from './eslint-guard/violations.mjs';
+} from './eslint-guard/bypass-detector.ts';
+export { formatViolations } from './eslint-guard/violations.ts';
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));

@@ -80,6 +80,9 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: 'Setup Bun'
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+
       - name: 'Prepare planner workspace'
         run: |
           set -euo pipefail
@@ -115,7 +118,7 @@ jobs:
           # Use the production extractLinkedReferences() helper (handles
           # fenced-code exclusion and de-dup) so the workflow and tests share
           # one implementation. Excludes the current issue number.
-          node .github/scripts/issue-planner.mjs \
+          bun .github/scripts/issue-planner.ts \
             --extract-linked-references planner "${ISSUE_NUMBER}"
 
           mapfile -t linked_numbers < planner/linked-references.txt
@@ -158,13 +161,13 @@ jobs:
           COMMENT_BODY: '${{ github.event.comment.body }}'
         run: |
           set -euo pipefail
-          node .github/scripts/issue-planner.mjs --extract-feedback planner
+          bun .github/scripts/issue-planner.ts --extract-feedback planner
 
       - name: 'Render planner context and instructions'
         run: |
           set -euo pipefail
-          node .github/scripts/issue-planner.mjs --render-context planner
-          node .github/scripts/issue-planner.mjs --render-instructions planner
+          bun .github/scripts/issue-planner.ts --render-context planner
+          bun .github/scripts/issue-planner.ts --render-instructions planner
 
       - name: 'Install LLxprt CLI nightly'
         run: npm install -g @vybestack/llxprt-code@nightly
@@ -174,7 +177,7 @@ jobs:
           KEY_VAR_NAME: '${{ env.PLANNER_KEY_VAR_NAME }}'
           OPENAI_API_KEY: '${{ secrets[vars.PLANNER_KEY_VAR_NAME] || secrets[vars.KEY_VAR_NAME] }}'
           OPENAI_API_KEY_2: '${{ secrets[vars.PLANNER_KEY_VAR_NAME_2] || secrets[vars.KEY_VAR_NAME_2] }}'
-        run: node scripts/ci-quota-check.js
+        run: bun scripts/ci-quota-check.ts
 
       - name: 'Confine filesystem for planner agent'
         run: |
@@ -235,7 +238,7 @@ jobs:
           fi
 
           if [[ -f planner/plan.md && -s planner/plan.md ]]; then
-            node .github/scripts/issue-planner.mjs --finalize planner
+            bun .github/scripts/issue-planner.ts --finalize planner
           else
             {
               echo "<!-- llxprt-issue-plan -->"
@@ -263,7 +266,7 @@ jobs:
             const path = require('path');
             const { pathToFileURL } = require('url');
             const helperUrl = pathToFileURL(
-              path.resolve('.github/scripts/issue-planner.mjs'),
+              path.resolve('.github/scripts/issue-planner.ts'),
             ).href;
 
             try {

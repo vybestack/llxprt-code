@@ -67,12 +67,12 @@ The `flushTelemetry()` function force-flushes pending data.
 ## Local collector setup script (non-functional for data reception)
 
 The `npm run telemetry -- --target=local` script
-(`scripts/local_telemetry.js`) downloads and starts a local Jaeger instance and
+(`scripts/local_telemetry.ts`) downloads and starts a local Jaeger instance and
 an OpenTelemetry Collector (`otelcol-contrib`) for development use. However,
 **the collector cannot receive any data from the SDK** because the SDK never
 constructs an OTLP exporter — it only writes to `File*Exporter` or
 `Console*Exporter`. The script (`manageTelemetrySettings` in
-`scripts/telemetry_utils.js`) only writes settings (enabled, target,
+`scripts/telemetry_utils.ts`) only writes settings (enabled, target,
 otlpEndpoint) into the workspace `settings.json`; it does not inject an OTLP
 exporter into the SDK at runtime.
 
@@ -91,5 +91,5 @@ of the current architecture.
 - `packages/telemetry/src/telemetry/loggers.ts`: log event emission.
 - `packages/telemetry/src/telemetry/constants.ts`: canonical event/metric names.
 - `packages/core/src/config/configConstructor.ts`: calls `initializeTelemetry`.
-- `scripts/local_telemetry.js`: local collector development script (writes
+- `scripts/local_telemetry.ts`: local collector development script (writes
   settings only; SDK does not emit OTLP).

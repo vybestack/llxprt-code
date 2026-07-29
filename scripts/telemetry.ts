@@ -28,25 +28,23 @@ const WORKSPACE_SETTINGS_PATH = join(
   'settings.json',
 );
 
-interface TelemetrySettings {
-  telemetry?: {
-    target?: string;
-  };
-}
-
-function loadSettingsValue(filePath: string): string | undefined {
+function loadSettingsValue(filePath: string): unknown {
   try {
     const content = readFileSync(filePath, 'utf-8');
     const errors: ParseError[] = [];
-    const settings = parseJsonc(content, errors) as
-      | TelemetrySettings
-      | undefined;
+    const settings: unknown = parseJsonc(content, errors);
     if (errors.length > 0) {
       throw new Error(
         `JSONC parse errors: ${errors.map((error) => `${error.offset}:${error.error}`).join('; ')}`,
       );
     }
-    return settings?.telemetry?.target;
+    if (settings === null || typeof settings !== 'object') {
+      return undefined;
+    }
+    const telemetry = Reflect.get(settings, 'telemetry');
+    return telemetry !== null && typeof telemetry === 'object'
+      ? Reflect.get(telemetry, 'target')
+      : undefined;
   } catch (e) {
     if (isErrnoException(e, 'ENOENT')) {
       return undefined;
@@ -60,18 +58,18 @@ function loadSettingsValue(filePath: string): string | undefined {
 }
 
 const targetScripts = {
-  local: 'local_telemetry.js',
-  gcp: 'telemetry_gcp.js',
-} as const;
+  local: 'local_telemetry.ts',
+  gcp: 'telemetry_gcp.ts',
+};
 type TelemetryTarget = keyof typeof targetScripts;
 const DEFAULT_TARGET: TelemetryTarget = 'local';
-const allowedTargets = Object.keys(targetScripts) as TelemetryTarget[];
+const allowedTargets = Object.keys(targetScripts);
 
-function isTelemetryTarget(value: string): value is TelemetryTarget {
-  return allowedTargets.includes(value as TelemetryTarget);
+function isTelemetryTarget(value: unknown): value is TelemetryTarget {
+  return typeof value === 'string' && allowedTargets.includes(value);
 }
 
-function defaultedTelemetryTarget(value: string | undefined): TelemetryTarget {
+function defaultedTelemetryTarget(value: unknown): TelemetryTarget {
   return value !== undefined && isTelemetryTarget(value)
     ? value
     : DEFAULT_TARGET;
@@ -137,15 +135,17 @@ if (!existsSync(scriptPath)) {
   process.exit(1);
 }
 
-// Target telemetry scripts remain JavaScript and run under Node even when this wrapper is launched by Bun.
+// Target telemetry scripts are TypeScript and run under the same runtime
+// that launched this wrapper (Bun when invoked via `bun scripts/telemetry.ts`).
+// Plain Node.js cannot execute .ts files directly.
 console.log(`Running telemetry script for target: ${target}.`);
-const result = spawnSync('node', [scriptPath], {
+const result = spawnSync(process.execPath, [scriptPath], {
   stdio: 'inherit',
   cwd: projectRoot,
 });
 if (result.error !== undefined) {
   const detail = isErrnoException(result.error, 'ENOENT')
-    ? "Node.js ('node') is required but was not found on PATH."
+    ? `Runtime ('${process.execPath}') was not found on PATH.`
     : messageOf(result.error);
   console.error(
     `[ERROR] Failed to run telemetry script for target: ${target}: ${detail}`,
@@ -156,7 +156,7 @@ if (result.signal !== null) {
   console.error(
     `[ERROR] Telemetry script for target ${target} was killed by signal ${result.signal}.`,
   );
-  const signals = osConstants.signals as Record<string, number>;
+  const signals = osConstants.signals;
   const signalNumber = Object.hasOwn(signals, result.signal)
     ? signals[result.signal]
     : undefined;

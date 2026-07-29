@@ -40,6 +40,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+
       - name: Download all artifacts
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # ratchet:actions/download-artifact@v5
         with:
@@ -48,4 +51,4 @@ jobs:
       - name: Aggregate and output results
         env:
           GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-        run: node scripts/aggregate_evals.js artifacts >> "$GITHUB_STEP_SUMMARY"
+        run: bun scripts/aggregate_evals.ts artifacts >> "$GITHUB_STEP_SUMMARY"

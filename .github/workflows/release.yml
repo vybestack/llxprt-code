@@ -196,7 +196,7 @@ jobs:
           github.event.inputs.force_skip_tests != 'true' ||
           (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')
         continue-on-error: ${{ github.event.inputs.force_skip_tests == 'true' }}
-        run: node scripts/ci-quota-check.js
+        run: bun scripts/ci-quota-check.ts
         env:
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Run Preflight Checks
         if: github.event.inputs.force_skip_tests != 'true'
-        run: node scripts/preflight-ci.js
+        run: bun scripts/preflight-ci.ts
         env:
           OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
@@ -399,7 +399,7 @@ jobs:
       - name: Update Homebrew formula
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.vars.outputs.is_nightly == 'false' }}
         continue-on-error: true
-        run: node scripts/update-homebrew-formula.js ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: bun scripts/update-homebrew-formula.ts ${{ steps.version.outputs.RELEASE_VERSION }}
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.GH_SECRET }}
 

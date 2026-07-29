@@ -1,0 +1,224 @@
+#!/usr/bin/env node
+
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import path from 'node:path';
+import fs from 'node:fs';
+import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import {
+  OTEL_DIR,
+  BIN_DIR,
+  fileExists,
+  waitForPort,
+  ensureBinary,
+  manageTelemetrySettings,
+  registerCleanup,
+} from './telemetry_utils.ts';
+
+interface GcpCollectorState {
+  collectorProcess: ChildProcess | null;
+  collectorLogFd: number | null;
+}
+
+const OTEL_CONFIG_FILE = path.join(OTEL_DIR, 'collector-gcp.yaml');
+const OTEL_LOG_FILE = path.join(OTEL_DIR, 'collector-gcp.log');
+
+const getOtelConfigContent = (projectId: string) => `
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "localhost:4317"
+processors:
+  batch:
+    timeout: 1s
+exporters:
+  googlecloud:
+    project: "${projectId}"
+    metric:
+      prefix: "custom.googleapis.com/llxprt_cli"
+    log:
+      default_log_name: "llxprt_cli"
+  debug:
+    verbosity: detailed
+service:
+  telemetry:
+    logs:
+      level: "debug"
+    metrics:
+      level: "none"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [googlecloud]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [googlecloud, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [googlecloud, debug]
+`;
+
+async function main(): Promise<void> {
+  console.log('Starting Local Telemetry Exporter for Google Cloud');
+
+  const state: GcpCollectorState = {
+    collectorProcess: null,
+    collectorLogFd: null,
+  };
+
+  const originalSandboxSetting = manageTelemetrySettings(
+    true,
+    'http://localhost:4317',
+    'gcp',
+  );
+  registerCleanup(
+    () => [state.collectorProcess].filter((p): p is ChildProcess => p !== null),
+    () => [state.collectorLogFd].filter((fd): fd is number => fd !== null),
+    originalSandboxSetting,
+  );
+
+  const projectId = requireProjectId();
+
+  if (!fileExists(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
+
+  const otelcolPath = await ensureBinary(
+    'otelcol-contrib',
+    'open-telemetry/opentelemetry-collector-releases',
+    (version: string, platform: string, arch: string, ext: string) =>
+      `otelcol-contrib_${version}_${platform}_${arch}.${ext}`,
+    'otelcol-contrib',
+    false, // isJaeger = false
+  ).catch((e: unknown) => {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[ERROR] getting otelcol-contrib: ${message}`);
+    return null;
+  });
+  if (!otelcolPath) process.exit(1);
+
+  cleanupOldCollector();
+
+  if (!fileExists(OTEL_DIR)) fs.mkdirSync(OTEL_DIR, { recursive: true });
+  fs.writeFileSync(OTEL_CONFIG_FILE, getOtelConfigContent(projectId));
+  console.log(`Wrote OTEL collector config to ${OTEL_CONFIG_FILE}`);
+
+  await startCollector(state, otelcolPath);
+
+  printGcpTelemetryReadyInfo(projectId);
+}
+
+function requireProjectId(): string {
+  const projectId = process.env.OTLP_GOOGLE_CLOUD_PROJECT;
+  if (!projectId) {
+    console.error(
+      '[ERROR] OTLP_GOOGLE_CLOUD_PROJECT environment variable is not exported.',
+    );
+    console.log(
+      '   Please set it to your Google Cloud Project ID and try again.',
+    );
+    console.log('   `export OTLP_GOOGLE_CLOUD_PROJECT=your-project-id`');
+    process.exit(1);
+  }
+  console.log(`[OK] Using OTLP Google Cloud Project ID: ${projectId}`);
+
+  console.log('\nPlease ensure you are authenticated with Google Cloud:');
+  console.log(
+    '  - Run `gcloud auth application-default login` OR ensure `GOOGLE_APPLICATION_CREDENTIALS` environment variable points to a valid service account key.',
+  );
+  console.log(
+    '  - The account needs "Cloud Trace Agent", "Monitoring Metric Writer", and "Logs Writer" roles.',
+  );
+
+  return projectId;
+}
+
+function cleanupOldCollector(): void {
+  console.log('Cleaning up old processes and logs...');
+  try {
+    execSync('pkill -f "otelcol-contrib"');
+    console.log('[OK] Stopped existing otelcol-contrib process.');
+  } catch (_e) {
+    /* no-op */
+  }
+  try {
+    fs.unlinkSync(OTEL_LOG_FILE);
+    console.log('[OK] Deleted old GCP collector log.');
+  } catch (e: unknown) {
+    if (
+      typeof e === 'object' &&
+      e !== null &&
+      'code' in e &&
+      e.code !== 'ENOENT'
+    )
+      console.error(e);
+  }
+}
+
+async function startCollector(
+  state: GcpCollectorState,
+  otelcolPath: string,
+): Promise<void> {
+  console.log(`Starting OTEL collector for GCP... Logs: ${OTEL_LOG_FILE}`);
+  state.collectorLogFd = fs.openSync(OTEL_LOG_FILE, 'a');
+  state.collectorProcess = spawn(otelcolPath, ['--config', OTEL_CONFIG_FILE], {
+    stdio: ['ignore', state.collectorLogFd, state.collectorLogFd],
+    env: { ...process.env },
+  });
+  const proc = state.collectorProcess;
+  state.collectorProcess.on('error', (err: Error) => {
+    console.error(`${proc.spawnargs[0]} process error:`, err);
+    process.exit(1);
+  });
+
+  console.log(
+    `Waiting for OTEL collector to start (PID: ${state.collectorProcess.pid})...`,
+  );
+
+  try {
+    await waitForPort(4317);
+    console.log(`[OK] OTEL collector started successfully on port 4317.`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[ERROR] OTEL collector failed to start on port 4317.`);
+    console.error(message);
+    if (state.collectorProcess && state.collectorProcess.pid) {
+      process.kill(state.collectorProcess.pid, 'SIGKILL');
+    }
+    if (fileExists(OTEL_LOG_FILE)) {
+      console.error('OTEL Collector Log Output:');
+      console.error(fs.readFileSync(OTEL_LOG_FILE, 'utf-8'));
+    }
+    process.exit(1);
+  }
+}
+
+function printGcpTelemetryReadyInfo(projectId: string): void {
+  console.log(`\nLocal OTEL collector for GCP is running.`);
+  console.log(
+    '\nTo send telemetry, run the Gemini CLI in a separate terminal window.',
+  );
+  console.log(`\nCollector logs are being written to: ${OTEL_LOG_FILE}`);
+  console.log(
+    `Tail collector logs in another terminal: tail -f ${OTEL_LOG_FILE}`,
+  );
+  console.log(`\nView your telemetry data in Google Cloud Console:`);
+  console.log(
+    `   - Logs: https://console.cloud.google.com/logs/query;query=logName%3D%22projects%2F${projectId}%2Flogs%2Fllxprt_cli%22?project=${projectId}`,
+  );
+  console.log(
+    `   - Metrics: https://console.cloud.google.com/monitoring/metrics-explorer?project=${projectId}`,
+  );
+  console.log(
+    `   - Traces: https://console.cloud.google.com/traces/list?project=${projectId}`,
+  );
+  console.log(`\nPress Ctrl+C to exit.`);
+}
+
+main();

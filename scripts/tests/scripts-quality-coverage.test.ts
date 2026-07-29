@@ -94,7 +94,7 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   it(
     'applies the same quality rules to a .mjs script',
     () => {
-      const rules = effectiveRulesFor('scripts/verify-bun-workspace-links.mjs');
+      const rules = effectiveRulesFor('scripts/verify-bun-workspace-links.ts');
       expect(severity(rules['sonarjs/no-collapsible-if'])).toBe(2);
       expect(severity(rules['max-lines-per-function'])).toBe(2);
     },
@@ -174,7 +174,7 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
       expect(severity(entryRules['sonarjs/nested-control-flow'])).toBe(2);
 
       const moduleRules = effectiveRulesFor(
-        'scripts/eslint-guard/check-diff.mjs',
+        'scripts/eslint-guard/check-diff.ts',
       );
       expect(severity(moduleRules['complexity'])).toBe(2);
       expect(severity(moduleRules['sonarjs/nested-control-flow'])).toBe(2);
@@ -190,7 +190,7 @@ describe('Issue #2282: scripts strict code-quality coverage', () => {
   it(
     'carves out max-lines for the exhaustive guard test fixture',
     () => {
-      const rules = effectiveRulesFor('scripts/tests/eslint-guard.test.js');
+      const rules = effectiveRulesFor('scripts/tests/eslint-guard.test.ts');
       expect(severity(rules['max-lines'])).toBe(0);
       // Other quality rules still apply.
       expect(severity(rules['sonarjs/no-identical-functions'])).toBe(2);
