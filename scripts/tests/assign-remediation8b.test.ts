@@ -13,7 +13,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawn, type ChildProcess } from 'child_process';
+import { existsSync, rmSync } from 'fs';
 import * as nodePath from 'path';
 import { asRecord, stateIssue, stateOpLog } from './typed-test-helpers.ts';
 import {
@@ -30,6 +31,43 @@ import {
 
 function defaultStateWith(overrides: Record<string, unknown>) {
   return { ...defaultState(), ...overrides };
+}
+
+function waitForHook(hookFile: string, child: ChildProcess): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      clearInterval(poll);
+      reject(new Error(`Timed out waiting for signal hook: ${hookFile}`));
+    }, 5000);
+    const poll = setInterval(() => {
+      if (existsSync(hookFile)) {
+        clearInterval(poll);
+        clearTimeout(timeout);
+        resolve();
+        return;
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
+        clearInterval(poll);
+        clearTimeout(timeout);
+        reject(
+          new Error('Assignment script exited before creating signal hook'),
+        );
+      }
+    }, 10);
+  });
+}
+
+function waitForExit(child: ChildProcess): Promise<number> {
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => {
+      if (code !== null) {
+        resolve(code);
+        return;
+      }
+      reject(new Error(`Assignment script exited from signal ${signal}`));
+    });
+  });
 }
 
 // ===========================================================================
@@ -353,7 +391,7 @@ describe('F14: fake-gh label filter ALL-label subset', () => {
     it(
       'rolls back bot-owned mutations when TERM arrives after assignee mutation',
       { timeout: 30000 },
-      () => {
+      async () => {
         const hookFile = nodePath.join(
           process.cwd(),
           'tmp',
@@ -393,24 +431,20 @@ describe('F14: fake-gh label filter ALL-label subset', () => {
           GH_FAKE_STATE: repo.stateFile,
           ASSIGN_ELECTION_DELAY: '0',
           PATH: `${repo.binDir}${nodePath.delimiter}${process.env.PATH}`,
-          ASSIGN_SCRIPT: assignScript,
-          SIGNAL_HOOK: hookFile,
         };
 
+        rmSync(hookFile, { force: true });
+        const child = spawn('bash', [assignScript], { env, stdio: 'ignore' });
+        const exit = waitForExit(child);
         let status = 0;
         try {
-          execFileSync(
-            'bash',
-            [
-              '-c',
-              'rm -f "$SIGNAL_HOOK"; bash "$ASSIGN_SCRIPT" >/dev/null 2>&1 & pid=$!; found=false; for _ in $(seq 1 500); do if [[ -f "$SIGNAL_HOOK" ]]; then found=true; break; fi; sleep 0.01; done; if [[ "$found" != true ]]; then kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; exit 99; fi; kill -TERM "$pid"; wait "$pid"',
-            ],
-            { env, stdio: ['ignore', 'pipe', 'pipe'] },
-          );
-        } catch (error: unknown) {
-          const errRecord = asRecord(error);
-          status =
-            typeof errRecord['status'] === 'number' ? errRecord['status'] : 1;
+          await waitForHook(hookFile, child);
+          expect(child.kill('SIGTERM')).toBe(true);
+          status = await exit;
+        } finally {
+          if (child.exitCode === null && child.signalCode === null) {
+            child.kill('SIGKILL');
+          }
         }
 
         const state = repo.readState();
