@@ -109,15 +109,38 @@ async function forceKillWindows(
   closePromise: Promise<void>,
   pid: number,
 ): Promise<void> {
+  if (isProcessTerminated(proc)) {
+    await awaitProcessClose(closePromise);
+    return;
+  }
+
   try {
     await runTaskkill(pid);
   } catch (taskkillError: unknown) {
-    if (!isProcessTerminated(proc) && !proc.kill('SIGKILL')) {
+    if (isProcessTerminated(proc)) {
+      await awaitProcessClose(closePromise);
+      return;
+    }
+    const signalError = !proc.kill('SIGKILL')
+      ? new Error(`Failed to terminate child process ${pid}`)
+      : undefined;
+    try {
+      await awaitProcessClose(closePromise);
+    } catch (closeError: unknown) {
       throw new AggregateError(
-        [taskkillError, new Error(`Failed to terminate child process ${pid}`)],
+        signalError === undefined
+          ? [taskkillError, closeError]
+          : [taskkillError, signalError, closeError],
         `Failed to force-terminate child process ${pid}`,
       );
     }
+    if (signalError !== undefined) {
+      throw new AggregateError(
+        [taskkillError, signalError],
+        `Failed to force-terminate child process ${pid}`,
+      );
+    }
+    throw taskkillError;
   }
 
   await awaitProcessClose(closePromise);

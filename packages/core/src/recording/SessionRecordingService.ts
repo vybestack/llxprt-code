@@ -26,7 +26,14 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { mkdirSync, existsSync, watch, watchFile, unwatchFile } from 'node:fs';
+import {
+  mkdirSync,
+  existsSync,
+  watch,
+  watchFile,
+  unwatchFile,
+  type Stats,
+} from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
@@ -377,8 +384,10 @@ export class SessionRecordingService {
     if (this.chatsDirWatcher) return;
     try {
       if (process.platform === 'win32') {
-        const listener = (): void => {
-          this.handleChatsDirChange(this.chatsDir);
+        const listener = (currentStats: Stats): void => {
+          if (currentStats.nlink === 0) {
+            this.handleChatsDirChange(this.chatsDir);
+          }
         };
         watchFile(
           this.chatsDir,

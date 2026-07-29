@@ -60,6 +60,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function buildPowerShellExitCodeWrapper(encodedCommand: string): string {
+  return (
+    '& { ' +
+    `$hookCommand = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedCommand}')); ` +
+    '$global:LASTEXITCODE = 0; ' +
+    '$global:__LLXPRT_HOOK_SUCCEEDED = $false; ' +
+    '$global:__LLXPRT_HOOK_EXIT_CODE = 0; ' +
+    '$hookScript = [ScriptBlock]::Create($hookCommand + [Environment]::NewLine + ' +
+    "'$global:__LLXPRT_HOOK_SUCCEEDED = $?; $global:__LLXPRT_HOOK_EXIT_CODE = $LASTEXITCODE'); " +
+    '& $hookScript; ' +
+    'if ($global:__LLXPRT_HOOK_SUCCEEDED) { exit 0 }; ' +
+    'if ($global:__LLXPRT_HOOK_EXIT_CODE -ne 0) { exit $global:__LLXPRT_HOOK_EXIT_CODE }; ' +
+    'exit 1 ' +
+    '}'
+  );
+}
+
 /**
  * Hook runner that executes command hooks
  */
@@ -527,7 +544,7 @@ export class HookRunner {
     const encodedCommand = Buffer.from(command, 'utf8').toString('base64');
     const shellCommand =
       shellConfig.shell === 'powershell'
-        ? `& { $hookCommand = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedCommand}')); $global:LASTEXITCODE = 0; $global:__LLXPRT_HOOK_SUCCEEDED = $false; $global:__LLXPRT_HOOK_EXIT_CODE = 0; $hookScript = [ScriptBlock]::Create($hookCommand + [Environment]::NewLine + '$global:__LLXPRT_HOOK_SUCCEEDED = $?; $global:__LLXPRT_HOOK_EXIT_CODE = $LASTEXITCODE'); & $hookScript; if ($global:__LLXPRT_HOOK_SUCCEEDED) { exit 0 }; if ($global:__LLXPRT_HOOK_EXIT_CODE -ne 0) { exit $global:__LLXPRT_HOOK_EXIT_CODE }; exit 1 }`
+        ? buildPowerShellExitCodeWrapper(encodedCommand)
         : command;
 
     // SECURITY: Use explicit shell executable with shell: false

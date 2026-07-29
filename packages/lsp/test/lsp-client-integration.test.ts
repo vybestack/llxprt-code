@@ -9,6 +9,7 @@ import {
   LspRequestTimeoutError,
 } from '../src/service/lsp-client';
 import type { LspServerConfig } from '../src/types';
+import { runCleanupTaskGroups } from './cleanup';
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
 const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
@@ -54,12 +55,18 @@ function createConfig(args: string[] = []): { config: LspServerConfig } {
 }
 
 afterEach(async () => {
-  await Promise.all(
-    createdClients.splice(0).map((client) => client.shutdown()),
+  const clients = createdClients.splice(0);
+  const directories = temporaryDirectories.splice(0);
+  await runCleanupTaskGroups(
+    [
+      clients.map((client) => () => client.shutdown()),
+      directories.map(
+        (directory) => () =>
+          fs.rmSync(directory, { recursive: true, force: true }),
+      ),
+    ],
+    'LSP client integration cleanup failed',
   );
-  for (const directory of temporaryDirectories.splice(0)) {
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
 });
 
 describe('LspClient integration with fake LSP server', () => {

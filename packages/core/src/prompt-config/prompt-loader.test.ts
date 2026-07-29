@@ -20,6 +20,13 @@ function restoreEnvVar(key: string, originalValue: string | undefined): void {
   }
 }
 
+function requireWatcher<T>(watcher: T | null): T {
+  if (watcher === null) {
+    throw new Error('Expected watchFiles to create a watcher');
+  }
+  return watcher;
+}
+
 describe('PromptLoader', () => {
   let tempDir: string;
   let loader: PromptLoader;
@@ -554,6 +561,40 @@ describe('PromptLoader', () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
 
       expect(events.length).toBe(0);
+    });
+
+    it('keeps watching after the watched directory disappears and returns', async () => {
+      const initialFile = path.join(tempDir, 'initial.md');
+      await fs.writeFile(initialFile, 'initial', 'utf8');
+      const events: Array<{ type: string; path: string }> = [];
+
+      const watcher = loader.watchFiles(tempDir, (eventType, relativePath) => {
+        events.push({ type: eventType, path: relativePath });
+      });
+      expect(watcher).not.toBeNull();
+      watchers.push(requireWatcher(watcher));
+
+      await vi.waitFor(() => {
+        expect(events.some((event) => event.path === 'initial.md')).toBe(true);
+      });
+
+      await fs.rm(tempDir, { recursive: true, force: true });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await fs.mkdir(tempDir, { recursive: true });
+      await fs.writeFile(
+        path.join(tempDir, 'recovered.md'),
+        'recovered',
+        'utf8',
+      );
+
+      await vi.waitFor(
+        () => {
+          expect(events.some((event) => event.path === 'recovered.md')).toBe(
+            true,
+          );
+        },
+        { timeout: 3000, interval: 50 },
+      );
     });
   });
 

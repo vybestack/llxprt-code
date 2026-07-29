@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { createOrchestrator } from '../src/service/orchestrator';
 import type { LspConfig } from '../src/service/diagnostics';
+import { runCleanupTaskGroups } from './cleanup';
 
 const WORKSPACE_ROOT = path.resolve('/workspace');
 const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
@@ -32,10 +33,10 @@ function createConfig(servers: LspConfig['servers']): LspConfig {
 const createdOrchestrators: ReturnType<typeof createOrchestrator>[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    createdOrchestrators
-      .splice(0)
-      .map((orchestrator) => orchestrator.shutdown()),
+  const orchestrators = createdOrchestrators.splice(0);
+  await runCleanupTaskGroups(
+    [orchestrators.map((orchestrator) => () => orchestrator.shutdown())],
+    'LSP orchestrator integration cleanup failed',
   );
 });
 

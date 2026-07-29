@@ -148,11 +148,13 @@ describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
   let origToken: string | undefined;
   let origSocket: string | undefined;
   let origHome: string | undefined;
+  let origUserProfile: string | undefined;
 
   beforeEach(() => {
     origToken = process.env.LLXPRT_CAPABILITY_TOKEN;
     origSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
     origHome = process.env.HOME;
+    origUserProfile = process.env.USERPROFILE;
     process.env.LLXPRT_CAPABILITY_TOKEN = VALID_TOKEN;
   });
 
@@ -166,6 +168,9 @@ describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
     // #10: restore HOME correctly when it was originally undefined.
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origUserProfile !== undefined)
+      process.env.USERPROFILE = origUserProfile;
+    else delete process.env.USERPROFILE;
   });
 
   it.skipIf(process.platform === 'win32')(
@@ -231,22 +236,16 @@ describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
     },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'fail-fast: directory-creation failure surfaces',
-    () => {
-      const controlledHome = fs.mkdtempSync(path.join(os.tmpdir(), 'home-ff-'));
-      process.env.HOME = controlledHome;
-      fs.chmodSync(controlledHome, 0o500);
-      try {
-        expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
-          /host-only directory/i,
-        );
-      } finally {
-        fs.chmodSync(controlledHome, 0o755);
-        fs.rmSync(controlledHome, { recursive: true, force: true });
-      }
-    },
-  );
+  it('fail-fast: directory-creation failure surfaces', () => {
+    const blockedHome = path.join(getTmpDir(), 'not-a-directory');
+    fs.writeFileSync(blockedHome, 'file blocks child directory creation');
+    process.env.HOME = blockedHome;
+    process.env.USERPROFILE = blockedHome;
+
+    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
+      /host-only directory/i,
+    );
+  });
 });
 
 describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10)', () => {

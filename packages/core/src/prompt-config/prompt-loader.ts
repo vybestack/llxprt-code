@@ -4,7 +4,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { existsSync } from 'fs';
+import { existsSync, type Dirent } from 'fs';
 import { debugLogger } from '../utils/debugLogger.js';
 // Types for file loading results
 export interface LoadFileResult {
@@ -29,6 +29,15 @@ export type FileChangeCallback = (
   eventType: string,
   relativePath: string,
 ) => void;
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === code
+  );
+}
 
 /**
  * PromptLoader handles file I/O operations for prompt configuration files
@@ -107,7 +116,7 @@ export class PromptLoader {
 
       return { success: true, content: finalContent, error: null };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if (hasErrorCode(error, 'ENOENT')) {
         return { success: false, content: '', error: 'File not found' };
       }
       return {
@@ -369,6 +378,19 @@ export class PromptLoader {
     ].some(Boolean);
   }
 
+  private async addMarkdownFile(
+    files: Map<string, number>,
+    filePath: string,
+  ): Promise<void> {
+    try {
+      files.set(filePath, (await fs.stat(filePath)).mtimeMs);
+    } catch (error) {
+      if (!hasErrorCode(error, 'ENOENT')) {
+        throw error;
+      }
+    }
+  }
+
   private async collectMarkdownFiles(
     baseDir: string,
   ): Promise<Map<string, number>> {
@@ -377,13 +399,21 @@ export class PromptLoader {
 
     while (directories.length > 0) {
       const directory = directories.pop()!;
-      const entries = await fs.readdir(directory, { withFileTypes: true });
+      let entries: Dirent[];
+      try {
+        entries = await fs.readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if (!hasErrorCode(error, 'ENOENT')) {
+          throw error;
+        }
+        continue;
+      }
       for (const entry of entries) {
         const filePath = path.join(directory, entry.name);
         if (entry.isDirectory()) {
           directories.push(filePath);
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          files.set(filePath, (await fs.stat(filePath)).mtimeMs);
+          await this.addMarkdownFile(files, filePath);
         }
       }
     }
