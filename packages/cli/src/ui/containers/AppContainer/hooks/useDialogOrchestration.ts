@@ -51,6 +51,11 @@ export interface UseDialogOrchestrationResult {
   isSessionBrowserDialogOpen: boolean;
   openSessionBrowserDialog: () => void;
   closeSessionBrowserDialog: () => void;
+
+  // Model config dialog
+  isModelConfigDialogOpen: boolean;
+  openModelConfigDialog: () => void;
+  closeModelConfigDialog: () => void;
 }
 
 function useBooleanDialog(): [boolean, () => void, () => void] {
@@ -133,6 +138,12 @@ export function useDialogOrchestration(): UseDialogOrchestrationResult {
     closeSessionBrowserDialog,
   ] = useBooleanDialog();
 
+  const [
+    isModelConfigDialogOpen,
+    openModelConfigDialog,
+    closeModelConfigDialog,
+  ] = useBooleanDialog();
+
   return {
     // Permissions dialog
     isPermissionsDialogOpen,
@@ -162,5 +173,10 @@ export function useDialogOrchestration(): UseDialogOrchestrationResult {
     isSessionBrowserDialogOpen,
     openSessionBrowserDialog,
     closeSessionBrowserDialog,
+
+    // Model config dialog
+    isModelConfigDialogOpen,
+    openModelConfigDialog,
+    closeModelConfigDialog,
   };
 }

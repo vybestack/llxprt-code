@@ -98,6 +98,7 @@ export {
   getActiveModelParams,
   setActiveModelParam,
   clearActiveModelParam,
+  getUnallowedParametersForActiveModel,
   listProviders,
   getActiveProviderName,
   NO_ACTIVE_PROVIDER_ERROR_MESSAGE,

@@ -48,6 +48,8 @@ import { LoggingDialog } from './LoggingDialog.js';
 import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
 import { ModelsDialog } from './ModelDialog.js';
+import { ModelConfigDialog } from './ModelConfigDialog.js';
+import { useModelDialogHandler } from './modelDialogHandler.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
  */
@@ -68,79 +70,6 @@ interface DialogManagerProps {
 }
 
 const dialogManagerLogger = new DebugLogger('llxprt:ui:dialogmanager');
-
-function useModelDialogHandler(
-  runtime: ReturnType<typeof useRuntimeApi>,
-  addItem: UseHistoryManagerReturn['addItem'],
-  uiActions: ReturnType<typeof useUIActions>,
-  currentProvider: string | null,
-  commandContext: {
-    recordingIntegration?: {
-      recordProviderSwitch: (provider: string, model: string) => void;
-    };
-  },
-) {
-  return useCallback(
-    (model: HydratedModel) => {
-      void (async () => {
-        try {
-          const selectedProvider = model.provider;
-          if (selectedProvider !== currentProvider) {
-            const switchResult = await runtime.setProvider(selectedProvider);
-            const messages: string[] = [];
-            messages.push(
-              currentProvider
-                ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
-                : `Switched to ${switchResult.nextProvider}`,
-            );
-            const baseUrlMsg = switchResult.infoMessages.find(
-              (m) => m.includes('Base URL') || m.includes('base URL'),
-            );
-            if (baseUrlMsg) messages.push(baseUrlMsg);
-            await runtime.setActiveModel(model.id);
-            messages.push(
-              `Active model is '${model.id}' for provider '${selectedProvider}'.`,
-            );
-            if (selectedProvider !== 'gemini') {
-              messages.push('Use /key to set API key if needed.');
-            }
-            for (const msg of messages) {
-              addItem({ type: 'info', text: msg });
-            }
-            commandContext.recordingIntegration?.recordProviderSwitch(
-              selectedProvider,
-              model.id,
-            );
-          } else {
-            const result = await runtime.setActiveModel(model.id);
-            addItem(
-              {
-                type: 'info',
-                text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
-              },
-              Date.now(),
-            );
-            commandContext.recordingIntegration?.recordProviderSwitch(
-              result.providerName,
-              result.nextModel,
-            );
-          }
-        } catch (e) {
-          const status = runtime.getActiveProviderStatus();
-          addItem(
-            {
-              type: 'error',
-              text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
-            },
-            Date.now(),
-          );
-        }
-        uiActions.closeModelsDialog();
-      })();
-    },
-    [runtime, addItem, uiActions, currentProvider, commandContext],
-  );
-}
 
 /**
  * Handler for SessionBrowserDialog selection - performs real session resume.
@@ -783,6 +712,13 @@ function renderDialogBodySecondHalf(
       config,
       state.commandContext,
       state.handleSessionBrowserSelect,
+    );
+  }
+  if (uiState.isModelConfigDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ModelConfigDialog onClose={uiActions.closeModelConfigDialog} />
+      </Box>
     );
   }
   return null;
