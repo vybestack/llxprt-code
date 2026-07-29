@@ -578,28 +578,25 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
   // =========================================================================
 
   describe('deletion replay safety', () => {
-    itProp(
-      'fails closed when checkpoint blockers cannot be replayed',
-      async () => {
-        const sessionId = 'corrupt-blocker-session';
-        const { filePath } = await createTestSession(chatsDir, { sessionId });
-        const lines = (await fs.readFile(filePath, 'utf-8')).trim().split('\n');
-        const header = JSON.parse(lines[0]) as {
-          payload: { provider: string };
-        };
-        header.payload.provider = '';
-        await fs.writeFile(
-          filePath,
-          `${JSON.stringify(header)}\n${lines.slice(1).join('\n')}\n`,
-          'utf-8',
-        );
+    itProp('fails closed when the session file is corrupt', async () => {
+      const sessionId = 'corrupt-blocker-session';
+      const { filePath } = await createTestSession(chatsDir, { sessionId });
+      const lines = (await fs.readFile(filePath, 'utf-8')).trim().split('\n');
+      const header = JSON.parse(lines[0]) as {
+        payload: { provider: string };
+      };
+      header.payload.provider = '';
+      await fs.writeFile(
+        filePath,
+        `${JSON.stringify(header)}\n${lines.slice(1).join('\n')}\n`,
+        'utf-8',
+      );
 
-        const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+      const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 
-        expect(result.ok).toBe(false);
-        expect(await fileExists(filePath)).toBe(true);
-      },
-    );
+      expect(result.ok).toBe(false);
+      expect(await fileExists(filePath)).toBe(true);
+    });
   });
 
   describe('Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
