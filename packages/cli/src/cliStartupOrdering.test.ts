@@ -65,7 +65,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   vi.doMock('./config/settings.js', () => ({
     loadSettings: () => {
       callOrder.push('loadSettings');
-      return { merged: {}, errors: [] };
+      return { merged: { ui: { unicode: 'auto' } }, errors: [] };
     },
   }));
   vi.doMock('./cliBootstrap.js', () => ({

@@ -6,15 +6,7 @@
  * Local context analysis functions for AST parsing and code snippet collection.
  */
 
-import type {
-  ASTNode,
-  CodeSnippet,
-  Declaration,
-  FunctionInfo,
-  ClassInfo,
-  VariableInfo,
-  ASTContext,
-} from './types.js';
+import type { ASTNode, CodeSnippet, Declaration, ASTContext } from './types.js';
 import { ASTConfig } from './ast-config.js';
 import { KEYWORDS, COMMENT_PREFIXES } from './constants.js';
 import { ContextOptimizer } from './context-optimizer.js';
@@ -95,20 +87,59 @@ export function collectSnippets(content: string): CodeSnippet[] {
 }
 
 /**
- * Build language-specific context by extracting functions, classes, and variables.
- * @param content - Source code content
- * @param language - Programming language
- * @returns Language context with extracted elements
+ * Declaration types that represent struct-like / aggregate types for the
+ * "classes" summary category, across all supported languages.
+ */
+const CLASS_LIKE_TYPES: ReadonlySet<Declaration['type']> = new Set([
+  'class',
+  'struct',
+  'union',
+  'enum',
+  'trait',
+  'impl',
+]);
+
+/**
+ * Build language-specific context by deriving function, class, and variable
+ * counts from AST declarations.
+ *
+ * The summary counts are derived from the declaration list produced by
+ * {@link ASTQueryExtractor.extractDeclarations} (the tree-sitter-backed AST
+ * path) rather than from per-language regex extractors. This keeps the
+ * counts consistent with the `ENHANCED CONTEXT ANALYSIS` section shown to
+ * the LLM and accurate for every supported language.
+ *
+ * @param declarations - AST declarations already parsed for the file
+ * @returns Language context with one entry per matching declaration
  */
 export function buildLanguageContext(
-  content: string,
-  language: string,
+  declarations: Declaration[],
 ): ASTContext['languageContext'] {
-  return {
-    functions: extractFunctions(content, language),
-    classes: extractClasses(content, language),
-    variables: extractVariables(content, language),
-  };
+  const functions: ASTContext['languageContext']['functions'] = [];
+  const classes: ASTContext['languageContext']['classes'] = [];
+  const variables: ASTContext['languageContext']['variables'] = [];
+
+  for (const decl of declarations) {
+    if (decl.type === 'function') {
+      functions.push({
+        name: decl.name,
+        parameters: [],
+        returnType: 'unknown',
+        line: decl.line,
+      });
+    } else if (CLASS_LIKE_TYPES.has(decl.type)) {
+      classes.push({
+        name: decl.name,
+        methods: [],
+        properties: [],
+        line: decl.line,
+      });
+    } else if (decl.type === 'variable') {
+      variables.push({ name: decl.name, type: 'unknown', line: decl.line });
+    }
+  }
+
+  return { functions, classes, variables };
 }
 
 /**
@@ -165,94 +196,6 @@ export function calculateRelevance(line: string): number {
 }
 
 /**
- * Extract function declarations from content using regex.
- * @param content - Source code content
- * @param _language - Programming language
- * @returns Array of function information
- */
-export function extractFunctions(
-  content: string,
-  _language: string,
-): FunctionInfo[] {
-  const functions: FunctionInfo[] = [];
-  const lines = content.split('\n');
-
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-    if (_language === 'typescript' || _language === 'javascript') {
-      const info = extractJsFunction(trimmed);
-      if (info) {
-        functions.push({ ...info, line: index + 1 });
-      }
-    } else if (_language === 'python') {
-      const info = extractPythonFunction(trimmed);
-      if (info) {
-        functions.push({ ...info, line: index + 1 });
-      }
-    }
-  });
-
-  return functions;
-}
-
-/**
- * Extract class declarations from content using regex.
- * @param content - Source code content
- * @param _language - Programming language
- * @returns Array of class information
- */
-export function extractClasses(
-  content: string,
-  _language: string,
-): ClassInfo[] {
-  const classes: ClassInfo[] = [];
-  const lines = content.split('\n');
-
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-    if (trimmed.includes(KEYWORDS.CLASS)) {
-      const name = extractWordAfterPrefix(trimmed, KEYWORDS.CLASS);
-      if (name) {
-        classes.push({
-          name,
-          methods: [], // Simplified implementation
-          properties: [], // Simplified implementation
-          line: index + 1,
-        });
-      }
-    }
-  });
-
-  return classes;
-}
-
-/**
- * Extract variable declarations from content using regex.
- * @param content - Source code content
- * @param _language - Programming language
- * @returns Array of variable information
- */
-export function extractVariables(
-  content: string,
-  _language: string,
-): VariableInfo[] {
-  const variables: VariableInfo[] = [];
-  const lines = content.split('\n');
-
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-    if (_language === 'typescript' || _language === 'javascript') {
-      const info = extractTypedVariable(trimmed);
-      if (info) {
-        variables.push({ ...info, line: index + 1 });
-      }
-    }
-  });
-
-  return variables;
-}
-
-/**
  * Optimize context collection by gathering declaration and local snippets.
  * @param declarations - Array of declarations
  * @param content - Source code content
@@ -290,137 +233,4 @@ export function optimizeContextCollection(
   );
 
   return ContextOptimizer.optimizeSnippets(allSnippets);
-}
-
-const WORD_PATTERN = /^[A-Za-z_$][\w$]*/;
-
-/**
- * Extracts a word identifier immediately following a prefix string using
- * linear scanning (avoids regex backtracking).
- */
-function extractWordAfterPrefix(line: string, prefix: string): string | null {
-  const idx = line.indexOf(prefix);
-  if (idx === -1) {
-    return null;
-  }
-  const after = line.slice(idx + prefix.length).trimStart();
-  const match = after.match(WORD_PATTERN);
-  return match ? match[0] : null;
-}
-
-/**
- * Parses parameters from a parenthesis-delimited string.
- */
-function parseParameters(paramStr: string): string[] {
-  return paramStr
-    .split(',')
-    .map((p) => p.trim())
-    .filter((p) => p);
-}
-
-/**
- * Extract a JS/TS function declaration: `function name(params): ReturnType`
- */
-function extractJsFunction(trimmed: string): Omit<FunctionInfo, 'line'> | null {
-  if (!trimmed.startsWith('function ')) {
-    return null;
-  }
-  const name = extractWordAfterPrefix(trimmed, 'function ');
-  if (!name) {
-    return null;
-  }
-  const openParen = trimmed.indexOf('(', 'function '.length + name.length);
-  if (openParen === -1) {
-    return null;
-  }
-  const closeParen = trimmed.indexOf(')', openParen + 1);
-  if (closeParen === -1) {
-    return null;
-  }
-  const params = parseParameters(trimmed.slice(openParen + 1, closeParen));
-
-  let returnType = 'unknown';
-  const afterParens = trimmed.slice(closeParen + 1);
-  if (afterParens.startsWith(':')) {
-    const typeMatch = afterParens.slice(1).trimStart().match(WORD_PATTERN);
-    if (typeMatch) {
-      returnType = typeMatch[0];
-    }
-  }
-  return { name, parameters: params, returnType };
-}
-
-/**
- * Extract a Python function declaration: `def name(params) -> ReturnType`
- */
-function extractPythonFunction(
-  trimmed: string,
-): Omit<FunctionInfo, 'line'> | null {
-  if (!trimmed.startsWith('def ')) {
-    return null;
-  }
-  const name = extractWordAfterPrefix(trimmed, 'def ');
-  if (!name) {
-    return null;
-  }
-  const openParen = trimmed.indexOf('(', 'def '.length + name.length);
-  if (openParen === -1) {
-    return null;
-  }
-  const closeParen = trimmed.indexOf(')', openParen + 1);
-  if (closeParen === -1) {
-    return null;
-  }
-  const params = parseParameters(trimmed.slice(openParen + 1, closeParen));
-
-  let returnType = 'unknown';
-  const afterParens = trimmed.slice(closeParen + 1).trimStart();
-  if (afterParens.startsWith('->')) {
-    const typeMatch = afterParens.slice(2).trimStart().match(WORD_PATTERN);
-    if (typeMatch) {
-      returnType = typeMatch[0];
-    }
-  }
-  return { name, parameters: params, returnType };
-}
-
-/**
- * Extract a typed variable declaration: `const name: Type`
- */
-function extractTypedVariable(
-  trimmed: string,
-): Omit<VariableInfo, 'line'> | null {
-  for (const keyword of ['const ', 'let ', 'var ']) {
-    const result = tryTypedVariable(trimmed, keyword);
-    if (result) {
-      return result;
-    }
-  }
-  return null;
-}
-
-function tryTypedVariable(
-  trimmed: string,
-  keyword: string,
-): Omit<VariableInfo, 'line'> | null {
-  if (!trimmed.startsWith(keyword)) {
-    return null;
-  }
-  const name = extractWordAfterPrefix(trimmed, keyword);
-  if (!name) {
-    return null;
-  }
-  const nameEnd = keyword.length + name.length;
-  const colonIdx = trimmed.indexOf(':', nameEnd);
-  if (colonIdx === -1) {
-    return null;
-  }
-  const typeMatch = trimmed
-    .slice(colonIdx + 1)
-    .trimStart()
-    .match(WORD_PATTERN);
-  if (!typeMatch) {
-    return null;
-  }
-  return { name, type: typeMatch[0] };
 }

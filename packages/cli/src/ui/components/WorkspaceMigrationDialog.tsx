@@ -10,6 +10,7 @@ import { performWorkspaceExtensionMigration } from '../../config/extension.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { Colors } from '../colors.js';
 import { useState, useCallback } from 'react';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface MigrationCompleteContentProps {
   failedExtensions: string[];
@@ -72,7 +73,7 @@ function MigrationPrompt({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       padding={1}
     >
@@ -143,7 +144,7 @@ export function WorkspaceMigrationDialog(props: {
     return (
       <Box
         flexDirection="column"
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={Colors.Gray}
         padding={1}
       >

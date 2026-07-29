@@ -18,6 +18,7 @@ import { Box, Text } from 'ink';
 import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-providers';
 import { Colors } from '../colors.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 /**
  * Get the color for circuit breaker state display.
@@ -55,7 +56,7 @@ const StatRow: React.FC<StatRowProps> = ({
 function renderNoProviderManager() {
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       paddingY={1}
       paddingX={2}
@@ -68,7 +69,7 @@ function renderNoProviderManager() {
 function renderNoLoadBalancer() {
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       paddingY={1}
       paddingX={2}
@@ -84,7 +85,7 @@ function renderNoLoadBalancer() {
 function renderNoStatsSupport(activeProviderName: string) {
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       paddingY={1}
       paddingX={2}
@@ -260,7 +261,7 @@ export const LBStatsDisplay: React.FC = () => {
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       paddingY={1}

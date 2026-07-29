@@ -1,0 +1,49 @@
+{
+  "_comment": "Issue #2552 regression proof. On Windows/PowerShell the round box-drawing corners and the Braille spinner frames used to render as '?'. With the fix, when Unicode rendering is disabled (ui.unicode='off', or auto-detect on win32), borders fall back to ASCII (+, -, |) and the spinner to the 'line' cli-spinner, so no '?' border glyphs appear. This script drives the real TUI via tmux and asserts the rendered /help panel (a deterministic bordered panel) contains ASCII corners and never shows a '?' corner. It does not depend on an LLM. Run on Windows with: node scripts/tmux-harness.js --script scripts/tmux-script.windows-box-chars.json  (auto-detect => ASCII on win32). To force the same on any platform, set LLXPRT_FORCE_UNICODE unset and ui.unicode 'off', or simply run on win32.",
+  "tmux": {
+    "cols": 100,
+    "rows": 30,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 8000
+  },
+  "yolo": true,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "00-startup", "scope": "screen" },
+
+    { "type": "key", "key": "Slash" },
+    { "type": "line", "text": "help", "submitKeys": ["Escape", "Enter"] },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Keyboard Shortcuts",
+      "timeoutMs": 15000
+    },
+    { "type": "wait", "ms": 1000 },
+    { "type": "capture", "label": "01-help-panel", "scope": "screen" },
+
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "regex": "^\\?[-]+\\?",
+      "atMost": 0,
+      "_comment": "No degraded top border row: a '?' corner followed by horizontal chars and a closing '?' must NOT appear."
+    },
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "contains": "+",
+      "atLeast": 2,
+      "_comment": "ASCII corners (+) ARE rendered for the help panel border on Windows / when Unicode is off."
+    },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

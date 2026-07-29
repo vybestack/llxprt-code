@@ -14,6 +14,7 @@ import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import type { SubagentInfo } from './types.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface SubagentShowViewProps {
   subagent: SubagentInfo;
@@ -104,7 +105,7 @@ function PromptViewport({
 
       <Box
         flexDirection="column"
-        borderStyle="single"
+        borderStyle={getBorderStyle('single')}
         borderColor={Colors.Gray}
         paddingX={1}
         height={promptViewportHeight + 2}

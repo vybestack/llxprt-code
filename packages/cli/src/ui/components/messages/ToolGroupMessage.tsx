@@ -23,6 +23,7 @@ import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
 import { useToolCallContext } from '../../contexts/ToolCallContext.js';
 import type { CliUiRuntime } from '../../cliUiRuntime.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface ToolGroupMessageProps {
   groupId: number;
@@ -316,7 +317,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       width="100%"
       marginLeft={1}
       borderDimColor={borderDimColor}

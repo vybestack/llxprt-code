@@ -20,7 +20,10 @@ import type {
 } from './AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import type { RuntimeSettingsState } from './providerRuntimeContext.js';
-import { resolveEffectiveContextLimit } from '../core/tokenLimits.js';
+import {
+  resolveEffectiveContextLimit,
+  resolveProviderReportedLimit,
+} from '../core/tokenLimits.js';
 /** @plan PLAN-20260211-COMPRESSION.P12 */
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 
@@ -101,19 +104,20 @@ function createGetLiveSetting(
 }
 
 /**
- * Resolve a positive finite context limit from the active provider, if any.
- * Returns undefined when the provider is unavailable or does not report a
- * usable limit, so callers can fall back to the model-name lookup.
+ * Resolve a usable context limit from the active provider, if any.
+ * Delegates positive-finite validation to the shared
+ * `resolveProviderReportedLimit` (issue #2270 DRY) so the acceptance predicate
+ * lives in exactly one place. Returns undefined when the provider is
+ * unavailable or does not report a usable limit, so callers fall back to the
+ * model-name lookup.
  */
 function resolveProviderContextLimit(
   provider: AgentRuntimeProviderAdapter,
 ): number | undefined {
   try {
-    const limit = provider.getActiveProvider().getContextLimit?.();
-    if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
-      return limit;
-    }
-    return undefined;
+    return resolveProviderReportedLimit(
+      provider.getActiveProvider().getContextLimit?.(),
+    );
   } catch {
     return undefined;
   }

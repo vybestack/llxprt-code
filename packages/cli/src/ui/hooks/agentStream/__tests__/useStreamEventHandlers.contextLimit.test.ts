@@ -9,9 +9,9 @@ import { getTokenLimitForConfiguredContext } from '../contextLimit.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 
 /**
- * The overflow-guidance token-limit helper delegates to the shared resolver in
- * @vybestack/llxprt-code-agents (single source of truth for the
- * user-override → provider-limit → model-name precedence, issue #2251).
+ * The overflow-guidance token-limit helper delegates to the shared
+ * resolveEffectiveContextLimit in core (single source of truth for the
+ * user-override → provider-limit → model-name precedence, issues #2251/#2815).
  * These tests assert the real resolved value through the thin cli wrapper.
  */
 describe('contextLimit helper (cli wrapper)', () => {
@@ -21,6 +21,7 @@ describe('contextLimit helper (cli wrapper)', () => {
       getEphemeralSetting: vi.fn((key: string) =>
         key === 'context-limit' ? 200_000 : undefined,
       ),
+      getContentGeneratorConfig: vi.fn(() => undefined),
     };
 
     const limit = getTokenLimitForConfiguredContext(
@@ -36,6 +37,7 @@ describe('contextLimit helper (cli wrapper)', () => {
     const configWithoutLimit = {
       getModel: vi.fn(() => 'gpt-4o'),
       getEphemeralSetting: vi.fn(() => undefined),
+      getContentGeneratorConfig: vi.fn(() => undefined),
     };
 
     const limit = getTokenLimitForConfiguredContext(

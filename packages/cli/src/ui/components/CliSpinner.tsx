@@ -7,6 +7,7 @@
 import Spinner from 'ink-spinner';
 import { type ComponentProps, useEffect } from 'react';
 import { debugState } from '../debug.js';
+import { getSpinnerType } from '../contexts/UnicodeRenderingContext.js';
 
 export type SpinnerProps = ComponentProps<typeof Spinner>;
 
@@ -18,5 +19,5 @@ export const CliSpinner = (props: SpinnerProps) => {
     };
   }, []);
 
-  return <Spinner {...props} />;
+  return <Spinner {...props} type={getSpinnerType(props.type ?? 'dots')} />;
 };

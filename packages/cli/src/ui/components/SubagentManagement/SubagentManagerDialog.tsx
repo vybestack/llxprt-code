@@ -25,6 +25,7 @@ import { SubagentCreationWizard } from './SubagentCreationWizard.js';
 import { ProfileAttachmentWizard } from './ProfileAttachmentWizard.js';
 import { SubagentDeleteDialog } from './SubagentDeleteDialog.js';
 import { SubagentMainMenu } from './SubagentMainMenu.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 function useDataLoader(
   subagentManager: SubagentManager | undefined,
@@ -584,7 +585,7 @@ function renderCurrentView(props: ManagerDialogViewProps) {
 function ManagerDialogView(props: ManagerDialogViewProps) {
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}

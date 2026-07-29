@@ -38,7 +38,9 @@ export interface Declaration {
     | 'struct'
     | 'trait'
     | 'enum'
-    | 'impl';
+    | 'impl'
+    | 'typedef'
+    | 'union';
   line: number;
   column: number;
   signature?: string;

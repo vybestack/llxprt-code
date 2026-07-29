@@ -12,6 +12,7 @@ import { colorizeCode, colorizeLine } from '../../utils/CodeColorizer.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import type { Theme } from '../../themes/theme.js';
 import { firstNonEmptyString } from '../../../utils/coalesce.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 interface DiffLine {
   type: 'add' | 'del' | 'context' | 'hunk' | 'other';
@@ -143,7 +144,11 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
 
   if (parsedLines.length === 0) {
     return (
-      <Box borderStyle="round" borderColor={Colors.Gray} padding={1}>
+      <Box
+        borderStyle={getBorderStyle('round')}
+        borderColor={Colors.Gray}
+        padding={1}
+      >
         <Text color={Colors.DimComment}>No changes detected.</Text>
       </Box>
     );
@@ -388,7 +393,11 @@ const renderDiffContent = (
 
   if (!context) {
     return (
-      <Box borderStyle="round" borderColor={Colors.Gray} padding={1}>
+      <Box
+        borderStyle={getBorderStyle('round')}
+        borderColor={Colors.Gray}
+        padding={1}
+      >
         <Text color={Colors.DimComment}>No changes detected.</Text>
       </Box>
     );

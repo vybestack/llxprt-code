@@ -77,6 +77,7 @@
     "scripts/tests/affected-lint-targets.test.ts",
     "scripts/tests/run-lint.test.ts",
     "scripts/tests/telemetry-doc-accuracy.test.ts",
+    "scripts/tests/pr-review-walkthrough-workflow.test.ts",
     "test-setup/stub-helpers.ts",
     "test-setup/stub-helpers.bun.test.ts",
     "test-setup/augment-bun-vi.ts",

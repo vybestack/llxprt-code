@@ -58,6 +58,9 @@ export function extractImports(content: string, language: string): Import[] {
       if (parsed) {
         imports.push({ ...parsed, line: index + 1 });
       }
+    } else if (language === 'c' && isCIncludeDirective(trimmed)) {
+      const module = extractCIncludeModule(trimmed);
+      imports.push({ module, items: [], line: index + 1 });
     }
   });
 
@@ -306,4 +309,45 @@ function splitRustImportItems(itemsStr: string): string[] {
   }
   items.push(itemsStr.slice(start));
   return items;
+}
+
+/**
+ * Detects a C #include preprocessor directive.
+ * Matches `#include <stdio.h>` and `#include "myheader.h"`.
+ * Uses linear scanning to avoid regex backtracking.
+ */
+function isCIncludeDirective(line: string): boolean {
+  const hashIdx = line.indexOf('#');
+  if (hashIdx === -1) return false;
+  // Reject lines where the #include is inside a comment (e.g., `// #include <x.h>`)
+  const beforeHash = line.slice(0, hashIdx).trim();
+  if (beforeHash.length > 0) return false;
+  const includeIdx = line.indexOf('include');
+  if (includeIdx === -1 || includeIdx < hashIdx) return false;
+  const afterInclude = line.slice(includeIdx + 'include'.length);
+  const trimmed = afterInclude.trimStart();
+  return trimmed.startsWith('<') || trimmed.startsWith('"');
+}
+
+/**
+ * Extracts the module path from a C #include directive.
+ * Strips the angle brackets or double quotes, leaving the bare header name
+ * (e.g., `stdio.h` or `myheader.h`).
+ */
+function extractCIncludeModule(line: string): string {
+  const angleOpen = line.indexOf('<');
+  if (angleOpen !== -1) {
+    const angleClose = line.indexOf('>', angleOpen + 1);
+    if (angleClose !== -1) {
+      return line.slice(angleOpen + 1, angleClose);
+    }
+  }
+  const quoteOpen = line.indexOf('"');
+  if (quoteOpen !== -1) {
+    const quoteClose = line.indexOf('"', quoteOpen + 1);
+    if (quoteClose !== -1) {
+      return line.slice(quoteOpen + 1, quoteClose);
+    }
+  }
+  return 'unknown';
 }
