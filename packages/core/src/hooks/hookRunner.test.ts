@@ -166,8 +166,8 @@ describe('HookRunner', () => {
               expect.stringContaining('[Convert]::FromBase64String'),
               expect.stringContaining('[ScriptBlock]::Create'),
               expect.stringContaining('$global:LASTEXITCODE = 0'),
-              expect.stringContaining('$script:hookSucceeded = $?'),
-              expect.stringContaining('$script:hookExitCode = $LASTEXITCODE'),
+              expect.stringContaining('& $hookScript; $hookSucceeded = $?'),
+              expect.stringContaining('$hookExitCode = $LASTEXITCODE'),
               expect.stringContaining('if ($hookSucceeded) { exit 0 }'),
               expect.stringContaining(
                 'if ($hookExitCode -ne 0) { exit $hookExitCode }',
