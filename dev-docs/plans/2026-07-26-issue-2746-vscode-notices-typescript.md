@@ -109,7 +109,7 @@ release-pack smokes, windows-installed-command smokes). One bridge,
 `scripts/ocr-canary-compare-2673.cjs`, receives a reference-only import update
 because its comparator implementation moves from `.js` to `.ts`; its runtime
 behavior and CommonJS entrypoint remain unchanged. The full list is in
-[Appendix B](#appendix-b-exempt-cjs-files-25).
+[Appendix B](#appendix-b--exempt-cjs-files-25).
 
 ## Completed slice (Slice 0) — VS Code notices generator
 
