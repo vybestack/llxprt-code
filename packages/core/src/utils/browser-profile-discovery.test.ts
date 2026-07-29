@@ -263,7 +263,7 @@ Path=Profiles/xxxxxxxx.default-release`;
         readFile: () => profilesIni,
       });
 
-      const expectedProfilePath = path.join(
+      const expectedProfilePath = path.resolve(
         '/Users/testuser',
         'Library',
         'Application Support',
