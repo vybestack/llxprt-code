@@ -394,6 +394,30 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
 
   /**
    * @plan PLAN-20260211-SECURESTORE.P11
+   * @requirement R9.1
+   */
+  it('removes an existing provider-key fallback after a verified keyring write', async () => {
+    const fallbackStore = new SecureStore('llxprt-code-provider-keys', {
+      keyringLoader: async () => null,
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+    });
+    await fallbackStore.set('zai', 'stale-provider-key');
+
+    // A keyring-absent store sees the stale fallback value.
+    expect(await fallbackStore.get('zai')).toBe('stale-provider-key');
+
+    const mockKeyring = createMockKeyring();
+    const storage = createTestStorage(mockKeyring, tempDir);
+    await storage.saveKey('zai', 'current-provider-key');
+
+    // The verified keyring write must clear the stale fallback so a
+    // keyring-absent store no longer returns it.
+    expect(await fallbackStore.get('zai')).toBeNull();
+    expect(await storage.getKey('zai')).toBe('current-provider-key');
+  });
+  /**
+   * @plan PLAN-20260211-SECURESTORE.P11
    * @requirement R9.5
    */
   it('listKeys deduplicates across keyring and fallback', async () => {
