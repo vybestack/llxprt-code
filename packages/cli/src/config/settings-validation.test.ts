@@ -568,8 +568,6 @@ describe('settings-validation', () => {
         ui: { theme: 'Green Screen', useAlternateBuffer: true },
         telemetry: {
           enabled: true,
-          target: 'local',
-          otlpEndpoint: '',
           outfile: '/tmp/test.log',
         },
         promptService: { baseDir: '/tmp/bundle' },
@@ -580,6 +578,16 @@ describe('settings-validation', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it.each(['target', 'otlpEndpoint', 'otlpProtocol', 'useCollector'])(
+      'should reject removed telemetry property %s',
+      (property) => {
+        const result = validateSettings({
+          telemetry: { [property]: property === 'useCollector' ? true : 'x' },
+        });
+        expect(result.success).toBe(false);
+      },
+    );
 
     it('should accept sandbox as boolean false', () => {
       const result = validateSettings({ sandbox: false });

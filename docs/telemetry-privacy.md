@@ -2,12 +2,12 @@
 
 ## Overview
 
-LLxprt takes a **privacy-first approach** to telemetry and logging. All data stays on your local machine by default, with no external transmission to Google or any other third-party services. This documentation explains our privacy-centered telemetry system and how to use it effectively for debugging and analysis.
+LLxprt takes a **privacy-first approach** to telemetry and logging. All data stays on your local machine, with no external transmission to Google or any other third-party services. This documentation explains our privacy-centered telemetry system and how to use it effectively for debugging and analysis.
 
 ## Key Privacy Principles
 
-- **Local Only**: No data is sent to external services by default
-- **Opt-in**: All logging and telemetry features are disabled by default
+- **Local Only**: No data is sent to external services
+- **Opt-in persistence**: Conversation logging and OTEL output are disabled by default; ephemeral `/stats` aggregation remains in memory
 - **Transparent**: You can see exactly what is logged and where it's stored
 - **User-Controlled**: Simple commands to enable, disable, and configure all features
 - **Data Redaction**: Sensitive information is automatically redacted from logs
@@ -252,13 +252,13 @@ Settings are applied in the following order (highest precedence first):
 
 ### Local Telemetry for Tests
 
-During testing and development, LLxprt uses local-only telemetry configuration:
+During testing and development, configure a temporary local outfile when tests
+need to inspect telemetry output:
 
 ```javascript
-// Integration tests use local telemetry target
 const telemetryConfig = {
-  target: 'local',
   enabled: true,
+  outfile: '/tmp/llxprt-telemetry.jsonl',
   logConversations: true,
 };
 ```
@@ -298,10 +298,10 @@ cat "${DATA_DIR}/conversations/conversation-"*.jsonl | jq -r '.provider' | sort 
 
 ### What LLxprt Does NOT Do
 
-- **No External Transmission**: LLxprt never sends your conversation data to Google, OpenAI, Anthropic, or any other external service
-- **No Analytics**: No usage analytics or statistics are collected or transmitted
-- **No Cloud Storage**: All data remains on your local machine
-- **No Tracking**: No user behavior tracking or profiling
+- **No telemetry transmission**: Conversation logs and telemetry are never uploaded to Google, OpenAI, Anthropic, or another analytics service
+- **No uploaded analytics**: Local session statistics are not transmitted
+- **No cloud log storage**: LLxprt does not upload conversation logs to cloud storage
+- **No telemetry profiling**: Conversation logging exists for local inspection and debugging
 
 ### What LLxprt DOES Do
 
@@ -324,9 +324,9 @@ LLxprt fundamentally differs from the original Google Gemini CLI in its approach
 
 ### LLxprt Privacy-First Approach
 
-- **Zero external transmission**: All data stays local by default
-- **Disabled by default**: No telemetry or logging without explicit user consent
-- **Complete user control**: Users manage all aspects of data collection
+- **Zero telemetry transmission**: Telemetry and conversation logs always stay local
+- **Persistent output disabled by default**: OTEL telemetry and conversation logging require explicit enablement; in-memory `/stats` remains active
+- **Complete user control**: Users manage all persistent telemetry and conversation logging
 - **Enhanced redaction**: Advanced privacy protection with configurable redaction
 - **Open transparency**: Full documentation of all privacy practices
 
@@ -341,7 +341,7 @@ LLxprt fundamentally differs from the original Google Gemini CLI in its approach
 
 ### For Development
 
-1. **Local testing only**: Use local telemetry targets for all development work
+1. **Use temporary output files**: Keep test telemetry isolated in local temporary files
 2. **Sensitive data awareness**: Be mindful of API keys and credentials in test scenarios
 3. **Log analysis**: Use standard JSON tools to analyze conversation patterns
 4. **Documentation**: Document any privacy-related configuration for your team

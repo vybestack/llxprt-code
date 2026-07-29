@@ -107,7 +107,6 @@ const REVIEWED_UNTRUSTED_INSTALL_SCRIPTS: readonly string[] = [
   '@vscode/vsce-sign', // release/VSCE signing tooling, not a CLI runtime need
   'fsevents', // optional macOS file-watcher; prebuilt binary, build not required
   'keytar', // transitive release tooling; credential-store binary not needed here
-  'protobufjs', // postinstall is a benign CLI shim; no required native artifact
 ];
 
 interface PackageJson {
