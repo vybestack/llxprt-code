@@ -16,6 +16,15 @@ function isRunning(proc: ChildProcessWithoutNullStreams): boolean {
   return proc.exitCode === null && proc.signalCode === null;
 }
 
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function createLongRunningChild(): Promise<{
   proc: ChildProcessWithoutNullStreams;
   closePromise: Promise<void>;
@@ -76,6 +85,29 @@ describe.skipIf(process.platform !== 'win32')(
       await expect(
         withTaskkillUnavailable(() => forceKillProcess(proc, closePromise)),
       ).resolves.toBeUndefined();
+    });
+
+    it('confirms termination via externally observable state when taskkill succeeds but close is not emitted', async () => {
+      // Reproduces the nightly Windows failure: taskkill /F /T succeeds
+      // externally (exit 0) but Bun's ChildProcess may not emit `close`
+      // for that path. forceKillProcess must resolve once the process is
+      // externally gone, rather than surfacing an implementation-detail
+      // cleanup timeout.
+      const { proc, closePromise } = await createLongRunningChild();
+      const pid = proc.pid;
+      expect(pid).toBeDefined();
+      expect(isPidAlive(pid as number)).toBe(true);
+
+      const start = Date.now();
+      await expect(
+        forceKillProcess(proc, closePromise),
+      ).resolves.toBeUndefined();
+      const elapsed = Date.now() - start;
+
+      // The requested OS outcome is achieved: the process is externally gone.
+      expect(isPidAlive(pid as number)).toBe(false);
+      // Must complete well under the 5-second caller budget.
+      expect(elapsed).toBeLessThan(5_000);
     });
   },
 );

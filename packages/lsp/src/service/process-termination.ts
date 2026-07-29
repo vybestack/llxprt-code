@@ -63,13 +63,47 @@ export async function shutdownProcess(
   if (primaryError !== null) throw primaryError;
 }
 
-async function awaitProcessClose(closePromise: Promise<void>): Promise<void> {
+async function awaitForcedTermination(
+  proc: ChildProcessWithoutNullStreams,
+  closePromise: Promise<void>,
+): Promise<void> {
   const closed = await waitForProcessClose(
     closePromise,
     FORCE_KILL_CLOSE_TIMEOUT_MS,
   );
-  if (!closed) {
+  if (closed) {
+    return;
+  }
+  // The `close` event was not emitted within the timeout. On Windows,
+  // Bun's ChildProcess may not emit `close` for a process terminated
+  // externally via taskkill, even though the OS-level termination
+  // succeeded. Confirm the requested outcome via externally observable
+  // process state rather than surfacing an implementation-detail error.
+  if (isProcessAlive(proc)) {
     throw new Error('Child process did not close after forced termination');
+  }
+}
+
+/**
+ * Returns true when the child process is still running, using externally
+ * observable state. Trusts the ChildProcess's own exit/signal report when
+ * available; otherwise probes the OS via signal-0 so that a process killed
+ * by an external mechanism (e.g. Windows taskkill) is correctly detected
+ * even if the ChildProcess never emitted `exit`/`close`.
+ */
+function isProcessAlive(proc: ChildProcessWithoutNullStreams): boolean {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return false;
+  }
+  const pid = proc.pid;
+  if (pid === undefined) {
+    return true;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -84,7 +118,7 @@ export async function forceKillProcess(
 ): Promise<void> {
   const pid = proc.pid;
   if (pid === undefined) {
-    await awaitProcessClose(closePromise);
+    await awaitForcedTermination(proc, closePromise);
     return;
   }
 
@@ -97,7 +131,7 @@ export async function forceKillProcess(
     throw new Error(`Failed to send SIGKILL to child process ${pid}`);
   }
 
-  await awaitProcessClose(closePromise);
+  await awaitForcedTermination(proc, closePromise);
 }
 
 function isProcessTerminated(proc: ChildProcessWithoutNullStreams): boolean {
@@ -110,7 +144,7 @@ async function forceKillWindows(
   pid: number,
 ): Promise<void> {
   if (isProcessTerminated(proc)) {
-    await awaitProcessClose(closePromise);
+    await awaitForcedTermination(proc, closePromise);
     return;
   }
 
@@ -118,14 +152,14 @@ async function forceKillWindows(
     await runTaskkill(pid);
   } catch (taskkillError: unknown) {
     if (isProcessTerminated(proc)) {
-      await awaitProcessClose(closePromise);
+      await awaitForcedTermination(proc, closePromise);
       return;
     }
     const signalError = !proc.kill('SIGKILL')
       ? new Error(`Failed to terminate child process ${pid}`)
       : undefined;
     try {
-      await awaitProcessClose(closePromise);
+      await awaitForcedTermination(proc, closePromise);
     } catch (closeError: unknown) {
       throw new AggregateError(
         signalError === undefined
@@ -143,7 +177,7 @@ async function forceKillWindows(
     return;
   }
 
-  await awaitProcessClose(closePromise);
+  await awaitForcedTermination(proc, closePromise);
 }
 
 function runTaskkill(pid: number): Promise<void> {
