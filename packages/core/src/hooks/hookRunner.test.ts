@@ -400,7 +400,7 @@ describe('HookRunner', () => {
         // SECURITY: Verify spawn is called with shell executable and expanded path
         const spawnCall = vi.mocked(spawn).mock.calls[0];
         expect(spawnCall[0]).toMatch(/bash|powershell/i);
-        expect(spawnCall[2]).toEqual(
+        expect(spawnCall[2]).toStrictEqual(
           expect.objectContaining({
             shell: false,
             env: expect.objectContaining({
@@ -408,7 +408,7 @@ describe('HookRunner', () => {
             }),
           }),
         );
-        const shellCommand = String(spawnCall[1]?.at(-1));
+        const shellCommand = String(spawnCall[1].at(-1));
         const expandedCommand =
           process.platform === 'win32'
             ? Buffer.from(
