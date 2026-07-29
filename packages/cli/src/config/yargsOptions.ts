@@ -49,18 +49,7 @@ export const rootOptions: Record<string, Options> = {
   telemetry: {
     type: 'boolean',
     description:
-      'Enable telemetry? This flag specifically controls if telemetry is sent. Other --telemetry-* flags set specific values but do not enable telemetry on their own.',
-  },
-  'telemetry-target': {
-    type: 'string',
-    choices: ['local', 'gcp'],
-    description:
-      'Set the telemetry target (local or gcp). Overrides settings files.',
-  },
-  'telemetry-otlp-endpoint': {
-    type: 'string',
-    description:
-      'Set the OTLP endpoint for telemetry. Overrides environment variables and settings files.',
+      'Enable local telemetry output. By default output is written to the console; use --telemetry-outfile to write to a file.',
   },
   'telemetry-log-prompts': {
     type: 'boolean',
@@ -261,18 +250,7 @@ export const innerCommandOptions: Record<string, Options> = {
   telemetry: {
     type: 'boolean',
     description:
-      'Enable telemetry? This flag specifically controls if telemetry is sent. Other --telemetry-* flags set specific values but do not enable telemetry on their own.',
-  },
-  'telemetry-target': {
-    type: 'string',
-    choices: ['local', 'gcp'],
-    description:
-      'Set the telemetry target (local or gcp). Overrides settings files.',
-  },
-  'telemetry-otlp-endpoint': {
-    type: 'string',
-    description:
-      'Set the OTLP endpoint for telemetry. Overrides environment variables and settings files.',
+      'Enable local telemetry output. By default output is written to the console; use --telemetry-outfile to write to a file.',
   },
   'telemetry-log-prompts': {
     type: 'boolean',
@@ -391,21 +369,6 @@ export const innerCommandOptions: Record<string, Options> = {
 export const deprecatedOptions = [
   {
     key: 'telemetry',
-    message:
-      'Use settings.json instead. This flag will be removed in a future version.',
-  },
-  {
-    key: 'telemetry-target',
-    message:
-      'Use settings.json instead. This flag will be removed in a future version.',
-  },
-  {
-    key: 'telemetry-otlp-endpoint',
-    message:
-      'Use settings.json instead. This flag will be removed in a future version.',
-  },
-  {
-    key: 'telemetry-otlp-protocol',
     message:
       'Use settings.json instead. This flag will be removed in a future version.',
   },

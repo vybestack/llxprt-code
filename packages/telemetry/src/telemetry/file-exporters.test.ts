@@ -4,20 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
-  FileSpanExporter,
-  FileLogExporter,
-  FileMetricExporter,
-} from './file-exporters.js';
-import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
+  BasicTracerProvider,
+  SimpleSpanProcessor,
+  type ReadableSpan,
+} from '@opentelemetry/sdk-trace-base';
 import {
   LoggerProvider,
   InMemoryLogRecordExporter,
   SimpleLogRecordProcessor,
+  type ReadableLogRecord,
 } from '@opentelemetry/sdk-logs';
 import {
   AggregationTemporality,
@@ -25,36 +25,59 @@ import {
 } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
-import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
+import {
+  FileSpanExporter,
+  FileLogExporter,
+  FileMetricExporter,
+} from './file-exporters.js';
 
-const TMP_DIR = path.join(
-  os.tmpdir(),
-  `llxprt-file-exporters-test-${process.pid}`,
-);
+describe('FileSpanExporter', () => {
+  const directories: string[] = [];
 
-function setupTempDir(): void {
-  fs.rmSync(TMP_DIR, { recursive: true, force: true });
-  fs.mkdirSync(TMP_DIR, { recursive: true });
-}
+  afterEach(() => {
+    for (const directory of directories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 
-function teardownTempDir(): void {
-  fs.rmSync(TMP_DIR, { recursive: true, force: true });
-}
+  it('writes readable spans to JSONL with complex fields projected', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-span-exporter-'));
+    directories.push(directory);
+    const outfile = join(directory, 'spans.jsonl');
+    const provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(new FileSpanExporter(outfile))],
+    });
 
-function createOutfilePath(name: string): string {
-  return path.join(TMP_DIR, name);
-}
+    const span = provider
+      .getTracer('file-exporter-test')
+      .startSpan('local-span');
+    span.setAttribute('local.attribute', 'value');
+    span.end();
+    await provider.forceFlush();
+    await provider.shutdown();
 
-function readOutfile(filePath: string): string {
-  return fs.readFileSync(filePath, 'utf-8');
-}
+    const exported = JSON.parse(readFileSync(outfile, 'utf8')) as {
+      name: string;
+      attributes: Record<string, unknown>;
+      instrumentationScope: { name: string };
+      spanContext: { spanId: string; traceId: string };
+    };
+    expect(exported.name).toBe('local-span');
+    expect(exported.attributes).toStrictEqual({ 'local.attribute': 'value' });
+    expect(exported.instrumentationScope.name).toBe('file-exporter-test');
+    expect(exported.spanContext.spanId).toHaveLength(16);
+    expect(exported.spanContext.traceId).toHaveLength(32);
+  });
+});
 
 /**
  * Produce a real, fully-formed ReadableSpan using a tracer provider so the
  * exporter serializes genuine telemetry data rather than a hand-rolled stub.
  */
-async function makeReadableSpan(name: string): Promise<ReadableSpan> {
+async function makeReadableSpan(
+  name: string,
+  directory: string,
+): Promise<ReadableSpan> {
   const provider = new BasicTracerProvider();
   const tracer = provider.getTracer('test-tracer');
   const span = tracer.startSpan(name);
@@ -62,7 +85,6 @@ async function makeReadableSpan(name: string): Promise<ReadableSpan> {
   span.end();
   await provider.forceFlush();
   await provider.shutdown();
-  // The SDK's span object satisfies ReadableSpan after end().
   return span as unknown as ReadableSpan;
 }
 
@@ -84,24 +106,29 @@ async function makeReadableLogRecord(body: string): Promise<ReadableLogRecord> {
   if (records.length === 0) {
     throw new Error('Expected at least one finished log record');
   }
-  // Release SDK background resources (processors, scheduled exports).
   await loggerProvider.shutdown();
   return records[0];
 }
 
 describe('FileSpanExporter serialization format', () => {
-  beforeEach(() => {
-    setupTempDir();
-  });
+  const directories: string[] = [];
 
   afterEach(() => {
-    teardownTempDir();
+    for (const directory of directories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
+
+  function createOutfilePath(name: string): string {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-format-test-'));
+    directories.push(directory);
+    return join(directory, name);
+  }
 
   it('writes compact JSON (no pretty-print indentation) — one object per line', async () => {
     const outfile = createOutfilePath('spans.jsonl');
     const exporter = new FileSpanExporter(outfile);
-    const span = await makeReadableSpan('compact-test-span');
+    const span = await makeReadableSpan('compact-test-span', outfile);
 
     const result = await new Promise<ExportResult>((resolve) => {
       exporter.export([span], resolve);
@@ -109,12 +136,9 @@ describe('FileSpanExporter serialization format', () => {
 
     expect(result).toMatchObject({ code: 0 }); // ExportResultCode.SUCCESS
 
-    const content = readOutfile(outfile);
-    // Compact JSON must not contain the 2-space indentation that
-    // pretty-printing produces. A single span is one line.
+    const content = readFileSync(outfile, 'utf-8');
     expect(content).not.toContain('\n  ');
     expect(content.trim().split('\n').length).toBe(1);
-    // The serialized line must round-trip to an object with the span name.
     const parsed = JSON.parse(content.trim());
     expect(parsed.name).toBe('compact-test-span');
   });
@@ -122,8 +146,8 @@ describe('FileSpanExporter serialization format', () => {
   it('appends each export call as a new JSONL line (no full-file rewrite)', async () => {
     const outfile = createOutfilePath('spans-multi.jsonl');
     const exporter = new FileSpanExporter(outfile);
-    const span1 = await makeReadableSpan('span-one');
-    const span2 = await makeReadableSpan('span-two');
+    const span1 = await makeReadableSpan('span-one', outfile);
+    const span2 = await makeReadableSpan('span-two', outfile);
 
     await new Promise<ExportResult>((resolve) => {
       exporter.export([span1], resolve);
@@ -132,7 +156,7 @@ describe('FileSpanExporter serialization format', () => {
       exporter.export([span2], resolve);
     });
 
-    const lines = readOutfile(outfile).trim().split('\n');
+    const lines = readFileSync(outfile, 'utf-8').trim().split('\n');
     expect(lines.length).toBe(2);
     expect(JSON.parse(lines[0]).name).toBe('span-one');
     expect(JSON.parse(lines[1]).name).toBe('span-two');
@@ -140,16 +164,18 @@ describe('FileSpanExporter serialization format', () => {
 });
 
 describe('FileLogExporter serialization format', () => {
-  beforeEach(() => {
-    setupTempDir();
-  });
+  const directories: string[] = [];
 
   afterEach(() => {
-    teardownTempDir();
+    for (const directory of directories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('writes compact JSON (no pretty-print indentation)', async () => {
-    const outfile = createOutfilePath('logs.jsonl');
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-log-format-test-'));
+    directories.push(directory);
+    const outfile = join(directory, 'logs.jsonl');
     const exporter = new FileLogExporter(outfile);
     const record = await makeReadableLogRecord('compact-log-body');
 
@@ -158,7 +184,7 @@ describe('FileLogExporter serialization format', () => {
     });
 
     expect(result).toMatchObject({ code: 0 });
-    const content = readOutfile(outfile);
+    const content = readFileSync(outfile, 'utf-8');
     expect(content).not.toContain('\n  ');
     const parsed = JSON.parse(content.trim());
     expect(parsed._body).toBe('compact-log-body');
@@ -166,16 +192,18 @@ describe('FileLogExporter serialization format', () => {
 });
 
 describe('FileMetricExporter serialization format', () => {
-  beforeEach(() => {
-    setupTempDir();
-  });
+  const directories: string[] = [];
 
   afterEach(() => {
-    teardownTempDir();
+    for (const directory of directories.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('writes compact JSON (no pretty-print indentation)', async () => {
-    const outfile = createOutfilePath('metrics.jsonl');
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-metric-format-test-'));
+    directories.push(directory);
+    const outfile = join(directory, 'metrics.jsonl');
     const exporter = new FileMetricExporter(outfile);
 
     const resourceMetrics: ResourceMetrics = {
@@ -188,21 +216,19 @@ describe('FileMetricExporter serialization format', () => {
     });
 
     expect(result).toMatchObject({ code: 0 });
-    const content = readOutfile(outfile);
+    const content = readFileSync(outfile, 'utf-8');
     expect(content).not.toContain('\n  ');
     const parsed = JSON.parse(content.trim());
-    // Validate the actual metric data structure, not just resource presence.
     expect(parsed.scopeMetrics).toStrictEqual([]);
-    // Behavior-level: the serialized resource should round-trip the same
-    // attributes as the source resource (avoiding coupling to OTel SDK
-    // internals like _rawAttributes).
     expect(JSON.stringify(resourceMetrics.resource)).toBe(
       JSON.stringify(parsed.resource),
     );
   });
 
   it('reports CUMULATIVE aggregation temporality', () => {
-    const exporter = new FileMetricExporter(createOutfilePath('m.jsonl'));
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-temp-test-'));
+    directories.push(directory);
+    const exporter = new FileMetricExporter(join(directory, 'm.jsonl'));
     expect(exporter.getPreferredAggregationTemporality()).toBe(
       AggregationTemporality.CUMULATIVE,
     );

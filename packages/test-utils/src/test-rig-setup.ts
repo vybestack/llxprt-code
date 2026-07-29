@@ -128,8 +128,6 @@ function buildSettings(
     },
     telemetry: {
       enabled: true,
-      target: 'local',
-      otlpEndpoint: '',
       outfile: telemetryPath,
     },
     promptService: {

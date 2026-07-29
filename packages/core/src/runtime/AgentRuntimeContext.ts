@@ -26,7 +26,7 @@ export interface ReadonlySettingsSnapshot {
   /** Telemetry configuration */
   telemetry?: {
     enabled: boolean;
-    target: TelemetryTarget | null;
+    target: 'local' | null;
     redaction?: TelemetryRedactionConfig;
   };
   /** Tool governance derived from profile ephemerals */
@@ -89,17 +89,6 @@ export interface TelemetryRedactionConfig {
   redactPrompts?: boolean;
   redactToolParams?: boolean;
   redactToolResults?: boolean;
-}
-
-/**
- * @plan PLAN-20251028-STATELESS6.P06
- * @requirement REQ-STAT6-002.3
- *
- * Telemetry target enumeration.
- */
-export enum TelemetryTarget {
-  GCP = 'gcp',
-  LOCAL = 'local',
 }
 
 /**

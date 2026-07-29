@@ -208,7 +208,6 @@ export const aboutCommand: SlashCommand = {
     }
 
     const cliVersion = await getCliVersion();
-    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT ?? '';
     const ideClient = getIdeClientDisplayName(context);
 
     // Determine keyfile path and key status for the active provider (if any)
@@ -221,7 +220,6 @@ export const aboutCommand: SlashCommand = {
       osVersion,
       sandboxEnv,
       modelVersion,
-      gcpProject,
       keyfile: keyfilePath,
       key: keyStatus,
       ideClient,

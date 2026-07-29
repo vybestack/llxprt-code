@@ -618,10 +618,14 @@ export class ConversationDataRedactor {
       redactionsByType: {},
     };
 
-    const patterns = [
-      ...(this.redactionPatterns.get('global') ?? []),
-      ...(this.redactionPatterns.get(providerName) ?? []),
-    ];
+    const globalPatterns = this.redactionPatterns.get('global') ?? [];
+    const patterns =
+      providerName === 'global'
+        ? globalPatterns
+        : [
+            ...globalPatterns,
+            ...(this.redactionPatterns.get(providerName) ?? []),
+          ];
 
     for (const pattern of patterns) {
       if (pattern.enabled) {

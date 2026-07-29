@@ -161,11 +161,9 @@ export class PrivacyComplianceValidator {
     config.updateSettings({
       telemetry: {
         logConversations: true,
-        target: 'local',
       },
     });
 
-    const isLocal = config.getTelemetryTarget() === 'local';
     const logPath = config.getConversationLogPath();
     const isLocalPath =
       logPath.includes('.llxprt') ||
@@ -174,8 +172,8 @@ export class PrivacyComplianceValidator {
 
     this.addResult({
       test: 'Conversation data stored locally by default',
-      passed: isLocal && isLocalPath,
-      details: `Target: ${config.getTelemetryTarget()}, Path: ${logPath}`,
+      passed: isLocalPath,
+      details: `Path: ${logPath}`,
       critical: true,
     });
   }
