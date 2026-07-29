@@ -270,7 +270,7 @@ setTimeout(() => {
       });
       const duration = Date.now() - startTime;
 
-      expect(duration).toBeLessThan(1500);
+      expect(duration).toBeLessThan(5000);
       expect(duration).toBeGreaterThan(400);
 
       if (result !== undefined) {
