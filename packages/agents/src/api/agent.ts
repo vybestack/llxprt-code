@@ -695,7 +695,7 @@ export interface AgentSessionControl {
   deleteCheckpoint(ref: string): Promise<void>;
   /** Assigns a project-unique name to the active living session. */
   nameCurrentSession(name: string): Promise<void>;
-  /** Activates a living session without creating a child branch. */
+  /** Activates a living session or forks a child from a checkpoint. */
   resumeSession(ref: string): Promise<SessionInfo>;
   /** Lists living recording sessions in the current project. */
   listSessions(): Promise<readonly SessionInfo[]>;

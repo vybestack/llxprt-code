@@ -345,7 +345,7 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('N');
     });
   });
-  describe('Escape Key Precedence', () => {
+  describe('Keyboard Dispatch', () => {
     it('should call handleKeypress for navigation input', async () => {
       const session = createMockSession();
       mockHookState.sessions = [session];
