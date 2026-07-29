@@ -656,8 +656,10 @@ function usePendingEdits() {
   return { pendingEdits, setPendingEdit, clearPendingEdits };
 }
 
-const FieldRows: React.FC<{
-  fields: readonly ConfigField[];
+const FieldRowsSplit: React.FC<{
+  paramFields: readonly ConfigField[];
+  behaviorFields: readonly ConfigField[];
+  allFields: readonly ConfigField[];
   selectedIndex: number;
   editingIndex: number | null;
   editValue: string;
@@ -666,7 +668,9 @@ const FieldRows: React.FC<{
   enumIndex: number;
   onEditChange: (value: string) => void;
 }> = ({
-  fields,
+  paramFields,
+  behaviorFields,
+  allFields,
   selectedIndex,
   editingIndex,
   editValue,
@@ -674,30 +678,37 @@ const FieldRows: React.FC<{
   reads,
   enumIndex,
   onEditChange,
-}) => (
-  <>
-    {fields.map((field, i) => {
-      const pending = pendingValueFor(field, pendingEdits[field.key]);
-      const committed = valueForField(
-        field,
-        reads.modelParams,
-        reads.ephemeralSettings,
-      );
-      return (
-        <FieldRow
-          key={field.key}
-          field={field}
-          isSelected={selectedIndex === i}
-          isEditing={editingIndex === i}
-          editValue={editValue}
-          currentValue={pending !== undefined ? pending : committed}
-          enumIndex={enumIndex}
-          onEditChange={onEditChange}
-        />
-      );
-    })}
-  </>
-);
+}) => {
+  const renderRow = (field: ConfigField) => {
+    const i = allFields.indexOf(field);
+    const pending = pendingValueFor(field, pendingEdits[field.key]);
+    const committed = valueForField(
+      field,
+      reads.modelParams,
+      reads.ephemeralSettings,
+    );
+    return (
+      <FieldRow
+        key={field.key}
+        field={field}
+        isSelected={selectedIndex === i}
+        isEditing={editingIndex === i}
+        editValue={editValue}
+        currentValue={pending !== undefined ? pending : committed}
+        enumIndex={enumIndex}
+        onEditChange={onEditChange}
+      />
+    );
+  };
+  return (
+    <>
+      {paramFields.length > 0 && <SectionHeader label="Model Parameters" />}
+      {paramFields.map(renderRow)}
+      {behaviorFields.length > 0 && <SectionHeader label="Model Behavior" />}
+      {behaviorFields.map(renderRow)}
+    </>
+  );
+};
 
 export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   onClose,
@@ -750,9 +761,14 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
         modelName={reads.modelName}
       />
 
-      <SectionHeader label="Model Parameters" />
-      <FieldRows
-        fields={fields}
+      <FieldRowsSplit
+        paramFields={fields.filter(
+          (f) => f.kind === 'param' || f.key === 'context-limit',
+        )}
+        behaviorFields={fields.filter(
+          (f) => f.kind === 'ephemeral' && f.key !== 'context-limit',
+        )}
+        allFields={fields}
         selectedIndex={selectedIndex}
         editingIndex={editingIndex}
         editValue={editValue}

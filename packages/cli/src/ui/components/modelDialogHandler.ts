@@ -49,7 +49,12 @@ function recordSwitchSideEffects(
   modelId: string,
 ): void {
   for (const msg of messages) {
-    addItem({ type: 'info', text: msg });
+    try {
+      addItem({ type: 'info', text: msg });
+    } catch {
+      // A single info-message failure must not mask a successful switch
+      // or suppress the remaining switch-info messages.
+    }
   }
   recorder?.(provider, modelId);
 }
