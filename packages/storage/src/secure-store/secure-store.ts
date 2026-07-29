@@ -517,9 +517,8 @@ export class SecureStore {
       // is durable, then clear the stale keyring value. Reads are
       // keyring-authoritative, so a stale entry that cannot be removed would
       // shadow the fallback. If the clear fails, remove the orphaned fallback
-      // (it would never be read while the stale keyring value persists) and
-      // throw UNAVAILABLE. This avoids both orphaned fallback artifacts and
-      // credential-loss windows.
+      // and throw UNAVAILABLE. deleteFallbackFiles logs non-ENOENT errors but
+      // does not propagate them — the keyring failure is the actionable error.
       this.logger.debug(
         () =>
           `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,

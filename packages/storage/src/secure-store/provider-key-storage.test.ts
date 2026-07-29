@@ -403,14 +403,17 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
       fallbackPolicy: 'allow',
     });
     await fallbackStore.set('zai', 'stale-provider-key');
-    const fallbackPath = path.join(tempDir, 'zai.enc');
-    await expect(fs.access(fallbackPath)).resolves.toBeUndefined();
+
+    // A keyring-absent store sees the stale fallback value.
+    expect(await fallbackStore.get('zai')).toBe('stale-provider-key');
 
     const mockKeyring = createMockKeyring();
     const storage = createTestStorage(mockKeyring, tempDir);
     await storage.saveKey('zai', 'current-provider-key');
 
-    await expect(fs.access(fallbackPath)).rejects.toThrow('ENOENT');
+    // The verified keyring write must clear the stale fallback so a
+    // keyring-absent store no longer returns it.
+    expect(await fallbackStore.get('zai')).toBeNull();
     expect(await storage.getKey('zai')).toBe('current-provider-key');
   });
   /**
