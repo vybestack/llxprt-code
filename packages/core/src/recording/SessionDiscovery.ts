@@ -162,6 +162,9 @@ export class SessionDiscovery {
     for (const summary of sessions) {
       const replay = await replaySession(summary.filePath, projectHash);
       if (!replay.ok) {
+        debugLogger.debug(
+          `Skipping unreadable session recording ${summary.filePath}: ${replay.error}`,
+        );
         continue;
       }
       const namedSummary = { ...summary, name: replay.sessionName };
@@ -198,7 +201,7 @@ export class SessionDiscovery {
 
     const namedMatches = targets.filter((target) =>
       target.kind === 'session'
-        ? target.session.name === ref
+        ? target.session.name === ref || target.session.sessionId === ref
         : target.checkpointName === ref,
     );
     if (namedMatches.length === 1) {

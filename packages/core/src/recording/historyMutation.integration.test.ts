@@ -220,6 +220,39 @@ describe('durable history mutation @plan:2026-07-28-issue-2625', () => {
       }
     });
 
+    it.each([Number.NaN, Number.POSITIVE_INFINITY, 1.5, -1])(
+      'rejects invalid turn count %s without recording a rewind',
+      async (turnsToRemove) => {
+        const svc = new SessionRecordingService(makeConfig(chatsDir()));
+        const history: IContent[] = [
+          makeContent('Q1', 'human'),
+          makeContent('A1', 'ai'),
+        ];
+        for (const item of history) svc.recordContent(item);
+        await svc.flush();
+
+        const result = await new HistoryMutationService().restore(
+          history,
+          turnsToRemove,
+          svc,
+        );
+
+        expect(result).toStrictEqual({
+          ok: false,
+          error: 'Turns to remove must be a non-negative integer',
+        });
+        await svc.dispose();
+
+        const filePath = svc.getFilePath();
+        expect(filePath).not.toBeNull();
+        const replay = await replaySession(filePath!, PROJECT_HASH);
+        requireReplaySuccess(replay);
+        expect(replay.history).toStrictEqual(history);
+        const recordingText = await fs.readFile(filePath!, 'utf8');
+        expect(recordingText).not.toContain('"type":"rewind"');
+      },
+    );
+
     it('persistence failure leaves live history unchanged', async () => {
       const svc = new SessionRecordingService(makeConfig(chatsDir()));
       const history: IContent[] = [

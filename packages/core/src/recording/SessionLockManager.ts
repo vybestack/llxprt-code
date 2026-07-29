@@ -166,7 +166,10 @@ export class SessionLockManager {
       const lockData = JSON.parse(content) as { pid: number };
       const lockPid = lockData.pid;
 
-      if (lockPid === process.pid) {
+      if (
+        lockPid === process.pid &&
+        SessionLockManager.ownedLockPaths.has(lockPath)
+      ) {
         return false;
       }
       try {

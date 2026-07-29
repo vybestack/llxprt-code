@@ -204,9 +204,10 @@ function makeResumeResult(historyText = 'resumed'): ResumeResult {
 
 describe('cli main provider initialization', () => {
   const originalIsTTY = process.stdin.isTTY;
-  let projectTempDir: string;
+  let projectTempDir = '';
 
   beforeEach(async () => {
+    projectTempDir = '';
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-provider-init-'));
     dynamicSettingsRegistry.reset();
     process.stdin.isTTY = true;
@@ -214,7 +215,9 @@ describe('cli main provider initialization', () => {
   });
 
   afterEach(async () => {
-    await rm(projectTempDir, { recursive: true, force: true });
+    if (projectTempDir !== '') {
+      await rm(projectTempDir, { recursive: true, force: true });
+    }
     process.stdin.isTTY = originalIsTTY;
     dynamicSettingsRegistry.reset();
     vi.resetModules();

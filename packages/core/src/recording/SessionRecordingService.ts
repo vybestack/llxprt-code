@@ -352,8 +352,10 @@ export class SessionRecordingService {
     return this.projectHash;
   }
 
-  getLockHandle(): LockHandle | null {
-    return this.lockHandle;
+  releaseLockOwnership(): LockHandle | null {
+    const lockHandle = this.lockHandle;
+    this.lockHandle = null;
+    return lockHandle;
   }
 
   /**
@@ -396,8 +398,10 @@ export class SessionRecordingService {
       this.chatsDirWatcher = null;
     }
     const lockHandle = this.lockHandle;
-    this.lockHandle = null;
     await lockHandle?.release();
+    if (this.lockHandle === lockHandle) {
+      this.lockHandle = null;
+    }
   }
 
   /**

@@ -39,21 +39,6 @@ export interface HistoryMutationError {
 }
 
 /**
- * Count the number of human-led turns in a history array.
- * A human-led turn starts at a `human` entry and includes all following
- * non-human entries until the next `human` entry.
- */
-export function countHumanTurns(history: readonly IContent[]): number {
-  let count = 0;
-  for (const item of history) {
-    if (item.speaker === 'human') {
-      count++;
-    }
-  }
-  return count;
-}
-
-/**
  * Compute the items that would be removed by clearing all non-initial content.
  * "Initial" means everything up to and including the first human-led turn.
  * Returns the cut point index and the removed items.
@@ -147,6 +132,12 @@ export class HistoryMutationService {
     turnsToRemove: number,
     recording: SessionRecordingService,
   ): Promise<HistoryMutationResult | HistoryMutationError> {
+    if (!Number.isSafeInteger(turnsToRemove) || turnsToRemove < 0) {
+      return {
+        ok: false,
+        error: 'Turns to remove must be a non-negative integer',
+      };
+    }
     const { cutIndex, removed } = computeRestoreCut(history, turnsToRemove);
     return this.applyMutation(history.slice(0, cutIndex), removed, recording);
   }
@@ -171,6 +162,9 @@ export class HistoryMutationService {
     try {
       // 1. Flush pending content first.
       await recording.flush();
+      if (!recording.isActive()) {
+        return { ok: false, error: 'Recording is not active' };
+      }
 
       // 2. Durably append the rewind event.
       recording.recordRewind(removed.length);

@@ -274,13 +274,14 @@ async function resolveTarget(
 function restorePreviousHistory(
   historyService: HistoryService,
   previousHistory: IContent[] | null,
+  logger?: DebugLogger,
 ): void {
   if (previousHistory === null) return;
   try {
     historyService.clear();
     historyService.addAll(previousHistory);
-  } catch {
-    void 0;
+  } catch (error: unknown) {
+    logger?.warn(`Failed to restore prior session history: ${error}`);
   }
 }
 
@@ -312,11 +313,13 @@ async function commitPreparedTransition(
   } catch (error: unknown) {
     integration.dispose();
     if (historyService !== null) {
-      restorePreviousHistory(historyService, previousHistory);
+      restorePreviousHistory(historyService, previousHistory, context.logger);
       try {
         oldIntegration?.subscribeToHistory(historyService);
-      } catch {
-        void 0;
+      } catch (resubscribeError: unknown) {
+        context.logger?.warn(
+          `Failed to restore prior recording subscription: ${resubscribeError}`,
+        );
       }
     }
     context.adoptSessionId?.(context.currentSessionId);

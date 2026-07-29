@@ -80,7 +80,6 @@ export {
 } from './SessionTransitionService.js';
 export {
   HistoryMutationService,
-  countHumanTurns,
   type HistoryMutationResult,
   type HistoryMutationError,
 } from './HistoryMutationService.js';

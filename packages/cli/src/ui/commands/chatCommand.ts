@@ -100,10 +100,12 @@ const getSavedChatTags = async (
   context: CommandContext,
 ): Promise<ChatDetail[]> => {
   const checkpoints = await listProjectCheckpoints(context);
-  return checkpoints.map((checkpoint) => ({
-    name: checkpoint.checkpointName,
-    mtime: checkpoint.source.lastModified.toISOString(),
-  }));
+  return checkpoints
+    .map((checkpoint) => ({
+      name: checkpoint.checkpointName,
+      mtime: checkpoint.source.lastModified.toISOString(),
+    }))
+    .sort((left, right) => left.mtime.localeCompare(right.mtime));
 };
 
 const checkpointSuggestionDescription = 'Saved conversation checkpoint';
@@ -114,7 +116,7 @@ const chatTagSchema: CommandArgumentSchema = [
     description: 'Select saved checkpoint',
     completer: withFuzzyFilter(async (ctx) => {
       const chatDetails = await getSavedChatTags(ctx);
-      return chatDetails.map((chat) => ({
+      return [...chatDetails].reverse().map((chat) => ({
         value: chat.name,
         description: checkpointSuggestionDescription,
       }));

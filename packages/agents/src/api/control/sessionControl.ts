@@ -619,10 +619,26 @@ export class SessionControl implements AgentSessionControl {
 
   async deleteSession(ref: string): Promise<void> {
     await this.runExclusive(async () => {
+      const chatsDir = this.chatsDir();
+      const projectHash = this.persistenceProjectHash();
+      const targets = await SessionDiscovery.listContinueTargets(
+        chatsDir,
+        projectHash,
+      );
+      const resolved = SessionDiscovery.resolveContinueRef(ref, targets);
+      if ('error' in resolved) throw new Error(resolved.error);
+      if (resolved.target.kind !== 'session') {
+        throw new Error(`Continue target '${ref}' is not a session`);
+      }
+      if (
+        this.recording?.getSessionId() === resolved.target.session.sessionId
+      ) {
+        await this.teardownActiveSession();
+      }
       const result = await deleteRecordedSession(
-        ref,
-        this.chatsDir(),
-        this.persistenceProjectHash(),
+        resolved.target.session.sessionId,
+        chatsDir,
+        projectHash,
       );
 
       if (!result.ok) throw new Error(result.error);

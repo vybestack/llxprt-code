@@ -127,7 +127,7 @@ async function materializeChild(
     return { ok: false, error: `Failed to create child session: ${detail}` };
   }
 
-  const lockHandle = recording.getLockHandle();
+  const lockHandle = recording.releaseLockOwnership();
   if (lockHandle === null) {
     await cleanupFailedChild(recording, null);
     return { ok: false, error: 'Failed to retain child session lock' };
