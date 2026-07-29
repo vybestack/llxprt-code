@@ -1,0 +1,94 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 30,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 15000
+  },
+  "yolo": false,
+  "startCommand": ["bun", "scripts/start.ts", "--profile-load", "zai"],
+  "steps": [
+    {
+      "type": "line",
+      "text": "/model",
+      "submitKeys": ["Escape", "Enter"],
+      "postTypeMs": 5000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "MODEL ID",
+      "timeoutMs": 30000,
+      "pollMs": 500
+    },
+    {
+      "type": "capture",
+      "label": "01-models-dialog-open",
+      "scope": "screen"
+    },
+    {
+      "type": "key",
+      "key": "Down"
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Model Configuration",
+      "timeoutMs": 15000,
+      "pollMs": 500
+    },
+    {
+      "type": "capture",
+      "label": "02-model-config-dialog",
+      "scope": "screen"
+    },
+    {
+      "type": "key",
+      "key": "Enter"
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "03-edit-mode",
+      "scope": "screen"
+    },
+    {
+      "type": "keys",
+      "keys": ["C-u", "2", "Enter"]
+    },
+    {
+      "type": "wait",
+      "ms": 1500
+    },
+    {
+      "type": "capture",
+      "label": "04-after-edit-save",
+      "scope": "screen"
+    },
+    {
+      "type": "key",
+      "key": "Escape"
+    },
+    {
+      "type": "wait",
+      "ms": 1000
+    },
+    {
+      "type": "capture",
+      "label": "05-after-close",
+      "scope": "screen"
+    }
+  ]
+}

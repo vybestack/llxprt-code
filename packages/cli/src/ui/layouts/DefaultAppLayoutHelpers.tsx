@@ -71,6 +71,7 @@ export function hasActiveDialog(uiState: UIState): boolean {
     uiState.isSubagentDialogOpen,
     uiState.isModelsDialogOpen,
     uiState.isSessionBrowserDialogOpen,
+    uiState.isModelConfigDialogOpen,
     uiState.showPrivacyNotice,
   ];
   return dialogFlags.some(Boolean);

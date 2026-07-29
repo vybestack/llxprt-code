@@ -57,19 +57,19 @@ import type { ProviderAliasEntry } from './providerAliases.js';
 // entry's id, contextWindow, and maxOutputTokens is asserted so any catalog
 // drift (retired models, geometry changes) is caught here.
 const EXPECTED_CLAUDECODE_CATALOG = [
-  { id: 'claude-opus-5', contextWindow: 200000, maxOutputTokens: 32000 },
-  { id: 'claude-fable-5', contextWindow: 200000, maxOutputTokens: 40000 },
-  { id: 'claude-opus-4-8', contextWindow: 200000, maxOutputTokens: 32000 },
-  { id: 'claude-opus-4-7', contextWindow: 200000, maxOutputTokens: 32000 },
-  { id: 'claude-opus-4-6', contextWindow: 200000, maxOutputTokens: 32000 },
+  { id: 'claude-opus-5', contextWindow: 1000000, maxOutputTokens: 128000 },
+  { id: 'claude-fable-5', contextWindow: 1000000, maxOutputTokens: 128000 },
+  { id: 'claude-opus-4-8', contextWindow: 1000000, maxOutputTokens: 128000 },
+  { id: 'claude-opus-4-7', contextWindow: 1000000, maxOutputTokens: 128000 },
+  { id: 'claude-opus-4-6', contextWindow: 1000000, maxOutputTokens: 128000 },
   {
     id: 'claude-opus-4-5-20251101',
     contextWindow: 500000,
     maxOutputTokens: 32000,
   },
   { id: 'claude-opus-4-5', contextWindow: 500000, maxOutputTokens: 32000 },
-  { id: 'claude-sonnet-5', contextWindow: 200000, maxOutputTokens: 128000 },
-  { id: 'claude-sonnet-4-6', contextWindow: 400000, maxOutputTokens: 64000 },
+  { id: 'claude-sonnet-5', contextWindow: 1000000, maxOutputTokens: 128000 },
+  { id: 'claude-sonnet-4-6', contextWindow: 1000000, maxOutputTokens: 128000 },
   {
     id: 'claude-sonnet-4-5-20250929',
     contextWindow: 400000,

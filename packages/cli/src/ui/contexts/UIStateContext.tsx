@@ -84,6 +84,7 @@ export interface UIState {
    * @plan PLAN-20260214-SESSIONBROWSER.P21
    */
   isSessionBrowserDialogOpen: boolean;
+  isModelConfigDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
