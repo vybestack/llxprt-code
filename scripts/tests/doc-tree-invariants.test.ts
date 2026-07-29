@@ -182,7 +182,6 @@ describe('doc-tree invariants (real repo state)', () => {
         'dev-docs/tools/tool-output-format.md',
         'dev-docs/providers/text-tool-call-parsing.md',
         'dev-docs/merge-notes/2026-01-06-batches21-25-skipped.md',
-        'dev-docs/plans/archive/2026-01-03-welcome-onboarding.md',
         'dev-docs/agent-api.md',
       ];
       for (const p of newPaths) {

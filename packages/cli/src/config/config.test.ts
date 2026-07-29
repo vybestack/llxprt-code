@@ -365,6 +365,34 @@ describe('parseArguments', () => {
     process.argv = originalArgv;
   });
 
+  it.each([
+    '--telemetry-target=local',
+    '--telemetry-otlp-endpoint=http://localhost:4317',
+    '--telemetry-otlp-protocol=grpc',
+  ])('rejects removed destination option %s', async (option) => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'script.js', option];
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
+    const mockConsoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    try {
+      await expect(parseArguments({} as Settings)).rejects.toThrow(
+        'process.exit called',
+      );
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown argument'),
+      );
+    } finally {
+      process.argv = originalArgv;
+      mockExit.mockRestore();
+      mockConsoleError.mockRestore();
+    }
+  });
+
   it('should throw an error when both --prompt and --prompt-interactive are used together', async () => {
     process.argv = [
       'node',

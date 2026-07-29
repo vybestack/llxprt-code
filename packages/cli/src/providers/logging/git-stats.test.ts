@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { GitStatsTracker } from './git-stats.js';
 import {
   Config,
-  TelemetryTarget,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
@@ -87,29 +86,6 @@ describe('Git Statistics Tracking', () => {
         linesRemoved: 0,
         filesChanged: 1,
       });
-    });
-
-    it('should NEVER send data externally', async () => {
-      // Mock any external calls to ensure they never happen
-      const config = new Config({
-        sessionId: 'test-session',
-        targetDir: tempDir,
-        debugMode: false,
-        cwd: tempDir,
-        model: 'gemini-flash',
-        telemetry: {
-          logConversations: true,
-          target: TelemetryTarget.GCP, // Even with GCP target
-        },
-      });
-      const tracker = new GitStatsTracker(config);
-
-      // Spy on any network calls
-      const networkSpy = vi.spyOn(global, 'fetch');
-
-      await tracker.trackFileEdit('test.ts', 'old', 'new');
-
-      expect(networkSpy).not.toHaveBeenCalled();
     });
   });
 

@@ -44,8 +44,6 @@ export interface CliArgs {
   approvalMode: string | undefined;
   telemetry: boolean | undefined;
   checkpointing: boolean | undefined;
-  telemetryTarget: string | undefined;
-  telemetryOtlpEndpoint: string | undefined;
   telemetryLogPrompts: boolean | undefined;
   telemetryOutfile: string | undefined;
   allowedMcpServerNames: string[] | undefined;
@@ -168,10 +166,6 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     approvalMode: result['approvalMode'] as string | undefined,
     telemetry: result['telemetry'] as boolean | undefined,
     checkpointing: result['checkpointing'] as boolean | undefined,
-    telemetryTarget: result['telemetryTarget'] as string | undefined,
-    telemetryOtlpEndpoint: result['telemetryOtlpEndpoint'] as
-      | string
-      | undefined,
     telemetryLogPrompts: result['telemetryLogPrompts'] as boolean | undefined,
     telemetryOutfile: result['telemetryOutfile'] as string | undefined,
     allowedMcpServerNames: result['allowedMcpServerNames'] as

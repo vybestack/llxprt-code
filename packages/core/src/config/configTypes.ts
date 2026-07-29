@@ -36,7 +36,6 @@ import type {
   ISkillService,
   ToolRegistry,
 } from '@vybestack/llxprt-code-tools';
-import { TelemetryTarget } from '../telemetry/index.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { AgentClientFactory } from '../core/clientContract.js';
 import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
@@ -57,7 +56,6 @@ export type PostSkillDiscoveryToolRegistrar = (
   skillService: ISkillService,
   messageBus: MessageBus,
 ) => void;
-export { TelemetryTarget };
 
 export interface RedactionConfig {
   redactApiKeys: boolean;
@@ -117,8 +115,6 @@ export interface IntrospectionAgentSettings {
 
 export interface TelemetrySettings {
   enabled?: boolean;
-  target?: TelemetryTarget;
-  otlpEndpoint?: string;
   logPrompts?: boolean;
   outfile?: string;
   logConversations?: boolean;
@@ -143,7 +139,6 @@ export interface TelemetrySettings {
   enableDataRetention?: boolean;
   conversationExpirationDays?: number;
   maxConversationsStored?: number;
-  remoteConsentGiven?: boolean;
 }
 
 /**

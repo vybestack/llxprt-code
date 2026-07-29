@@ -9,7 +9,6 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 import * as dotenv from 'dotenv';
 
-import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
   Config,
@@ -140,10 +139,6 @@ function createTelemetrySettings(
 ): ConfigParameters['telemetry'] {
   return {
     enabled: settings.telemetry?.enabled,
-    target: settings.telemetry?.target as TelemetryTarget,
-    otlpEndpoint:
-      process.env['OTEL_EXPORTER_OTLP_ENDPOINT'] ??
-      settings.telemetry?.otlpEndpoint,
     logPrompts: settings.telemetry?.logPrompts,
   };
 }

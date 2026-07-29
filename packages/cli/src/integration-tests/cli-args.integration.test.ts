@@ -579,6 +579,10 @@ describe('CLI --version and --help flags', () => {
     expect(output).toContain('llxprt');
     expect(output).toContain('--version');
     expect(output).toContain('--help');
+    expect(output).not.toContain('--telemetry-target');
+    expect(output).not.toContain('--telemetry-otlp-endpoint');
+    expect(output).not.toContain('--telemetry-otlp-protocol');
+    expect(output).toContain('--telemetry-outfile');
   });
 
   it('should print help with -h flag', async () => {
