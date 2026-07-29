@@ -217,9 +217,9 @@ jobs:
           node-version: '${{ matrix.node-version }}'
 
       - name: 'Setup Bun'
-        # The trusted quota selector below runs `bun scripts/ci-quota-check.ts`
-        # directly, so Bun must be on PATH before that step. npm run build
-        # below is also backed by bun scripts/build.ts.
+        # The trusted quota selector runs under Bun before PR code is checked
+        # out, so Bun must be on PATH before that step. npm run build below is
+        # also backed by bun scripts/build.ts.
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
@@ -229,7 +229,12 @@ jobs:
         shell: 'bash'
         run: |
           set -euo pipefail
-          bun scripts/ci-quota-check.ts
+          quota_selectors=(scripts/ci-quota-check.*)
+          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
+            echo 'Trusted checkout must contain exactly one quota selector' >&2
+            exit 1
+          fi
+          bun "${quota_selectors[0]}"
 
           # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
           # it before checking out PR code; downstream steps resolve one secret.
@@ -379,9 +384,9 @@ jobs:
           node-version: '24.x'
 
       - name: 'Setup Bun'
-        # The trusted quota selector below runs `bun scripts/ci-quota-check.ts`
-        # directly, so Bun must be on PATH before that step. npm run build
-        # below is also backed by bun scripts/build.ts.
+        # The trusted quota selector runs under Bun before PR code is checked
+        # out, so Bun must be on PATH before that step. npm run build below is
+        # also backed by bun scripts/build.ts.
         uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
@@ -391,7 +396,12 @@ jobs:
         shell: 'bash'
         run: |
           set -euo pipefail
-          bun scripts/ci-quota-check.ts
+          quota_selectors=(scripts/ci-quota-check.*)
+          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
+            echo 'Trusted checkout must contain exactly one quota selector' >&2
+            exit 1
+          fi
+          bun "${quota_selectors[0]}"
 
           # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
           # it before checking out PR code; downstream steps resolve one secret.

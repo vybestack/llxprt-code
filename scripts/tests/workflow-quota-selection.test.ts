@@ -66,10 +66,13 @@ function assertJobCheckoutSecurity(
 
   expect(quota.id).toBe(quotaId);
   expect(quota.shell).toBe('bash');
-  expect(asString(quota.run)).toContain('bun scripts/ci-quota-check.ts');
-  expect(asString(quota.run)).toContain(
-    'awk \'!/^OPENAI_API_KEY=/\' "$GITHUB_ENV"',
-  );
+  const quotaRun = asString(quota.run);
+  expect(quotaRun).toContain('quota_selectors=(scripts/ci-quota-check.*)');
+  expect(quotaRun).toContain('${#quota_selectors[@]} != 1');
+  expect(quotaRun).toContain('[[ ! -f "${quota_selectors[0]}" ]]');
+  expect(quotaRun).toContain('bun "${quota_selectors[0]}"');
+  expect(quotaRun).not.toContain('ci-quota-check.js');
+  expect(quotaRun).toContain('awk \'!/^OPENAI_API_KEY=/\' "$GITHUB_ENV"');
   expect(asString(quota.run)).toContain(
     'grep -Eq \'^selected_key=(primary|secondary)$\' "$GITHUB_OUTPUT"',
   );

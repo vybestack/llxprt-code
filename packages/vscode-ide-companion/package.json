@@ -121,7 +121,7 @@
     "build:dev": "npm run check-types && npm run lint && bun esbuild.ts",
     "build:prod": "bun esbuild.ts --production",
     "generate:notices": "bun ./scripts/generate-notices.ts",
-    "prepare": "bun ./scripts/generate-notices.ts",
+    "prepare": "node -e \"const { spawnSync } = require('node:child_process'); const isBun = (process.env.npm_config_user_agent ?? '').startsWith('bun/'); const command = isBun ? process.env.npm_execpath : 'bun'; if (!command) throw new Error('Bun executable is unavailable'); const result = spawnSync(command, ['./scripts/generate-notices.ts'], { stdio: 'inherit' }); process.exit(result.status ?? 1);\"",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "watch": "npm-run-all2 -p watch:*",
