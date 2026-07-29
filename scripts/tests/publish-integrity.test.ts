@@ -24,8 +24,17 @@ import {
   verifyTransitiveSourceClosure,
   verifyExportedSubpaths,
 } from './workspace-source-helpers.ts';
+import {
+  asOptionalRecord,
+  asRecord,
+  asString,
+  asOptionalString,
+  parseJsonObject,
+} from './typed-test-helpers.ts';
 
 const repoRoot = resolve(__dirname, '..', '..');
+
+const LIFECYCLE_HOOKS: readonly string[] = ['preinstall', 'postinstall'];
 
 /**
  * The npm lifecycle hooks whose entry scripts these tests walk. They run on
@@ -36,57 +45,38 @@ const repoRoot = resolve(__dirname, '..', '..');
  * shared helper to a lifecycle script while forgetting to allowlist it — exactly
  * the regression these tests guard against.
  */
-const LIFECYCLE_HOOKS = ['preinstall', 'postinstall'] as const;
+
 interface RootPackageMetadata extends RootManifest {
   bin?: Record<string, string>;
 }
 
-interface CliPackageMetadata {
-  main?: string;
-  types?: string;
-  bin?: Record<string, string>;
-  scripts?: Record<string, string>;
-  files?: string[];
-}
-
-interface PackageScripts {
-  scripts?: Record<string, string>;
-}
-
-interface NpmPackEntry {
-  files: Array<{ path: string }>;
-}
-
 /**
- * Derives the lifecycle ENTRY scripts from package.json `scripts` rather than
- * hardcoding their paths, so this test follows a rename/move of a lifecycle
- * script (e.g. preinstall.cjs -> bootstrap/preinstall.cjs) instead of silently
- * guarding a stale path. Each hook command is expected to invoke a single local
- * script file (e.g. "node scripts/preinstall.cjs"); the package-root-relative
- * POSIX path of that file is extracted and asserted to exist on disk.
+ * Derives the lifecycle entry scripts from package.json.
+ * Each lifecycle hook (preinstall, postinstall, etc.) should reference a local
+ * .cjs/.mjs/.js file so the published-package integrity test can walk its require graph.
  */
 function deriveLifecycleEntryScripts(): string[] {
-  const pkg = JSON.parse(
-    readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-  ) as PackageScripts;
-  const scripts = pkg.scripts ?? {};
+  const pkg = asRecord(
+    JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')),
+  );
+  const scripts = asOptionalRecord(pkg.scripts) ?? {};
   const entries: string[] = [];
   for (const hook of LIFECYCLE_HOOKS) {
-    const command = scripts[hook];
+    const command = asOptionalString(scripts[hook]);
     expect(
       command,
       `package.json scripts.${hook} is expected to be defined so the ` +
         'published-package integrity test can walk its require graph.',
     ).toBeDefined();
     const match = /(?:^|\s)((?:\.?\/)?[\w./-]+\.(?:cjs|mjs|js))(?:\s|$)/.exec(
-      command as string,
+      command ?? '',
     );
     expect(
       match,
       `Could not extract a local script file from scripts.${hook} ` +
-        `("${command}"); the integrity test expects a "node <path>.cjs" form.`,
+        `("${command ?? ''}"); the integrity test expects a "node <path>.cjs" form.`,
     ).not.toBeNull();
-    const relPath = (match as RegExpExecArray)[1]
+    const relPath = (match?.[1] ?? '')
       .replace(/^\.\//, '')
       .split('/')
       .join(posix.sep);
@@ -123,19 +113,21 @@ function getPackedPaths(): Set<string> {
     process.platform === 'win32'
       ? ['/d', '/s', '/c', 'npm', ...npmArgs]
       : npmArgs;
-  const stdout = execFileSync(executable!, args, {
+  const stdout = execFileSync(executable ?? 'npm', args, {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
-  const parsed = JSON.parse(stdout) as NpmPackEntry[];
+  const parsed = JSON.parse(stdout);
   const entry = parsed[0];
   if (entry === undefined || !Array.isArray(entry.files)) {
     throw new Error(
       'npm pack --dry-run --json did not return the expected { files: [...] } shape.',
     );
   }
-  packedPathsCache = new Set(entry.files.map((f) => f.path));
+  packedPathsCache = new Set(
+    entry.files.map((file: unknown) => asString(asRecord(file).path)),
+  );
   return packedPathsCache;
 }
 
@@ -386,7 +378,7 @@ describe('published package integrity (S1)', () => {
       const missing: string[] = [];
 
       while (queue.length > 0) {
-        const current = queue.shift() as string;
+        const current = asString(queue.shift());
         if (visited.has(current)) {
           continue;
         }
@@ -448,10 +440,10 @@ describe('published package no-compile runtime contract (S6)', () => {
   it('publishes a checked-in launcher bin instead of a compiled dist entry', () => {
     const rootPackage = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-    ) as RootPackageMetadata;
+    );
     const cliPackage = JSON.parse(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
-    ) as CliPackageMetadata;
+    );
 
     expect(rootPackage.bin?.llxprt).toBe('packages/cli/bin/llxprt');
     expect(cliPackage.bin?.llxprt).toBe('bin/llxprt');
@@ -485,13 +477,13 @@ describe('published package no-compile runtime contract (S6)', () => {
     // identify internal packages from a manifest-derived set.
     const rootPackage = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-    ) as RootPackageMetadata;
+    );
     const root: ManifestDependencies = {
       dependencies: rootPackage.dependencies ?? {},
       optionalDependencies: rootPackage.optionalDependencies ?? {},
     };
-    const globWorkspaces = (rootPackage.workspaces ?? []).filter((entry) =>
-      /[*?[\]{}]/.test(entry),
+    const globWorkspaces = (rootPackage.workspaces ?? []).filter(
+      (entry: unknown) => /[*?[\]{}]/.test(asString(entry)),
     );
     expect(globWorkspaces).toEqual([]);
     const shippedWorkspacePackagePaths =
@@ -505,11 +497,11 @@ describe('published package no-compile runtime contract (S6)', () => {
     for (const workspaceDir of rootPackage.workspaces ?? []) {
       const manifestPath = join(repoRoot, workspaceDir, 'package.json');
       if (!existsSync(manifestPath)) continue;
-      const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
-        name?: string;
-      };
+      const manifest = asRecord(
+        JSON.parse(readFileSync(manifestPath, 'utf-8')),
+      );
       if (manifest.name !== undefined) {
-        internalPackages.add(manifest.name);
+        internalPackages.add(asString(manifest.name));
       }
     }
 
@@ -527,9 +519,9 @@ describe('published package no-compile runtime contract (S6)', () => {
 
     const mismatches = shippedWorkspacePackagePaths.flatMap(
       ({ workspaceDir, packagePath }) => {
-        const workspaceManifest = JSON.parse(
-          readFileSync(packagePath, 'utf-8'),
-        ) as ManifestDependencies;
+        const workspaceManifest = asRecord(
+          JSON.parse(readFileSync(packagePath, 'utf-8')),
+        );
         return checkWorkspaceDependencies(
           workspaceDir,
           workspaceManifest,
@@ -549,14 +541,22 @@ describe('published package no-compile runtime contract (S6)', () => {
   });
 
   it('keeps the published CLI workspace free of direct GenAI ownership', () => {
-    const cliPackage = JSON.parse(
+    const cliPackage = parseJsonObject(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf-8'),
-    ) as CliPackageMetadata & ManifestDependencies;
+    );
 
-    expect(cliPackage.dependencies?.['@google/genai']).toBeUndefined();
-    expect(cliPackage.devDependencies?.['@google/genai']).toBeUndefined();
-    expect(cliPackage.optionalDependencies?.['@google/genai']).toBeUndefined();
-    expect(cliPackage.peerDependencies?.['@google/genai']).toBeUndefined();
+    expect(
+      asOptionalRecord(cliPackage.dependencies)?.['@google/genai'],
+    ).toBeUndefined();
+    expect(
+      asOptionalRecord(cliPackage.devDependencies)?.['@google/genai'],
+    ).toBeUndefined();
+    expect(
+      asOptionalRecord(cliPackage.optionalDependencies)?.['@google/genai'],
+    ).toBeUndefined();
+    expect(
+      asOptionalRecord(cliPackage.peerDependencies)?.['@google/genai'],
+    ).toBeUndefined();
   });
 
   it(
@@ -571,7 +571,7 @@ describe('published package no-compile runtime contract (S6)', () => {
       // manifest fields (`main`, `exports`, `module`, `types`).
       const rootPackage = JSON.parse(
         readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-      ) as RootPackageMetadata;
+      );
       const packed = getPackedPaths();
 
       // Build the authoritative package-name-to-workspace map from the root
@@ -587,9 +587,9 @@ describe('published package no-compile runtime contract (S6)', () => {
 
       const mismatches = shippedWorkspacePackagePaths.flatMap(
         ({ workspaceDir, packagePath }) => {
-          const workspacePackage = JSON.parse(
-            readFileSync(packagePath, 'utf-8'),
-          ) as ManifestDependencies;
+          const workspacePackage = asRecord(
+            JSON.parse(readFileSync(packagePath, 'utf-8')),
+          );
           return Array.from(iterateWorkspaceDependencies(workspacePackage))
             .filter(({ name }) => packageNameToWorkspace.has(name))
             .map(({ name: dep }) => {
@@ -653,7 +653,7 @@ describe('published package no-compile runtime contract (S6)', () => {
       // source file means the runtime would fail with MODULE_NOT_FOUND.
       const rootPackage = JSON.parse(
         readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-      ) as RootPackageMetadata;
+      );
       const packed = getPackedPaths();
 
       const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
@@ -666,9 +666,9 @@ describe('published package no-compile runtime contract (S6)', () => {
 
       const allMissing = shippedWorkspacePackagePaths.flatMap(
         ({ packagePath }) => {
-          const workspacePackage = JSON.parse(
-            readFileSync(packagePath, 'utf-8'),
-          ) as ManifestDependencies;
+          const workspacePackage = asRecord(
+            JSON.parse(readFileSync(packagePath, 'utf-8')),
+          );
           return Array.from(iterateWorkspaceDependencies(workspacePackage))
             .filter(({ name }) => packageNameToWorkspace.has(name))
             .flatMap(({ name: dep }) => {
@@ -706,7 +706,7 @@ describe('published package no-compile runtime contract (S6)', () => {
       // that every exported subpath entry file ships in the packed tarball.
       const rootPackage = JSON.parse(
         readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-      ) as RootPackageMetadata;
+      );
       const packed = getPackedPaths();
 
       const packageNameToWorkspace = buildPackageNameToWorkspaceMap(
@@ -719,9 +719,9 @@ describe('published package no-compile runtime contract (S6)', () => {
 
       const allMissing = shippedWorkspacePackagePaths.flatMap(
         ({ packagePath }) => {
-          const workspacePackage = JSON.parse(
-            readFileSync(packagePath, 'utf-8'),
-          ) as ManifestDependencies;
+          const workspacePackage = asRecord(
+            JSON.parse(readFileSync(packagePath, 'utf-8')),
+          );
           return Array.from(iterateWorkspaceDependencies(workspacePackage))
             .filter(({ name }) => packageNameToWorkspace.has(name))
             .flatMap(({ name: dep }) => {
@@ -784,7 +784,7 @@ describe('release build self-contained generate contract (issue #2392)', () => {
   it('runs generate before building workspaces in build:packages', () => {
     const rootPackage = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-    ) as PackageScripts;
+    );
     const scripts = rootPackage.scripts ?? {};
     const buildPackages = scripts['build:packages'] ?? '';
 
@@ -822,7 +822,7 @@ describe('release build self-contained generate contract (issue #2392)', () => {
   it('keeps the generate script wired to the git-commit generator', () => {
     const rootPackage = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-    ) as PackageScripts;
+    );
     const scripts = rootPackage.scripts ?? {};
     const generate = scripts['generate'] ?? '';
 
@@ -919,7 +919,7 @@ describe('root duplicate dependency detection (F9)', () => {
     // and allows per-section version drift.
     const rootPackage = JSON.parse(
       readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-    ) as RootManifest;
+    );
     const dups = detectRootDuplicateDependencies(rootPackage);
     expect(
       dups,

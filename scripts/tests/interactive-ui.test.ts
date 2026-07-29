@@ -68,12 +68,12 @@ function runHarness(
   extraEnv: NodeJS.ProcessEnv = {},
 ): HarnessResult {
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
-  const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.js');
+  const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.ts');
   const artifactDir = getArtifactDir(testName);
   artifactDirs.push(artifactDir);
 
   const result = spawnSync(
-    process.execPath,
+    'bun',
     [
       harnessPath,
       '--script',
@@ -86,7 +86,7 @@ function runHarness(
       encoding: 'utf8',
       cwd: projectRoot,
       timeout: 300_000,
-      env: { ...process.env, FORCE_COLOR: '0', NODE_OPTIONS: '', ...extraEnv },
+      env: { ...process.env, FORCE_COLOR: '0', ...extraEnv },
     },
   );
 

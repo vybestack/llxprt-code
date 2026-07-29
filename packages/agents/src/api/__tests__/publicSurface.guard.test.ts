@@ -35,7 +35,7 @@ import {
   DENIED_INTERNAL_NAMES,
   loadExpectedSurface,
   API_SURFACE_REPORT_PATH,
-} from '../apiSurfaceParser.mjs';
+} from '../apiSurfaceParser.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

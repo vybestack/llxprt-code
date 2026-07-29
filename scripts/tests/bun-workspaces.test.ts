@@ -10,6 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import TOML from '@iarna/toml';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import semver from 'semver';
+import { asOptionalString, asRecord, asString } from './typed-test-helpers.ts';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -153,12 +154,6 @@ interface PackageLock {
   packages?: Record<string, PackageLockEntry>;
 }
 
-interface ParsedBunfig {
-  install?: {
-    linker?: string;
-  };
-}
-
 interface BunLockWorkspace {
   name?: string;
   dependencies?: Record<string, string>;
@@ -188,9 +183,7 @@ const DEPENDENCY_SECTIONS: ReadonlyArray<
 ];
 
 function readRootPackage(): PackageJson {
-  return JSON.parse(
-    readFileSync(join(repoRoot, 'package.json'), 'utf-8'),
-  ) as PackageJson;
+  return JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8'));
 }
 
 /**
@@ -263,7 +256,7 @@ function readDeclaredWorkspaceManifests(): WorkspaceManifest[] {
     manifests.push({
       key: workspace,
       label: workspace,
-      pkg: JSON.parse(readFileSync(pkgPath, 'utf-8')) as PackageJson,
+      pkg: JSON.parse(readFileSync(pkgPath, 'utf-8')),
     });
   }
   return manifests;
@@ -306,7 +299,7 @@ function readBunLock(): BunLock {
   const errors: ParseError[] = [];
   const parsed = parseJsonc(readFileSync(lockPath, 'utf-8'), errors, {
     allowTrailingComma: true,
-  }) as BunLock | undefined;
+  });
   if (errors.length > 0 || parsed === undefined) {
     throw new Error(
       `bun.lock is not parseable as JSONC (${errors.length} parse error(s)); ` +
@@ -330,7 +323,7 @@ function readPackageLock(): PackageLock {
         'committed so its workspace graph can be verified against package.json.',
     );
   }
-  return JSON.parse(readFileSync(lockPath, 'utf-8')) as PackageLock;
+  return JSON.parse(readFileSync(lockPath, 'utf-8'));
 }
 
 /**
@@ -343,8 +336,11 @@ function collectDependencyNames(
 ): Set<string> {
   const names = new Set<string>();
   for (const section of DEPENDENCY_SECTIONS) {
-    for (const name of Object.keys(source[section] ?? {})) {
-      names.add(name);
+    const deps = source[section];
+    if (deps) {
+      for (const name of Object.keys(deps)) {
+        names.add(name);
+      }
     }
   }
   return names;
@@ -382,8 +378,11 @@ function collectDependencyRanges(
 ): Record<string, string> {
   const ranges: Record<string, string> = {};
   for (const section of DEPENDENCY_SECTIONS) {
-    for (const [name, range] of Object.entries(source[section] ?? {})) {
-      ranges[`${section}/${name}`] = range;
+    const deps = source[section];
+    if (deps) {
+      for (const [name, range] of Object.entries(deps)) {
+        ranges[`${section}/${name}`] = String(range);
+      }
     }
   }
   return ranges;
@@ -430,8 +429,12 @@ function classifyInstallScriptEntry(
 describe('Bun package-manager configuration (S1)', () => {
   it('bunfig.toml exists and selects the hoisted linker', () => {
     const content = readFileSync(join(repoRoot, 'bunfig.toml'), 'utf-8');
-    const parsed = TOML.parse(content) as unknown as ParsedBunfig;
-    expect(parsed.install?.linker).toBe('hoisted');
+    const parsed = asRecord(TOML.parse(content));
+    const install =
+      parsed['install'] !== null && typeof parsed['install'] === 'object'
+        ? asRecord(parsed['install'])
+        : undefined;
+    expect(asOptionalString(install?.['linker'])).toBe('hoisted');
   });
 
   it('.bun-version pins the exact validated Bun version', () => {
@@ -499,9 +502,13 @@ describe('Bun package-manager configuration (S1)', () => {
     // every dependency section so a future automated version bump cannot
     // reintroduce it.
     const root = readRootPackage();
-    const offending = DEPENDENCY_SECTIONS.filter((section) =>
-      Object.prototype.hasOwnProperty.call(root[section] ?? {}, root.name),
-    );
+    const rootName = root.name;
+    const offending = DEPENDENCY_SECTIONS.filter((section) => {
+      const deps = root[section];
+      return rootName
+        ? Object.prototype.hasOwnProperty.call(deps ?? {}, rootName)
+        : false;
+    });
     expect(offending).toEqual([]);
   });
 
@@ -666,7 +673,7 @@ describe('Bun package-manager configuration (S1)', () => {
     const root = readRootPackage();
     const override = root.overrides?.['typescript'];
     expect(typeof override).toBe('string');
-    const pinned = override as string;
+    const pinned = asString(override);
     expect(semver.valid(pinned)).not.toBeNull();
 
     for (const pkg of readWorkspacePackages()) {
@@ -721,11 +728,14 @@ describe('Bun package-manager configuration (S1)', () => {
       rootEntry,
       'package-lock.json is missing the root packages[""] entry',
     ).toBeDefined();
+    if (!rootEntry) {
+      throw new Error(
+        'package-lock.json is missing the root packages[""] entry',
+      );
+    }
 
     // Representation 1: the mirrored `workspaces` array on the root entry.
-    const mirrored = [
-      ...new Set((rootEntry as PackageLockEntry).workspaces ?? []),
-    ].sort();
+    const mirrored = [...new Set(rootEntry.workspaces ?? [])].sort();
     expect(mirrored).toStrictEqual(declaredWorkspaces);
 
     // Representation 2: the resolved targets of every linked node_modules entry.
@@ -736,7 +746,7 @@ describe('Bun package-manager configuration (S1)', () => {
           entry.link === true &&
           typeof entry.resolved === 'string',
       )
-      .map(([, entry]) => entry.resolved as string)
+      .map(([, entry]) => asString(entry.resolved))
       .sort();
     expect([...new Set(linkedTargets)].sort()).toStrictEqual(
       declaredWorkspaces,
@@ -754,11 +764,10 @@ describe('Bun package-manager configuration (S1)', () => {
     const bunLock = readBunLock();
     const bunRoot = bunLock.workspaces?.[''];
     expect(bunRoot).toBeDefined();
+    if (!bunRoot) throw new Error('bun.lock missing root workspace');
 
     const declaredNames = [...collectDependencyNames(root)].sort();
-    const bunNames = [
-      ...collectDependencyNames(bunRoot as BunLockWorkspace),
-    ].sort();
+    const bunNames = [...collectDependencyNames(bunRoot)].sort();
 
     expect(bunNames).toStrictEqual(declaredNames);
   });
@@ -781,7 +790,7 @@ describe('Bun package-manager configuration (S1)', () => {
         bunWorkspace,
         `bun.lock is missing workspace entry for "${label}"`,
       ).toBeDefined();
-      expect((bunWorkspace as BunLockWorkspace).name).toBe(pkg.name);
+      expect(asOptionalString(bunWorkspace?.name)).toBe(pkg.name);
     }
   });
 
@@ -798,21 +807,19 @@ describe('Bun package-manager configuration (S1)', () => {
     const bunLock = readBunLock();
     const drift: string[] = [];
 
-    for (const { key, label, pkg } of readDeclaredWorkspaceManifests()) {
-      if (key === '') {
-        // Root graph parity is covered by the dedicated root-graph test.
-        continue;
-      }
+    const nonRootManifests = readDeclaredWorkspaceManifests().filter(
+      (m) => m.key !== '',
+    );
+    for (const { key, label, pkg } of nonRootManifests) {
       const bunWorkspace = bunLock.workspaces?.[key];
       expect(
         bunWorkspace,
         `bun.lock is missing workspace entry for "${label}"`,
       ).toBeDefined();
+      if (!bunWorkspace) continue;
 
       const declaredNames = [...collectDependencyNames(pkg)].sort();
-      const bunNames = [
-        ...collectDependencyNames(bunWorkspace as BunLockWorkspace),
-      ].sort();
+      const bunNames = [...collectDependencyNames(bunWorkspace)].sort();
 
       if (JSON.stringify(declaredNames) !== JSON.stringify(bunNames)) {
         const declaredSet = new Set(declaredNames);
@@ -852,11 +859,10 @@ describe('Bun package-manager configuration (S1)', () => {
         bunWorkspace,
         `bun.lock is missing workspace entry for "${label}"`,
       ).toBeDefined();
+      if (!bunWorkspace) continue;
 
       const declared = collectDependencyRanges(pkg);
-      const recorded = collectDependencyRanges(
-        bunWorkspace as BunLockWorkspace,
-      );
+      const recorded = collectDependencyRanges(bunWorkspace);
       const allKeys = new Set([
         ...Object.keys(declared),
         ...Object.keys(recorded),
@@ -899,9 +905,10 @@ describe('Bun package-manager configuration (S1)', () => {
         lockEntry,
         `package-lock.json is missing packages entry for "${label}"`,
       ).toBeDefined();
+      if (!lockEntry) continue;
 
       const declared = collectDependencyRanges(pkg);
-      const recorded = collectDependencyRanges(lockEntry as PackageLockEntry);
+      const recorded = collectDependencyRanges(lockEntry);
       const allKeys = new Set([
         ...Object.keys(declared),
         ...Object.keys(recorded),
