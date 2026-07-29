@@ -32,6 +32,7 @@ under test.
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -426,6 +427,12 @@ def _apply_side_effect_action(state, se):
             with open(hook_file, "w") as f:
                 f.write("paused\n")
         time.sleep(float(se.get("seconds", 1)))
+    elif action == "signal_parent":
+        signal_name = se.get("signal", "SIGTERM")
+        signal_number = getattr(signal, signal_name, None)
+        if not isinstance(signal_number, int):
+            raise ValueError(f"Unsupported signal: {signal_name}")
+        os.kill(os.getppid(), signal_number)
     elif action == "remove_label" and issue is not None:
         lbl = se["label"]
         issue["_label_names"] = [

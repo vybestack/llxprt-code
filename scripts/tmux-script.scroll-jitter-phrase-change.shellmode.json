@@ -32,13 +32,13 @@
 
     {
       "type": "line",
-      "text": "node scripts/scrollback-load.js --total 400 --interval-ms 100 --prefix PHRASE",
+      "text": "bun scripts/scrollback-load.ts --total 400 --interval-ms 100 --prefix PHRASE",
       "submitKeys": ["Enter"]
     },
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Shell Command node scripts/scrollback-load.js --total 400",
+      "contains": "Shell Command bun scripts/scrollback-load.ts --total 400",
       "timeoutMs": 15000
     },
 

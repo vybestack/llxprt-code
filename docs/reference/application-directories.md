@@ -109,7 +109,6 @@ The log/state category holds logs, temp files, and short-lived runtime state.
 | `<log>/tmp/<projectHash>/checkpoints/`  | Undo/redo checkpoints                                 |
 | `<log>/tmp/<projectHash>/shell_history` | Shell command history (per project)                   |
 | `<log>/oauth/locks/`                    | OAuth refresh/advisory locks (contain no credentials) |
-| `<log>/tmp/<projectHash>/otel/`         | OpenTelemetry collector artifacts (when enabled)      |
 
 ## Credential and token storage
 

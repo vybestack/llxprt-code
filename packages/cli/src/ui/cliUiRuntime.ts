@@ -266,16 +266,11 @@ export interface SettingsTelemetryState {
   getSettingsService(): SettingsService;
   getProxy(): string | undefined;
   getBugCommand(): UiBugCommandSettings | undefined;
-  getTelemetrySettings(): TelemetrySettings & {
-    remoteConsentGiven?: boolean;
-    [key: string]: unknown;
-  };
+  getTelemetrySettings(): TelemetrySettings;
   updateTelemetrySettings(settings: Partial<TelemetrySettings>): void;
   getTelemetryLogPromptsEnabled(): boolean;
   getTelemetryEnabled(): boolean;
   getTelemetryOutfile(): string | undefined;
-  getTelemetryTarget(): string;
-  getTelemetryOtlpEndpoint(): string;
   getConversationLoggingEnabled(): boolean;
   getEmbeddingModel(): string | undefined;
   getSandbox(): SandboxConfig | undefined;
@@ -634,8 +629,6 @@ function buildSettingsRuntime(
     getTelemetryLogPromptsEnabled: () => source.getTelemetryLogPromptsEnabled(),
     getTelemetryEnabled: () => source.getTelemetryEnabled(),
     getTelemetryOutfile: () => source.getTelemetryOutfile(),
-    getTelemetryTarget: () => source.getTelemetryTarget(),
-    getTelemetryOtlpEndpoint: () => source.getTelemetryOtlpEndpoint(),
     getConversationLoggingEnabled: () => source.getConversationLoggingEnabled(),
     getEmbeddingModel: () => source.getEmbeddingModel(),
     getSandbox: () => source.getSandbox(),

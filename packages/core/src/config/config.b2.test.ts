@@ -8,10 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
-import {
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
-} from '../telemetry/index.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
@@ -105,34 +101,6 @@ describe('Server Config (config.ts)', () => {
     resetAgentClientMock();
   });
   describe('Telemetry Settings', () => {
-    it('should return default telemetry target if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryTarget()).toBe(DEFAULT_TELEMETRY_TARGET);
-    });
-
-    it('should return provided OTLP endpoint', () => {
-      const endpoint = 'http://custom.otel.collector:4317';
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true, otlpEndpoint: endpoint },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(endpoint);
-    });
-
-    it('should return default OTLP endpoint if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
-    });
-
     it('should return provided logPrompts setting', () => {
       const params: ConfigParameters = {
         ...baseParams,
@@ -156,20 +124,6 @@ describe('Server Config (config.ts)', () => {
       delete paramsWithoutTelemetry.telemetry;
       const config = new Config(paramsWithoutTelemetry);
       expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
-    });
-
-    it('should return default telemetry target if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryTarget()).toBe(DEFAULT_TELEMETRY_TARGET);
-    });
-
-    it('should return default OTLP endpoint if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
     });
   });
 

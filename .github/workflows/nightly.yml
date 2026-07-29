@@ -312,7 +312,7 @@ jobs:
         run: |
           SMOKE_OUTPUT_FILE=smoke_output.txt
           set +e
-          bun scripts/bun-native-modules-smoke.mjs > "${SMOKE_OUTPUT_FILE}" 2>&1
+          bun scripts/bun-native-modules-smoke.ts > "${SMOKE_OUTPUT_FILE}" 2>&1
           SMOKE_EXIT=$?
           set -e
           cat "${SMOKE_OUTPUT_FILE}"

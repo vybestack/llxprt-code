@@ -410,9 +410,10 @@ function scriptKindForExt(filePath: string): ts.ScriptKind {
     case '.jsx':
       return ts.ScriptKind.JSX;
     case '.cts':
-      return ts.ScriptKind.CTS;
     case '.mts':
-      return ts.ScriptKind.MTS;
+      // .cts and .mts are TypeScript variants. ts.ScriptKind in this version
+      // does not expose CTS/MTS enums; TS is the closest (type-aware) kind.
+      return ts.ScriptKind.TS;
     case '.js':
       return ts.ScriptKind.JS;
     default:
@@ -551,7 +552,10 @@ function allEnclosingTestBlockLabels(node: ts.Node): readonly string[] {
   let current: ts.Node | undefined = node.parent;
   while (current !== undefined) {
     if (isTestBlockCall(current)) {
-      const firstArg = (current as ts.CallExpression).arguments[0];
+      const firstArg =
+        'arguments' in current && Array.isArray(current.arguments)
+          ? current.arguments[0]
+          : undefined;
       if (firstArg !== undefined && ts.isStringLiteral(firstArg)) {
         labels.push(firstArg.text);
       }
@@ -685,7 +689,7 @@ function isInHookWireDescribeBlock(node: ts.Node): boolean {
 }
 
 /** Whether a call expression is a describe/it/test call. */
-function isTestBlockCall(node: ts.Node): boolean {
+function isTestBlockCall(node: ts.Node): node is ts.CallExpression {
   if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) {
     return false;
   }

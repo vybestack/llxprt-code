@@ -440,9 +440,8 @@ an environment variable, but it can also be enforced for custom tools via the
 
 LLxprt Code can emit telemetry (traces, metrics, logs) for auditing and
 monitoring. All telemetry output is **local only** — it is written to a file
-(`--telemetry-outfile`) or the console. The SDK does not construct OTLP or
-network exporters, so data cannot be sent to a remote collector regardless of
-the `target` or `otlpEndpoint` settings. For more information, see the
+(`--telemetry-outfile`) or the console. The SDK does not construct OTLP or network exporters, so data cannot be sent
+to a remote collector. For more information, see the
 [telemetry documentation](../telemetry.md).
 
 **Example:** Enable telemetry and write it to a local file.
@@ -451,7 +450,6 @@ the `target` or `otlpEndpoint` settings. For more information, see the
 {
   "telemetry": {
     "enabled": true,
-    "target": "local",
     "outfile": "/var/log/llxprt/telemetry.jsonl",
     "logPrompts": false
   }
@@ -545,7 +543,6 @@ CLI.
   },
   "telemetry": {
     "enabled": true,
-    "target": "local",
     "logPrompts": false
   },
   "advanced": {
