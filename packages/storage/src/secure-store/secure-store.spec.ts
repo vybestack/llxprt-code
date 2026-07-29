@@ -270,6 +270,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         'Keyring is unavailable and fallback is denied',
       );
       expect(error.code).toBe('UNAVAILABLE');
+      expect(error.remediation).toContain('allow encrypted fallback storage');
 
       expect(await fallbackFileExists('denied-key')).toBe(false);
     });

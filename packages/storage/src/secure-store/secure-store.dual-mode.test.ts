@@ -141,8 +141,10 @@ interface ContractMode {
 
 // The keyring-present mode uses fallbackPolicy 'deny' so that the keyring code
 // path is exercised in isolation — reads, list, and has must be satisfied by
-// the keyring, not masked by a fallback artifact. The keyring-absent mode
-// uses 'allow' so the encrypted-file fallback path is engaged.
+// the keyring, not masked by a fallback artifact. The keyring-absent mode uses
+// 'allow' so the encrypted-file fallback path is engaged. The divergence test
+// below deliberately uses 'allow' with a present keyring to prove that a
+// verified write still creates no fallback artifact.
 const SHARED_CONTRACT_MODES: readonly ContractMode[] = [
   {
     mode: 'keyring-present',

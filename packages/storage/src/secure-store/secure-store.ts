@@ -146,7 +146,7 @@ function classifyError(error: unknown): SecureStoreErrorCode {
 function getRemediation(code: SecureStoreErrorCode): string {
   switch (code) {
     case 'UNAVAILABLE':
-      return 'Use --key, install a keyring backend, or use seatbelt mode';
+      return 'Use --key, install a keyring backend, use seatbelt mode, or allow encrypted fallback storage';
     case 'LOCKED':
       return 'Unlock your keyring';
     case 'DENIED':
