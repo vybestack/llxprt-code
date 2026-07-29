@@ -74,10 +74,7 @@ describe('FileSpanExporter', () => {
  * Produce a real, fully-formed ReadableSpan using a tracer provider so the
  * exporter serializes genuine telemetry data rather than a hand-rolled stub.
  */
-async function makeReadableSpan(
-  name: string,
-  directory: string,
-): Promise<ReadableSpan> {
+async function makeReadableSpan(name: string): Promise<ReadableSpan> {
   const provider = new BasicTracerProvider();
   const tracer = provider.getTracer('test-tracer');
   const span = tracer.startSpan(name);
@@ -128,7 +125,7 @@ describe('FileSpanExporter serialization format', () => {
   it('writes compact JSON (no pretty-print indentation) — one object per line', async () => {
     const outfile = createOutfilePath('spans.jsonl');
     const exporter = new FileSpanExporter(outfile);
-    const span = await makeReadableSpan('compact-test-span', outfile);
+    const span = await makeReadableSpan('compact-test-span');
 
     const result = await new Promise<ExportResult>((resolve) => {
       exporter.export([span], resolve);
@@ -146,8 +143,8 @@ describe('FileSpanExporter serialization format', () => {
   it('appends each export call as a new JSONL line (no full-file rewrite)', async () => {
     const outfile = createOutfilePath('spans-multi.jsonl');
     const exporter = new FileSpanExporter(outfile);
-    const span1 = await makeReadableSpan('span-one', outfile);
-    const span2 = await makeReadableSpan('span-two', outfile);
+    const span1 = await makeReadableSpan('span-one');
+    const span2 = await makeReadableSpan('span-two');
 
     await new Promise<ExportResult>((resolve) => {
       exporter.export([span1], resolve);
