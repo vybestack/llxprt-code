@@ -23,6 +23,7 @@ function restoreEnvVar(key: string, originalValue: string | undefined): void {
 describe('PromptLoader', () => {
   let tempDir: string;
   let loader: PromptLoader;
+  const watchers: Array<{ stop(): void }> = [];
 
   beforeEach(async () => {
     // Create a temporary directory for test files
@@ -31,6 +32,7 @@ describe('PromptLoader', () => {
   });
 
   afterEach(async () => {
+    watchers.splice(0).forEach((watcher) => watcher.stop());
     // Clean up temporary directory
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -471,6 +473,7 @@ describe('PromptLoader', () => {
 
       const watcher = loader.watchFiles(tempDir, callback);
       expect(watcher).not.toBeNull();
+      watchers.push(watcher!);
 
       // Create a markdown file
       const testFile = 'test.md';
