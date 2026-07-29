@@ -142,6 +142,32 @@ describe('HookRunner', () => {
         timeout: 5000,
       };
 
+      if (process.platform === 'win32') {
+        it('should preserve command exit codes through PowerShell', async () => {
+          mockSpawn.mockProcessOn.mockImplementation(
+            (event: string, callback: (code: number) => void) => {
+              if (event === 'close') {
+                setImmediate(() => callback(2));
+              }
+            },
+          );
+
+          await hookRunner.executeHook(
+            commandConfig,
+            HookEventName.BeforeTool,
+            mockInput,
+          );
+
+          expect(spawn).toHaveBeenCalledWith(
+            expect.stringMatching(/powershell/i),
+            expect.arrayContaining([
+              expect.stringContaining('exit $LASTEXITCODE'),
+            ]),
+            expect.objectContaining({ shell: false }),
+          );
+        });
+      }
+
       it('should execute command hook successfully', async () => {
         const mockOutput = { decision: 'allow', reason: 'All good' };
 

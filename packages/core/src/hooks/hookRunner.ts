@@ -524,14 +524,23 @@ export class HookRunner {
       LLXPRT_PROJECT_DIR: input.cwd,
     };
 
+    const shellCommand =
+      shellConfig.shell === 'powershell'
+        ? `& { ${command}; exit $LASTEXITCODE }`
+        : command;
+
     // SECURITY: Use explicit shell executable with shell: false
     // This prevents Node's shell interpretation layer
-    return spawn(shellConfig.executable, [...shellConfig.argsPrefix, command], {
-      env,
-      cwd: input.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: false, // CRITICAL: must be false to prevent injection
-    });
+    return spawn(
+      shellConfig.executable,
+      [...shellConfig.argsPrefix, shellCommand],
+      {
+        env,
+        cwd: input.cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false, // CRITICAL: must be false to prevent injection
+      },
+    );
   }
 
   private parseHookOutput(

@@ -145,6 +145,11 @@ log contains the same three native worker crashes.
 30. `project-plans/issue-2800-nightly-windows.md`
 31. `tsconfig.scripts.json` (user-rule micro-expansion — typecheck include)
 32. `scripts/tests/nightly-bun-native-smoke.test.js` (related micro-expansion — assertions updated to match `.ts` path and `timeout-minutes:30`)
+33. `packages/core/src/recording/SessionRecordingService.ts` (A8 remediation — canonical Windows watcher path)
+34. `packages/core/src/recording/SessionRecordingService.test.ts` (A8 Windows temp-root regression)
+35. `packages/core/src/hooks/hookRunner.ts` (A6 remediation — preserve native exit codes through PowerShell)
+36. `packages/core/src/hooks/hookRunner.test.ts` (A6 Windows exit-code regression)
+37. `scripts/tests/bun-script-migration.test.ts` (current-main ancestry correction — exclude historical plan records from active stale-script scanning)
 
 The following paths were added as approved related micro-expansions during
 remediation:
@@ -156,6 +161,9 @@ remediation:
 - `packages/settings/src/profiles/__tests__/canonicalProfileRepair.test.ts` (new behavioral read-only test)
 - `tsconfig.scripts.json` (added `scripts/bun-native-modules-smoke.ts` to include list so typecheck covers it)
 - `scripts/tests/nightly-bun-native-smoke.test.js` (updated assertions to match `.ts` path and `timeout-minutes:30` — required by the workflow YAML diff)
+- `packages/core/src/recording/SessionRecordingService.ts` and its test (causal A8 remediation for libuv issue 5010)
+- `packages/core/src/hooks/hookRunner.ts` and its test (causal A6 remediation for PowerShell collapsing native exit code 2)
+- `scripts/tests/bun-script-migration.test.ts` (current main added a historical plan that correctly references a retired script; inherited focused fix from issue 2692)
 
 ## Scope ledger
 
@@ -169,7 +177,10 @@ remediation:
 | Portable hook fixtures | 2 | -82 | Complete. |
 | Bun smoke TypeScript rename and coverage | 4 | +23 | Complete (related micro-expansion). |
 | Workflow references and timeout | 2 | 0 | Complete (related micro-expansion). |
-| **Total** | **31 Git diff paths** | **+1815 / -1095 (net +720)** | **Within hard stop (<40 files, <2500 net).** |
+| Windows watcher remediation | 2 | +42 | Complete; authoritative Windows validation pending. |
+| PowerShell hook exit-code remediation | 2 | +26 | Complete; authoritative Windows validation pending. |
+| Current-main stale-script guard correction | 1 | +4 | Complete; focused migration test pending. |
+| **Total** | **36 Git diff paths** | **+1939 / -1106 (net +833)** | **Within hard stop (<40 files, <2500 net).** |
 
 ### Scope review (mandatory threshold crossed at >25 paths)
 
@@ -193,18 +204,35 @@ micro-expansions per the user directive:
 6. `tsconfig.scripts.json` — adds `scripts/bun-native-modules-smoke.ts` to the
    typecheck include list so the TypeScript conversion is covered by
    `npm run typecheck`.
+7. `packages/core/src/recording/SessionRecordingService.ts` and its test — run
+   `30414719240` proved A8 still failed once in each core, agents, and CLI
+   workspace with `fs-event.c, line 72`. The common recording watcher used an
+   8.3-short Windows temp path while `ReadDirectoryChangesW` returned its long
+   spelling, matching libuv issue 5010. Canonicalizing only the existing Windows
+   watch directory with `realpathSync.native` fixes the native abort without
+   reducing two-fork test parallelism.
+8. `packages/core/src/hooks/hookRunner.ts` and its test — the same run proved A6
+   still failed because PowerShell collapsed a native hook's exit code 2. The
+   runner now explicitly exits with `$LASTEXITCODE`, preserving the documented
+   blocking-hook contract. The existing integration path assertion was also
+   normalized without adding another path.
+9. `scripts/tests/bun-script-migration.test.ts` — merging current main introduced
+   a historical implementation plan that intentionally mentions retired
+   `scripts/start.js`. The focused issue 2692 fix excludes `dev-docs/plans` from
+   the active-surface scanner while continuing to scan active documentation.
 
-**Hard stop check:** 31 Git diff paths total, including the smoke-script
-rename. The final diff has 1,815 additions and 1,095 deletions, for net +720.
+**Hard stop check:** the remediation expands the existing 31-path diff to 36
+paths. The final diff has 1,939 additions and 1,106 deletions, for net +833.
 This remains below the hard stops of 40 paths and 2,500 net lines. No
 dependencies, lockfiles, public abstractions, quality-tool weakening, or
-`.llxprt/` changes were introduced. `VITEST_MAX_FORKS=2` is preserved. No
-ESLint/TypeScript suppressions or severity downgrades were added.
+`.llxprt/` changes were introduced.
+`VITEST_MAX_FORKS=2` is preserved. No ESLint/TypeScript suppressions or severity
+downgrades were added.
 
 Unplanned paths and behavior include the async profile writer, trusted-folder
-production code, hook-runner production code, prompt-loader production/tests,
-Vitest configuration, dependencies/lockfiles, public APIs, quality rules, other
-workflows, retries, source exclusions, and allowlist expansion.
+production code, prompt-loader production/tests, Vitest configuration,
+dependencies/lockfiles, public APIs, quality rules, other workflows, retries,
+source exclusions, and allowlist expansion.
 
 ## Approval request
 
@@ -273,13 +301,23 @@ from the focused remediation pass:
   creation through fsync, not layer fallbacks. The `r+` regression on read-only
   mode-preserved copies is fixed by using writable creation descriptors.
 
-### Deferred findings
+### Candidate-head remediation findings
 
-- **A8 worker crash:** The libuv `fs-event.c, line 72` / `ERR_IPC_CHANNEL_CLOSED`
-  worker crash is deferred to candidate Windows validation. If it persists after
-  the source/path/fixture fixes are validated on Windows CI, a dedicated test-
-  worker isolation investigation will be shaped. No concurrency reduction,
-  retry increase, or suppression is authorized without that investigation.
+- **A8 worker crash — Blocker-Fix:** Exact-head nightly run `30414719240`
+  reproduced `Assertion failed: !_wcsnicmp(filename, dir, dirlen), file
+  src\win\fs-event.c, line 72` once in each core, agents, and CLI workspace,
+  followed by `ERR_IPC_CHANNEL_CLOSED`. The common real
+  `SessionRecordingService` watcher was passed the 8.3-short spelling returned
+  by Windows `os.tmpdir()`, while `ReadDirectoryChangesW` returned the long
+  spelling. This matches https://github.com/libuv/libuv/issues/5010. Fixed by
+  passing `realpathSync.native(this.chatsDir)` to `fs.watch` only on Windows
+  after materialization creates the directory. Two-fork parallelism remains.
+- **A6 PowerShell exit code — Blocker-Fix:** The same nightly run showed the
+  portable Bun hook scripts executing but exit-code-2 block decisions becoming
+  non-blocking failures. Fixed by appending `exit $LASTEXITCODE` inside the
+  PowerShell command block. Added focused runner coverage and normalized the
+  existing input-override path assertion. Authoritative Windows validation is
+  required on the next exact-head run.
 
 ## Exact-head completion checklist
 

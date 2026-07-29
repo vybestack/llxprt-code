@@ -26,7 +26,13 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
+import {
+  mkdirSync,
+  existsSync,
+  watch,
+  realpathSync,
+  type FSWatcher,
+} from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
@@ -376,8 +382,12 @@ export class SessionRecordingService {
   private startChatsDirWatcher(): void {
     if (this.chatsDirWatcher) return;
     try {
+      const watchDir =
+        process.platform === 'win32'
+          ? realpathSync.native(this.chatsDir)
+          : this.chatsDir;
       this.chatsDirWatcher = watch(
-        this.chatsDir,
+        watchDir,
         { persistent: false },
         (eventType) => {
           if (eventType === 'rename' && !existsSync(this.chatsDir)) {

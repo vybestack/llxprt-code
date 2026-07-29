@@ -1891,9 +1891,11 @@ console.log(JSON.stringify({decision: "block", systemMessage: "Disabled hook sho
       const toolLogs = rig.readToolLogs();
       expect(toolLogs.length).toBeGreaterThanOrEqual(1);
       expect(toolLogs[0].toolRequest.name).toBe('write_file');
-      expect(JSON.parse(toolLogs[0].toolRequest.args).file_path).toBe(
-        join(rig.testDir!, 'original.txt'),
-      );
+      expect(
+        JSON.parse(toolLogs[0].toolRequest.args)
+          .file_path.split('\\')
+          .join('/'),
+      ).toBe(join(rig.testDir!, 'original.txt').split('\\').join('/'));
     });
   });
 

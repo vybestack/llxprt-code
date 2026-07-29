@@ -743,6 +743,37 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Windows temp-root watcher (Issue 2800)
+  // -------------------------------------------------------------------------
+
+  if (process.platform === 'win32') {
+    it('records filesystem changes under the Windows temp directory', async () => {
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+
+      service.recordContent(makeContent('before watcher event'));
+      await service.flush();
+
+      const probePath = path.join(chatsDir, 'probe.tmp');
+      await fs.writeFile(probePath, 'probe');
+      await fs.rename(probePath, path.join(chatsDir, 'probe-renamed.tmp'));
+
+      service.recordContent(makeContent('after watcher event'));
+      await service.flush();
+
+      const events = await readJsonlFile(service.getFilePath()!);
+      expect(
+        events
+          .filter((event) => event.type === 'content')
+          .map((event) => (event.payload as { content: IContent }).content),
+      ).toStrictEqual([
+        makeContent('before watcher event'),
+        makeContent('after watcher event'),
+      ]);
+    });
+  }
+
   // =========================================================================
   // Property-Based Tests (≥30% of total — 9 property tests out of 24 total)
   // =========================================================================
