@@ -574,9 +574,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
 
     // From the specific "claude-opus-5" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
-    expect(defaults['context-limit']).toBe(200000);
-    // Overrides the provider-wide 40K default to match the 32K catalog metadata
-    expect(defaults['maxOutputTokens']).toBe(32000);
+    expect(defaults['context-limit']).toBe(1000000);
+    // Opus 5 ships a 128K max output budget (1M context window).
+    expect(defaults['maxOutputTokens']).toBe(128000);
   });
 
   it('rules merge in order — claude-opus-4-8 retains its specific settings @issue:2665', () => {
@@ -593,7 +593,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
 
     // From the retained "claude-opus-4-8" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
-    expect(defaults['context-limit']).toBe(200000);
+    expect(defaults['context-limit']).toBe(1000000);
   });
 
   // Claude Fable 5: the broad Claude pattern includes `fable` and a
@@ -622,7 +622,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['reasoning.includeInContext']).toBe(true);
     // From the specific "claude-fable-5" rule (merged on top)
     expect(defaults['reasoning.effort']).toBe('high');
-    expect(defaults['context-limit']).toBe(200000);
+    expect(defaults['context-limit']).toBe(1000000);
   });
 
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {

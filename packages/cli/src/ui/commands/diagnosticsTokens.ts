@@ -8,6 +8,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 
 interface McpServerToken {
   readonly expiresAt?: number;
@@ -26,33 +27,19 @@ async function appendProviderTokens(
   logger: DebugLogger,
   oauthManager: OAuthManager,
 ): Promise<void> {
-  const supportedProviders = oauthManager.getSupportedProviders();
-  if (supportedProviders.length === 0) {
+  const discovered = await discoverProviderBuckets(oauthManager, logger);
+  if (discovered.length === 0) {
     return;
   }
 
   const tokenStore = oauthManager.getTokenStore();
 
-  for (const provider of supportedProviders) {
-    let buckets: string[] = [];
-
-    try {
-      buckets = await tokenStore.listBuckets(provider);
-    } catch (error) {
-      logger.debug(
-        () => `[diagnostics] Failed to list buckets for ${provider}: ${error}`,
-      );
-    }
-
-    if (buckets.length === 0) {
-      continue;
-    }
-
+  for (const { provider, buckets } of discovered) {
     diagnostics.push('### Provider Tokens');
     diagnostics.push(`- ${provider}:`);
     diagnostics.push(`  - Buckets: ${buckets.length}`);
 
-    for (const bucket of buckets) {
+    for (const { bucket } of buckets) {
       let token: ProviderToken | null;
       try {
         token = (await tokenStore.getToken(

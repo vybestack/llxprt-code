@@ -355,12 +355,11 @@ export class KeyringTokenStore implements TokenStore {
     if (token === null) {
       return null;
     }
-    return {
-      bucket,
-      requestCount: 0,
-      percentage: 0,
-      lastUsed: undefined,
-    };
+    // Credential storage does not track per-bucket request counts or last-used
+    // timestamps. That attribution lives in session telemetry, not in the token
+    // store. Returning null here signals "usage data unavailable" so callers can
+    // distinguish a discovered bucket (token present) from fabricated zeros.
+    return null;
   }
 
   async acquireRefreshLock(

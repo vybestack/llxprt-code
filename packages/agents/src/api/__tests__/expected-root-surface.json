@@ -178,7 +178,6 @@
   "createToolScheduler",
   "executeProviderActivation",
   "fromConfig",
-  "getTokenLimitForConfiguredContext",
   "listProviders",
   "listTools",
   "mapLoopStream",

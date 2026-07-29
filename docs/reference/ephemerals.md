@@ -129,6 +129,13 @@ Settings for multi-endpoint load balancing. Only apply when using load-balanced 
 | `tools.allowed`  | string[] | —       | yes     | Allowlist — if set, only these tools are available. Overrides `tools.disabled`. |
 | `tool_choice`    | string   | —       | yes     | Tool choice strategy sent to the API: `auto`, `required`, `none`.               |
 
+## MCP Lazy Schema Loading
+
+| Setting            | Type     | Default | Profile | Description                                                                                                                                                                                                                                                                                                                            |
+| ------------------ | -------- | ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp.lazy`         | boolean  | `false` | yes     | Defer MCP server tool schemas from the model until a server is explicitly activated. The model receives an `activate_mcp_server` tool that lets it pick a server by name; only then are that server's full tool schemas published. MCP servers stay connected and discoverable — only the model-facing schema publication is deferred. |
+| `mcp.eagerServers` | string[] | —       | yes     | Names of MCP servers that remain eager while `mcp.lazy` is enabled. Their schemas are always published regardless of lazy mode. Unknown server names are silently ignored.                                                                                                                                                             |
+
 ## Prompt Configuration
 
 | Setting                    | Type    | Default | Profile | Description                                                                                                                                                           |

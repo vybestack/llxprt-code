@@ -81,6 +81,7 @@ export interface UIStateParams {
   isSubagentDialogOpen: boolean;
   isModelsDialogOpen: boolean;
   isSessionBrowserDialogOpen: boolean;
+  isModelConfigDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
@@ -280,6 +281,7 @@ function buildDialogStates(p: UIStateParams) {
     isSubagentDialogOpen: p.isSubagentDialogOpen,
     isModelsDialogOpen: p.isModelsDialogOpen,
     isSessionBrowserDialogOpen: p.isSessionBrowserDialogOpen,
+    isModelConfigDialogOpen: p.isModelConfigDialogOpen,
   };
 }
 

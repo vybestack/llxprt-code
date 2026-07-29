@@ -447,5 +447,37 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       expect(workRetrieved?.access_token).toBe('updated-work-token');
       expect(personalRetrieved?.access_token).toBe('personal-access-token');
     });
+
+    describe('Bucket Stats Truthfulness', () => {
+      const statsToken: OAuthToken = {
+        access_token: 'stats-access-token',
+        refresh_token: 'stats-refresh-token',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        scope: 'stats-scope',
+        token_type: 'Bearer' as const,
+      };
+
+      it('should return null when a token exists but no real usage data is tracked', async () => {
+        await tokenStore.saveToken('codex', statsToken, 'default');
+
+        const stats = await tokenStore.getBucketStats('codex', 'default');
+
+        expect(stats).toBeNull();
+      });
+
+      it('should return null when no token exists for the bucket', async () => {
+        const stats = await tokenStore.getBucketStats('codex', 'absent');
+
+        expect(stats).toBeNull();
+      });
+
+      it('should not return fabricated zero request counts or percentages', async () => {
+        await tokenStore.saveToken('anthropic', statsToken, 'work');
+
+        const stats = await tokenStore.getBucketStats('anthropic', 'work');
+
+        expect(stats).toBeNull();
+      });
+    });
   });
 });

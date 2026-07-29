@@ -243,6 +243,7 @@ describe('Agent Client (client.ts)', () => {
           ]),
           getLastPromptTokenCount: vi.fn().mockReturnValue(0),
           getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+          getContextLimit: vi.fn().mockReturnValue(1000000),
         };
         client['chat'] = mockChat as ChatSession;
 

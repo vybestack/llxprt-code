@@ -128,6 +128,18 @@ export function isPositiveFiniteLimit(value: unknown): value is number {
 }
 
 /**
+ * Normalize a raw user-supplied `context-limit` value (from /set, a profile,
+ * or settings) into a usable number or `undefined`.
+ *
+ * Collapses non-numbers, non-positive values, `NaN`, and `Infinity` to
+ * `undefined` so `resolveEffectiveContextLimit` cleanly falls back to the
+ * provider/model tiers.
+ */
+export function resolveUserContextLimit(value: unknown): number | undefined {
+  return isPositiveFiniteLimit(value) ? value : undefined;
+}
+
+/**
  * Normalize a raw provider-reported context limit (from
  * `IProvider.getContextLimit()`) into a usable number or `undefined`.
  *
@@ -136,9 +148,9 @@ export function isPositiveFiniteLimit(value: unknown): value is number {
  * sub-profile context windows). This collapses all of those to `undefined` so
  * `resolveEffectiveContextLimit` cleanly falls back to the model-name lookup.
  *
- * Single source of truth for issue #2270 DRY: both the core runtime
- * (`createAgentRuntimeContext`) and the agents layer
- * (`contextLimitResolver`) delegate provider-limit validation here so a future
+ * Single source of truth for issue #2270 DRY: the core runtime
+ * (`createAgentRuntimeContext`) and the CLI layer
+ * (`contextLimit.ts`) both delegate provider-limit validation here so a future
  * change to the acceptance predicate only needs one edit.
  */
 export function resolveProviderReportedLimit(
@@ -156,9 +168,9 @@ export function resolveProviderReportedLimit(
  *    min-across-sub-profiles limit),
  * 3. the model-name lookup via `tokenLimit(model)`.
  *
- * Both `ephemerals.contextLimit()` (core runtime) and
- * `getTokenLimitForConfiguredContext()` (agents layer) delegate to this
- * function so the precedence lives in exactly one place.
+ * The core runtime `ephemerals.contextLimit()` and the CLI layer
+ * `contextLimit.ts` delegate to this function so the precedence lives in
+ * exactly one place.
  */
 export function resolveEffectiveContextLimit(
   model: string,
