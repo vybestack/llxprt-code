@@ -48,8 +48,14 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
   it('contains a top-level "rules" array with calibration guidance', () => {
     expect(Array.isArray(parsedRules.rules)).toBe(true);
     expect(parsedRules.rules.length).toBeGreaterThanOrEqual(1);
+    // The global path pattern (**/* or **) is part of the contract this
+    // test enforces: calibration guidance must live in a global rule that
+    // applies to all files.
     expect(typeof globalRule.rule).toBe('string');
     expect(globalRule.rule.length).toBeGreaterThan(500);
+    // merge_system_rule: true ensures the calibration merges with OCR's
+    // built-in system rule rather than replacing it.
+    expect(globalRule.merge_system_rule).toBe(true);
   });
 
   it('preserves the include glob array for test-file re-inclusion', () => {
@@ -68,6 +74,10 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
 
   // -----------------------------------------------------------------------
   // Baseline calibration (pre-existing guidance now committed)
+  //
+  // The exact phrases matched below (e.g. "senior-engineer review") are
+  // contractual: if the rule text is rephrased, the test must be updated
+  // in the same commit so the calibration intent is explicitly reviewed.
   // -----------------------------------------------------------------------
 
   it('includes senior-engineer review priority guidance', () => {
