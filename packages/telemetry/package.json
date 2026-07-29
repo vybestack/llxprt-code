@@ -101,9 +101,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "bun test --preload ./test-setup-storage-isolation.ts --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml",
+    "test": "vitest run",
     "test:bun": "bun ../../scripts/run_bun_tests.ts --workspace telemetry",
-    "test:ci": "bun test --preload ./test-setup-storage-isolation.ts --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml",
+    "test:ci": "vitest run",
     "test:vitest": "vitest run",
     "typecheck": "tsc --noEmit"
   },
