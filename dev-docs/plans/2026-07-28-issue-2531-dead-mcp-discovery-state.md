@@ -140,8 +140,8 @@ Local candidate evidence:
   `origin/main` contains the same line, and main CI for this exact base commit
   passed. The issue diff does not touch that path.
 - `bun scripts/start.ts --profile-load ollamakimi` returns a three-line haiku.
-  The remembered `node scripts/start.js` command is obsolete because current
-  main contains only the TypeScript launcher.
+  The earlier `node scripts/start.ts` launcher is obsolete because current
+  main contains only the Bun-native TypeScript launcher.
 
 No tmux harness run is required because this issue has no visual or terminal UI
 change. DeepThinker, rustreviewer, and local Open Code Review are complete; OCR's
