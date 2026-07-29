@@ -18,6 +18,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const LOG_FILE_NAME = 'logs.json';
+const BACKUP_RETENTION_DAYS = 30;
 
 /**
  * Structural shapes for checkpoint (de)serialization. Checkpoints are stored
@@ -181,6 +182,15 @@ export class Logger {
     writeFileSync(this.logFilePath, this._toJsonl(entries), 'utf-8');
   }
 
+  private _writeJsonlAtomicSync(entries: LogEntry[]): void {
+    if (!this.logFilePath) {
+      throw new Error('Log file path not set during write attempt.');
+    }
+    const tmpPath = `${this.logFilePath}.migration.${process.pid}.${Date.now()}.tmp`;
+    writeFileSync(tmpPath, this._toJsonl(entries), 'utf-8');
+    renameSync(tmpPath, this.logFilePath);
+  }
+
   private _appendJsonlSync(entry: LogEntry): void {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during append attempt.');
@@ -216,7 +226,7 @@ export class Logger {
       return;
     }
     const entries = this._readLogFileSync();
-    this._writeJsonlSync(entries);
+    this._writeJsonlAtomicSync(entries);
   }
 
   private _updateLogFileSync(entryToAppend: LogEntry): LogEntry | null {
@@ -335,6 +345,34 @@ export class Logger {
     }
   }
 
+  private async _pruneOldBackups(): Promise<void> {
+    if (!this.logFilePath) return;
+    const dir = path.dirname(this.logFilePath);
+    const baseName = path.basename(this.logFilePath);
+    const cutoffMs = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dir);
+    } catch {
+      return;
+    }
+    const staleBackups = entries.filter((entry) => {
+      if (!entry.startsWith(baseName) || !entry.endsWith('.bak')) {
+        return false;
+      }
+      const match = entry.match(/\.(\d+)\.bak$/);
+      return match !== null && Number(match[1]) < cutoffMs;
+    });
+    for (const backup of staleBackups) {
+      try {
+        await fs.unlink(path.join(dir, backup));
+        debugLogger.debug(`Pruned old log backup ${backup}`);
+      } catch {
+        // Deletion is best-effort; a locked or already-removed backup is fine.
+      }
+    }
+  }
+
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
@@ -347,6 +385,7 @@ export class Logger {
 
     try {
       await fs.mkdir(llxprtDir, { recursive: true });
+      await this._pruneOldBackups();
       this.logs = await this._readLogFile();
       const sessionLogs = this.logs.filter(
         (entry) => entry.sessionId === this.sessionId,
