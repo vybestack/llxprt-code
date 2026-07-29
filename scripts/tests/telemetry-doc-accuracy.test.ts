@@ -91,9 +91,12 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     const activeSource = globSync('packages/*/src/**/*.{ts,tsx,js,mjs,cjs}', {
       cwd: repoRoot,
     });
+    const allPackageJson = globSync('packages/*/package.json', {
+      cwd: repoRoot,
+    });
     const inspected = [
       'package.json',
-      'packages/telemetry/package.json',
+      ...allPackageJson,
       'package-lock.json',
       'bun.lock',
       ...activeSource,
@@ -103,9 +106,13 @@ describe('telemetry doc accuracy (doc vs source)', () => {
 
     expect(inspected).not.toMatch(/@opentelemetry\/sdk-node/);
     expect(inspected).not.toMatch(
-      /@opentelemetry\/exporter-[^"'\s]+-otlp-[^"'\s]+/,
+      /@opentelemetry\/(?:exporter-(?:trace-|metric-|log-)?(?:otlp|[^"'\s]+-otlp)-[^"'\s]+|otlp-(?:exporter|grpc-exporter|http-exporter)-base|otlp-transformer)/,
     );
-    expect(inspected).not.toMatch(/OTLP(?:Trace|Metric|Log)?Exporter/);
+    // Only flag OTLP exporter class references in import statements, not
+    // comments or documentation that may mention them.
+    expect(inspected).not.toMatch(
+      /import[^\n]*\bOTLP(?:Trace|Metric|Log)?Exporter\b/,
+    );
   });
 
   it('dedicated remote telemetry collector scripts are absent', () => {

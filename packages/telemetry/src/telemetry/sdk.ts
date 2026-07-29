@@ -59,6 +59,7 @@ interface TelemetryProviders {
 const httpInstrumentation = new HttpInstrumentation();
 let providers: TelemetryProviders | undefined;
 let telemetryInitialized = false;
+let shuttingDown = false;
 let flushInProgress: Promise<void> | null = null;
 
 export function isTelemetrySdkInitialized(): boolean {
@@ -137,7 +138,7 @@ function registerProviders(nextProviders: TelemetryProviders): void {
 }
 
 export function initializeTelemetry(config: TelemetryConfig): void {
-  if (telemetryInitialized || !config.getTelemetryEnabled()) {
+  if (telemetryInitialized || shuttingDown || !config.getTelemetryEnabled()) {
     if (process.env.VERBOSE === 'true' && config.getTelemetryEnabled()) {
       debugLogger.error(
         `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
@@ -197,10 +198,11 @@ export async function flushTelemetry(): Promise<void> {
 export async function shutdownTelemetry(
   config: TelemetryConfig,
 ): Promise<void> {
-  if (!telemetryInitialized || !providers) {
+  if (!telemetryInitialized || !providers || shuttingDown) {
     return;
   }
 
+  shuttingDown = true;
   const activeProviders = providers;
   providers = undefined;
   telemetryInitialized = false;
@@ -222,5 +224,6 @@ export async function shutdownTelemetry(
     trace.disable();
     logs.disable();
     metrics.disable();
+    shuttingDown = false;
   }
 }

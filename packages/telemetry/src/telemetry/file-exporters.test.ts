@@ -23,7 +23,7 @@ describe('FileSpanExporter', () => {
     }
   });
 
-  it('writes readable spans without serializing SDK-internal cycles', async () => {
+  it('writes readable spans to JSONL with complex fields projected', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'llxprt-span-exporter-'));
     directories.push(directory);
     const outfile = join(directory, 'spans.jsonl');
