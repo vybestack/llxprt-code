@@ -116,6 +116,8 @@ const realRunOnlyPendingTimers = (bunVi as BunViBase).runOnlyPendingTimers.bind(
   bunVi,
 );
 const realGetTimerCount = (bunVi as BunViBase).getTimerCount.bind(bunVi);
+const realClearAllTimers = (bunVi as BunViBase).clearAllTimers.bind(bunVi);
+const realIsFakeTimers = (bunVi as BunViBase).isFakeTimers.bind(bunVi);
 
 /**
  * Captured before any fake-timer activation so async timer helpers can await
@@ -451,6 +453,16 @@ const viAugmentations = {
     realRunOnlyPendingTimers();
     await flushPendingTasks();
   },
+  clearAllTimers: (): void => {
+    // Vitest's vi.clearAllTimers() is a no-op when fake timers are not active.
+    // Bun's built-in implementation throws "Fake timers are not active" in
+    // that case. Guard against the throw to match Vitest semantics, since 15
+    // repository test files call vi.clearAllTimers() unconditionally in
+    // afterEach hooks regardless of whether fake timers were activated.
+    if (realIsFakeTimers()) {
+      realClearAllTimers();
+    }
+  },
   mocks: unsupportedMockRegistry,
 };
 
@@ -477,6 +489,7 @@ const forceOverride = new Set([
   'useFakeTimers',
   'useRealTimers',
   'restoreAllMocks',
+  'clearAllTimers',
 ]);
 
 for (const [key, value] of Object.entries(viAugmentations)) {
