@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as path from 'node:path';
 
 import {
   createLspClient,
@@ -9,7 +10,8 @@ import {
 } from '../src/service/lsp-client';
 import type { LspServerConfig } from '../src/types';
 
-const WORKSPACE_ROOT = '/workspace';
+const WORKSPACE_ROOT = path.resolve('/workspace');
+const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
 const FIXTURE_PATH = fileURLToPath(
   new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
 );
@@ -20,7 +22,19 @@ function createConfig(args: string[] = []): { config: LspServerConfig } {
       id: 'fake-ts',
       command: process.execPath,
       args: [FIXTURE_PATH, ...args],
-      rootUri: `file://${WORKSPACE_ROOT}`,
+      rootUri: WORKSPACE_URI,
+    },
+  };
+}
+
+function createConfigWithoutRootUri(args: string[] = []): {
+  config: LspServerConfig;
+} {
+  return {
+    config: {
+      id: 'fake-ts',
+      command: process.execPath,
+      args: [FIXTURE_PATH, ...args],
     },
   };
 }
@@ -41,6 +55,30 @@ afterEach(async () => {
   createdClients.length = 0;
 });
 
+describe('LspClient default rootUri', () => {
+  it('initializes with a valid file URI when config.rootUri is omitted', async () => {
+    const client = createLspClient(
+      createConfigWithoutRootUri(),
+      WORKSPACE_ROOT,
+    );
+    createdClients.push(client);
+
+    await client.initialize();
+
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src', 'default-root-uri.ts'),
+      'const x = TYPE_ERROR',
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      path.join(WORKSPACE_ROOT, 'src', 'default-root-uri.ts'),
+      400,
+    );
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics.at(-1)?.message ?? '').toContain('TYPE_ERROR');
+  });
+});
+
 describe('LspClient unit TDD edge cases and internal behaviors', () => {
   /**
    * @plan PLAN-20250212-LSP.P11
@@ -53,12 +91,12 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/debounce.ts',
+      path.join(WORKSPACE_ROOT, 'src/debounce.ts'),
       'const x = TYPE_ERROR',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/debounce.ts',
+      path.join(WORKSPACE_ROOT, 'src/debounce.ts'),
       400,
     );
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -87,7 +125,10 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/switch.ts', 'const x = TYPE_ERROR');
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/switch.ts'),
+      'const x = TYPE_ERROR',
+    );
     expect(client.isFirstTouch()).toBe(false);
   });
 
@@ -106,7 +147,7 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     await client.initialize();
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/cold-start.ts',
+      path.join(WORKSPACE_ROOT, 'src/cold-start.ts'),
       10,
     );
     expect(diagnostics).toEqual([]);
@@ -127,7 +168,10 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     await client.initialize();
 
     const controller = new AbortController();
-    const pending = client.waitForDiagnostics('/workspace/src/abort.ts', 3000);
+    const pending = client.waitForDiagnostics(
+      path.join(WORKSPACE_ROOT, 'src/abort.ts'),
+      3000,
+    );
     controller.abort();
 
     await expect(pending).resolves.toEqual([]);
@@ -143,7 +187,10 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     createdClients.push(client);
 
     await expect(
-      client.touchFile('/workspace/src/no-init.ts', 'const x = 1;'),
+      client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/no-init.ts'),
+        'const x = 1;',
+      ),
     ).rejects.toThrow();
   });
 
@@ -173,11 +220,14 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
 
     await client.initialize();
     await expect(
-      client.touchFile('/workspace/src/repeat.ts', 'const a = TYPE_ERROR'),
+      client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/repeat.ts'),
+        'const a = TYPE_ERROR',
+      ),
     ).resolves.toBeUndefined();
     await expect(
       client.touchFile(
-        '/workspace/src/repeat.ts',
+        path.join(WORKSPACE_ROOT, 'src/repeat.ts'),
         'const a = TYPE_ERROR\n// WARN',
       ),
     ).resolves.toBeUndefined();
@@ -195,8 +245,14 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     await client.initialize();
     await expect(
       Promise.all([
-        client.touchFile('/workspace/src/multi-1.ts', 'const x = TYPE_ERROR'),
-        client.touchFile('/workspace/src/multi-2.ts', 'const y = TYPE_ERROR'),
+        client.touchFile(
+          path.join(WORKSPACE_ROOT, 'src/multi-1.ts'),
+          'const x = TYPE_ERROR',
+        ),
+        client.touchFile(
+          path.join(WORKSPACE_ROOT, 'src/multi-2.ts'),
+          'const y = TYPE_ERROR',
+        ),
       ]),
     ).resolves.toHaveLength(2);
   });
@@ -212,7 +268,7 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
 
     await client.initialize();
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/zero.ts',
+      path.join(WORKSPACE_ROOT, 'src/zero.ts'),
       0,
     );
     expect(diagnostics).toEqual([]);
@@ -232,12 +288,12 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/crash-pending.ts',
+      path.join(WORKSPACE_ROOT, 'src/crash-pending.ts'),
       'const x = TYPE_ERROR',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/crash-pending.ts',
+      path.join(WORKSPACE_ROOT, 'src/crash-pending.ts'),
       200,
     );
     expect(diagnostics).toEqual([]);
@@ -253,11 +309,14 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/fast.ts', 'const x = TYPE_ERROR');
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/fast.ts'),
+      'const x = TYPE_ERROR',
+    );
 
     const start = Date.now();
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/fast.ts',
+      path.join(WORKSPACE_ROOT, 'src/fast.ts'),
       3000,
     );
     const elapsed = Date.now() - start;
@@ -280,12 +339,15 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/deadline-100.ts',
+      path.join(WORKSPACE_ROOT, 'src/deadline-100.ts'),
       'const x = TYPE_ERROR',
     );
 
     const start = Date.now();
-    await client.waitForDiagnostics('/workspace/src/deadline-100.ts', 3000);
+    await client.waitForDiagnostics(
+      path.join(WORKSPACE_ROOT, 'src/deadline-100.ts'),
+      3000,
+    );
     const elapsed = Date.now() - start;
 
     // Allow small CI timer jitter (typically 1-5ms on loaded runners)
@@ -306,12 +368,15 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/deadline-10.ts',
+      path.join(WORKSPACE_ROOT, 'src/deadline-10.ts'),
       'const x = TYPE_ERROR',
     );
 
     const start = Date.now();
-    await client.waitForDiagnostics('/workspace/src/deadline-10.ts', 3000);
+    await client.waitForDiagnostics(
+      path.join(WORKSPACE_ROOT, 'src/deadline-10.ts'),
+      3000,
+    );
     const elapsed = Date.now() - start;
 
     // Allow small CI timer jitter (typically 1-5ms on loaded runners)
@@ -333,7 +398,11 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
         fc.string({ minLength: 1, maxLength: 30 }),
         async (segment) => {
           const safe = segment.replace(/[^a-zA-Z0-9_-]/g, 'x');
-          const filePath = `/workspace/src/${safe || 'file'}.ts`;
+          const filePath = path.join(
+            WORKSPACE_ROOT,
+            'src',
+            `${safe || 'file'}.ts`,
+          );
           await expect(
             client.touchFile(filePath, 'const x = 1;'),
           ).resolves.toBeUndefined();
@@ -359,7 +428,7 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: 50 }), async (timeoutMs) => {
         const result = await client.waitForDiagnostics(
-          '/workspace/src/array.ts',
+          path.join(WORKSPACE_ROOT, 'src/array.ts'),
           timeoutMs,
         );
         expect(Array.isArray(result)).toBe(true);
@@ -388,7 +457,10 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
           const initial = client.isFirstTouch();
           for (const segment of segments) {
             const safe = segment.replace(/[^a-zA-Z0-9_-]/g, 'y');
-            await client.touchFile(`/workspace/src/${safe}.ts`, 'const z = 1;');
+            await client.touchFile(
+              path.join(WORKSPACE_ROOT, 'src', `${safe}.ts`),
+              'const z = 1;',
+            );
           }
           const finalValue = client.isFirstTouch();
           expect(initial || !finalValue).toBe(true);
@@ -406,12 +478,12 @@ describe('LspClient diagnostics boundary normalization', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/norm-error.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-error.ts'),
       'const x = TYPE_ERROR',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/norm-error.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-error.ts'),
       2000,
     );
 
@@ -428,12 +500,12 @@ describe('LspClient diagnostics boundary normalization', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/norm-line.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-line.ts'),
       'const x = TYPE_ERROR',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/norm-line.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-line.ts'),
       2000,
     );
 
@@ -449,12 +521,12 @@ describe('LspClient diagnostics boundary normalization', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/norm-warn.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-warn.ts'),
       ['const x = TYPE_ERROR', '// WARN'].join('\n'),
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/norm-warn.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-warn.ts'),
       2000,
     );
 
@@ -471,12 +543,12 @@ describe('LspClient diagnostics boundary normalization', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/norm-info-hint.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-info-hint.ts'),
       ['// INFO', '// HINT'].join('\n'),
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/norm-info-hint.ts',
+      path.join(WORKSPACE_ROOT, 'src/norm-info-hint.ts'),
       2000,
     );
 
@@ -494,12 +566,12 @@ describe('LspClient diagnostics boundary normalization', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/malformed-boundary.ts',
+      path.join(WORKSPACE_ROOT, 'src/malformed-boundary.ts'),
       'const x = TYPE_ERROR',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/malformed-boundary.ts',
+      path.join(WORKSPACE_ROOT, 'src/malformed-boundary.ts'),
       2000,
     );
 
@@ -518,7 +590,7 @@ function createContentLengthConfig(): { config: LspServerConfig } {
       id: 'content-length-utf8',
       command: 'bun',
       args: ['run', CONTENT_LENGTH_FIXTURE_PATH],
-      rootUri: `file://${WORKSPACE_ROOT}`,
+      rootUri: WORKSPACE_URI,
     },
   };
 }
@@ -529,10 +601,13 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/unicode.ts', 'const x = TYPE_ERROR');
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/unicode.ts'),
+      'const x = TYPE_ERROR',
+    );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/unicode.ts',
+      path.join(WORKSPACE_ROOT, 'src/unicode.ts'),
       3000,
     );
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -545,20 +620,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/multi-byte-1.ts',
+      path.join(WORKSPACE_ROOT, 'src/multi-byte-1.ts'),
       'const a = TYPE_ERROR',
     );
     await client.touchFile(
-      '/workspace/src/multi-byte-2.ts',
+      path.join(WORKSPACE_ROOT, 'src/multi-byte-2.ts'),
       'const b = TYPE_ERROR',
     );
 
     const d1 = await client.waitForDiagnostics(
-      '/workspace/src/multi-byte-1.ts',
+      path.join(WORKSPACE_ROOT, 'src/multi-byte-1.ts'),
       3000,
     );
     const d2 = await client.waitForDiagnostics(
-      '/workspace/src/multi-byte-2.ts',
+      path.join(WORKSPACE_ROOT, 'src/multi-byte-2.ts'),
       3000,
     );
     expect(d1.length).toBeGreaterThan(0);
@@ -573,12 +648,12 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
     await client.initialize();
     await client.touchFile(
-      '/workspace/src/mixed.ts',
+      path.join(WORKSPACE_ROOT, 'src/mixed.ts'),
       'const x = TYPE_ERROR\n// WARN',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/mixed.ts',
+      path.join(WORKSPACE_ROOT, 'src/mixed.ts'),
       3000,
     );
     expect(diagnostics.length).toBe(2);
@@ -595,10 +670,13 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/timeout-test.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/timeout-test.ts'),
+        'const x = 1;',
+      );
 
       await expect(
-        client.hover('/workspace/src/timeout-test.ts', 0, 0),
+        client.hover(path.join(WORKSPACE_ROOT, 'src/timeout-test.ts'), 0, 0),
       ).rejects.toThrow(LspRequestTimeoutError);
     });
 
@@ -611,10 +689,17 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/timeout-msg.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/timeout-msg.ts'),
+        'const x = 1;',
+      );
 
       try {
-        await client.hover('/workspace/src/timeout-msg.ts', 0, 0);
+        await client.hover(
+          path.join(WORKSPACE_ROOT, 'src/timeout-msg.ts'),
+          0,
+          0,
+        );
         expect.unreachable('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(LspRequestTimeoutError);
@@ -636,10 +721,13 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/timeout-alive.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/timeout-alive.ts'),
+        'const x = 1;',
+      );
 
       await expect(
-        client.hover('/workspace/src/timeout-alive.ts', 0, 0),
+        client.hover(path.join(WORKSPACE_ROOT, 'src/timeout-alive.ts'), 0, 0),
       ).rejects.toThrow(LspRequestTimeoutError);
 
       expect(client.isAlive()).toBe(true);
@@ -655,18 +743,18 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
       await client.initialize();
       await client.touchFile(
-        '/workspace/src/timeout-recover.ts',
+        path.join(WORKSPACE_ROOT, 'src/timeout-recover.ts'),
         'const x = 1;',
       );
 
       // First request times out (hover is delayed)
       await expect(
-        client.hover('/workspace/src/timeout-recover.ts', 0, 0),
+        client.hover(path.join(WORKSPACE_ROOT, 'src/timeout-recover.ts'), 0, 0),
       ).rejects.toThrow(LspRequestTimeoutError);
 
       // Second request uses documentSymbols which is NOT delayed
       const symbols = await client.documentSymbols(
-        '/workspace/src/timeout-recover.ts',
+        path.join(WORKSPACE_ROOT, 'src/timeout-recover.ts'),
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);
@@ -677,10 +765,13 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/symbol-kind.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/symbol-kind.ts'),
+        'const x = 1;',
+      );
 
       const symbols = await client.documentSymbols(
-        '/workspace/src/symbol-kind.ts',
+        path.join(WORKSPACE_ROOT, 'src/symbol-kind.ts'),
       );
 
       expect(symbols[0]?.kind).toBe(12);
@@ -711,12 +802,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/abort-test.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/abort-test.ts'),
+        'const x = 1;',
+      );
 
       const controller = new AbortController();
-      const hoverPromise = client.hover('/workspace/src/abort-test.ts', 0, 0, {
-        abortSignal: controller.signal,
-      });
+      const hoverPromise = client.hover(
+        path.join(WORKSPACE_ROOT, 'src/abort-test.ts'),
+        0,
+        0,
+        {
+          abortSignal: controller.signal,
+        },
+      );
 
       controller.abort(new Error('User cancelled'));
 
@@ -732,12 +831,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/abort-alive.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/abort-alive.ts'),
+        'const x = 1;',
+      );
 
       const controller = new AbortController();
-      const hoverPromise = client.hover('/workspace/src/abort-alive.ts', 0, 0, {
-        abortSignal: controller.signal,
-      });
+      const hoverPromise = client.hover(
+        path.join(WORKSPACE_ROOT, 'src/abort-alive.ts'),
+        0,
+        0,
+        {
+          abortSignal: controller.signal,
+        },
+      );
 
       controller.abort();
 
@@ -752,13 +859,16 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/pre-abort.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/pre-abort.ts'),
+        'const x = 1;',
+      );
 
       const controller = new AbortController();
       controller.abort(new Error('Already aborted'));
 
       await expect(
-        client.hover('/workspace/src/pre-abort.ts', 0, 0, {
+        client.hover(path.join(WORKSPACE_ROOT, 'src/pre-abort.ts'), 0, 0, {
           abortSignal: controller.signal,
         }),
       ).rejects.toThrow('Already aborted');
@@ -776,7 +886,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
       await client.initialize();
       await client.touchFile(
-        '/workspace/src/pre-abort-chain.ts',
+        path.join(WORKSPACE_ROOT, 'src/pre-abort-chain.ts'),
         'const x = 1;',
       );
 
@@ -785,15 +895,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
       // Already-aborted hover should reject without sending
       await expect(
-        client.hover('/workspace/src/pre-abort-chain.ts', 0, 0, {
-          abortSignal: controller.signal,
-        }),
+        client.hover(
+          path.join(WORKSPACE_ROOT, 'src/pre-abort-chain.ts'),
+          0,
+          0,
+          {
+            abortSignal: controller.signal,
+          },
+        ),
       ).rejects.toThrow('Pre-cancelled');
 
       // documentSymbols is NOT delayed and should complete normally,
       // proving no pending entry was leaked from the pre-aborted call
       const symbols = await client.documentSymbols(
-        '/workspace/src/pre-abort-chain.ts',
+        path.join(WORKSPACE_ROOT, 'src/pre-abort-chain.ts'),
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);
@@ -815,14 +930,17 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/crash-req.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/crash-req.ts'),
+        'const x = 1;',
+      );
 
       // The server crashes when it receives hover, so the write succeeds but
       // the response never arrives. markBroken rejects the pending promise.
       // The test verifies that the timeout timer and abort listener registered
       // in Phase 2 are cleaned up by markBroken (not a leaked timer).
       await expect(
-        client.hover('/workspace/src/crash-req.ts', 0, 0),
+        client.hover(path.join(WORKSPACE_ROOT, 'src/crash-req.ts'), 0, 0),
       ).rejects.toThrow();
 
       // markBroken was triggered by the process exit, not by timeout/abort
@@ -838,14 +956,17 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/abort-req.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/abort-req.ts'),
+        'const x = 1;',
+      );
 
       const controller = new AbortController();
 
       // Request with abort signal — server crashes on hover, markBroken
       // rejects the pending and should clean up the abort listener.
       await expect(
-        client.hover('/workspace/src/abort-req.ts', 0, 0, {
+        client.hover(path.join(WORKSPACE_ROOT, 'src/abort-req.ts'), 0, 0, {
           abortSignal: controller.signal,
         }),
       ).rejects.toThrow();
@@ -866,7 +987,10 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/timer-req.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/timer-req.ts'),
+        'const x = 1;',
+      );
 
       let unhandledRejection = false;
       const handler = (): void => {
@@ -876,7 +1000,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
       try {
         await expect(
-          client.hover('/workspace/src/timer-req.ts', 0, 0),
+          client.hover(path.join(WORKSPACE_ROOT, 'src/timer-req.ts'), 0, 0),
         ).rejects.toThrow();
 
         // Wait beyond requestTimeoutMs to ensure any leaked timer would fire
@@ -909,12 +1033,15 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/late-resp.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/late-resp.ts'),
+        'const x = 1;',
+      );
 
       // Hover times out after 200ms; the server will send a late response
       // at ~500ms that should be ignored.
       await expect(
-        client.hover('/workspace/src/late-resp.ts', 0, 0),
+        client.hover(path.join(WORKSPACE_ROOT, 'src/late-resp.ts'), 0, 0),
       ).rejects.toThrow(LspRequestTimeoutError);
 
       // Wait for the late response to actually arrive
@@ -922,7 +1049,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
       // A subsequent request should work fine despite the late response
       const symbols = await client.documentSymbols(
-        '/workspace/src/late-resp.ts',
+        path.join(WORKSPACE_ROOT, 'src/late-resp.ts'),
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);
@@ -942,12 +1069,20 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
       createdClients.push(client);
 
       await client.initialize();
-      await client.touchFile('/workspace/src/late-abort.ts', 'const x = 1;');
+      await client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/late-abort.ts'),
+        'const x = 1;',
+      );
 
       const controller = new AbortController();
-      const hoverPromise = client.hover('/workspace/src/late-abort.ts', 0, 0, {
-        abortSignal: controller.signal,
-      });
+      const hoverPromise = client.hover(
+        path.join(WORKSPACE_ROOT, 'src/late-abort.ts'),
+        0,
+        0,
+        {
+          abortSignal: controller.signal,
+        },
+      );
 
       // Abort immediately — server will send late response at ~500ms
       controller.abort(new Error('Cancelled'));
@@ -959,7 +1094,7 @@ describe('Content-Length framing with multi-byte UTF-8', () => {
 
       // Subsequent non-delayed request should still work
       const symbols = await client.documentSymbols(
-        '/workspace/src/late-abort.ts',
+        path.join(WORKSPACE_ROOT, 'src/late-abort.ts'),
       );
       expect(Array.isArray(symbols)).toBe(true);
       expect(client.isAlive()).toBe(true);

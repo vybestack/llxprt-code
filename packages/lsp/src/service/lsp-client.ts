@@ -197,7 +197,8 @@ export class LspClient {
     });
 
     const rootUri =
-      this.config.config.rootUri ?? `file://${this.workspaceRoot}`;
+      this.config.config.rootUri ??
+      pathToFileURL(this.workspaceRoot).toString();
     const initializeResult = await this.sendRequest('initialize', {
       processId: process.pid,
       rootUri,

@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as path from 'node:path';
 
 import { createLspClient } from '../src/service/lsp-client';
 import type { LspServerConfig } from '../src/types';
 
-const WORKSPACE_ROOT = '/workspace';
+const WORKSPACE_ROOT = path.resolve('/workspace');
+const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
 const FIXTURE_PATH = fileURLToPath(
   new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
 );
@@ -15,7 +17,7 @@ function createConfig(args: string[] = []): { config: LspServerConfig } {
       id: 'fake-ts',
       command: process.execPath,
       args: [FIXTURE_PATH, ...args],
-      rootUri: `file://${WORKSPACE_ROOT}`,
+      rootUri: WORKSPACE_URI,
     },
   };
 }
@@ -65,10 +67,13 @@ describe('LspClient integration with fake LSP server', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/a.ts', 'const x = TYPE_ERROR');
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/a.ts',
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
       800,
     );
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -87,15 +92,18 @@ describe('LspClient integration with fake LSP server', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/b.ts', 'const x = TYPE_ERROR');
-    await client.waitForDiagnostics('/workspace/src/b.ts', 800);
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/b.ts'),
+      'const x = TYPE_ERROR',
+    );
+    await client.waitForDiagnostics(path.join(WORKSPACE_ROOT, 'src/b.ts'), 800);
 
     await client.touchFile(
-      '/workspace/src/b.ts',
+      path.join(WORKSPACE_ROOT, 'src/b.ts'),
       'const x = TYPE_ERROR\n// WARN',
     );
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/b.ts',
+      path.join(WORKSPACE_ROOT, 'src/b.ts'),
       800,
     );
 
@@ -115,18 +123,21 @@ describe('LspClient integration with fake LSP server', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/c.ts', 'const x = TYPE_ERROR');
     await client.touchFile(
-      '/workspace/src/c.ts',
+      path.join(WORKSPACE_ROOT, 'src/c.ts'),
+      'const x = TYPE_ERROR',
+    );
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/c.ts'),
       'const x = TYPE_ERROR\n// WARN',
     );
     await client.touchFile(
-      '/workspace/src/c.ts',
+      path.join(WORKSPACE_ROOT, 'src/c.ts'),
       'const x = TYPE_ERROR\n// WARN\nconst y = TYPE_ERROR',
     );
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/c.ts',
+      path.join(WORKSPACE_ROOT, 'src/c.ts'),
       1200,
     );
     expect(diagnostics.length).toBeGreaterThanOrEqual(2);
@@ -148,7 +159,10 @@ describe('LspClient integration with fake LSP server', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await client.touchFile('/workspace/src/crash.ts', 'const x = TYPE_ERROR');
+    await client.touchFile(
+      path.join(WORKSPACE_ROOT, 'src/crash.ts'),
+      'const x = TYPE_ERROR',
+    );
 
     expect(client.isAlive()).toBe(false);
   });
@@ -188,7 +202,7 @@ describe('LspClient integration with fake LSP server', () => {
     await client.initialize();
 
     const diagnostics = await client.waitForDiagnostics(
-      '/workspace/src/never-opened.ts',
+      path.join(WORKSPACE_ROOT, 'src/never-opened.ts'),
       20,
     );
     expect(diagnostics).toEqual([]);
@@ -209,13 +223,19 @@ describe('LspClient integration with fake LSP server', () => {
     await client.initialize();
 
     await Promise.all([
-      client.touchFile('/workspace/src/f1.ts', 'const x = TYPE_ERROR'),
-      client.touchFile('/workspace/src/f2.ts', 'const x = TYPE_ERROR\n// WARN'),
+      client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/f1.ts'),
+        'const x = TYPE_ERROR',
+      ),
+      client.touchFile(
+        path.join(WORKSPACE_ROOT, 'src/f2.ts'),
+        'const x = TYPE_ERROR\n// WARN',
+      ),
     ]);
 
     const [d1, d2] = await Promise.all([
-      client.waitForDiagnostics('/workspace/src/f1.ts', 800),
-      client.waitForDiagnostics('/workspace/src/f2.ts', 800),
+      client.waitForDiagnostics(path.join(WORKSPACE_ROOT, 'src/f1.ts'), 800),
+      client.waitForDiagnostics(path.join(WORKSPACE_ROOT, 'src/f2.ts'), 800),
     ]);
 
     expect(d1.length).toBeGreaterThan(0);

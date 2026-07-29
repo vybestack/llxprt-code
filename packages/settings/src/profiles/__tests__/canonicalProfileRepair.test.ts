@@ -255,6 +255,27 @@ describe('repairCanonicalProfiles — generalized corrupt profile repair', () =>
     ).toBe(corruptData);
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'repairs a read-only (0o444) corrupt canonical file and preserves its backup',
+    () => {
+      const corruptData = JSON.stringify(corruptCanonicalProfile());
+      const corruptPath = path.join(env.canonicalDir, 'zai.json');
+      writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());
+      fs.chmodSync(corruptPath, 0o444);
+      writeProfile(env.legacyProfilesDir, 'zai.json', validLegacyProfile());
+
+      repairCanonicalProfiles(env.canonicalDir, env.legacyProfilesDir);
+
+      const backups = fs
+        .readdirSync(env.canonicalDir)
+        .filter((f) => f.endsWith('.pre-repair.bak'));
+      expect(backups).toStrictEqual(['zai.json.pre-repair.bak']);
+      expect(
+        fs.readFileSync(path.join(env.canonicalDir, backups[0]), 'utf-8'),
+      ).toBe(corruptData);
+    },
+  );
+
   it('does not modify the legacy profile file during repair', () => {
     const legacyData = JSON.stringify(validLegacyProfile());
     writeProfile(env.canonicalDir, 'zai.json', corruptCanonicalProfile());

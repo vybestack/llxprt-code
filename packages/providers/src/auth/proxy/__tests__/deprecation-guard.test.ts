@@ -20,31 +20,88 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Helper to run grep and return matching lines.
- * Returns empty array if no matches (grep exits non-zero).
+ * Walk a directory tree (optionally excluding directory names) and return
+ * matching file lines for a pattern. Replaces shell `grep -rn` so the
+ * same source set is scanned on every platform (Windows has no grep).
+ *
+ * @param pattern  Literal substring or RegExp to match within each line.
+ * @param include  Glob-like filename filter, e.g. `"*.ts"` or
+ *                 `"provider-key-storage.ts"`.
+ */
+function scanFilesForPattern(
+  pattern: string | RegExp,
+  include: string,
+  cwd: string,
+  excludeDirs: string[] = [],
+): string[] {
+  const matches: string[] = [];
+  const excludeSet = new Set(excludeDirs);
+  // For a glob include like "*.ts", match by suffix ".ts"; for a bare
+  // filename like "provider-key-storage.ts", match by exact basename.
+  const isWildcard = include.startsWith('*');
+  const suffix = isWildcard ? include.slice(1) : null;
+  const exactName = isWildcard ? null : include;
+
+  function walk(dir: string): void {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      walkEntry(entry, dir);
+    }
+  }
+
+  function walkEntry(entry: fs.Dirent, dir: string): void {
+    if (entry.isDirectory()) {
+      if (!excludeSet.has(entry.name)) {
+        walk(path.join(dir, entry.name));
+      }
+      return;
+    }
+    const isMatch =
+      suffix !== null ? entry.name.endsWith(suffix) : entry.name === exactName;
+    if (isMatch) {
+      scanFile(path.join(dir, entry.name));
+    }
+  }
+
+  function scanFile(fullPath: string): void {
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const relativePath = path.relative(cwd, fullPath).replace(/\\/g, '/');
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (pattern instanceof RegExp) {
+        pattern.lastIndex = 0;
+      }
+      const hit =
+        typeof pattern === 'string'
+          ? line.includes(pattern)
+          : pattern.test(line);
+      if (hit) {
+        matches.push(`${relativePath}:${i + 1}:${line}`);
+      }
+    }
+  }
+
+  walk(cwd);
+  return matches;
+}
+
+/**
+ * Helper to search files for a pattern using Node filesystem scanning.
+ * Returns matching lines in `relativePath:lineNum:lineContent` format.
+ * Returns empty array if no matches found.
  */
 function grepFiles(
-  pattern: string,
+  pattern: string | RegExp,
   include: string,
   cwd: string,
   excludePatterns: string[] = [],
 ): string[] {
-  const excludeArgs = excludePatterns
-    .map((p) => `--exclude-dir=${p}`)
-    .join(' ');
-
-  try {
-    const cmd = `grep -rn "${pattern}" . --include="${include}" ${excludeArgs} 2>/dev/null || true`;
-    const result = execSync(cmd, { cwd, encoding: 'utf-8' });
-    return result.split('\n').filter((line) => line.trim().length > 0);
-  } catch {
-    return [];
-  }
+  return scanFilesForPattern(pattern, include, cwd, excludePatterns);
 }
 
 /**
@@ -134,7 +191,7 @@ describe('Deprecation Guards (P36)', () => {
 
     it('should not have any "mergeRefreshedToken =" assignments', () => {
       const matches = grepFiles(
-        'mergeRefreshedToken[[:space:]]*=',
+        /(?:^|\s)mergeRefreshedToken\s*=/,
         '*.ts',
         packagesRoot,
         ['node_modules', 'dist', '__tests__'],

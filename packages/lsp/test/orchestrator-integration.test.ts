@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as path from 'node:path';
 
 import { createOrchestrator } from '../src/service/orchestrator';
 import type { LspConfig } from '../src/service/diagnostics';
 
-const WORKSPACE_ROOT = '/workspace';
-const FIXTURE_PATH = new URL('./fixtures/fake-lsp-server.ts', import.meta.url)
-  .pathname;
+const WORKSPACE_ROOT = path.resolve('/workspace');
+const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
+const FIXTURE_PATH = fileURLToPath(
+  new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
+);
 
 function createFakeServer(
   id: string,
@@ -16,7 +20,7 @@ function createFakeServer(
     id,
     command: process.execPath,
     args: [FIXTURE_PATH, ...extraArgs],
-    rootUri: `file://${WORKSPACE_ROOT}`,
+    rootUri: WORKSPACE_URI,
     extensions,
   };
 }
@@ -56,7 +60,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const diagnostics = await orchestrator.checkFile(
-      '/workspace/src/app.ts',
+      path.join(WORKSPACE_ROOT, 'src/app.ts'),
       'const x = TYPE_ERROR',
     );
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -79,7 +83,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     ).toBe(false);
 
     await orchestrator.checkFile(
-      '/workspace/src/lazy.ts',
+      path.join(WORKSPACE_ROOT, 'src/lazy.ts'),
       'const x = TYPE_ERROR',
     );
 
@@ -104,8 +108,14 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const [tsDiagnostics, pyDiagnostics] = await Promise.all([
-      orchestrator.checkFile('/workspace/src/a.ts', 'const x = TYPE_ERROR'),
-      orchestrator.checkFile('/workspace/src/b.py', 'TYPE_ERROR = 1'),
+      orchestrator.checkFile(
+        path.join(WORKSPACE_ROOT, 'src/a.ts'),
+        'const x = TYPE_ERROR',
+      ),
+      orchestrator.checkFile(
+        path.join(WORKSPACE_ROOT, 'src/b.py'),
+        'TYPE_ERROR = 1',
+      ),
     ]);
 
     expect(tsDiagnostics.length).toBeGreaterThan(0);
@@ -142,18 +152,18 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/k1.ts',
+      path.join(WORKSPACE_ROOT, 'src/k1.ts'),
       'const x = TYPE_ERROR',
     );
     await orchestrator.checkFile(
-      '/workspace/src/k2.ts',
+      path.join(WORKSPACE_ROOT, 'src/k2.ts'),
       'const x = TYPE_ERROR',
     );
 
     const all = await orchestrator.getAllDiagnostics();
     expect(Object.keys(all).sort()).toEqual([
-      '/workspace/src/k1.ts',
-      '/workspace/src/k2.ts',
+      path.join(WORKSPACE_ROOT, 'src/k1.ts'),
+      path.join(WORKSPACE_ROOT, 'src/k2.ts'),
     ]);
   });
 
@@ -171,11 +181,11 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/crash.ts',
+      path.join(WORKSPACE_ROOT, 'src/crash.ts'),
       'const x = TYPE_ERROR',
     );
     const afterCrash = await orchestrator.checkFile(
-      '/workspace/src/crash.ts',
+      path.join(WORKSPACE_ROOT, 'src/crash.ts'),
       'const x = TYPE_ERROR',
     );
 
@@ -194,7 +204,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/shutdown.ts',
+      path.join(WORKSPACE_ROOT, 'src/shutdown.ts'),
       'const x = TYPE_ERROR',
     );
     await orchestrator.shutdown();
@@ -220,11 +230,11 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/s1.ts',
+      path.join(WORKSPACE_ROOT, 'src/s1.ts'),
       'const x = TYPE_ERROR',
     );
     await orchestrator.checkFile(
-      '/workspace/src/s2.tsx',
+      path.join(WORKSPACE_ROOT, 'src/s2.tsx'),
       'const x = TYPE_ERROR',
     );
 
@@ -249,7 +259,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const definitions = await orchestrator.gotoDefinition(
-      '/workspace/src/nav.ts',
+      path.join(WORKSPACE_ROOT, 'src/nav.ts'),
       0,
       6,
     );
@@ -268,7 +278,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const diagnostics = await orchestrator.checkFile(
-      '/workspace/src/file.unknown',
+      path.join(WORKSPACE_ROOT, 'src/file.unknown'),
       'TYPE_ERROR',
     );
     expect(diagnostics).toEqual([]);
@@ -289,12 +299,14 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/known.ts',
+      path.join(WORKSPACE_ROOT, 'src/known.ts'),
       'const x = TYPE_ERROR',
     );
     const all = await orchestrator.getAllDiagnostics();
 
-    expect(all['/workspace/src/known.ts']?.length ?? 0).toBeGreaterThan(0);
+    expect(
+      all[path.join(WORKSPACE_ROOT, 'src/known.ts')]?.length ?? 0,
+    ).toBeGreaterThan(0);
   });
 
   /**
@@ -311,11 +323,11 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const first = await orchestrator.checkFile(
-      '/workspace/src/touch-timeout.ts',
+      path.join(WORKSPACE_ROOT, 'src/touch-timeout.ts'),
       'const x = TYPE_ERROR',
     );
     const second = await orchestrator.checkFile(
-      '/workspace/src/touch-timeout.ts',
+      path.join(WORKSPACE_ROOT, 'src/touch-timeout.ts'),
       'const x = TYPE_ERROR // changed',
     );
 

@@ -84,7 +84,7 @@ describe('nightly Windows Bun native-module smoke', () => {
   it('runs the committed native-module harness in a bounded least-privilege Windows job', () => {
     expect(smokeJob['runs-on']).toBe('windows-latest');
     expect(smokeJob.permissions).toEqual({ contents: 'read' });
-    expect(smokeJob['timeout-minutes']).toBe(15);
+    expect(smokeJob['timeout-minutes']).toBe(30);
     expect(stepNamed(smokeJob, 'Checkout').with?.['persist-credentials']).toBe(
       false,
     );
@@ -98,7 +98,7 @@ describe('nightly Windows Bun native-module smoke', () => {
     const smokeStep = stepNamed(smokeJob, 'Run Bun native-modules smoke');
     expect(smokeStep.shell).toBe('bash');
     expect(String(smokeStep.run)).toContain(
-      'bun scripts/bun-native-modules-smoke.mjs',
+      'bun scripts/bun-native-modules-smoke.ts',
     );
     expect(String(smokeStep.run)).toContain('exit "${SMOKE_EXIT}"');
   });
@@ -181,7 +181,7 @@ describe('Bun native-module smoke harness', () => {
       try {
         ({ stdout } = await execFileAsync(
           'bun',
-          ['scripts/bun-native-modules-smoke.mjs'],
+          ['scripts/bun-native-modules-smoke.ts'],
           {
             cwd: ROOT,
             encoding: 'utf8',

@@ -9,7 +9,14 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { extname, normalize, resolve } from 'node:path';
+import {
+  extname,
+  isAbsolute,
+  normalize,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 
 import type { Diagnostic } from './diagnostics.js';
 import type {
@@ -356,11 +363,12 @@ export class Orchestrator {
     return normalize(resolve(path));
   }
 
-  private isInsideWorkspace(path: string): boolean {
-    if (path === this.workspaceRootAbs) {
+  private isInsideWorkspace(filePath: string): boolean {
+    if (filePath === this.workspaceRootAbs) {
       return true;
     }
-    return path.startsWith(`${this.workspaceRootAbs}/`);
+    const rel = relative(this.workspaceRootAbs, filePath);
+    return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
   }
 
   private getServersForFile(filePath: string): LspServerConfig[] {
@@ -512,5 +520,5 @@ export class Orchestrator {
 
 export const createOrchestrator = (
   config: OrchestratorConfig = {},
-  workspaceRoot = '/workspace',
+  workspaceRoot = process.cwd(),
 ): Orchestrator => new Orchestrator(config, workspaceRoot);

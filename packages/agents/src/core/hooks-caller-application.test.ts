@@ -28,6 +28,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import type { ToolCall, SuccessfulToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -250,7 +251,7 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that blocks execution (exit code 2 = block)
       const config = createConfigWithHook({
         event: 'BeforeTool',
-        command: 'echo "Tool blocked by policy" >&2; exit 2',
+        command: `node -e "process.stderr.write('Tool blocked by policy'); process.exit(2)"`,
       });
 
       const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
@@ -303,7 +304,7 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that modifies the path argument
       const config = createConfigWithHook({
         event: 'BeforeTool',
-        command: `echo '{"decision": "allow", "hookSpecificOutput": {"tool_input": {"path": "/safe/sanitized/path"}}}'`,
+        command: `node -e "process.stdout.write(JSON.stringify({decision: 'allow', hookSpecificOutput: {tool_input: {path: '/safe/sanitized/path'}}}))"`,
       });
 
       const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
@@ -350,7 +351,7 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that provides additional context
       const config = createConfigWithHook({
         event: 'AfterTool',
-        command: `echo '{"decision": "allow", "systemMessage": "Security scan: file contents verified safe"}'`,
+        command: `node -e "process.stdout.write(JSON.stringify({decision: 'allow', systemMessage: 'Security scan: file contents verified safe'}))"`,
       });
 
       const hookResult = await triggerAfterToolHook(
@@ -410,7 +411,7 @@ describe('Hook Caller Application', () => {
       // Arrange: Hook that suppresses output display
       const config = createConfigWithHook({
         event: 'AfterTool',
-        command: `echo '{"decision": "allow", "suppressOutput": true}'`,
+        command: `node -e "process.stdout.write(JSON.stringify({decision: 'allow', suppressOutput: true}))"`,
       });
 
       const hookResult = await triggerAfterToolHook(
@@ -477,8 +478,9 @@ describe('Hook Caller Application', () => {
 
       // Read the source code and verify the pattern
       const fs = await import('node:fs/promises');
-      const chatSessionPath = new URL('../core/chatSession.ts', import.meta.url)
-        .pathname;
+      const chatSessionPath = fileURLToPath(
+        new URL('../core/chatSession.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(chatSessionPath, 'utf-8');
 
       // The test FAILS if chatSession uses `void` prefix (ignores result)
@@ -513,10 +515,9 @@ describe('Hook Caller Application', () => {
       // After decomposition, this logic lives in DirectMessageProcessor.ts
 
       const fs = await import('node:fs/promises');
-      const directMessageProcessorPath = new URL(
-        '../core/DirectMessageProcessor.ts',
-        import.meta.url,
-      ).pathname;
+      const directMessageProcessorPath = fileURLToPath(
+        new URL('../core/DirectMessageProcessor.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(directMessageProcessorPath, 'utf-8');
 
       // The test FAILS if the hook handler doesn't call getSyntheticResponse
@@ -552,8 +553,9 @@ describe('Hook Caller Application', () => {
       //   if (hookResult) { tools = hookResult.applyToolConfigModifications(tools); }
 
       const fs = await import('node:fs/promises');
-      const chatSessionPath = new URL('../core/chatSession.ts', import.meta.url)
-        .pathname;
+      const chatSessionPath = fileURLToPath(
+        new URL('../core/chatSession.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(chatSessionPath, 'utf-8');
 
       // The test FAILS if chatSession uses `void` prefix (ignores result)
@@ -589,8 +591,9 @@ describe('Hook Caller Application', () => {
       //   if (hookResult?.shouldStopExecution()) { break; }
 
       const fs = await import('node:fs/promises');
-      const chatSessionPath = new URL('../core/chatSession.ts', import.meta.url)
-        .pathname;
+      const chatSessionPath = fileURLToPath(
+        new URL('../core/chatSession.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(chatSessionPath, 'utf-8');
 
       // The test FAILS if chatSession uses `void` prefix (ignores result)
@@ -629,14 +632,12 @@ describe('Hook Caller Application', () => {
       // turn calls applyLLMRequestModifications. Verify BOTH the delegation
       // in DMP and the actual call in the shared helper.
       const fs = await import('node:fs/promises');
-      const directMessageProcessorPath = new URL(
-        '../core/DirectMessageProcessor.ts',
-        import.meta.url,
-      ).pathname;
-      const streamRequestHelpersPath = new URL(
-        '../core/streamRequestHelpers.ts',
-        import.meta.url,
-      ).pathname;
+      const directMessageProcessorPath = fileURLToPath(
+        new URL('../core/DirectMessageProcessor.ts', import.meta.url),
+      );
+      const streamRequestHelpersPath = fileURLToPath(
+        new URL('../core/streamRequestHelpers.ts', import.meta.url),
+      );
       const dmpSource = await fs.readFile(directMessageProcessorPath, 'utf-8');
       const helperSource = await fs.readFile(streamRequestHelpersPath, 'utf-8');
 
@@ -682,10 +683,9 @@ describe('Hook Caller Application', () => {
       // (extracted from StreamProcessor.ts).
 
       const fs = await import('node:fs/promises');
-      const hookDecisionPath = new URL(
-        '../core/beforeModelHookDecision.ts',
-        import.meta.url,
-      ).pathname;
+      const hookDecisionPath = fileURLToPath(
+        new URL('../core/beforeModelHookDecision.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(hookDecisionPath, 'utf-8');
 
       // Check that AgentExecutionStoppedError exists (constructor lives in chatSession.ts)
@@ -717,10 +717,9 @@ describe('Hook Caller Application', () => {
       // After decomposition, this logic lives in StreamProcessor.ts.
 
       const fs = await import('node:fs/promises');
-      const streamProcessorPath = new URL(
-        '../core/StreamProcessor.ts',
-        import.meta.url,
-      ).pathname;
+      const streamProcessorPath = fileURLToPath(
+        new URL('../core/StreamProcessor.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
 
       // Check that systemMessage is passed when throwing AgentExecutionStoppedError after AfterModel
@@ -755,10 +754,9 @@ describe('Hook Caller Application', () => {
       // After decomposition, this logic lives in StreamProcessor.ts.
 
       const fs = await import('node:fs/promises');
-      const streamProcessorPath = new URL(
-        '../core/StreamProcessor.ts',
-        import.meta.url,
-      ).pathname;
+      const streamProcessorPath = fileURLToPath(
+        new URL('../core/StreamProcessor.ts', import.meta.url),
+      );
       const sourceCode = await fs.readFile(streamProcessorPath, 'utf-8');
 
       // Check that AgentExecutionBlockedError is referenced in stream handling

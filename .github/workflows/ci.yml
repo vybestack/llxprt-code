@@ -701,7 +701,7 @@ jobs:
 
       - name: 'Run Bun native-module smoke harness'
         run: |-
-          bun scripts/bun-native-modules-smoke.mjs
+          bun scripts/bun-native-modules-smoke.ts
 
   #
   # Node consumer smoke (issue 2243, S6 / issue 2603)

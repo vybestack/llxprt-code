@@ -16,11 +16,12 @@
  * - On Windows, the Bun.Terminal PTY adapter is skipped (POSIX-only).
  * - On POSIX, the @lydell/node-pty ConPTY check is skipped (Windows-only).
  *
- * Usage: bun scripts/bun-native-modules-smoke.mjs
+ * Usage: bun scripts/bun-native-modules-smoke.ts
  */
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import type { IPty, IDisposable } from '@lydell/node-pty';
 
 const require = createRequire(import.meta.url);
 
@@ -50,26 +51,36 @@ if (!isWindows) {
 
 let failures = 0;
 
-function pass(name) {
+function pass(name: string): void {
   console.log(`[PASS] ${name}`);
 }
 
-function formatError(error) {
+function formatError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack ?? `${error.name}: ${error.message}`;
   }
   return String(error);
 }
 
-function fail(name, error) {
+function fail(name: string, error: unknown): void {
   failures += 1;
   console.error(`[FAIL] ${name}: ${formatError(error)}`);
 }
 
-function createExitPromise(timeoutMs) {
-  let timeout;
-  let resolveExit;
-  const promise = new Promise((resolve) => {
+interface ExitInfo {
+  exitCode: number;
+  signal?: number;
+}
+
+interface ExitPromise {
+  resolve(exitInfo: ExitInfo | null): void;
+  promise: Promise<ExitInfo | null>;
+}
+
+function createExitPromise(timeoutMs: number): ExitPromise {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let resolveExit: ((exitInfo: ExitInfo | null) => void) | null = null;
+  const promise = new Promise<ExitInfo | null>((resolve) => {
     resolveExit = resolve;
     timeout = setTimeout(() => resolve(null), timeoutMs);
   }).finally(() => {
@@ -78,7 +89,7 @@ function createExitPromise(timeoutMs) {
     }
   });
   return {
-    resolve(exitInfo) {
+    resolve(exitInfo: ExitInfo | null): void {
       if (resolveExit === null) {
         return;
       }
@@ -93,7 +104,7 @@ function createExitPromise(timeoutMs) {
 // ---------------------------------------------------------------------------
 // 1. @ast-grep/napi
 // ---------------------------------------------------------------------------
-async function checkAstGrep() {
+async function checkAstGrep(): Promise<void> {
   try {
     const { Lang, parse } = await import('@ast-grep/napi');
     const ts = Lang.TypeScript;
@@ -111,7 +122,7 @@ async function checkAstGrep() {
 // ---------------------------------------------------------------------------
 // 2. @napi-rs/keyring (construct-only; no credential I/O)
 // ---------------------------------------------------------------------------
-async function checkKeyring() {
+async function checkKeyring(): Promise<void> {
   try {
     const { Entry } = await import('@napi-rs/keyring');
     const entry = new Entry('llxprt-smoke-test', 'llxprt-smoke-account');
@@ -130,7 +141,7 @@ async function checkKeyring() {
 // ---------------------------------------------------------------------------
 // 3. web-tree-sitter + tree-sitter-bash WASM
 // ---------------------------------------------------------------------------
-async function checkTreeSitter() {
+async function checkTreeSitter(): Promise<void> {
   try {
     const { Parser, Language } = await import('web-tree-sitter');
     await Parser.init();
@@ -140,6 +151,9 @@ async function checkTreeSitter() {
     const bashLanguage = await Language.load(wasmBytes);
     parser.setLanguage(bashLanguage);
     const tree = parser.parse('echo hello');
+    if (tree === null) {
+      throw new Error('parser returned null tree');
+    }
     if (tree.rootNode.type !== 'program') {
       throw new Error(
         `expected root node type "program", got "${tree.rootNode.type}"`,
@@ -156,12 +170,13 @@ async function checkTreeSitter() {
 // ---------------------------------------------------------------------------
 const NODE_PTY_TIMEOUT_MS = 10000;
 
-async function checkNodePty() {
+async function checkNodePty(): Promise<void> {
   if (!isWindows) {
     return;
   }
-  let ptyProcess;
-  let exitPromise;
+  let ptyProcess: IPty | undefined;
+  const disposables: IDisposable[] = [];
+  let exitPromise: ExitPromise | undefined;
   let didExit = false;
   try {
     const nodePty = await import('@lydell/node-pty');
@@ -186,20 +201,24 @@ async function checkNodePty() {
     if (typeof ptyProcess.pid !== 'number' || ptyProcess.pid <= 0) {
       throw new Error(`invalid pid: ${ptyProcess.pid}`);
     }
-    for (const methodName of ['onData', 'onExit', 'kill']) {
+    for (const methodName of ['onData', 'onExit', 'kill'] as const) {
       if (typeof ptyProcess[methodName] !== 'function') {
         throw new Error(`@lydell/node-pty process is missing ${methodName}()`);
       }
     }
 
-    ptyProcess.onData((data) => {
-      output += data;
-    });
+    disposables.push(
+      ptyProcess.onData((data: string) => {
+        output += data;
+      }),
+    );
 
-    ptyProcess.onExit((exitInfo) => {
-      didExit = true;
-      exitPromise.resolve(exitInfo);
-    });
+    disposables.push(
+      ptyProcess.onExit((exitInfo: ExitInfo) => {
+        didExit = true;
+        exitPromise!.resolve(exitInfo);
+      }),
+    );
 
     const exitInfo = await exitPromise.promise;
 
@@ -221,13 +240,12 @@ async function checkNodePty() {
   } catch (e) {
     fail('@lydell/node-pty ConPTY', e);
   } finally {
+    for (const disposable of disposables) {
+      disposable.dispose();
+    }
     exitPromise?.resolve(null);
     if (ptyProcess && !didExit) {
-      try {
-        ptyProcess.kill();
-      } catch {
-        // Process may already have exited.
-      }
+      ptyProcess.kill();
     }
   }
 }
@@ -235,18 +253,20 @@ async function checkNodePty() {
 // ---------------------------------------------------------------------------
 // 5. Bun.Terminal PTY adapter (the bun-pty seam; POSIX-only)
 // ---------------------------------------------------------------------------
-async function checkBunPty() {
+async function checkBunPty(): Promise<void> {
   if (!isPosix) {
     return;
   }
-  let pty;
+  let pty: (IPty & { destroy(): void }) | undefined;
+  const disposables: IDisposable[] = [];
+  let exitPromise: ExitPromise | undefined;
   try {
     const { createBunPty } = await import(
       '../packages/core/src/utils/bunPtyAdapter.ts'
     );
 
     let output = '';
-    const exitPromise = createExitPromise(5000);
+    exitPromise = createExitPromise(5000);
 
     pty = createBunPty('/bin/sh', ['-c', 'echo bun-pty-smoke-ok'], {
       cols: 80,
@@ -258,13 +278,17 @@ async function checkBunPty() {
       throw new Error(`invalid pid: ${pty.pid}`);
     }
 
-    pty.onData((data) => {
-      output += data;
-    });
+    disposables.push(
+      pty.onData((data: string) => {
+        output += data;
+      }),
+    );
 
-    pty.onExit((exitInfo) => {
-      exitPromise.resolve(exitInfo);
-    });
+    disposables.push(
+      pty.onExit((exitInfo: ExitInfo) => {
+        exitPromise!.resolve(exitInfo);
+      }),
+    );
 
     const exitInfo = await exitPromise.promise;
 
@@ -286,13 +310,11 @@ async function checkBunPty() {
   } catch (e) {
     fail('Bun.Terminal PTY adapter', e);
   } finally {
-    if (pty) {
-      try {
-        pty.destroy();
-      } catch {
-        // PTY may already have exited.
-      }
+    for (const disposable of disposables) {
+      disposable.dispose();
     }
+    exitPromise?.resolve(null);
+    pty?.destroy();
   }
 }
 
@@ -316,3 +338,4 @@ if (skippedChecks > 0) {
 } else {
   console.log('\nAll native-module smoke checks passed under Bun.');
 }
+process.exit(0);

@@ -385,27 +385,21 @@ function writeReplacementTemp(
 ): string {
   const tmpPath = uniqueTempPath(dir, base, '.repair.tmp');
   try {
-    fs.writeFileSync(tmpPath, content, {
-      encoding: 'utf-8',
-      mode,
-      flag: 'wx',
-    });
-    // fsync the temp so the replacement content is durable before commit.
-    fsyncFile(tmpPath);
+    const fd = fs.openSync(tmpPath, 'wx', 0o600);
+    try {
+      fs.writeFileSync(fd, content, { encoding: 'utf-8' });
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    if ((mode & 0o777) !== 0o600) {
+      fs.chmodSync(tmpPath, mode & 0o777);
+    }
   } catch (error) {
     cleanupTemp(tmpPath);
     throw error;
   }
   return tmpPath;
-}
-
-function fsyncFile(filePath: string): void {
-  const fd = fs.openSync(filePath, 'r');
-  try {
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
 }
 
 function cleanupTemp(tmpPath: string): void {
@@ -429,6 +423,33 @@ function validateReplacementFile(filePath: string): void {
   }
 }
 
+function copyAndFsyncExclusive(source: string, dest: string): boolean {
+  const content = fs.readFileSync(source);
+  const sourceMode = fs.statSync(source).mode & 0o777;
+  let destFd: number;
+  try {
+    destFd = fs.openSync(dest, 'wx', 0o600);
+  } catch (error) {
+    if (hasErrnoCode(error, 'EEXIST')) {
+      return false;
+    }
+    throw error;
+  }
+  try {
+    fs.writeFileSync(destFd, content);
+    fs.fsyncSync(destFd);
+  } catch (error) {
+    fs.closeSync(destFd);
+    cleanupTemp(dest);
+    throw error;
+  }
+  fs.closeSync(destFd);
+  if (sourceMode !== 0o600) {
+    fs.chmodSync(dest, sourceMode);
+  }
+  return true;
+}
+
 /**
  * Claim an exclusive backup of the corrupt canonical file using
  * COPYFILE_EXCL. If the primary backup name is taken, try numbered
@@ -440,15 +461,9 @@ function claimBackup(
   baseFileName: string,
 ): string {
   const primary = path.join(dir, `${baseFileName}${REPAIR_BACKUP_SUFFIX}`);
-  try {
-    fs.copyFileSync(canonicalPath, primary, fs.constants.COPYFILE_EXCL);
-    fsyncFile(primary);
+  if (copyAndFsyncExclusive(canonicalPath, primary)) {
     fsyncDirSync(dir);
     return primary;
-  } catch (error) {
-    if (!hasErrnoCode(error, 'EEXIST')) {
-      throw error;
-    }
   }
   const maxBackupAttempts = 1000;
   for (let counter = 1; counter <= maxBackupAttempts; counter++) {
@@ -456,15 +471,9 @@ function claimBackup(
       dir,
       `${baseFileName}.${counter}${REPAIR_BACKUP_SUFFIX}`,
     );
-    try {
-      fs.copyFileSync(canonicalPath, next, fs.constants.COPYFILE_EXCL);
-      fsyncFile(next);
+    if (copyAndFsyncExclusive(canonicalPath, next)) {
       fsyncDirSync(dir);
       return next;
-    } catch (error) {
-      if (!hasErrnoCode(error, 'EEXIST')) {
-        throw error;
-      }
     }
   }
   throw new Error(`could not claim a backup for ${canonicalPath}`);

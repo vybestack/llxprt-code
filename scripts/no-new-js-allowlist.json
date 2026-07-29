@@ -30,7 +30,6 @@
     "scripts/aggregate-evals-schema.js",
     "scripts/aggregate-ocr-telemetry.js",
     "scripts/bun-build.config.mjs",
-    "scripts/bun-native-modules-smoke.mjs",
     "scripts/check-agents-api-surface.mjs",
     "scripts/check-settings-boundary.js",
     "scripts/ci-quota-check.js",
