@@ -21,6 +21,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// On win32 the harness uses -L <name> (psmux named namespace) instead of
+// -S <path> (Unix socket), because psmux does not honor -S for isolation.
+const IS_WIN32 = process.platform === 'win32';
+const SOCKET_FLAG = IS_WIN32 ? '-L' : '-S';
+
 // Capture spawnSync calls. The module under test imports `spawnSync` from
 // `node:child_process`, so we mock that specifier.
 const { spawnSyncMock } = vi.hoisted(() => ({
@@ -46,7 +51,12 @@ const {
  * Default successful spawnSync return value (utf8 encoding => stdout is a
  * string).
  */
-function okReturn(stdout = '') {
+function okReturn(stdout = ''): {
+  stdout: string;
+  stderr: string;
+  status: number | null;
+  error: Error | undefined;
+} {
   return {
     stdout,
     stderr: '',
@@ -55,11 +65,18 @@ function okReturn(stdout = '') {
   };
 }
 
-function expectKillServerCall() {
+function expectKillServerCall(expectedSocketPath?: string): void {
   const killServerCall = spawnSyncMock.mock.calls.find(([, args]) =>
-    args.includes('kill-server'),
+    (args as string[]).includes('kill-server'),
   );
   expect(killServerCall).toBeDefined();
+  // kill-server must ALWAYS be scoped to our private socket — never bare.
+  const [, args] = killServerCall as [string, string[]];
+  expect(args[0]).toBe(SOCKET_FLAG);
+  // On win32 the socket identifier is a random name that changes on each
+  // getTmuxSocketPath() call after cleanup, so the caller must pass the
+  // value captured before cleanup.
+  expect(args[1]).toBe(expectedSocketPath ?? getTmuxSocketPath());
 }
 
 beforeEach(() => {
@@ -88,13 +105,21 @@ describe('issue #2469: cleanupTmuxSocketDir', () => {
 
   it('keeps the cached socket path when cleanup fails', () => {
     const socketPath = getTmuxSocketPath();
+    // On win32 there is no temp directory to remove, so rmSync failure is
+    // not a relevant failure mode. Only test this on Unix.
+    if (IS_WIN32) {
+      // Just verify cleanup is safe and kill-server uses the right socket.
+      expect(() => cleanupTmuxSocketDir()).not.toThrow();
+      expectKillServerCall(socketPath);
+      return;
+    }
     const rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {
       throw new Error('EBUSY');
     });
 
     try {
       expect(() => cleanupTmuxSocketDir()).not.toThrow();
-      expectKillServerCall();
+      expectKillServerCall(socketPath);
       expect(getTmuxSocketPath()).toBe(socketPath);
     } finally {
       rmSyncSpy.mockRestore();
@@ -128,8 +153,10 @@ describe('issue #2469: cleanupTmuxSocketDir', () => {
     });
 
     expect(() => cleanupTmuxSocketDir()).not.toThrow();
-    expectKillServerCall();
-    expect(fs.existsSync(dir)).toBe(false);
+    expectKillServerCall(socketPath);
+    if (!IS_WIN32) {
+      expect(fs.existsSync(dir)).toBe(false);
+    }
   });
 
   it('keeps the cached socket path when kill-server has a spawn error', () => {
@@ -164,16 +191,20 @@ describe('issue #2469: lazy socket temp directory', () => {
   it('does not create a temp directory until getTmuxSocketPath is called', () => {
     // After cleanupTmuxSocketDir, the socket path is null. Simply importing
     // the module must not create any temp directory. Calling getTmuxSocketPath
-    // lazily creates one.
+    // lazily creates one (Unix) or generates a unique name (Windows).
     cleanupTmuxSocketDir();
 
     const socketPath = getTmuxSocketPath();
-    const dir = path.dirname(socketPath);
-    expect(dir).toMatch(/llxprt-tmux-harness-/);
-    expect(fs.existsSync(dir)).toBe(true);
+    if (IS_WIN32) {
+      expect(socketPath).toMatch(/^llxprt-harness-/);
+    } else {
+      const dir = path.dirname(socketPath);
+      expect(dir).toMatch(/llxprt-tmux-harness-/);
+      expect(fs.existsSync(dir)).toBe(true);
 
-    cleanupTmuxSocketDir();
-    expect(fs.existsSync(dir)).toBe(false);
+      cleanupTmuxSocketDir();
+      expect(fs.existsSync(dir)).toBe(false);
+    }
   });
 });
 
@@ -182,43 +213,53 @@ describe('issue #2469: tmux socket isolation', () => {
     const socketPath = getTmuxSocketPath();
     expect(typeof socketPath).toBe('string');
     expect(socketPath.length).toBeGreaterThan(0);
-    // Must be a -S style socket path (a filesystem path), not a fixed -L name.
-    expect(socketPath).toMatch(/llxprt-tmux-harness-[^/\\]+[/\\\\]tmux\.sock$/);
+    if (IS_WIN32) {
+      // Windows: -L named namespace (no filesystem path).
+      expect(socketPath).toMatch(/^llxprt-harness-/);
+    } else {
+      // Unix: -S style socket path (a filesystem path).
+      expect(socketPath).toMatch(
+        /llxprt-tmux-harness-[^/\\]+[/\\\\]tmux\.sock$/,
+      );
+    }
     expect(getTmuxSocketPath()).toBe(socketPath);
   });
 
   it('creates a new directory after cleanup and re-access', () => {
     const first = getTmuxSocketPath();
-    const firstDir = path.dirname(first);
 
     cleanupTmuxSocketDir();
 
     const second = getTmuxSocketPath();
-    const secondDir = path.dirname(second);
     expect(second).not.toBe(first);
-    expect(fs.existsSync(firstDir)).toBe(false);
-    expect(fs.existsSync(secondDir)).toBe(true);
+    if (!IS_WIN32) {
+      const firstDir = path.dirname(first);
+      const secondDir = path.dirname(second);
+      expect(fs.existsSync(firstDir)).toBe(false);
+      expect(fs.existsSync(secondDir)).toBe(true);
+    }
   });
 
-  it('prefixes tmux args with -S <private socket path>', () => {
+  it('prefixes tmux args with the private socket flag', () => {
     runTmux(['list-sessions']);
     expect(spawnSyncMock).toHaveBeenCalledTimes(1);
     const [command, args] = spawnSyncMock.mock.calls[0];
     const socketPath = getTmuxSocketPath();
     expect(command).toBe('tmux');
-    expect(args[0]).toBe('-S');
+    expect(args[0]).toBe(SOCKET_FLAG);
     expect(args[1]).toBe(socketPath);
     // The caller-provided args follow the socket flag.
     expect(args.slice(2)).toEqual(['list-sessions']);
   });
 
-  it('uses the dedicated socket flag rather than a fixed -L name', () => {
+  it('uses the dedicated socket flag for isolation', () => {
     runTmux(['kill-session', '-t', 'foo']);
     const [, args] = spawnSyncMock.mock.calls[0];
-    // -S (socket path) is the isolation mechanism, not -L (named local socket).
-    expect(args[0]).toBe('-S');
+    expect(args[0]).toBe(SOCKET_FLAG);
     expect(args[1]).toBe(getTmuxSocketPath());
-    expect(args).not.toContain('-L');
+    // Must not also contain the OTHER flag.
+    const otherFlag = IS_WIN32 ? '-S' : '-L';
+    expect(args).not.toContain(otherFlag);
   });
 
   it('lazily creates the socket path on the first runTmux call', () => {
@@ -228,9 +269,11 @@ describe('issue #2469: tmux socket isolation', () => {
 
     expect(spawnSyncMock).toHaveBeenCalledTimes(1);
     const [, args] = spawnSyncMock.mock.calls[0];
-    expect(args[0]).toBe('-S');
-    expect(args[1]).toMatch(/llxprt-tmux-harness-[^/\\]+[/\\\\]tmux\.sock$/);
-    expect(fs.existsSync(path.dirname(args[1]))).toBe(true);
+    expect(args[0]).toBe(SOCKET_FLAG);
+    expect(args[1]).toBe(getTmuxSocketPath());
+    if (!IS_WIN32) {
+      expect(fs.existsSync(path.dirname(args[1]))).toBe(true);
+    }
   });
 });
 
@@ -338,7 +381,7 @@ describe('issue #2469: error messages include socket flag', () => {
     }
     expect(thrown).not.toBeNull();
     if (thrown instanceof Error) {
-      expect(thrown.message).toContain('-S');
+      expect(thrown.message).toContain(SOCKET_FLAG);
       expect(thrown.message).toContain(getTmuxSocketPath());
     } else {
       throw new Error('expected thrown to be an Error');
@@ -353,11 +396,11 @@ describe('issue #2469: error messages include socket flag', () => {
       error: undefined,
     });
     // tryTmux must invoke tmux through the isolated socket even though it
-    // swallows failures, so assert the spawn args start with -S <socket>.
+    // swallows failures, so assert the spawn args start with the socket flag.
     expect(tryTmux(['list-sessions'])).toBeNull();
     expect(spawnSyncMock).toHaveBeenCalledTimes(1);
     const [, args] = spawnSyncMock.mock.calls[0];
-    expect(args[0]).toBe('-S');
+    expect(args[0]).toBe(SOCKET_FLAG);
     expect(args[1]).toBe(getTmuxSocketPath());
   });
 
@@ -411,9 +454,9 @@ describe('issue #2469: error messages include socket flag', () => {
 });
 
 describe('buildTmuxSocketArgs pure helper', () => {
-  it('prepends -S <socket path> to the provided args', () => {
+  it('prepends the socket flag + identifier to the provided args', () => {
     const result = buildTmuxSocketArgs(['list-sessions']);
-    expect(result[0]).toBe('-S');
+    expect(result[0]).toBe(SOCKET_FLAG);
     expect(result[1]).toBe(getTmuxSocketPath());
     expect(result.slice(2)).toEqual(['list-sessions']);
   });

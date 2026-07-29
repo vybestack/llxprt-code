@@ -5,35 +5,27 @@
  */
 
 /**
- * Behavioral tests for MessageStreamOrchestrator pause-tool handling.
+ * Behavioral tests for MessageStreamOrchestrator's handling of tool-call
+ * turns, focused on the post-#2657 architecture.
  *
- * Issue #2287 requirements:
- * 1. A successful pause-tool result must immediately break the retry/
- *    continuation loop, even though the pause was issued as a tool call
- *    (which otherwise routes through the generic tool-call finish path).
- * 2. Only SUCCESSFUL pause responses break the loop. A pause
- *    response carrying an error (invalid schema, empty/overlong reason,
- *    filtered reason) must NOT break the loop.
- * 3. The orchestrator must rely on the authoritative in-memory
- *    isSuccessfulTodoPauseResponse signal, not persisted pause-state timing.
+ * Issue #2657: The orchestrator's pause-detection branch was dead code.
+ * Turn.run() only emits ToolCallRequest events (never ToolCallResponse),
+ * so the orchestrator never sees real tool responses — they arrive later
+ * via the scheduler in AgenticLoop. Pause detection now lives exclusively
+ * in AgenticLoop.buildNextMessage() (tested in agenticLoop.todoPause.test.ts).
  *
- * The observable that DISTINGUISHES the explicit pause branch
- * (_evaluateTodoContinuation with todoPauseSeen) from the generic
- * tool-call finish (_finishWithToolCalls) is the AfterAgent-hook
- * continuation: _finishWithToolCalls forwards a blocking AfterAgent hook
- * decision into sendMessageStream (a new continuation turn), whereas the
- * pause branch returns done immediately and never calls sendMessageStream.
- * Asserting on sendMessageStream is asserting on the hook's public
- * observable effect (a follow-up model turn), not on a private method.
+ * These tests verify the orchestrator's ACTUAL behavior:
+ * 1. A tool-call turn (including pause-tool requests) routes through the
+ *    generic _finishWithToolCalls path, ending the single-turn iteration.
+ * 2. The orchestrator does NOT attempt pause detection — it treats every
+ *    tool call identically, regardless of tool name.
+ * 3. AfterAgent-hook continuation behavior works correctly for tool-call
+ *    turns via the generic path.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type {
-  ServerAgentStreamEvent,
-  ToolCallResponseInfo,
-  ToolCallRequestInfo,
-} from './turn.js';
+import type { ServerAgentStreamEvent, ToolCallRequestInfo } from './turn.js';
 import { AgentEventType } from './turn.js';
 import type { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -45,24 +37,29 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 
 const mockTurnRun = vi.fn();
 
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
-  const tokenLimit = vi.fn(
-    (_model: string, userContextLimit?: number) =>
-      userContextLimit ?? 1_000_000,
-  );
-  return {
-    tokenLimit,
-    resolveEffectiveContextLimit: vi.fn(
-      (model: string, userCtx?: number, provCtx?: number) => {
-        const ok = (v: unknown): v is number =>
-          typeof v === 'number' && Number.isFinite(v) && v > 0;
-        if (ok(userCtx)) return userCtx;
-        if (ok(provCtx)) return provCtx;
-        return tokenLimit(model);
-      },
-    ),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/tokenLimits.js',
+  async (importOriginal) => {
+    const actual = await importOriginal();
+    const tokenLimit = vi.fn(
+      (_model: string, userContextLimit?: number) =>
+        userContextLimit ?? 1_000_000,
+    );
+    return {
+      ...actual,
+      tokenLimit,
+      resolveEffectiveContextLimit: vi.fn(
+        (model: string, userCtx?: number, provCtx?: number) => {
+          const ok = (v: unknown): v is number =>
+            typeof v === 'number' && Number.isFinite(v) && v > 0;
+          if (ok(userCtx)) return userCtx;
+          if (ok(provCtx)) return provCtx;
+          return tokenLimit(model);
+        },
+      ),
+    };
+  },
+);
 
 vi.mock('./turn.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
@@ -80,7 +77,6 @@ import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
-import { TodoContinuationService } from './TodoContinuationService.js';
 
 function makePauseRequest(): ToolCallRequestInfo {
   return {
@@ -90,40 +86,18 @@ function makePauseRequest(): ToolCallRequestInfo {
   } as unknown as ToolCallRequestInfo;
 }
 
-function makePauseResponse(success: boolean): ToolCallResponseInfo {
-  const base = {
-    callId: 'pause-call-1',
-    responseParts: [
-      {
-        type: 'tool_response',
-        callId: 'pause-call-1',
-        toolName: 'todo_pause',
-        result: success ? { ok: true } : {},
-      },
-    ],
-    resultDisplay: undefined,
-  };
-  if (success) {
-    return {
-      ...base,
-      error: undefined,
-      errorType: undefined,
-    } as unknown as ToolCallResponseInfo;
-  }
+function makeGenericToolRequest(): ToolCallRequestInfo {
   return {
-    ...base,
-    error: new Error('reason exceeds maximum length of 500 characters'),
-    errorType: 'EXECUTION_ERROR',
-  } as unknown as ToolCallResponseInfo;
+    name: 'read_file',
+    args: { file_path: '/tmp/test.txt' },
+    callId: 'read-call-1',
+  } as unknown as ToolCallRequestInfo;
 }
 
 interface BuildOptions {
   turnStream?: AsyncGenerator<ServerAgentStreamEvent>;
   activeTodos?: Todo[];
   blockingAfterHook?: boolean;
-  isSuccessfulTodoPauseResponse?: (
-    response: ToolCallResponseInfo | undefined,
-  ) => boolean;
 }
 
 function buildOrchestrator(options: BuildOptions = {}): {
@@ -132,8 +106,10 @@ function buildOrchestrator(options: BuildOptions = {}): {
 } {
   const mockChat = {
     getLastPromptTokenCount: vi.fn().mockReturnValue(100),
+    getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
+    getContextLimit: vi.fn(() => tokenLimit()),
   };
 
   const providerManager = {
@@ -176,9 +152,6 @@ function buildOrchestrator(options: BuildOptions = {}): {
 
   mockTurnRun.mockReturnValue(stream);
 
-  // A blocking AfterAgent hook is the observable distinguisher:
-  // _finishWithToolCalls forwards its reason into sendMessageStream, but the
-  // pause branch returns done immediately and never calls sendMessageStream.
   const blockingAfterHookOutput =
     options.blockingAfterHook === true
       ? ({
@@ -198,8 +171,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     consecutiveComplexTurns: 0,
     lastTodoSnapshot: [],
     recordModelActivity: vi.fn(),
-    isSuccessfulTodoPauseResponse:
-      options.isSuccessfulTodoPauseResponse ?? vi.fn().mockReturnValue(false),
+    isSuccessfulTodoPauseResponse: vi.fn().mockReturnValue(false),
     isTodoToolCall: vi.fn().mockReturnValue(false),
     applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
     getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
@@ -300,17 +272,17 @@ async function collectEvents(
   return events;
 }
 
-function toolCallTurnStream(
-  response: ToolCallResponseInfo,
+/**
+ * Realistic turn stream: Turn.run() emits ONLY ToolCallRequest (never
+ * ToolCallResponse — the scheduler response arrives later in AgenticLoop).
+ */
+function toolCallRequestOnlyStream(
+  request: ToolCallRequestInfo,
 ): AsyncGenerator<ServerAgentStreamEvent> {
   return (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
     yield {
       type: AgentEventType.ToolCallRequest,
-      value: makePauseRequest(),
-    };
-    yield {
-      type: AgentEventType.ToolCallResponse,
-      value: response,
+      value: request,
     };
     yield {
       type: AgentEventType.Finished,
@@ -319,22 +291,7 @@ function toolCallTurnStream(
   })();
 }
 
-function pauseTurnStream(
-  success: boolean,
-): AsyncGenerator<ServerAgentStreamEvent> {
-  return toolCallTurnStream(makePauseResponse(success));
-}
-
-function expectPauseToolEvents(events: ServerAgentStreamEvent[]): void {
-  expect(
-    events.some((event) => event.type === AgentEventType.ToolCallRequest),
-  ).toBe(true);
-  expect(
-    events.some((event) => event.type === AgentEventType.ToolCallResponse),
-  ).toBe(true);
-}
-
-describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', () => {
+describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(tokenLimit).mockImplementation(
@@ -361,13 +318,12 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
       turnStream,
       activeTodos: [],
     });
-    deps.todoContinuationService.shouldDeferStreamEvent =
-      TodoContinuationService.prototype.shouldDeferStreamEvent.bind(
-        deps.todoContinuationService,
-      );
+    deps.todoContinuationService.shouldDeferStreamEvent = vi
+      .fn()
+      .mockReturnValue(false);
 
     const iterator = orchestrator.execute(
-      [{ text: 'test' }] as PartListUnion,
+      [{ text: 'test' }] as unknown as AgentMessageInput,
       new AbortController().signal,
       'prompt-1',
       1,
@@ -393,77 +349,75 @@ describe('MessageStreamOrchestrator — todo_pause loop break (issue #2287)', ()
     ]);
   });
 
-  describe('successful pause breaks the loop via the explicit pause branch', () => {
-    it('suppresses the AfterAgent-hook continuation that the generic tool-call finish would fire', async () => {
-      // If todoPauseSeen is not evaluated before hadToolCallsThisTurn,
-      // _finishWithToolCalls runs and forwards the blocking hook reason into
-      // sendMessageStream. The pause branch must not.
+  describe('tool-call turns route through the generic finish path', () => {
+    it('treats a pause-tool request as a normal tool-call turn', async () => {
+      // Turn.run() emits only ToolCallRequest for the pause tool. The
+      // orchestrator must NOT attempt pause detection — that's
+      // AgenticLoop's job.
       const { orchestrator, deps } = buildOrchestrator({
-        turnStream: pauseTurnStream(true),
+        turnStream: toolCallRequestOnlyStream(makePauseRequest()),
         blockingAfterHook: true,
-        isSuccessfulTodoPauseResponse: vi.fn().mockReturnValue(true),
+      });
+
+      const events = await collectEvents(orchestrator);
+
+      // The generic tool-call finish path forwards blocking AfterAgent-hook
+      // decisions into sendMessageStream.
+      expect(deps.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(
+        events.some((event) => event.type === AgentEventType.ToolCallRequest),
+      ).toBe(true);
+      // The orchestrator never emits ToolCallResponse — Turn.run() doesn't.
+      expect(
+        events.some((event) => event.type === AgentEventType.ToolCallResponse),
+      ).toBe(false);
+    });
+
+    it('treats a generic read_file tool-call request identically', async () => {
+      const { orchestrator, deps } = buildOrchestrator({
+        turnStream: toolCallRequestOnlyStream(makeGenericToolRequest()),
+        blockingAfterHook: true,
+      });
+
+      const events = await collectEvents(orchestrator);
+
+      expect(deps.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(
+        events.some((event) => event.type === AgentEventType.ToolCallRequest),
+      ).toBe(true);
+    });
+
+    it('does not call isSuccessfulTodoPauseResponse for tool-call turns', async () => {
+      // The orchestrator no longer checks pause responses at all.
+      const { orchestrator, deps } = buildOrchestrator({
+        turnStream: toolCallRequestOnlyStream(makePauseRequest()),
+      });
+
+      await collectEvents(orchestrator);
+
+      expect(
+        deps.todoContinuationService.isSuccessfulTodoPauseResponse,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('completes the turn without calling sendMessageStream when AfterAgent hook is non-blocking', async () => {
+      // With a non-blocking AfterAgent hook (the default), the generic
+      // tool-call finish path should NOT forward into sendMessageStream.
+      const { orchestrator, deps } = buildOrchestrator({
+        turnStream: toolCallRequestOnlyStream(makePauseRequest()),
+        blockingAfterHook: false,
       });
 
       const events = await collectEvents(orchestrator);
 
       expect(deps.sendMessageStream).not.toHaveBeenCalled();
-      expectPauseToolEvents(events);
-    });
-
-    it('breaks without depending on an AfterAgent-hook continuation', async () => {
-      const { orchestrator, deps } = buildOrchestrator({
-        turnStream: pauseTurnStream(true),
-        isSuccessfulTodoPauseResponse: vi.fn().mockReturnValue(true),
-      });
-
-      const events = await collectEvents(orchestrator);
-
-      expect(deps.sendMessageStream).not.toHaveBeenCalled();
-      expectPauseToolEvents(events);
-    });
-  });
-
-  describe('invalid/error pause does NOT trigger the authoritative pause branch', () => {
-    it('routes through the generic tool-call finish, forwarding the blocking hook into a continuation', async () => {
-      // An invalid pause must NOT set todoPauseSeen, so _finishWithToolCalls
-      // runs and forwards the blocking hook into sendMessageStream.
-      const { orchestrator, deps } = buildOrchestrator({
-        turnStream: pauseTurnStream(false),
-        blockingAfterHook: true,
-        isSuccessfulTodoPauseResponse: vi.fn().mockReturnValue(false),
-      });
-
-      await collectEvents(orchestrator);
-
-      expect(deps.sendMessageStream).toHaveBeenCalledTimes(1);
-    });
-
-    it('passes the raw pause response to the success classifier without short-circuiting', async () => {
-      const errorResponse = {
-        callId: 'pause-call-1',
-        responseParts: [
-          {
-            type: 'tool_response',
-            callId: 'pause-call-1',
-            toolName: 'todo_pause',
-            result: {},
-          },
-        ],
-        resultDisplay: undefined,
-        error: new Error('filtered'),
-        errorType: 'EXECUTION_ERROR',
-      } as unknown as ToolCallResponseInfo;
-      const classifier = vi.fn().mockReturnValue(false);
-      const { orchestrator, deps } = buildOrchestrator({
-        turnStream: toolCallTurnStream(errorResponse),
-        blockingAfterHook: true,
-        isSuccessfulTodoPauseResponse: classifier,
-      });
-
-      await collectEvents(orchestrator);
-
-      expect(classifier).toHaveBeenCalledWith(errorResponse);
-      expect(deps.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(
+        events.some((event) => event.type === AgentEventType.ToolCallRequest),
+      ).toBe(true);
+      // Still no pause detection.
+      expect(
+        deps.todoContinuationService.isSuccessfulTodoPauseResponse,
+      ).not.toHaveBeenCalled();
     });
   });
 });

@@ -4,36 +4,62 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import type {
+  AnsiOutput,
+  LiveOutputUpdate,
+} from '../utils/terminalSerializer.js';
 
 /**
- * Accumulates a live-output chunk onto an existing value.
+ * Narrows an arbitrary `existing` accumulator value to the live-output union
+ * (`string | AnsiOutput`), returning an empty string for values that are not
+ * valid live-output content (e.g. `FileDiff` drawn from a broader display
+ * union). Used by the `status` path, which must not invent new content.
+ */
+function preserveLiveOutput(existing: unknown): string | AnsiOutput {
+  if (typeof existing === 'string') {
+    return existing;
+  }
+  if (Array.isArray(existing)) {
+    return existing as AnsiOutput;
+  }
+  return '';
+}
+
+/**
+ * Accumulates a live-output update onto an existing accumulated value using
+ * the explicit tagged {@link LiveOutputUpdate} protocol.
  *
- * Tools that stream via `canUpdateOutput` deliver chunks in one of two
- * semantics:
- *
- * - **`AnsiOutput`** (e.g. the shell tool) — a full terminal-buffer snapshot.
- *   Each chunk supersedes the previous one, so the latest snapshot replaces
- *   the old value.
- * - **`string`** (e.g. the task tool streaming subagent text) — an incremental
- *   delta.  Each chunk must be appended to the existing text so the display
- *   grows rather than showing only the latest token.
+ * - **`append`** (text deltas) — concatenated onto the existing value when it
+ *   is a string; otherwise the prior non-string value is dropped and the
+ *   delta starts a fresh string.
+ * - **`replace`** (terminal-buffer snapshots) — supersedes any prior value.
+ * - **`status`** (liveness snapshot, issue #2540) — non-content; the existing
+ *   accumulated value is returned unchanged so retained output never grows
+ *   with heartbeat strings.
  *
  * The `existing` parameter is typed `unknown` because callers may pass values
  * drawn from a broader display union (e.g. `ToolResultDisplay`, which also
- * includes `FileDiff` / `FileRead`).  The function only ever appends when both
- * values are strings; any other combination replaces with the incoming chunk.
- *
- * Note: the append-vs-replace distinction is currently inferred from the
- * payload type.  Migrating to an explicit tagged update protocol (e.g.
- * `{ mode: 'append'; data: string } | { mode: 'replace'; data: AnsiOutput }`)
- * is tracked in follow-up #2586.
+ * includes `FileDiff` / `FileRead`). The returned type is the narrow
+ * `string | AnsiOutput` union the live-output channel actually produces.
  */
 export function accumulateLiveOutput(
   existing: unknown,
-  chunk: string | AnsiOutput,
+  update: LiveOutputUpdate,
 ): string | AnsiOutput {
-  return typeof chunk === 'string' && typeof existing === 'string'
-    ? existing + chunk
-    : chunk;
+  switch (update.mode) {
+    case 'append':
+      return typeof existing === 'string'
+        ? existing + update.data
+        : update.data;
+    case 'replace':
+      return update.data;
+    case 'status':
+      // Liveness snapshots carry no content; keep the existing accumulator
+      // value verbatim without inventing new output.
+      return preserveLiveOutput(existing);
+    default: {
+      const _exhaustive: never = update;
+      return _exhaustive;
+    }
+  }
 }

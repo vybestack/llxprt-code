@@ -9,8 +9,8 @@ import {
   BaseToolInvocation,
   Kind,
   type ToolResult,
+  type LiveOutputUpdate,
 } from '@vybestack/llxprt-code-tools';
-import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   SubagentOrchestrator,
@@ -46,6 +46,8 @@ import {
   formatSuccessDisplay,
 } from './taskResultHelpers.js';
 import { executeAsyncTask } from './taskAsyncExecution.js';
+import { startTaskHeartbeat, type TaskHeartbeat } from './taskHeartbeat.js';
+import { setupTaskStreaming } from './taskStreaming.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -246,7 +248,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
   override async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     if (this.normalized.async) {
       return this.executeAsync(signal, updateOutput);
@@ -316,7 +318,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutSeconds: number | undefined,
     onUserAbort: () => void,
     timeoutId: ReturnType<typeof setTimeout> | null,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const abortState = this.createAbortState(launchRequest, signal);
 
@@ -461,7 +463,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         result: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
       ) => void;
     },
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const { scope, agentId, dispose } = launchResult;
     taskLogger.debug(
@@ -487,7 +489,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
     }
 
-    const { emitClosingSubagentTag } = this.setupStreaming(
+    const { emitClosingSubagentTag, heartbeat } = this.setupStreaming(
       launchResult,
       agentId,
       scope,
@@ -518,6 +520,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         abortState.aborted,
       );
     } finally {
+      heartbeat.stop();
       emitClosingSubagentTag();
     }
   }
@@ -547,39 +550,17 @@ class TaskToolInvocation extends BaseToolInvocation<
     launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
     agentId: string,
     scope: SubAgentScope,
-    updateOutput?: (output: string) => void,
-  ): { emitClosingSubagentTag: () => void } {
+    updateOutput?: (update: LiveOutputUpdate) => void,
+  ): { emitClosingSubagentTag: () => void; heartbeat: TaskHeartbeat } {
     const subagentName =
       launchRequestName(launchResult) || this.normalized.subagentName;
-    let xmlOutputOpen = false;
-    const normalizer = createStreamNormalizer();
-    const emitClosingSubagentTag = () => {
-      if (!xmlOutputOpen || !updateOutput) {
-        return;
-      }
-      const flushed = normalizer.flush();
-      if (flushed !== undefined) {
-        updateOutput(flushed);
-      }
-      updateOutput(`</subagent name="${subagentName}" id="${agentId}">\n`);
-      xmlOutputOpen = false;
-    };
-
-    if (updateOutput) {
-      updateOutput(`<subagent name="${subagentName}" id="${agentId}">\n`);
-      xmlOutputOpen = true;
-
-      const existingHandler = scope.onMessage;
-      scope.onMessage = (message: string) => {
-        const delta = normalizer.push(message);
-        if (delta !== undefined) {
-          updateOutput(delta);
-        }
-        existingHandler?.(message);
-      };
-    }
-
-    return { emitClosingSubagentTag };
+    return setupTaskStreaming(
+      subagentName,
+      agentId,
+      scope,
+      updateOutput,
+      startTaskHeartbeat,
+    );
   }
 
   private async runSubagent(
@@ -703,7 +684,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
   private async executeAsync(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     return executeAsyncTask(
       {

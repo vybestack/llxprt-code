@@ -22,6 +22,8 @@ import {
   type VirtualizedListState,
 } from './VirtualizedList.types.js';
 
+const BOTTOM_EPSILON = 0.001;
+
 export function findLastIndex<T>(
   array: T[],
   predicate: (value: T, index: number, obj: T[]) => unknown,
@@ -203,12 +205,15 @@ export function useStickToBottom(
   useLayoutEffect(() => {
     const contentPreviouslyFit =
       prevTotalHeight.current <= prevContainerHeight.current;
-    const wasScrolledToBottomPixels =
-      prevScrollTop.current >=
-      prevTotalHeight.current - prevContainerHeight.current - 1;
-    const wasAtBottom = contentPreviouslyFit || wasScrolledToBottomPixels;
+    const currentMaxScrollTop = Math.max(
+      0,
+      totalHeight - scrollableContainerHeight,
+    );
+    const userIsAtBottomPixels =
+      scrollTop >= currentMaxScrollTop - BOTTOM_EPSILON;
+    const wasAtBottom = contentPreviouslyFit || userIsAtBottomPixels;
 
-    if (wasAtBottom && scrollTop >= prevScrollTop.current) {
+    if (wasAtBottom && scrollTop > prevScrollTop.current) {
       setIsStickingToBottom(true);
     }
 

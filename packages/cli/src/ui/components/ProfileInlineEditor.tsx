@@ -12,6 +12,7 @@ import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 /**
  * Get border color based on editor state.
@@ -302,7 +303,7 @@ const InstructionsBar: React.FC<{
   cursorLine: number;
 }> = ({ isEditing, cursorLine }) => (
   <Box
-    borderStyle="single"
+    borderStyle={getBorderStyle('single')}
     borderTop
     borderBottom={false}
     borderLeft={false}
@@ -378,7 +379,7 @@ const EditorLayout: React.FC<{
   dialogWidth,
 }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={getEditorBorderColor(validateJson, hasChanges)}
     flexDirection="column"
     padding={1}

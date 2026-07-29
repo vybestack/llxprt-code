@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  OAUTH_MODELS,
   DEFAULT_MODELS,
   isOpus46Plus,
   isSonnet5,
@@ -19,34 +18,25 @@ import {
 
 describe('AnthropicModelData latest Opus models', () => {
   describe('catalog entries', () => {
-    // Defaults reflect the Claude Code / subscription (auth) limits: 200K
-    // context and 32K max output. The API-only 1M/128K limits are plan-gated
-    // and can be raised via /set or a profile (context-limit / maxOutputTokens).
-    it('includes claude-opus-4-8 with 200K context / 32K output (auth default) in OAUTH_MODELS', () => {
-      const model = OAUTH_MODELS.find((m) => m.id === 'claude-opus-4-8');
-      expect(model).toBeDefined();
-      expect(model?.name).toBe('Claude Opus 4.8');
-      expect(model?.contextWindow).toBe(200000);
-      expect(model?.maxOutputTokens).toBe(32000);
-    });
-
-    it('includes claude-opus-4-7 with 200K context / 32K output (auth default) in OAUTH_MODELS', () => {
-      const model = OAUTH_MODELS.find((m) => m.id === 'claude-opus-4-7');
-      expect(model).toBeDefined();
-      expect(model?.contextWindow).toBe(200000);
-      expect(model?.maxOutputTokens).toBe(32000);
-    });
-
     it('includes claude-opus-4-8 and claude-opus-4-7 in DEFAULT_MODELS', () => {
       expect(DEFAULT_MODELS.some((m) => m.id === 'claude-opus-4-8')).toBe(true);
       expect(DEFAULT_MODELS.some((m) => m.id === 'claude-opus-4-7')).toBe(true);
     });
 
     it('retains claude-opus-4-6 with 200K context / 32K output (auth default)', () => {
-      const model = OAUTH_MODELS.find((m) => m.id === 'claude-opus-4-6');
+      const model = DEFAULT_MODELS.find((m) => m.id === 'claude-opus-4-6');
       expect(model).toBeDefined();
       expect(model?.contextWindow).toBe(200000);
       expect(model?.maxOutputTokens).toBe(32000);
+    });
+
+    it('does not include retired claude-opus-4-1 entries in DEFAULT_MODELS', () => {
+      expect(DEFAULT_MODELS.some((m) => m.id === 'claude-opus-4-1')).toBe(
+        false,
+      );
+      expect(
+        DEFAULT_MODELS.some((m) => m.id === 'claude-opus-4-1-20250805'),
+      ).toBe(false);
     });
   });
 
@@ -69,25 +59,25 @@ describe('AnthropicModelData latest Opus models', () => {
   });
 
   describe('getMaxTokensForModel', () => {
-    it('returns 32000 (auth default) for opus 4.6, 4.7, and 4.8', () => {
+    it('returns 32000 for opus 4.6, 4.7, and 4.8', () => {
       expect(getMaxTokensForModel('claude-opus-4-8')).toBe(32000);
       expect(getMaxTokensForModel('claude-opus-4-7')).toBe(32000);
       expect(getMaxTokensForModel('claude-opus-4-6')).toBe(32000);
     });
 
-    it('returns 32000 (auth default) for the claude-opus-4-latest alias', () => {
+    it('returns 32000 for the claude-opus-4-latest alias', () => {
       expect(getMaxTokensForModel('claude-opus-4-latest')).toBe(32000);
     });
   });
 
   describe('getContextWindowForModel', () => {
-    it('returns 200000 (auth default) for opus 4.6, 4.7, and 4.8', () => {
+    it('returns 200000 for opus 4.6, 4.7, and 4.8', () => {
       expect(getContextWindowForModel('claude-opus-4-8')).toBe(200000);
       expect(getContextWindowForModel('claude-opus-4-7')).toBe(200000);
       expect(getContextWindowForModel('claude-opus-4-6')).toBe(200000);
     });
 
-    it('returns 200000 (auth default) for the claude-opus-4-latest alias', () => {
+    it('returns 200000 for the claude-opus-4-latest alias', () => {
       expect(getContextWindowForModel('claude-opus-4-latest')).toBe(200000);
     });
   });
@@ -95,17 +85,6 @@ describe('AnthropicModelData latest Opus models', () => {
 
 describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
   describe('catalog entries', () => {
-    // Context window reflects the Claude Code / subscription (auth) 200K
-    // default; the advertised 1M window is API-only/plan-gated. Max output
-    // is the full 128K ceiling.
-    it('includes claude-sonnet-5 with 200K context / 128K output in OAUTH_MODELS', () => {
-      const model = OAUTH_MODELS.find((m) => m.id === 'claude-sonnet-5');
-      expect(model).toBeDefined();
-      expect(model?.name).toBe('Claude Sonnet 5');
-      expect(model?.contextWindow).toBe(200000);
-      expect(model?.maxOutputTokens).toBe(128000);
-    });
-
     it('includes claude-sonnet-5 in DEFAULT_MODELS', () => {
       expect(DEFAULT_MODELS.some((m) => m.id === 'claude-sonnet-5')).toBe(true);
     });
@@ -189,23 +168,8 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
 
 describe('AnthropicModelData Claude Opus 5 @issue:2665', () => {
   describe('catalog entries', () => {
-    // Defaults reflect the Claude Code / subscription (auth) limits: 200K
-    // context and 32K max output. The API-only 1M/128K limits are plan-gated
-    // and can be raised via /set or a profile (context-limit / maxOutputTokens).
-    it('includes claude-opus-5 with 200K context / 32K output in OAUTH_MODELS', () => {
-      const model = OAUTH_MODELS.find((m) => m.id === 'claude-opus-5');
-      expect(model).toBeDefined();
-      expect(model?.name).toBe('Claude Opus 5');
-      expect(model?.contextWindow).toBe(200000);
-      expect(model?.maxOutputTokens).toBe(32000);
-    });
-
     it('includes claude-opus-5 in DEFAULT_MODELS', () => {
       expect(DEFAULT_MODELS.some((m) => m.id === 'claude-opus-5')).toBe(true);
-    });
-
-    it('includes claude-opus-5 in OAUTH_MODELS', () => {
-      expect(OAUTH_MODELS.some((m) => m.id === 'claude-opus-5')).toBe(true);
     });
   });
 
@@ -269,29 +233,6 @@ describe('AnthropicModelData Claude Opus 5 @issue:2665', () => {
 });
 
 describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
-  describe('catalog entries', () => {
-    // Context window reflects the Claude Code / subscription (auth) 200K
-    // default; the advertised 1M window is API-only/plan-gated. Max output
-    // defaults to 40K (a 128K cap is not realistic at a 200K context window).
-    it('includes claude-fable-5 with 200K context / 40K output in OAUTH_MODELS', () => {
-      const model = OAUTH_MODELS.find((m) => m.id === 'claude-fable-5');
-      expect(model).toBeDefined();
-      expect(model?.name).toBe('Claude Fable 5');
-      expect(model?.contextWindow).toBe(200000);
-      expect(model?.maxOutputTokens).toBe(40000);
-    });
-
-    it('includes claude-fable-5 near the top of OAUTH_MODELS', () => {
-      // claude-opus-5 is the current head entry (#2665); fable remains
-      // prominently placed among the curated OAuth models.
-      expect(OAUTH_MODELS.some((m) => m.id === 'claude-fable-5')).toBe(true);
-    });
-
-    it('does NOT include claude-fable-5 in DEFAULT_MODELS (OAuth-only)', () => {
-      expect(DEFAULT_MODELS.some((m) => m.id === 'claude-fable-5')).toBe(false);
-    });
-  });
-
   describe('isFable5', () => {
     it('returns true for claude-fable-5 and dated snapshot variants', () => {
       expect(isFable5('claude-fable-5')).toBe(true);

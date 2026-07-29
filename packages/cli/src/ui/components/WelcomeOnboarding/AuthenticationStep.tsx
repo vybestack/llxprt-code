@@ -9,6 +9,7 @@ import { Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
+import { getSpinnerType } from '../../contexts/UnicodeRenderingContext.js';
 
 interface AuthenticationStepProps {
   provider: string;
@@ -36,7 +37,7 @@ const OAuthFlowContent: React.FC<{ providerDisplay: string }> = ({
     <Box marginBottom={1}>
       <Text color={Colors.Foreground}>
         <Text color={Colors.AccentYellow}>
-          <Spinner type="dots" />
+          <Spinner type={getSpinnerType('dots')} />
         </Text>{' '}
         Opening browser for OAuth authentication...
       </Text>
@@ -68,7 +69,7 @@ const ApiKeyInputContent: React.FC<{
         <Box marginBottom={1}>
           <Text color={Colors.Foreground}>
             <Text color={Colors.AccentYellow}>
-              <Spinner type="dots" />
+              <Spinner type={getSpinnerType('dots')} />
             </Text>{' '}
             Validating API key...
           </Text>

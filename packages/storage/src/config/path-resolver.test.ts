@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as path from 'node:path';
 import {
   resolveGlobalConfigDir,
   resolveGlobalDataDir,
@@ -62,8 +63,8 @@ describe('shared path-resolver', () => {
   });
 
   it('resolveEnvOverride resolves an absolute path', () => {
-    expect(resolveEnvOverride('/tmp/foo')).toBe('/tmp/foo');
-    expect(resolveEnvOverride('  /tmp/bar  ')).toBe('/tmp/bar');
+    expect(resolveEnvOverride('/tmp/foo')).toBe(path.resolve('/tmp/foo'));
+    expect(resolveEnvOverride('  /tmp/bar  ')).toBe(path.resolve('/tmp/bar'));
   });
 
   it('resolveGlobalConfigDir returns the platform default when no override is set', () => {
@@ -72,28 +73,28 @@ describe('shared path-resolver', () => {
 
   it('resolveGlobalConfigDir honors LLXPRT_CONFIG_HOME', () => {
     process.env.LLXPRT_CONFIG_HOME = '/tmp/custom-config';
-    expect(resolveGlobalConfigDir()).toBe('/tmp/custom-config');
+    expect(resolveGlobalConfigDir()).toBe(path.resolve('/tmp/custom-config'));
   });
 
   it('resolveGlobalDataDir falls back to LLXPRT_CONFIG_HOME when LLXPRT_DATA_HOME is absent', () => {
     process.env.LLXPRT_CONFIG_HOME = '/tmp/shared-root';
-    expect(resolveGlobalDataDir()).toBe('/tmp/shared-root');
+    expect(resolveGlobalDataDir()).toBe(path.resolve('/tmp/shared-root'));
   });
 
   it('resolveGlobalDataDir prefers LLXPRT_DATA_HOME over LLXPRT_CONFIG_HOME', () => {
     process.env.LLXPRT_DATA_HOME = '/tmp/data-specific';
     process.env.LLXPRT_CONFIG_HOME = '/tmp/config-fallback';
-    expect(resolveGlobalDataDir()).toBe('/tmp/data-specific');
+    expect(resolveGlobalDataDir()).toBe(path.resolve('/tmp/data-specific'));
   });
 
   it('resolveGlobalCacheDir falls back to LLXPRT_CONFIG_HOME', () => {
     process.env.LLXPRT_CONFIG_HOME = '/tmp/cache-fallback';
-    expect(resolveGlobalCacheDir()).toBe('/tmp/cache-fallback');
+    expect(resolveGlobalCacheDir()).toBe(path.resolve('/tmp/cache-fallback'));
   });
 
   it('resolveGlobalLogDir falls back to LLXPRT_CONFIG_HOME', () => {
     process.env.LLXPRT_CONFIG_HOME = '/tmp/log-fallback';
-    expect(resolveGlobalLogDir()).toBe('/tmp/log-fallback');
+    expect(resolveGlobalLogDir()).toBe(path.resolve('/tmp/log-fallback'));
   });
 
   it('resolveCanonicalDir throws when platformDefault is empty and no override is set', () => {
@@ -148,7 +149,9 @@ describe('Storage delegates to the shared path-resolver (single implementation)'
 
   it('Storage honors LLXPRT_DATA_HOME override identically to the resolver', () => {
     process.env.LLXPRT_DATA_HOME = '/tmp/storage-data-override';
-    expect(Storage.getGlobalDataDir()).toBe('/tmp/storage-data-override');
+    expect(Storage.getGlobalDataDir()).toBe(
+      path.resolve('/tmp/storage-data-override'),
+    );
     expect(Storage.getGlobalDataDir()).toBe(resolveGlobalDataDir());
   });
 });

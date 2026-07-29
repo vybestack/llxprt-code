@@ -14,6 +14,7 @@ import {
   parseWorkflowYaml,
   asRecord,
   asRecordArray,
+  asOptionalRecord,
 } from './typed-test-helpers.ts';
 import { readRootFile, stepNamed } from './ocr-review-workflow-helpers.ts';
 
@@ -82,11 +83,16 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(testShardJob?.name).toBe(
       'Test (${{ matrix.os }}) [${{ matrix.shard }}]',
     );
-    const matrix = testShardJob?.strategy?.matrix;
-    const matrixRec = matrix ? asRecord(matrix) : {};
-    expect(matrixRec['os']).toEqual(['ubuntu-latest', 'macos-latest']);
-    expect(matrixRec['node-version']).toEqual(['24.x']);
-    expect(matrixRec).not.toHaveProperty('secure-store-mode');
+    const matrix = asOptionalRecord(
+      asOptionalRecord(testShardJob?.strategy)?.['matrix'],
+    );
+    const include = matrix ? asRecord(matrix)['include'] : undefined;
+    expect(
+      include,
+      'test_shard must use dynamic matrix from shard_selector',
+    ).toContain('${{ fromJSON(needs.shard_selector.outputs.matrix) }}');
+    expect(testShardJob?.['runs-on']).toBe('${{ matrix.os }}');
+    expect(matrix).not.toHaveProperty('secure-store-mode');
 
     const runTests = stepNamed(testShardJob, 'Run shard tests (issue #2707)');
     expect(runTests.run).toContain('bun scripts/test.ts --shard');
@@ -403,5 +409,62 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(artifact.with?.['path']).toBe(
       'packages/storage/junit.secure-store.xml',
     );
+  });
+});
+
+describe('Issue #2709: shard_selector and Test aggregator wiring', () => {
+  let workflow: WorkflowObject;
+  let shardSelectorJob: WorkflowJob | undefined;
+  let testAggregatorJob: WorkflowJob | undefined;
+
+  beforeAll(() => {
+    workflow = loadCiWorkflow();
+    const jobs = jobsOf(workflow);
+    shardSelectorJob = jobs['shard_selector'];
+    testAggregatorJob = jobs['test'];
+  });
+
+  it('shard_selector is least-privilege, self-contained, and does not suppress gh failures', () => {
+    expect(shardSelectorJob).toBeTruthy();
+    // Least-privilege permissions.
+    expect(shardSelectorJob?.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
+    // Unused doc_change_filter dependency removed.
+    expect(shardSelectorJob?.needs).not.toContain('doc_change_filter');
+    expect(shardSelectorJob?.needs).toContain('skip_check');
+    // Bounded timeout.
+    expect(shardSelectorJob?.['timeout-minutes']).toBeGreaterThan(0);
+    // Checkout does not persist credentials.
+    const checkout = stepNamed(shardSelectorJob, 'Checkout');
+    expect(checkout.with?.['persist-credentials']).toBe(false);
+    // Pinned setup-node with .nvmrc; no dependency install.
+    const setupNode = stepNamed(shardSelectorJob, 'Set up Node.js');
+    expect(setupNode.uses).toContain('actions/setup-node@');
+    expect(setupNode.with?.['node-version-file']).toBe('.nvmrc');
+    const stepNames = (shardSelectorJob?.steps ?? []).map(
+      (s: WorkflowStep) => s.name,
+    );
+    expect(stepNames).not.toContain('Install dependencies');
+    expect(stepNames).not.toContain('Setup Bun');
+    // gh api pagination failures must not be suppressed (no `|| true`).
+    const changed = stepNamed(shardSelectorJob, 'Determine changed files');
+    expect(changed.run).not.toContain('|| true');
+  });
+
+  it('Test aggregator honors explicit skip_check but stays red for selector failure', () => {
+    expect(testAggregatorJob).toBeTruthy();
+    expect(testAggregatorJob?.needs).toContain('skip_check');
+    expect(testAggregatorJob?.needs).toContain('shard_selector');
+    const check = stepNamed(testAggregatorJob, 'Check shard results');
+    const checkRun = check.run ?? '';
+    // The should_skip=true branch runs before the selector-result check.
+    const skipIdx = checkRun.indexOf('should_skip');
+    const selectorIdx = checkRun.indexOf('selector_result');
+    expect(skipIdx).toBeGreaterThanOrEqual(0);
+    expect(selectorIdx).toBeGreaterThan(skipIdx);
+    // Non-skip selector failure stays red.
+    expect(checkRun).toContain('Shard selector did not succeed');
   });
 });

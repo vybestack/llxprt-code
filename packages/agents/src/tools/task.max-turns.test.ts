@@ -71,7 +71,9 @@ describe('TaskTool', () => {
 
     await invocation.execute(new AbortController().signal, updateOutput);
 
-    return updateOutput.mock.calls.map((c) => c[0] as string).slice(1, -1);
+    return updateOutput.mock.calls
+      .map((c) => (c[0] as { data: string }).data)
+      .slice(1, -1);
   }
 
   describe('max_turns handling', () => {
@@ -397,7 +399,9 @@ describe('TaskTool', () => {
 
     await invocation.execute(new AbortController().signal, updateOutput);
 
-    const calls = updateOutput.mock.calls.map((c) => c[0] as string);
+    const calls = updateOutput.mock.calls.map(
+      (c) => (c[0] as { data: string }).data,
+    );
     expect(calls[0]).toBe('<subagent name="helper" id="agent-42">\n');
     expect(calls[calls.length - 1]).toBe(
       '</subagent name="helper" id="agent-42">\n',

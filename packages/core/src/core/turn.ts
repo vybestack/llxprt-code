@@ -199,10 +199,19 @@ export enum CompressionStatus {
   /** The compression failed due to an error counting tokens */
   COMPRESSION_FAILED_TOKEN_COUNT_ERROR = 3,
 
-  /** The compression failed because the model returned an empty summary */
-  COMPRESSION_FAILED_EMPTY_SUMMARY,
+  /**
+   * The compression failed because the model returned an empty summary.
+   * Explicit value to avoid colliding with NOOP (issue #2602).
+   */
+  COMPRESSION_FAILED_EMPTY_SUMMARY = 7,
 
-  /** The compression was not necessary and no action was taken */
+  /**
+   * Structural compression was a no-op: the strategy determined it could not
+   * produce a valid compressed candidate (e.g. no valid middle after split /
+   * tool-boundary / last-user-prompt preservation) and returned the history
+   * unchanged. Distinct serialized value from COMPRESSION_FAILED_EMPTY_SUMMARY
+   * (issue #2602).
+   */
   NOOP = 4,
 
   /** Compression ran recently and did not reduce tokens further */
@@ -224,6 +233,14 @@ export enum PerformCompressionResult {
   SKIPPED_EMPTY = 'skipped_empty',
   /** Compression skipped due to cooldown after repeated failures */
   SKIPPED_COOLDOWN = 'skipped_cooldown',
+  /**
+   * Structural compression was a no-op: the configured strategy (and, for
+   * middle-out, the one-shot fallback) determined it could not produce a valid
+   * compressed candidate and returned history unchanged. Distinct from skips
+   * (which never attempted) and from FAILED (which attempted and threw).
+   * (issue #2602)
+   */
+  NOOP = 'noop',
   /** Compression was attempted but all strategies failed */
   FAILED = 'failed',
 }

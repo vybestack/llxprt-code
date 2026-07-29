@@ -28,6 +28,9 @@ import type {
 } from '@vybestack/llxprt-code-providers';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
 
+type RuntimeApi = ReturnType<typeof getRuntimeApi>;
+type RuntimeOAuthManager = ReturnType<RuntimeApi['maybeGetCliOAuthManager']>;
+
 interface RuntimeSessionTokenUsage {
   input: number;
   output: number;
@@ -135,13 +138,12 @@ function isSessionTokenUsage(
 
 function appendProviderInfo(
   diagnostics: string[],
-  context: CommandContext,
   providerName: string | undefined,
+  oauthMgr: RuntimeOAuthManager,
 ): void {
   diagnostics.push('## Provider Information');
   diagnostics.push(`- Active Provider: ${providerName ?? 'none'}`);
 
-  const oauthMgr = context.services.oauthManager;
   if (oauthMgr && providerName) {
     const sessionBucket = oauthMgr.getSessionBucket(providerName);
     diagnostics.push(`- OAuth Bucket: ${sessionBucket ?? 'default'}`);
@@ -152,7 +154,7 @@ function appendFailoverInfo(
   diagnostics: string[],
   config: NonNullable<CommandContext['services']['config']>,
   providerName: string | undefined,
-  oauthMgr: CommandContext['services']['oauthManager'],
+  oauthMgr: RuntimeOAuthManager,
 ): void {
   const failoverHandler = getBucketFailoverDiagnosticsHandler(config);
   if (failoverHandler === undefined) {
@@ -479,7 +481,17 @@ export const diagnosticsCommand: SlashCommand = {
         };
       }
 
-      const snapshot = getRuntimeApi().getRuntimeDiagnosticsSnapshot();
+      const runtimeApi = getRuntimeApi();
+      const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
+      let runtimeOAuthManager: RuntimeOAuthManager = null;
+      try {
+        runtimeOAuthManager = runtimeApi.maybeGetCliOAuthManager();
+      } catch (oauthError) {
+        logger.debug(
+          () =>
+            `[diagnostics] Failed to retrieve OAuth manager: ${oauthError instanceof Error ? oauthError.message : String(oauthError)}`,
+        );
+      }
       logger.debug(
         () =>
           `[diagnostics] snapshot provider=${snapshot.providerName ?? 'unknown'}`,
@@ -488,8 +500,8 @@ export const diagnosticsCommand: SlashCommand = {
 
       appendProviderInfo(
         diagnostics,
-        context,
         snapshot.providerName ?? undefined,
+        runtimeOAuthManager,
       );
       diagnostics.push(`- Current Model: ${snapshot.modelName ?? 'unknown'}`);
       diagnostics.push(`- Current Profile: ${snapshot.profileName ?? 'none'}`);
@@ -499,7 +511,7 @@ export const diagnosticsCommand: SlashCommand = {
         diagnostics,
         config,
         snapshot.providerName ?? undefined,
-        context.services.oauthManager,
+        runtimeOAuthManager,
       );
       appendLoadBalancerStats(diagnostics, logger);
 

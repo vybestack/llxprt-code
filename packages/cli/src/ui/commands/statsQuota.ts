@@ -305,7 +305,7 @@ async function fetchOAuthQuotaLines(
 
   const anthropicLines = formatAnthropicLines(anthropicUsageInfo);
   if (anthropicLines.length > 0) {
-    output.push('## Anthropic Quota Information\n');
+    output.push('## Claude Code Quota Information\n');
     output.push(...anthropicLines);
   }
 

@@ -29,6 +29,7 @@ import {
   REDIRECTION_WARNING_TIP_LABEL,
   REDIRECTION_WARNING_TIP_TEXT,
 } from '../../textConstants.js';
+import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 /**
  * Build options for edit-type confirmation.
@@ -601,7 +602,7 @@ export const ToolConfirmationMessage: React.FC<
     return (
       <Box
         width={terminalWidth}
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         borderColor={theme.border.default}
         justifyContent="space-around"
         paddingTop={1}

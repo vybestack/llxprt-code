@@ -804,7 +804,7 @@ async function buildSystemInstruction(
     ),
   );
 
-  const mcpInstructions = config.getMcpClientManager()?.getMcpInstructions();
+  const mcpInstructions = config.getMcpInstructions();
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
     mcpInstructions,
     model: modelConfig.model,

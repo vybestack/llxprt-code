@@ -32,6 +32,26 @@ function findStepByName(
   return jobSteps(job).find((step) => step.name === name);
 }
 
+function requireStepByName(job: WorkflowJob, name: string): WorkflowStep {
+  const step = jobSteps(job).find((candidate) => candidate.name === name);
+  if (!step) {
+    throw new Error(`Review job must have a step named "${name}"`);
+  }
+  return step;
+}
+
+function requireStepById(job: WorkflowJob, id: string): WorkflowStep {
+  const step = jobSteps(job).find((candidate) => candidate.id === id);
+  if (!step) {
+    throw new Error(`Review job must have a step with id "${id}"`);
+  }
+  return step;
+}
+
+function stepUses(step: WorkflowStep | undefined): string {
+  return asString(step?.['uses'] ?? '');
+}
+
 function stepRunText(job: WorkflowJob | undefined, name: string): string {
   const step = findStepByName(job, name);
   if (!step) return '';
@@ -44,6 +64,153 @@ function allStepNames(job: WorkflowJob | undefined): string[] {
 
 function allStepText(job: WorkflowJob | undefined): string {
   return JSON.stringify(job?.steps);
+}
+
+function continueOnError(step: WorkflowStep | undefined): boolean {
+  if (!step) {
+    return false;
+  }
+  const value = step['continue-on-error'] ?? step['continue_on_error'];
+  return value === true || value === '${{ true }}';
+}
+
+type StepOutcome = 'success' | 'failure' | 'skipped' | 'cancelled';
+
+interface StepOutcomes {
+  outcomes: Record<string, StepOutcome>;
+  outputs?: Record<string, Record<string, string>>;
+}
+
+/**
+ * Evaluate a GitHub Actions `if:` expression against a map of step outcomes.
+ * Supports the limited subset used by pr-review.yml: step.outcome equality,
+ * &&, ||, !cancelled(), always(), failure(), success().
+ */
+function evalStepIf(
+  expr: string | undefined,
+  stepOutcomes: StepOutcomes = { outcomes: {} },
+): boolean {
+  if (expr === undefined || expr === null) {
+    return true;
+  }
+  let normalized = String(expr).trim();
+  if (normalized.startsWith('${{') && normalized.endsWith('}}')) {
+    normalized = normalized.slice(3, -2).trim();
+  }
+  if (normalized === '') {
+    return true;
+  }
+  normalized = normalized.replace(/\s+/g, ' ');
+  normalized = normalized.replace(
+    /steps\.([a-zA-Z0-9_-]+)\.outcome\s*==\s*'([^']*)'/g,
+    (_match, id: string, value: string) => {
+      const outcome = stepOutcomes.outcomes[id] ?? 'skipped';
+      return outcome === value ? 'TRUE' : 'FALSE';
+    },
+  );
+  const outputs = stepOutcomes.outputs ?? {};
+  normalized = normalized.replace(
+    /steps\.([a-zA-Z0-9_-]+)\.outputs\.([a-zA-Z0-9_-]+)\s*==\s*'([^']*)'/g,
+    (_match, stepId: string, outputName: string, expected: string) => {
+      const actual = outputs[stepId]?.[outputName];
+      // Missing outputs default to TRUE so that install/quota gating
+      // expressions can be tested in isolation without modeling every
+      // upstream gate. Critical outputs (should_review, selected_key)
+      // are always provided by tests that exercise those paths.
+      if (actual === undefined) {
+        return 'TRUE';
+      }
+      return actual === expected ? 'TRUE' : 'FALSE';
+    },
+  );
+  const outcomeValues = Object.values(stepOutcomes.outcomes);
+  const anyFailure = outcomeValues.some((o) => o === 'failure');
+  const anyCancelled = outcomeValues.some((o) => o === 'cancelled');
+  normalized = normalized.replace(/\balways\(\)/g, 'TRUE');
+  // success() is true only when no prior step failed and the job is not cancelled.
+  normalized = normalized.replace(
+    /\bsuccess\(\)/g,
+    anyFailure || anyCancelled ? 'FALSE' : 'TRUE',
+  );
+  normalized = normalized.replace(
+    /\bfailure\(\)/g,
+    anyFailure ? 'TRUE' : 'FALSE',
+  );
+  normalized = normalized.replace(
+    /!cancelled\(\)/g,
+    anyCancelled ? 'FALSE' : 'TRUE',
+  );
+  return evalBoolean(normalized);
+}
+
+function evalBoolean(expr: string): boolean {
+  let pos = 0;
+  function skipSpaces(): void {
+    while (pos < expr.length && expr[pos] === ' ') {
+      pos += 1;
+    }
+  }
+  function parsePrimary(): boolean {
+    skipSpaces();
+    if (expr.startsWith('TRUE', pos)) {
+      pos += 4;
+      return true;
+    }
+    if (expr.startsWith('FALSE', pos)) {
+      pos += 5;
+      return false;
+    }
+    if (expr[pos] === '(') {
+      pos += 1;
+      const value = parseOr();
+      skipSpaces();
+      if (expr[pos] !== ')') {
+        throw new Error(
+          `Invalid boolean expression: expected ')' at ${pos} in "${expr}"`,
+        );
+      }
+      pos += 1;
+      return value;
+    }
+    if (expr[pos] === '!') {
+      pos += 1;
+      skipSpaces();
+      return !parsePrimary();
+    }
+    throw new Error(
+      `Invalid boolean expression: unexpected token at ${pos} in "${expr}"`,
+    );
+  }
+  function parseAnd(): boolean {
+    let value = parsePrimary();
+    skipSpaces();
+    while (expr.startsWith('&&', pos)) {
+      pos += 2;
+      const right = parsePrimary();
+      value = value && right;
+      skipSpaces();
+    }
+    return value;
+  }
+  function parseOr(): boolean {
+    let value = parseAnd();
+    skipSpaces();
+    while (expr.startsWith('||', pos)) {
+      pos += 2;
+      const right = parseAnd();
+      value = value || right;
+      skipSpaces();
+    }
+    return value;
+  }
+  const result = parseOr();
+  skipSpaces();
+  if (pos !== expr.length) {
+    throw new Error(
+      `Invalid boolean expression: trailing input at ${pos} in "${expr}"`,
+    );
+  }
+  return result;
 }
 
 describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', () => {
@@ -119,7 +286,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     it('uses llxprt-walkthrough as the comment-tag in the post step', () => {
       const steps = jobSteps(reviewJob);
       const postStep = steps.find((step) =>
-        String(step.uses ?? '').includes('actions-comment-pull-request'),
+        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
       );
       expect(postStep, 'should have a comment-post step').toBeTruthy();
       expect(asOptionalRecord(postStep?.with)?.['comment-tag']).toBe(
@@ -130,7 +297,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     it('does not use the old llxprt-pr-review comment tag in the post step', () => {
       const steps = jobSteps(reviewJob);
       const postStep = steps.find((step) =>
-        String(step.uses ?? '').includes('actions-comment-pull-request'),
+        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
       );
       expect(asOptionalRecord(postStep?.with)?.['comment-tag']).not.toBe(
         'llxprt-pr-review',
@@ -252,11 +419,12 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   describe('idempotent comment posting', () => {
     it('uses the thollander comment action with edit-in-place tag', () => {
       const postStep = jobSteps(reviewJob).find((step: WorkflowStep) =>
-        String(step.uses ?? '').includes('actions-comment-pull-request'),
+        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
       );
-      expect(postStep?.uses, 'should use the pinned comment action').toContain(
-        'thollander/actions-comment-pull-request',
-      );
+      expect(
+        postStep?.['uses'],
+        'should use the pinned comment action',
+      ).toContain('thollander/actions-comment-pull-request');
     });
   });
 
@@ -316,10 +484,14 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     it('uploads the private diagnostics log for post-mortem inspection', () => {
       const step = findStepByName(reviewJob, 'Upload walkthrough diagnostics');
       expect(step, 'should upload the diagnostics log').toBeTruthy();
+      // Issue #2778: upload runs under always() so parse artifacts from
+      // gracefully degraded zero-exit runs are captured alongside failure logs.
       if (!step)
         throw new Error('Upload walkthrough diagnostics step not found');
-      expect(step.if).toBe('failure()');
-      expect(step.uses).toContain('actions/upload-artifact@');
+      expect(step.if).toBe('always()');
+      expect(asString(step['uses'] ?? '')).toContain(
+        'actions/upload-artifact@',
+      );
       // Issue #2742: the artifact now includes parse-failure diagnostics
       // (raw LLM responses + metadata) alongside the error log.
       const artifactPath = asOptionalRecord(step.with)?.['path'] ?? '';
@@ -334,7 +506,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
         (s: WorkflowStep) => s.name === 'Ensure fallback comment',
       );
       const postIdx = steps.findIndex((s: WorkflowStep) =>
-        asOptionalString(s.uses)?.includes('actions-comment-pull-request'),
+        asOptionalString(s['uses'])?.includes('actions-comment-pull-request'),
       );
       expect(fallbackIdx).toBeGreaterThanOrEqual(0);
       expect(postIdx).toBeGreaterThan(fallbackIdx);
@@ -357,9 +529,314 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   describe('post-comment step always runs', () => {
     it('the post-comment step uses if: always()', () => {
       const postStep = jobSteps(reviewJob).find((step: WorkflowStep) =>
-        String(step.uses ?? '').includes('actions-comment-pull-request'),
+        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
       );
       expect(postStep?.if).toBe('always()');
+    });
+  });
+
+  // =========================================================================
+  // Issue #2778: Non-blocking advisory review boundaries
+  // =========================================================================
+
+  describe('non-blocking review job (Issue #2778)', () => {
+    function stepById(id: string): WorkflowStep {
+      return requireStepById(reviewJob as WorkflowJob, id);
+    }
+
+    function stepByName(name: string): WorkflowStep {
+      return requireStepByName(reviewJob as WorkflowJob, name);
+    }
+
+    // --- A1: Every advisory step has continue-on-error: true ---
+
+    it('Install LLxprt CLI nightly has id "install" and continue-on-error', () => {
+      const step = stepByName('Install LLxprt CLI nightly');
+      expect(step.id).toBe('install');
+      expect(continueOnError(step)).toBe(true);
+    });
+
+    it('Check API quota and select optimal key has id "quota" and continue-on-error', () => {
+      const step = stepByName('Check API quota and select optimal key');
+      expect(step.id).toBe('quota');
+      expect(continueOnError(step)).toBe(true);
+    });
+
+    it('Run walkthrough pipeline has id "walkthrough" and continue-on-error', () => {
+      const step = stepByName('Run walkthrough pipeline');
+      expect(step.id).toBe('walkthrough');
+      expect(continueOnError(step)).toBe(true);
+    });
+
+    it('Upload walkthrough diagnostics has continue-on-error', () => {
+      const step = stepByName('Upload walkthrough diagnostics');
+      expect(continueOnError(step)).toBe(true);
+    });
+
+    it('Ensure fallback comment has continue-on-error', () => {
+      const step = stepByName('Ensure fallback comment');
+      expect(continueOnError(step)).toBe(true);
+    });
+
+    it('Post walkthrough comment has continue-on-error', () => {
+      const step = jobSteps(reviewJob).find((s: WorkflowStep) =>
+        stepUses(s).includes('actions-comment-pull-request'),
+      );
+      expect(continueOnError(step)).toBe(true);
+    });
+
+    // --- A2/A3: Install/quota failure is visible and skips walkthrough ---
+
+    it('walkthrough step is skipped when install fails', () => {
+      const walkthrough = stepById('walkthrough');
+      expect(
+        evalStepIf(walkthrough.if, {
+          outcomes: { install: 'failure', quota: 'success' },
+          outputs: { issue_gate: { should_review: 'true' } },
+        }),
+      ).toBe(false);
+    });
+
+    it('walkthrough step is skipped when quota fails', () => {
+      const walkthrough = stepById('walkthrough');
+      expect(
+        evalStepIf(walkthrough.if, {
+          outcomes: { install: 'success', quota: 'failure' },
+          outputs: { issue_gate: { should_review: 'true' } },
+        }),
+      ).toBe(false);
+    });
+
+    it('walkthrough step runs when both install and quota succeed', () => {
+      const walkthrough = stepById('walkthrough');
+      expect(
+        evalStepIf(walkthrough.if, {
+          outcomes: { install: 'success', quota: 'success' },
+          outputs: { issue_gate: { should_review: 'true' } },
+        }),
+      ).toBe(true);
+    });
+
+    it('walkthrough step does not run when issue_gate says false', () => {
+      const walkthrough = stepById('walkthrough');
+      expect(
+        evalStepIf(walkthrough.if, {
+          outcomes: { install: 'success', quota: 'success' },
+          outputs: { issue_gate: { should_review: 'false' } },
+        }),
+      ).toBe(false);
+    });
+
+    // --- A5: Diagnostics upload under always(), capturing zero-exit parse artifacts ---
+
+    it('diagnostics upload step uses if: always()', () => {
+      const upload = stepByName('Upload walkthrough diagnostics');
+      expect(upload.if).toBe('always()');
+    });
+
+    it('diagnostics upload runs even when walkthrough succeeds (zero-exit parse artifacts)', () => {
+      const upload = stepByName('Upload walkthrough diagnostics');
+      expect(
+        evalStepIf(upload.if, { outcomes: { walkthrough: 'success' } }),
+      ).toBe(true);
+    });
+
+    it('diagnostics upload runs when walkthrough fails', () => {
+      const upload = stepByName('Upload walkthrough diagnostics');
+      expect(
+        evalStepIf(upload.if, { outcomes: { walkthrough: 'failure' } }),
+      ).toBe(true);
+    });
+
+    // --- A7: Fallback and posting always attempted, non-blocking ---
+
+    it('Ensure fallback comment runs under always()', () => {
+      const fallback = stepByName('Ensure fallback comment');
+      expect(
+        evalStepIf(fallback.if, { outcomes: { walkthrough: 'failure' } }),
+      ).toBe(true);
+      expect(
+        evalStepIf(fallback.if, { outcomes: { walkthrough: 'success' } }),
+      ).toBe(true);
+    });
+
+    it('Post walkthrough comment runs under always()', () => {
+      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
+        stepUses(s).includes('actions-comment-pull-request'),
+      );
+      expect(
+        evalStepIf(post?.if, { outcomes: { walkthrough: 'failure' } }),
+      ).toBe(true);
+      expect(
+        evalStepIf(post?.if, { outcomes: { walkthrough: 'success' } }),
+      ).toBe(true);
+    });
+
+    // --- A8: Cancellation is not disguised as success ---
+
+    it('no advisory step uses an expression that fabricates success on cancellation', () => {
+      for (const step of jobSteps(reviewJob)) {
+        const ifExpr = String(step.if ?? '');
+        expect(ifExpr).not.toMatch(/cancelled\s*\(\s*\)\s*==\s*'?false'?/);
+      }
+    });
+
+    it('issue gate and fetch steps (pre-advisory) do not use continue-on-error', () => {
+      const gate = stepByName('Collect PR metadata and ensure linked issue');
+      const fetch = stepByName('Fetch pull request head');
+      expect(continueOnError(gate)).toBe(false);
+      expect(continueOnError(fetch)).toBe(false);
+    });
+
+    // --- A9: Linked-issue gate and mergeability gate unchanged ---
+
+    it('the issue_gate step does NOT have continue-on-error', () => {
+      const gate = stepByName('Collect PR metadata and ensure linked issue');
+      expect(continueOnError(gate)).toBe(false);
+    });
+
+    it('the issue_gate step is NOT id-gated by install/quota', () => {
+      const gate = stepByName('Collect PR metadata and ensure linked issue');
+      const gateIf = String(gate.if ?? '');
+      expect(gateIf).not.toContain('steps.install');
+      expect(gateIf).not.toContain('steps.quota');
+    });
+
+    it('mergeability-gate job is unchanged and still required', () => {
+      const needs = asOptionalRecord(reviewJob)?.['needs'];
+      const needsList = Array.isArray(needs) ? needs : [needs];
+      expect(needsList).toContain('mergeability-gate');
+    });
+  });
+
+  describe('injected-failure scenario coverage (Issue #2778)', () => {
+    // These tests use optional find (returning WorkflowStep | undefined)
+    // because they pass results to continueOnError(), which handles
+    // undefined by returning false.
+    function stepByName(name: string): WorkflowStep | undefined {
+      return findStepByName(reviewJob, name);
+    }
+
+    function stepById(id: string): WorkflowStep | undefined {
+      return jobSteps(reviewJob).find((s) => s.id === id);
+    }
+
+    it('install failure: walkthrough skipped, fallback+post still run', () => {
+      const scenarios: StepOutcomes = {
+        outcomes: {
+          install: 'failure',
+          quota: 'skipped',
+          walkthrough: 'skipped',
+        },
+      };
+      const fallback = stepByName('Ensure fallback comment');
+      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
+        stepUses(s).includes('actions-comment-pull-request'),
+      );
+      expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
+      expect(evalStepIf(post?.if, scenarios)).toBe(true);
+      expect(continueOnError(stepByName('Install LLxprt CLI nightly'))).toBe(
+        true,
+      );
+    });
+
+    it('quota failure: walkthrough skipped, fallback+post still run', () => {
+      const scenarios: StepOutcomes = {
+        outcomes: {
+          install: 'success',
+          quota: 'failure',
+          walkthrough: 'skipped',
+        },
+      };
+      const fallback = stepByName('Ensure fallback comment');
+      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
+        stepUses(s).includes('actions-comment-pull-request'),
+      );
+      expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
+      expect(evalStepIf(post?.if, scenarios)).toBe(true);
+      expect(
+        continueOnError(stepByName('Check API quota and select optimal key')),
+      ).toBe(true);
+    });
+
+    it('walkthrough failure: diagnostics uploaded, fallback+post still run', () => {
+      const scenarios: StepOutcomes = {
+        outcomes: {
+          install: 'success',
+          quota: 'success',
+          walkthrough: 'failure',
+        },
+      };
+      const upload = stepByName('Upload walkthrough diagnostics');
+      const fallback = stepByName('Ensure fallback comment');
+      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
+        stepUses(s).includes('actions-comment-pull-request'),
+      );
+      expect(evalStepIf(upload?.if, scenarios)).toBe(true);
+      expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
+      expect(evalStepIf(post?.if, scenarios)).toBe(true);
+      expect(continueOnError(stepById('walkthrough'))).toBe(true);
+    });
+
+    it('JSON parse failure on zero-exit: parse artifacts uploaded via always()', () => {
+      const scenarios: StepOutcomes = {
+        outcomes: {
+          install: 'success',
+          quota: 'success',
+          walkthrough: 'success',
+        },
+      };
+      const upload = stepByName('Upload walkthrough diagnostics');
+      expect(evalStepIf(upload?.if, scenarios)).toBe(true);
+      const artifactPath = asOptionalRecord(upload?.with)?.['path'] ?? '';
+      expect(artifactPath).toContain('review/parse-failure-raw-*.txt');
+      expect(artifactPath).toContain('review/parse-failure-info-*.json');
+    });
+
+    it('upload failure is non-blocking (continue-on-error on upload)', () => {
+      const upload = stepByName('Upload walkthrough diagnostics');
+      expect(continueOnError(upload)).toBe(true);
+    });
+
+    it('comment-posting failure is non-blocking (continue-on-error on post)', () => {
+      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
+        stepUses(s).includes('actions-comment-pull-request'),
+      );
+      expect(continueOnError(post)).toBe(true);
+    });
+
+    it('fallback comment failure is non-blocking (continue-on-error)', () => {
+      const fallback = stepByName('Ensure fallback comment');
+      expect(continueOnError(fallback)).toBe(true);
+    });
+  });
+
+  describe('secrets never leaked into public comments (Issue #2778 non-goal)', () => {
+    it('walkthrough stderr is never appended to comment.md', () => {
+      const walkthrough = findStepByName(reviewJob, 'Run walkthrough pipeline');
+      // Strip shell comments so we only inspect actual commands, not
+      // explanatory comments that reference the file name.
+      const run = String(walkthrough?.run ?? '')
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('#'))
+        .join('\n');
+      expect(run).not.toMatch(/review\/comment\.md/);
+    });
+
+    it('fallback comment is generic and contains no diagnostic content', () => {
+      const fallback = findStepByName(reviewJob, 'Ensure fallback comment');
+      const run = String(fallback?.run ?? '');
+      expect(run).not.toContain('walkthrough-error.log');
+      expect(run).not.toContain('parse-failure');
+    });
+
+    it('upload artifact path excludes comment.md', () => {
+      const upload = findStepByName(
+        reviewJob,
+        'Upload walkthrough diagnostics',
+      );
+      const artifactPath = asOptionalRecord(upload?.with)?.['path'] ?? '';
+      expect(asString(artifactPath)).not.toContain('comment.md');
     });
   });
 });

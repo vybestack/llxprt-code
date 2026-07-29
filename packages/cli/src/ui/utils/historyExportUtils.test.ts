@@ -6,9 +6,26 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { readFile, unlink } from 'node:fs/promises';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFile, unlink, stat, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const { mockRandomBytes } = vi.hoisted(() => ({
+  mockRandomBytes: vi.fn(),
+}));
+
+vi.mock('node:crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:crypto')>();
+  mockRandomBytes.mockImplementation((size: number) =>
+    actual.randomBytes(size),
+  );
+  return {
+    ...actual,
+    randomBytes: mockRandomBytes,
+  };
+});
+
 import {
   sanitizeTranscript,
   exportHistoryForBugReport,
@@ -282,6 +299,88 @@ describe('historyExportUtils', () => {
 
       // Clean up second file
       await unlink(result2.filePath).catch(() => {});
+    });
+
+    it('should create distinct files for concurrent exports', async () => {
+      const history: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'secret path /home/user/.ssh' }],
+        },
+      ];
+
+      const [result1, result2] = await Promise.all([
+        exportHistoryForBugReport(history),
+        exportHistoryForBugReport(history),
+      ]);
+      exportedFilePath = result1.filePath;
+
+      expect(result1.filePath).not.toBe(result2.filePath);
+
+      await unlink(result2.filePath).catch(() => {});
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'should set owner-only permissions on exported transcripts',
+      async () => {
+        const history: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'permission check' }],
+          },
+        ];
+
+        const result = await exportHistoryForBugReport(history);
+        exportedFilePath = result.filePath;
+
+        const mode = (await stat(result.filePath)).mode & 0o777;
+        expect(mode).toBe(0o600);
+      },
+    );
+
+    it('should retry when the exporter candidate path already exists', async () => {
+      const actualCrypto =
+        await vi.importActual<typeof import('node:crypto')>('node:crypto');
+      const fixedTime = '2026-07-28T12:34:56.789Z';
+      const firstRandom = Buffer.alloc(8, 1);
+      const secondRandom = Buffer.alloc(8, 2);
+      const stamped = fixedTime.replace(/[:.]/g, '-');
+      const collidedPath = join(
+        tmpdir(),
+        `llxprt-bug-report-${stamped}-${firstRandom.toString('hex')}.md`,
+      );
+
+      const dateSpy = vi
+        .spyOn(Date.prototype, 'toISOString')
+        .mockReturnValue(fixedTime);
+      mockRandomBytes
+        .mockImplementationOnce(() => firstRandom)
+        .mockImplementationOnce(() => secondRandom);
+
+      const preexisting = await open(collidedPath, 'wx', 0o600);
+      await preexisting.writeFile('preexisting', 'utf-8');
+      await preexisting.close();
+
+      try {
+        const history: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Test' }],
+          },
+        ];
+        const result = await exportHistoryForBugReport(history);
+        exportedFilePath = result.filePath;
+
+        expect(result.filePath).not.toBe(collidedPath);
+        expect(result.filePath).toContain(secondRandom.toString('hex'));
+        expect(await readFile(collidedPath, 'utf-8')).toBe('preexisting');
+      } finally {
+        dateSpy.mockRestore();
+        mockRandomBytes.mockImplementation((size: number) =>
+          actualCrypto.randomBytes(size),
+        );
+        await unlink(collidedPath).catch(() => {});
+      }
     });
   });
 });

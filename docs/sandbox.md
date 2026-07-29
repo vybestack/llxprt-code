@@ -145,6 +145,16 @@ In Docker/Podman mode, a host-side credential proxy runs over a Unix socket. The
 
 The socket path is set automatically via `LLXPRT_CREDENTIAL_SOCKET`.
 
+The per-session capability token that authenticates the sandbox to the proxy is delivered through a **trusted entrypoint + inherited descriptor** transport, never via process arguments, the container environment, or a mounted file the sandbox can read:
+
+- The host writes the raw token to a mode-0600 env file in a fresh mode-0700 directory **outside every sandbox mount** and passes only that file's path to the runtime via `--env-file`. The token never appears in `docker run`/`podman run` argv, and the file is never mounted into the container.
+- A trusted Bash entrypoint runs with profile/rc/`BASH_ENV` startup execution disabled. Before any project code, bridge process, or user setup runs, it captures the token from the environment into an unexported shell variable and **unsets the environment value**.
+- After trusted setup, the entrypoint exposes the token only on inherited descriptor 3 to the final LLxprt CLI (`LLXPRT_CAPABILITY_FD=3`) and unsets its shell variable. Long-lived processes (socat relays, `su`, launchers) that run before the final CLI never retain the token env value or an open capability descriptor.
+- At the very start of CLI startup — before settings, extensions, hooks, MCP, provider activation, agent construction, or project startup code — the credential-store factory reads and validates descriptor 3, closes it, deletes the `LLXPRT_CAPABILITY_FD` marker, and caches the value only in module-private memory shared by both proxy clients. Missing, malformed, duplicate, or unreadable transport fails fast.
+- `.llxprt/sandbox.bashrc` is no longer sourced by the entrypoint; it is evaluated explicitly by LLxprt **after** capability consumption, so its exported environment and working-directory changes still apply, but it can never observe the capability, its descriptor, or a readable secret file.
+
+After consumption the capability exists only in module-private process memory and in authenticated proxy clients. Socket reachability alone is not authority — a direct socket client without the consumed capability is rejected with `UNAUTHORIZED`.
+
 > **Note:** Seatbelt mode runs on the host directly, so there is no credential proxy — it uses your normal keyring and token store.
 
 ## SSH Agent Forwarding

@@ -19,7 +19,7 @@ import path from 'node:path';
 import os from 'node:os';
 import mime from 'mime-types';
 
-import { detectFileType } from './fileUtils.js';
+import { detectFileType, processSingleFileContent } from './fileUtils.js';
 
 vi.mock('mime-types', () => ({
   default: { lookup: vi.fn() },
@@ -104,5 +104,42 @@ describe('fileUtils.detectFileType', () => {
     const textPath = path.join(tempRootDir, 'unknown.xyz');
     actualNodeFs.writeFileSync(textPath, 'plain text content\n');
     expect(await detectFileType(textPath)).toBe('text');
+  });
+});
+
+describe('processSingleFileContent media displayName @issue:2608', () => {
+  let tempRootDir: string;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    tempRootDir = actualNodeFs.mkdtempSync(
+      path.join(os.tmpdir(), 'tools-fileUtils-pdf-test-'),
+    );
+  });
+
+  afterEach(() => {
+    try {
+      if (actualNodeFs.existsSync(tempRootDir)) {
+        actualNodeFs.rmSync(tempRootDir, { recursive: true, force: true });
+      }
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('preserves the source basename as inlineData.displayName for a PDF', async () => {
+    mockMimeLookup.mockReturnValue('application/pdf');
+    const pdfPath = path.join(tempRootDir, 'sub', 'quarterly-report.pdf');
+    actualNodeFs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+    actualNodeFs.writeFileSync(pdfPath, Buffer.from('%PDF-1.4\n%bin\n'));
+
+    const result = await processSingleFileContent(pdfPath, tempRootDir);
+
+    expect(result.llmContent).toMatchObject({
+      inlineData: expect.objectContaining({
+        displayName: 'quarterly-report.pdf',
+        mimeType: 'application/pdf',
+      }),
+    });
   });
 });

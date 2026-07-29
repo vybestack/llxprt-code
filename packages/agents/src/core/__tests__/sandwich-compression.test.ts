@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -211,9 +212,11 @@ describe('Sandwich Compression (Issue #1011)', () => {
       expect(lastMsg.blocks[0].type).toBe('text');
     });
 
-    it('should handle overlap gracefully (not enough to compress)', async () => {
+    it('routes middle-out structural no-op to one-shot fallback (issue #2602)', async () => {
       // Add only 8 messages - with 0.2 top + 0.3 bottom thresholds,
-      // middle section will be < 4 messages so nothing to compress
+      // the middle-out middle section will be < 4 messages (structural no-op).
+      // Per issue #2602, middle-out no-op now routes to one-shot, which can
+      // compress the older prefix while preserving the recent tail.
       for (let i = 0; i < 4; i++) {
         historyService.add(createUserMessage(`User message ${i}`));
         historyService.add(createAiTextMessage(`AI response ${i}`));
@@ -228,18 +231,19 @@ describe('Sandwich Compression (Issue #1011)', () => {
         [],
       );
 
-      const mockProvider = buildMockProvider('should-not-be-used');
+      const mockProvider = buildMockProvider('one-shot fallback summary');
       vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
         mockProvider as never,
       );
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
-      await chat.performCompression('test-prompt-id');
+      const result = await chat.performCompression('test-prompt-id');
 
-      // With only 8 messages and minimum 4 required for middle,
-      // no compression should occur - all messages preserved
+      // Middle-out could not form a valid middle, so one-shot ran as fallback
+      // and compressed the history (fewer messages than before).
+      expect(result).toBe(PerformCompressionResult.COMPRESSED);
       const finalHistory = historyService.getCurated();
-      expect(finalHistory.length).toBe(messageCountBefore);
+      expect(finalHistory.length).toBeLessThan(messageCountBefore);
     });
 
     it('should preserve tool call boundaries', async () => {

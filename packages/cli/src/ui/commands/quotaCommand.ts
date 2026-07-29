@@ -119,7 +119,7 @@ async function statusAction(context: CommandContext): Promise<void> {
     if (quotaLines.length === 0) {
       addInfo(
         context,
-        'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
+        'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
       );
       return;
     }

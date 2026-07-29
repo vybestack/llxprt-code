@@ -153,7 +153,7 @@ const providers: Record<string, StubProviderInstance> = {
   openai: new StubProvider('openai'),
   qwenvercel: new StubProvider('qwenvercel'),
   gemini: new StubProvider('gemini'),
-  anthropic: new StubProvider('anthropic'),
+  claudecode: new StubProvider('claudecode'),
   openrouter: new StubProvider('openrouter'),
 };
 
@@ -243,10 +243,10 @@ const debugLoggerWarnSpy = vi
   .mockImplementation(() => {});
 
 /**
- * Helper to push the anthropic alias entry with modelDefaults (config-driven).
- * This mirrors the structure of the real anthropic.config file.
+ * Helper to push the Claude Code alias entry with modelDefaults (config-driven).
+ * This mirrors the structure of the real claudecode.config file.
  */
-function pushAnthropicAlias(overrides?: {
+function pushClaudeCodeAlias(overrides?: {
   defaultModel?: string;
   ephemeralSettings?: Record<string, unknown>;
   modelDefaults?: Array<{
@@ -255,9 +255,9 @@ function pushAnthropicAlias(overrides?: {
   }>;
 }): void {
   aliasEntries.push({
-    alias: 'anthropic',
+    alias: 'claudecode',
     source: 'builtin',
-    filePath: '/fake/anthropic.config',
+    filePath: '/fake/claudecode.config',
     config: {
       baseProvider: 'anthropic',
       defaultModel: overrides?.defaultModel ?? 'claude-opus-4-6',
@@ -327,7 +327,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     providers.qwenvercel.defaultModel = 'gpt-4o';
     providers.qwenvercel.providerConfig.baseUrl = 'https://portal.qwen.ai/v1';
 
-    providers.anthropic.defaultModel = 'claude-opus-4-6';
+    providers.claudecode.defaultModel = 'claude-opus-4-6';
     providers.openrouter.defaultModel = 'gpt-4o';
   });
 
@@ -438,7 +438,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
   });
 
-  describe('Anthropic OAuth maxOutputTokens respect (Issue #1769)', () => {
+  describe('Claude Code OAuth maxOutputTokens respect (Issue #1769)', () => {
     const enableOAuth = () =>
       vi
         .mocked(
@@ -461,12 +461,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         .mockReturnValue(false);
 
     it('should restore maxOutputTokens and not inject max_tokens=10000 when user had maxOutputTokens configured', async () => {
-      pushAnthropicAlias();
+      pushClaudeCodeAlias();
       enableOAuth();
 
       stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
@@ -475,13 +475,13 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('should prefer explicit max_tokens over maxOutputTokens when both are set', async () => {
-      pushAnthropicAlias();
+      pushClaudeCodeAlias();
       enableOAuth();
 
       stubConfig.setEphemeralSetting('max_tokens', 50000);
       stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
 
@@ -489,10 +489,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('should not inject max_tokens default when neither max_tokens nor maxOutputTokens is set (Issue #1769)', async () => {
-      pushAnthropicAlias();
+      pushClaudeCodeAlias();
       enableOAuth();
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
@@ -500,12 +500,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('should treat maxOutputTokens=0 as not configured and use default', async () => {
-      pushAnthropicAlias();
+      pushClaudeCodeAlias();
       enableOAuth();
 
       stubConfig.setEphemeralSetting('maxOutputTokens', 0);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
@@ -513,12 +513,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('should treat negative maxOutputTokens as not configured and use default', async () => {
-      pushAnthropicAlias();
+      pushClaudeCodeAlias();
       enableOAuth();
 
       stubConfig.setEphemeralSetting('maxOutputTokens', -1);
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
@@ -526,12 +526,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('should treat non-numeric maxOutputTokens as not configured and use default', async () => {
-      pushAnthropicAlias();
+      pushClaudeCodeAlias();
       enableOAuth();
 
       stubConfig.setEphemeralSetting('maxOutputTokens', '40000');
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('claudecode');
 
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 

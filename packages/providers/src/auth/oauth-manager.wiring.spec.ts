@@ -267,7 +267,7 @@ describe('OAuthManager wiring', () => {
   it('delegates provider registry methods', async () => {
     const tokenStore = createTokenStore();
     const manager = new OAuthManager(tokenStore);
-    const provider = createProvider('anthropic');
+    const provider = createProvider('claudecode');
 
     const providerRegistry = wiring.state.providerRegistry as {
       registerProvider: ReturnType<typeof vi.fn>;
@@ -278,25 +278,25 @@ describe('OAuthManager wiring', () => {
     };
 
     providerRegistry.getProvider.mockReturnValue(provider);
-    providerRegistry.getSupportedProviders.mockReturnValue(['anthropic']);
+    providerRegistry.getSupportedProviders.mockReturnValue(['claudecode']);
     providerRegistry.toggleOAuthEnabled.mockReturnValue(true);
     providerRegistry.isOAuthEnabled.mockReturnValue(true);
 
     manager.registerProvider(provider);
     expect(providerRegistry.registerProvider).toHaveBeenCalledWith(provider);
 
-    expect(manager.getProvider('anthropic')).toBe(provider);
-    expect(providerRegistry.getProvider).toHaveBeenCalledWith('anthropic');
+    expect(manager.getProvider('claudecode')).toBe(provider);
+    expect(providerRegistry.getProvider).toHaveBeenCalledWith('claudecode');
 
-    expect(manager.getSupportedProviders()).toStrictEqual(['anthropic']);
+    expect(manager.getSupportedProviders()).toStrictEqual(['claudecode']);
 
-    await expect(manager.toggleOAuthEnabled('anthropic')).resolves.toBe(true);
+    await expect(manager.toggleOAuthEnabled('claudecode')).resolves.toBe(true);
     expect(providerRegistry.toggleOAuthEnabled).toHaveBeenCalledWith(
-      'anthropic',
+      'claudecode',
     );
 
-    expect(manager.isOAuthEnabled('anthropic')).toBe(true);
-    expect(providerRegistry.isOAuthEnabled).toHaveBeenCalledWith('anthropic');
+    expect(manager.isOAuthEnabled('claudecode')).toBe(true);
+    expect(providerRegistry.isOAuthEnabled).toHaveBeenCalledWith('claudecode');
   });
 
   it('delegates coordinator, orchestrator, status service, and usage module methods', async () => {
@@ -346,7 +346,7 @@ describe('OAuthManager wiring', () => {
     tokenAccessCoordinator.peekStoredToken.mockResolvedValue(tokenObj);
     tokenAccessCoordinator.getOAuthToken.mockResolvedValue(tokenObj);
     tokenAccessCoordinator.getCurrentProfileSessionMetadata.mockResolvedValue({
-      providerId: 'anthropic',
+      providerId: 'claudecode',
       profileId: 'p1',
     });
     tokenAccessCoordinator.getCurrentProfileSessionBucket.mockResolvedValue(
@@ -355,7 +355,7 @@ describe('OAuthManager wiring', () => {
     tokenAccessCoordinator.doGetProfileBuckets.mockResolvedValue(['bucket-a']);
 
     authStatusService.getAuthStatus.mockResolvedValue([
-      { provider: 'anthropic', authenticated: true, oauthEnabled: true },
+      { provider: 'claudecode', authenticated: true, oauthEnabled: true },
     ]);
     authStatusService.isAuthenticated.mockResolvedValue(true);
     authStatusService.listBuckets.mockResolvedValue(['bucket-a']);
@@ -368,7 +368,7 @@ describe('OAuthManager wiring', () => {
     ]);
 
     providerRegistry.getProvider.mockImplementation((name: string) =>
-      name === 'anthropic' ? createProvider('anthropic') : undefined,
+      name === 'claudecode' ? createProvider('claudecode') : undefined,
     );
 
     wiring.getHigherPriorityAuth.mockResolvedValue('API Key');
@@ -390,55 +390,55 @@ describe('OAuthManager wiring', () => {
       ]),
     );
 
-    await expect(manager.getToken('anthropic')).resolves.toBe('oauth-token');
+    await expect(manager.getToken('claudecode')).resolves.toBe('oauth-token');
     expect(tokenAccessCoordinator.getToken).toHaveBeenCalledWith(
-      'anthropic',
+      'claudecode',
       undefined,
     );
 
-    await expect(manager.peekStoredToken('anthropic')).resolves.toStrictEqual(
+    await expect(manager.peekStoredToken('claudecode')).resolves.toStrictEqual(
       tokenObj,
     );
-    await expect(manager.getOAuthToken('anthropic')).resolves.toStrictEqual(
+    await expect(manager.getOAuthToken('claudecode')).resolves.toStrictEqual(
       tokenObj,
     );
 
-    await manager.authenticate('anthropic', 'bucket-a');
+    await manager.authenticate('claudecode', 'bucket-a');
     expect(authFlowOrchestrator.authenticate).toHaveBeenCalledWith(
-      'anthropic',
+      'claudecode',
       'bucket-a',
       undefined,
     );
 
-    await manager.authenticateMultipleBuckets('anthropic', ['bucket-a']);
+    await manager.authenticateMultipleBuckets('claudecode', ['bucket-a']);
     expect(
       authFlowOrchestrator.authenticateMultipleBuckets,
-    ).toHaveBeenCalledWith('anthropic', ['bucket-a'], undefined);
+    ).toHaveBeenCalledWith('claudecode', ['bucket-a'], undefined);
 
     await expect(manager.getAuthStatus()).resolves.toStrictEqual([
-      { provider: 'anthropic', authenticated: true, oauthEnabled: true },
+      { provider: 'claudecode', authenticated: true, oauthEnabled: true },
     ]);
-    await expect(manager.isAuthenticated('anthropic')).resolves.toBe(true);
+    await expect(manager.isAuthenticated('claudecode')).resolves.toBe(true);
 
-    await manager.logout('anthropic', 'bucket-a');
+    await manager.logout('claudecode', 'bucket-a');
     expect(authStatusService.logout).toHaveBeenCalledWith(
-      'anthropic',
+      'claudecode',
       'bucket-a',
     );
 
     await manager.logoutAll();
     expect(authStatusService.logoutAll).toHaveBeenCalledTimes(1);
 
-    await manager.logoutAllBuckets('anthropic');
+    await manager.logoutAllBuckets('claudecode');
     expect(authStatusService.logoutAllBuckets).toHaveBeenCalledWith(
-      'anthropic',
+      'claudecode',
     );
 
-    await expect(manager.listBuckets('anthropic')).resolves.toStrictEqual([
+    await expect(manager.listBuckets('claudecode')).resolves.toStrictEqual([
       'bucket-a',
     ]);
     await expect(
-      manager.getAuthStatusWithBuckets('anthropic'),
+      manager.getAuthStatusWithBuckets('claudecode'),
     ).resolves.toStrictEqual([
       {
         bucket: 'bucket-a',
@@ -447,11 +447,11 @@ describe('OAuthManager wiring', () => {
       },
     ]);
 
-    await expect(manager.getHigherPriorityAuth('anthropic')).resolves.toBe(
+    await expect(manager.getHigherPriorityAuth('claudecode')).resolves.toBe(
       'API Key',
     );
     expect(wiring.getHigherPriorityAuth).toHaveBeenCalledWith(
-      'anthropic',
+      'claudecode',
       settings,
     );
 
@@ -498,7 +498,7 @@ describe('OAuthManager wiring', () => {
     expect(authFlowOrchestrator.setRuntimeMessageBus).toHaveBeenCalledWith(bus);
   });
 
-  it('returns null for anthropic usage when anthropic provider is not registered', async () => {
+  it('getAnthropicUsageInfo returns null when the claudecode provider is not registered', async () => {
     const tokenStore = createTokenStore();
     const manager = new OAuthManager(tokenStore);
 

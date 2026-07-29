@@ -202,7 +202,16 @@ export class ExtensionEnablementManager {
   private readRuntimeConfig(): RuntimeAllExtensionsEnablementConfig {
     try {
       const content = fs.readFileSync(this.configFilePath, 'utf-8');
-      return JSON.parse(content) as RuntimeAllExtensionsEnablementConfig;
+      const parsed: unknown = JSON.parse(content);
+      const validated = parseRuntimeEnablementConfig(parsed);
+      if (validated === null) {
+        coreEvents.emitFeedback(
+          'error',
+          'Invalid extension enablement config; ignoring malformed file.',
+        );
+        return {};
+      }
+      return validated;
     } catch (error) {
       if (
         error instanceof Error &&
@@ -288,4 +297,56 @@ export class ExtensionEnablementManager {
   resetSessionState(): void {
     this.sessionState.clear();
   }
+}
+
+/**
+ * Validates a single extension enablement entry.
+ * Returns `undefined` to skip, `null` if invalid, otherwise the entry.
+ */
+function parseExtensionEntry(
+  entry: unknown,
+): ExtensionEnablementConfig | null | undefined {
+  if (entry === undefined) {
+    return undefined;
+  }
+  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+    return null;
+  }
+  const overrides = (entry as { overrides?: unknown }).overrides;
+  if (overrides === undefined) {
+    return { overrides: [] };
+  }
+  if (
+    !Array.isArray(overrides) ||
+    !overrides.every((rule) => typeof rule === 'string')
+  ) {
+    return null;
+  }
+  return { overrides };
+}
+
+/**
+ * Validates extension-enablement.json. Returns null for structurally invalid
+ * JSON so callers can fall back safely instead of throwing at startup.
+ */
+function parseRuntimeEnablementConfig(
+  value: unknown,
+): RuntimeAllExtensionsEnablementConfig | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const result: RuntimeAllExtensionsEnablementConfig = {};
+  for (const [name, entry] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    const parsed = parseExtensionEntry(entry);
+    if (parsed === null) {
+      return null;
+    }
+    if (parsed !== undefined) {
+      result[name] = parsed;
+    }
+  }
+  return result;
 }

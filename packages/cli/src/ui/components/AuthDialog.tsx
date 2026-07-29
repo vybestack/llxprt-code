@@ -15,6 +15,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { AuthStatus } from '@vybestack/llxprt-code-providers/auth.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: string | undefined, scope: SettingScope) => void;
@@ -100,9 +101,9 @@ function buildAuthItems(
 }> {
   return [
     {
-      key: 'oauth_anthropic',
-      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getStatusLabel('anthropic', authStatuses)}`,
-      value: 'oauth_anthropic',
+      key: 'oauth_claudecode',
+      label: `Claude Code (Claude.ai OAuth) ${enabledProviders.has('oauth_claudecode') ? '[ON]' : '[OFF]'}${getStatusLabel('claudecode', authStatuses)}`,
+      value: 'oauth_claudecode',
     },
     {
       key: 'oauth_codex',
@@ -297,7 +298,7 @@ export function AuthDialog({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}

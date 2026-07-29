@@ -144,7 +144,7 @@ describe('statsCommand', () => {
     };
 
     expect(infoItem.type).toBe(MessageType.INFO);
-    expect(infoItem.text).toContain('Anthropic Quota Information');
+    expect(infoItem.text).toContain('Claude Code Quota Information');
     expect(infoItem.text).not.toContain('Codex Quota Information');
   });
 
@@ -205,7 +205,7 @@ describe('statsCommand', () => {
 
     expect(infoItem.type).toBe(MessageType.INFO);
     expect(infoItem.text).toContain('Codex Quota Information');
-    expect(infoItem.text).not.toContain('Anthropic Quota Information');
+    expect(infoItem.text).not.toContain('Claude Code Quota Information');
     expect(infoItem.text).toContain('5-hour limit');
     expect(infoItem.text).toContain('Weekly limit');
   });
@@ -351,7 +351,7 @@ describe('statsCommand', () => {
 
     expect(lastItem.type).toBe(MessageType.INFO);
     // Should contain both OAuth and API-key provider quotas
-    expect(lastItem.text).toContain('Anthropic Quota Information');
+    expect(lastItem.text).toContain('Claude Code Quota Information');
     expect(lastItem.text).toContain('Z.ai Quota Information');
 
     vi.restoreAllMocks();

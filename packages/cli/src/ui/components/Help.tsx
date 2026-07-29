@@ -9,6 +9,7 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import type { SlashCommand } from '../commands/types.js';
 import { KEYBOARD_SHORTCUTS_URL } from '../constants.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface HelpProps {
   commands: readonly SlashCommand[];
@@ -195,7 +196,7 @@ export const Help: React.FC<HelpProps> = ({ commands }) => (
     flexDirection="column"
     marginBottom={1}
     borderColor={Colors.Gray}
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     padding={1}
   >
     <BasicsSection />

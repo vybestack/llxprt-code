@@ -49,6 +49,20 @@ vi.mock('../sandboxConfig.js', () => ({
   loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
 }));
 
+const reloadSettingsState = vi.hoisted<{ current?: Settings }>(() => ({}));
+
+vi.mock('../settings.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../settings.js')>();
+  return {
+    ...actual,
+    loadSettings: vi.fn((cwd: string) =>
+      reloadSettingsState.current === undefined
+        ? actual.loadSettings(cwd)
+        : { merged: reloadSettingsState.current },
+    ),
+  };
+});
+
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof import('fs')>();
   const pathMod = await import('node:path');
@@ -296,14 +310,14 @@ function settingsWithMcpServers(servers: McpServerMap): Settings {
   return { mcpServers: servers } as unknown as Settings;
 }
 
-async function getMcpServers(
+async function loadMcpConfig(
   settings: Settings,
   cliArgs: string[] = [],
-): Promise<string[]> {
+): Promise<ServerConfig.Config> {
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  const config = await loadCliConfig(
+  return loadCliConfig(
     settings,
     [],
     makeExtMgr(),
@@ -312,6 +326,13 @@ async function getMcpServers(
     undefined,
     { settingsService: runtimeSettingsService },
   );
+}
+
+async function getMcpServers(
+  settings: Settings,
+  cliArgs: string[] = [],
+): Promise<string[]> {
+  const config = await loadMcpConfig(settings, cliArgs);
   return Object.keys(config.getMcpServers() ?? {});
 }
 
@@ -350,6 +371,7 @@ describe('mcpFilteringParity: MCP server filtering', () => {
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
+    reloadSettingsState.current = undefined;
   });
 
   afterEach(() => {
@@ -526,6 +548,60 @@ describe('mcpFilteringParity: MCP server filtering', () => {
     });
     const blocked = await getBlockedMcpServers(settings);
     expect(blocked).toHaveLength(0);
+  });
+
+  it('reloads persisted MCP servers and reapplies settings filtering', async () => {
+    const config = await loadMcpConfig(
+      settingsWithMcpServers({ stale: { command: 'stale' } }),
+    );
+    reloadSettingsState.current = {
+      ...settingsWithMcpServers({
+        allowed: { command: 'allowed' },
+        blocked: { command: 'blocked' },
+      }),
+      allowMCPServers: ['allowed'],
+    };
+
+    await config.reloadMcpServers();
+
+    expect(Object.keys(config.getMcpServers() ?? {})).toStrictEqual([
+      'allowed',
+    ]);
+    expect(config.getBlockedMcpServers()).toStrictEqual([
+      { name: 'blocked', extensionName: '' },
+    ]);
+  });
+
+  it('retains the startup CLI allow-list when persisted settings reload', async () => {
+    const config = await loadMcpConfig(
+      settingsWithMcpServers({ allowed: { command: 'initial' } }),
+      ['--allowed-mcp-server-names', 'allowed'],
+    );
+    reloadSettingsState.current = settingsWithMcpServers({
+      allowed: { command: 'updated' },
+      rejected: { command: 'rejected' },
+    });
+
+    await config.reloadMcpServers();
+
+    expect(config.getMcpServers()).toStrictEqual({
+      allowed: { command: 'updated' },
+    });
+  });
+
+  it('keeps MCP reload disabled when administrative policy disabled it at startup', async () => {
+    const config = await loadMcpConfig({
+      ...settingsWithMcpServers({ initial: { command: 'initial' } }),
+      admin: { mcp: { enabled: false } },
+    });
+    reloadSettingsState.current = settingsWithMcpServers({
+      added: { command: 'added' },
+    });
+
+    await config.reloadMcpServers();
+
+    expect(config.getMcpServers()).toStrictEqual({});
+    expect(config.getBlockedMcpServers()).toStrictEqual([]);
   });
 
   it('blockedMcpServers includes servers filtered by settings.excludeMCPServers', async () => {

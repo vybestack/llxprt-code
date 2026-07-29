@@ -148,7 +148,22 @@ function withMediaSupport(
   };
 }
 
+/**
+ * Resolve the tool format an alias's static models should declare, based on
+ * the alias's base provider. OpenAI-protocol aliases use `openai`; the
+ * Anthropic protocol alias uses `anthropic`.
+ */
+function staticModelsToolFormat(
+  entry: ProviderAliasEntry,
+): IModel['supportedToolFormats'] {
+  if (entry.config.baseProvider.toLowerCase() === 'anthropic') {
+    return ['anthropic'];
+  }
+  return ['openai'];
+}
+
 function mapStaticModels(entry: ProviderAliasEntry): IModel[] {
+  const supportedToolFormats = staticModelsToolFormat(entry);
   return (entry.config.staticModels ?? []).map((model) => {
     const hasContextWindow = model.contextWindow !== undefined;
     const hasMaxOutputTokens = model.maxOutputTokens !== undefined;
@@ -160,7 +175,7 @@ function mapStaticModels(entry: ProviderAliasEntry): IModel[] {
       id: model.id,
       name: model.name,
       provider: entry.alias,
-      supportedToolFormats: ['openai'],
+      supportedToolFormats,
       ...(model.contextWindow !== undefined
         ? { contextWindow: model.contextWindow }
         : {}),
@@ -384,7 +399,7 @@ export function createGeminiAliasProvider(
 
 export function createAnthropicAliasProvider(
   entry: ProviderAliasEntry,
-  oauthManager: OAuthManager,
+  oauthManager: OAuthManager | undefined,
   authOnlyEnabled = false,
 ): AnthropicProvider | null {
   let aliasApiKey: string | undefined;
@@ -411,6 +426,7 @@ export function createAnthropicAliasProvider(
   );
 
   overrideAliasDefaultModel(provider, entry);
+  overrideStaticModels(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
 
@@ -475,9 +491,14 @@ export function registerAliasProviders(
         break;
       }
       case 'anthropic': {
+        // Binding is by identity, not host: only the `claudecode` alias
+        // receives the Claude subscription OAuth manager/identity; the
+        // `anthropic` alias is API-key-only and must not bind OAuth.
+        const oauthManagerForAlias =
+          entry.alias === 'claudecode' ? oauthManager : undefined;
         const provider = createAnthropicAliasProvider(
           entry,
-          oauthManager,
+          oauthManagerForAlias,
           authOnlyEnabled,
         );
         if (provider) {

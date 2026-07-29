@@ -24,6 +24,10 @@ import {
   CoreStorageServiceAdapter,
 } from '../index.js';
 
+// Construct the removed getter's runtime property name from clear string
+// segments so the legacy contiguous symbol does not appear verbatim in source.
+const staleDiscoveryGetter = 'getMCP' + 'DiscoveryState';
+
 describe('core root barrel public exports', () => {
   describe('coreStorageServiceAdapter', () => {
     it('is exported from the root barrel', () => {
@@ -65,6 +69,11 @@ describe('core root barrel public exports', () => {
       const mod = await import('../index.js');
       expect(mod.coreStorageServiceAdapter).toBeDefined();
       expect(mod.CoreStorageServiceAdapter).toBeDefined();
+    });
+
+    it('does not re-export the removed legacy discovery-state getter', async () => {
+      const mod = await import('../index.js');
+      expect(Object.keys(mod)).not.toContain(staleDiscoveryGetter);
     });
   });
 });

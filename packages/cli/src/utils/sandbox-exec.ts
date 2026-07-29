@@ -175,17 +175,13 @@ async function prepareContainerSandbox(
   const containerName = assignContainerName(args, config, image);
   addContainerEnvVars(args, config, containerName, nodeArgs, workdir);
 
-  const finalEntrypoint = entrypoint(
-    workdir,
-    cliArgs,
-    podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
-  );
+  // Gather entrypoint prefixes (ssh-agent bridge, credential proxy bridge)
+  // before building the entrypoint so they compose INTO the trusted script
+  // AFTER the capability capture stanza (F1).
   const entrypointPrefixes: string[] = [];
   if (sshResult.entrypointPrefix !== undefined) {
     entrypointPrefixes.push(sshResult.entrypointPrefix);
   }
-
-  const userFlag = await setupContainerUser(args, finalEntrypoint);
 
   let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   try {
@@ -214,9 +210,20 @@ async function prepareContainerSandbox(
     );
   }
 
+  // Build the entrypoint with all prefixes composed into the trusted script
+  // body after the capability capture stanza. setupContainerUser then wraps
+  // the complete script for the current-user su path.
+  const finalEntrypoint = entrypoint(
+    workdir,
+    cliArgs,
+    podmanMacOSPortsForwarded.size > 0 ? podmanMacOSPortsForwarded : undefined,
+    entrypointPrefixes,
+  );
+
+  const userFlag = await setupContainerUser(args, finalEntrypoint);
+
   return {
     args,
-    entrypointPrefixes,
     finalEntrypoint,
     proxyCommand,
     userFlag,
@@ -242,7 +249,6 @@ async function executeContainerSandbox(
 }> {
   const {
     args,
-    entrypointPrefixes,
     finalEntrypoint,
     proxyCommand,
     userFlag,
@@ -253,9 +259,8 @@ async function executeContainerSandbox(
   } = prepared;
   let credentialProxyBridgeCleanup = prepared.credentialProxyBridgeCleanup;
 
-  if (entrypointPrefixes.length > 0) {
-    finalEntrypoint[2] = `${entrypointPrefixes.join(' ')} ${finalEntrypoint[2]}`;
-  }
+  // Prefixes are already composed INTO the trusted entrypoint script body
+  // (after the capture stanza) by entrypoint() during prepare.
   args.push(image);
   args.push(...finalEntrypoint);
 

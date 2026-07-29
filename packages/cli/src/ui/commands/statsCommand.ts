@@ -15,6 +15,7 @@
 import type { HistoryItemStats } from '../types.js';
 import { MessageType } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   type CommandContext,
   type SlashCommand,
@@ -22,8 +23,11 @@ import {
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { fetchAllQuotaInfo } from './statsQuota.js';
+import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatSessionSection } from './formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../types/SessionRecordingMetadata.js';
+
+const logger = new DebugLogger('llxprt:cli:stats');
 
 async function defaultSessionView(context: CommandContext): Promise<void> {
   const now = new Date();
@@ -74,7 +78,7 @@ async function quotaSubcommandAction(context: CommandContext): Promise<void> {
       context.ui.addItem(
         {
           type: MessageType.INFO,
-          text: 'No quota information available. Supported providers: Anthropic (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
+          text: 'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
         },
         Date.now(),
       );
@@ -109,7 +113,7 @@ function formatBucketLastUsed(stats: { lastUsed?: number }): string {
   ) {
     return new Date(stats.lastUsed).toISOString().split('T')[0];
   }
-  return 'Never';
+  return 'unavailable';
 }
 
 function formatBucketLines(
@@ -127,37 +131,44 @@ function formatBucketLines(
   ];
 }
 
-async function collectProviderBuckets(
-  tokenStore: NonNullable<
-    NonNullable<CommandContext['services']['oauthManager']>['getTokenStore']
-  > extends () => infer T
-    ? T
-    : never,
-  provider: string,
-  output: string[],
-): Promise<void> {
-  const buckets = await tokenStore.listBuckets(provider);
-  if (buckets.length === 0) {
-    return;
-  }
+function formatUnavailableBucketLines(bucket: string): string[] {
+  return [`- ${bucket}:`, `  - Usage data unavailable`];
+}
 
-  output.push(`### ${provider}\n`);
-
-  for (const bucket of buckets) {
-    const stats = await tokenStore.getBucketStats(provider, bucket);
-    if (stats) {
-      output.push(...formatBucketLines(bucket, stats));
+function formatDiscoveredProviders(
+  providers: ReadonlyArray<{
+    provider: string;
+    buckets: ReadonlyArray<{
+      bucket: string;
+      stats: {
+        requestCount: number;
+        percentage: number;
+        lastUsed?: number;
+      } | null;
+    }>;
+  }>,
+): string[] {
+  const output: string[] = ['## OAuth Bucket Statistics\n'];
+  for (const { provider, buckets } of providers) {
+    output.push(`### ${provider}\n`);
+    for (const { bucket, stats } of buckets) {
+      if (stats !== null) {
+        output.push(...formatBucketLines(bucket, stats));
+      } else {
+        output.push(...formatUnavailableBucketLines(bucket));
+      }
     }
+    output.push('');
   }
-
-  output.push('');
+  return output;
 }
 
 async function bucketsSubcommandAction(
   context: CommandContext,
   _args: string,
 ): Promise<void> {
-  const { oauthManager } = context.services;
+  const runtimeApi = getRuntimeApi();
+  const oauthManager = runtimeApi.maybeGetCliOAuthManager();
 
   if (!oauthManager) {
     context.ui.addItem(
@@ -171,20 +182,9 @@ async function bucketsSubcommandAction(
   }
 
   try {
-    const tokenStore = oauthManager.getTokenStore();
-    const supportedProviders = oauthManager.getSupportedProviders();
-    const output: string[] = ['## OAuth Bucket Statistics\n'];
-    let hasAnyBuckets = false;
+    const discovered = await discoverProviderBuckets(oauthManager, logger);
 
-    for (const provider of supportedProviders) {
-      const beforeLength = output.length;
-      await collectProviderBuckets(tokenStore, provider, output);
-      if (output.length > beforeLength) {
-        hasAnyBuckets = true;
-      }
-    }
-
-    if (!hasAnyBuckets) {
+    if (discovered.length === 0) {
       context.ui.addItem(
         {
           type: MessageType.INFO,
@@ -195,6 +195,7 @@ async function bucketsSubcommandAction(
       return;
     }
 
+    const output = formatDiscoveredProviders(discovered);
     context.ui.addItem(
       {
         type: MessageType.INFO,
@@ -278,7 +279,7 @@ export const statsCommand: SlashCommand = {
     {
       name: 'quota',
       description:
-        'Show quota/usage information for OAuth providers (Anthropic, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
+        'Show quota/usage information for OAuth providers (Claude Code, Codex) and API-key providers (Z.ai, Synthetic, Chutes, Kimi).',
       kind: CommandKind.BUILT_IN,
       action: quotaSubcommandAction,
     },

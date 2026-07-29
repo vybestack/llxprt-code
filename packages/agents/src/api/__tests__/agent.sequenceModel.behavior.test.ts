@@ -72,7 +72,7 @@ function makeSeqClient(sequenceModel: string | null): AgentClientContract {
  * with a CONTROLLABLE resolveClient seam. The config-derived fields (config,
  * providerManager, messageBus, settingsService, runtimeState) are genuine so
  * the AgentImpl constructor's config reads (getAgentClient, getTargetDir,
- * getMcpClientManager, getToolRegistry) succeed against real objects. The
+ * getMcpRuntimeStatus, getToolRegistry) succeed against real objects. The
  * lightweight structural fields (runtimeId, runtimeHandle, loopHolder,
  * ownership, rebuildLoop) are real-shaped stand-ins for surfaces the
  * getCurrentSequenceModel path never touches.

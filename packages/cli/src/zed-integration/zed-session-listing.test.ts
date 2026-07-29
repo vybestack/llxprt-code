@@ -454,8 +454,10 @@ describe('recorded ACP session listing', () => {
       const updatedAt = result.sessions[0].updatedAt;
       expect(updatedAt).toBeDefined();
       expect(new Date(updatedAt ?? '').toISOString()).toBe(updatedAt);
+      // Allow 1ms of clock granularity: Date.now() around construction can
+      // otherwise flake with "expected T to be >= T+1" under load.
       expect(new Date(updatedAt ?? '').getTime()).toBeGreaterThanOrEqual(
-        startedAt,
+        startedAt - 1,
       );
       expect(new Date(updatedAt ?? '').getTime()).toBeLessThanOrEqual(
         Date.now(),

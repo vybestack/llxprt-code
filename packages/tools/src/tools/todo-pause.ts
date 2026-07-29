@@ -5,7 +5,12 @@
  */
 
 import { Type } from '../types/schema-type.js';
-import { BaseTool, type ToolResult, Kind } from './tools.js';
+import {
+  BaseTool,
+  type ToolResult,
+  Kind,
+  type LiveOutputUpdate,
+} from './tools.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 import type { IToolHost } from '../interfaces/IToolHost.js';
 import { EmojiFilter, isEmojiFilterMode } from '../utils/EmojiFilter.js';
@@ -118,7 +123,7 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
   async execute(
     params: TodoPauseParams,
     _signal: AbortSignal,
-    _updateOutput?: (output: string) => void,
+    _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
     const reasonResult = this.filterReason(params.reason);
     if (reasonResult.blocked) {

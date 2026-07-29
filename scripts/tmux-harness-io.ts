@@ -40,24 +40,41 @@ import {
 export const TMUX_ENV_KEYS = ['TMUX', 'TMUX_PANE', 'TMUX_TMPDIR'];
 
 /**
- * Lazily-created private tmux socket path. Using -S with a socket inside a
- * unique temp directory guarantees concurrent harness runs each get their own
- * tmux server and can never collide with or attach to an outer server.
+ * Whether the current platform is Windows. On Windows, psmux (the tmux
+ * reimplementation) does not honor `-S <file-path>` for Unix-style socket
+ * isolation — it silently falls back to the default socket, so `kill-server`
+ * would nuke every session on the default socket. Instead, psmux properly
+ * honors `-L <name>` (named-namespace isolation), which is how jefe isolates
+ * its own sessions. We branch accordingly.
+ */
+const IS_WIN32 = process.platform === 'win32';
+
+/**
+ * Lazily-created private tmux socket identifier. On Unix this is a filesystem
+ * socket path (used with `-S`); on Windows it is a unique socket name (used
+ * with `-L`). Either way, concurrent harness runs each get their own tmux
+ * server and can never collide with or attach to an outer server.
  *
- * The temp directory and socket path are created on first access rather than
- * at module load so that importing this module has no filesystem side effect
- * and cannot crash on import. The created directory can later be cleaned up
- * via {@link cleanupTmuxSocketDir}.
+ * The temp directory (Unix) or unique name (Windows) is created on first
+ * access rather than at module load so that importing this module has no
+ * filesystem side effect and cannot crash on import. The resource can later
+ * be cleaned up via {@link cleanupTmuxSocketDir}.
  */
 let tmuxSocketPath: string | null = null;
 let tmuxSocketDir: fsSync.PathLike | null = null;
 
 export function getTmuxSocketPath(): string {
   if (tmuxSocketPath === null) {
-    tmuxSocketDir = fsSync.mkdtempSync(
-      path.join(os.tmpdir(), 'llxprt-tmux-harness-'),
-    );
-    tmuxSocketPath = path.join(tmuxSocketDir, 'tmux.sock');
+    if (IS_WIN32) {
+      // psmux honors -L (named namespace) for proper isolation on Windows.
+      tmuxSocketDir = null;
+      tmuxSocketPath = `llxprt-harness-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    } else {
+      tmuxSocketDir = fsSync.mkdtempSync(
+        path.join(os.tmpdir(), 'llxprt-tmux-harness-'),
+      );
+      tmuxSocketPath = path.join(tmuxSocketDir, 'tmux.sock');
+    }
   }
   return tmuxSocketPath;
 }
@@ -85,16 +102,18 @@ function killedOrMissingTmuxServer(
  * access the kept server.
  */
 export function cleanupTmuxSocketDir(): void {
-  if (tmuxSocketDir === null) {
+  if (tmuxSocketPath === null && tmuxSocketDir === null) {
     return;
   }
   if (tmuxSocketPath !== null) {
     try {
-      const killResult = spawnSync(
-        'tmux',
-        ['-S', tmuxSocketPath, 'kill-server'],
-        buildTmuxOptions(),
-      );
+      // On both platforms we pass the isolation flag so kill-server is scoped
+      // to our private server only. Without the flag psmux/tmux would target
+      // the default socket and kill unrelated sessions.
+      const killArgs = IS_WIN32
+        ? ['-L', tmuxSocketPath, 'kill-server']
+        : ['-S', tmuxSocketPath, 'kill-server'];
+      const killResult = spawnSync('tmux', killArgs, buildTmuxOptions());
       if (killResult.error || !killedOrMissingTmuxServer(killResult)) {
         return;
       }
@@ -102,11 +121,13 @@ export function cleanupTmuxSocketDir(): void {
       return;
     }
   }
-  try {
-    fsSync.rmSync(tmuxSocketDir, { recursive: true, force: true });
-  } catch {
-    // Best-effort cleanup; keep cached paths so callers can retry later.
-    return;
+  if (tmuxSocketDir !== null) {
+    try {
+      fsSync.rmSync(tmuxSocketDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; keep cached paths so callers can retry later.
+      return;
+    }
   }
   tmuxSocketDir = null;
   tmuxSocketPath = null;
@@ -121,6 +142,9 @@ export function cleanupTmuxSocketDir(): void {
  * @returns {string[]} full argument vector beginning with the socket flag
  */
 export function buildTmuxSocketArgs(args: string[]): string[] {
+  if (IS_WIN32) {
+    return ['-L', getTmuxSocketPath(), ...args];
+  }
   return ['-S', getTmuxSocketPath(), ...args];
 }
 

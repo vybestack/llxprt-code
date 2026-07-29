@@ -196,11 +196,14 @@ jobs:
 
       - name: 'Install LLxprt CLI nightly'
         if: steps.issue_gate.outputs.should_review == 'true'
+        id: 'install'
+        continue-on-error: true
         run: npm install -g @vybestack/llxprt-code@nightly
 
       - name: 'Check API quota and select optimal key'
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'quota'
+        continue-on-error: true
         run: bun scripts/ci-quota-check.ts
         env:
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
@@ -373,7 +376,9 @@ jobs:
           '
 
       - name: 'Run walkthrough pipeline'
-        if: steps.issue_gate.outputs.should_review == 'true'
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' && steps.quota.outcome == 'success' }}
+        id: 'walkthrough'
+        continue-on-error: true
         env:
           OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
         run: |
@@ -385,7 +390,8 @@ jobs:
           bun scripts/pr-review-walkthrough.ts 2> >(tee review/walkthrough-error.log >&2)
 
       - name: 'Upload walkthrough diagnostics'
-        if: failure()
+        if: always()
+        continue-on-error: true
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
           name: 'walkthrough-diagnostics-${{ github.run_attempt }}'
@@ -398,6 +404,7 @@ jobs:
 
       - name: 'Ensure fallback comment'
         if: always()
+        continue-on-error: true
         run: |
           if [[ ! -s review/comment.md ]]; then
             {
@@ -409,6 +416,7 @@ jobs:
 
       - name: 'Post walkthrough comment'
         if: always()
+        continue-on-error: true
         uses: 'thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b' # v3.0.1
         with:
           file-path: 'review/comment.md'

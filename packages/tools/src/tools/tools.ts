@@ -18,7 +18,10 @@ import {
 } from '../interfaces/IToolMessageBus.js';
 import type { DiffUpdateResult } from '../interfaces/IIdeService.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
-import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import type {
+  AnsiOutput,
+  LiveOutputUpdate,
+} from '../utils/terminalSerializer.js';
 import type { ContextAwareTool, ToolContext } from '../types/tool-context.js';
 import {
   ToolConfirmationOutcome,
@@ -28,6 +31,7 @@ import { ToolErrorType } from '../types/tool-error.js';
 
 export { ToolConfirmationOutcome } from '../types/tool-confirmation-types.js';
 export type { ToolConfirmationPayload } from '../types/tool-confirmation-types.js';
+export type { LiveOutputUpdate } from '../utils/terminalSerializer.js';
 
 /**
  * Represents a validated and ready-to-execute tool call.
@@ -74,7 +78,7 @@ export interface ToolInvocation<
    */
   execute(
     signal: AbortSignal,
-    updateOutput?: (output: string | AnsiOutput) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
     terminalColumns?: number,
     terminalRows?: number,
     setPidCallback?: (pid: number) => void,
@@ -419,7 +423,7 @@ export abstract class BaseToolInvocation<
 
   abstract execute(
     signal: AbortSignal,
-    updateOutput?: (output: string | AnsiOutput) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
     terminalColumns?: number,
     terminalRows?: number,
     setPidCallback?: (pid: number) => void,
@@ -577,7 +581,7 @@ export abstract class DeclarativeTool<
   async buildAndExecute(
     params: TParams,
     signal: AbortSignal,
-    updateOutput?: (output: string | AnsiOutput) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<TResult> {
     const invocation = this.build(params);
     return invocation.execute(signal, updateOutput);
@@ -1002,7 +1006,7 @@ export abstract class BaseTool<
   abstract execute(
     params: TParams,
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<TResult>;
 
   /**
@@ -1043,7 +1047,7 @@ class BaseToolLegacyInvocation<
 
   async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
+    updateOutput?: (update: LiveOutputUpdate) => void,
     _terminalColumns?: number,
     _terminalRows?: number,
     _setPidCallback?: (pid: number) => void,

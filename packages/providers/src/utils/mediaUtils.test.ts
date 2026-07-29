@@ -20,6 +20,8 @@ import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
   detectImageMimeTypeFromBase64,
+  buildPdfDisabledNotice,
+  inlineBase64ByteLength,
 } from './mediaUtils.js';
 import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -336,5 +338,106 @@ ${webpBase64.slice(8)}
     expect(detectImageMimeTypeFromBase64('!!!not-valid-base64-!@#$')).toBe(
       null,
     );
+  });
+});
+
+describe('buildPdfDisabledNotice @issue:2608', () => {
+  it('names the file when filename is known', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'AAA',
+      encoding: 'base64',
+      filename: 'invoice.pdf',
+    };
+    const notice = buildPdfDisabledNotice(media);
+    expect(notice).toContain('invoice.pdf');
+  });
+
+  it('states the PDF was not read', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'AAA',
+      encoding: 'base64',
+      filename: 'doc.pdf',
+    };
+    expect(buildPdfDisabledNotice(media).toLowerCase()).toContain('not read');
+  });
+
+  it('suggests text extraction or page rendering', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'AAA',
+      encoding: 'base64',
+      filename: 'doc.pdf',
+    };
+    const notice = buildPdfDisabledNotice(media).toLowerCase();
+    expect(notice.includes('extract') || notice.includes('render')).toBe(true);
+  });
+
+  it('falls back to document.pdf when filename is absent', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'AAA',
+      encoding: 'base64',
+    };
+    expect(buildPdfDisabledNotice(media)).toContain('document.pdf');
+  });
+
+  it('falls back to document.pdf when filename is whitespace-only', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'AAA',
+      encoding: 'base64',
+      filename: '   ',
+    };
+    expect(buildPdfDisabledNotice(media)).toContain('document.pdf');
+  });
+
+  it('falls back to document.pdf when filename is empty', () => {
+    const media: MediaBlock = {
+      type: 'media',
+      mimeType: 'application/pdf',
+      data: 'AAA',
+      encoding: 'base64',
+      filename: '',
+    };
+    expect(buildPdfDisabledNotice(media)).toContain('document.pdf');
+  });
+});
+
+describe('inlineBase64ByteLength @issue:2608', () => {
+  it('computes decoded byte length for an inline data-URI base64 payload', () => {
+    const raw = Buffer.from('A'.repeat(1024)).toString('base64');
+    expect(inlineBase64ByteLength(`data:application/pdf;base64,${raw}`)).toBe(
+      1024,
+    );
+  });
+
+  it('returns 0 for a bare URL (not inline base64)', () => {
+    expect(inlineBase64ByteLength('https://example.com/doc.pdf')).toBe(0);
+  });
+
+  it('returns 0 for a non-base64 data URI', () => {
+    expect(inlineBase64ByteLength('data:text/plain,hello')).toBe(0);
+  });
+
+  it('returns 0 for an empty payload', () => {
+    expect(inlineBase64ByteLength('data:application/pdf;base64,')).toBe(0);
+  });
+
+  it('computes correct length for unpadded base64', () => {
+    const unpadded = Buffer.from('ab').toString('base64').slice(0, -1);
+    expect(
+      inlineBase64ByteLength(`data:application/pdf;base64,${unpadded}`),
+    ).toBe(2);
+  });
+
+  it('accepts case-insensitive base64 encoding tokens', () => {
+    expect(inlineBase64ByteLength('data:application/pdf;BASE64,YWJj')).toBe(3);
   });
 });

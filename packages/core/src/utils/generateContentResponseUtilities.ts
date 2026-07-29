@@ -224,7 +224,9 @@ interface LegacyPartLike {
   functionResponse?:
     | { id?: string; name?: string; response?: unknown }
     | undefined;
-  inlineData?: { mimeType?: string; data?: string } | undefined;
+  inlineData?:
+    | { mimeType?: string; data?: string; displayName?: string }
+    | undefined;
   fileData?: { fileUri?: string; mimeType?: string } | undefined;
 }
 
@@ -313,6 +315,9 @@ function legacyPartToBlocks(part: LegacyPartLike): ContentBlock[] {
         mimeType: part.inlineData.mimeType ?? '',
         data: part.inlineData.data ?? '',
         encoding: 'base64',
+        ...(part.inlineData.displayName
+          ? { filename: part.inlineData.displayName }
+          : {}),
       },
     ];
   }

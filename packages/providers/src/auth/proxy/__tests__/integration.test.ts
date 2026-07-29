@@ -142,11 +142,14 @@ type StartedServer = {
 describe('proxy integration (phase 31)', () => {
   let tmpDir: string;
   let priorSocketEnv: string | undefined;
+  let priorCapabilityFdEnv: string | undefined;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
+    priorCapabilityFdEnv = process.env.LLXPRT_CAPABILITY_FD;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+    delete process.env.LLXPRT_CAPABILITY_FD;
     resetFactorySingletons();
   });
 
@@ -162,18 +165,24 @@ describe('proxy integration (phase 31)', () => {
     } else {
       process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
     }
+    if (priorCapabilityFdEnv === undefined) {
+      delete process.env.LLXPRT_CAPABILITY_FD;
+    } else {
+      process.env.LLXPRT_CAPABILITY_FD = priorCapabilityFdEnv;
+    }
 
     resetFactorySingletons();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  async function startServer(): Promise<StartedServer> {
+  async function startServer(capabilityToken?: string): Promise<StartedServer> {
     const tokenStore = new InMemoryTokenStore();
     const keyStorage = new InMemoryProviderKeyStorage();
     const server = new CredentialProxyServer({
       tokenStore,
       providerKeyStorage: keyStorage as unknown as ProviderKeyStorage,
       socketDir: tmpDir,
+      capabilityToken,
     });
     const socketPath = await server.start();
     return { server, socketPath, tokenStore, keyStorage };
@@ -261,6 +270,78 @@ describe('proxy integration (phase 31)', () => {
     expect(token).toMatch(/^[0-9a-f]{64}$/); // 32 bytes hex-encoded
     expect(getProxySocketPath()).toBeDefined();
     await stopProxy();
+  });
+
+  it('consumes fd capability for both factories and reauthenticates after reconnect', async () => {
+    const capabilityToken = 'c'.repeat(64);
+    const started = await startServer(capabilityToken);
+    try {
+      await started.tokenStore.saveToken('openai', {
+        access_token: 'factory-token',
+        expiry: Date.now() + 60_000,
+        token_type: 'Bearer',
+      });
+      await started.keyStorage.saveKey('openai', 'factory-key');
+      // O11/O12: guarantee fd 3 rather than assuming openSync returns 3.
+      // Open the capability file, then dup2 it to fd 3 using POSIX dup2
+      // available via node:fs on the current process. This is done in-process
+      // so the proxy server's event loop stays responsive (spawnSync would
+      // block it).
+      const capabilityFile = path.join(tmpDir, 'capability');
+      fs.writeFileSync(capabilityFile, `${capabilityToken}\n`, { mode: 0o600 });
+      // Open the file on whatever fd openSync returns.
+      const openedFd = fs.openSync(capabilityFile, 'r');
+      // If openedFd is not already 3, use bash to move it to fd 3.
+      // We use a child process via spawn (async) so the parent's event loop
+      // stays responsive for the proxy server.
+      const { spawn } = await import('node:child_process');
+      const { fileURLToPath } = await import('node:url');
+      const factoryPath = fileURLToPath(
+        new URL('../credential-store-factory.ts', import.meta.url),
+      );
+      const childScript = [
+        `const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } = require(${JSON.stringify(factoryPath)});`,
+        'resetFactorySingletons();',
+        'const tokenStore = createTokenStore();',
+        'const keyStorage = createProviderKeyStorage();',
+        'Promise.all([tokenStore.getToken("openai"), keyStorage.getKey("openai")])',
+        '  .then(([t, k]) => {',
+        '    process.stdout.write(JSON.stringify({ token: t?.access_token, key: k, isProxy: tokenStore.constructor.name === "ProxyTokenStore" }));',
+        '    process.exit(0);',
+        '  })',
+        '  .catch((e) => {',
+        '    process.stdout.write(JSON.stringify({ error: e.message }));',
+        '    process.exit(0);',
+        '  });',
+      ].join('');
+      const bashScript = `exec 3<${JSON.stringify(capabilityFile)}\nLLXPRT_CREDENTIAL_SOCKET=${JSON.stringify(started.socketPath)} LLXPRT_CAPABILITY_FD=3 exec bun -e ${JSON.stringify(childScript)}`;
+      const child = spawn(
+        'env',
+        ['-u', 'BASH_ENV', 'bash', '--noprofile', '--norc', '-c', bashScript],
+        { encoding: 'utf8' },
+      );
+      let childStdout = '';
+      let childStderr = '';
+      child.stdout.on('data', (d) => (childStdout += d.toString()));
+      child.stderr.on('data', (d) => (childStderr += d.toString()));
+      const exitCode = await new Promise<number>((resolve) => {
+        child.on('close', resolve);
+      });
+      fs.closeSync(openedFd);
+      expect(exitCode).toBe(0);
+      const payload = JSON.parse(childStdout.trim()) as {
+        token?: string;
+        key?: string;
+        isProxy?: boolean;
+        error?: string;
+      };
+      expect(payload.error, `child error: ${payload.error}`).toBeUndefined();
+      expect(payload.token).toBe('factory-token');
+      expect(payload.key).toBe('factory-key');
+      expect(payload.isProxy).toBe(true);
+    } finally {
+      await started.server.stop();
+    }
   });
 
   it('clears capability token after proxy stop', async () => {

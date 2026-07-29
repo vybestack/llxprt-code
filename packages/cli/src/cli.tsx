@@ -55,7 +55,9 @@ import {
   ExitCodes,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
   runStartupMigration,
   reportStartupResult,
@@ -106,6 +108,7 @@ import {
   __resetUnhandledRejectionStateForTesting,
 } from './session/signalHandlers.js';
 import { startInteractiveUI } from './session/interactiveUI.js';
+import { configureUnicodeSupport } from './ui/utils/unicodeSupport.js';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -188,6 +191,10 @@ async function constructForegroundAgentAndDispatch(
   hasPipedInput: boolean,
   readStdinData: () => Promise<string>,
 ): Promise<void> {
+  // Configure Unicode rendering before any Ink render (including the MCP
+  // initialization spinner inside constructAgentWithSpinner) so that Windows
+  // consoles with non-UTF-8 codepages fall back to ASCII borders/spinners.
+  configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
   const agent = await constructAgentWithSpinner(
     config,
     providerActivation.token,
@@ -242,6 +249,20 @@ async function constructForegroundAgentAndDispatch(
  * Zed/ACP is the exception: it runs its own runtime and constructs per-session
  * Agents via `fromConfig` internally, so no foreground Agent is built for it.
  */
+function prepareSandboxCredentialStartup(workspaceRoot: string): void {
+  const sandboxSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
+  const capabilityFd = process.env.LLXPRT_CAPABILITY_FD;
+  if (sandboxSocket !== undefined || capabilityFd !== undefined) {
+    createTokenStore();
+  }
+  if (sandboxSocket !== undefined) {
+    applySandboxBashrc(
+      `${workspaceRoot}/.llxprt/sandbox.bashrc`,
+      workspaceRoot,
+    );
+  }
+}
+
 export async function main() {
   configureEarlyDebugLogging();
 
@@ -251,6 +272,8 @@ export async function main() {
   const cleanupStdio = setupProcessLifecycle();
 
   const workspaceRoot = process.cwd();
+  prepareSandboxCredentialStartup(workspaceRoot);
+
   const settings = loadSettings(workspaceRoot);
 
   await maybeRelaunchForMemory(settings);

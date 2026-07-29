@@ -25,6 +25,7 @@ import {
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { theme } from '../semantic-colors.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface ThemeDialogProps {
   onSelect: (themeName: string | undefined, scope: SettingScope) => void;
@@ -119,7 +120,7 @@ function ThemePreviewPane({
 }): React.JSX.Element {
   return (
     <Box
-      borderStyle="single"
+      borderStyle={getBorderStyle('single')}
       borderColor={Colors.Gray}
       paddingTop={includePadding ? 1 : 0}
       paddingBottom={includePadding ? 1 : 0}
@@ -392,7 +393,7 @@ function ThemeDialogContent({
 }): React.JSX.Element {
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       paddingTop={layout.includePadding ? 1 : 0}

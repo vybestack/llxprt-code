@@ -22,6 +22,7 @@ import './test-setup-base.js';
 // scheduling, alter token-store behaviour, and change sandbox paths).
 delete process.env.LLXPRT_CREDENTIAL_SOCKET;
 delete process.env.LLXPRT_CAPABILITY_TOKEN;
+delete process.env.LLXPRT_CAPABILITY_FD;
 
 // Setup for React DOM testing - fix for React 19 internals issue
 import React from 'react';

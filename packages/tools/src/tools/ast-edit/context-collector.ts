@@ -84,19 +84,20 @@ export class ASTContextCollector {
 
   async collectContext(filePath: string, content: string): Promise<ASTContext> {
     const language = detectLanguage(filePath);
+    const declarations = await this.astExtractor.extractDeclarations(
+      filePath,
+      content,
+    );
 
     return {
       filePath,
       language,
       fileSize: content.length,
       astNodes: await parseAST(content, language),
-      declarations: await this.astExtractor.extractDeclarations(
-        filePath,
-        content,
-      ),
+      declarations,
       imports: extractImports(content, language),
       relevantSnippets: collectSnippets(content),
-      languageContext: buildLanguageContext(content, language),
+      languageContext: buildLanguageContext(declarations),
     };
   }
 

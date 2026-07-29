@@ -330,6 +330,11 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Refreshing MCP discovery affects the live runtime tool set',
   ),
   runtime(
+    '/mcp reload',
+    'agent.mcp.reload',
+    'Reloading MCP configuration changes the live runtime tool set',
+  ),
+  runtime(
     '/chat list',
     'agent.session.listCheckpoints',
     'Listing checkpoints reflects the live session state',
