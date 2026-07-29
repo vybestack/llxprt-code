@@ -19,6 +19,7 @@ const {
   mockCreateCounterFn,
   mockCreateHistogramFn,
   mockMeterInstance,
+  mockGetMeterFn,
 } = vi.hoisted(() => {
   const counterAdd = vi.fn();
   const histogramRecord = vi.fn();
@@ -27,12 +28,12 @@ const {
 
   const counterInstance = { add: counterAdd };
   const histogramInstance = { record: histogramRecord };
-  createCounter.mockReturnValue(counterInstance);
-  createHistogram.mockReturnValue(histogramInstance);
   const meterInstance = {
     createCounter,
     createHistogram,
   };
+
+  const getMeter = vi.fn().mockReturnValue(meterInstance);
 
   return {
     mockCounterAddFn: counterAdd,
@@ -40,12 +41,13 @@ const {
     mockCreateCounterFn: createCounter,
     mockCreateHistogramFn: createHistogram,
     mockMeterInstance: meterInstance,
+    mockGetMeterFn: getMeter,
   };
 });
 
 vi.mock('@opentelemetry/api', () => ({
   metrics: {
-    getMeter: vi.fn().mockReturnValue(mockMeterInstance),
+    getMeter: mockGetMeterFn,
   },
   ValueType: {
     INT: 1,
@@ -60,17 +62,27 @@ const {
   resetMetricsForTesting,
 } = await import('./metrics.js');
 
+/**
+ * Resets all mock functions to their default state and re-establishes return
+ * values that mockClear() wipes. Called from beforeEach so every test starts
+ * from a clean mock state without re-declaring the mocks.
+ */
+function resetMockDefaults(): void {
+  mockCounterAddFn.mockClear();
+  mockCreateCounterFn.mockClear();
+  mockCreateHistogramFn.mockClear();
+  mockHistogramRecordFn.mockClear();
+  mockGetMeterFn.mockClear();
+
+  mockCreateCounterFn.mockReturnValue({ add: mockCounterAddFn });
+  mockCreateHistogramFn.mockReturnValue({ record: mockHistogramRecordFn });
+  mockGetMeterFn.mockReturnValue(mockMeterInstance);
+}
+
 describe('Telemetry Metrics', () => {
   beforeEach(() => {
     resetMetricsForTesting();
-    mockCounterAddFn.mockClear();
-    mockCreateCounterFn.mockClear();
-    mockCreateHistogramFn.mockClear();
-    mockHistogramRecordFn.mockClear();
-
-    // Re-establish default return values after mockClear resets them
-    mockCreateCounterFn.mockReturnValue({ add: mockCounterAddFn });
-    mockCreateHistogramFn.mockReturnValue({ record: mockHistogramRecordFn });
+    resetMockDefaults();
   });
 
   describe('recordTokenUsageMetrics', () => {
