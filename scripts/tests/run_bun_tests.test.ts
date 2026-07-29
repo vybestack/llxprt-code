@@ -304,6 +304,24 @@ describe('runBunTests', () => {
     expect(stdout.at(-1)).toBe('Passed 1/1 isolated native Bun test files');
     expect(status).toBe(0);
   });
+
+  it('rejects a fractional --timeout value before any child is spawned', () => {
+    const dependencies: BunTestRunnerDependencies = {
+      repoRoot: '/repo',
+      invocationDirectory: '/invoke',
+      executable: '/bin/bun',
+      environment: {},
+      resolveFiles: () => [{ cwd: '/repo/core', file: '/repo/core/test.ts' }],
+      resolveTsconfig: resolveTsconfigOverride,
+      spawn: () => ({ exitCode: 0, signalCode: null }),
+      stdout: () => {},
+      stderr: () => {},
+    };
+
+    expect(() => runBunTests(['--timeout', '1.5'], dependencies)).toThrow(
+      'Invalid --timeout value: 1.5',
+    );
+  });
 });
 
 describe('actual child process signal shape', () => {

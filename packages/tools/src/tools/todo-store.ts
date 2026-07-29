@@ -74,6 +74,60 @@ function resolveDataDir(options: TodoStoreOptions): TodoDataDirResolver {
   return () => fixed;
 }
 
+/**
+ * Resolves a read operation against a todo store, preferring the async
+ * `readTodos` API and falling back to the legacy synchronous `getTodos`.
+ * Throws when neither is present (the store must be wired by the composition
+ * root). Centralized here so TodoRead and TodoWrite share one fallback chain.
+ */
+export async function resolveTodoRead(
+  store: { readTodos?: () => Promise<Todo[]>; getTodos?: () => Todo[] },
+  sessionId: string,
+  agentId: string | undefined,
+  toolLabel = 'TodoRead',
+): Promise<Todo[]> {
+  if (store.readTodos) {
+    return store.readTodos();
+  }
+  if (store.getTodos) {
+    return store.getTodos();
+  }
+  throw new Error(
+    `${toolLabel} cannot read todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
+      'no ITodoService store was injected. Construct the tool via the tool registry so ' +
+      'the composition root can wire Storage.getGlobalDataDir().',
+  );
+}
+
+/**
+ * Resolves a write operation against a todo store, preferring the async
+ * `writeTodos` API and falling back to the legacy synchronous `setTodos`.
+ * Throws when neither is present (the store must be wired by the composition
+ * root). Centralized here so TodoRead and TodoWrite share one fallback chain.
+ */
+export async function resolveTodoWrite(
+  todos: Todo[],
+  store: {
+    writeTodos?: (todos: Todo[]) => Promise<void>;
+    setTodos?: (todos: Todo[]) => void;
+  },
+  sessionId: string,
+  agentId: string | undefined,
+  toolLabel = 'TodoWrite',
+): Promise<void> {
+  if (store.writeTodos) {
+    await store.writeTodos(todos);
+  } else if (store.setTodos) {
+    store.setTodos(todos);
+  } else {
+    throw new Error(
+      `${toolLabel} cannot persist todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
+        'no ITodoService store was injected. Construct the tool via the tool registry so ' +
+        'the composition root can wire Storage.getGlobalDataDir().',
+    );
+  }
+}
+
 export class TodoStore {
   private readonly dataDirResolver: TodoDataDirResolver;
   private readonly sessionId: string;

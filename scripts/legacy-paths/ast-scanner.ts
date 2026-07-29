@@ -38,7 +38,7 @@ import type { CompiledAllowlist } from './config.js';
  * Matches strings that contain `.llxprt` as a path segment (e.g. `.llxprt`,
  * `.llxprt/settings.json`). Used to detect alias assignments.
  */
-const DOT_LLPRT_PATTERN = /\.llxprt(?=[/"'`)}\s$]|$)/;
+const DOT_LLXPRT_PATTERN = /\.llxprt(?=[/"'`)}\s$]|$)/;
 
 /**
  * An AST-detected legacy-path violation.
@@ -176,7 +176,7 @@ function collectAliases(
       init !== undefined &&
       ts.isIdentifier(decl.name) &&
       ts.isStringLiteral(init) &&
-      DOT_LLPRT_PATTERN.test(init.text)
+      DOT_LLXPRT_PATTERN.test(init.text)
     ) {
       aliasMap.set(decl.name.text, init.text);
     }
@@ -275,12 +275,12 @@ function isDotLlxprtValue(
   node: ts.Node,
   aliasMap: Map<string, string>,
 ): boolean {
-  if (ts.isStringLiteral(node) && DOT_LLPRT_PATTERN.test(node.text)) {
+  if (ts.isStringLiteral(node) && DOT_LLXPRT_PATTERN.test(node.text)) {
     return true;
   }
   if (ts.isIdentifier(node)) {
     const aliased = aliasMap.get(node.text);
-    if (aliased !== undefined && DOT_LLPRT_PATTERN.test(aliased)) {
+    if (aliased !== undefined && DOT_LLXPRT_PATTERN.test(aliased)) {
       return true;
     }
   }
@@ -331,7 +331,7 @@ function checkTemplateExpression(
   for (const span of node.templateSpans) {
     if (
       isHomedirCall(span.expression) &&
-      DOT_LLPRT_PATTERN.test(span.literal.text)
+      DOT_LLXPRT_PATTERN.test(span.literal.text)
     ) {
       const pos = node.getStart(sourceFile);
       const { line, character } = sourceFile.getLineAndCharacterOfPosition(pos);
