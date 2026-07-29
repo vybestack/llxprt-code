@@ -257,9 +257,8 @@ export async function setupSessionRecording(
           ),
         );
       }
-      // Fresh session with a new UUID in the same project's chatsDir.
-      // buildNewRecordingService generates a new sessionId so the recording
-      // is fully isolated from the corrupted resumed session.
+      // Rebuild the configured session recording after the failed resume.
+      // Lock acquisition and file materialization remain fail-fast.
       try {
         activeRecordingService = await buildNewRecordingService(
           config,
@@ -267,9 +266,6 @@ export async function setupSessionRecording(
           chatsDir,
         );
       } catch (buildErr) {
-        // This should be unreachable (construction just stores config),
-        // but if it throws we must not leave the session without a
-        // recording service — rethrow so startup fails loudly.
         throw new Error(
           `Failed to create fallback recording service: ${
             buildErr instanceof Error ? buildErr.message : String(buildErr)

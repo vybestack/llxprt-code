@@ -223,18 +223,23 @@ export class SessionDiscovery {
       : resolved;
   }
 
+  static validateName(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Name must not be empty');
+    }
+    if (trimmed === 'latest' || /^\d+$/.test(trimmed)) {
+      throw new Error(`Name '${trimmed}' is reserved`);
+    }
+    return trimmed;
+  }
+
   static async validateAvailableName(
     name: string,
     chatsDir: string,
     projectHash: string,
   ): Promise<string> {
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-      throw new Error('Name must not be empty');
-    }
-    if (trimmed === 'latest' || /^[1-9]\d*$/.test(trimmed)) {
-      throw new Error(`Name '${trimmed}' is reserved`);
-    }
+    const trimmed = this.validateName(name);
     const targets = await this.listContinueTargets(chatsDir, projectHash);
     const duplicate = targets.some((target) =>
       target.kind === 'session'

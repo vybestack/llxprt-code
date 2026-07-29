@@ -151,6 +151,30 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       await svc.dispose();
     });
 
+    it('materializes an unstarted recording when naming the session', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+
+      await svc.setSessionName('before-first-turn');
+
+      expect(svc.getFilePath()).not.toBeNull();
+      const replay = await replaySession(svc.getFilePath()!, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.sessionName).toBe('before-first-turn');
+      await svc.dispose();
+    });
+
+    it('rejects rename and delete on an unmaterialized recording', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+
+      await expect(svc.renameCheckpoint('missing', 'renamed')).rejects.toThrow(
+        'recording is not materialized',
+      );
+      await expect(svc.deleteCheckpoint('missing')).rejects.toThrow(
+        'recording is not materialized',
+      );
+      await svc.dispose();
+    });
+
     it('rejects checkpoint creation on an inactive recorder', async () => {
       const svc = new SessionRecordingService(makeConfig(chatsDir));
       svc.recordContent(makeContent('A', 'human'));

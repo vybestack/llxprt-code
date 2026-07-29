@@ -296,12 +296,14 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
           ),
         ).rejects.toThrow(/in use/);
 
-        const beforeBytes = (await fs.readFile(svc.getFilePath()!, 'utf-8'))
+        const beforeEventLines = (
+          await fs.readFile(svc.getFilePath()!, 'utf-8')
+        )
           .trim()
           .split('\n').length;
         const result = await replaySession(svc.getFilePath()!, PROJECT_HASH);
         requireReplaySuccess(result);
-        expect(result.eventCount).toBe(beforeBytes);
+        expect(result.eventCount).toBe(beforeEventLines);
       } finally {
         await blockingLock.release();
       }

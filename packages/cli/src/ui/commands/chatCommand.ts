@@ -54,18 +54,29 @@ function getChatsDir(context: CommandContext): string | null {
   return context.services.config?.storage.getProjectChatsDir() ?? null;
 }
 
+type CheckpointResolution =
+  | { target: Extract<ContinueTarget, { kind: 'checkpoint' }> }
+  | { error: string };
+
 function resolveCheckpoint(
   ref: string,
   checkpoints: ReadonlyArray<Extract<ContinueTarget, { kind: 'checkpoint' }>>,
-): Extract<ContinueTarget, { kind: 'checkpoint' }> | null {
-  const exactId = checkpoints.find(
+): CheckpointResolution {
+  const exactId = checkpoints.filter(
     (checkpoint) => checkpoint.checkpointId === ref,
   );
-  if (exactId !== undefined) return exactId;
+  if (exactId.length === 1) return { target: exactId[0] };
+  if (exactId.length > 1) {
+    return { error: `Ambiguous checkpoint ID: ${ref}` };
+  }
   const names = checkpoints.filter(
     (checkpoint) => checkpoint.checkpointName === ref,
   );
-  return names.length === 1 ? names[0] : null;
+  if (names.length === 1) return { target: names[0] };
+  if (names.length > 1) {
+    return { error: `Ambiguous checkpoint name: ${ref}` };
+  }
+  return { error: `No checkpoint found with tag: ${ref}` };
 }
 
 async function listProjectCheckpoints(
@@ -257,14 +268,15 @@ const deleteCommand: SlashCommand = {
 
     const recording = getRecording(context);
     const checkpoints = await listProjectCheckpoints(context);
-    const target = resolveCheckpoint(tag, checkpoints);
-    if (!target) {
+    const resolved = resolveCheckpoint(tag, checkpoints);
+    if ('error' in resolved) {
       return {
         type: 'message',
         messageType: 'info',
-        content: `No checkpoint found with tag: ${tag}.`,
+        content: `${resolved.error}.`,
       };
     }
+    const target = resolved.target;
 
     try {
       const service = new CheckpointService();
@@ -347,14 +359,15 @@ const renameCommand: SlashCommand = {
     const [oldTag, newTag] = parts;
 
     const checkpoints = await listProjectCheckpoints(context);
-    const target = resolveCheckpoint(oldTag, checkpoints);
-    if (!target) {
+    const resolved = resolveCheckpoint(oldTag, checkpoints);
+    if ('error' in resolved) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `No checkpoint found with tag: ${oldTag}`,
+        content: resolved.error,
       };
     }
+    const target = resolved.target;
 
     const projectHash = getProjectHashForContext(context);
     if (projectHash === null) {

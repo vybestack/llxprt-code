@@ -153,7 +153,6 @@ export class CheckpointService {
     projectHash: string,
     checkpointId: string,
   ): Promise<void> {
-    this.requireActiveRecording(recording);
     await this.requireActiveCheckpoint(recording, projectHash, checkpointId);
     await recording.deleteCheckpoint(checkpointId);
   }
@@ -519,12 +518,7 @@ export class CheckpointService {
   }
 
   private requireName(name: string): string {
-    const trimmed = name.trim();
-    if (trimmed.length === 0) throw new Error('Name must not be empty');
-    if (trimmed === 'latest' || /^[1-9]\d*$/.test(trimmed)) {
-      throw new Error(`Name '${trimmed}' is reserved`);
-    }
-    return trimmed;
+    return SessionDiscovery.validateName(name);
   }
 
   private requireActiveRecording(recording: SessionRecordingService): void {

@@ -143,6 +143,7 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private integrationNeedsSubscribe = false;
+  private readonly checkpointService = new CheckpointService();
 
   constructor(private readonly deps: SessionControlDeps) {}
 
@@ -461,7 +462,7 @@ export class SessionControl implements AgentSessionControl {
         await this.startRecording();
       }
       const recording = this.requireRecording();
-      const created = await new CheckpointService().createCheckpoint(
+      const created = await this.checkpointService.createCheckpoint(
         recording,
         this.persistenceProjectHash(),
         name,
@@ -495,26 +496,30 @@ export class SessionControl implements AgentSessionControl {
     return this.runExclusive(async () => {
       const targets = await this.continueTargets();
       const checkpoints: CheckpointInfo[] = [];
+      const replayByFilePath = new Map<string, ReplayResult>();
       for (const target of targets) {
-        if (target.kind === 'checkpoint') {
-          const replay = await replaySession(
+        if (target.kind !== 'checkpoint') continue;
+        let replay = replayByFilePath.get(target.source.filePath);
+        if (replay === undefined) {
+          replay = await replaySession(
             target.source.filePath,
             this.persistenceProjectHash(),
           );
-          const checkpoint = replay.ok
-            ? replay.checkpoints?.find(
-                (candidate) => candidate.checkpointId === target.checkpointId,
-              )
-            : undefined;
-          if (checkpoint !== undefined && !checkpoint.deleted) {
-            checkpoints.push({
-              checkpointId: checkpoint.checkpointId,
-              name: checkpoint.name,
-              sessionId: target.source.sessionId,
-              sequence: checkpoint.sequence,
-              createdAt: checkpoint.createdAt,
-            });
-          }
+          replayByFilePath.set(target.source.filePath, replay);
+        }
+        const checkpoint = replay.ok
+          ? replay.checkpoints?.find(
+              (candidate) => candidate.checkpointId === target.checkpointId,
+            )
+          : undefined;
+        if (checkpoint !== undefined && !checkpoint.deleted) {
+          checkpoints.push({
+            checkpointId: checkpoint.checkpointId,
+            name: checkpoint.name,
+            sessionId: target.source.sessionId,
+            sequence: checkpoint.sequence,
+            createdAt: checkpoint.createdAt,
+          });
         }
       }
       return checkpoints;
@@ -527,7 +532,7 @@ export class SessionControl implements AgentSessionControl {
       const trimmedName = name.trim();
       if (target.checkpointName === trimmedName) return;
       if (this.recording?.getSessionId() === target.source.sessionId) {
-        await new CheckpointService().renameCheckpoint(
+        await this.checkpointService.renameCheckpoint(
           this.recording,
           this.persistenceProjectHash(),
           target.checkpointId,
@@ -540,7 +545,7 @@ export class SessionControl implements AgentSessionControl {
         this.chatsDir(),
         this.persistenceProjectHash(),
       );
-      await new CheckpointService().renameCheckpointClosed(
+      await this.checkpointService.renameCheckpointClosed(
         target.source.filePath,
         this.persistenceProjectHash(),
         this.chatsDir(),
@@ -555,14 +560,14 @@ export class SessionControl implements AgentSessionControl {
     await this.runExclusive(async () => {
       const target = await this.resolveCheckpointTarget(ref);
       if (this.recording?.getSessionId() === target.source.sessionId) {
-        await new CheckpointService().deleteCheckpoint(
+        await this.checkpointService.deleteCheckpoint(
           this.recording,
           this.persistenceProjectHash(),
           target.checkpointId,
         );
         return;
       }
-      await new CheckpointService().deleteCheckpointClosed(
+      await this.checkpointService.deleteCheckpointClosed(
         target.source.filePath,
         this.persistenceProjectHash(),
         this.chatsDir(),
@@ -576,12 +581,13 @@ export class SessionControl implements AgentSessionControl {
     await this.runExclusive(async () => {
       if (this.recording === null) await this.startRecording();
       const recording = this.requireRecording();
+      const normalizedName = name.trim();
       const replay = await this.replayRecording(recording);
-      if (replay.sessionName === name.trim()) return;
-      await new CheckpointService().setSessionName(
+      if (replay.sessionName === normalizedName) return;
+      await this.checkpointService.setSessionName(
         recording,
         this.persistenceProjectHash(),
-        name,
+        normalizedName,
       );
     });
   }
@@ -633,16 +639,17 @@ export class SessionControl implements AgentSessionControl {
         recording,
       );
       if (!result.ok) throw new Error(result.error);
-      const historyService = client.getHistoryService();
       this.integration?.unsubscribeFromHistory();
+      let mutationError: unknown;
       try {
         await client.resetChat();
         await client.restoreHistory(result.remainingHistory);
-      } finally {
-        if (historyService !== null && this.integration !== null) {
-          this.integration.subscribeToHistory(historyService);
-        }
+      } catch (error: unknown) {
+        mutationError = error;
       }
+      const resubscribeError = this.resubscribeIntegration();
+      if (mutationError !== undefined) throw mutationError;
+      if (resubscribeError !== undefined) throw resubscribeError;
     });
   }
 
@@ -733,7 +740,7 @@ export class SessionControl implements AgentSessionControl {
     const activeSource =
       this.recording?.getSessionId() === target.source.sessionId
         ? this.recording
-        : this.deps.config.getSessionRecordingService();
+        : undefined;
     const result = await new SessionTransitionService().forkFromCheckpoint(
       target,
       this.chatsDir(),
@@ -900,6 +907,19 @@ export class SessionControl implements AgentSessionControl {
     // committed but dead; flag it so a later operation re-attaches it rather
     // than leaving continuous recording permanently off.
     this.integrationNeedsSubscribe = !subscribed;
+  }
+
+  private resubscribeIntegration(): unknown {
+    const integration = this.integration;
+    if (integration === null) return undefined;
+    try {
+      this.integrationNeedsSubscribe =
+        !this.attachIntegrationToHistory(integration);
+      return undefined;
+    } catch (error: unknown) {
+      this.integrationNeedsSubscribe = true;
+      return error;
+    }
   }
 
   /**

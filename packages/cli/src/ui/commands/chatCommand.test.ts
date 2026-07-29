@@ -56,7 +56,8 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
         getCurrentRecording: () => recording,
       },
     });
-    Object.assign(context.services.config ?? {}, {
+    assertDefined(context.services.config);
+    Object.assign(context.services.config, {
       getProjectRoot: () => root,
     });
   });
@@ -122,11 +123,11 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       recording.getFilePath() ?? '',
       PROJECT_HASH,
     );
-    expect(replay).toMatchObject({
-      ok: true,
-      sessionName: 'living-branch',
-      metadata: expect.not.objectContaining({ title: expect.anything() }),
-    });
+    expect(replay.ok).toBe(true);
+    expect(replay.sessionName).toBe('living-branch');
+    expect(replay.metadata).toStrictEqual(
+      expect.not.objectContaining({ title: expect.anything() }),
+    );
   });
 
   it('exposes all recording-native subcommands', () => {

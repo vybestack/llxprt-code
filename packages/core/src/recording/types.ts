@@ -330,6 +330,10 @@ export interface SessionSummary {
    * Used for stable ordering independent of file `lastModified` mutations.
    */
   createdAt?: string;
+  /**
+   * Mutable name folded from `session_named`, distinct from the generated title.
+   * Undefined means never named; null means explicitly cleared.
+   */
   name?: string | null;
 }
 

@@ -351,18 +351,25 @@ function usePreviewLoader(
         pageToUse * PAGE_SIZE,
         pageToUse * PAGE_SIZE + PAGE_SIZE,
       );
+      const pendingByFile = new Map<string, EnrichedSessionSummary>();
+      for (const session of currentPageItems) {
+        if (
+          !previewCacheRef.current.has(session.filePath) &&
+          !pendingByFile.has(session.filePath)
+        ) {
+          pendingByFile.set(session.filePath, session);
+        }
+      }
       await Promise.allSettled(
-        currentPageItems
-          .filter((session) => !previewCacheRef.current.has(session.targetKey))
-          .map((session) =>
-            loadPreview(
-              session,
-              generation,
-              generationRef,
-              previewCacheRef,
-              setSessions,
-            ),
+        [...pendingByFile.values()].map((session) =>
+          loadPreview(
+            session,
+            generation,
+            generationRef,
+            previewCacheRef,
+            setSessions,
           ),
+        ),
       );
     },
     [generationRef, previewCacheRef, setSessions],
@@ -380,27 +387,27 @@ async function loadPreview(
     const text = await SessionDiscovery.readFirstUserMessage(session.filePath);
     if (generation !== generationRef.current) return;
     const state: PreviewState = text !== null ? 'loaded' : 'none';
-    previewCacheRef.current.set(session.targetKey, { text, state });
-    updateSessionPreview(setSessions, session.targetKey, text, state);
+    previewCacheRef.current.set(session.filePath, { text, state });
+    updateFilePreviews(setSessions, session.filePath, text, state);
   } catch {
     if (generation !== generationRef.current) return;
-    previewCacheRef.current.set(session.targetKey, {
+    previewCacheRef.current.set(session.filePath, {
       text: null,
       state: 'error',
     });
-    updateSessionPreview(setSessions, session.targetKey, undefined, 'error');
+    updateFilePreviews(setSessions, session.filePath, undefined, 'error');
   }
 }
 
-function updateSessionPreview(
+function updateFilePreviews(
   setSessions: React.Dispatch<React.SetStateAction<EnrichedSessionSummary[]>>,
-  targetKey: string,
+  filePath: string,
   text: string | null | undefined,
   state: PreviewState,
 ): void {
   setSessions((prev) =>
     prev.map((session) =>
-      session.targetKey === targetKey
+      session.filePath === filePath
         ? {
             ...session,
             firstUserMessage: text ?? undefined,
@@ -434,13 +441,10 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
   return useCallback(async () => {
     const currentGen = beginSessionLoad(deps);
     try {
-      const [detailed, targets] = await Promise.all([
-        SessionDiscovery.listSessionsDetailed(
-          props.chatsDir,
-          props.projectHash,
-        ),
-        SessionDiscovery.listContinueTargets(props.chatsDir, props.projectHash),
-      ]);
+      const targets = await SessionDiscovery.listContinueTargets(
+        props.chatsDir,
+        props.projectHash,
+      );
       if (currentGen !== deps.generationRef.current) return;
       const filtered = await filterContinueTargets(
         targets,
@@ -449,11 +453,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
         processSession,
       );
       if (filtered === null) return;
-      const pageToLoad = finishSessionLoad(
-        detailed.skippedCount,
-        filtered,
-        deps,
-      );
+      const pageToLoad = finishSessionLoad(filtered, deps);
       await deps.loadPreviewsForPage(currentGen, filtered.sessions, pageToLoad);
     } catch (loadError) {
       if (currentGen !== deps.generationRef.current) return;
@@ -505,11 +505,10 @@ async function filterContinueTargets(
 }
 
 function finishSessionLoad(
-  initialSkippedCount: number,
   filtered: FilteredSessionsResult,
   deps: LoaderDeps,
 ): number {
-  deps.coreSetters.setSkippedCount(initialSkippedCount + filtered.skippedCount);
+  deps.coreSetters.setSkippedCount(filtered.skippedCount);
   deps.coreSetters.setSessions(filtered.sessions);
   deps.coreSetters.setIsLoading(false);
   return restoreSelectionAfterLoad(filtered.sessions, deps);
@@ -561,8 +560,7 @@ function useSessionProcessor(
         ? false
         : await SessionLockManager.isLocked(chatsDir, source.sessionId);
       if (currentGen !== generationRef.current) return null;
-      const targetKey = getTargetKey(target);
-      const cached = previewCacheRef.current.get(targetKey);
+      const cached = previewCacheRef.current.get(source.filePath);
       return {
         enriched: buildEnrichedSession(target, source, locked, cached),
       };

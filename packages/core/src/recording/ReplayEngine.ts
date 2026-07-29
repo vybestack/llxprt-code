@@ -416,6 +416,13 @@ function collectMetadataEvent(
   payload: Record<string, unknown>,
   lineNumber: number,
 ): void {
+  if (!('checkpointId' in payload) && type !== 'session_named') {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed ${type} event (missing checkpointId), skipping`,
+    );
+    return;
+  }
   acc.rawMetadataEvents.push({
     v: 1,
     seq,
@@ -423,12 +430,6 @@ function collectMetadataEvent(
     type: type as SessionRecordLine['type'],
     payload,
   });
-  if (!('checkpointId' in payload) && type !== 'session_named') {
-    acc.malformedCount++;
-    acc.warnings.push(
-      `Line ${lineNumber}: malformed ${type} event (missing checkpointId), skipping`,
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -720,12 +721,12 @@ export async function replaySession(
   return finalizeReplay(acc);
 }
 
-async function applyBoundedReplayLine(
+function applyBoundedReplayLine(
   rawLine: string,
   maxSequence: number,
   expectedProjectHash: string,
   acc: ReplayAccumulators,
-): Promise<ReplayResult | 'complete' | undefined> {
+): ReplayResult | 'complete' | undefined {
   if (rawLine.trim() === '') return undefined;
   const parsed = parseLine(rawLine, acc.lineNumber, acc);
   if (parsed === null) return undefined;
@@ -759,7 +760,7 @@ export async function replaySessionThroughSequence(
         rawLine = rawLine.slice(1);
       }
 
-      const outcome = await applyBoundedReplayLine(
+      const outcome = applyBoundedReplayLine(
         rawLine,
         maxSequence,
         expectedProjectHash,

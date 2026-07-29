@@ -683,14 +683,23 @@ export interface AgentSessionControl {
     target: 'latest' | string,
     options?: { readonly prefix?: boolean },
   ): Promise<readonly AgentHistoryItem[]>;
+  /** Creates a durable branch point in the active recording. */
   createCheckpoint(name: string): Promise<CheckpointInfo>;
+  /** Creates and activates a self-contained child session from a checkpoint. */
   forkFromCheckpoint(ref: string): Promise<SessionInfo>;
+  /** Lists live recording-native checkpoints in the current project. */
   listCheckpoints(): Promise<readonly CheckpointInfo[]>;
+  /** Renames a checkpoint reference while preserving its branch point. */
   renameCheckpoint(ref: string, name: string): Promise<void>;
+  /** Tombstones a checkpoint reference without deleting existing children. */
   deleteCheckpoint(ref: string): Promise<void>;
+  /** Assigns a project-unique name to the active living session. */
   nameCurrentSession(name: string): Promise<void>;
+  /** Activates a living session without creating a child branch. */
   resumeSession(ref: string): Promise<SessionInfo>;
+  /** Lists living recording sessions in the current project. */
   listSessions(): Promise<readonly SessionInfo[]>;
+  /** Deletes a non-active session when no live checkpoint references block it. */
   deleteSession(ref: string): Promise<void>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;

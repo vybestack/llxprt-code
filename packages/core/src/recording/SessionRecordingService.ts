@@ -141,7 +141,9 @@ export class SessionRecordingService {
     if (!this.active) return;
 
     if (
-      (type === 'content' || type === 'session_metadata') &&
+      (type === 'content' ||
+        type === 'session_metadata' ||
+        type === 'session_named') &&
       !this.materialized
     ) {
       this.materialize();
@@ -595,6 +597,11 @@ export class SessionRecordingService {
     if (!this.active) {
       throw new Error('Cannot delete checkpoint: recording is not active');
     }
+    if (!this.materialized) {
+      throw new Error(
+        'Cannot delete checkpoint: recording is not materialized',
+      );
+    }
     this.enqueue('checkpoint_deleted', { checkpointId });
     await this.flushAndRequireActive('delete checkpoint');
   }
@@ -606,6 +613,11 @@ export class SessionRecordingService {
   async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
     if (!this.active) {
       throw new Error('Cannot rename checkpoint: recording is not active');
+    }
+    if (!this.materialized) {
+      throw new Error(
+        'Cannot rename checkpoint: recording is not materialized',
+      );
     }
     const trimmed = name.trim();
     if (trimmed.length === 0) {

@@ -267,7 +267,21 @@ async function resolveTarget(
   if ('error' in resolved) {
     return new Error(resolved.error);
   }
+
   return resolved.target;
+}
+
+function restorePreviousHistory(
+  historyService: HistoryService,
+  previousHistory: IContent[] | null,
+): void {
+  if (previousHistory === null) return;
+  try {
+    historyService.clear();
+    historyService.addAll(previousHistory);
+  } catch {
+    void 0;
+  }
 }
 
 async function commitPreparedTransition(
@@ -283,7 +297,8 @@ async function commitPreparedTransition(
   const oldIntegration = callbacks.getCurrentIntegration();
   const oldLock = callbacks.getCurrentLockHandle();
   const historyService = context.historyService ?? null;
-  const previousHistory = historyService?.getAll() ?? null;
+  const previousHistory =
+    historyService === null ? null : [...historyService.getAll()];
   const integration = new RecordingIntegration(recording);
   oldIntegration?.unsubscribeFromHistory();
   try {
@@ -296,13 +311,8 @@ async function commitPreparedTransition(
     callbacks.setRecording(recording, integration, lockHandle, metadata);
   } catch (error: unknown) {
     integration.dispose();
-    if (historyService !== null && previousHistory !== null) {
-      try {
-        historyService.clear();
-        historyService.addAll(previousHistory);
-      } catch {
-        void 0;
-      }
+    if (historyService !== null) {
+      restorePreviousHistory(historyService, previousHistory);
       try {
         oldIntegration?.subscribeToHistory(historyService);
       } catch {
