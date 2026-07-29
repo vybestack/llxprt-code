@@ -142,10 +142,9 @@ Local candidate evidence:
 - `bun scripts/start.ts --profile-load ollamakimi` returns a three-line haiku.
   The remembered `node scripts/start.js` command is obsolete because current
   main contains only the TypeScript launcher.
-
-No tmux harness run is required because this issue has no visual or terminal UI
-change. DeepThinker, rustreviewer, and local Open Code Review are complete; OCR's
-single suggestion is classified above. Optional cleanup stops here.
+  No tmux harness run is required because this issue has no visual or terminal UI
+  change. DeepThinker, rustreviewer, and local Open Code Review are complete; OCR's
+  single suggestion is classified above. Optional cleanup stops here.
 
 Final local scope reconciliation: 10 planned paths, 312 additions and 981
 deletions (1,293 changed lines). This remains below the 25-file/1,500-line target
