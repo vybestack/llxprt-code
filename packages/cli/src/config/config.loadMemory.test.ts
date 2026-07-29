@@ -41,6 +41,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         setProviderManager: vi.fn(),
         setRuntimeMessageBus: vi.fn(),
         setRuntimeOAuthManager: vi.fn(),
+        setImageBackendResolver: vi.fn(),
         initialize: vi.fn(),
         getModel: vi.fn(() => model),
         setModel: vi.fn((next: string) => {

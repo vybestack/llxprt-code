@@ -184,7 +184,12 @@ describe('persistBase64ImageResult', () => {
     const written = await fs.promises.readFile(finalPath);
     expect(written.equals(makeRealMinimalPng())).toBe(true);
 
-    const relative = path.relative(workspaceRoot, finalPath);
+    // On macOS, os.tmpdir() may report a non-canonical prefix such as /var
+    // while the production persistence canonicalizes via fs.realpath to
+    // /private/var. Comparing against the realpath of workspaceRoot keeps the
+    // security assertion accurate across platforms without weakening it.
+    const canonicalWorkspaceRoot = await fs.promises.realpath(workspaceRoot);
+    const relative = path.relative(canonicalWorkspaceRoot, finalPath);
     expect(relative.startsWith('generated-images')).toBe(true);
     expect(relative).not.toMatch(/\.\./);
   });
