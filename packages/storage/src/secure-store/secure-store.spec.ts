@@ -188,12 +188,18 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
     });
 
     it('should throw UNAVAILABLE when keyring read-back returns a stale value and fallbackPolicy is deny', async () => {
+      // The deny path still clears the stale keyring value before throwing so
+      // the credential is not left in an unrecoverable state.
+      let keyringValue: string | null = 'stale-wrong-value';
       const mockKeyring: KeyringAdapter = {
-        getPassword: async () => 'stale-wrong-value',
+        getPassword: async () => keyringValue,
         setPassword: async () => {
           /* accepts but does not replace the stale value */
         },
-        deletePassword: async () => true,
+        deletePassword: async () => {
+          keyringValue = null;
+          return true;
+        },
       };
 
       store = new SecureStore('test-service', {
@@ -211,12 +217,17 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         'Keyring write could not be verified and fallback is denied',
       );
       expect(await fallbackFileExists('stale-denied-key')).toBe(false);
+      // The stale value must have been cleared even though the write was
+      // rejected, so a retry can succeed.
+      expect(keyringValue).toBeNull();
     });
 
     it('should reject without writing a fallback when a stale keyring value cannot be removed', async () => {
       // The keyring reports a stale value on read-back and refuses deletion.
-      // The stale value must be cleared BEFORE the fallback is written, so a
-      // clear failure must not leave an orphaned fallback artifact on disk.
+      // The compensating transaction writes the fallback, then attempts to
+      // clear the stale keyring value. Since the clear fails, the fallback is
+      // rolled back (deleted) and UNAVAILABLE is thrown — no orphaned fallback
+      // artifact is left on disk.
       const mockKeyring: KeyringAdapter = {
         getPassword: async () => 'stale-wrong-value',
         setPassword: async () => {
@@ -342,9 +353,13 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         keyringLoader: async () => mockKeyring,
       });
 
-      await expect(store.set('unverified-key', 'my-secret')).rejects.toThrow(
-        'EEXIST',
-      );
+      // A blocked fallback directory must cause set() to reject. The
+      // filesystem error propagates so the caller knows the credential
+      // could not be stored.
+      await expect(
+        store.set('unverified-key', 'my-secret'),
+      ).rejects.toThrowError(Error);
+      expect(await fallbackFileExists('unverified-key')).toBe(false);
     });
 
     it('should reject an unverified keyring write when fallbackPolicy is deny', async () => {

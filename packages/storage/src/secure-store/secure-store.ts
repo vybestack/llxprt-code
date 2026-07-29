@@ -101,7 +101,7 @@ function isErrorWithCode(value: unknown): value is { code: string } {
     typeof value === 'object' &&
     value !== null &&
     'code' in value &&
-    typeof (value as { code: unknown }).code === 'string'
+    typeof (value as Record<string, unknown>).code === 'string'
   );
 }
 
@@ -110,7 +110,7 @@ function isErrorWithMessage(value: unknown): value is { message: string } {
     typeof value === 'object' &&
     value !== null &&
     'message' in value &&
-    typeof (value as { message: unknown }).message === 'string'
+    typeof (value as Record<string, unknown>).message === 'string'
   );
 }
 
@@ -121,13 +121,10 @@ const KEYRING_MODULE_ERROR_CODES = new Set([
 ]);
 
 function isKeyringModuleMissingError(error: unknown): boolean {
-  if (isErrorWithCode(error) && KEYRING_MODULE_ERROR_CODES.has(error.code)) {
-    return true;
-  }
-  if (!isErrorWithMessage(error)) {
-    return false;
-  }
-  return error.message.includes('@napi-rs/keyring');
+  return (
+    (isErrorWithCode(error) && KEYRING_MODULE_ERROR_CODES.has(error.code)) ||
+    (isErrorWithMessage(error) && error.message.includes('@napi-rs/keyring'))
+  );
 }
 
 function classifyError(error: unknown): SecureStoreErrorCode {
@@ -510,6 +507,8 @@ export class SecureStore {
 
       this.recordKeyringFailure();
       if (this.fallbackPolicy === 'deny') {
+        if (result.hasStaleValue)
+          await clearMismatchedKeyringValue(adapter, this.serviceName, key);
         throw this.unavailableError(
           'Keyring write could not be verified and fallback is denied',
         );
