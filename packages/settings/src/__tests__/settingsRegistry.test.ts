@@ -845,3 +845,48 @@ describe('compression strategy values in registry', () => {
     }
   });
 });
+
+describe('mcp.lazy and mcp.eagerServers ephemeral settings', () => {
+  it('mcp.lazy has type boolean', () => {
+    const spec = getSettingSpec('mcp.lazy');
+    expect(spec).toBeDefined();
+    expect(spec?.type).toBe('boolean');
+  });
+
+  it('mcp.lazy is persistable to profile', () => {
+    const spec = getSettingSpec('mcp.lazy');
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('mcp.lazy appears in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+    expect(keys).toContain('mcp.lazy');
+  });
+
+  it('mcp.eagerServers has type string-array', () => {
+    const spec = getSettingSpec('mcp.eagerServers');
+    expect(spec).toBeDefined();
+    expect(spec?.type).toBe('string-array');
+  });
+
+  it('mcp.eagerServers parses a JSON array value as a string array', () => {
+    const parsed = parseSetting('mcp.eagerServers', '["server-a","server-b"]');
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toStrictEqual(['server-a', 'server-b']);
+  });
+
+  it('mcp.eagerServers ignores malformed values', () => {
+    const parsed = parseSetting('mcp.eagerServers', 'not-valid-json');
+    expect(parsed).toBe('not-valid-json');
+  });
+
+  it('mcp.eagerServers is persistable to profile', () => {
+    const spec = getSettingSpec('mcp.eagerServers');
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('mcp.eagerServers appears in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+    expect(keys).toContain('mcp.eagerServers');
+  });
+});
