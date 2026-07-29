@@ -1,0 +1,97 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TokenStore } from '@vybestack/llxprt-code-auth';
+import type { LocalOAuthCallbackOptions } from './local-oauth-callback.js';
+
+vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
+  openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+  shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock('./local-oauth-callback.js', () => ({
+  startLocalOAuthCallback: vi.fn(
+    async (options: LocalOAuthCallbackOptions) => ({
+      redirectUri: 'http://127.0.0.1:1455/callback',
+      waitForCallback: async () => ({
+        code: 'shared-code',
+        state: options.state,
+      }),
+      shutdown: async () => {},
+    }),
+  ),
+}));
+
+import { CodexOAuthProvider } from './codex-oauth-provider.js';
+import { startLocalOAuthCallback } from './local-oauth-callback.js';
+import { shouldLaunchBrowser } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+
+function createTokenStore(): TokenStore {
+  return {
+    saveToken: async () => {},
+    getToken: async () => null,
+    removeToken: async () => {},
+    listProviders: async () => [],
+    listBuckets: async () => [],
+    getBucketStats: async () => null,
+    acquireRefreshLock: async () => true,
+    releaseRefreshLock: async () => {},
+    acquireAuthLock: async () => true,
+    releaseAuthLock: async () => {},
+  };
+}
+
+function idToken(): string {
+  const encode = (value: object): string =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'none' })}.${encode({ account_id: 'shared-account' })}.signature`;
+}
+
+describe('CodexOAuthProvider public single-flight', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(shouldLaunchBrowser).mockReturnValue(true);
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: 'shared-access',
+          refresh_token: 'shared-refresh',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          id_token: idToken(),
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('joins two public same-bucket flows before starting callback infrastructure', async () => {
+    const provider = new CodexOAuthProvider(createTokenStore());
+    provider.setAuthContext({ bucket: 'default' });
+
+    const [first, second] = await Promise.all([
+      provider.initiateAuth(),
+      provider.initiateAuth(),
+    ]);
+
+    expect({
+      callbackStarts: vi.mocked(startLocalOAuthCallback).mock.calls.length,
+      first: first.access_token,
+      second: second.access_token,
+    }).toStrictEqual({
+      callbackStarts: 1,
+      first: 'shared-access',
+      second: 'shared-access',
+    });
+  });
+});

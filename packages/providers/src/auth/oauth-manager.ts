@@ -15,6 +15,12 @@ import {
   type OAuthUICallback,
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import {
+  invalidateProviderRuntimeCache,
+  type AuthLockStatus,
+  type AuthLockRecoveryResult,
+  type ForceRecoverOptions,
+} from '@vybestack/llxprt-code-auth';
 import { ProviderRegistry } from './provider-registry.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -321,6 +327,37 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     return this.tokenStore;
   }
 
+  async inspectAuthLock(
+    provider: string,
+    bucket?: string,
+  ): Promise<AuthLockStatus | null> {
+    if (typeof this.tokenStore.inspectAuthLock !== 'function') {
+      return null;
+    }
+    return this.tokenStore.inspectAuthLock(provider, bucket);
+  }
+
+  async recoverAuthLock(
+    provider: string,
+    bucket?: string,
+  ): Promise<AuthLockRecoveryResult | null> {
+    if (typeof this.tokenStore.recoverAuthLock !== 'function') {
+      return null;
+    }
+    return this.tokenStore.recoverAuthLock(provider, bucket);
+  }
+
+  async forceRecoverAuthLock(
+    provider: string,
+    bucket?: string,
+    options: ForceRecoverOptions = { acknowledgeAllStopped: false },
+  ): Promise<AuthLockRecoveryResult | null> {
+    if (typeof this.tokenStore.forceRecoverAuthLock !== 'function') {
+      return null;
+    }
+    return this.tokenStore.forceRecoverAuthLock(provider, bucket, options);
+  }
+
   /**
    * Check for higher priority authentication methods
    * @param providerName - Name of the provider to check
@@ -349,6 +386,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     const context = await resolveCurrentProfileOAuthContext(provider);
     if (context?.providerMatches === true && !context.hasExplicitBucketPolicy) {
       this.bucketManager.setSessionBucket(provider, bucket, context.metadata);
+      invalidateProviderRuntimeCache(provider, context.metadata.profileId);
     }
   }
 

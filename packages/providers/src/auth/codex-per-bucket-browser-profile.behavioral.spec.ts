@@ -1,0 +1,144 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ISecureStore } from '@vybestack/llxprt-code-auth';
+import type { LocalOAuthCallbackOptions } from './local-oauth-callback.js';
+
+vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
+  openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+  shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock('./local-oauth-callback.js', () => ({
+  startLocalOAuthCallback: vi.fn(
+    async (options: LocalOAuthCallbackOptions) => ({
+      redirectUri: 'http://127.0.0.1:1455/callback',
+      waitForCallback: async () => ({
+        code: `code-${options.state}`,
+        state: options.state,
+      }),
+      shutdown: async () => {},
+    }),
+  ),
+}));
+
+import { CodexOAuthProvider } from './codex-oauth-provider.js';
+import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import {
+  openBrowserSecurely,
+  shouldLaunchBrowser,
+} from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+
+function createInMemorySecureStore(): ISecureStore {
+  const entries = new Map<string, string>();
+  return {
+    get: async (key) => entries.get(key) ?? null,
+    set: async (key, value) => void entries.set(key, value),
+    delete: async (key) => void entries.delete(key),
+    list: async () => [...entries.keys()],
+    has: async (key) => entries.has(key),
+  };
+}
+
+function createIdToken(accountId: string): string {
+  const encode = (value: object): string =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ account_id: accountId })}.signature`;
+}
+
+describe('Codex per-bucket browser profile selection', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(shouldLaunchBrowser).mockReturnValue(true);
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      const body = new URLSearchParams(String(init?.body));
+      const accountId = body.get('code')?.slice(0, 12) ?? 'codex-account';
+      return new Response(
+        JSON.stringify({
+          access_token: `access-${accountId}`,
+          refresh_token: `refresh-${accountId}`,
+          token_type: 'Bearer',
+          expires_in: 3600,
+          id_token: createIdToken(accountId),
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+    oauthRuntimeBridge.setAccessors({
+      getEphemeralSetting: () => undefined,
+      getProviderManager: () => undefined,
+      getRuntimeContext: () => undefined,
+      getCurrentProfileName: () => null,
+      getBrowserProfileAssociation: (_provider, bucket) => {
+        if (bucket === 'work') {
+          return { browser: 'chrome', profileDirectory: '/tmp/work-profile' };
+        }
+        if (bucket === 'personal') {
+          return {
+            browser: 'chrome',
+            profileDirectory: '/tmp/personal-profile',
+          };
+        }
+        return undefined;
+      },
+    });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    oauthRuntimeBridge.setAccessors({
+      getEphemeralSetting: () => undefined,
+      getProviderManager: () => undefined,
+      getRuntimeContext: () => undefined,
+      getCurrentProfileName: () => null,
+      getBrowserProfileAssociation: () => undefined,
+    });
+  });
+
+  it('completes concurrent public flows with each immutable bucket profile', async () => {
+    const provider = new CodexOAuthProvider({
+      ...createInMemorySecureStore(),
+      saveToken: async () => {},
+      getToken: async () => null,
+      removeToken: async () => {},
+      listProviders: async () => [],
+      listBuckets: async () => [],
+      getBucketStats: async () => null,
+      acquireRefreshLock: async () => true,
+      releaseRefreshLock: async () => {},
+      acquireAuthLock: async () => true,
+      releaseAuthLock: async () => {},
+    });
+
+    provider.setAuthContext({ bucket: 'work' });
+    const workAuth = provider.initiateAuth();
+    provider.setAuthContext({ bucket: 'personal' });
+    const personalAuth = provider.initiateAuth();
+
+    const [workToken, personalToken] = await Promise.all([
+      workAuth,
+      personalAuth,
+    ]);
+    const profiles = vi
+      .mocked(openBrowserSecurely)
+      .mock.calls.map(([, options]) => options?.profileDirectory)
+      .sort();
+
+    expect({
+      profiles,
+      tokensCompleted: [
+        workToken.access_token,
+        personalToken.access_token,
+      ].every((token) => token.startsWith('access-')),
+    }).toStrictEqual({
+      profiles: ['/tmp/personal-profile', '/tmp/work-profile'],
+      tokensCompleted: true,
+    });
+  });
+});

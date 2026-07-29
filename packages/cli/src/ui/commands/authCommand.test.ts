@@ -237,7 +237,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid action: invalid. Use create, disable, enable, login, logout, profile, status, or switch',
+          'Invalid action: invalid. Use create, disable, enable, lock, login, logout, profile, status, switch, or unlock',
       });
     });
   });
@@ -607,7 +607,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         '  2: Work (profile: Profile 1)',
         '',
         'To associate a profile, run:',
-        '  /auth claudecode profile mybucket <number-or-directory>',
+        '  /auth claudecode profile mybucket <number|directory|--clear>',
         'Then authenticate with:',
         '  /auth claudecode login mybucket',
       ].join('\n');

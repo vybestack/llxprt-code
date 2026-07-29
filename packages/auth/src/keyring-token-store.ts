@@ -21,15 +21,29 @@ import {
   type OAuthToken,
   type BucketStats,
 } from './types.js';
-import { type TokenStore } from './token-store.js';
+import {
+  type TokenStore,
+  type AuthLockStatus,
+  type AuthLockRecoveryResult,
+  type ForceRecoverOptions,
+} from './token-store.js';
 import { type IDebugLogger, type ISecureStore } from './interfaces/index.js';
 import {
   buildCurrentProcessOwnerMetadata,
   parseOwnerMetadata,
+  parseLegacyLockRecord,
   probeOwnerLiveness,
   serializeOwnerMetadata,
   type LockOwnerMetadata,
 } from './lock-owner.js';
+import {
+  inspectAuthLock as inspectAuthLockOps,
+  recoverAuthLock as recoverAuthLockOps,
+  forceRecoverAuthLock as forceRecoverAuthLockOps,
+  type LockInspectionDeps,
+  type LockRecoveryDeps,
+  type OwnerFingerprint,
+} from './lock-inspection-ops.js';
 
 const NAME_REGEX = /^[a-zA-Z0-9._@-]{1,64}$/;
 const DEFAULT_BUCKET = 'default';
@@ -265,18 +279,19 @@ export class KeyringTokenStore implements TokenStore {
    *      (`<lockPath>.fence`). The fence carries the contender's owner
    *      metadata so a crashed fence-winner is detectable by future
    *      contenders.
-   *   2. The fence winner unlinks the dead lock and atomically claims it
-   *      via O_EXCL on the lock path itself. If a fresh owner appeared in
-   *      the gap (another legitimate contender won the post-unlink race),
-   *      the O_EXCL fails and the fence winner backs off — it never deletes
-   *      a successor.
+   *   2. The fence winner re-reads the lock and requires exact content
+   *      equality with the inspected dead-owner fingerprint. If a
+   *      successor has replaced the dead owner, the claim aborts — it
+   *      never deletes a successor. Only then does it unlink and atomically
+   *      claim via O_EXCL. If a fresh owner appeared in the gap, the
+   *      O_EXCL fails and the fence winner backs off.
    *   3. Fence losers probe the fence owner's liveness; if the fence owner
    *      is dead (crashed mid-takeover), they remove the stale fence and
    *      retry. Otherwise they defer.
    *
-   * This prevents the unsafe pattern where multiple contenders all unlink a
-   * foreign lock and then all attempt auth, or where a contender deletes a
-   * successor's lock. Live/unverifiable owners are never reclaimed.
+   * Legacy records lack hostname/start-time identity so local ESRCH cannot
+   * prove a remote process dead — they are classified unverifiable and
+   * never auto-reclaimed.
    *
    * Returns true if this caller won the fence and now owns the lock.
    */
@@ -290,34 +305,55 @@ export class KeyringTokenStore implements TokenStore {
       existingContent = await fs.readFile(lockPath, 'utf8');
     } catch (error) {
       if (isErrnoCode(error, 'ENOENT')) {
-        // Lock vanished between EEXIST and read — another contender already
-        // completed. Loop back in acquireLock.
         return false;
       }
       throw error;
     }
 
     const existingOwner = parseOwnerMetadata(existingContent);
-    const liveness = await probeOwnerLiveness(existingOwner, {
-      probeTimeoutMs,
-    });
+    if (existingOwner !== null) {
+      const liveness = await probeOwnerLiveness(existingOwner, {
+        probeTimeoutMs,
+      });
 
-    if (liveness.status !== 'dead' || existingOwner === null) {
+      if (liveness.status !== 'dead') {
+        this.logger.debug(
+          `[acquireLock] existing owner is ${liveness.status}, deferring`,
+        );
+        return false;
+      }
+
       this.logger.debug(
-        `[acquireLock] existing owner is ${liveness.status}, deferring`,
+        `[acquireLock] recovering dead-owner lock at ${lockPath}`,
+      );
+      return this.fencedTakeover(
+        lockPath,
+        { ownerToken: existingOwner.ownerToken, rawContent: existingContent },
+        owner,
+        probeTimeoutMs,
+      );
+    }
+
+    // Legacy records lack hostname/start-time identity. A local ESRCH
+    // cannot prove a remote process using shared LLXPRT_LOG_HOME/
+    // LLXPRT_CONFIG_HOME is dead, so we never auto-reclaim legacy locks.
+    // Force recovery with --i-have-stopped-all-processes is the only path.
+    const legacy = parseLegacyLockRecord(existingContent);
+    if (legacy !== null) {
+      this.logger.debug(
+        `[acquireLock] legacy lock PID ${legacy.pid} at ${lockPath} — ` +
+          'cannot verify liveness (no hostname), deferring',
       );
       return false;
     }
 
-    this.logger.debug(
-      `[acquireLock] recovering dead-owner lock at ${lockPath}`,
-    );
-    return this.fencedTakeover(lockPath, existingOwner, owner, probeTimeoutMs);
+    this.logger.debug('[acquireLock] unparseable lock content, deferring');
+    return false;
   }
 
   private async fencedTakeover(
     lockPath: string,
-    deadOwner: LockOwnerMetadata,
+    deadOwnerFingerprint: OwnerFingerprint,
     owner: LockOwnerMetadata,
     probeTimeoutMs: number,
   ): Promise<boolean> {
@@ -329,7 +365,24 @@ export class KeyringTokenStore implements TokenStore {
     }
 
     try {
-      return await this.executeFencedClaim(lockPath, deadOwner, owner);
+      const cleared = await this.executeFencedClaim(
+        lockPath,
+        deadOwnerFingerprint,
+        probeTimeoutMs,
+      );
+      if (!cleared) {
+        return false;
+      }
+      // Internal recovery (during acquireLock) wants to own the cleared
+      // lock. executeFencedClaim removed it; atomically claim it now.
+      try {
+        return await this.tryCreateLock(lockPath, owner);
+      } catch (error) {
+        if (isErrnoCode(error, 'EEXIST')) {
+          return false;
+        }
+        throw error;
+      }
     } finally {
       await this.removeOwnedFile(fencePath, owner.ownerToken);
     }
@@ -353,25 +406,45 @@ export class KeyringTokenStore implements TokenStore {
     }
   }
 
+  /**
+   * Execute a fenced claim: re-read the lock content under the fence,
+   * require exact content equality with the dead-owner fingerprint, then
+   * re-probe the owner's liveness under the fence. Only if all checks
+   * pass is the dead lock removed.
+   *
+   * This method does NOT register held-lock ownership — it only clears the
+   * dead lock. The internal `fencedTakeover` caller creates and owns a new
+   * lock after this returns true. The public recovery API leaves the lock
+   * absent so callers can re-acquire with the same store.
+   */
   private async executeFencedClaim(
     lockPath: string,
-    deadOwner: LockOwnerMetadata,
-    owner: LockOwnerMetadata,
+    deadOwnerFingerprint: OwnerFingerprint,
+    probeTimeoutMs: number,
   ): Promise<boolean> {
-    const observedOwner = await this.readOwner(lockPath);
-    if (observedOwner?.ownerToken !== deadOwner.ownerToken) {
+    const postFenceContent = await this.readRawOwnerContent(lockPath);
+
+    // Require exact content equality — proves no successor replaced the
+    // dead owner between inspection and fence acquisition.
+    if (postFenceContent !== deadOwnerFingerprint.rawContent) {
       return false;
     }
 
-    await this.removeOwnedFile(lockPath, deadOwner.ownerToken);
-    try {
-      return await this.tryCreateLock(lockPath, owner);
-    } catch (error) {
-      if (isErrnoCode(error, 'EEXIST')) {
-        return false;
-      }
-      throw error;
+    const postFenceOwner = parseOwnerMetadata(postFenceContent);
+    if (postFenceOwner === null) {
+      return false;
     }
+
+    // Re-probe liveness under the fence.
+    const liveness = await probeOwnerLiveness(postFenceOwner, {
+      probeTimeoutMs,
+    });
+    if (liveness.status !== 'dead') {
+      return false;
+    }
+
+    await this.removeFileIfExists(lockPath);
+    return true;
   }
 
   private async readOwner(lockPath: string): Promise<LockOwnerMetadata | null> {
@@ -382,6 +455,27 @@ export class KeyringTokenStore implements TokenStore {
         return null;
       }
       throw error;
+    }
+  }
+
+  private async readRawOwnerContent(lockPath: string): Promise<string> {
+    try {
+      return await fs.readFile(lockPath, 'utf8');
+    } catch (error) {
+      if (isErrnoCode(error, 'ENOENT')) {
+        return '';
+      }
+      throw error;
+    }
+  }
+
+  private async removeFileIfExists(lockPath: string): Promise<void> {
+    try {
+      await fs.unlink(lockPath);
+    } catch (error) {
+      if (!isErrnoCode(error, 'ENOENT')) {
+        throw error;
+      }
     }
   }
 
@@ -599,6 +693,67 @@ export class KeyringTokenStore implements TokenStore {
     if (bucket) this.validateName(bucket, 'bucket');
     const lockPath = this.authLockFilePath(provider, bucket);
     return this.releaseLock(lockPath);
+  }
+
+  async inspectAuthLock(
+    provider: string,
+    bucket?: string,
+  ): Promise<AuthLockStatus> {
+    this.validateName(provider, 'provider');
+    if (bucket) this.validateName(bucket, 'bucket');
+    return inspectAuthLockOps(
+      this.lockInspectionDeps,
+      provider,
+      bucket,
+      bucket ?? DEFAULT_BUCKET,
+    );
+  }
+
+  async recoverAuthLock(
+    provider: string,
+    bucket?: string,
+  ): Promise<AuthLockRecoveryResult> {
+    this.validateName(provider, 'provider');
+    if (bucket) this.validateName(bucket, 'bucket');
+    return recoverAuthLockOps(
+      this.lockRecoveryDeps,
+      provider,
+      bucket,
+      bucket ?? DEFAULT_BUCKET,
+    );
+  }
+
+  async forceRecoverAuthLock(
+    provider: string,
+    bucket?: string,
+    options: ForceRecoverOptions = { acknowledgeAllStopped: false },
+  ): Promise<AuthLockRecoveryResult> {
+    this.validateName(provider, 'provider');
+    if (bucket) this.validateName(bucket, 'bucket');
+    return forceRecoverAuthLockOps(
+      this.lockRecoveryDeps,
+      provider,
+      bucket,
+      bucket ?? DEFAULT_BUCKET,
+      options,
+    );
+  }
+
+  private get lockInspectionDeps(): LockInspectionDeps {
+    return {
+      authLockFilePath: (p, b) => this.authLockFilePath(p, b),
+      getToken: (p, b) => this.getToken(p, b),
+    };
+  }
+
+  private get lockRecoveryDeps(): LockRecoveryDeps {
+    return {
+      ...this.lockInspectionDeps,
+      readRawOwnerContent: (lp) => this.readRawOwnerContent(lp),
+      tryWinFence: (fp, o) => this.tryWinFence(fp, o),
+      removeOwnedFile: (lp, t) => this.removeOwnedFile(lp, t),
+      removeFileIfExists: (lp) => this.removeFileIfExists(lp),
+    };
   }
 }
 

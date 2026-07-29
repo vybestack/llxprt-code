@@ -41,6 +41,10 @@ function markGlobalAuthComplete(): void {
   (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete = true;
 }
 
+/** Maximum time to wait for an auth lock before timing out and surfacing
+ * a recovery hint to the user. Matches the interactive login window. */
+const AUTH_LOCK_WAIT_MS = 60_000;
+
 type MultiBucketAuthResult = {
   cancelled: boolean;
   authenticatedBuckets: string[];
@@ -81,6 +85,11 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   // Session-scoped flag: user dismissed the BucketAuthConfirmation dialog.
   // When true, subsequent auth attempts skip the dialog and proceed directly.
   userDismissedAuthPrompt = false;
+
+  // Same-process single-flight: concurrent authenticate() calls for the
+  // same provider+bucket join the in-flight promise instead of failing
+  // on the heldTokens lock check and timing out.
+  private readonly authInFlight: Map<string, Promise<void>> = new Map();
 
   constructor(
     private readonly tokenStore: TokenStore,
@@ -138,6 +147,38 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       throw new Error('Provider name must be a non-empty string');
     }
 
+    // Same-process single-flight: if an auth flow is already in-flight
+    // for this provider+bucket, join it. This prevents the second caller
+    // from failing the heldTokens lock check and timing out while the
+    // first caller is performing the actual OAuth flow.
+    const flightKey = `${providerName}:${bucket ?? 'default'}`;
+    const existing = this.authInFlight.get(flightKey);
+    if (existing !== undefined) {
+      logger.debug(
+        () => `[FLOW] authenticate() joining in-flight auth for ${flightKey}`,
+      );
+      await existing;
+      return;
+    }
+
+    const authPromise = this.authenticateInternal(
+      providerName,
+      bucket,
+      shouldSignalAuthCompletion,
+    );
+    this.authInFlight.set(flightKey, authPromise);
+    try {
+      await authPromise;
+    } finally {
+      this.authInFlight.delete(flightKey);
+    }
+  }
+
+  private async authenticateInternal(
+    providerName: string,
+    bucket: string | undefined,
+    shouldSignalAuthCompletion: boolean,
+  ): Promise<void> {
     const provider = this.providerRegistry.getProvider(providerName);
     if (!provider) {
       throw new Error(`Unknown provider: ${providerName}`);
@@ -146,7 +187,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     const lockOutcome = await this.waitForAuthLockOrToken(
       providerName,
       bucket,
-      60_000,
+      AUTH_LOCK_WAIT_MS,
     );
 
     if (lockOutcome !== 'acquired') {
@@ -318,9 +359,95 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       return;
     }
 
-    throw new Error(
-      `Failed to acquire auth lock for ${providerName}${bucket ? `/${bucket}` : ''} and no valid token on disk`,
-    );
+    const recoveryHint = await this.buildLockRecoveryHint(providerName, bucket);
+    throw new Error(recoveryHint);
+  }
+
+  private buildAuthCommand(
+    providerName: string,
+    action: 'lock status' | 'unlock',
+    bucket: string | undefined,
+    flags: string = '',
+  ): string {
+    const bucketArgument = bucket === undefined ? '' : ` ${bucket}`;
+    const flagArguments = flags === '' ? '' : ` ${flags}`;
+    return `/auth ${providerName} ${action}${bucketArgument}${flagArguments}`;
+  }
+
+  private async buildLockRecoveryHint(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<string> {
+    const bucketLabel = bucket ? `/${bucket}` : '';
+    const base = `Failed to acquire auth lock for ${providerName}${bucketLabel}`;
+
+    if (typeof this.tokenStore.inspectAuthLock !== 'function') {
+      return `${base}. Run ${this.buildAuthCommand(providerName, 'lock status', bucket)} for details.`;
+    }
+
+    try {
+      const status = await this.tokenStore.inspectAuthLock(
+        providerName,
+        bucket,
+      );
+      const parts: string[] = [base];
+
+      if (!status.exists) {
+        // Absent lock: no recovery action needed. Do not suggest force
+        // just because liveness defaults to 'unverifiable' for absent
+        // locks.
+        parts.push(`Lock file not found at ${status.canonicalPath}`);
+        return parts.join('. ') + '.';
+      }
+
+      const ownerInfo: string[] = [];
+      if (status.classification !== 'absent') {
+        ownerInfo.push(`schema: ${status.classification}`);
+      }
+      if (status.ownerPid !== null) {
+        ownerInfo.push(`PID: ${status.ownerPid}`);
+      }
+      if (status.ownerHostname !== null) {
+        ownerInfo.push(`host: ${status.ownerHostname}`);
+      }
+      ownerInfo.push(`liveness: ${status.liveness.status}`);
+      if (status.ageMs !== null) {
+        ownerInfo.push(`age: ${Math.floor(status.ageMs / 1000)}s`);
+      }
+      parts.push(`Lock owner: ${ownerInfo.join(', ')}`);
+      parts.push(`Lock path: ${status.canonicalPath}`);
+
+      if (status.liveness.status === 'dead') {
+        parts.push(
+          `Recover with: ${this.buildAuthCommand(providerName, 'unlock', bucket)}`,
+        );
+      } else if (
+        status.classification === 'legacy' ||
+        status.classification === 'malformed' ||
+        status.liveness.status === 'unverifiable'
+      ) {
+        parts.push(
+          `Inspect with: ${this.buildAuthCommand(providerName, 'lock status', bucket)}`,
+        );
+        parts.push(
+          `Force-remove with: ${this.buildAuthCommand(providerName, 'unlock', bucket, '--force --i-have-stopped-all-processes')}`,
+        );
+      } else {
+        parts.push(
+          `Inspect with: ${this.buildAuthCommand(providerName, 'lock status', bucket)}`,
+        );
+      }
+
+      return parts.join('. ') + '.';
+    } catch (error) {
+      // Preserve useful error details instead of only directing the user
+      // to repeat the same failing command.
+      const detail = error instanceof Error ? error.message : String(error);
+      return (
+        `${base}. Lock inspection failed: ${detail}. ` +
+        `Check permissions on the lock directory or run ${this.buildAuthCommand(providerName, 'lock status', bucket)} manually.`
+      );
+    }
   }
 
   /**

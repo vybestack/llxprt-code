@@ -123,14 +123,16 @@ export class CodexDeviceFlow {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let text = '';
+    let activeRead = reader.read();
     try {
-      let chunk = await this.readChunkWithSignal(reader, signal);
+      let chunk = await this.readChunkWithSignal(activeRead, signal);
       while (!chunk.done) {
         if (signal.aborted) {
           throw signal.reason;
         }
         text += decoder.decode(chunk.value, { stream: true });
-        chunk = await this.readChunkWithSignal(reader, signal);
+        activeRead = reader.read();
+        chunk = await this.readChunkWithSignal(activeRead, signal);
       }
       if (signal.aborted) {
         throw signal.reason;
@@ -138,29 +140,62 @@ export class CodexDeviceFlow {
       return text + decoder.decode();
     } finally {
       if (signal.aborted) {
-        await reader.cancel(signal.reason).catch(() => undefined);
+        this.cancelAndReleaseReader(reader, activeRead, signal.reason);
+      } else {
+        this.releaseReaderLock(reader);
       }
+    }
+  }
+
+  private cancelAndReleaseReader(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    activeRead: ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']>,
+    reason: unknown,
+  ): void {
+    try {
+      void reader.cancel(reason).catch((error: unknown) => {
+        this.logger.warn(
+          `Codex OAuth response body cancellation failed: ${String(error)}`,
+        );
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Codex OAuth response body cancellation failed: ${String(error)}`,
+      );
+    }
+
+    void activeRead.then(
+      () => this.releaseReaderLock(reader),
+      () => this.releaseReaderLock(reader),
+    );
+  }
+
+  private releaseReaderLock(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+  ): void {
+    try {
       reader.releaseLock();
+    } catch (error) {
+      this.logger.warn(
+        `Codex OAuth response reader release failed: ${String(error)}`,
+      );
     }
   }
 
   private readChunkWithSignal(
-    reader: ReadableStreamDefaultReader<Uint8Array>,
+    activeRead: ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']>,
     signal: AbortSignal,
   ): ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']> {
     return new Promise((resolve, reject) => {
       const cleanup = (): void => {
         signal.removeEventListener('abort', onAbort);
       };
-      const rejectForAbort = (): void => {
+      const onAbort = (): void => {
         cleanup();
         reject(abortReason(signal));
       };
-      const onAbort = (): void => {
-        reader.cancel(abortReason(signal)).then(rejectForAbort, rejectForAbort);
-      };
       signal.addEventListener('abort', onAbort, { once: true });
-      reader.read().then(
+      activeRead.then(
         (result) => {
           cleanup();
           resolve(result);
@@ -221,6 +256,14 @@ export class CodexDeviceFlow {
         `${operation} failed: invalid JSON response (status ${response.status})`,
       );
     }
+  }
+
+  private logResponseKeys(data: unknown, prefix: string): void {
+    const keys =
+      typeof data === 'object' && data !== null
+        ? Object.keys(data as Record<string, unknown>).join(', ')
+        : '(non-object)';
+    this.logger.debug(() => `${prefix} response keys: ${keys}`);
   }
   /**
    * Build authorization URL for browser-based OAuth flow
@@ -361,10 +404,7 @@ export class CodexDeviceFlow {
     }
 
     const data = this.parseSuccessfulJson(response, 'Token exchange');
-    this.logger.debug(
-      () =>
-        `[FLOW] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
-    );
+    this.logResponseKeys(data, '[FLOW] Token exchange');
 
     const tokenResponse = CodexTokenResponseSchema.parse(data);
     this.logger.debug(
@@ -583,11 +623,7 @@ export class CodexDeviceFlow {
     }
 
     const data = this.parseSuccessfulJson(response, 'Device code request');
-    // Log only non-sensitive keys to avoid exposing auth data
-    this.logger.debug(
-      () =>
-        `[DEVICE] User code response keys: ${Object.keys(data as object).join(', ')}`,
-    );
+    this.logResponseKeys(data, '[DEVICE] User code');
 
     // Parse the response
     const UserCodeResponseSchema = z.object({
@@ -661,12 +697,7 @@ export class CodexDeviceFlow {
 
       if (response.ok) {
         const data = this.parseSuccessfulJson(response, 'Device token polling');
-
-        // Log only non-sensitive keys to avoid exposing auth data
-        this.logger.debug(
-          () =>
-            `[DEVICE] Token polling successful, keys: ${Object.keys(data as object).join(', ')}`,
-        );
+        this.logResponseKeys(data, '[DEVICE] Token polling successful');
 
         // Parse the successful response - includes authorization_code for token exchange
         const CodeSuccessResponseSchema = z.object({
@@ -708,10 +739,7 @@ export class CodexDeviceFlow {
       );
     }
     const data = this.parseSuccessfulJson(response, 'Token exchange');
-    this.logger.debug(
-      () =>
-        `[DEVICE] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
-    );
+    this.logResponseKeys(data, '[DEVICE] Token response');
     return CodexTokenResponseSchema.parse(data);
   }
 

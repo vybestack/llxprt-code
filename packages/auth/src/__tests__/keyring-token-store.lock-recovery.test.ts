@@ -100,6 +100,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: os.hostname(),
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
 
       const store = createStore();
@@ -118,6 +119,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: os.hostname(),
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
 
       const store = createStore();
@@ -136,6 +138,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: os.hostname(),
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
 
       const store = createStore();
@@ -182,13 +185,15 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
     it('recovers when a dead predecessor shared our PID but had a different start time', async () => {
       const lockFile = refreshLockPath('gemini');
       // Same PID as us, but start time from 2 minutes ago → predecessor died,
-      // our process recycled the PID.
+      // our process recycled the PID. Requires canonical startTimeSource
+      // because PID-reuse proof depends on OS-observed process identity.
       await writeVersionedLock(lockFile, {
         version: 1,
         ownerToken: 'predecessor-owner',
         pid: process.pid,
         hostname: os.hostname(),
         startTimeMs: getProcessStartTimeMs() - 120_000,
+        startTimeSource: 'canonical',
       });
 
       const store = createStore();
@@ -209,6 +214,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: 'some-other-host-12345',
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
 
       const store = createStore();
@@ -219,7 +225,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
       expect(acquired).toBe(false);
     });
 
-    it('defers on a legacy unversioned payload (no unsafe reclaim)', async () => {
+    it('defers on a legacy payload with a non-existent PID because its owner is unverifiable', async () => {
       const lockFile = refreshLockPath('legacy');
       await fs.mkdir(lockDir, { recursive: true });
       await fs.writeFile(
@@ -229,7 +235,29 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
       );
 
       const store = createStore();
+      // Legacy records lack hostname/start-time identity, so local ESRCH
+      // cannot prove a remote process dead. Auto-reclaim is stopped.
       const acquired = await store.acquireRefreshLock('legacy', {
+        waitMs: 300,
+      });
+      expect(acquired).toBe(false);
+    });
+
+    it('defers on a legacy payload whose PID is alive (no hostname/start identity to prove reuse)', async () => {
+      const lockFile = refreshLockPath('legacy-live');
+      await fs.mkdir(lockDir, { recursive: true });
+      await fs.writeFile(
+        lockFile,
+        JSON.stringify({
+          pid: process.pid,
+          timestamp: Date.now(),
+          token: 'old',
+        }),
+        { mode: 0o600 },
+      );
+
+      const store = createStore();
+      const acquired = await store.acquireRefreshLock('legacy-live', {
         waitMs: 200,
       });
       expect(acquired).toBe(false);
@@ -257,6 +285,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: os.hostname(),
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
 
       const storeA = createStore();
@@ -287,6 +316,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: os.hostname(),
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
       await writeVersionedLock(lockWork, {
         version: 1,
@@ -294,6 +324,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
         pid: 999999,
         hostname: os.hostname(),
         startTimeMs: Date.now() - 60_000,
+        startTimeSource: 'approximate',
       });
 
       const store = createStore();
@@ -340,6 +371,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
           pid: 4242,
           hostname: os.hostname(),
           startTimeMs: 1000,
+          startTimeSource: 'canonical',
         },
         {
           currentHostname: os.hostname(),

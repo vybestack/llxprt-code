@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
+import * as secureBrowserLauncher from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
 describe('CodexOAuthProvider - Concurrency and State Management', () => {
   let provider: CodexOAuthProvider;
@@ -397,6 +398,59 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       expect(redirectUri).not.toBe(
         'https://auth.openai.com/api/accounts/deviceauth/callback',
       );
+    });
+  });
+
+  describe('Browser launch graceful degradation (issue #2819)', () => {
+    const getDisplayMethod = (): ((
+      url: string,
+      requestBucket: string,
+      signal: AbortSignal,
+    ) => Promise<void>) =>
+      (
+        provider as unknown as {
+          displayAuthUrlAndOpenBrowser: (
+            url: string,
+            requestBucket: string,
+            signal: AbortSignal,
+          ) => Promise<void>;
+        }
+      ).displayAuthUrlAndOpenBrowser.bind(provider);
+
+    it('continues the OAuth flow when the browser fails to launch for a non-abort reason', async () => {
+      const browserSpy = vi
+        .spyOn(secureBrowserLauncher, 'openBrowserSecurely')
+        .mockRejectedValue(new Error('No browser available'));
+
+      const displayMethod = getDisplayMethod();
+
+      const controller = new AbortController();
+
+      // Should NOT throw despite browser launch failure
+      await expect(
+        displayMethod(
+          'https://auth.openai.com/oauth/authorize',
+          'default',
+          controller.signal,
+        ),
+      ).resolves.toBeUndefined();
+
+      browserSpy.mockRestore();
+    });
+
+    it('propagates an already-aborted signal before browser launch', async () => {
+      const displayMethod = getDisplayMethod();
+
+      const controller = new AbortController();
+      controller.abort(new Error('parent auth aborted'));
+
+      await expect(
+        displayMethod(
+          'https://auth.openai.com/oauth/authorize',
+          'default',
+          controller.signal,
+        ),
+      ).rejects.toThrow('parent auth aborted');
     });
   });
 });

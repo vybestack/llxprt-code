@@ -165,10 +165,7 @@ export async function resolveCurrentProfileOAuthContext(
         ? profile.provider
         : null;
     const providerMatches = profileProvider === providerName;
-    const hasExplicitBucketPolicy =
-      'auth' in profile &&
-      profile.auth?.type === 'oauth' &&
-      'buckets' in profile.auth;
+    const hasExplicitBucketPolicy = hasNonEmptyOAuthBuckets(profile);
 
     return { metadata, providerMatches, hasExplicitBucketPolicy };
   } catch (error) {
@@ -178,4 +175,16 @@ export async function resolveCurrentProfileOAuthContext(
     );
     return undefined;
   }
+}
+
+function hasNonEmptyOAuthBuckets(profile: object): boolean {
+  const auth = (profile as Record<string, unknown>).auth;
+  if (auth === null || auth === undefined || typeof auth !== 'object') {
+    return false;
+  }
+  const authRecord = auth as Record<string, unknown>;
+  if (authRecord.type !== 'oauth') {
+    return false;
+  }
+  return Array.isArray(authRecord.buckets) && authRecord.buckets.length > 0;
 }

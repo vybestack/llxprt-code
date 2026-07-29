@@ -84,7 +84,8 @@ export class CodexOAuthProvider implements OAuthProvider {
   private tokenStore: TokenStore;
   private addItem?: OAuthUICallback;
   private initGuard: InitializationGuard;
-  private authInProgress: Promise<CodexOAuthToken> | null = null;
+  private authInProgressByBucket: Map<string, Promise<CodexOAuthToken>> =
+    new Map();
   private currentAuthBucket?: string;
 
   constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
@@ -135,49 +136,73 @@ export class CodexOAuthProvider implements OAuthProvider {
    * @returns The OAuth token obtained from the authentication flow
    */
   async initiateAuth(): Promise<OAuthToken> {
+    // Capture the bucket at entry so concurrent named-bucket flows cannot
+    // cross-select browser profiles via the mutable currentAuthBucket.
+    const requestBucket: string = this.currentAuthBucket ?? 'default';
     this.logger.debug(
       () =>
-        `[FLOW] initiateAuth() called, authInProgress=${!!this.authInProgress}`,
+        `[FLOW] initiateAuth() called for bucket=${requestBucket}, authInProgress=${this.authInProgressByBucket.has(requestBucket)}`,
     );
-    if (this.authInProgress) {
-      this.logger.debug(() => '[FLOW] OAuth already in progress, waiting...');
-      const token = await this.authInProgress;
-      this.logger.debug(() => '[FLOW] Finished waiting for existing auth flow');
+    const existing = this.authInProgressByBucket.get(requestBucket);
+    if (existing) {
+      this.logger.debug(
+        () =>
+          `[FLOW] OAuth already in progress for bucket=${requestBucket}, waiting...`,
+      );
+      const token = await existing;
+      this.logger.debug(
+        () =>
+          `[FLOW] Finished waiting for existing auth flow for bucket=${requestBucket}`,
+      );
       return token;
     }
 
-    this.logger.debug(() => '[FLOW] Starting new auth flow via performAuth()');
+    this.logger.debug(
+      () =>
+        `[FLOW] Starting new auth flow for bucket=${requestBucket} via performAuth()`,
+    );
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(new Error('Codex OAuth flow timed out')),
       AUTH_TIMEOUT_MS,
     );
-    this.authInProgress = waitForAbort(
-      this.performAuth(controller.signal),
+    const authPromise = waitForAbort(
+      this.performAuth(requestBucket, controller.signal),
       controller.signal,
     );
+    this.authInProgressByBucket.set(requestBucket, authPromise);
     try {
-      const token = await this.authInProgress;
-      this.logger.debug(() => '[FLOW] performAuth() completed successfully');
+      const token = await authPromise;
+      this.logger.debug(
+        () =>
+          `[FLOW] performAuth() completed successfully for bucket=${requestBucket}`,
+      );
       return token;
     } catch (error) {
       this.logger.debug(
         () =>
-          `[FLOW] performAuth() failed: ${error instanceof Error ? error.message : error}`,
+          `[FLOW] performAuth() failed for bucket=${requestBucket}: ${error instanceof Error ? error.message : error}`,
       );
       throw error;
     } finally {
       clearTimeout(timeout);
-      this.authInProgress = null;
-      this.logger.debug(() => '[FLOW] authInProgress reset to null');
+      this.authInProgressByBucket.delete(requestBucket);
+      this.logger.debug(
+        () => `[FLOW] authInProgress cleared for bucket=${requestBucket}`,
+      );
     }
   }
 
   /**
-   * Perform the actual OAuth authentication flow
+   * Perform the actual OAuth authentication flow.
+   * The requestBucket is captured at initiateAuth entry and threaded
+   * through all helpers so concurrent flows cannot cross-select.
    * @returns The OAuth token obtained from the authentication flow
    */
-  private async performAuth(signal: AbortSignal): Promise<CodexOAuthToken> {
+  private async performAuth(
+    requestBucket: string,
+    signal: AbortSignal,
+  ): Promise<CodexOAuthToken> {
     this.logger.debug(() => '[FLOW] performAuth() starting');
 
     let noBrowser = false;
@@ -230,7 +255,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
 
     try {
-      await this.displayAuthUrlAndOpenBrowser(authUrl, signal);
+      await this.displayAuthUrlAndOpenBrowser(authUrl, requestBucket, signal);
       return await this.waitForCallbackAndComplete(
         localCallback,
         redirectUri,
@@ -244,9 +269,12 @@ export class CodexOAuthProvider implements OAuthProvider {
 
   /**
    * Display the auth URL to the user (TUI + clipboard + browser).
+   * requestBucket is threaded from initiateAuth entry to ensure the
+   * correct browser profile association is used for this specific flow.
    */
   private async displayAuthUrlAndOpenBrowser(
     authUrl: string,
+    requestBucket: string,
     signal: AbortSignal,
   ): Promise<void> {
     debugLogger.log('\nCodex OAuth Authentication');
@@ -277,11 +305,12 @@ export class CodexOAuthProvider implements OAuthProvider {
 
     this.logger.debug(() => '[FLOW] Opening browser for authentication');
     // Look up the browser profile association for this provider+bucket
+    // using the immutable request bucket captured at initiateAuth entry.
     let browserOpts: BrowserLaunchOptions | undefined;
     try {
       const assoc = oauthRuntimeBridge.getBrowserProfileAssociation(
         'codex',
-        this.currentAuthBucket,
+        requestBucket,
       );
       if (assoc) {
         browserOpts = {
@@ -292,8 +321,19 @@ export class CodexOAuthProvider implements OAuthProvider {
     } catch {
       // Association lookup failed — fall back to default browser
     }
-    await waitForAbort(openBrowserSecurely(authUrl, browserOpts), signal);
-    this.logger.debug(() => '[FLOW] Browser opened');
+    try {
+      await waitForAbort(openBrowserSecurely(authUrl, browserOpts), signal);
+      this.logger.debug(() => '[FLOW] Browser opened');
+    } catch (error) {
+      if (signal.aborted) {
+        throw signal.reason;
+      }
+      // Browser launch failed for a non-abort reason (e.g., no browser
+      // available on a headless host). The URL was already displayed and
+      // copied to clipboard, so the user can proceed manually rather than
+      // failing the entire auth flow.
+      this.logger.debug(() => `Browser launch error: ${error}`);
+    }
   }
 
   /**

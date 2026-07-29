@@ -130,7 +130,7 @@ The optional `auth` block configures OAuth bucket authentication. This is set up
 
 When `type` is `"oauth"`, LLxprt tries each bucket in order until one succeeds. This is useful for providers like Anthropic where you might have multiple accounts or token pools.
 
-A successful explicitly named `/auth <provider> login <bucket>` makes that bucket the active in-memory selection when the active profile uses the same provider and does not define `auth.buckets`. The selection is scoped to that profile and lasts only for the current process; LLxprt does not modify or save the profile. An explicit `auth.buckets` list always keeps its configured order and precedence.
+A successful explicitly named `/auth <provider> login <bucket>` makes that bucket the active in-memory selection when the active profile uses the same provider and does not define `auth.buckets` (or defines an empty `auth.buckets: []`, which is treated as unbucketed). The selection is scoped to that profile and lasts only for the current process; LLxprt does not modify or save the profile. An explicit nonempty `auth.buckets` list always keeps its configured order and precedence.
 
 When `type` is `"apikey"`, the key comes from `auth-key-name` (preferred — looks up a named key in the OS keyring), or the deprecated `auth-key`/`auth-keyfile` settings.
 

@@ -168,7 +168,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
     try {
       const flow = new CodexDeviceFlow({
         logger: createCollectingLogger(),
-        networkTimeoutMs: 20,
+        networkTimeoutMs: 50,
       });
 
       await expect(flow.requestDeviceCode()).rejects.toThrow(
@@ -219,7 +219,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
     try {
       const flow = new CodexDeviceFlow({
         logger: createCollectingLogger(),
-        networkTimeoutMs: 20,
+        networkTimeoutMs: 50,
       });
 
       await expect(flow.requestDeviceCode()).rejects.toThrow(
@@ -274,6 +274,47 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
     } finally {
       globalThis.fetch = originalFetch;
       await body.cancel().catch(() => undefined);
+    }
+  });
+
+  it('rejects the deadline even when reader.cancel() never settles (issue #2819)', async () => {
+    const originalFetch = globalThis.fetch;
+    let cancelCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"device_auth_id":'));
+      },
+      cancel() {
+        cancelCount += 1;
+        return new Promise<void>(() => {});
+      },
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    try {
+      const flow = new CodexDeviceFlow({
+        logger: createCollectingLogger(),
+        networkTimeoutMs: 50,
+      });
+
+      const start = Date.now();
+      await expect(flow.requestDeviceCode()).rejects.toThrow(
+        'Codex OAuth network request timed out',
+      );
+      const elapsed = Date.now() - start;
+      await vi.waitFor(() => expect(body.locked).toBe(false));
+
+      expect({ cancelCount, prompt: elapsed < 5_000 }).toStrictEqual({
+        cancelCount: 1,
+        prompt: true,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 

@@ -14,12 +14,15 @@ const PROCESS_START_TOLERANCE_MS = 2_000;
 const PROCESS_PROBE_TIMEOUT_MS = 250;
 const execFileAsync = promisify(execFile);
 
+export type StartTimeSource = 'canonical' | 'approximate' | 'unavailable';
+
 export interface LockOwnerMetadata {
   readonly version: number;
   readonly ownerToken: string;
   readonly pid: number;
   readonly hostname: string;
   readonly startTimeMs: number;
+  readonly startTimeSource: StartTimeSource;
 }
 
 export type OwnerLiveness =
@@ -27,25 +30,40 @@ export type OwnerLiveness =
   | { readonly status: 'live' }
   | { readonly status: 'unverifiable' };
 
-export function buildOwnerMetadata(startTimeMs: number): LockOwnerMetadata {
+export function buildOwnerMetadata(
+  startTimeMs: number,
+  startTimeSource: StartTimeSource = 'approximate',
+): LockOwnerMetadata {
   return {
     version: LOCK_VERSION,
     ownerToken: randomUUID(),
     pid: process.pid,
     hostname: nodeHostname(),
     startTimeMs,
+    startTimeSource,
   };
 }
 
-let cachedCurrentProcessStartTime: Promise<number> | undefined;
+let cachedCurrentProcessStartTime:
+  | Promise<{ startTimeMs: number; startTimeSource: StartTimeSource }>
+  | undefined;
 
 export async function buildCurrentProcessOwnerMetadata(
   timeoutMs: number = PROCESS_PROBE_TIMEOUT_MS,
 ): Promise<LockOwnerMetadata> {
   if (cachedCurrentProcessStartTime === undefined) {
-    const lookup = readProcessStartTimeMs(process.pid, timeoutMs).then(
-      (value) => value ?? getProcessStartTimeMs(),
-    );
+    const lookup: Promise<{
+      startTimeMs: number;
+      startTimeSource: StartTimeSource;
+    }> = readProcessStartTimeMs(process.pid, timeoutMs).then((value) => {
+      if (value !== null) {
+        return { startTimeMs: value, startTimeSource: 'canonical' };
+      }
+      return {
+        startTimeMs: getProcessStartTimeMs(),
+        startTimeSource: 'approximate',
+      };
+    });
     cachedCurrentProcessStartTime = lookup;
     lookup.then(undefined, () => {
       if (cachedCurrentProcessStartTime === lookup) {
@@ -53,7 +71,8 @@ export async function buildCurrentProcessOwnerMetadata(
       }
     });
   }
-  return buildOwnerMetadata(await cachedCurrentProcessStartTime);
+  const cached = await cachedCurrentProcessStartTime;
+  return buildOwnerMetadata(cached.startTimeMs, cached.startTimeSource);
 }
 
 export function serializeOwnerMetadata(owner: LockOwnerMetadata): string {
@@ -73,12 +92,16 @@ export function parseOwnerMetadata(raw: string): LockOwnerMetadata | null {
   if (!hasValidOwnerIdentity(parsed) || !hasValidProcessIdentity(parsed)) {
     return null;
   }
+  const startTimeSource = isValidStartTimeSource(parsed.startTimeSource)
+    ? parsed.startTimeSource
+    : 'approximate';
   return {
     version: parsed.version,
     ownerToken: parsed.ownerToken,
     pid: parsed.pid,
     hostname: parsed.hostname,
     startTimeMs: parsed.startTimeMs,
+    startTimeSource,
   };
 }
 
@@ -110,6 +133,12 @@ function hasValidProcessIdentity(
   return pidIsValid && startTimeIsValid;
 }
 
+function isValidStartTimeSource(value: unknown): value is StartTimeSource {
+  return (
+    value === 'canonical' || value === 'approximate' || value === 'unavailable'
+  );
+}
+
 export async function probeOwnerLiveness(
   owner: LockOwnerMetadata | null,
   options: {
@@ -137,6 +166,10 @@ export async function probeOwnerLiveness(
     if (code === 'ESRCH') {
       return { status: 'dead' };
     }
+    return { status: 'unverifiable' };
+  }
+
+  if (owner.startTimeSource !== 'canonical') {
     return { status: 'unverifiable' };
   }
 
@@ -203,6 +236,34 @@ export async function readProcessStartTimeMs(
 export function _resetProcessStartTimeForTests(): void {
   cachedProcessStartTimeMs = undefined;
   cachedCurrentProcessStartTime = undefined;
+}
+
+export interface LegacyLockRecord {
+  readonly pid: number;
+  readonly ownerToken: string;
+}
+
+export function parseLegacyLockRecord(raw: string): LegacyLockRecord | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isPlainObject(parsed)) {
+    return null;
+  }
+  if (
+    typeof parsed.pid !== 'number' ||
+    !Number.isSafeInteger(parsed.pid) ||
+    parsed.pid <= 0
+  ) {
+    return null;
+  }
+  if (typeof parsed.token !== 'string' || parsed.token === '') {
+    return null;
+  }
+  return { pid: parsed.pid, ownerToken: parsed.token };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
