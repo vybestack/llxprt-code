@@ -16,8 +16,8 @@ early-returns without starting the SDK when `getTelemetryEnabled()` returns
 
 ## SDK configuration
 
-When enabled, `initializeTelemetry` constructs a `NodeSDK`
-(`@opentelemetry/sdk-node`) with:
+When enabled, `initializeTelemetry` constructs and registers direct local
+`NodeTracerProvider`, `LoggerProvider`, and `MeterProvider` instances with:
 
 - A resource identifying the service (`llxprt-code`), Node.js version, and
   session ID.
@@ -40,9 +40,8 @@ The `File*Exporter` classes write to the configured outfile path. The
 
 OTLP exporters and any network-based exporters are **absent** from the code path.
 There is no `OTLPExporter`, no gRPC/HTTP exporter, and no collector endpoint
-configured. This is by design — telemetry data never leaves the local machine
-through the SDK. The `otlpEndpoint` setting is read into the configuration but
-never used to construct an exporter.
+configuration. This is by design — telemetry data never leaves the local machine
+through the SDK.
 
 ### No custom spans
 
@@ -61,25 +60,9 @@ not as custom spans.
 
 ## Shutdown
 
-On `SIGTERM` or `SIGINT`, `shutdownTelemetry(config)` calls `sdk.shutdown()`.
-The `flushTelemetry()` function force-flushes pending data.
-
-## Local collector setup script (non-functional for data reception)
-
-The `npm run telemetry -- --target=local` script
-(`scripts/local_telemetry.ts`) downloads and starts a local Jaeger instance and
-an OpenTelemetry Collector (`otelcol-contrib`) for development use. However,
-**the collector cannot receive any data from the SDK** because the SDK never
-constructs an OTLP exporter — it only writes to `File*Exporter` or
-`Console*Exporter`. The script (`manageTelemetrySettings` in
-`scripts/telemetry_utils.ts`) only writes settings (enabled, target,
-otlpEndpoint) into the workspace `settings.json`; it does not inject an OTLP
-exporter into the SDK at runtime.
-
-As a result, running the collector script will start Jaeger and the collector,
-but **no telemetry data will arrive at either**. The collector and Jaeger UI
-will show zero traces/metrics/logs from LLxprt Code. This is a known limitation
-of the current architecture.
+On `SIGTERM` or `SIGINT`, `shutdownTelemetry(config)` shuts down all three
+providers. The `flushTelemetry()` function force-flushes each provider, and
+shutdown also flushes pending local output before returning.
 
 ## Key source files
 
@@ -91,5 +74,3 @@ of the current architecture.
 - `packages/telemetry/src/telemetry/loggers.ts`: log event emission.
 - `packages/telemetry/src/telemetry/constants.ts`: canonical event/metric names.
 - `packages/core/src/config/configConstructor.ts`: calls `initializeTelemetry`.
-- `scripts/local_telemetry.ts`: local collector development script (writes
-  settings only; SDK does not emit OTLP).

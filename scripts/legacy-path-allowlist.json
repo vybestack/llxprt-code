@@ -30,16 +30,6 @@
     "reason": "Comment in the a2a loadExtensions() explicitly identifies the path as legacy ('Legacy ~/.llxprt/extensions is NOT scanned'). Actual user-extension roots resolve through Storage.getUserExtensionsDir() and the .gemini compatibility root."
   },
   {
-    "path": "scripts/telemetry_utils.ts",
-    "pattern": "~/\\.llxprt",
-    "reason": "Comment at the canonical log-dir resolver explicitly identifies the legacy path as the avoided behavior ('avoids writing telemetry artifacts under the legacy ~/.llxprt/tmp tree'). Actual resolution uses env-paths with LLXPRT_LOG_HOME/LLXPRT_CONFIG_HOME precedence."
-  },
-  {
-    "path": "scripts/telemetry.ts",
-    "pattern": "~/\\.llxprt",
-    "reason": "Comment at the canonical config-dir resolver explicitly identifies the legacy path as the avoided behavior ('not the legacy ~/.llxprt global layout'). Actual resolution uses resolveGlobalConfigDir() with LLXPRT_CONFIG_HOME/platform precedence."
-  },
-  {
     "path": "packages/core/src/utils/memoryDiscovery.ts",
     "pattern": "homedir\\(\\)[^\\n]{0,40}(LLXPRT_DIR|\\.llxprt)|~/\\.llxprt",
     "reason": "Legacy-exclusion sentinel in upward memory traversal: stops walking at ~/.llxprt so a surviving legacy global file is never resurrected as workspace memory. The comment identifies the path as legacy-exclusion (migration-only contract). Scoped to the sentinel line only."

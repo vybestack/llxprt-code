@@ -4,49 +4,143 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// TELEMETRY: Modified to support local file logging only - no data sent to Google
-import { DiagConsoleLogger, DiagLogLevel, diag } from '@opentelemetry/api';
-import { NodeSDK } from '@opentelemetry/sdk-node';
+import {
+  context,
+  DiagConsoleLogger,
+  DiagLogLevel,
+  diag,
+  metrics,
+  propagation,
+  trace,
+} from '@opentelemetry/api';
+import { logs } from '@opentelemetry/api-logs';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
+import {
+  CompositePropagator,
+  W3CBaggagePropagator,
+  W3CTraceContextPropagator,
+} from '@opentelemetry/core';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   BatchSpanProcessor,
   ConsoleSpanExporter,
+  NodeTracerProvider,
 } from '@opentelemetry/sdk-trace-node';
 import {
   BatchLogRecordProcessor,
   ConsoleLogRecordExporter,
+  LoggerProvider,
 } from '@opentelemetry/sdk-logs';
 import {
   ConsoleMetricExporter,
+  MeterProvider,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 import { SERVICE_NAME } from './constants.js';
-import { initializeMetrics } from './metrics.js';
+import { initializeMetrics, resetMetricsState } from './metrics.js';
 import {
   FileLogExporter,
   FileMetricExporter,
   FileSpanExporter,
 } from './file-exporters.js';
 import { debugLogger } from '../utils/debugLogger.js';
+
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
-let sdk: NodeSDK | undefined;
+interface TelemetryProviders {
+  tracer: NodeTracerProvider;
+  logger: LoggerProvider;
+  meter: MeterProvider;
+}
+
+const httpInstrumentation = new HttpInstrumentation();
+let providers: TelemetryProviders | undefined;
 let telemetryInitialized = false;
+let shuttingDown = false;
 let flushInProgress: Promise<void> | null = null;
 
 export function isTelemetrySdkInitialized(): boolean {
   return telemetryInitialized;
 }
 
+function createProviders(config: TelemetryConfig): TelemetryProviders {
+  const resource = resourceFromAttributes({
+    [SemanticResourceAttributes.SERVICE_NAME]: SERVICE_NAME,
+    [SemanticResourceAttributes.SERVICE_VERSION]: process.version,
+    'session.id': config.getSessionId(),
+  });
+  const telemetryOutfile = config.getTelemetryOutfile() ?? '';
+  const spanExporter = telemetryOutfile
+    ? new FileSpanExporter(telemetryOutfile)
+    : new ConsoleSpanExporter();
+  const logExporter = telemetryOutfile
+    ? new FileLogExporter(telemetryOutfile)
+    : new ConsoleLogRecordExporter();
+  const metricExporter = telemetryOutfile
+    ? new FileMetricExporter(telemetryOutfile)
+    : new ConsoleMetricExporter();
+
+  return {
+    tracer: new NodeTracerProvider({
+      resource,
+      spanProcessors: [
+        new BatchSpanProcessor(spanExporter, {
+          scheduledDelayMillis: 100,
+          maxExportBatchSize: 10,
+          exportTimeoutMillis: 5000,
+        }),
+      ],
+    }),
+    logger: new LoggerProvider({
+      resource,
+      processors: [
+        new BatchLogRecordProcessor(logExporter, {
+          scheduledDelayMillis: 0,
+          maxExportBatchSize: 1,
+          exportTimeoutMillis: 5000,
+        }),
+      ],
+    }),
+    meter: new MeterProvider({
+      resource,
+      readers: [
+        new PeriodicExportingMetricReader({
+          exporter: metricExporter,
+          exportIntervalMillis: 10000,
+          exportTimeoutMillis: 5000,
+        }),
+      ],
+    }),
+  };
+}
+
+function registerProviders(nextProviders: TelemetryProviders): void {
+  const contextManager = new AsyncLocalStorageContextManager();
+  contextManager.enable();
+  context.setGlobalContextManager(contextManager);
+  propagation.setGlobalPropagator(
+    new CompositePropagator({
+      propagators: [
+        new W3CTraceContextPropagator(),
+        new W3CBaggagePropagator(),
+      ],
+    }),
+  );
+  trace.setGlobalTracerProvider(nextProviders.tracer);
+  logs.setGlobalLoggerProvider(nextProviders.logger);
+  metrics.setGlobalMeterProvider(nextProviders.meter);
+  httpInstrumentation.setTracerProvider(nextProviders.tracer);
+  httpInstrumentation.setMeterProvider(nextProviders.meter);
+  httpInstrumentation.enable();
+}
+
 export function initializeTelemetry(config: TelemetryConfig): void {
-  // TELEMETRY: Modified to ONLY support local file logging - network exporters disabled
-  if (telemetryInitialized || !config.getTelemetryEnabled()) {
-    // Only output verbose logs when telemetry is enabled to avoid stdout spam
+  if (telemetryInitialized || shuttingDown || !config.getTelemetryEnabled()) {
     if (process.env.VERBOSE === 'true' && config.getTelemetryEnabled()) {
-      debugLogger.error(
+      debugLogger.log(
         `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
       );
     }
@@ -54,70 +148,20 @@ export function initializeTelemetry(config: TelemetryConfig): void {
   }
 
   if (process.env.VERBOSE === 'true') {
-    debugLogger.error(
+    debugLogger.log(
       `[TELEMETRY] Initializing with outfile: ${config.getTelemetryOutfile()}`,
     );
   }
 
-  const resource = resourceFromAttributes({
-    [SemanticResourceAttributes.SERVICE_NAME]: SERVICE_NAME,
-    [SemanticResourceAttributes.SERVICE_VERSION]: process.version,
-    'session.id': config.getSessionId(),
-  });
-
-  // SECURITY: OTLP/network endpoints are completely disabled to prevent data leakage
-  // Only local file or console output is allowed
-  const telemetryOutfile = config.getTelemetryOutfile() ?? '';
-
-  const spanExporter = telemetryOutfile
-    ? new FileSpanExporter(telemetryOutfile)
-    : new ConsoleSpanExporter();
-
-  const logExporter = telemetryOutfile
-    ? new FileLogExporter(telemetryOutfile)
-    : new ConsoleLogRecordExporter();
-
-  const metricReader = telemetryOutfile
-    ? new PeriodicExportingMetricReader({
-        exporter: new FileMetricExporter(telemetryOutfile),
-        exportIntervalMillis: 10000,
-        exportTimeoutMillis: 5000,
-      })
-    : new PeriodicExportingMetricReader({
-        exporter: new ConsoleMetricExporter(),
-        exportIntervalMillis: 10000,
-        exportTimeoutMillis: 5000,
-      });
-
-  // Configure batch processors with shorter delays for faster writes
-  // This ensures telemetry is written promptly, especially important for tests
-  const spanProcessor = new BatchSpanProcessor(spanExporter, {
-    scheduledDelayMillis: 100, // Export every 100ms instead of default 5000ms
-    maxExportBatchSize: 10, // Export after 10 spans instead of default 512
-    exportTimeoutMillis: 5000, // Shorter timeout for faster failure detection
-  });
-
-  const logProcessor = new BatchLogRecordProcessor(logExporter, {
-    scheduledDelayMillis: 0, // Export immediately for tests - was 100ms
-    maxExportBatchSize: 1, // Export after every single log - was 10
-    exportTimeoutMillis: 5000,
-  });
-
-  sdk = new NodeSDK({
-    resource,
-    spanProcessors: [spanProcessor],
-    logRecordProcessors: [logProcessor],
-    metricReader,
-    instrumentations: [new HttpInstrumentation()],
-  });
-
   try {
-    sdk.start();
+    const nextProviders = createProviders(config);
+    registerProviders(nextProviders);
+    providers = nextProviders;
+    telemetryInitialized = true;
+    initializeMetrics(config);
     if (config.getDebugMode()) {
       debugLogger.log('OpenTelemetry SDK started successfully.');
     }
-    telemetryInitialized = true;
-    initializeMetrics(config);
   } catch (error) {
     debugLogger.error('Error starting OpenTelemetry SDK:', error);
   }
@@ -131,45 +175,56 @@ export function initializeTelemetry(config: TelemetryConfig): void {
 }
 
 export async function flushTelemetry(): Promise<void> {
-  if (!sdk) return undefined;
-  if (flushInProgress) return flushInProgress;
+  if (!providers) return;
+  if (flushInProgress) {
+    await flushInProgress;
+    return;
+  }
 
-  flushInProgress = (async () => {
-    try {
-      // Feature-detect forceFlush on the SDK instance
-      if (
-        typeof (sdk as unknown as Record<string, unknown>).forceFlush ===
-        'function'
-      ) {
-        await (
-          sdk as unknown as { forceFlush: () => Promise<void> }
-        ).forceFlush();
-      }
-    } catch {
-      // Telemetry flush failures are non-fatal
-    } finally {
+  flushInProgress = Promise.all([
+    providers.tracer.forceFlush(),
+    providers.logger.forceFlush(),
+    providers.meter.forceFlush(),
+  ])
+    .then(() => undefined)
+    .catch(() => undefined)
+    .finally(() => {
       flushInProgress = null;
-    }
-  })();
+    });
 
-  return flushInProgress;
+  await flushInProgress;
 }
 
 export async function shutdownTelemetry(
   config: TelemetryConfig,
 ): Promise<void> {
-  // TELEMETRY: Shutdown only affects local file writing
-  if (!telemetryInitialized || !sdk) {
+  if (!telemetryInitialized || !providers || shuttingDown) {
     return;
   }
+
+  shuttingDown = true;
+  const activeProviders = providers;
+  providers = undefined;
+  telemetryInitialized = false;
   try {
-    await sdk.shutdown();
+    await Promise.all([
+      activeProviders.tracer.shutdown(),
+      activeProviders.logger.shutdown(),
+      activeProviders.meter.shutdown(),
+    ]);
     if (config.getDebugMode()) {
       debugLogger.log('OpenTelemetry SDK shut down successfully.');
     }
   } catch (error) {
     debugLogger.error('Error shutting down SDK:', error);
   } finally {
-    telemetryInitialized = false;
+    httpInstrumentation.disable();
+    context.disable();
+    propagation.disable();
+    trace.disable();
+    logs.disable();
+    metrics.disable();
+    resetMetricsState();
+    shuttingDown = false;
   }
 }

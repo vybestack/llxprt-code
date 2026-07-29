@@ -15,6 +15,7 @@ import type { TelemetryConfig } from '../internal/interfaces.js';
 
 const mockConfig = {
   getSessionId: () => 'test-session',
+  getTelemetryEnabled: () => false,
   getTelemetryLogPromptsEnabled: () => false,
 } as unknown as TelemetryConfig;
 
@@ -38,6 +39,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
   });
 
   it('aggregates provider-owned API responses locally even when SDK is NOT initialized', () => {
+    expect(sdk.isTelemetrySdkInitialized()).toBe(false);
     const event = new ApiResponseEvent('test-model-owned', 1000, 'prompt-1', {
       promptTokenCount: 100,
       candidatesTokenCount: 50,
