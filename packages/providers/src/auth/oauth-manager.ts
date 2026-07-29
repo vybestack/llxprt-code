@@ -36,6 +36,7 @@ import {
 } from './provider-usage-info.js';
 import { BrowserProfileAssociationStore } from './browser-profile-association-store.js';
 import type { BrowserProfileAssociation } from './browser-profile-association-store.js';
+import { resolveCurrentProfileOAuthContext } from './token-profile-resolver.js';
 
 /**
  * Compile-time structural compatibility marker: ensures the auth package's
@@ -339,6 +340,16 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     metadata?: OAuthTokenRequestMetadata,
   ): void {
     this.bucketManager.setSessionBucket(provider, bucket, metadata);
+  }
+
+  async activateNamedLoginBucket(
+    provider: string,
+    bucket: string,
+  ): Promise<void> {
+    const context = await resolveCurrentProfileOAuthContext(provider);
+    if (context?.providerMatches === true && !context.hasExplicitBucketPolicy) {
+      this.bucketManager.setSessionBucket(provider, bucket, context.metadata);
+    }
   }
 
   /**

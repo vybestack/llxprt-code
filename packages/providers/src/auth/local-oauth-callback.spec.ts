@@ -114,6 +114,29 @@ describe('startLocalOAuthCallback', () => {
     });
   });
 
+  it('closes the listener and rejects when aborted as startup completes', async () => {
+    const port = await findAvailablePort();
+    const controller = new AbortController();
+    const startup = startLocalOAuthCallback({
+      state: 'abort-state',
+      portRange: [port, port],
+      timeoutMs: 5_000,
+      signal: controller.signal,
+    });
+
+    controller.abort();
+
+    await expect(startup).rejects.toThrow(/abort/i);
+    const replacement = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      replacement.once('error', reject);
+      replacement.listen(port, '127.0.0.1', resolve);
+    });
+    await new Promise<void>((resolve, reject) => {
+      replacement.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
   it('rejects when callback does not arrive within timeout', async () => {
     vi.useFakeTimers();
 

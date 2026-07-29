@@ -47,6 +47,8 @@ type MultiBucketAuthResult = {
   failedBuckets: string[];
 };
 
+type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
+
 type MultiBucketAuthenticatorLike = {
   fromCallbacks(opts: {
     onAuthBucket(
@@ -141,13 +143,16 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
-    const lockAcquired = await this.tokenStore.acquireAuthLock(providerName, {
-      waitMs: 60000, // Wait up to 60 seconds
+    const lockOutcome = await this.waitForAuthLockOrToken(
+      providerName,
       bucket,
-    });
+      60_000,
+    );
 
-    if (!lockAcquired) {
-      await this.handleAuthLockTimeout(providerName, bucket);
+    if (lockOutcome !== 'acquired') {
+      if (lockOutcome === 'timed-out') {
+        await this.handleAuthLockTimeout(providerName, bucket);
+      }
       if (shouldSignalAuthCompletion) {
         markGlobalAuthComplete();
       }
@@ -198,6 +203,42 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     }
   }
 
+  private async waitForAuthLockOrToken(
+    providerName: string,
+    bucket: string | undefined,
+    waitMs: number,
+  ): Promise<AuthLockWaitOutcome> {
+    const waitState: { outcome: AuthLockWaitOutcome } = {
+      outcome: 'timed-out',
+    };
+    const acquired = await this.tokenStore.acquireAuthLock(providerName, {
+      waitMs,
+      bucket,
+      onWait: async () => {
+        if (await this.findAndActivateValidDiskToken(providerName, bucket)) {
+          waitState.outcome = 'token-found';
+          return true;
+        }
+        return false;
+      },
+    });
+    return acquired ? 'acquired' : waitState.outcome;
+  }
+
+  private async findAndActivateValidDiskToken(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<boolean> {
+    const token = await this.tokenStore.getToken(providerName, bucket);
+    if (token === null || token.expiry <= Math.floor(Date.now() / 1000) + 30) {
+      return false;
+    }
+    if (!this.providerRegistry.isOAuthEnabled(providerName)) {
+      this.providerRegistry.setOAuthEnabledState(providerName, true);
+    }
+    return true;
+  }
+
   /**
    * Check if a valid disk token already exists under the auth lock.
    * Returns true if auth can be skipped.
@@ -206,21 +247,17 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
   ): Promise<boolean> {
-    const diskToken = await this.tokenStore.getToken(providerName, bucket);
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    const thirtySecondsFromNow = nowInSeconds + 30;
-
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
-      if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-        this.providerRegistry.setOAuthEnabledState(providerName, true);
-      }
+    const found = await this.findAndActivateValidDiskToken(
+      providerName,
+      bucket,
+    );
+    if (found) {
       logger.debug(
         () =>
           `[FLOW] Found valid token on disk after acquiring lock for ${providerName}, skipping auth`,
       );
-      return true;
     }
-    return false;
+    return found;
   }
 
   /**
@@ -273,14 +310,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
   ): Promise<void> {
-    const diskToken = await this.tokenStore.getToken(providerName, bucket);
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    const thirtySecondsFromNow = nowInSeconds + 30;
-
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
-      if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-        this.providerRegistry.setOAuthEnabledState(providerName, true);
-      }
+    if (await this.findAndActivateValidDiskToken(providerName, bucket)) {
       logger.debug(
         () =>
           `[FLOW] Lock timeout but found valid token on disk for ${providerName}, using it`,

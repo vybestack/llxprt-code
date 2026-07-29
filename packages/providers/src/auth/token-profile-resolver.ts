@@ -142,3 +142,40 @@ export async function resolveCurrentProfileSessionMetadata(
     profileId: currentProfileName.trim(),
   };
 }
+
+export interface CurrentProfileOAuthContext {
+  readonly metadata: OAuthTokenRequestMetadata;
+  readonly providerMatches: boolean;
+  readonly hasExplicitBucketPolicy: boolean;
+}
+
+export async function resolveCurrentProfileOAuthContext(
+  providerName: string,
+): Promise<CurrentProfileOAuthContext | undefined> {
+  const metadata = await resolveCurrentProfileSessionMetadata(providerName);
+  if (metadata?.profileId === undefined) {
+    return undefined;
+  }
+
+  try {
+    const profileManager = await createProfileManager();
+    const profile = await profileManager.loadProfile(metadata.profileId);
+    const profileProvider =
+      'provider' in profile && typeof profile.provider === 'string'
+        ? profile.provider
+        : null;
+    const providerMatches = profileProvider === providerName;
+    const hasExplicitBucketPolicy =
+      'auth' in profile &&
+      profile.auth?.type === 'oauth' &&
+      'buckets' in profile.auth;
+
+    return { metadata, providerMatches, hasExplicitBucketPolicy };
+  } catch (error) {
+    logger.debug(
+      `Could not load current profile OAuth context for ${providerName}:`,
+      error,
+    );
+    return undefined;
+  }
+}

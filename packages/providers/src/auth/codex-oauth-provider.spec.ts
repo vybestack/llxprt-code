@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 
@@ -27,6 +27,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
     };
 
     provider = new CodexOAuthProvider(mockTokenStore);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('Concurrent initiateAuth Prevention', () => {
@@ -107,6 +112,42 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       expect(callCount).toBe(2);
 
       performAuthSpy.mockRestore();
+    });
+
+    it('rejects at the overall deadline and ignores a late flow completion', async () => {
+      vi.useFakeTimers();
+      const pendingAuth = Promise.withResolvers<{
+        access_token: string;
+        token_type: 'Bearer';
+        expiry: number;
+        account_id: string;
+      }>();
+      vi.spyOn(
+        provider as unknown as {
+          performAuth: () => Promise<Awaited<typeof pendingAuth.promise>>;
+        },
+        'performAuth',
+      ).mockReturnValue(pendingAuth.promise);
+
+      const authentication = provider.initiateAuth();
+      const rejection = authentication.then(
+        () => 'resolved',
+        (error: unknown) =>
+          error instanceof Error ? error.message : String(error),
+      );
+      await vi.advanceTimersByTimeAsync(20 * 60 * 1000);
+      expect(await rejection).toBe('Codex OAuth flow timed out');
+
+      const lateToken = {
+        access_token: 'too-late',
+        token_type: 'Bearer' as const,
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        account_id: 'late-account',
+      };
+      pendingAuth.resolve(lateToken);
+      await vi.runAllTimersAsync();
+
+      await expect(provider.initiateAuth()).resolves.toStrictEqual(lateToken);
     });
   });
 

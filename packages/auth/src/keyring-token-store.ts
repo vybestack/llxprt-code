@@ -16,7 +16,6 @@
 
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import {
   OAuthTokenSchema,
   type OAuthToken,
@@ -24,14 +23,60 @@ import {
 } from './types.js';
 import { type TokenStore } from './token-store.js';
 import { type IDebugLogger, type ISecureStore } from './interfaces/index.js';
+import {
+  buildCurrentProcessOwnerMetadata,
+  parseOwnerMetadata,
+  probeOwnerLiveness,
+  serializeOwnerMetadata,
+  type LockOwnerMetadata,
+} from './lock-owner.js';
 
 const NAME_REGEX = /^[a-zA-Z0-9._@-]{1,64}$/;
 const DEFAULT_BUCKET = 'default';
 const DEFAULT_LOCK_WAIT_MS = 10_000;
-const LOCK_POLL_INTERVAL_MS = 100;
+const LOCK_BACKOFF_BASE_MS = 100;
+const LOCK_BACKOFF_CAP_MS = 2_000;
+const LOCK_BACKOFF_JITTER_MS = 50;
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+function waitUntilDeadline<T>(
+  promise: Promise<T>,
+  deadline: number,
+  fallback: T,
+): Promise<T> {
+  const remaining = Math.max(0, deadline - Date.now());
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(fallback), remaining);
+    promise
+      .then(resolve, () => resolve(fallback))
+      .finally(() => {
+        clearTimeout(timeout);
+      });
+  });
+}
+
+/**
+ * Compute the next bounded randomized/exponential backoff delay.
+ *
+ * Replaces fixed synchronized polling so multiple contenders for the same
+ * provider+bucket do not all hammer the lock file on the same cadence. The
+ * delay grows exponentially from `base` up to `cap`, with a small uniform
+ * jitter so independent contenders desynchronize over time.
+ */
+export function computeBackoffDelay(
+  attempt: number,
+  base: number,
+  cap: number,
+  jitter: number,
+  random: () => number = Math.random,
+): number {
+  const exponent = Math.min(attempt, 16);
+  const jitterRange = Math.min(jitter, cap);
+  const exp = Math.min(cap - jitterRange, base * 2 ** exponent);
+  return exp + Math.floor(random() * jitterRange);
+}
 
 export class KeyringTokenStore implements TokenStore {
   private static readonly NO_OP_LOGGER: IDebugLogger = {
@@ -116,94 +161,244 @@ export class KeyringTokenStore implements TokenStore {
   private async acquireLock(
     lockPath: string,
     waitMs: number,
+    onWait?: () => Promise<boolean>,
   ): Promise<boolean> {
     if (this.heldTokens.has(lockPath)) {
       return false;
     }
 
     const startTime = Date.now();
+    const deadline = startTime + waitMs;
     await this.ensureLockDir();
-
-    this.logger.debug(
-      `[acquireLock] wait=${waitMs} poll=${LOCK_POLL_INTERVAL_MS}`,
+    const owner = await buildCurrentProcessOwnerMetadata(
+      Math.max(0, deadline - Date.now()),
     );
 
-    while (Date.now() - startTime < waitMs) {
-      const token = randomUUID();
-      const payload = JSON.stringify({
-        pid: process.pid,
-        timestamp: Date.now(),
-        token,
-      });
-      try {
-        const acquired = await this.tryCreateLock(lockPath, payload, token);
-        if (acquired) {
-          return true;
-        }
-      } catch (error) {
-        if (!isErrnoCode(error, 'EEXIST')) {
-          throw error;
-        }
-        // EEXIST: lock held by another owner or a stale orphan. No PID-based
-        // reclaim — poll until timeout. This is safety-over-availability: a
-        // stale orphan requires process restart or manual cleanup.
+    this.logger.debug(`[acquireLock] wait=${waitMs}`);
+
+    let attempt = 0;
+    while (Date.now() < deadline) {
+      const acquired = await this.tryCreateLock(lockPath, owner);
+      if (acquired) {
+        return true;
+      }
+      const recovered = await this.maybeRecoverDeadOwnerLock(
+        lockPath,
+        owner,
+        Math.max(0, deadline - Date.now()),
+      );
+      if (recovered) {
+        return true;
+      }
+      if (
+        onWait !== undefined &&
+        (await waitUntilDeadline(onWait(), deadline, false))
+      ) {
+        return false;
       }
 
-      await sleep(LOCK_POLL_INTERVAL_MS);
+      const delay = computeBackoffDelay(
+        attempt,
+        LOCK_BACKOFF_BASE_MS,
+        LOCK_BACKOFF_CAP_MS,
+        LOCK_BACKOFF_JITTER_MS,
+      );
+      attempt += 1;
+      await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
     }
 
     return false;
   }
 
   /**
-   * Attempts to create the lock file with O_EXCL. On success, records the
-   * token in heldTokens and returns true. On EEXIST, returns false (no
-   * throw). Other errors propagate. A close failure after a successful
-   * payload write still records ownership (the file is on disk with our
-   * content) but surfaces a warning.
+   * Publishes a complete owner record through a same-directory temporary file.
+   * The hard-link claim is atomic and never replaces an existing owner.
    */
-  private async tryCreateLock(
-    lockPath: string,
-    payload: string,
-    token: string,
+  private async publishOwnerFile(
+    targetPath: string,
+    owner: LockOwnerMetadata,
   ): Promise<boolean> {
-    const fh = await fs.open(lockPath, 'wx', 0o600);
-    let closeError: unknown;
+    const temporaryPath = `${targetPath}.${owner.ownerToken}.tmp`;
+    let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
     try {
-      await fh.writeFile(payload, 'utf8');
-    } catch (writeError) {
-      // writeFile failure means the payload may be incomplete; close
-      // and remove the orphan, then rethrow.
+      handle = await fs.open(temporaryPath, 'wx', 0o600);
+      await handle.writeFile(serializeOwnerMetadata(owner), 'utf8');
+      await handle.sync();
+      await handle.close();
+      handle = undefined;
       try {
-        await fh.close();
-      } catch {
-        // best-effort close
+        await fs.link(temporaryPath, targetPath);
+      } catch (error) {
+        if (isErrnoCode(error, 'EEXIST')) {
+          return false;
+        }
+        throw error;
       }
-      await this.removeOrphan(lockPath);
-      throw writeError;
+      return true;
+    } finally {
+      await handle?.close().catch(() => undefined);
+      await fs.unlink(temporaryPath).catch(() => undefined);
     }
-    try {
-      await fh.close();
-    } catch (err) {
-      closeError = err;
-    }
-    // The payload was written successfully — we own the lock. Record
-    // the token so release can verify-and-unlink. A close error does
-    // not change ownership (the file is on disk with our content).
-    this.heldTokens.set(lockPath, token);
-    if (closeError !== undefined) {
-      this.logger.warn(
-        `[acquireLock] unexpected close error for ${lockPath}: ${closeError instanceof Error ? closeError.message : String(closeError)}`,
-      );
-    }
-    return true;
   }
 
-  private async removeOrphan(lockPath: string): Promise<void> {
+  private async tryCreateLock(
+    lockPath: string,
+    owner: LockOwnerMetadata,
+  ): Promise<boolean> {
+    const published = await this.publishOwnerFile(lockPath, owner);
+    if (published) {
+      this.heldTokens.set(lockPath, owner.ownerToken);
+    }
+    return published;
+  }
+
+  /**
+   * Coordinated/fenced takeover protocol for a lock whose owner is provably
+   * dead on the current host.
+   *
+   * When `acquireLock` observes EEXIST, it reads the existing payload and
+   * probes owner liveness. If the owner is provably dead (PID gone on this
+   * host, or the PID was recycled to us with a different process-start
+   * identity), this method runs a fenced takeover:
+   *
+   *   1. Exactly one contender wins an O_EXCL fence file
+   *      (`<lockPath>.fence`). The fence carries the contender's owner
+   *      metadata so a crashed fence-winner is detectable by future
+   *      contenders.
+   *   2. The fence winner unlinks the dead lock and atomically claims it
+   *      via O_EXCL on the lock path itself. If a fresh owner appeared in
+   *      the gap (another legitimate contender won the post-unlink race),
+   *      the O_EXCL fails and the fence winner backs off — it never deletes
+   *      a successor.
+   *   3. Fence losers probe the fence owner's liveness; if the fence owner
+   *      is dead (crashed mid-takeover), they remove the stale fence and
+   *      retry. Otherwise they defer.
+   *
+   * This prevents the unsafe pattern where multiple contenders all unlink a
+   * foreign lock and then all attempt auth, or where a contender deletes a
+   * successor's lock. Live/unverifiable owners are never reclaimed.
+   *
+   * Returns true if this caller won the fence and now owns the lock.
+   */
+  private async maybeRecoverDeadOwnerLock(
+    lockPath: string,
+    owner: LockOwnerMetadata,
+    probeTimeoutMs: number,
+  ): Promise<boolean> {
+    let existingContent: string;
+    try {
+      existingContent = await fs.readFile(lockPath, 'utf8');
+    } catch (error) {
+      if (isErrnoCode(error, 'ENOENT')) {
+        // Lock vanished between EEXIST and read — another contender already
+        // completed. Loop back in acquireLock.
+        return false;
+      }
+      throw error;
+    }
+
+    const existingOwner = parseOwnerMetadata(existingContent);
+    const liveness = await probeOwnerLiveness(existingOwner, {
+      probeTimeoutMs,
+    });
+
+    if (liveness.status !== 'dead' || existingOwner === null) {
+      this.logger.debug(
+        `[acquireLock] existing owner is ${liveness.status}, deferring`,
+      );
+      return false;
+    }
+
+    this.logger.debug(
+      `[acquireLock] recovering dead-owner lock at ${lockPath}`,
+    );
+    return this.fencedTakeover(lockPath, existingOwner, owner, probeTimeoutMs);
+  }
+
+  private async fencedTakeover(
+    lockPath: string,
+    deadOwner: LockOwnerMetadata,
+    owner: LockOwnerMetadata,
+    probeTimeoutMs: number,
+  ): Promise<boolean> {
+    const fencePath = `${lockPath}.fence`;
+    const fenceResult = await this.tryWinFence(fencePath, owner);
+    if (fenceResult === 'lost') {
+      await this.handleLostFence(fencePath, probeTimeoutMs);
+      return false;
+    }
+
+    try {
+      return await this.executeFencedClaim(lockPath, deadOwner, owner);
+    } finally {
+      await this.removeOwnedFile(fencePath, owner.ownerToken);
+    }
+  }
+
+  private async tryWinFence(
+    fencePath: string,
+    owner: LockOwnerMetadata,
+  ): Promise<'won' | 'lost'> {
+    return (await this.publishOwnerFile(fencePath, owner)) ? 'won' : 'lost';
+  }
+
+  private async handleLostFence(
+    fencePath: string,
+    probeTimeoutMs: number,
+  ): Promise<void> {
+    const fenceOwner = await this.readOwner(fencePath);
+    const liveness = await probeOwnerLiveness(fenceOwner, { probeTimeoutMs });
+    if (fenceOwner !== null && liveness.status === 'dead') {
+      await this.removeOwnedFile(fencePath, fenceOwner.ownerToken);
+    }
+  }
+
+  private async executeFencedClaim(
+    lockPath: string,
+    deadOwner: LockOwnerMetadata,
+    owner: LockOwnerMetadata,
+  ): Promise<boolean> {
+    const observedOwner = await this.readOwner(lockPath);
+    if (observedOwner?.ownerToken !== deadOwner.ownerToken) {
+      return false;
+    }
+
+    await this.removeOwnedFile(lockPath, deadOwner.ownerToken);
+    try {
+      return await this.tryCreateLock(lockPath, owner);
+    } catch (error) {
+      if (isErrnoCode(error, 'EEXIST')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  private async readOwner(lockPath: string): Promise<LockOwnerMetadata | null> {
+    try {
+      return parseOwnerMetadata(await fs.readFile(lockPath, 'utf8'));
+    } catch (error) {
+      if (isErrnoCode(error, 'ENOENT')) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private async removeOwnedFile(
+    lockPath: string,
+    ownerToken: string,
+  ): Promise<void> {
+    const observedOwner = await this.readOwner(lockPath);
+    if (observedOwner?.ownerToken !== ownerToken) {
+      return;
+    }
     try {
       await fs.unlink(lockPath);
-    } catch {
-      // best-effort cleanup of an incomplete write
+    } catch (error) {
+      if (!isErrnoCode(error, 'ENOENT')) {
+        throw error;
+      }
     }
   }
 
@@ -217,8 +412,8 @@ export class KeyringTokenStore implements TokenStore {
     // to the caller via the throw below.
     try {
       const content = await fs.readFile(lockPath, 'utf8');
-      const payload = parseLockPayload(content);
-      if (payload !== null && payload.token === token) {
+      const owner = parseOwnerMetadata(content);
+      if (owner !== null && owner.ownerToken === token) {
         await fs.unlink(lockPath);
       }
     } catch (error) {
@@ -385,7 +580,11 @@ export class KeyringTokenStore implements TokenStore {
 
   async acquireAuthLock(
     provider: string,
-    options?: { waitMs?: number; bucket?: string },
+    options?: {
+      waitMs?: number;
+      bucket?: string;
+      onWait?: () => Promise<boolean>;
+    },
   ): Promise<boolean> {
     this.validateName(provider, 'provider');
     if (options?.bucket) this.validateName(options.bucket, 'bucket');
@@ -393,7 +592,7 @@ export class KeyringTokenStore implements TokenStore {
     const lockPath = this.authLockFilePath(provider, options?.bucket);
     const waitMs = options?.waitMs ?? 60_000;
 
-    return this.acquireLock(lockPath, waitMs);
+    return this.acquireLock(lockPath, waitMs, options?.onWait);
   }
 
   async releaseAuthLock(provider: string, bucket?: string): Promise<void> {
@@ -402,48 +601,6 @@ export class KeyringTokenStore implements TokenStore {
     const lockPath = this.authLockFilePath(provider, bucket);
     return this.releaseLock(lockPath);
   }
-}
-
-interface LockPayload {
-  readonly pid: number;
-  readonly timestamp: number;
-  readonly token?: string;
-}
-
-function parseLockPayload(raw: string): LockPayload | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!isLockPayloadObject(parsed)) {
-    return null;
-  }
-  return {
-    pid: parsed.pid,
-    timestamp: parsed.timestamp,
-    token: typeof parsed.token === 'string' ? parsed.token : undefined,
-  };
-}
-
-function isLockPayloadObject(
-  value: unknown,
-): value is { pid: number; timestamp: number; token?: unknown } & Record<
-  string,
-  unknown
-> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const v = value as Record<string, unknown>;
-  if (!('pid' in v) || !('timestamp' in v)) {
-    return false;
-  }
-  if (typeof v.pid !== 'number' || typeof v.timestamp !== 'number') {
-    return false;
-  }
-  return true;
 }
 
 function isSecureStoreCorruptError(error: unknown): boolean {

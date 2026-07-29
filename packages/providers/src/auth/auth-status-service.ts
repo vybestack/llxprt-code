@@ -64,7 +64,16 @@ export class AuthStatusService {
           continue;
         }
 
-        const token = await this.tokenStore.getToken(providerName);
+        const metadata =
+          await this.tokenAccessCoordinator.getCurrentProfileSessionMetadata(
+            providerName,
+          );
+        const bucket =
+          await this.tokenAccessCoordinator.getCurrentProfileSessionBucket(
+            providerName,
+            metadata,
+          );
+        const token = await this.tokenStore.getToken(providerName, bucket);
 
         if (token) {
           const now = Date.now() / 1000;
@@ -142,7 +151,18 @@ export class AuthStatusService {
       }
     }
 
-    const token = await this.tokenStore.getToken(providerName, bucket);
+    const metadata = bucket
+      ? undefined
+      : await this.tokenAccessCoordinator.getCurrentProfileSessionMetadata(
+          providerName,
+        );
+    const effectiveBucket =
+      bucket ??
+      (await this.tokenAccessCoordinator.getCurrentProfileSessionBucket(
+        providerName,
+        metadata,
+      ));
+    const token = await this.tokenStore.getToken(providerName, effectiveBucket);
     if (!token) return false;
 
     const now = Date.now() / 1000;

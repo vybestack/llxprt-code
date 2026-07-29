@@ -37,6 +37,41 @@ import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 const CODEX_PRIMARY_PORT = 1455;
 const CODEX_FALLBACK_RANGE: readonly [number, number] = [1456, 1485];
 const CALLBACK_TIMEOUT_MS = 120000; // 2 minutes
+const AUTH_TIMEOUT_MS = 20 * 60 * 1000;
+
+function waitForAbort<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (signal === undefined) {
+    return promise;
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => {
+      signal.removeEventListener('abort', onAbort);
+    };
+    const settle = (handler: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      handler();
+    };
+    const onAbort = (): void => {
+      settle(() =>
+        reject(signal.reason ?? new Error('Codex OAuth operation aborted')),
+      );
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+}
 /**
  * Codex OAuth Provider Implementation
  * Implements OAuth 2.0 PKCE flow for Codex authentication
@@ -112,7 +147,15 @@ export class CodexOAuthProvider implements OAuthProvider {
     }
 
     this.logger.debug(() => '[FLOW] Starting new auth flow via performAuth()');
-    this.authInProgress = this.performAuth();
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(new Error('Codex OAuth flow timed out')),
+      AUTH_TIMEOUT_MS,
+    );
+    this.authInProgress = waitForAbort(
+      this.performAuth(controller.signal),
+      controller.signal,
+    );
     try {
       const token = await this.authInProgress;
       this.logger.debug(() => '[FLOW] performAuth() completed successfully');
@@ -124,6 +167,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       );
       throw error;
     } finally {
+      clearTimeout(timeout);
       this.authInProgress = null;
       this.logger.debug(() => '[FLOW] authInProgress reset to null');
     }
@@ -133,7 +177,7 @@ export class CodexOAuthProvider implements OAuthProvider {
    * Perform the actual OAuth authentication flow
    * @returns The OAuth token obtained from the authentication flow
    */
-  private async performAuth(): Promise<CodexOAuthToken> {
+  private async performAuth(signal: AbortSignal): Promise<CodexOAuthToken> {
     this.logger.debug(() => '[FLOW] performAuth() starting');
 
     let noBrowser = false;
@@ -150,7 +194,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       this.logger.debug(
         () => '[FLOW] Using device flow for browserless authentication',
       );
-      return this.performDeviceAuth();
+      return this.performDeviceAuth(signal);
     }
 
     const state = crypto.randomUUID();
@@ -159,12 +203,16 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
 
     this.logger.debug(() => '[FLOW] Starting local callback server...');
-    const localCallback = await startLocalOAuthCallback({
-      state,
-      portRange: [CODEX_PRIMARY_PORT, CODEX_FALLBACK_RANGE[1]],
-      timeoutMs: CALLBACK_TIMEOUT_MS,
-      provider: 'codex',
-    });
+    const localCallback = await waitForAbort(
+      startLocalOAuthCallback({
+        state,
+        portRange: [CODEX_PRIMARY_PORT, CODEX_FALLBACK_RANGE[1]],
+        timeoutMs: CALLBACK_TIMEOUT_MS,
+        provider: 'codex',
+        signal,
+      }),
+      signal,
+    );
 
     const port = parseInt(
       localCallback.redirectUri.match(/:(\d+)\//)?.[1] ?? '0',
@@ -181,14 +229,26 @@ export class CodexOAuthProvider implements OAuthProvider {
       () => `[FLOW] Built auth URL: ${authUrl.substring(0, 80)}...`,
     );
 
-    await this.displayAuthUrlAndOpenBrowser(authUrl);
-    return this.waitForCallbackAndComplete(localCallback, redirectUri);
+    try {
+      await this.displayAuthUrlAndOpenBrowser(authUrl, signal);
+      return await this.waitForCallbackAndComplete(
+        localCallback,
+        redirectUri,
+        signal,
+      );
+    } catch (error) {
+      await localCallback.shutdown().catch(() => undefined);
+      throw error;
+    }
   }
 
   /**
    * Display the auth URL to the user (TUI + clipboard + browser).
    */
-  private async displayAuthUrlAndOpenBrowser(authUrl: string): Promise<void> {
+  private async displayAuthUrlAndOpenBrowser(
+    authUrl: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     debugLogger.log('\nCodex OAuth Authentication');
     debugLogger.log('─'.repeat(40));
 
@@ -207,8 +267,11 @@ export class CodexOAuthProvider implements OAuthProvider {
     debugLogger.log(authUrl);
 
     try {
-      await ClipboardService.copyToClipboard(authUrl);
+      await waitForAbort(ClipboardService.copyToClipboard(authUrl), signal);
     } catch (error) {
+      if (signal.aborted) {
+        throw signal.reason;
+      }
       this.logger.debug(() => `Failed to copy URL to clipboard: ${error}`);
     }
 
@@ -229,7 +292,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     } catch {
       // Association lookup failed — fall back to default browser
     }
-    await openBrowserSecurely(authUrl, browserOpts);
+    await waitForAbort(openBrowserSecurely(authUrl, browserOpts), signal);
     this.logger.debug(() => '[FLOW] Browser opened');
   }
 
@@ -240,11 +303,14 @@ export class CodexOAuthProvider implements OAuthProvider {
   private async waitForCallbackAndComplete(
     localCallback: Awaited<ReturnType<typeof startLocalOAuthCallback>>,
     redirectUri: string,
+    signal: AbortSignal,
   ): Promise<CodexOAuthToken> {
     this.logger.debug(() => '[FLOW] Waiting for OAuth callback...');
     try {
-      const { code, state: callbackState } =
-        await localCallback.waitForCallback();
+      const { code, state: callbackState } = await waitForAbort(
+        localCallback.waitForCallback(),
+        signal,
+      );
       this.logger.debug(
         () =>
           `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
@@ -253,18 +319,26 @@ export class CodexOAuthProvider implements OAuthProvider {
       await localCallback.shutdown().catch(() => undefined);
 
       this.logger.debug(() => '[FLOW] Calling completeAuth()...');
-      const token = await this.completeAuth(code, redirectUri, callbackState);
+      const token = await this.completeAuth(
+        code,
+        redirectUri,
+        callbackState,
+        signal,
+      );
       this.logger.debug(() => '[FLOW] completeAuth() finished');
       return token;
     } catch (error) {
       await localCallback.shutdown().catch(() => undefined);
+      if (signal.aborted) {
+        throw signal.reason;
+      }
       this.logger.debug(
         () =>
           `[FLOW] Callback failed, falling back to device auth: ${
             error instanceof Error ? error.message : String(error)
           }`,
       );
-      return this.performDeviceAuth();
+      return this.performDeviceAuth(signal);
     }
   }
 
@@ -279,6 +353,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     authCode: string,
     redirectUri: string,
     state: string,
+    signal?: AbortSignal,
   ): Promise<CodexOAuthToken> {
     this.logger.debug(
       () =>
@@ -292,6 +367,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       authCode,
       redirectUri,
       state,
+      signal,
     );
     this.logger.debug(
       () =>
@@ -308,14 +384,17 @@ export class CodexOAuthProvider implements OAuthProvider {
    * User copies this code FROM the terminal TO the browser at auth.openai.com/codex/device
    * @returns The OAuth token obtained from the device flow
    */
-  private async performDeviceAuth(): Promise<CodexOAuthToken> {
+  private async performDeviceAuth(
+    signal?: AbortSignal,
+  ): Promise<CodexOAuthToken> {
     this.logger.debug(() => '[DEVICE-FLOW] Starting device authorization flow');
 
     try {
       this.logger.debug(
         () => '[DEVICE-FLOW] Requesting device code from OpenAI...',
       );
-      const deviceCodeResponse = await this.deviceFlow.requestDeviceCode();
+      const deviceCodeResponse =
+        await this.deviceFlow.requestDeviceCode(signal);
       this.logger.debug(
         () => `[DEVICE-FLOW] requestDeviceCode() returned successfully`,
       );
@@ -331,12 +410,14 @@ export class CodexOAuthProvider implements OAuthProvider {
       await this.copyDeviceCodeToClipboard(
         deviceCodeResponse.user_code,
         addItem,
+        signal,
       );
 
       const pollResult = await this.deviceFlow.pollForDeviceToken(
         deviceCodeResponse.device_auth_id,
         deviceCodeResponse.user_code,
         deviceCodeResponse.interval,
+        signal,
       );
 
       this.logger.debug(
@@ -352,6 +433,7 @@ export class CodexOAuthProvider implements OAuthProvider {
         pollResult.authorization_code,
         pollResult.code_verifier,
         redirectUri,
+        signal,
       );
 
       this.logger.debug(
@@ -426,9 +508,10 @@ export class CodexOAuthProvider implements OAuthProvider {
   private async copyDeviceCodeToClipboard(
     userCode: string,
     addItem: OAuthUICallback | undefined,
+    signal?: AbortSignal,
   ): Promise<void> {
     try {
-      await ClipboardService.copyToClipboard(userCode);
+      await waitForAbort(ClipboardService.copyToClipboard(userCode), signal);
       if (addItem) {
         addItem(
           { type: 'info', text: 'Code copied to clipboard!' },
@@ -438,6 +521,9 @@ export class CodexOAuthProvider implements OAuthProvider {
         process.stdout.write('Code copied to clipboard!\n');
       }
     } catch (error) {
+      if (signal?.aborted === true) {
+        throw signal.reason;
+      }
       this.logger.debug(() => `Failed to copy code to clipboard: ${error}`);
     }
   }

@@ -64,6 +64,34 @@ function resolveAccountId(
   return rootAccountId;
 }
 
+function abortReason(signal?: AbortSignal): unknown {
+  return signal?.reason ?? new Error('Codex OAuth operation aborted');
+}
+
+function waitForDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(abortReason(signal));
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timeout);
+      reject(abortReason(signal));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+interface ConsumedResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly text: string;
+}
+
 /**
  * Codex OAuth PKCE flow implementation
  * Implements OAuth 2.0 Authorization Code flow with PKCE for Codex authentication
@@ -71,6 +99,7 @@ function resolveAccountId(
 export class CodexDeviceFlow {
   private logger: IDebugLogger;
   private codeVerifiers: Map<string, string> = new Map();
+  private readonly networkTimeoutMs: number;
 
   private static readonly NO_OP_LOGGER: IDebugLogger = {
     debug: () => {},
@@ -79,10 +108,120 @@ export class CodexDeviceFlow {
     log: () => {},
   };
 
-  constructor(options?: { logger?: IDebugLogger }) {
+  constructor(options?: { logger?: IDebugLogger; networkTimeoutMs?: number }) {
     this.logger = options?.logger ?? CodexDeviceFlow.NO_OP_LOGGER;
+    this.networkTimeoutMs = options?.networkTimeoutMs ?? 30_000;
   }
 
+  private async readResponseBody(
+    response: Response,
+    signal: AbortSignal,
+  ): Promise<string> {
+    if (response.body === null) {
+      return '';
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    try {
+      let chunk = await this.readChunkWithSignal(reader, signal);
+      while (!chunk.done) {
+        if (signal.aborted) {
+          throw signal.reason;
+        }
+        text += decoder.decode(chunk.value, { stream: true });
+        chunk = await this.readChunkWithSignal(reader, signal);
+      }
+      if (signal.aborted) {
+        throw signal.reason;
+      }
+      return text + decoder.decode();
+    } finally {
+      if (signal.aborted) {
+        await reader.cancel(signal.reason).catch(() => undefined);
+      }
+      reader.releaseLock();
+    }
+  }
+
+  private readChunkWithSignal(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    signal: AbortSignal,
+  ): ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']> {
+    return new Promise((resolve, reject) => {
+      const cleanup = (): void => {
+        signal.removeEventListener('abort', onAbort);
+      };
+      const rejectForAbort = (): void => {
+        cleanup();
+        reject(abortReason(signal));
+      };
+      const onAbort = (): void => {
+        reader.cancel(abortReason(signal)).then(rejectForAbort, rejectForAbort);
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      reader.read().then(
+        (result) => {
+          cleanup();
+          resolve(result);
+        },
+        (error: unknown) => {
+          cleanup();
+          reject(error);
+        },
+      );
+      if (signal.aborted) {
+        onAbort();
+      }
+    });
+  }
+
+  private async fetchWithDeadline(
+    input: string | URL,
+    init: RequestInit,
+    signal?: AbortSignal,
+  ): Promise<ConsumedResponse> {
+    const controller = new AbortController();
+    const abort = (): void => controller.abort(abortReason(signal));
+    if (signal?.aborted === true) {
+      throw abortReason(signal);
+    } else {
+      signal?.addEventListener('abort', abort, { once: true });
+    }
+    const timeout = setTimeout(
+      () =>
+        controller.abort(new Error('Codex OAuth network request timed out')),
+      this.networkTimeoutMs,
+    );
+    try {
+      const response = await globalThis.fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+      const text = await this.readResponseBody(response, controller.signal);
+      return { ok: response.ok, status: response.status, text };
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', abort);
+    }
+  }
+
+  private parseSuccessfulJson(
+    response: ConsumedResponse,
+    operation: string,
+  ): unknown {
+    try {
+      return JSON.parse(response.text) as unknown;
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `[FLOW] ${operation} response JSON parsing failed: ${String(error)}`,
+      );
+      throw new Error(
+        `${operation} failed: invalid JSON response (status ${response.status})`,
+      );
+    }
+  }
   /**
    * Build authorization URL for browser-based OAuth flow
    * @param redirectUri Callback URL for OAuth redirect
@@ -136,6 +275,7 @@ export class CodexDeviceFlow {
     authCode: string,
     redirectUri: string,
     state: string,
+    signal?: AbortSignal,
   ): Promise<CodexOAuthToken> {
     this.logger.debug(
       () =>
@@ -159,20 +299,21 @@ export class CodexDeviceFlow {
         `[FLOW] Found PKCE verifier for state, length=${codeVerifier.length}`,
     );
 
-    const tokenResponse = await this.performTokenExchange(
-      authCode,
-      redirectUri,
-      codeVerifier,
-    );
-    const codexToken = this.buildCodexToken(tokenResponse);
-
-    this.codeVerifiers.delete(state);
-    this.logger.debug(
-      () =>
-        `[FLOW] Cleaned up PKCE verifier, remaining: ${this.codeVerifiers.size}`,
-    );
-
-    return codexToken;
+    try {
+      const tokenResponse = await this.performTokenExchange(
+        authCode,
+        redirectUri,
+        codeVerifier,
+        signal,
+      );
+      return this.buildCodexToken(tokenResponse);
+    } finally {
+      this.codeVerifiers.delete(state);
+      this.logger.debug(
+        () =>
+          `[FLOW] Cleaned up PKCE verifier, remaining: ${this.codeVerifiers.size}`,
+      );
+    }
   }
 
   /**
@@ -183,38 +324,43 @@ export class CodexDeviceFlow {
     authCode: string,
     redirectUri: string,
     codeVerifier: string,
+    signal?: AbortSignal,
   ): Promise<z.infer<typeof CodexTokenResponseSchema>> {
     this.logger.debug(
       () =>
         `[FLOW] Making token exchange request to ${CODEX_CONFIG.tokenEndpoint}`,
     );
 
-    const response = await fetch(CODEX_CONFIG.tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
+    const response = await this.fetchWithDeadline(
+      CODEX_CONFIG.tokenEndpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: authCode,
+          redirect_uri: redirectUri,
+          client_id: CODEX_CONFIG.clientId,
+          code_verifier: codeVerifier,
+        }).toString(),
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: authCode,
-        redirect_uri: redirectUri,
-        client_id: CODEX_CONFIG.clientId,
-        code_verifier: codeVerifier,
-      }).toString(),
-    });
+      signal,
+    );
 
     this.logger.debug(
       () => `[FLOW] Token exchange response status: ${response.status}`,
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = response.text;
       this.logger.debug(`[FLOW] Token exchange FAILED: ${errorText}`);
       throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
     }
 
-    const data: unknown = await response.json();
+    const data = this.parseSuccessfulJson(response, 'Token exchange');
     this.logger.debug(
       () =>
         `[FLOW] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
@@ -284,27 +430,34 @@ export class CodexDeviceFlow {
    * @returns New CodexOAuthToken with updated expiry
    * @throws Error if refresh fails or id_token missing
    */
-  async refreshToken(refreshToken: string): Promise<CodexOAuthToken> {
+  async refreshToken(
+    refreshToken: string,
+    signal?: AbortSignal,
+  ): Promise<CodexOAuthToken> {
     this.logger.debug('Refreshing expired token');
 
-    const response = await fetch(CODEX_CONFIG.tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
+    const response = await this.fetchWithDeadline(
+      CODEX_CONFIG.tokenEndpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: CODEX_CONFIG.clientId,
+        }).toString(),
       },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: CODEX_CONFIG.clientId,
-      }).toString(),
-    });
+      signal,
+    );
 
     if (!response.ok) {
       throw new Error(`Token refresh failed: ${response.status}`);
     }
 
-    const data: unknown = await response.json();
+    const data = this.parseSuccessfulJson(response, 'Token refresh');
     const tokenResponse = CodexTokenResponseSchema.parse(data);
 
     // Extract account_id from new id_token if available
@@ -387,7 +540,7 @@ export class CodexDeviceFlow {
    * Request a user code for device authorization flow (browserless authentication)
    * @returns Device code response with user_code and device_auth_id
    */
-  async requestDeviceCode(): Promise<{
+  async requestDeviceCode(signal?: AbortSignal): Promise<{
     device_auth_id: string;
     user_code: string;
     interval: number;
@@ -400,7 +553,7 @@ export class CodexDeviceFlow {
       () => `[DEVICE] Using client_id: ${CODEX_CONFIG.clientId}`,
     );
 
-    const response = await globalThis.fetch(
+    const response = await this.fetchWithDeadline(
       CODEX_CONFIG.deviceAuthUserCodeEndpoint,
       {
         method: 'POST',
@@ -411,6 +564,7 @@ export class CodexDeviceFlow {
           client_id: CODEX_CONFIG.clientId,
         }),
       },
+      signal,
     );
 
     if (!response.ok) {
@@ -419,7 +573,7 @@ export class CodexDeviceFlow {
           'Device code authorization is not enabled for this Codex server',
         );
       }
-      const errorText = await response.text();
+      const errorText = response.text;
       this.logger.debug(
         () => `[DEVICE] User code request FAILED: ${errorText}`,
       );
@@ -428,7 +582,7 @@ export class CodexDeviceFlow {
       );
     }
 
-    const data: unknown = await response.json();
+    const data = this.parseSuccessfulJson(response, 'Device code request');
     // Log only non-sensitive keys to avoid exposing auth data
     this.logger.debug(
       () =>
@@ -466,6 +620,7 @@ export class CodexDeviceFlow {
     deviceAuthId: string,
     userCode: string,
     intervalSeconds: number = 5,
+    signal?: AbortSignal,
   ): Promise<{
     authorization_code: string;
     code_verifier: string;
@@ -483,7 +638,7 @@ export class CodexDeviceFlow {
           `[DEVICE] Polling ${CODEX_CONFIG.deviceAuthTokenEndpoint} with device_auth_id=${deviceAuthId}, user_code=${userCode}`,
       );
 
-      const response = await globalThis.fetch(
+      const response = await this.fetchWithDeadline(
         CODEX_CONFIG.deviceAuthTokenEndpoint,
         {
           method: 'POST',
@@ -495,26 +650,17 @@ export class CodexDeviceFlow {
             user_code: userCode,
           }),
         },
+        signal,
       );
 
-      const responseText = await response.text();
+      const responseText = response.text;
       // Log status only, not the full response body which may contain sensitive data
       this.logger.debug(
         () => `[DEVICE] Poll response status: ${response.status}`,
       );
 
       if (response.ok) {
-        let data: unknown;
-        try {
-          data = JSON.parse(responseText);
-        } catch (parseError) {
-          this.logger.debug(
-            () => `[DEVICE] Failed to parse response as JSON: ${parseError}`,
-          );
-          throw new Error(
-            `Failed to parse device token response: ${responseText}`,
-          );
-        }
+        const data = this.parseSuccessfulJson(response, 'Device token polling');
 
         // Log only non-sensitive keys to avoid exposing auth data
         this.logger.debug(
@@ -538,7 +684,7 @@ export class CodexDeviceFlow {
           () =>
             `[DEVICE] User hasn't authorized yet (${response.status}), waiting ${intervalMs}ms...`,
         );
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        await waitForDelay(intervalMs, signal);
         continue;
       }
 
@@ -552,6 +698,23 @@ export class CodexDeviceFlow {
     throw new Error('Device authorization timed out after 15 minutes');
   }
 
+  private parseDeviceTokenResponse(
+    response: ConsumedResponse,
+  ): z.infer<typeof CodexTokenResponseSchema> {
+    if (!response.ok) {
+      this.logger.debug(`[DEVICE] Token exchange FAILED: ${response.text}`);
+      throw new Error(
+        `Token exchange failed: ${response.status} ${response.text}`,
+      );
+    }
+    const data = this.parseSuccessfulJson(response, 'Token exchange');
+    this.logger.debug(
+      () =>
+        `[DEVICE] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
+    );
+    return CodexTokenResponseSchema.parse(data);
+  }
+
   /**
    * Complete device authorization flow by exchanging authorization code for tokens
    * @param authorizationCode Authorization code from polling response
@@ -563,6 +726,7 @@ export class CodexDeviceFlow {
     authorizationCode: string,
     codeVerifier: string,
     redirectUri: string,
+    signal?: AbortSignal,
   ): Promise<CodexOAuthToken> {
     this.logger.debug(
       () => '[DEVICE] Completing device authorization with code exchange',
@@ -579,49 +743,44 @@ export class CodexDeviceFlow {
         `[DEVICE] Making token exchange request to ${CODEX_CONFIG.tokenEndpoint}`,
     );
 
-    const response = await fetch(CODEX_CONFIG.tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
+    const response = await this.fetchWithDeadline(
+      CODEX_CONFIG.tokenEndpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: authorizationCode,
+          redirect_uri: redirectUri,
+          client_id: CODEX_CONFIG.clientId,
+          code_verifier: codeVerifier,
+        }).toString(),
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: authorizationCode,
-        redirect_uri: redirectUri,
-        client_id: CODEX_CONFIG.clientId,
-        code_verifier: codeVerifier,
-      }).toString(),
-    });
+      signal,
+    );
 
     this.logger.debug(
       () => `[DEVICE] Token exchange response status: ${response.status}`,
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.logger.debug(`[DEVICE] Token exchange FAILED: ${errorText}`);
-      throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
-    }
-
-    const data: unknown = await response.json();
+    const tokenResponse = this.parseDeviceTokenResponse(response);
+    const hasIdToken = typeof tokenResponse.id_token === 'string';
+    const hasRefreshToken = typeof tokenResponse.refresh_token === 'string';
     this.logger.debug(
       () =>
-        `[DEVICE] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
-    );
-
-    // Validate with Zod schema
-    const tokenResponse = CodexTokenResponseSchema.parse(data);
-    this.logger.debug(
-      () =>
-        `[DEVICE] Token response validated: has_id_token=${!!tokenResponse.id_token}, has_refresh_token=${!!tokenResponse.refresh_token}, expires_in=${tokenResponse.expires_in}`,
+        `[DEVICE] Token response validated: has_id_token=${hasIdToken}, has_refresh_token=${hasRefreshToken}, expires_in=${tokenResponse.expires_in}`,
     );
 
     // Extract account_id from id_token JWT
     this.logger.debug('[DEVICE] Extracting account_id from id_token...');
-    const accountId = tokenResponse.id_token
-      ? this.extractAccountIdFromIdToken(tokenResponse.id_token)
-      : this.throwMissingAccountId();
+    const idToken = tokenResponse.id_token;
+    const accountId =
+      typeof idToken === 'string'
+        ? this.extractAccountIdFromIdToken(idToken)
+        : this.throwMissingAccountId();
     this.logger.debug(
       () => `[DEVICE] Extracted account_id: ${accountId.substring(0, 8)}...`,
     );

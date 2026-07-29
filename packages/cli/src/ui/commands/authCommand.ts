@@ -554,6 +554,19 @@ export class AuthCommandExecutor {
       await this.oauthManager.authenticate(provider, bucket, {
         signalAuthCompletion: true,
       });
+      if (bucket) {
+        try {
+          await this.oauthManager.activateNamedLoginBucket(provider, bucket);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Authenticated ${provider}, but failed to activate bucket ${bucket}: ${errorMessage}`,
+          };
+        }
+      }
 
       const bucketInfo = bucket ? ` (bucket: ${bucket})` : '';
       return {

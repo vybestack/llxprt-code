@@ -93,7 +93,11 @@ export interface TokenStore {
    */
   acquireAuthLock(
     provider: string,
-    options?: { waitMs?: number; bucket?: string },
+    options?: {
+      waitMs?: number;
+      bucket?: string;
+      onWait?: () => Promise<boolean>;
+    },
   ): Promise<boolean>;
 
   /**

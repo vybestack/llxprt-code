@@ -28,9 +28,11 @@ const setBrowserProfileAssociationMock = vi.fn();
 const clearBrowserProfileAssociationMock = vi.fn();
 const clearSessionBucketMock = vi.fn();
 const logoutAllBucketsMock = vi.fn();
+const activateNamedLoginBucketMock = vi.fn();
 const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
+  activateNamedLoginBucket: activateNamedLoginBucketMock,
   isOAuthEnabled: vi.fn(),
   isAuthenticated: vi.fn(),
   getAuthStatus: vi.fn(),
@@ -56,6 +58,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     getOAuthTokenMock.mockReset();
     clearSessionBucketMock.mockReset();
     logoutAllBucketsMock.mockReset();
+    activateNamedLoginBucketMock.mockReset();
     executor = new AuthCommandExecutor(mockOAuthManager);
     mockContext = {
       services: {
@@ -694,6 +697,26 @@ describe('AuthCommandExecutor OAuth Support', () => {
         'Invalid profile selector',
       );
     });
+    it('@given named login authenticates but activation fails @then reports post-auth activation failure distinctly', async () => {
+      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
+      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
+      activateNamedLoginBucketMock.mockRejectedValue(
+        new Error('session activation failed'),
+      );
+
+      const result = await executor.execute(
+        mockContext,
+        'claudecode login mybucket',
+      );
+
+      expect(mockAuthenticate).toHaveBeenCalled();
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Authenticated claudecode, but failed to activate bucket mybucket: session activation failed',
+      });
+    });
 
     it('@given traversal selector @when profile selector has path separators @then returns error', async () => {
       const result = await executor.execute(
@@ -774,6 +797,10 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(mockAuthenticate).toHaveBeenCalledWith('claudecode', 'mybucket', {
         signalAuthCompletion: true,
       });
+      expect(activateNamedLoginBucketMock).toHaveBeenCalledWith(
+        'claudecode',
+        'mybucket',
+      );
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
