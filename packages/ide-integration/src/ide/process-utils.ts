@@ -9,10 +9,85 @@ import { promisify } from 'util';
 import os from 'os';
 import path from 'path';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
+import { IDE_EXECUTABLE_NAMES } from './constants.js';
 
 const execAsync = promisify(exec);
 
 const MAX_TRAVERSAL_DEPTH = 32;
+
+/** Lowercased IDE executable basenames for case-insensitive matching. */
+const IDE_EXECUTABLE_BASENAMES: ReadonlySet<string> = new Set(
+  IDE_EXECUTABLE_NAMES.map((name) => name.toLowerCase()),
+);
+
+/**
+ * Splits a Windows process command line into argv-style tokens, respecting
+ * double-quoted segments. A leading quoted path like
+ * `"C:\Program Files\VS Code\Code.exe" --reuse-window` is split so that the
+ * first token is `C:\Program Files\VS Code\Code.exe` (without the quotes),
+ * not the broken `"C:\Program` that a naive whitespace split would yield.
+ */
+function tokenizeCommand(command: string): readonly string[] {
+  const trimmed = command.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+  const tokens: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (const char of trimmed) {
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (/\s/.test(char) && !inQuotes) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current.length > 0) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+/**
+ * Returns true when a process's name or command identifies it as a supported
+ * IDE. Matching is case-insensitive and basename-based so that fully-qualified
+ * Windows paths (e.g. `C:\...\Code.exe`) still match `code.exe`.
+ *
+ * VS Code (and forks) spawn child/utility processes that share the IDE
+ * executable name but carry a `--type=` flag (e.g. `--type=utility`,
+ * `--type=extensionHost`). Only the main window process — which never has
+ * `--type=` as a distinct argv token — owns the companion server / port file,
+ * so child processes are excluded to avoid selecting a PID whose port file
+ * does not exist (the issue #2656 regression).
+ */
+function isIdeProcess(processInfo: ProcessInfo): boolean {
+  // Use path.win32.basename because this function only ever inspects Windows
+  // process data (it is called exclusively from getIdeProcessInfoForWindows).
+  // On a POSIX host (e.g. Linux CI), path.basename does not treat `` as a
+  // separator, so a Windows path like `C:\Program Files\Code.exe` would not
+  // reduce to `Code.exe` and matching would silently fail.
+  const nameBase = path.win32.basename(processInfo.name).toLowerCase();
+  const matchesByName =
+    Boolean(nameBase) && IDE_EXECUTABLE_BASENAMES.has(nameBase);
+  const tokens = tokenizeCommand(processInfo.command);
+  const commandFirstToken = tokens[0] ?? '';
+  const commandBase = path.win32.basename(commandFirstToken).toLowerCase();
+  const matchesByCommand =
+    Boolean(commandBase) && IDE_EXECUTABLE_BASENAMES.has(commandBase);
+  if (!matchesByName && !matchesByCommand) {
+    return false;
+  }
+  // Exclude VS Code fork child/utility processes; the main window has no
+  // --type= token. Matching as a distinct argv token avoids wrongly rejecting
+  // a main process whose path or an unrelated arg contains `--type=` as a
+  // substring (e.g. `Code.exe C:\work\project--type=demo`).
+  return !tokens.some((token) => token.startsWith('--type='));
+}
 
 interface ProcessInfo {
   pid: number;
@@ -220,7 +295,10 @@ async function getIdeProcessInfoForWindows(): Promise<{
   }
 
   // Perform tree traversal in memory.
-  // Strategy: Find the great-grandchild of the root process (pid 0 or non-existent parent).
+  // ancestors[0] is the CLI itself (not an IDE candidate). Walk from the
+  // nearest non-CLI ancestor toward the root, returning the first process
+  // whose name or command identifies a supported IDE. If none match, fall
+  // back to the top-level reachable ancestor to preserve best-effort behavior.
   const ancestors: ProcessInfo[] = [];
   let curr: ProcessInfo | undefined = myProc;
 
@@ -232,10 +310,15 @@ async function getIdeProcessInfoForWindows(): Promise<{
     curr = processMap.get(curr.parentPid);
   }
 
-  if (ancestors.length >= 3) {
-    const target = ancestors[ancestors.length - 3];
-    return { pid: target.pid, command: target.command };
-  } else if (ancestors.length > 0) {
+  // ancestors[0] is the CLI; start matching from its first parent.
+  for (let i = 1; i < ancestors.length; i++) {
+    const ancestor = ancestors[i];
+    if (isIdeProcess(ancestor)) {
+      return { pid: ancestor.pid, command: ancestor.command };
+    }
+  }
+
+  if (ancestors.length > 0) {
     const target = ancestors[ancestors.length - 1];
     return { pid: target.pid, command: target.command };
   }

@@ -171,21 +171,26 @@ vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
     },
   };
 });
-vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
-  const tokenLimit = vi.fn();
-  return {
-    tokenLimit,
-    resolveEffectiveContextLimit: vi.fn(
-      (model: string, userCtx?: number, provCtx?: number) => {
-        const ok = (v: unknown): v is number =>
-          typeof v === 'number' && Number.isFinite(v) && v > 0;
-        if (ok(userCtx)) return userCtx;
-        if (ok(provCtx)) return provCtx;
-        return tokenLimit(model);
-      },
-    ),
-  };
-});
+vi.mock(
+  '@vybestack/llxprt-code-core/core/tokenLimits.js',
+  async (importOriginal) => {
+    const actual = await importOriginal();
+    const tokenLimit = vi.fn();
+    return {
+      ...actual,
+      tokenLimit,
+      resolveEffectiveContextLimit: vi.fn(
+        (model: string, userCtx?: number, provCtx?: number) => {
+          const ok = (v: unknown): v is number =>
+            typeof v === 'number' && Number.isFinite(v) && v > 0;
+          if (ok(userCtx)) return userCtx;
+          if (ok(provCtx)) return provCtx;
+          return tokenLimit(model);
+        },
+      ),
+    };
+  },
+);
 vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
@@ -224,10 +229,13 @@ describe('AgentClient (client.ts)', () => {
       n: number,
     ): Pick<
       ChatSession,
-      'getLastPromptTokenCount' | 'getProjectedPromptBaseline'
+      | 'getLastPromptTokenCount'
+      | 'getProjectedPromptBaseline'
+      | 'getContextLimit'
     > => ({
       getLastPromptTokenCount: vi.fn().mockReturnValue(n),
       getProjectedPromptBaseline: vi.fn().mockReturnValue(n),
+      getContextLimit: vi.fn(() => tokenLimit()),
     });
 
     beforeEach(() => {
@@ -661,27 +669,13 @@ describe('AgentClient (client.ts)', () => {
     });
 
     it("should use the sticky model's token limit for the overflow check", async () => {
-      // Arrange
-      const STICKY_MODEL = 'gemini-1.5-flash';
       const STICKY_MODEL_LIMIT = 1000;
-      const CONFIG_MODEL_LIMIT = 2000;
-
-      // Set up token limits
-      vi.mocked(tokenLimit).mockImplementation((model) => {
-        if (model === STICKY_MODEL) return STICKY_MODEL_LIMIT;
-        return CONFIG_MODEL_LIMIT;
-      });
-
-      // Set the sticky model
-      client['currentSequenceModel'] = STICKY_MODEL;
-
-      // Set token count
+      client['currentSequenceModel'] = 'gemini-1.5-flash';
+      vi.mocked(tokenLimit).mockReturnValue(STICKY_MODEL_LIMIT);
       const lastPromptTokenCount = 900;
       vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
         lastPromptTokenCount,
       );
-
-      // Mock the chat to return the lastPromptTokenCount
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
@@ -720,7 +714,7 @@ describe('AgentClient (client.ts)', () => {
           remainingTokenCount,
         },
       });
-      expect(tokenLimit).toHaveBeenCalledWith(STICKY_MODEL);
+      expect(mockChat.getContextLimit).toHaveBeenCalled();
       expect(mockTurnRunFn).not.toHaveBeenCalled();
     });
 

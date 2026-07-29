@@ -18,6 +18,7 @@ import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 const logger = new DebugLogger('llxprt:bucket:confirmation:ui');
 
@@ -187,7 +188,7 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.AccentCyan}
       padding={1}
       marginY={1}

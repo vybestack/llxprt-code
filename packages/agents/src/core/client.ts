@@ -135,7 +135,6 @@ export class AgentClient implements AgentClientContract {
     runtimeState: AgentRuntimeState,
     historyService?: HistoryService,
     createTurn?: MessageStreamDeps['createTurn'],
-    resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'],
   ) {
     if (!runtimeState.provider || runtimeState.provider === '') {
       throw new Error('AgentRuntimeState must have a valid provider');
@@ -190,7 +189,7 @@ export class AgentClient implements AgentClientContract {
     this.agentHookManager = new AgentHookManager(config);
 
     this.messageStreamOrchestrator = new MessageStreamOrchestrator(
-      this._buildOrchestratorDeps(createTurn, resolveTokenLimit),
+      this._buildOrchestratorDeps(createTurn),
     );
 
     coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
@@ -202,7 +201,6 @@ export class AgentClient implements AgentClientContract {
 
   private _buildOrchestratorDeps(
     createTurn?: MessageStreamDeps['createTurn'],
-    resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'],
   ): MessageStreamDeps {
     return {
       config: this.config,
@@ -237,7 +235,6 @@ export class AgentClient implements AgentClientContract {
       sendMessageStream: (req, sig, pid, trns, isRetry, is413) =>
         this.sendMessageStream(req, sig, pid, trns, isRetry, is413),
       createTurn,
-      resolveTokenLimit,
     };
   }
 

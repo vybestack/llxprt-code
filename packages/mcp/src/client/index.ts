@@ -10,7 +10,6 @@ export {
   MCPServerStatus,
   MCPDiscoveryState,
   getAllMCPServerStatuses,
-  getMCPDiscoveryState,
   getMCPServerStatus,
   updateMCPServerStatus,
   addMCPStatusChangeListener,

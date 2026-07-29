@@ -15,6 +15,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { AuthStatus } from '@vybestack/llxprt-code-providers/auth.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: string | undefined, scope: SettingScope) => void;
@@ -297,7 +298,7 @@ export function AuthDialog({
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}

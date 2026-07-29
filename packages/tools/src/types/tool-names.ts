@@ -30,6 +30,7 @@ export const READ_FILE_TOOL_NAME = 'read_file';
 export const LS_TOOL_NAME = 'list_directory';
 export const MEMORY_TOOL_NAME = 'save_memory';
 export const ACTIVATE_SKILL_TOOL_NAME = 'activate_skill';
+export const ACTIVATE_MCP_SERVER_TOOL_NAME = 'activate_mcp_server';
 
 // File System Tools
 export const READ_FILE_TOOL = 'read_file';

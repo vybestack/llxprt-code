@@ -7,6 +7,7 @@
 import type React from 'react';
 import { Box } from 'ink';
 import { theme } from '../semantic-colors.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 export interface StickyHeaderProps {
   children: React.ReactNode;
@@ -33,7 +34,7 @@ export const StickyHeader: React.FC<StickyHeaderProps> = ({
       width={width}
       stickyChildren={
         <Box
-          borderStyle="round"
+          borderStyle={getBorderStyle('round')}
           flexDirection="column"
           width={width}
           opaque
@@ -48,7 +49,7 @@ export const StickyHeader: React.FC<StickyHeaderProps> = ({
           <Box
             width={separatorWidth}
             borderColor={theme.ui.dark}
-            borderStyle="single"
+            borderStyle={getBorderStyle('single')}
             borderTop={false}
             borderBottom={true}
             borderLeft={false}
@@ -58,7 +59,7 @@ export const StickyHeader: React.FC<StickyHeaderProps> = ({
       }
     >
       <Box
-        borderStyle="round"
+        borderStyle={getBorderStyle('round')}
         width={width}
         borderColor={borderColor}
         borderDimColor={borderDimColor}

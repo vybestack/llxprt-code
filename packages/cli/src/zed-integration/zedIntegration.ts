@@ -16,18 +16,18 @@ import { debugLogger, DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
   fromConfig,
-  getTokenLimitForConfiguredContext,
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
-import { type LoadedSettings } from '../config/settings.js';
 import { randomUUID } from 'crypto';
+import { type LoadedSettings } from '../config/settings.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import {
   buildAvailableModes,
   buildSessionModes,
   buildUsageUpdate,
   describeSessionUpdateForLog,
+  resolveZedContextWindowSize,
 } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
@@ -382,9 +382,8 @@ export class ZedAgent {
         );
       }
     } catch (error) {
-      // buildZedTerminalSetup can throw after fromConfig succeeded; dispose the
-      // already-constructed agent (and any partially-built terminals) so it is
-      // not leaked when this method aborts before returning ownership to caller.
+      // Dispose already-constructed agent/terminals if buildZedTerminalSetup
+      // throws after fromConfig succeeded, avoiding leaks on abort.
       await agent?.dispose().catch(() => undefined);
       await terminalSetup?.terminals.settleAll().catch(() => undefined);
       throw error;
@@ -677,7 +676,7 @@ export class Session {
   ): Promise<void> {
     const update = buildUsageUpdate(
       usage,
-      getTokenLimitForConfiguredContext(this.config.getModel(), this.config),
+      resolveZedContextWindowSize(this.config),
     );
     if (update !== null) await this.sendUpdate(update);
   }
@@ -796,15 +795,13 @@ export class Session {
       this.settleActiveConfirmation();
       await this.terminals
         ?.settleAll()
-        .catch((error) =>
-          this.logger.debug(() => `Terminal cleanup failed: ${error}`),
-        );
+        .catch((e) => this.logger.debug(() => `Terminal cleanup failed: ${e}`));
       this.pendingPrompt?.abort();
       this.pendingPrompt = null;
     } finally {
       await this.agent
         .dispose()
-        .catch((e: unknown) =>
+        .catch((e) =>
           this.logger.debug(() => `Failed to dispose Zed session agent: ${e}`),
         );
     }

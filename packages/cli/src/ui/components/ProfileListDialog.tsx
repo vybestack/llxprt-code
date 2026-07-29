@@ -11,6 +11,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateEnd } from '../utils/responsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 export interface ProfileListItem {
   name: string;
@@ -415,7 +416,7 @@ function buildGrid(
 
 const LoadingState: React.FC = () => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.border.default}
     flexDirection="column"
     padding={1}
@@ -426,7 +427,7 @@ const LoadingState: React.FC = () => (
 
 const EmptyState: React.FC = () => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={SemanticColors.border.default}
     flexDirection="column"
     padding={1}
@@ -620,7 +621,7 @@ const ProfileListBody: React.FC<{
 
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}

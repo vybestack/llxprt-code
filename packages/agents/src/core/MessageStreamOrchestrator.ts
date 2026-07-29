@@ -38,8 +38,6 @@ import {
   estimateRequestTokensStructured,
 } from './clientHelpers.js';
 import { recordTokenEstimate } from './tokenUsageEstimateLogger.js';
-import { getTokenLimitForConfiguredContext } from './contextLimitResolver.js';
-import type { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { resolvePreflightOverflow } from './preflightRecovery.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
@@ -81,7 +79,6 @@ export interface MessageStreamDeps {
     agentId: string,
     providerName: string,
   ) => Turn;
-  resolveTokenLimit?: typeof tokenLimit;
 }
 
 export interface StreamContext {
@@ -305,11 +302,7 @@ export class MessageStreamOrchestrator {
 
     const chat = getChat();
     const effectiveIdentity = getEffectiveModelIdentity();
-    const configuredContextLimit = getTokenLimitForConfiguredContext(
-      effectiveIdentity.model,
-      config,
-      this.deps.resolveTokenLimit,
-    );
+    const configuredContextLimit = chat.getContextLimit();
     const remainingTokenCount =
       configuredContextLimit - chat.getProjectedPromptBaseline();
 

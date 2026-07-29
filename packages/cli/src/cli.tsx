@@ -108,6 +108,7 @@ import {
   __resetUnhandledRejectionStateForTesting,
 } from './session/signalHandlers.js';
 import { startInteractiveUI } from './session/interactiveUI.js';
+import { configureUnicodeSupport } from './ui/utils/unicodeSupport.js';
 
 // Re-exported to preserve the public module API consumed by tests and tooling.
 export { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -190,6 +191,10 @@ async function constructForegroundAgentAndDispatch(
   hasPipedInput: boolean,
   readStdinData: () => Promise<string>,
 ): Promise<void> {
+  // Configure Unicode rendering before any Ink render (including the MCP
+  // initialization spinner inside constructAgentWithSpinner) so that Windows
+  // consoles with non-UTF-8 codepages fall back to ASCII borders/spinners.
+  configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
   const agent = await constructAgentWithSpinner(
     config,
     providerActivation.token,

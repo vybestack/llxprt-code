@@ -745,6 +745,47 @@ Use `/help` to see available MCP prompts alongside built-in commands.
 
 When running in a [sandbox](../sandbox.md), MCP servers must be available **inside the container**. If your server uses `npx`, the npm package must be installable within the sandbox environment.
 
+## Lazy MCP Schema Loading
+
+When you have many MCP servers with large tool schemas, every tool schema is sent to the model on each request. The `mcp.lazy` ephemeral setting defers those schemas so only the servers you actually need are published.
+
+### How It Works
+
+- **Servers stay connected.** MCP discovery, connection, tool registration, prompts, and resources all work exactly as before. Nothing is deferred except the model-facing schema publication.
+- **The model gets an `activate_mcp_server` tool.** Its compact description lists each deferred server's name, tool count, and up to 12 tool names — never full parameter schemas. The model calls this tool with a server name to activate it.
+- **Activation is session-scoped.** Once a server is activated, its full schemas are published for the rest of the session. There is no automatic un-activation; if you want to restart, create a new session.
+- **Eager exceptions.** Use `mcp.eagerServers` to pin specific servers as always-eager even when lazy mode is on.
+
+### Enabling Lazy Mode
+
+```
+/set mcp.lazy true
+```
+
+To keep specific servers eager:
+
+```
+/set mcp.eagerServers ["my-important-server","another-server"]
+```
+
+> `/set` updates the ephemeral settings but does not republish tools in an
+> already-initialized chat. To apply lazy mode, save and reload a named profile
+> (`/profile save lazy-mcp`, then `/profile load lazy-mcp`) or start a new
+> session with that profile. MCP tools are synchronized when the session
+> initializes and on each MCP lifecycle refresh.
+
+### Tradeoffs
+
+Lazy mode **reduces token overhead** for sessions with large MCP tool sets, but the model must spend a turn calling `activate_mcp_server` before it can use a deferred server's tools. For sessions where you always use all MCP tools, eager mode (the default) is better.
+
+### What Is Not Affected
+
+- MCP server connection, transport, and process lifecycle
+- OAuth, trust, and per-tool-call confirmation
+- `includeTools` and `excludeTools` filtering
+- MCP prompts, resources, and server instructions
+- Subagent tool whitelists (`getFunctionDeclarationsFiltered`)
+
 ## Common Issues
 
 **Server won't connect:**

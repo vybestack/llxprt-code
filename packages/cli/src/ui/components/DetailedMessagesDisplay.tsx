@@ -9,6 +9,7 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import type { ConsoleMessageItem } from '../types.js';
 import { MaxSizedBox } from './shared/MaxSizedBox.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface DetailedMessagesDisplayProps {
   messages: ConsoleMessageItem[];
@@ -30,7 +31,7 @@ export const DetailedMessagesDisplay: React.FC<
     <Box
       flexDirection="column"
       marginTop={1}
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.Gray}
       paddingX={1}
       width={width}

@@ -707,6 +707,17 @@ export class ChatSession {
   }
 
   /**
+   * Resolves the effective context-window token limit through the three-tier
+   * precedence (user override → provider limit → model-name lookup) via the
+   * runtime context's ephemerals.contextLimit(). This is the single source
+   * of truth for the agents layer — callers must use this instead of reaching
+   * through Config.getContentGeneratorConfig().providerManager (issue #2815).
+   */
+  getContextLimit(): number {
+    return this.runtimeContext.ephemerals.contextLimit();
+  }
+
+  /**
    * Returns the Config instance from the provider runtime.
    * Used by Turn and other consumers to access ephemeral settings.
    */

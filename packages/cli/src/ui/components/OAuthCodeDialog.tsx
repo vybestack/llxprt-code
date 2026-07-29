@@ -16,6 +16,7 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import type { Key } from '../hooks/useKeypress.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface OAuthCodeDialogProps {
   provider: string;
@@ -109,7 +110,7 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.AccentCyan}
       paddingX={2}
       paddingY={1}

@@ -8,6 +8,10 @@ import {
   type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
   ApprovalMode,
+  resolveEffectiveContextLimit,
+  resolveProviderReportedLimit,
+  resolveUserContextLimit,
+  type Config,
 } from '@vybestack/llxprt-code-core';
 import type {
   AgentEvent,
@@ -321,4 +325,28 @@ export function buildUsageUpdate(
     used,
     size: Math.max(contextWindowSize, used),
   };
+}
+
+/**
+ * Resolves the effective context-window size for Zed usage updates, using the
+ * shared core resolver so there is a single source of truth for the
+ * user-override → provider-limit → model-name precedence (issues #2251 / #2815).
+ */
+export function resolveZedContextWindowSize(config: Config): number {
+  let providerLimit: number | undefined;
+  try {
+    providerLimit = resolveProviderReportedLimit(
+      config
+        .getContentGeneratorConfig()
+        ?.providerManager?.getActiveProvider()
+        ?.getContextLimit?.(),
+    );
+  } catch {
+    providerLimit = undefined;
+  }
+  return resolveEffectiveContextLimit(
+    config.getModel(),
+    resolveUserContextLimit(config.getEphemeralSetting('context-limit')),
+    providerLimit,
+  );
 }

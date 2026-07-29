@@ -10,6 +10,7 @@ import type { RadioSelectItem } from './components/shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from './components/shared/RadioButtonSelect.js';
 import { useKeypress } from './hooks/useKeypress.js';
 import { Colors } from './colors.js';
+import { getBorderStyle } from './contexts/UnicodeRenderingContext.js';
 
 export type IdeIntegrationNudgeResult = {
   userSelection: 'yes' | 'no' | 'dismiss';
@@ -85,7 +86,7 @@ export function IdeIntegrationNudge({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={Colors.AccentYellow}
       padding={1}
       width="100%"

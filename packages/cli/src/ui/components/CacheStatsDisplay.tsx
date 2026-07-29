@@ -16,6 +16,7 @@ import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { theme } from '../semantic-colors.js';
 import { computeCachedTokenRatio } from '../utils/computeStats.js';
+import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 const METRIC_COL_WIDTH = 35;
 const VALUE_COL_WIDTH = 20;
@@ -47,7 +48,7 @@ interface NoStatsBoxProps {
 
 const NoStatsBox: React.FC<NoStatsBoxProps> = ({ message }) => (
   <Box
-    borderStyle="round"
+    borderStyle={getBorderStyle('round')}
     borderColor={theme.border.default}
     paddingY={1}
     paddingX={2}
@@ -84,7 +85,7 @@ export const CacheStatsDisplay: React.FC = () => {
   );
   return (
     <Box
-      borderStyle="round"
+      borderStyle={getBorderStyle('round')}
       borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}

@@ -16,6 +16,10 @@
 
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
+import * as os from 'node:os';
 import {
   executeOpenAIResponsesRequest,
   type ResponsesExecutorDeps,
@@ -23,6 +27,7 @@ import {
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -36,8 +41,11 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 function buildNormalizedOptions(
-  overrides: Partial<NormalizedGenerateChatOptions> = {},
+  overrides: Partial<NormalizedGenerateChatOptions> & {
+    ephemerals?: Record<string, unknown>;
+  } = {},
 ): NormalizedGenerateChatOptions {
+  const { ephemerals = {}, ...optionOverrides } = overrides;
   const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
     settingsService: settings,
@@ -48,7 +56,7 @@ function buildNormalizedOptions(
     runtime,
     settings,
     providerName: 'openai-responses',
-    ephemeralsSnapshot: {},
+    ephemeralsSnapshot: ephemerals,
     fallbackRuntimeId: 'test-runtime',
   });
 
@@ -73,7 +81,7 @@ function buildNormalizedOptions(
     },
   } as unknown as NormalizedGenerateChatOptions;
 
-  return { ...base, ...overrides };
+  return { ...base, ...optionOverrides };
 }
 
 function buildDeps(
@@ -168,5 +176,138 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
         blocks: [{ type: 'text', text: 'Hi' }],
       },
     ]);
+  });
+});
+
+describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
+  let tempDumpDir: string;
+  const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+  const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getCoreSystemPromptAsyncSpy.mockResolvedValue('system prompt');
+    tempDumpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'responses-dump-test-'),
+    );
+    delete process.env['LLXPRT_CACHE_HOME'];
+    process.env['LLXPRT_CONFIG_HOME'] = tempDumpDir;
+  });
+
+  afterEach(async () => {
+    if (originalConfigHome !== undefined) {
+      process.env['LLXPRT_CONFIG_HOME'] = originalConfigHome;
+    } else {
+      delete process.env['LLXPRT_CONFIG_HOME'];
+    }
+    if (originalCacheHome !== undefined) {
+      process.env['LLXPRT_CACHE_HOME'] = originalCacheHome;
+    }
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    if (tempDumpDir) {
+      await fsp.rm(tempDumpDir, { recursive: true, force: true });
+    }
+  });
+
+  async function readDumpedRequest(): Promise<{
+    model?: string;
+    input?: unknown[];
+    instructions?: string;
+  }> {
+    const dumpDir = path.join(tempDumpDir, 'dumps');
+    const entries = await fsp.readdir(dumpDir);
+    const requestFiles = entries.filter((f) => f.endsWith('-request.json'));
+    expect(requestFiles).toHaveLength(1);
+    const raw = await fsp.readFile(
+      path.join(dumpDir, requestFiles[0]),
+      'utf-8',
+    );
+    const parsed = JSON.parse(raw) as {
+      request: {
+        body: { model?: string; input?: unknown[]; instructions?: string };
+      };
+    };
+    return parsed.request.body;
+  }
+
+  it('A3: emits finalized request dump at common pre-transport seam (HTTP)', async () => {
+    const sseBody = encodeSse([
+      'data: {"type":"response.output_text.delta","delta":"OK"}\n\n',
+      'data: [DONE]\n\n',
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, body: sseBody }),
+    );
+
+    const options = buildNormalizedOptions({
+      ephemerals: { dumpcontext: 'on' },
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: 'https://api.openai.com/v1',
+        authToken: 'test-token',
+      },
+    });
+
+    const iterator = executeOpenAIResponsesRequest(options, buildDeps());
+    for await (const _chunk of iterator) {
+      void _chunk;
+    }
+
+    const dumpedBody = await readDumpedRequest();
+    expect(dumpedBody.model).toBe('gpt-5.6-sol');
+    expect(Array.isArray(dumpedBody.input)).toBe(true);
+    expect(dumpedBody.instructions).toBe('system prompt');
+  });
+
+  it('A3: emits finalized request dump when Codex WebSocket path is selected', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const options = buildNormalizedOptions({
+      ephemerals: { dumpcontext: 'on' },
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        authToken: 'codex-token',
+      },
+    });
+
+    const wsTransport: WebSocketTransport = {
+      streamResponse: vi.fn().mockReturnValue(
+        (async function* () {
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'OK' }],
+          };
+        })(),
+      ),
+      close: vi.fn(),
+    };
+
+    const iterator = executeOpenAIResponsesRequest(
+      options,
+      buildDeps({
+        isCodexBaseURL: () => true,
+        getWebSocketTransport: () => wsTransport,
+      }),
+    );
+    const consumed: IContent[] = [];
+    for await (const chunk of iterator) {
+      consumed.push(chunk);
+    }
+
+    expect(consumed).toHaveLength(1);
+    expect(consumed[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'OK' }],
+    });
+    expect(wsTransport.streamResponse).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const dumpedBody = await readDumpedRequest();
+    expect(dumpedBody.model).toBe('gpt-5.6-sol');
+    expect(Array.isArray(dumpedBody.input)).toBe(true);
   });
 });
