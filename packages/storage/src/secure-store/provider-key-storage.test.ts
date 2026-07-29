@@ -392,6 +392,23 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     expect(result).toBe('sk-fallback-value');
   });
 
+  it('removes an existing provider-key fallback after a verified keyring write', async () => {
+    const fallbackStore = new SecureStore('llxprt-code-provider-keys', {
+      keyringLoader: async () => null,
+      fallbackDir: tempDir,
+      fallbackPolicy: 'allow',
+    });
+    await fallbackStore.set('zai', 'stale-provider-key');
+    const fallbackPath = path.join(tempDir, 'zai.enc');
+    await expect(fs.access(fallbackPath)).resolves.toBeUndefined();
+
+    const mockKeyring = createMockKeyring();
+    const storage = createTestStorage(mockKeyring, tempDir);
+    await storage.saveKey('zai', 'current-provider-key');
+
+    await expect(fs.access(fallbackPath)).rejects.toThrow('ENOENT');
+    expect(await storage.getKey('zai')).toBe('current-provider-key');
+  });
   /**
    * @plan PLAN-20260211-SECURESTORE.P11
    * @requirement R9.5

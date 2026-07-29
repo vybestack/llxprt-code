@@ -40,9 +40,8 @@ import {
 // 1. On-disk artifacts:
 //    - Fallback (keyring-absent): set() writes an encrypted `.enc` file via
 //      atomic temp+rename with 0o600 permissions.
-//    - Keyring (keyring-present, non-Linux): set() writes ONLY to the keyring;
-//      the fallback dir stays empty. (On Linux, a backup fallback copy is also
-//      written after a successful keyring write.)
+//    - Keyring (keyring-present, verified write): set() writes only to the
+//      keyring; the fallback dir stays empty on all platforms.
 //
 // 2. Envelope / machine-secret dependence (fallback only):
 //    - Fallback files are AES-256-GCM envelopes (v:1 or v:2). v:2 incorporates
@@ -140,11 +139,10 @@ interface ContractMode {
   readonly makeLoader: () => () => Promise<KeyringAdapter | null>;
 }
 
-// The keyring-present mode uses fallbackPolicy 'deny' so that on Linux (where
-// production writes an encrypted backup after a successful keyring write) the
-// keyring code path is exercised in isolation — reads, list, and has must be
-// satisfied by the keyring, not masked by a fallback artifact. The keyring-
-// absent mode uses 'allow' so the encrypted-file fallback path is engaged.
+// The keyring-present mode uses fallbackPolicy 'deny' so that the keyring code
+// path is exercised in isolation — reads, list, and has must be satisfied by
+// the keyring, not masked by a fallback artifact. The keyring-absent mode
+// uses 'allow' so the encrypted-file fallback path is engaged.
 const SHARED_CONTRACT_MODES: readonly ContractMode[] = [
   {
     mode: 'keyring-present',
@@ -307,72 +305,22 @@ describe('SecureStore keyring-vs-fallback divergence', () => {
     expect(encFiles).toContain('fallback-only.enc');
   });
 
-  // On Linux, a successful keyring write also keeps an encrypted backup copy
-  // in the fallback dir, so the "no fallback artifact" assertion is only valid
-  // on non-Linux platforms. Split into its own skipIf-guarded test so the
-  // unconditional divergence above stays platform-independent.
-  it.skipIf(process.platform === 'linux')(
-    'keyring-present mode leaves no .enc fallback artifact (non-Linux)',
-    async () => {
-      const keyringStore = createStore(
-        'diverge',
-        tempDir,
-        presentLoader,
-        'allow',
-      );
+  // After a successful, verified keyring write, no encrypted fallback
+  // artifact is written on any platform (issue #2556).
+  it('keyring-present mode leaves no .enc fallback artifact after a verified write (all platforms)', async () => {
+    const keyringStore = createStore(
+      'diverge',
+      tempDir,
+      presentLoader,
+      'allow',
+    );
 
-      await keyringStore.set('keyring-only-no-artifact', 'kr');
+    await keyringStore.set('keyring-only-no-artifact', 'kr');
 
-      const files = await fs.readdir(tempDir);
-      const encFiles = files.filter((f) => f.endsWith('.enc'));
-      expect(encFiles).not.toContain('keyring-only-no-artifact.enc');
-    },
-  );
-
-  // Deterministic Linux-only counterpart to the skipIf test above: on Linux a
-  // successful keyring write with fallbackPolicy 'allow' ALSO keeps an
-  // encrypted backup copy in the fallback dir. Asserts the .enc backup is
-  // created, is encrypted (no cleartext), and is decryptable by a separate
-  // keyring-absent SecureStore sharing the same fallback dir.
-  it.runIf(process.platform === 'linux')(
-    'Linux: keyring-present + fallbackPolicy allow creates an encrypted .enc backup that is decryptable cross-store',
-    async () => {
-      const secret = 'linux-keyring-backup-plaintext';
-      const backupKey = 'linux-backup-key';
-
-      // keyring-present + allow → triggers the Linux backup-after-success path.
-      const keyringStore = createStore(
-        'diverge',
-        tempDir,
-        presentLoader,
-        'allow',
-      );
-      await keyringStore.set(backupKey, secret);
-
-      // The backup .enc artifact must exist alongside the keyring write.
-      const files = await fs.readdir(tempDir);
-      const encFiles = files.filter((f) => f.endsWith('.enc'));
-      expect(encFiles).toContain(`${backupKey}.enc`);
-
-      // The backup must be encrypted — cleartext must not appear on disk.
-      const raw = await fs.readFile(
-        path.join(tempDir, `${backupKey}.enc`),
-        'utf8',
-      );
-      expect(raw).not.toContain(secret);
-
-      // A separate keyring-absent SecureStore sharing the fallback dir must be
-      // able to decrypt the backup (proves it is a well-formed envelope, not a
-      // stray artifact). This is the cross-store decryptability contract.
-      const readerStore = createStore(
-        'diverge',
-        tempDir,
-        absentLoader,
-        'allow',
-      );
-      expect(await readerStore.get(backupKey)).toBe(secret);
-    },
-  );
+    const files = await fs.readdir(tempDir);
+    const encFiles = files.filter((f) => f.endsWith('.enc'));
+    expect(encFiles).not.toContain('keyring-only-no-artifact.enc');
+  });
 
   it('keyring-absent write produces an encrypted envelope (cleartext absent, AES-256-GCM)', async () => {
     const fallbackStore = createStore(

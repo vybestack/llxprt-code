@@ -31,6 +31,10 @@ import {
   SALT_LEN,
   type Envelope,
 } from './envelope.js';
+import {
+  clearMismatchedKeyringValue,
+  verifyKeyringWrite,
+} from './keyring-write-verification.js';
 
 let _moduleLogger: StorageLogger = new NullStorageLoggerImpl();
 
@@ -438,19 +442,34 @@ export class SecureStore {
     }
   }
 
-  private async writeFallbackAfterKeyringSuccess(
-    key: string,
-    value: string,
-  ): Promise<void> {
-    try {
-      await this.writeFallbackFile(key, value);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.debug(
-        () =>
-          `[set] key='${key}' fallback backup failed after keyring success (${this.fallbackDir}): ${msg}`,
-      );
+  private async deleteFallbackFiles(key: string): Promise<boolean> {
+    const currentPath = this.getFallbackFilePath(key);
+    const legacyPath = this.getLegacyFallbackFilePath(key);
+    const paths =
+      legacyPath === currentPath ? [currentPath] : [currentPath, legacyPath];
+    let deleted = false;
+    for (const filePath of paths) {
+      try {
+        await fs.unlink(filePath);
+        deleted = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          const msg = error instanceof Error ? error.message : String(error);
+          this.logger.debug(
+            () => `[set] key='${key}' fallback cleanup failed: ${msg}`,
+          );
+        }
+      }
     }
+    return deleted;
+  }
+
+  private unavailableError(message: string): SecureStoreError {
+    return new SecureStoreError(
+      message,
+      'UNAVAILABLE',
+      getRemediation('UNAVAILABLE'),
+    );
   }
 
   // ─── CRUD: set() ─────────────────────────────────────────────────────────
@@ -458,75 +477,75 @@ export class SecureStore {
   async set(key: string, value: string): Promise<void> {
     this.validateKey(key);
 
-    // Try keyring first (directly, not via isKeychainAvailable)
     const adapter = await this.getKeyring();
     let keyringWriteSucceeded = false;
     let keyringWriteError: unknown = null;
     if (adapter !== null) {
       try {
         await adapter.setPassword(this.serviceName, key, value);
-        this.recordKeyringSuccess();
-        this.logger.debug(() => `[set] key='${key}' → keyring (OS keychain)`);
-
         keyringWriteSucceeded = true;
       } catch (error) {
         keyringWriteError = error;
         this.recordKeyringFailure();
-        const msg = error instanceof Error ? error.message : String(error);
         this.logger.debug(
-          () => `[set] key='${key}' keyring write failed: ${msg}`,
+          () =>
+            `[set] key='${key}' keyring write failed: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
 
-    // If keyring succeeded and fallbackPolicy is deny, we're done
-    if (keyringWriteSucceeded && this.fallbackPolicy === 'deny') {
+    if (keyringWriteSucceeded && adapter !== null) {
+      const result = await verifyKeyringWrite(
+        adapter,
+        this.serviceName,
+        key,
+        value,
+      );
+      if (result.verified) {
+        this.recordKeyringSuccess();
+        this.logger.debug(() => `[set] key='${key}' → verified keyring`);
+        await this.deleteFallbackFiles(key);
+        return;
+      }
+
+      this.recordKeyringFailure();
+      if (this.fallbackPolicy === 'deny') {
+        throw this.unavailableError(
+          'Keyring write could not be verified and fallback is denied',
+        );
+      }
+      this.logger.debug(
+        () =>
+          `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
+      );
+      await this.writeFallbackFile(key, value);
+      if (
+        result.hasStaleValue &&
+        !(await clearMismatchedKeyringValue(adapter, this.serviceName, key))
+      ) {
+        throw this.unavailableError(
+          'Mismatched keyring value could not be removed',
+        );
+      }
       return;
     }
 
-    // If keyring unavailable or write failed, check fallback policy
-    if (!keyringWriteSucceeded && this.fallbackPolicy === 'deny') {
+    // Keyring unavailable or write failed.
+    if (this.fallbackPolicy === 'deny') {
       if (adapter !== null && keyringWriteError !== null) {
         const classified = classifyError(keyringWriteError);
         const msg =
           keyringWriteError instanceof Error
             ? keyringWriteError.message
             : String(keyringWriteError);
-        this.logger.debug(
-          () =>
-            `[set] key='${key}' fallback denied after keyring write failure (${classified})`,
-        );
         throw new SecureStoreError(msg, classified, getRemediation(classified));
       }
-
-      this.logger.debug(
-        () => `[set] key='${key}' fallback denied — throwing UNAVAILABLE`,
-      );
-      throw new SecureStoreError(
+      throw this.unavailableError(
         'Keyring is unavailable and fallback is denied',
-        'UNAVAILABLE',
-        'Use --key, install a keyring backend, or change fallbackPolicy to allow',
       );
     }
 
-    const shouldWriteFallback =
-      this.fallbackPolicy === 'allow' &&
-      (!keyringWriteSucceeded || process.platform === 'linux');
-
-    if (!shouldWriteFallback) {
-      return;
-    }
-
-    this.logger.debug(
-      () =>
-        `[set] key='${key}' → encrypted fallback file (${this.fallbackDir})`,
-    );
-
-    if (keyringWriteSucceeded) {
-      await this.writeFallbackAfterKeyringSuccess(key, value);
-      return;
-    }
-
+    this.logger.debug(() => `[set] key='${key}' → fallback file`);
     await this.writeFallbackFile(key, value);
   }
 
@@ -617,30 +636,7 @@ export class SecureStore {
       }
     }
 
-    const filePath = this.getFallbackFilePath(key);
-    try {
-      await fs.unlink(filePath);
-      deletedFromFile = true;
-    } catch (error) {
-      const err = error as NodeJS.ErrnoException;
-      if (err.code !== 'ENOENT') {
-        // Non-missing-file errors
-      }
-    }
-
-    // Always try unlinking the legacy path too if it's different
-    const legacyPath = this.getLegacyFallbackFilePath(key);
-    if (legacyPath !== filePath) {
-      try {
-        await fs.unlink(legacyPath);
-        deletedFromFile = true;
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException;
-        if (err.code !== 'ENOENT') {
-          // Non-missing-file errors
-        }
-      }
-    }
+    deletedFromFile = await this.deleteFallbackFiles(key);
 
     this.logger.debug(
       () =>
