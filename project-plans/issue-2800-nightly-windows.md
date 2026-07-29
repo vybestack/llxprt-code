@@ -180,7 +180,7 @@ remediation:
 | Windows watcher remediation | 2 | +42 | Complete; authoritative Windows validation pending. |
 | PowerShell hook exit-code remediation | 2 | +26 | Complete; authoritative Windows validation pending. |
 | Current-main stale-script guard correction | 1 | +4 | Complete; focused migration test pending. |
-| **Total** | **36 Git diff paths** | **+1939 / -1106 (net +833)** | **Within hard stop (<40 files, <2500 net).** |
+| **Total** | **36 Git diff paths** | **+1938 / -1107 (net +831)** | **Within hard stop (<40 files, <2500 net).** |
 
 ### Scope review (mandatory threshold crossed at >25 paths)
 
@@ -222,7 +222,7 @@ micro-expansions per the user directive:
    the active-surface scanner while continuing to scan active documentation.
 
 **Hard stop check:** the remediation expands the existing 31-path diff to 36
-paths. The final diff has 1,939 additions and 1,106 deletions, for net +833.
+paths. The final diff has 1,938 additions and 1,107 deletions, for net +831.
 This remains below the hard stops of 40 paths and 2,500 net lines. No
 dependencies, lockfiles, public abstractions, quality-tool weakening, or
 `.llxprt/` changes were introduced.

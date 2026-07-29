@@ -388,12 +388,12 @@ function writeReplacementTemp(
     const fd = fs.openSync(tmpPath, 'wx', 0o600);
     try {
       fs.writeFileSync(fd, content, { encoding: 'utf-8' });
+      if ((mode & 0o777) !== 0o600) {
+        fs.chmodSync(tmpPath, mode & 0o777);
+      }
       fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
-    }
-    if ((mode & 0o777) !== 0o600) {
-      fs.chmodSync(tmpPath, mode & 0o777);
     }
   } catch (error) {
     cleanupTemp(tmpPath);
@@ -436,16 +436,18 @@ function copyAndFsyncExclusive(source: string, dest: string): boolean {
     throw error;
   }
   try {
-    fs.writeFileSync(destFd, content);
-    fs.fsyncSync(destFd);
+    try {
+      fs.writeFileSync(destFd, content);
+      if (sourceMode !== 0o600) {
+        fs.chmodSync(dest, sourceMode);
+      }
+      fs.fsyncSync(destFd);
+    } finally {
+      fs.closeSync(destFd);
+    }
   } catch (error) {
-    fs.closeSync(destFd);
     cleanupTemp(dest);
     throw error;
-  }
-  fs.closeSync(destFd);
-  if (sourceMode !== 0o600) {
-    fs.chmodSync(dest, sourceMode);
   }
   return true;
 }

@@ -788,6 +788,9 @@ function archiveSource(dataPath: string, archivePath: string): void {
     const archiveFd = fs.openSync(target, 'wx', 0o600);
     try {
       fs.writeFileSync(archiveFd, sourceContent);
+      if (sourceMode !== 0o600) {
+        fs.chmodSync(target, sourceMode);
+      }
       fs.fsyncSync(archiveFd);
     } finally {
       fs.closeSync(archiveFd);
@@ -801,9 +804,6 @@ function archiveSource(dataPath: string, archivePath: string): void {
       );
     }
     throw error;
-  }
-  if (sourceMode !== 0o600) {
-    fs.chmodSync(target, sourceMode);
   }
   // Archive durability: fsync the parent directory BEFORE unlinking the
   // source so the archive's directory entry is durably established. A crash

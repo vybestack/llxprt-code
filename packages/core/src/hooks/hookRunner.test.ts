@@ -143,7 +143,7 @@ describe('HookRunner', () => {
       };
 
       if (process.platform === 'win32') {
-        it('should preserve command exit codes through PowerShell', async () => {
+        it('should preserve native and PowerShell command failures', async () => {
           mockSpawn.mockProcessOn.mockImplementation(
             (event: string, callback: (code: number) => void) => {
               if (event === 'close') {
@@ -161,7 +161,12 @@ describe('HookRunner', () => {
           expect(spawn).toHaveBeenCalledWith(
             expect.stringMatching(/powershell/i),
             expect.arrayContaining([
-              expect.stringContaining('exit $LASTEXITCODE'),
+              expect.stringContaining('$hookSucceeded = $?'),
+              expect.stringContaining('$hookExitCode = $LASTEXITCODE'),
+              expect.stringContaining(
+                'if (-not $hookSucceeded -and ($null -eq $hookExitCode -or $hookExitCode -eq 0)) { exit 1 }',
+              ),
+              expect.stringContaining('exit $hookExitCode'),
             ]),
             expect.objectContaining({ shell: false }),
           );

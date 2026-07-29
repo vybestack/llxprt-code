@@ -284,20 +284,12 @@ describe('proxy integration (phase 31)', () => {
           token_type: 'Bearer',
         });
         await started.keyStorage.saveKey('openai', 'factory-key');
-        // O11/O12: guarantee fd 3 rather than assuming openSync returns 3.
-        // Open the capability file, then dup2 it to fd 3 using POSIX dup2
-        // available via node:fs on the current process. This is done in-process
-        // so the proxy server's event loop stays responsive (spawnSync would
-        // block it).
         const capabilityFile = path.join(tmpDir, 'capability');
         fs.writeFileSync(capabilityFile, `${capabilityToken}\n`, {
           mode: 0o600,
         });
-        // Open the file on whatever fd openSync returns.
-        const openedFd = fs.openSync(capabilityFile, 'r');
-        // If openedFd is not already 3, use bash to move it to fd 3.
-        // We use a child process via spawn (async) so the parent's event loop
-        // stays responsive for the proxy server.
+        // The bash wrapper assigns the capability file to fd 3. The child stays
+        // asynchronous so the proxy server's event loop remains responsive.
         const { spawn } = await import('node:child_process');
         const { fileURLToPath } = await import('node:url');
         const factoryPath = fileURLToPath(
@@ -319,44 +311,35 @@ describe('proxy integration (phase 31)', () => {
           '  });',
         ].join('');
         const bashScript = `exec 3<${JSON.stringify(capabilityFile)}\nLLXPRT_CREDENTIAL_SOCKET=${JSON.stringify(started.socketPath)} LLXPRT_CAPABILITY_FD=3 exec bun -e ${JSON.stringify(childScript)}`;
-        let exitCode: number;
         let childStdout = '';
         let childStderr = '';
-        try {
-          const child = spawn(
-            'env',
-            [
-              '-u',
-              'BASH_ENV',
-              'bash',
-              '--noprofile',
-              '--norc',
-              '-c',
-              bashScript,
-            ],
-            { encoding: 'utf8' },
-          );
-          child.stdout.on('data', (d) => (childStdout += d.toString()));
-          child.stderr.on('data', (d) => (childStderr += d.toString()));
-          exitCode = await new Promise<number>((resolve, reject) => {
-            const timer = setTimeout(() => {
-              child.kill('SIGKILL');
-              reject(
-                new Error(`Child process timed out. stderr: ${childStderr}`),
-              );
-            }, 15_000);
-            child.on('error', (err) => {
-              clearTimeout(timer);
-              reject(err);
-            });
-            child.on('close', (code) => {
-              clearTimeout(timer);
-              resolve(code ?? -1);
-            });
+        const child = spawn('env', [
+          '-u',
+          'BASH_ENV',
+          'bash',
+          '--noprofile',
+          '--norc',
+          '-c',
+          bashScript,
+        ]);
+        child.stdout.on('data', (d) => (childStdout += d.toString()));
+        child.stderr.on('data', (d) => (childStderr += d.toString()));
+        const exitCode = await new Promise<number>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            child.kill('SIGKILL');
+            reject(
+              new Error(`Child process timed out. stderr: ${childStderr}`),
+            );
+          }, 15_000);
+          child.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
           });
-        } finally {
-          fs.closeSync(openedFd);
-        }
+          child.on('close', (code) => {
+            clearTimeout(timer);
+            resolve(code ?? -1);
+          });
+        });
         expect(exitCode, `child stderr: ${childStderr}`).toBe(0);
         const payload = JSON.parse(childStdout.trim()) as {
           token?: string;

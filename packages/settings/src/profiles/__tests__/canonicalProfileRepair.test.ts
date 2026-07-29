@@ -273,6 +273,9 @@ describe('repairCanonicalProfiles — generalized corrupt profile repair', () =>
       expect(
         fs.readFileSync(path.join(env.canonicalDir, backups[0]), 'utf-8'),
       ).toBe(corruptData);
+      expect(JSON.parse(fs.readFileSync(corruptPath, 'utf-8'))).toStrictEqual(
+        validLegacyProfile(),
+      );
     },
   );
 
