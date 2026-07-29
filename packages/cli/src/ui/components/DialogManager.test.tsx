@@ -214,6 +214,34 @@ describe('useModelDialogHandler', () => {
     expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
   });
 
+  it('does NOT open config dialog when cross-provider setProvider succeeds but setActiveModel fails', async () => {
+    // Partial failure: the provider switch has already committed, but the
+    // model switch fails. The error must be reported and the config dialog
+    // must NOT open (switchSucceeded stays false).
+    fakeRuntime = createFakeRuntime({ setActiveModelShouldFail: true });
+
+    const { result } = renderHook(() =>
+      useModelDialogHandler(
+        fakeRuntime as never,
+        mockAddItem,
+        mockUiActions as never,
+        'openai',
+        {},
+      ),
+    );
+
+    result.current(makeModel('anthropic', 'claude-sonnet'));
+
+    await waitFor(() => {
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error' }),
+      );
+    });
+    expect(fakeRuntime.setProvider).toHaveBeenCalledTimes(1);
+    expect(mockUiActions.openModelConfigDialog).not.toHaveBeenCalled();
+    expect(mockUiActions.closeModelsDialog).toHaveBeenCalledTimes(1);
+  });
+
   it('STILL opens config dialog when addItem fails after successful switch', async () => {
     const recordProviderSwitch = vi.fn(() => {
       throw new Error('recording infrastructure down');

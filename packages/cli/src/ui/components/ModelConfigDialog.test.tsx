@@ -235,7 +235,7 @@ describe('<ModelConfigDialog />', () => {
     expect(lastFrame()).toContain('temperature');
   });
 
-  it('edits a model param inline and shows the new value after save (AC5)', async () => {
+  it('edits a model param inline and stages the new value on Enter (AC5)', async () => {
     const { lastFrame, stdin } = renderWithProviders(
       <ModelConfigDialog {...defaultProps()} />,
     );
@@ -266,12 +266,13 @@ describe('<ModelConfigDialog />', () => {
       });
     }
 
-    // Save
+    // Enter stages the edit — the list row immediately reflects the staged
+    // value even though the runtime is only written on [s]ave.
     await act(async () => {
       stdin.write(ENTER);
     });
 
-    // The rendered output must reflect the new value (not the old 0.7)
+    // The rendered output must reflect the new staged value (not the old 0.7)
     await waitFor(() => {
       expect(lastFrame()).toContain('0.9');
       expect(lastFrame()).not.toContain('0.70.9');
