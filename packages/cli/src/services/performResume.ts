@@ -36,8 +36,8 @@ import {
   type LockHandle,
   type SessionMetadata,
   type SessionSummary,
+  type HistoryService,
 } from '@vybestack/llxprt-code-core';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
