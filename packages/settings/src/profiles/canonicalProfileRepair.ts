@@ -446,6 +446,7 @@ function writeReplacementTemp(
 
 function cleanupTemp(tmpPath: string): void {
   try {
+    fs.chmodSync(tmpPath, 0o600);
     fs.unlinkSync(tmpPath);
   } catch (error) {
     if (hasErrnoCode(error, 'ENOENT')) {
