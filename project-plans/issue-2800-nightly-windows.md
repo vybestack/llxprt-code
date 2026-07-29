@@ -201,7 +201,7 @@ remediation:
 | PowerShell hook exit-code remediation | 2 | +26 | Complete; authoritative Windows validation pending. |
 | Current-main stale-script guard correction | 1 | +4 | Complete; focused migration test pending. |
 | Remaining deterministic Windows portability | 18 | +144 | Complete; 311 focused tests pass with two forks. |
-| **Total** | **58 paths** | **+2960 / -1719 (net +1241)** | **User-approved expansion above the 40-path hard stop; net remains below 2500.** |
+| **Total** | **58 paths** | **+2996 / -1734 (net +1262)** | **User-approved expansion above the 40-path hard stop; net remains below 2500.** |
 
 ### Scope review (mandatory threshold crossed at >25 paths)
 
@@ -245,8 +245,8 @@ micro-expansions per the user directive:
 **Hard stop check:** exact-head nightly runs exposed deterministic Windows
 portability failures across the affected test paths. The user explicitly
 authorized continuing after being told that proper remediation would exceed the
-40-path hard stop. The resulting diff has 58 paths, 2,960 additions, and 1,719
-deletions, for net +1,241. The path expansion is approved and the net line total
+40-path hard stop. The resulting diff has 58 paths, 2,996 additions, and 1,734
+deletions, for net +1,262. The path expansion is approved and the net line total
 remains below 2,500. No dependencies, lockfiles, public abstractions,
 quality-tool weakening, or `.llxprt/` changes were introduced.
 `VITEST_MAX_FORKS=2` is preserved. No ESLint/TypeScript suppressions or severity

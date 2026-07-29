@@ -296,8 +296,11 @@ describe('Orchestrator unit tests against real implementation', () => {
         async (name) => {
           const clean = Buffer.from(name).toString('hex');
           const outsidePath = path.join(os.tmpdir(), `${clean}.ts`);
+          const relativePath = path.relative(WORKSPACE_ROOT, outsidePath);
           expect(
-            path.relative(WORKSPACE_ROOT, outsidePath).startsWith('..'),
+            path.isAbsolute(relativePath) ||
+              relativePath === '..' ||
+              relativePath.startsWith(`..${path.sep}`),
           ).toBe(true);
           const out = await orchestrator.checkFile(outsidePath, 'TYPE_ERROR');
           expect(out).toEqual([]);

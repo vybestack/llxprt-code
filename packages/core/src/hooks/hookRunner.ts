@@ -527,7 +527,7 @@ export class HookRunner {
     const encodedCommand = Buffer.from(command, 'utf8').toString('base64');
     const shellCommand =
       shellConfig.shell === 'powershell'
-        ? `& { $hookCommand = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedCommand}')); $global:LASTEXITCODE = 0; $hookScript = [ScriptBlock]::Create($hookCommand); & $hookScript; $hookSucceeded = $?; $hookExitCode = $LASTEXITCODE; if ($hookSucceeded) { exit 0 }; if ($hookExitCode -ne 0) { exit $hookExitCode }; exit 1 }`
+        ? `& { $hookCommand = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedCommand}')); $global:LASTEXITCODE = 0; $global:__LLXPRT_HOOK_SUCCEEDED = $false; $global:__LLXPRT_HOOK_EXIT_CODE = 0; $hookScript = [ScriptBlock]::Create($hookCommand + [Environment]::NewLine + '$global:__LLXPRT_HOOK_SUCCEEDED = $?; $global:__LLXPRT_HOOK_EXIT_CODE = $LASTEXITCODE'); & $hookScript; if ($global:__LLXPRT_HOOK_SUCCEEDED) { exit 0 }; if ($global:__LLXPRT_HOOK_EXIT_CODE -ne 0) { exit $global:__LLXPRT_HOOK_EXIT_CODE }; exit 1 }`
         : command;
 
     // SECURITY: Use explicit shell executable with shell: false
