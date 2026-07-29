@@ -514,11 +514,11 @@ export class SecureStore {
           'Keyring write could not be verified and fallback is denied',
         );
       }
-      this.logger.debug(
-        () =>
-          `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
-      );
-      await this.writeFallbackFile(key, value);
+      // Clear a stale keyring value BEFORE persisting the fallback. Reads are
+      // keyring-authoritative, so a stale entry that cannot be removed would
+      // shadow the fallback and serve wrong data. Clearing first also means a
+      // clear failure fails cleanly with no orphaned fallback artifact left
+      // on disk while the caller sees UNAVAILABLE.
       if (
         result.hasStaleValue &&
         !(await clearMismatchedKeyringValue(adapter, this.serviceName, key))
@@ -527,6 +527,11 @@ export class SecureStore {
           'Mismatched keyring value could not be removed',
         );
       }
+      this.logger.debug(
+        () =>
+          `[set] key='${key}' → encrypted fallback file (unverified keyring write)`,
+      );
+      await this.writeFallbackFile(key, value);
       return;
     }
 

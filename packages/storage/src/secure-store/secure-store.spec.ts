@@ -181,10 +181,42 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         keyringLoader: async () => mockKeyring,
       });
       expect(await fallbackFileExists('mismatch-key')).toBe(true);
+      // The stale keyring value must have been cleared so it does not shadow
+      // the fallback on subsequent reads.
+      expect(keyringValue).toBeNull();
       expect(await freshStore.get('mismatch-key')).toBe('correct-value');
     });
 
-    it('should retain fallback and reject when a stale keyring value cannot be removed', async () => {
+    it('should throw UNAVAILABLE when keyring read-back returns a stale value and fallbackPolicy is deny', async () => {
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => 'stale-wrong-value',
+        setPassword: async () => {
+          /* accepts but does not replace the stale value */
+        },
+        deletePassword: async () => true,
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'deny',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      const error = await store
+        .set('stale-denied-key', 'correct-value')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('UNAVAILABLE');
+      expect(error.message).toBe(
+        'Keyring write could not be verified and fallback is denied',
+      );
+      expect(await fallbackFileExists('stale-denied-key')).toBe(false);
+    });
+
+    it('should reject without writing a fallback when a stale keyring value cannot be removed', async () => {
+      // The keyring reports a stale value on read-back and refuses deletion.
+      // The stale value must be cleared BEFORE the fallback is written, so a
+      // clear failure must not leave an orphaned fallback artifact on disk.
       const mockKeyring: KeyringAdapter = {
         getPassword: async () => 'stale-wrong-value',
         setPassword: async () => {
@@ -206,14 +238,8 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       expect(error.message).toBe(
         'Mismatched keyring value could not be removed',
       );
-      expect(await fallbackFileExists('stuck-key')).toBe(true);
-
-      const fallbackStore = new SecureStore('test-service', {
-        fallbackDir: tempDir,
-        fallbackPolicy: 'allow',
-        keyringLoader: async () => null,
-      });
-      expect(await fallbackStore.get('stuck-key')).toBe('correct-value');
+      // No fallback artifact should be left on disk after a failed clear.
+      expect(await fallbackFileExists('stuck-key')).toBe(false);
     });
     it('should recover from fallback when keyring read-back throws', async () => {
       const mockKeyring: KeyringAdapter = {

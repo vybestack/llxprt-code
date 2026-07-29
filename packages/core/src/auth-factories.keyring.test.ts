@@ -194,6 +194,10 @@ describe('core-factory keyring-primary OAuth (issue2704 #1)', () => {
   });
 
   // A verified keyring write creates no encrypted fallback on any platform.
+  // The mock adapter stores the written value and returns it on read-back, so
+  // the verification step in SecureStore.set() succeeds and no fallback .enc
+  // artifact is produced. This confirms the platform-neutral write-verification
+  // contract end-to-end through the factory wiring.
   it('does NOT write any encrypted .enc fallback artifacts when the keyring is available (all platforms)', async () => {
     const mockKeyring = createMockKeyring();
     const tokenStore = createKeyringTokenStore(async () => mockKeyring);
@@ -207,6 +211,16 @@ describe('core-factory keyring-primary OAuth (issue2704 #1)', () => {
     };
 
     await tokenStore.saveToken('codex', token);
+
+    // Confirm the mock adapter returns the value it was given — this is the
+    // read-back that makes the keyring write "verified" so no fallback is
+    // needed.
+    const storedKey = `${AUTH_SECURE_STORE_SERVICE}:codex:default`;
+    const readBack = mockKeyring.store.get(storedKey);
+    expect(readBack).toBeDefined();
+    expect(
+      await mockKeyring.getPassword(AUTH_SECURE_STORE_SERVICE, 'codex:default'),
+    ).toBe(readBack);
 
     const fallbackDir = path.join(
       dataHome,
