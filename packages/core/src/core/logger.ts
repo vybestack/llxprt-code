@@ -175,13 +175,6 @@ export class Logger {
     }
   }
 
-  private _writeJsonlSync(entries: LogEntry[]): void {
-    if (!this.logFilePath) {
-      throw new Error('Log file path not set during write attempt.');
-    }
-    writeFileSync(this.logFilePath, this._toJsonl(entries), 'utf-8');
-  }
-
   private _writeJsonlAtomicSync(entries: LogEntry[]): void {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during write attempt.');
