@@ -425,7 +425,17 @@ export class Logger {
 
     try {
       await fs.mkdir(llxprtDir, { recursive: true });
-      await this._pruneOldBackups();
+    } catch (err) {
+      debugLogger.error('Failed to create llxprt directory:', err);
+      this.initialized = false;
+      return;
+    }
+
+    // Pruning is best-effort and never throws — run it outside the
+    // critical try/catch so it cannot block initialization.
+    await this._pruneOldBackups();
+
+    try {
       this.logs = await this._readLogFile();
       const sessionLogs = this.logs.filter(
         (entry) => entry.sessionId === this.sessionId,
