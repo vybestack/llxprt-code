@@ -67,7 +67,6 @@ export interface ClientMockFns {
   mockGenerateContentFn: ReturnType<typeof vi.fn>;
   mockEmbedContentFn: ReturnType<typeof vi.fn>;
   createTurn?: MessageStreamDeps['createTurn'];
-  resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'];
 }
 
 /** Reset all mocks and re-apply the shared service mocks. */
@@ -185,7 +184,6 @@ function setupConfigMock(): ContentGeneratorConfig {
 async function createAndInitClient(
   contentGeneratorConfig: ContentGeneratorConfig,
   createTurn?: MessageStreamDeps['createTurn'],
-  resolveTokenLimit?: MessageStreamDeps['resolveTokenLimit'],
 ): Promise<AgentClient> {
   const mockConfig = new Config({
     sessionId: 'test-session-id',
@@ -201,7 +199,6 @@ async function createAndInitClient(
     runtimeState,
     undefined,
     createTurn,
-    resolveTokenLimit,
   );
   await client.initialize(contentGeneratorConfig);
 
@@ -220,6 +217,7 @@ async function createAndInitClient(
     sendMessageStream: vi.fn(),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+    getContextLimit: vi.fn().mockReturnValue(0),
     getTokenUsageLogger: vi.fn().mockReturnValue({
       isEnabled: () => false,
     }),
@@ -242,7 +240,6 @@ export async function setupAgentClient(
   const client = await createAndInitClient(
     contentGeneratorConfig,
     mockFns.createTurn,
-    mockFns.resolveTokenLimit,
   );
   const mockConfig = client['config'];
   return { client, mockConfig };

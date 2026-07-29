@@ -190,13 +190,13 @@ vi.mock(
           model: string,
           userCtx?: number,
           provCtx?: number,
-          resolveTokenLimit?: (model: string) => number,
+          resolveTok?: (model: string) => number,
         ) => {
           const ok = (v: unknown): v is number =>
             typeof v === 'number' && Number.isFinite(v) && v > 0;
           if (ok(userCtx)) return userCtx;
           if (ok(provCtx)) return provCtx;
-          if (resolveTokenLimit) return resolveTokenLimit(model);
+          if (resolveTok) return resolveTok(model);
           return tokenLimit(model);
         },
       ),
@@ -255,6 +255,7 @@ function buildOverflowScenario(
     getProjectedPromptBaseline: vi
       .fn()
       .mockImplementation(() => currentBaseline),
+    getContextLimit: vi.fn(() => tokenLimit()),
     performCompression:
       scenario.compressionResult instanceof Error
         ? vi.fn().mockRejectedValue(scenario.compressionResult)
@@ -586,6 +587,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         getProjectedPromptBaseline: vi
           .fn()
           .mockImplementation(() => currentBaseline),
+        getContextLimit: vi.fn(() => tokenLimit()),
         performCompression: vi
           .fn()
           .mockImplementation(() =>
@@ -638,14 +640,12 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
 
     it('should use the same configured context limit for initial capacity and post-recovery recheck (issue 2755 A7 exact-limit parity)', async () => {
       const injectedLimit = 842;
-      const injectedResolver = vi.fn(() => injectedLimit);
 
       client = (
         await setupAgentClient({
           mockChatCreateFn,
           mockGenerateContentFn,
           mockEmbedContentFn,
-          resolveTokenLimit: injectedResolver,
         })
       ).client;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
@@ -665,6 +665,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         getProjectedPromptBaseline: vi
           .fn()
           .mockImplementation(() => currentBaseline),
+        getContextLimit: vi.fn().mockReturnValue(injectedLimit),
         performCompression: vi
           .fn()
           .mockImplementation(() =>
@@ -719,6 +720,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         getProjectedPromptBaseline: vi
           .fn()
           .mockImplementation(() => currentBaseline),
+        getContextLimit: vi.fn(() => tokenLimit()),
         performCompression: vi.fn().mockImplementation(() => {
           currentBaseline = fitBaseline;
           return Promise.resolve(PerformCompressionResult.COMPRESSED);

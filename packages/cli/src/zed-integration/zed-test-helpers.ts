@@ -528,7 +528,7 @@ export function buildMinimalConfig(): Config {
     getFileSystemService: () => ({ readTextFile: async () => '' }),
     getMaxSessionTurns: () => 50,
     // usage_update path (issue #1607): sendUsageUpdate resolves the context
-    // window via getTokenLimitForConfiguredContext(model, config).
+    // window via resolveEffectiveContextLimit(model, userLimit, providerLimit).
     getModel: () => 'test-model',
     getContentGeneratorConfig: () => undefined,
     getSessionRecordingService: () => undefined,

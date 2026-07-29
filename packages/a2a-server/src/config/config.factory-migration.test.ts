@@ -147,6 +147,7 @@ function injectStubModelResponse(
     recordCompletedToolCalls: () => {},
     getLastPromptTokenCount: () => 0,
     getProjectedPromptBaseline: () => 0,
+    getContextLimit: () => 0,
   };
 }
 
