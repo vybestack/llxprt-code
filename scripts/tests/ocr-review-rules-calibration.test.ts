@@ -17,6 +17,7 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
   let codeReviewJob;
   let configureRulesStep;
   let parsedRules;
+  let globalRule;
 
   beforeAll(() => {
     const workflowYml = readRootFile(WORKFLOW_PATH);
@@ -34,6 +35,10 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
       parsedRules.rules?.[0]?.rule,
       'first rule should have a non-empty rule string',
     ).toBeTruthy();
+    globalRule = parsedRules.rules.find(
+      (r) => r.path === '**/*' || r.path === '**',
+    );
+    expect(globalRule, 'should have a global path rule').toBeTruthy();
   });
 
   // -----------------------------------------------------------------------
@@ -43,10 +48,6 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
   it('contains a top-level "rules" array with calibration guidance', () => {
     expect(Array.isArray(parsedRules.rules)).toBe(true);
     expect(parsedRules.rules.length).toBeGreaterThanOrEqual(1);
-    const globalRule = parsedRules.rules.find(
-      (r) => r.path === '**/*' || r.path === '**',
-    );
-    expect(globalRule, 'should have a global path rule').toBeTruthy();
     expect(typeof globalRule.rule).toBe('string');
     expect(globalRule.rule.length).toBeGreaterThan(500);
   });
@@ -70,30 +71,30 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
   // -----------------------------------------------------------------------
 
   it('includes senior-engineer review priority guidance', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toContain('senior-engineer review');
     expect(ruleText).toMatch(/Correctness\/logic bugs/i);
     expect(ruleText).toMatch(/Security/i);
   });
 
   it('suppresses JSDoc/documentation-only findings', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/JSDoc\/comment\/documentation-only/i);
   });
 
   it('includes severity calibration', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/Reserve.*high/i);
     expect(ruleText).toMatch(/medium/i);
   });
 
   it('prevents test-wishlist churn', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/test-wishlist churn/i);
   });
 
   it('emphasizes resource-leak findings', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/resource leaks/i);
     expect(ruleText).toMatch(/orphaned processes/i);
   });
@@ -103,32 +104,32 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
   // -----------------------------------------------------------------------
 
   it('suppresses hardcoded build/test-fixture constant findings', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/Hardcoded constants/i);
     expect(ruleText).toMatch(/build-time|test-fixture/i);
   });
 
   it('suppresses diagnostic verbosity findings', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(
       /diagnostic verbosity|Error\/diagnostic verbosity/i,
     );
   });
 
   it('suppresses naming style findings', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/Naming style/i);
     expect(ruleText).toMatch(/actively misleading/i);
   });
 
   it('suppresses extract-to-shared-file modularity refactors', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/Modularity refactors/i);
     expect(ruleText).toMatch(/future reuse|active duplication/i);
   });
 
   it('tightens test-suggestion suppression', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/Test-suggestion suppression/i);
     expect(ruleText).toMatch(/plausible defect/i);
   });
@@ -138,13 +139,13 @@ describe('.github/workflows/ocr-review.yml — OCR rules calibration (issue #267
   // -----------------------------------------------------------------------
 
   it('explicitly protects bug/correctness/security findings from suppression', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/Signal preservation/i);
     expect(ruleText).toMatch(/Do NOT suppress bug, correctness, or security/i);
   });
 
   it('enforces lint/complexity guardrail invariance', () => {
-    const ruleText = parsedRules.rules[0].rule;
+    const ruleText = globalRule.rule;
     expect(ruleText).toMatch(/eslint-disable/i);
     expect(ruleText).toMatch(/complexity\/size threshold/i);
   });
