@@ -498,6 +498,7 @@ describe('DebugLogger', () => {
         expect(logEntry).toHaveProperty('timestamp');
         expect(logEntry).toHaveProperty('runId');
         expect(logEntry).toHaveProperty('pid');
+        writeSpy.mockRestore();
       }),
     );
   });
@@ -555,6 +556,7 @@ describe('DebugLogger', () => {
           // Since minLength: 1, we know args always has elements
           expect(logEntry).toHaveProperty('args');
           expect(logEntry.args).toStrictEqual(args);
+          writeSpy.mockRestore();
         },
       ),
     );
@@ -614,6 +616,7 @@ describe('DebugLogger', () => {
           expect(logEntry).toHaveProperty('message', message);
           expect(logEntry).toHaveProperty('runId');
           expect(logEntry).toHaveProperty('pid');
+          writeSpy.mockRestore();
         },
       ),
     );
@@ -675,6 +678,7 @@ describe('DebugLogger', () => {
         // Verify write was called if enabled
         const writeCallCount = writeSpy.mock.calls.length;
         expect(writeCallCount > 0).toBe(enabled);
+        writeSpy.mockRestore();
       }),
     );
   });

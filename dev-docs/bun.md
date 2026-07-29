@@ -575,6 +575,8 @@ plugins. The shim at `test-setup/augment-bun-vi.ts` augments Bun's injected
   auto-advance fake timers under Bun (see `setWaitForScheduler` in
   `stub-helpers.ts`).
 - `vi.mock` / `vi.doMock` — overridden to pass `importOriginal` to factories
+- `vi.clearAllTimers` — guarded no-op when fake timers are not active
+  (Vitest treats this as a no-op; Bun throws "Fake timers are not active")
 
 The root `bunfig.toml` and migrated workspace configurations preload this
 shim. Workspace paths are relative to that workspace, for example:
@@ -622,8 +624,9 @@ explicitly listed in the manifest (`scripts/bun-test-manifest.ts`). Files
 that are not Bun-compatible are simply absent from the manifest rather than
 excluded at invocation time.
 
-Only `packages/a2a-server`, `packages/cli`, and `packages/providers` define a
-package-level `test:bun` script; each passes its exact manifest workspace name.
+Only `packages/a2a-server`, `packages/cli`, `packages/providers`,
+`packages/telemetry`, and `packages/test-utils` define a package-level
+`test:bun` script; each passes its exact manifest workspace name.
 The native `core` and `test-setup` entries are run through the root runner
 instead: `bun scripts/run_bun_tests.ts --workspace core` and
 `bun scripts/run_bun_tests.ts --workspace test-setup`. The root package's own

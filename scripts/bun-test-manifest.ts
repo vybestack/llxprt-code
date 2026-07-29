@@ -108,6 +108,27 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     files: ['src/BaseProvider.test.ts'],
   },
   {
+    workspace: 'telemetry',
+    preload: 'test-setup-storage-isolation.ts',
+    files: [
+      'src/debug/ConfigurationManager.test.ts',
+      'src/debug/DebugLogger.test.ts',
+      'src/debug/FileOutput.test.ts',
+      'src/telemetry/canonicalConsumer.behavior.test.ts',
+      'src/telemetry/events/api-events.neutral.test.ts',
+      'src/telemetry/loggers.localAggregation.test.ts',
+      'src/telemetry/metrics.test.ts',
+      'src/telemetry/sessionMetricsAggregator.advanced.test.ts',
+      'src/telemetry/sessionMetricsAggregator.test.ts',
+      'src/telemetry/tool-call-decision.test.ts',
+      'src/telemetry/types.test.ts',
+    ],
+  },
+  {
+    workspace: 'test-utils',
+    files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
+  },
+  {
     workspace: 'test-setup',
     cwd: '.',
     files: [
