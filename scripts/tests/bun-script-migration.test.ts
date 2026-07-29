@@ -415,6 +415,10 @@ describe('Issue #2242: active surfaces do not reference deleted migrated scripts
     'dist',
     '.git',
     'project-plans',
+    // Historical plan records (dev-docs/plans) intentionally reference
+    // obsolete scripts when documenting migrations. Scanning them would
+    // flag legitimate historical context as stale references.
+    'plans',
   ]);
 
   const FIXTURE_EXCLUSIONS = new Set<string>([relativeToRepo(thisFile)]);
