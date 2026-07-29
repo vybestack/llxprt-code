@@ -19,6 +19,16 @@ import type { Config } from '../config/config.js';
 import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
 
+function decodeSpawnCommand(args: readonly string[]): string {
+  const shellCommand = String(args.at(-1) ?? '');
+  const encodedCommand = shellCommand.match(
+    /FromBase64String\('([^']+)'\)/,
+  )?.[1];
+  return encodedCommand
+    ? Buffer.from(encodedCommand, 'base64').toString('utf8')
+    : shellCommand;
+}
+
 /** Checks for escaped version of malicious path in ls command. */
 function isMaliciousPathEscaped(s: string): boolean {
   if (!s.startsWith('ls ')) {
@@ -408,14 +418,7 @@ describe('HookRunner', () => {
             }),
           }),
         );
-        const shellCommand = String(spawnCall[1].at(-1));
-        const expandedCommand =
-          process.platform === 'win32'
-            ? Buffer.from(
-                shellCommand.match(/FromBase64String\('([^']+)'\)/)?.[1] ?? '',
-                'base64',
-              ).toString('utf8')
-            : shellCommand;
+        const expandedCommand = decodeSpawnCommand(spawnCall[1]);
         expect(expandedCommand).toContain(
           process.platform === 'win32'
             ? "'/test/project'/hooks/test.sh"
@@ -468,17 +471,9 @@ describe('HookRunner', () => {
 
         // Verify the decoded command contains the escaped malicious path.
         const commandArgs = vi.mocked(spawn).mock.calls[0][1];
-        const shellCommand = Array.isArray(commandArgs)
-          ? String(commandArgs.at(-1))
-          : '';
-        const decodedCommand =
-          process.platform === 'win32'
-            ? Buffer.from(
-                shellCommand.match(/FromBase64String\('([^']+)'\)/)?.[1] ?? '',
-                'base64',
-              ).toString('utf8')
-            : shellCommand;
-        expect(isMaliciousPathEscaped(decodedCommand)).toBe(true);
+        expect(isMaliciousPathEscaped(decodeSpawnCommand(commandArgs))).toBe(
+          true,
+        );
       });
     });
   });
@@ -555,8 +550,7 @@ describe('HookRunner', () => {
             const args = vi.mocked(spawn).mock.calls[
               executionOrder.length
             ][1] as string[];
-            const command = args[args.length - 1]; // Last arg is the command string
-            executionOrder.push(command);
+            executionOrder.push(decodeSpawnCommand(args));
             setImmediate(() => callback(0));
           }
         },

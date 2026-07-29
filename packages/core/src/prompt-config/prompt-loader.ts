@@ -18,6 +18,7 @@ interface ChokidarLike {
       persistent: boolean;
       recursive: boolean;
       ignoreInitial: boolean;
+      usePolling?: boolean;
     },
   ): ChokidarWatcherLike;
 }
@@ -406,6 +407,7 @@ export class PromptLoader {
       persistent: true,
       recursive: true,
       ignoreInitial: true,
+      usePolling: process.platform === 'win32',
     });
 
     watcher.on('add', (filePath: string) => handleChange('add', filePath));

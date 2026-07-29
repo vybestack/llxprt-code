@@ -73,10 +73,13 @@ export function mountGitConfigFiles(
     const containerHostPath = getContainerPath(hostPath);
     args.push('--volume', `${hostPath}:${containerHostPath}:ro`);
 
-    const containerAltPath = path.posix.join(
-      containerHomePath,
-      relPath.split(path.sep).join(path.posix.sep),
-    );
+    const containerAltPath =
+      containerHomePath === hostHomedir
+        ? containerHostPath
+        : path.posix.join(
+            containerHomePath,
+            relPath.split(path.sep).join(path.posix.sep),
+          );
     if (containerAltPath !== containerHostPath) {
       args.push('--volume', `${hostPath}:${containerAltPath}:ro`);
     }
