@@ -516,11 +516,7 @@ function sha256Hex(text: string): string {
 }
 
 function urlPart(url: string, part: 'pathname' | 'host'): string {
-  try {
-    return new URL(url)[part];
-  } catch {
-    return url;
-  }
+  return new URL(url)[part];
 }
 function readDump(filePath: string): DumpArtifact {
   return validateDumpArtifact(
