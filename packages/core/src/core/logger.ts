@@ -5,7 +5,13 @@
  */
 
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
+import {
+  promises as fs,
+  readFileSync,
+  writeFileSync,
+  appendFileSync,
+  renameSync,
+} from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -42,7 +48,7 @@ export interface LogEntry {
   message: string;
 }
 
-function isValidLogEntry(entry: unknown): boolean {
+function isValidLogEntry(entry: unknown): entry is LogEntry {
   if (entry === null || typeof entry !== 'object') {
     return false;
   }
@@ -108,21 +114,195 @@ export class Logger {
     this.sessionId = sessionId;
   }
 
+  private _parseLegacyJsonArray(trimmed: string): LogEntry[] | null {
+    if (!trimmed.startsWith('[')) {
+      return null;
+    }
+    try {
+      const parsedLogs: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsedLogs)) {
+        return parsedLogs.filter(isValidLogEntry);
+      }
+    } catch {
+      // Fall through to JSONL handling / corruption backup below.
+    }
+    return null;
+  }
+
+  private _parseJsonl(trimmed: string): LogEntry[] {
+    return trimmed
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as unknown)
+      .filter(isValidLogEntry);
+  }
+
+  private _toJsonl(entries: LogEntry[]): string {
+    return entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
+  }
+
+  private _readLogFileSync(): LogEntry[] {
+    if (!this.logFilePath) {
+      throw new Error('Log file path not set during read attempt.');
+    }
+    try {
+      const fileContent = readFileSync(this.logFilePath, 'utf-8');
+      const trimmed = fileContent.trim();
+      if (trimmed.length === 0) {
+        return [];
+      }
+      const legacy = this._parseLegacyJsonArray(trimmed);
+      if (legacy !== null) {
+        return legacy;
+      }
+      return this._parseJsonl(trimmed);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'ENOENT') {
+        return [];
+      }
+      if (error instanceof SyntaxError) {
+        debugLogger.debug(
+          `Invalid JSON line in log file ${this.logFilePath}. Backing up and starting fresh.`,
+          error,
+        );
+        this._backupCorruptedLogFileSync('malformed_line');
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private _writeJsonlSync(entries: LogEntry[]): void {
+    if (!this.logFilePath) {
+      throw new Error('Log file path not set during write attempt.');
+    }
+    writeFileSync(this.logFilePath, this._toJsonl(entries), 'utf-8');
+  }
+
+  private _appendJsonlSync(entry: LogEntry): void {
+    if (!this.logFilePath) {
+      throw new Error('Log file path not set during append attempt.');
+    }
+    appendFileSync(this.logFilePath, JSON.stringify(entry) + '\n', 'utf-8');
+  }
+
+  private _backupCorruptedLogFileSync(reason: string): void {
+    if (!this.logFilePath) return;
+    const backupPath = `${this.logFilePath}.${reason}.${Date.now()}.bak`;
+    try {
+      renameSync(this.logFilePath, backupPath);
+      debugLogger.debug(`Backed up corrupted log file to ${backupPath}`);
+    } catch {
+      // Rename failed (e.g., file doesn't exist); primary error already handled.
+    }
+  }
+
+  private _isLegacyFormat(): boolean {
+    if (!this.logFilePath) {
+      return false;
+    }
+    try {
+      const content = readFileSync(this.logFilePath, 'utf-8');
+      return content.trim().startsWith('[');
+    } catch {
+      return false;
+    }
+  }
+
+  private _migrateLegacyToJsonl(): void {
+    if (!this.logFilePath) {
+      return;
+    }
+    const entries = this._readLogFileSync();
+    this._writeJsonlSync(entries);
+  }
+
+  private _updateLogFileSync(entryToAppend: LogEntry): LogEntry | null {
+    if (!this.logFilePath) {
+      debugLogger.debug('Log file path not set. Cannot persist log entry.');
+      throw new Error('Log file path not set during update attempt.');
+    }
+
+    if (this._isLegacyFormat()) {
+      this._migrateLegacyToJsonl();
+    }
+
+    const currentLogsOnDisk = this._readLogFileSync();
+
+    const sessionLogsOnDisk = currentLogsOnDisk.filter(
+      (e) => e.sessionId === entryToAppend.sessionId,
+    );
+    const nextMessageIdForSession =
+      sessionLogsOnDisk.length > 0
+        ? Math.max(...sessionLogsOnDisk.map((e) => e.messageId)) + 1
+        : 0;
+
+    entryToAppend.messageId = nextMessageIdForSession;
+
+    const entryExists = currentLogsOnDisk.some(
+      (e) =>
+        e.sessionId === entryToAppend.sessionId &&
+        e.messageId === entryToAppend.messageId &&
+        e.timestamp === entryToAppend.timestamp &&
+        e.message === entryToAppend.message,
+    );
+
+    if (entryExists) {
+      debugLogger.debug(
+        `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
+      );
+      this.logs = currentLogsOnDisk;
+      return null;
+    }
+
+    this._appendJsonlSync(entryToAppend);
+    currentLogsOnDisk.push(entryToAppend);
+    this.logs = currentLogsOnDisk;
+    return entryToAppend;
+  }
+
+  private _updateLogFile(entryToAppend: LogEntry): Promise<LogEntry | null> {
+    try {
+      return Promise.resolve(this._updateLogFileSync(entryToAppend));
+    } catch (error) {
+      debugLogger.debug('Error appending to log file:', error);
+      return Promise.reject(error as Error);
+    }
+  }
+
   private async _readLogFile(): Promise<LogEntry[]> {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during read attempt.');
     }
     try {
       const fileContent = await fs.readFile(this.logFilePath, 'utf-8');
-      const parsedLogs = JSON.parse(fileContent);
-      if (!Array.isArray(parsedLogs)) {
-        debugLogger.debug(
-          `Log file at ${this.logFilePath} is not a valid JSON array. Starting with empty logs.`,
-        );
-        await this._backupCorruptedLogFile('malformed_array');
+      const trimmed = fileContent.trim();
+      if (trimmed.length === 0) {
         return [];
       }
-      return parsedLogs.filter(isValidLogEntry) as LogEntry[];
+      // Legacy format: a single pretty-printed JSON array (pre-JSONL).
+      // Read-only tolerance so existing on-disk files keep working; new
+      // writes always append JSONL lines.
+      const legacy = this._parseLegacyJsonArray(trimmed);
+      if (legacy !== null) {
+        return legacy;
+      }
+      // JSONL format: one JSON object per line.
+      try {
+        return this._parseJsonl(trimmed);
+      } catch (parseError) {
+        if (parseError instanceof SyntaxError) {
+          debugLogger.debug(
+            `Invalid JSON line in log file ${this.logFilePath}. Backing up and starting fresh.`,
+            parseError,
+          );
+          await this._backupCorruptedLogFile('malformed_line');
+          return [];
+        }
+        throw parseError;
+      }
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
@@ -167,17 +347,7 @@ export class Logger {
 
     try {
       await fs.mkdir(llxprtDir, { recursive: true });
-      let fileExisted = true;
-      try {
-        await fs.access(this.logFilePath);
-      } catch {
-        // File doesn't exist yet.
-        fileExisted = false;
-      }
       this.logs = await this._readLogFile();
-      if (!fileExisted && this.logs.length === 0) {
-        await fs.writeFile(this.logFilePath, '[]', 'utf-8');
-      }
       const sessionLogs = this.logs.filter(
         (entry) => entry.sessionId === this.sessionId,
       );
@@ -189,72 +359,6 @@ export class Logger {
     } catch (err) {
       debugLogger.error('Failed to initialize logger:', err);
       this.initialized = false;
-    }
-  }
-
-  private async _updateLogFile(
-    entryToAppend: LogEntry,
-  ): Promise<LogEntry | null> {
-    if (!this.logFilePath) {
-      debugLogger.debug('Log file path not set. Cannot persist log entry.');
-      throw new Error('Log file path not set during update attempt.');
-    }
-
-    let currentLogsOnDisk: LogEntry[];
-    try {
-      currentLogsOnDisk = await this._readLogFile();
-    } catch (readError) {
-      debugLogger.debug(
-        'Critical error reading log file before append:',
-        readError,
-      );
-      throw readError;
-    }
-
-    // Determine the correct messageId for the new entry based on current disk state for its session
-    const sessionLogsOnDisk = currentLogsOnDisk.filter(
-      (e) => e.sessionId === entryToAppend.sessionId,
-    );
-    const nextMessageIdForSession =
-      sessionLogsOnDisk.length > 0
-        ? Math.max(...sessionLogsOnDisk.map((e) => e.messageId)) + 1
-        : 0;
-
-    // Update the messageId of the entry we are about to append
-    entryToAppend.messageId = nextMessageIdForSession;
-
-    // Check if this entry (same session, same *recalculated* messageId, same content) might already exist
-    // This is a stricter check for true duplicates if multiple instances try to log the exact same thing
-    // at the exact same calculated messageId slot.
-    const entryExists = currentLogsOnDisk.some(
-      (e) =>
-        e.sessionId === entryToAppend.sessionId &&
-        e.messageId === entryToAppend.messageId &&
-        e.timestamp === entryToAppend.timestamp && // Timestamps are good for distinguishing
-        e.message === entryToAppend.message,
-    );
-
-    if (entryExists) {
-      debugLogger.debug(
-        `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
-      );
-      this.logs = currentLogsOnDisk; // Ensure in-memory is synced with disk
-      return null; // Indicate that no new entry was actually added
-    }
-
-    currentLogsOnDisk.push(entryToAppend);
-
-    try {
-      await fs.writeFile(
-        this.logFilePath,
-        JSON.stringify(currentLogsOnDisk, null, 2),
-        'utf-8',
-      );
-      this.logs = currentLogsOnDisk;
-      return entryToAppend; // Return the successfully appended entry
-    } catch (error) {
-      debugLogger.debug('Error writing to log file:', error);
-      throw error;
     }
   }
 

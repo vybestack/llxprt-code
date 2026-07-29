@@ -69,13 +69,31 @@ async function cleanupLogAndCheckpointFiles() {
 async function readLogFile(): Promise<LogEntry[]> {
   try {
     const content = await fs.readFile(TEST_LOG_FILE_PATH, 'utf-8');
-    return JSON.parse(content) as LogEntry[];
+    const trimmed = content.trim();
+    if (trimmed.length === 0) {
+      return [];
+    }
+    // Legacy format: a single pretty-printed JSON array.
+    if (trimmed.startsWith('[')) {
+      return JSON.parse(trimmed) as LogEntry[];
+    }
+    // JSONL format: one JSON object per line.
+    return trimmed
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as LogEntry);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return [];
     }
     throw error;
   }
+}
+
+/** Serialize an array of LogEntry objects to the JSONL on-disk format. */
+function toJsonl(entries: LogEntry[]): string {
+  return entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
 }
 
 vi.mock('../utils/session.js', () => ({
@@ -125,18 +143,19 @@ describe('Logger', () => {
   });
 
   describe('initialize', () => {
-    it('should create .llxprt directory and an empty log file if none exist', async () => {
+    it('should create .llxprt directory if none exist and not create an empty log file', async () => {
       const dirExists = await fs
         .access(TEST_LLXPRT_DIR)
         .then(() => true)
         .catch(() => false);
       expect(dirExists).toBe(true);
 
+      // JSONL: no empty log file is created until the first message is logged.
       const fileExists = await fs
         .access(TEST_LOG_FILE_PATH)
         .then(() => true)
         .catch(() => false);
-      expect(fileExists).toBe(true);
+      expect(fileExists).toBe(false);
 
       const logContent = await readLogFile();
       expect(logContent).toStrictEqual([]);
@@ -168,10 +187,7 @@ describe('Logger', () => {
           message: 'Msg2',
         },
       ];
-      await fs.writeFile(
-        TEST_LOG_FILE_PATH,
-        JSON.stringify(existingLogs, null, 2),
-      );
+      await fs.writeFile(TEST_LOG_FILE_PATH, toJsonl(existingLogs));
       const newLogger = new Logger(
         currentSessionId,
         new Storage(process.cwd()),
@@ -192,10 +208,7 @@ describe('Logger', () => {
           message: 'OldMsg',
         },
       ];
-      await fs.writeFile(
-        TEST_LOG_FILE_PATH,
-        JSON.stringify(existingLogs, null, 2),
-      );
+      await fs.writeFile(TEST_LOG_FILE_PATH, toJsonl(existingLogs));
       const newLogger = new Logger('a-new-session', new Storage(process.cwd()));
       await newLogger.initialize();
       expect(newLogger['messageId']).toBe(0);
@@ -215,8 +228,9 @@ describe('Logger', () => {
       expect(logsFromFile.length).toBe(1);
     });
 
-    it('should handle invalid JSON in log file by backing it up and starting fresh', async () => {
-      await fs.writeFile(TEST_LOG_FILE_PATH, 'invalid json');
+    it('should handle malformed JSONL in log file by backing it up and starting fresh', async () => {
+      // A JSONL line that cannot be parsed triggers a backup.
+      await fs.writeFile(TEST_LOG_FILE_PATH, 'this is not valid json\n');
       const consoleDebugSpy = vi
         .spyOn(debugLogger, 'debug')
         .mockImplementation(() => {});
@@ -225,7 +239,7 @@ describe('Logger', () => {
       await newLogger.initialize();
 
       expect(consoleDebugSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid JSON in log file'),
+        expect.stringContaining('Invalid JSON line in log file'),
         expect.any(SyntaxError),
       );
       const logContent = await readLogFile();
@@ -234,37 +248,96 @@ describe('Logger', () => {
       expect(
         dirContents.some(
           (f) =>
-            f.startsWith(LOG_FILE_NAME + '.invalid_json') && f.endsWith('.bak'),
+            f.startsWith(LOG_FILE_NAME + '.malformed_line') &&
+            f.endsWith('.bak'),
         ),
       ).toBe(true);
       newLogger.close();
     });
-
-    it('should handle non-array JSON in log file by backing it up and starting fresh', async () => {
+    it('should migrate a legacy pretty-printed JSON array to JSONL on first write', async () => {
+      const currentSessionId = 'session-legacy';
+      const existingLogs: LogEntry[] = [
+        {
+          sessionId: currentSessionId,
+          messageId: 0,
+          timestamp: new Date('2025-01-01T10:00:00.000Z').toISOString(),
+          type: MessageSenderType.USER,
+          message: 'Legacy1',
+        },
+        {
+          sessionId: currentSessionId,
+          messageId: 1,
+          timestamp: new Date('2025-01-01T10:00:05.000Z').toISOString(),
+          type: MessageSenderType.USER,
+          message: 'Legacy2',
+        },
+      ];
+      // Write legacy format: pretty-printed JSON array
       await fs.writeFile(
         TEST_LOG_FILE_PATH,
-        JSON.stringify({ not: 'an array' }),
+        JSON.stringify(existingLogs, null, 2),
+        'utf-8',
       );
-      const consoleDebugSpy = vi
-        .spyOn(debugLogger, 'debug')
-        .mockImplementation(() => {});
+
+      const newLogger = new Logger(
+        currentSessionId,
+        new Storage(process.cwd()),
+      );
+      await newLogger.initialize();
+      expect(newLogger['messageId']).toBe(2);
+
+      // First write should trigger migration and append as JSONL
+      await newLogger.logMessage(MessageSenderType.USER, 'New1');
+      await newLogger.logMessage(MessageSenderType.USER, 'New2');
+
+      // Reopen and verify all entries parse as JSONL
+      const logsFromFile = await readLogFile();
+      expect(logsFromFile).toHaveLength(4);
+      expect(logsFromFile[0].message).toBe('Legacy1');
+      expect(logsFromFile[1].message).toBe('Legacy2');
+      expect(logsFromFile[2].message).toBe('New1');
+      expect(logsFromFile[3].message).toBe('New2');
+
+      // Confirm the file was actually migrated to JSONL on disk, not merely
+      // readable via the dual-format-tolerant helper above.
+      const rawContent = await fs.readFile(TEST_LOG_FILE_PATH, 'utf-8');
+      expect(rawContent.trim().startsWith('[')).toBe(false);
+      expect(rawContent.trim().split('\n').filter(Boolean)).toHaveLength(4);
+
+      // Verify no corruption backup was created
+      const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
+      expect(dirContents.some((f) => f.includes('.malformed_line'))).toBe(
+        false,
+      );
+      expect(dirContents.some((f) => f.includes('.invalid_json'))).toBe(false);
+
+      newLogger.close();
+    });
+
+    it('should migrate the legacy empty array "[]" to JSONL on first write', async () => {
+      await fs.writeFile(TEST_LOG_FILE_PATH, '[]', 'utf-8');
 
       const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
       await newLogger.initialize();
+      expect(newLogger['messageId']).toBe(0);
 
-      expect(consoleDebugSpy).toHaveBeenCalledWith(
-        `Log file at ${TEST_LOG_FILE_PATH} is not a valid JSON array. Starting with empty logs.`,
-      );
-      const logContent = await readLogFile();
-      expect(logContent).toStrictEqual([]);
+      await newLogger.logMessage(MessageSenderType.USER, 'First');
+      await newLogger.logMessage(MessageSenderType.USER, 'Second');
+
+      const logsFromFile = await readLogFile();
+      expect(logsFromFile).toHaveLength(2);
+      expect(logsFromFile[0].message).toBe('First');
+      expect(logsFromFile[1].message).toBe('Second');
+
+      const rawContent = await fs.readFile(TEST_LOG_FILE_PATH, 'utf-8');
+      expect(rawContent.trim().startsWith('[')).toBe(false);
+
       const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
-      expect(
-        dirContents.some(
-          (f) =>
-            f.startsWith(LOG_FILE_NAME + '.malformed_array') &&
-            f.endsWith('.bak'),
-        ),
-      ).toBe(true);
+      expect(dirContents.some((f) => f.includes('.malformed_line'))).toBe(
+        false,
+      );
+      expect(dirContents.some((f) => f.includes('.invalid_json'))).toBe(false);
+
       newLogger.close();
     });
   });
@@ -358,22 +431,36 @@ describe('Logger', () => {
       logger2.close();
     });
 
-    it('should not throw, not increment messageId, and log error if writing to file fails', async () => {
-      vi.spyOn(fs, 'writeFile').mockRejectedValueOnce(new Error('Disk full'));
+    it('should not throw, not increment messageId, and log error if appending to file fails', async () => {
       const consoleDebugSpy = vi
         .spyOn(debugLogger, 'debug')
         .mockImplementation(() => {});
       const initialMessageId = logger['messageId'];
       const initialLogCount = logger['logs'].length;
 
+      // Write a message first so the file exists
+      await logger.logMessage(MessageSenderType.USER, 'setup message');
+      expect(logger['messageId']).toBe(initialMessageId + 1);
+
+      // Make the log file path a directory so appendFileSync fails
+      const logFilePath = logger['logFilePath']!;
+      await fs.unlink(logFilePath);
+      await fs.mkdir(logFilePath);
+
       await logger.logMessage(MessageSenderType.USER, 'test fail write');
 
       expect(consoleDebugSpy).toHaveBeenCalledWith(
-        'Error writing to log file:',
+        'Error appending to log file:',
         expect.any(Error),
       );
-      expect(logger['messageId']).toBe(initialMessageId); // Not incremented
-      expect(logger['logs'].length).toBe(initialLogCount); // Log not added to in-memory cache
+      // The failed message did not further increment messageId beyond the setup message's increment
+      expect(logger['messageId']).toBe(initialMessageId + 1);
+      // The failed message was not added to the in-memory cache (only the setup message was)
+      expect(logger['logs'].length).toBe(initialLogCount + 1);
+
+      // Restore: remove the directory and recreate the file
+      await fs.rmdir(logFilePath);
+      await fs.writeFile(logFilePath, '', 'utf-8');
     });
   });
 
