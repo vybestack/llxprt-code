@@ -67,6 +67,8 @@ const TRANSIENT_ERROR_PHRASES = [
   'network error',
   'request aborted',
   'request timeout',
+  'the operation timed out',
+  'operation timed out',
   'stream closed',
   'stream prematurely closed',
   'read econnreset',
