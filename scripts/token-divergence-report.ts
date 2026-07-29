@@ -154,7 +154,10 @@ function validateTargetRows(
     (_, i) => i + 1,
   );
   const ids = [...rows.map((r) => r.corpusId)].sort((a, b) => a - b);
-  if (ids.some((id, i) => id !== expectedIds[i]))
+  if (
+    ids.length !== expectedIds.length ||
+    ids.some((id, i) => id !== expectedIds[i])
+  )
     throw new Error(
       `Target "${target.key}" has duplicate or missing corpus IDs`,
     );

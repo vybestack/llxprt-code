@@ -555,6 +555,7 @@ describe('corpus', () => {
   it('IDs 1-20 train, 21-25 heldout; stable version', () => {
     for (const i of getCorpus())
       expect(i.split).toBe(i.id <= 20 ? 'train' : 'heldout');
+    expect(() => getCorpusItem(Number.NaN)).toThrow('out of range');
     expect(CORPUS_VERSION).toBe('2026-07-28-v1');
   });
 });

@@ -100,7 +100,7 @@ export function getCorpus(): readonly CorpusItem[] {
 }
 
 export function getCorpusItem(id: number): CorpusItem {
-  if (id < 1 || id > HOLDOUT_END) {
+  if (!Number.isInteger(id) || id < 1 || id > HOLDOUT_END) {
     throw new Error(`Corpus item id ${id} out of range [1, ${HOLDOUT_END}]`);
   }
   return buildItem(id);

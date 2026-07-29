@@ -211,7 +211,9 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
   });
 
   async function readDumpedRequest(): Promise<{
-    body: { model?: string; input?: unknown[]; instructions?: string };
+    model?: string;
+    input?: unknown[];
+    instructions?: string;
   }> {
     const dumpDir = path.join(tempDumpDir, 'dumps');
     const entries = await fsp.readdir(dumpDir);
