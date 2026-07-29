@@ -110,6 +110,8 @@ describe('DebugLogger', () => {
 
     // Secondary timing check: generous budget for CI runner variance.
     // The previous 3 ms bound was routinely exceeded on shared GitHub runners.
+    // Bun's test runner adds slightly more per-call overhead than Vitest,
+    // so the budget is set to 15 ms to avoid false flakes.
     const start = performance.now();
     for (let i = 0; i < 1000; i++) {
       logger.log('test message');
@@ -117,7 +119,7 @@ describe('DebugLogger', () => {
     const duration = performance.now() - start;
 
     expect(writeSpy).not.toHaveBeenCalled();
-    expect(duration).toBeLessThan(10);
+    expect(duration).toBeLessThan(15);
   });
 
   /**
@@ -473,6 +475,7 @@ describe('DebugLogger', () => {
         // Verify that when disabled, no write operation occurs
         expect(writeSpy).not.toHaveBeenCalled();
         expect(logger.enabled).toBe(false);
+        writeSpy.mockRestore();
       }),
     );
   });

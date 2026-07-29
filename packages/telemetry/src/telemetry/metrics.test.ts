@@ -52,8 +52,8 @@ vi.mock('@opentelemetry/api', () => ({
   },
 }));
 
-const { FileOperation } = await import('./metrics.js');
 const {
+  FileOperation,
   initializeMetrics,
   recordTokenUsageMetrics,
   recordFileOperationMetric,
