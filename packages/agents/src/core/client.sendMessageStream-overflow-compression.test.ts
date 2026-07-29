@@ -255,6 +255,7 @@ function buildOverflowScenario(
     getProjectedPromptBaseline: vi
       .fn()
       .mockImplementation(() => currentBaseline),
+    getContextLimit: vi.fn(() => tokenLimit()),
     performCompression:
       scenario.compressionResult instanceof Error
         ? vi.fn().mockRejectedValue(scenario.compressionResult)
@@ -586,6 +587,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         getProjectedPromptBaseline: vi
           .fn()
           .mockImplementation(() => currentBaseline),
+        getContextLimit: vi.fn(() => tokenLimit()),
         performCompression: vi
           .fn()
           .mockImplementation(() =>
@@ -718,6 +720,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
         getProjectedPromptBaseline: vi
           .fn()
           .mockImplementation(() => currentBaseline),
+        getContextLimit: vi.fn(() => tokenLimit()),
         performCompression: vi.fn().mockImplementation(() => {
           currentBaseline = fitBaseline;
           return Promise.resolve(PerformCompressionResult.COMPRESSED);
