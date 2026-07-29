@@ -1,0 +1,30 @@
+
+                                                                                                   █
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│ Model Configuration                                                          │
+│ anthropic / claude-haiku-4-5                                                 │
+│                                                                              │
+│                                                                              │
+│ Model Parameters                                                             │
+│ ○ temperature           1           Sampling randomness (0.0-2.0)            │
+│ ○ max_tokens            (not set)   Maximum output tokens                    │
+│ ○ top_p                 (not set)   Nucleus sampling (0.0-1.0)               │
+│ ○ top_k                 (not set)   Top-k sampling                           │
+│ ○ frequency_penalty     (not set)   Penalize frequent tokens                 │
+│ ○ presence_penalty      (not set)   Penalize present tokens                  │
+│                                                                              │
+│ Model Behavior                                                               │
+│ ○ reasoning.enabled     (not set)   Enable thinking/reasoning (true/false)   │
+│ ○ reasoning.effort      (not set)   minimal|low|medium|high|xhigh|max        │
+│ ○ context-limit         200000      Positive integer token cap               │
+│ ○ streaming             (not set)   enabled|disabled                         │
+│ ○ prompt-caching        (not set)   off|5m|1h|24h                            │
+│                                                                              │
+│ Edit temperature (Enter=save Esc=cancel)                                     │
+│ > 1                                                                          │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+(issue125*)                                               Context: 0.0k/200k | TPM: 0.00 | Wait: 0ms
+/Volumes/XS1000/acoliver/projects/llxprt/branch-9/ll [no sandbox (see    zai:claude-haiku | Tokens:
+xprt-code                                            /docs)]             4-5

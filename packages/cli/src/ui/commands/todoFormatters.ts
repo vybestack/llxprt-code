@@ -6,7 +6,11 @@
 
 import * as fs from 'fs';
 import type { Todo } from '@vybestack/llxprt-code-core';
-import { LIST_ITEM_LABEL, type TodoSessionFile } from './todoOperations.js';
+import {
+  LIST_ITEM_LABEL,
+  parseTodoFileContent,
+  type TodoSessionFile,
+} from './todoOperations.js';
 
 /**
  * Get the icon for a task-list status.
@@ -94,7 +98,7 @@ export function formatSessionEntry(
 ): string[] {
   try {
     const content = fs.readFileSync(file.path, 'utf8');
-    const todos: Todo[] = JSON.parse(content);
+    const todos = parseTodoFileContent(content);
 
     const counts = countStatuses(todos);
     const firstTitle = todos[0]?.content || '(empty)';

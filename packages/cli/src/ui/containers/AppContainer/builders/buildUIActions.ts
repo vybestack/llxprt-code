@@ -131,6 +131,10 @@ export interface UIActionsParams {
   }) => void;
   closeModelsDialog: () => void;
 
+  // Model config dialog
+  openModelConfigDialog: () => void;
+  closeModelConfigDialog: () => void;
+
   // Session browser dialog
   openSessionBrowserDialog: () => void;
   closeSessionBrowserDialog: () => void;
@@ -276,6 +280,10 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     // Models dialog
     openModelsDialog: params.openModelsDialog,
     closeModelsDialog: params.closeModelsDialog,
+
+    // Model config dialog
+    openModelConfigDialog: params.openModelConfigDialog,
+    closeModelConfigDialog: params.closeModelConfigDialog,
 
     // Session browser dialog
     openSessionBrowserDialog: params.openSessionBrowserDialog,

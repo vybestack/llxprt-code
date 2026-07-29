@@ -28,8 +28,8 @@ describe('Built-in provider aliases (Qwen defaults)', () => {
         entry?.config as { ephemeralSettings?: Record<string, unknown> }
       ).ephemeralSettings;
       expect(ephemerals).toBeDefined();
-      expect(ephemerals?.['context-limit']).toBe(200000);
-      expect(ephemerals?.max_tokens).toBe(50000);
+      expect(ephemerals?.['context-limit']).toBe(1000000);
+      expect(ephemerals?.max_tokens).toBe(65536);
 
       // Qwen aliases are now API-key-only via Alibaba Cloud DashScope
       expect(entry?.config['base-url']).toBe(
