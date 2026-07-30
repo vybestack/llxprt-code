@@ -382,7 +382,16 @@ export class Logger {
       );
       return;
     }
-    const entries = this._parseLegacyJsonArray(trimmed) ?? [];
+    const entries = this._parseLegacyJsonArray(trimmed);
+    if (entries === null) {
+      // Content starts with '[' but is not a valid JSON array — corrupted.
+      // The backup was already created above; rewrite as empty JSONL.
+      debugLogger.debug(
+        'Legacy file starts with [ but is not a valid JSON array — treating as corrupted.',
+      );
+      this._writeJsonlAtomicSync([]);
+      return;
+    }
     this._writeJsonlAtomicSync(entries);
   }
 
@@ -515,6 +524,7 @@ export class Logger {
   /**
    * Back up a partially-corrupted JSONL file and rewrite the active file with
    * only the valid entries, ensuring the next write appends to a clean file.
+   * Uses temp-file + rename for atomicity, matching the sync path.
    */
   private async _recoverPartialCorruption(
     entries: LogEntry[],
@@ -525,7 +535,18 @@ export class Logger {
     );
     const backedUp = await this._backupCorruptedLogFile('partial_corruption');
     if (backedUp && this.logFilePath) {
-      await fs.writeFile(this.logFilePath, this._toJsonl(entries), 'utf-8');
+      const tmpPath = `${this.logFilePath}.recovery.${process.pid}.${Date.now()}.tmp`;
+      try {
+        await fs.writeFile(tmpPath, this._toJsonl(entries), 'utf-8');
+        await fs.rename(tmpPath, this.logFilePath);
+      } catch {
+        // Best-effort cleanup of the temp file if rename failed.
+        try {
+          await fs.unlink(tmpPath);
+        } catch {
+          // Ignore — temp file pruning handles stale files.
+        }
+      }
     }
   }
 
