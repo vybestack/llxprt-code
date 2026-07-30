@@ -12,8 +12,6 @@ import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimi
 
 const PROJECTION_REVISION = 2;
 const BINARY_PAYLOAD_PLACEHOLDER = '[binary media bytes omitted]';
-const BARE_BASE64_KEYS = new Set(['data']);
-const BASE64_SYMBOLS = new Set(['+', '/', '=']);
 const PROMPT_KEYS = {
   'anthropic-messages': ['system', 'messages', 'tools'],
   'openai-chat': ['messages', 'tools'],
@@ -77,60 +75,39 @@ function serializePromptBearingStructure(
 
 function canonicalizePromptValue(value: unknown, key: string): unknown {
   if (typeof value === 'string') {
-    return canonicalizePromptString(value, key);
+    return canonicalizePromptString(value);
   }
   if (Array.isArray(value)) {
     return value.map((item) => canonicalizePromptValue(item, key));
   }
   if (typeof value === 'object' && value !== null) {
+    const record = value as Record<string, unknown>;
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(
-        ([childKey, child]) => [
-          childKey,
-          canonicalizePromptValue(child, childKey),
-        ],
-      ),
+      Object.entries(record).map(([childKey, child]) => [
+        childKey,
+        isAnthropicBase64Data(record, childKey)
+          ? BINARY_PAYLOAD_PLACEHOLDER
+          : canonicalizePromptValue(child, childKey),
+      ]),
     );
   }
   return value;
 }
 
-function canonicalizePromptString(value: string, key: string): string {
+function isAnthropicBase64Data(
+  parent: Record<string, unknown>,
+  key: string,
+): boolean {
+  return key === 'data' && parent.type === 'base64';
+}
+
+function canonicalizePromptString(value: string): string {
   const base64Marker = ';base64,';
   const markerIndex = value.toLowerCase().indexOf(base64Marker);
   if (value.toLowerCase().startsWith('data:') && markerIndex >= 4) {
     return `${value.slice(0, markerIndex + base64Marker.length)}${BINARY_PAYLOAD_PLACEHOLDER}`;
   }
-  if (
-    BARE_BASE64_KEYS.has(key.toLowerCase()) &&
-    value.length > 256 &&
-    isProbableBase64(value)
-  ) {
-    return BINARY_PAYLOAD_PLACEHOLDER;
-  }
   return value;
-}
-
-function isProbableBase64(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    const allowed =
-      isAsciiAlphaNumeric(code) ||
-      BASE64_SYMBOLS.has(character) ||
-      isAsciiWhitespace(code);
-    if (!allowed) return false;
-  }
-  return true;
-}
-
-function isAsciiAlphaNumeric(code: number): boolean {
-  if (code >= 48 && code <= 57) return true;
-  if (code >= 65 && code <= 90) return true;
-  return code >= 97 && code <= 122;
-}
-
-function isAsciiWhitespace(code: number): boolean {
-  return code === 32 || (code >= 9 && code <= 13);
 }
 
 function countPromptTokens(promptText: string): number {

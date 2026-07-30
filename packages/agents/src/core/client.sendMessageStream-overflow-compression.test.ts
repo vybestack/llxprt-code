@@ -573,7 +573,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
       expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
-    it('should not grant a false full-window allowance when the last observed count is cleared but history is large (issue 2755 A4 consecutive)', async () => {
+    it('should defer overflow detection to finalized provider enforcement for consecutive turns with cleared counts (issue 2755 A4)', async () => {
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(0);
 

@@ -185,17 +185,16 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     // invocation stub. BaseProvider normalizes that shape for
     // generateChatCompletion, so projection must normalize it identically
     // instead of assuming already-normalized options.
-    const agentShaped = buildCallOptions(provider, {
+    const normalizedOptions = buildCallOptions(provider, {
       contents: [
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
       ],
-    }) as Record<string, unknown>;
-    delete agentShaped['resolved'];
-    agentShaped['invocation'] = { signal: new AbortController().signal };
-
-    const projection = await provider.projectPromptEnvelope(
-      agentShaped as Parameters<typeof provider.projectPromptEnvelope>[0],
-    );
+    });
+    const agentShaped = { ...normalizedOptions, resolved: undefined };
+    const projection = await provider.projectPromptEnvelope({
+      ...agentShaped,
+      invocation: { signal: new AbortController().signal },
+    });
 
     expect(projection).toBeDefined();
     expect(projection.protocol).toBe('anthropic-messages');

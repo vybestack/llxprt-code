@@ -647,11 +647,11 @@ export class AnthropicProvider extends BaseProvider {
    * Project the finalized Anthropic Messages envelope (issue #2817).
    *
    * Runs the SAME `prepareAnthropicRequest` path transport uses, so the
-   * estimate is derived from the exact `requestBody` that will be sent. No
-   * client is constructed and no credential is exchanged: estimation must not
-   * trigger auth side effects (e.g. an OAuth refresh) on the send hot path.
-   * The OAuth flavor only selects tool-name prefixing and cache formatting, so
-   * it is derived from the already-resolved token when one is present.
+   * estimate is derived from the exact `requestBody` that will be sent. Request
+   * preparation still resolves prompt-bearing inputs such as memory and tools,
+   * but no client is constructed and no credential is exchanged. The OAuth
+   * flavor only selects tool-name prefixing and cache formatting, so it is
+   * derived from the already-resolved token when one is present.
    */
   async projectPromptEnvelope(
     options: GenerateChatOptions,

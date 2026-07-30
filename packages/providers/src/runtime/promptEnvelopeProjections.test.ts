@@ -159,6 +159,27 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(imageTokens).toBeLessThan(textTokens * 50);
   });
 
+  it('counts long prompt-bearing data values that are not marked as base64 media', async () => {
+    const build = (size: number) => ({
+      model: 'claude-3-5-sonnet',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'document', data: 'A'.repeat(size) }],
+        },
+      ],
+    });
+
+    const shortTokens = await projectAnthropicPromptEnvelope(
+      build(300),
+    ).countProjectedTokens();
+    const longTokens = await projectAnthropicPromptEnvelope(
+      build(10_000),
+    ).countProjectedTokens();
+
+    expect(longTokens).toBeGreaterThan(shortTokens);
+  });
+
   it('keeps binary-size invariant for RFC 2397 data URLs without a media type', async () => {
     const project = (size: number) =>
       projectAnthropicPromptEnvelope({
@@ -444,32 +465,74 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     ).countProjectedTokens();
     expect(large).toBe(small);
   });
+
+  it('counts tools and excludes transport controls', async () => {
+    const promptOnly = {
+      model: 'gpt-4o',
+      input: [{ type: 'message', role: 'user', content: 'Hello' }],
+    };
+    const withTransportControls = {
+      ...promptOnly,
+      stream: true,
+      temperature: 0.8,
+      max_output_tokens: 4096,
+      tool_choice: 'auto',
+    };
+    const withTools = {
+      ...promptOnly,
+      tools: [
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get weather for a city',
+          parameters: {
+            type: 'object',
+            properties: { city: { type: 'string' } },
+          },
+        },
+      ],
+    };
+
+    const baselineTokens =
+      await projectOpenAIResponsesPromptEnvelope(
+        promptOnly,
+      ).countProjectedTokens();
+    const controlTokens = await projectOpenAIResponsesPromptEnvelope(
+      withTransportControls,
+    ).countProjectedTokens();
+    const toolTokens =
+      await projectOpenAIResponsesPromptEnvelope(
+        withTools,
+      ).countProjectedTokens();
+
+    expect(controlTokens).toBe(baselineTokens);
+    expect(toolTokens).toBeGreaterThan(baselineTokens);
+  });
 });
 
 describe('projection token count consistency (issue #2817 A10)', () => {
-  it('estimates equal request bodies consistently across calls without relying on input identity or mutation (purity)', async () => {
-    const buildRequestBody = () => ({
-      model: 'claude-3-5-sonnet',
-      messages: [{ role: 'user', content: 'Consistent test message' }],
-    });
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope, 'messages'],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope, 'messages'],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope, 'input'],
+  ] as const)(
+    'estimates separate equal %s request bodies consistently',
+    async (_name, project, promptKey) => {
+      const buildRequestBody = () => ({
+        model: 'test-model',
+        [promptKey]: [{ role: 'user', content: 'Consistent test message' }],
+      });
 
-    // Separate, structurally-equal objects: if the projection mutated its
-    // input or cached by identity, these would diverge.
-    const tokens1 =
-      await projectAnthropicPromptEnvelope(
-        buildRequestBody(),
-      ).countProjectedTokens();
-    const tokens2 =
-      await projectAnthropicPromptEnvelope(
-        buildRequestBody(),
-      ).countProjectedTokens();
-    const tokens3 =
-      await projectAnthropicPromptEnvelope(
-        buildRequestBody(),
-      ).countProjectedTokens();
-    expect(tokens1).toBe(tokens2);
-    expect(tokens2).toBe(tokens3);
-  });
+      const first = buildRequestBody();
+      const second = buildRequestBody();
+      const firstTokens = await project(first).countProjectedTokens();
+      const secondTokens = await project(second).countProjectedTokens();
+
+      expect(firstTokens).toBe(secondTokens);
+      expect(first).toStrictEqual(buildRequestBody());
+      expect(second).toStrictEqual(buildRequestBody());
+    },
+  );
 
   it('produces a positive token count for any non-empty prompt', async () => {
     const requestBody = {

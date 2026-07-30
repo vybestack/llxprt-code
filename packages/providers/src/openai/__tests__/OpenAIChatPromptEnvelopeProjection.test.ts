@@ -8,10 +8,10 @@
  * Behavioral test: OpenAIProvider.projectPromptEnvelope must project the SAME
  * finalized request body that transport sends (issue #2817 acceptance A4).
  *
- * Exercises the REAL provider preparation path (prepareRequest) through
- * projectPromptEnvelope, proving the estimate reflects history, pending
- * content, system instructions, and tools without rebuilding the payload
- * outside the provider.
+ * Exercises the real request-shaping path (prepareRequest) through
+ * projectPromptEnvelope while mocking the external OpenAI SDK boundary. This
+ * proves the estimate reflects history, pending content, system instructions,
+ * and tools without rebuilding the payload outside the provider.
  *
  * @requirement:REQ-PE-001 (issue #2817 acceptance A4, A10)
  */
@@ -47,6 +47,10 @@ class TestOpenAIProvider extends OpenAIProvider {
   }
 
   override getCurrentModel(): string {
+    return 'gpt-4o';
+  }
+
+  protected override getModel(): string {
     return 'gpt-4o';
   }
 
@@ -194,7 +198,7 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
     );
 
     expect(projection.protocol).toBe('openai-chat');
-    expect(projection.model).not.toBe('');
+    expect(projection.model).toBe('gpt-4o');
   });
 
   it('does not count transport controls (stream, temperature) — only messages/tools', async () => {

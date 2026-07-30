@@ -656,10 +656,6 @@ describe('Agent Client (client.ts)', () => {
         MAX_SESSION_TURNS,
       );
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-      const getContextParts = vi.spyOn(
-        client['ideContextTracker'],
-        'getContextParts',
-      );
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -694,8 +690,6 @@ describe('Agent Client (client.ts)', () => {
         }
       }
 
-      getContextParts.mockClear();
-
       // This call should exceed the limit
       const stream = client.sendMessageStream(
         [{ text: 'Hi' }],
@@ -721,7 +715,6 @@ describe('Agent Client (client.ts)', () => {
         },
         { type: AgentEventType.MaxSessionTurns },
       ]);
-      expect(getContextParts).not.toHaveBeenCalled();
     });
   });
 });

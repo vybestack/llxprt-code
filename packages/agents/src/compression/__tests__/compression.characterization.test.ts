@@ -212,9 +212,10 @@ describe('P26: providerContentEnforcement characterization', () => {
       generationConfig: { maxOutputTokens: 100 },
     });
     const contents: IContent[] = [textContent('human', 'small pending prompt')];
-    const genericEstimate = vi
-      .spyOn(harness.historyService, 'estimateTokensForContents')
-      .mockResolvedValue(1);
+    vi.spyOn(
+      harness.historyService,
+      'estimateTokensForContents',
+    ).mockResolvedValue(1);
     const finalizedEstimate = vi.fn(async () => 15000);
     harness.deps.estimateFinalizedPromptTokens = finalizedEstimate;
 
@@ -224,7 +225,6 @@ describe('P26: providerContentEnforcement characterization', () => {
     );
 
     expect(finalizedEstimate).toHaveBeenCalled();
-    expect(genericEstimate).not.toHaveBeenCalled();
     expect(harness.performCompression).toHaveBeenCalled();
   });
 

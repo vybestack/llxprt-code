@@ -34,9 +34,11 @@ export async function prepareOpenAIChatProjection(
   const support = deps.readMediaSupport();
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
-  const preparedOptions = needsClient
-    ? await deps.processMedia(options, await deps.getClient(), deps.logger)
-    : options;
+  let preparedOptions = options;
+  if (needsClient) {
+    const client = await deps.getClient();
+    preparedOptions = await deps.processMedia(options, client, deps.logger);
+  }
   return {
     options: preparedOptions,
     requestContext: await prepareRequest(

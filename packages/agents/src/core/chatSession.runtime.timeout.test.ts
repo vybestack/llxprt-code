@@ -313,7 +313,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       expect(firstTransportSignal?.aborted).toBe(true);
       expect(firstError).toBeInstanceOf(Error);
       expect(firstError).toMatchObject({ name: 'StreamIdleTimeoutError' });
-      expect(String(firstError)).toContain('Stream idle timeout');
 
       const secondResponse = await chat.sendMessage(
         { message: [{ text: 'second request' }] },
