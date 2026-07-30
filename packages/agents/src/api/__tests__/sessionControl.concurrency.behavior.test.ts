@@ -32,7 +32,10 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import {
+  replaySession,
+  SessionRecordingService,
+} from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -86,32 +89,32 @@ function buildFakeConfig(projectRoot: string): FakeConfig {
 }
 
 /**
- * Honest fake client: exposes a swappable HistoryService and records
- * restoreHistory calls. getHistory() returns whatever seed was configured (as
+ * Honest fake client: exposes a swappable HistoryService and records history
+ * replacement calls. getHistory() returns whatever seed was configured (as
  * Gemini-ish content the ContentConverters bridge accepts). This is a genuine
  * collaborator, not a call-spy assertion target.
  */
 interface FakeClient {
   contract: AgentClientContract;
   setHistoryService: (hs: HistoryService | null) => void;
-  restoreCount: () => number;
+  replacementCount: () => number;
 }
 
 function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   let historyService: HistoryService | null = new HistoryService();
   let history = [...seed];
-  let restoreCalls = 0;
+  let replacementCalls = 0;
   const contract = {
     getHistory: async () => [...history],
     getHistoryService: () => historyService,
     setHistory: async (nextHistory: IContent[]) => {
       history = [...nextHistory];
-      restoreCalls += 1;
+      replacementCalls += 1;
     },
     resetChat: async () => undefined,
     restoreHistory: async (nextHistory: IContent[]) => {
       history = [...nextHistory];
-      restoreCalls += 1;
+      replacementCalls += 1;
     },
   } as unknown as AgentClientContract;
   return {
@@ -119,7 +122,7 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
     setHistoryService: (hs) => {
       historyService = hs;
     },
-    restoreCount: () => restoreCalls,
+    replacementCount: () => replacementCalls,
   };
 }
 
@@ -244,7 +247,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       // result's value without a conditional expect.
       const resumeValue = unwrapFulfilled(resumeOutcome);
       expect(resumeValue.length).toBeGreaterThanOrEqual(1);
-      expect(client.restoreCount()).toBe(1);
+      expect(client.replacementCount()).toBe(1);
 
       // LAST-submitted op wins: stop ran AFTER resume fully committed, so the
       // final state is cleanly DISABLED — recording off, Config cleared, and the
@@ -421,6 +424,8 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         buildDeps(config, client.contract, sessionId),
       );
       await control.setRecording({ enabled: true });
+      const recordingPath = control.getRecording().path;
+      expect(recordingPath).toBeDefined();
       const restoreHistory = client.contract.restoreHistory.bind(
         client.contract,
       );
@@ -435,7 +440,13 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         'remaining restore failed',
       );
       expect(await client.contract.getHistory()).toStrictEqual(originalHistory);
-      expect(restoreAttempt).toBe(2);
+      expect(restoreAttempt).toBe(1);
+      expect(client.replacementCount()).toBe(1);
+      const replay = await replaySession(recordingPath!, basename(projectRoot));
+      if (!replay.ok) {
+        throw new Error(`Expected replay success: ${replay.error}`);
+      }
+      expect(replay.history).toStrictEqual(originalHistory);
       await control.dispose();
     });
   });

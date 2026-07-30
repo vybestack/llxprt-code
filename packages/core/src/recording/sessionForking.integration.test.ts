@@ -635,8 +635,21 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       );
       requireForkSuccess(fork);
 
-      // Child should have 3 items (A, B, C)
+      // Child should have 3 items (A, B, C) with the active provider context.
       expect(fork.history).toHaveLength(3);
+      expect(fork.metadata).toMatchObject({
+        provider: 'anthropic',
+        model: 'claude-4',
+      });
+      const replay = await replaySession(
+        fork.recording.getFilePath()!,
+        PROJECT_HASH,
+      );
+      requireReplaySuccess(replay);
+      expect(replay.metadata).toMatchObject({
+        provider: 'anthropic',
+        model: 'claude-4',
+      });
       try {
         await fork.recording.dispose();
       } finally {

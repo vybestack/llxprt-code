@@ -653,19 +653,23 @@ export class SessionControl implements AgentSessionControl {
       if (!result.ok) throw new Error(result.error);
       this.integration?.unsubscribeFromHistory();
       const mutationFailures: unknown[] = [];
-      let resetSucceeded = false;
       try {
         await client.resetChat();
-        resetSucceeded = true;
         await client.restoreHistory(result.remainingHistory);
       } catch (error: unknown) {
         mutationFailures.push(error);
-        if (resetSucceeded) {
-          try {
-            await client.restoreHistory(history);
-          } catch (rollbackError: unknown) {
-            mutationFailures.push(rollbackError);
-          }
+        try {
+          await client.setHistory(history);
+        } catch (rollbackError: unknown) {
+          mutationFailures.push(rollbackError);
+        }
+        try {
+          await this.restoreRecordedHistory(
+            recording,
+            history.slice(result.remainingHistory.length),
+          );
+        } catch (rollbackError: unknown) {
+          mutationFailures.push(rollbackError);
         }
       }
       const resubscribeError = this.resubscribeIntegration();
@@ -910,6 +914,17 @@ export class SessionControl implements AgentSessionControl {
     // committed but dead; flag it so a later operation re-attaches it rather
     // than leaving continuous recording permanently off.
     this.integrationNeedsSubscribe = !subscribed;
+  }
+
+  private async restoreRecordedHistory(
+    recording: SessionRecordingService,
+    removedHistory: readonly IContent[],
+  ): Promise<void> {
+    for (const content of removedHistory) recording.recordContent(content);
+    await recording.flush();
+    if (!recording.isActive()) {
+      throw new Error('Recording failed during history rollback');
+    }
   }
 
   private resubscribeIntegration(): Error | undefined {

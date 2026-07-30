@@ -30,7 +30,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -99,12 +99,12 @@ function storageTempDirFor(workingDir: string): string {
  */
 async function withIsolatedAgent(
   fixture: string,
-  fn: (agent: Agent) => Promise<void>,
+  fn: (agent: Agent, workingDir: string) => Promise<void>,
 ): Promise<void> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-session-spec-'));
   const { agent, cleanup } = await buildAgent(fixture, { workingDir });
   try {
-    await fn(agent);
+    await fn(agent, workingDir);
   } finally {
     await cleanup();
     rmSync(workingDir, { recursive: true, force: true });
@@ -114,7 +114,7 @@ async function withIsolatedAgent(
 
 describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', () => {
   it('creates and lists recording-native checkpoints without legacy checkpoint files @plan:2026-07-28-issue-2625', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent, workingDir) => {
       const seeded = [
         textMessage('user', 'remember the magic word: quokka'),
         textMessage('model', 'got it, the magic word is quokka'),
@@ -133,6 +133,9 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
       expect(
         readFileSync(agent.session.getRecording().path ?? '', 'utf8'),
       ).toContain('checkpoint_created');
+      expect(
+        existsSync(join(storageTempDirFor(workingDir), 'checkpoints')),
+      ).toBe(false);
     });
   });
 
@@ -354,10 +357,12 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
         checkpoint.checkpointId,
         'after-rename',
       );
-      expect(await agent.session.listCheckpoints()).toContainEqual({
-        ...checkpoint,
-        name: 'after-rename',
-      });
+      expect(await agent.session.listCheckpoints()).toContainEqual(
+        expect.objectContaining({
+          checkpointId: checkpoint.checkpointId,
+          name: 'after-rename',
+        }),
+      );
       await agent.session.nameCurrentSession('named-session');
       expect(await agent.session.listSessions()).toContainEqual(
         expect.objectContaining({
