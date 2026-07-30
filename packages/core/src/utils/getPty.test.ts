@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { isBunPosix } from './runtime.js';
 
 const PTY_BACKENDS = ['lydell-node-pty', 'node-pty'] as const;
@@ -18,11 +18,6 @@ function requirePty<T>(pty: T | null, backend: string): T {
 }
 
 describe('getPty unavailable backend handling', () => {
-  afterEach(() => {
-    vi.doUnmock('@lydell/node-pty');
-    vi.doUnmock('node-pty');
-  });
-
   it.skipIf(isBunPosix())(
     'returns null when no node-pty backend can be loaded',
     async () => {
