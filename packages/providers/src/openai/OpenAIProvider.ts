@@ -64,7 +64,10 @@ import {
   OpenAIPromptEnvelopeStore,
   prepareOpenAIPromptProjection,
 } from './OpenAIPromptEnvelopeStore.js';
-import { prepareOpenAIChatProjection } from './OpenAIPromptProjectionPreparation.js';
+import {
+  prepareOpenAIChatProjection,
+  withProjectionModel,
+} from './OpenAIPromptProjectionPreparation.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 
@@ -130,7 +133,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return {
       providerName: this.name,
       logger: new DebugLogger('llxprt:provider:openai'),
-      getProviderBaseURL: () => this.getBaseURL(),
+      getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
       getCustomHeaders: (options) => this.getCustomHeaders(options),
       isCodexBaseURL: () => false,
       getCodexAccountId: async () => {
@@ -833,19 +836,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
-    const resolvedModel =
-      options.resolved?.model === undefined || options.resolved.model === ''
-        ? this.getModel() || this.getDefaultModel()
-        : options.resolved.model;
-    const optionsWithModel =
-      resolvedModel === options.resolved?.model
-        ? options
-        : {
-            ...options,
-            resolved: { ...options.resolved, model: resolvedModel },
-          };
-    const normalized =
-      await this.normalizeOptionsForProjection(optionsWithModel);
+    const normalized = await this.normalizeOptionsForProjection(
+      withProjectionModel(
+        options,
+        () => this.getModel() || this.getDefaultModel(),
+      ),
+    );
     const useResponses = this.resolveTransport(
       normalized.resolved.model,
       normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
@@ -863,7 +859,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       prepareChat: () =>
         prepareOpenAIChatProjection(normalized, {
           readMediaSupport: () => this.readMediaSupport(),
-          getClient: () => this.getClient(normalized),
+          getClient: (clientOptions) => this.getClient(clientOptions),
+          resolveAuthToken: (authOptions) =>
+            this.resolveProjectionAuthToken(authOptions),
           processMedia: (preparedOptions, client, logger) =>
             this.maybeProcessKimiMedia(preparedOptions, client, logger),
           logger: this.getLogger(),

@@ -572,6 +572,12 @@ export class LoggingProviderWrapper implements IProvider {
    * (issue #2817, finding #1). Without this delegation, ProviderManager
    * returns a wrapped provider that hides the capability from the agent layer.
    *
+   * The projection MUST see the same normalized options transport sees:
+   * ProviderManager installs the runtime-context resolver and options
+   * normalizer on this wrapper, so forwarding raw options would let the
+   * estimated envelope be prepared against different runtime state than the
+   * request that is actually sent.
+   *
    * Resolves to `undefined` when the wrapped provider does not implement the
    * seam — absence of the capability is a normal state for out-of-scope
    * protocols, not an error.
@@ -579,7 +585,12 @@ export class LoggingProviderWrapper implements IProvider {
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection | undefined> {
-    return this.wrapped.projectPromptEnvelope?.(options);
+    const normalizedOptions = this.normalizeChatCompletionOptions(
+      options,
+      options.tools,
+    );
+    this.ensureRuntimeContext(normalizedOptions);
+    return this.wrapped.projectPromptEnvelope?.(normalizedOptions);
   }
 
   /**

@@ -369,6 +369,83 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
   });
 });
 
+describe('protocol/method pair validation (issue #2817)', () => {
+  it.each([
+    ['anthropic-messages', 'messages/v1'],
+    ['openai-chat', 'chat/completions/v1'],
+    ['openai-responses', 'responses/v1'],
+  ] as const)(
+    'accepts the supported pair %s + %s',
+    async (protocol, method) => {
+      const projection: PromptEnvelopeProjection = {
+        model: 'test-model',
+        protocol,
+        method,
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        countProjectedTokens: () => Promise.resolve(11),
+      };
+
+      const estimate = await estimatePromptEnvelope(projection);
+
+      expect(estimate.protocol).toBe(protocol);
+      expect(estimate.method).toBe(method);
+      expect(estimate.estimatedPromptTokens).toBe(11);
+    },
+  );
+
+  it.each([
+    ['openai-chat', 'responses/v1'],
+    ['openai-chat', 'messages/v1'],
+    ['openai-responses', 'chat/completions/v1'],
+    ['anthropic-messages', 'chat/completions/v1'],
+  ])(
+    'fail-fast: rejects the incompatible pair %s + %s before counting tokens',
+    async (protocol, method) => {
+      let tokenCountCalls = 0;
+      const projection = {
+        model: 'test-model',
+        protocol,
+        method,
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        countProjectedTokens: () => {
+          tokenCountCalls += 1;
+          return Promise.resolve(11);
+        },
+      } as unknown as PromptEnvelopeProjection;
+
+      await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
+        /protocol .* does not support method/i,
+      );
+      expect(tokenCountCalls).toBe(0);
+    },
+  );
+
+  it('fail-fast: rejects an unknown protocol before counting tokens', async () => {
+    let tokenCountCalls = 0;
+    const projection = {
+      model: 'test-model',
+      protocol: 'gemini-generate',
+      method: 'messages/v1',
+      projectionRevision: 1,
+      unsupportedMedia: [],
+      transportToken: Object.freeze({}),
+      countProjectedTokens: () => {
+        tokenCountCalls += 1;
+        return Promise.resolve(11);
+      },
+    } as unknown as PromptEnvelopeProjection;
+
+    await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
+      /protocol must be one of/i,
+    );
+    expect(tokenCountCalls).toBe(0);
+  });
+});
+
 describe('UnsupportedMediaEntry contract (issue #2817)', () => {
   it('marks unsupported media explicitly rather than silently caption-only', () => {
     const entry: UnsupportedMediaEntry = {

@@ -77,10 +77,48 @@ export interface PromptEnvelopeEstimate {
   readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
 }
 
+/**
+ * The closed set of wire methods each protocol can carry. The protocol and
+ * method types are already closed unions, but they are independent, so a
+ * projection could otherwise declare an impossible identity such as
+ * `openai-chat` + `responses/v1` and still be accepted as validated.
+ */
+const SUPPORTED_METHODS_BY_PROTOCOL: Readonly<
+  Record<PromptEnvelopeProtocol, readonly PromptEnvelopeMethod[]>
+> = Object.freeze({
+  'anthropic-messages': Object.freeze(['messages/v1'] as const),
+  'openai-chat': Object.freeze(['chat/completions/v1'] as const),
+  'openai-responses': Object.freeze(['responses/v1'] as const),
+});
+
 function assertNonEmptyString(value: string, field: string): void {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(
       `PromptEnvelopeEstimate validation failed: ${field} must be a non-empty string`,
+    );
+  }
+}
+
+function assertSupportedProtocolMethodPair(
+  protocol: PromptEnvelopeProtocol,
+  method: PromptEnvelopeMethod,
+): void {
+  // A projection crossing a package boundary can carry an unknown protocol at
+  // runtime even though the declared type is closed, so membership is checked
+  // against the contract table rather than trusted from the type alone.
+  if (!Object.keys(SUPPORTED_METHODS_BY_PROTOCOL).includes(protocol)) {
+    throw new Error(
+      `PromptEnvelopeEstimate validation failed: protocol must be one of ${Object.keys(
+        SUPPORTED_METHODS_BY_PROTOCOL,
+      ).join(', ')} (received "${protocol}")`,
+    );
+  }
+  const supportedMethods = SUPPORTED_METHODS_BY_PROTOCOL[protocol];
+  if (!supportedMethods.includes(method)) {
+    throw new Error(
+      `PromptEnvelopeEstimate validation failed: protocol "${protocol}" does not support method "${method}" (supported: ${supportedMethods.join(
+        ', ',
+      )})`,
     );
   }
 }
@@ -146,6 +184,7 @@ export async function estimatePromptEnvelope(
   assertNonEmptyString(projection.model, 'model');
   assertNonEmptyString(projection.protocol, 'protocol');
   assertNonEmptyString(projection.method, 'method');
+  assertSupportedProtocolMethodPair(projection.protocol, projection.method);
   assertFiniteNonNegativeInt(
     projection.projectionRevision,
     'projectionRevision',

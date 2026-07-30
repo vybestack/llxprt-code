@@ -20,6 +20,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type {
@@ -30,11 +31,47 @@ import type {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function makeContent(text: string): IContent {
   return {
     speaker: 'human',
     blocks: [{ type: 'text', text }],
+  };
+}
+
+/**
+ * ProviderManager always supplies settings and config through the runtime
+ * context, and LoggingProviderWrapper fails fast without them on every seam.
+ */
+function buildRuntimeContext(): ProviderRuntimeContext {
+  return {
+    settingsService: new SettingsService(),
+    config: {
+      getConversationLoggingEnabled: () => false,
+      getRedactionConfig: () => ({
+        redactApiKeys: false,
+        redactCredentials: false,
+        redactFilePaths: false,
+        redactUrls: false,
+        redactEmails: false,
+        redactPersonalInfo: false,
+      }),
+      getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
+    } as unknown as Config,
+    runtimeId: 'prompt-envelope-wrapper-chain-test',
+    metadata: {},
+  };
+}
+
+function buildChainOptions(contents: IContent[]): GenerateChatOptions {
+  const runtime = buildRuntimeContext();
+  return {
+    contents,
+    settings: runtime.settingsService,
+    config: runtime.config,
+    runtime,
   };
 }
 
@@ -139,9 +176,7 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     const base = new EstimatingProvider();
     const wrapper = new LoggingProviderWrapper(base);
 
-    const options: GenerateChatOptions = {
-      contents: [makeContent('Hello world')],
-    };
+    const options = buildChainOptions([makeContent('Hello world')]);
 
     expect(typeof wrapper.projectPromptEnvelope).toBe('function');
 
@@ -158,9 +193,7 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     const withRetry = new RetryOrchestrator(base);
     const fullChain = new LoggingProviderWrapper(withRetry);
 
-    const options: GenerateChatOptions = {
-      contents: [makeContent('Chain test')],
-    };
+    const options = buildChainOptions([makeContent('Chain test')]);
 
     // The outermost provider (what ProviderManager.getActiveProvider returns)
     // must expose the capability.
@@ -184,7 +217,9 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     const fullChain = new LoggingProviderWrapper(new RetryOrchestrator(plain));
 
     await expect(
-      fullChain.projectPromptEnvelope({ contents: [makeContent('Hello')] }),
+      fullChain.projectPromptEnvelope(
+        buildChainOptions([makeContent('Hello')]),
+      ),
     ).resolves.toBeUndefined();
   });
 
@@ -192,15 +227,15 @@ describe('projectPromptEnvelope wrapper-chain delegation (issue #2817, finding #
     const base = new EstimatingProvider();
     const fullChain = new LoggingProviderWrapper(new RetryOrchestrator(base));
 
-    const small = await fullChain.projectPromptEnvelope({
-      contents: [makeContent('Hi')],
-    });
-    const large = await fullChain.projectPromptEnvelope({
-      contents: [
+    const small = await fullChain.projectPromptEnvelope(
+      buildChainOptions([makeContent('Hi')]),
+    );
+    const large = await fullChain.projectPromptEnvelope(
+      buildChainOptions([
         makeContent('This is a much longer message with many more tokens.'),
         makeContent('And another message to increase the count further.'),
-      ],
-    });
+      ]),
+    );
 
     const smallTokens = await small.countProjectedTokens();
     const largeTokens = await large.countProjectedTokens();

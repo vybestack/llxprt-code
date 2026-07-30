@@ -46,7 +46,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     return {
       providerName: this.name,
       logger: this.logger,
-      getProviderBaseURL: () => this.getBaseURL(),
+      getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
       getCustomHeaders: (options) => this.getCustomHeaders(options),
       isCodexBaseURL: (baseURL) => this.isCodexMode(baseURL),
       getCodexAccountId: () => this.getCodexAccountId(),

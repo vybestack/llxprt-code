@@ -65,6 +65,7 @@ export class AnthropicProvider extends BaseProvider {
         ReturnType<typeof prepareAnthropicRequest>
       >;
       readonly isOAuth: boolean;
+      readonly authToken: string;
     }
   >();
 
@@ -177,6 +178,41 @@ export class AnthropicProvider extends BaseProvider {
     return new Anthropic(clientConfig as ClientOptions);
   }
 
+  private async resolveClientAuthToken(
+    options: NormalizedGenerateChatOptions,
+    preparedAuthToken: string | undefined,
+  ): Promise<string> {
+    if (preparedAuthToken !== undefined) {
+      return preparedAuthToken;
+    }
+
+    const runtimeAuthToken: unknown = options.resolved.authToken;
+    if (
+      typeof runtimeAuthToken === 'string' &&
+      runtimeAuthToken.trim() !== ''
+    ) {
+      return runtimeAuthToken;
+    }
+    if (!isRuntimeAuthTokenProvider(runtimeAuthToken)) {
+      return this.getAuthTokenForPrompt();
+    }
+
+    try {
+      const freshToken = await runtimeAuthToken.provide();
+      if (!freshToken) {
+        throw new Error(
+          `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+        );
+      }
+      this.getAuthLogger().debug(() => 'Refreshed OAuth token for call');
+      return freshToken;
+    } catch (error) {
+      throw new Error(
+        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003)."): ${error}`,
+      );
+    }
+  }
+
   /**
    * @plan PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement REQ-SP4-002
@@ -186,37 +222,13 @@ export class AnthropicProvider extends BaseProvider {
   private async buildProviderClient(
     options: NormalizedGenerateChatOptions,
     telemetry?: ProviderTelemetryContext,
+    preparedAuthToken?: string,
   ): Promise<{ client: Anthropic; authToken: string }> {
     const authLogger = this.getAuthLogger();
-    const runtimeAuthToken: unknown = options.resolved.authToken;
-    let authToken: string | undefined;
-
-    if (
-      typeof runtimeAuthToken === 'string' &&
-      runtimeAuthToken.trim() !== ''
-    ) {
-      authToken = runtimeAuthToken;
-    } else if (isRuntimeAuthTokenProvider(runtimeAuthToken)) {
-      try {
-        const freshToken = await runtimeAuthToken.provide();
-        if (!freshToken) {
-          throw new Error(
-            `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
-          );
-        }
-        authToken = freshToken;
-        authLogger.debug(() => 'Refreshed OAuth token for call');
-      } catch (error) {
-        throw new Error(
-          `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003)."): ${error}`,
-        );
-      }
-    }
-
-    if (authToken === undefined || authToken === '') {
-      authToken = await this.getAuthTokenForPrompt();
-    }
-
+    const authToken = await this.resolveClientAuthToken(
+      options,
+      preparedAuthToken,
+    );
     const baseURL = options.resolved.baseURL;
     if (authToken === '') {
       authLogger.debug(
@@ -565,11 +577,6 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
-    const { client: initialClient, authToken } = await this.buildProviderClient(
-      options,
-      options.resolved.telemetry,
-    );
     const prepared =
       options.promptEnvelopeTransportToken === undefined
         ? undefined
@@ -582,6 +589,11 @@ export class AnthropicProvider extends BaseProvider {
     ) {
       throw new Error('Unknown Anthropic prompt-envelope transport token');
     }
+    const { client: initialClient, authToken } = await this.buildProviderClient(
+      options,
+      options.resolved.telemetry,
+      prepared?.authToken,
+    );
     const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
     const requestContext =
       prepared?.requestContext ??
@@ -623,30 +635,6 @@ export class AnthropicProvider extends BaseProvider {
     );
   }
 
-  /**
-   * Resolve the credential the projection must classify, using the SAME
-   * precedence `buildProviderClient` applies at transport: an explicitly
-   * resolved runtime token first, then the ambient prompt credential. The
-   * agent send seam does not populate `resolved.authToken`, so inferring the
-   * OAuth flavor from provider configuration would prepare a body transport
-   * contradicts.
-   */
-  private async resolveProjectionAuthToken(
-    options: NormalizedGenerateChatOptions,
-  ): Promise<string> {
-    const runtimeAuthToken: unknown = options.resolved.authToken;
-    if (typeof runtimeAuthToken === 'string' && runtimeAuthToken !== '') {
-      return runtimeAuthToken;
-    }
-    if (isRuntimeAuthTokenProvider(runtimeAuthToken)) {
-      const freshToken = await runtimeAuthToken.provide();
-      if (typeof freshToken === 'string' && freshToken !== '') {
-        return freshToken;
-      }
-    }
-    return this.getAuthTokenForPrompt();
-  }
-
   private async prepareRequestContext(
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
@@ -681,9 +669,8 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const isOAuth = this.classifyOAuthToken(
-      await this.resolveProjectionAuthToken(normalized),
-    );
+    const authToken = await this.resolveProjectionAuthToken(normalized);
+    const isOAuth = this.classifyOAuthToken(authToken);
     const requestContext = await this.prepareRequestContext(
       normalized,
       isOAuth,
@@ -692,6 +679,7 @@ export class AnthropicProvider extends BaseProvider {
     this.preparedPromptEnvelopes.set(transportToken, {
       requestContext,
       isOAuth,
+      authToken,
     });
     return projectAnthropicPromptEnvelope(requestContext.requestBody, {
       transportToken,

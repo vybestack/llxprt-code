@@ -179,9 +179,22 @@ describe('ChatSession prompt-envelope estimate on mid-stream failure (issue #281
       'prompt-midstream',
     );
 
+    const iterator = stream[Symbol.asyncIterator]();
+    const firstChunk = await iterator.next();
+    expect(firstChunk.done).toBe(false);
+
+    const estimateBeforeFailure = chat.getPromptEnvelopeEstimate();
+    expect(estimateBeforeFailure).not.toBeNull();
+    expect(estimateBeforeFailure?.estimatedPromptTokens).toBeGreaterThan(0);
+    expect(estimateBeforeFailure?.protocol).toBe('anthropic-messages');
+
     await expect(
       (async () => {
-        for await (const _chunk of stream) {
+        for (
+          let next = await iterator.next();
+          next.done !== true;
+          next = await iterator.next()
+        ) {
           // drain until the provider disconnects
         }
       })(),

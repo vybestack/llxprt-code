@@ -137,13 +137,44 @@ describe('recordTokenEstimate', () => {
 });
 
 describe('recordFinalizedPromptEnvelopeEstimate', () => {
-  it('keeps synchronous logger failures from disrupting a valid send', () => {
+  it('refines the existing prompt estimate with the finalized envelope count', () => {
+    const refineEstimate = vi.fn();
     const usageLogger = {
       isEnabled: () => true,
-      recordEstimate: () => {
-        throw new Error('record failed');
+      refineEstimate,
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger,
+      'prompt-finalized',
+      {
+        estimatedPromptTokens: 12,
+        model: 'gpt-4o',
+        protocol: 'openai-chat',
+        method: 'chat/completions/v1',
+        projectionRevision: 2,
+        unsupportedMedia: [],
       },
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'recordEstimate'>;
+      'openai',
+    );
+
+    expect(refineEstimate).toHaveBeenCalledExactlyOnceWith('prompt-finalized', {
+      provider: 'openai',
+      model: 'gpt-4o',
+      estimatedTokens: 12,
+      estimator: 'openai-tiktoken',
+    });
+  });
+
+  it('keeps synchronous logger failures from disrupting a valid send', () => {
+    let refineCalls = 0;
+    const usageLogger = {
+      isEnabled: () => true,
+      refineEstimate: () => {
+        refineCalls += 1;
+        throw new Error('refine failed');
+      },
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
 
     expect(() =>
       recordFinalizedPromptEnvelopeEstimate(
@@ -160,6 +191,7 @@ describe('recordFinalizedPromptEnvelopeEstimate', () => {
         'openai',
       ),
     ).not.toThrow();
+    expect(refineCalls).toBe(1);
   });
 });
 

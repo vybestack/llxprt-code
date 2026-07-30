@@ -79,8 +79,17 @@ import type { DumpMode } from '../utils/dumpContext.js';
 export interface ResponsesExecutorDeps {
   readonly providerName: string;
   readonly logger: DebugLogger;
-  /** Return the configured base URL for the provider instance. */
-  readonly getProviderBaseURL: () => string | undefined;
+  /**
+   * Return the effective base URL for THIS call.
+   *
+   * The per-call options are passed explicitly because projection runs outside
+   * the provider's active-call context; resolving from ambient state there
+   * would prepare an envelope for a different endpoint than transport uses
+   * (issue #2817).
+   */
+  readonly getProviderBaseURL: (
+    options?: NormalizedGenerateChatOptions,
+  ) => string | undefined;
   /** Return provider-config custom headers. */
   readonly getCustomHeaders: (
     options?: NormalizedGenerateChatOptions,
@@ -519,7 +528,7 @@ function resolveResponsesBaseURL(
 ): string {
   return (
     options.resolved.baseURL ??
-    deps.getProviderBaseURL() ??
+    deps.getProviderBaseURL(options) ??
     'https://api.openai.com/v1'
   );
 }
