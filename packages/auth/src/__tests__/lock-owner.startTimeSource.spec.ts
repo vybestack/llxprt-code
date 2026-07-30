@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as os from 'node:os';
 import {
+  _resetProcessStartTimeForTests,
   buildOwnerMetadata,
   buildCurrentProcessOwnerMetadata,
   getProcessStartTimeMs,
@@ -23,6 +24,40 @@ describe('LockOwnerMetadata startTimeSource quality (issue #2819)', () => {
     expect(['canonical', 'approximate', 'unavailable']).toContain(
       owner.startTimeSource,
     );
+  });
+
+  it('re-probes after an approximate result and caches only a canonical result', async () => {
+    _resetProcessStartTimeForTests();
+    const canonicalStartTime = 1_725_000_000_000;
+    let probeCount = 0;
+    const readProcessStartTime = async (): Promise<number | null> => {
+      probeCount += 1;
+      return probeCount === 1 ? null : canonicalStartTime;
+    };
+
+    const first = await buildCurrentProcessOwnerMetadata(
+      250,
+      readProcessStartTime,
+    );
+    const second = await buildCurrentProcessOwnerMetadata(
+      250,
+      readProcessStartTime,
+    );
+    const third = await buildCurrentProcessOwnerMetadata(
+      250,
+      readProcessStartTime,
+    );
+
+    expect(first.startTimeSource).toBe('approximate');
+    expect(second).toMatchObject({
+      startTimeMs: canonicalStartTime,
+      startTimeSource: 'canonical',
+    });
+    expect(third).toMatchObject({
+      startTimeMs: canonicalStartTime,
+      startTimeSource: 'canonical',
+    });
+    expect(probeCount).toBe(2);
   });
 
   it('marks owner as dead only when startTimeSource is canonical and start-time mismatch proves PID reuse', async () => {

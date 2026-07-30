@@ -103,12 +103,16 @@ export class KeyringTokenStore implements TokenStore {
   private readonly secureStore: ISecureStore;
   private readonly logger: IDebugLogger;
   private readonly lockDir: string;
+  private readonly currentProcessOwnerMetadataBuilder: () => Promise<LockOwnerMetadata>;
   private readonly heldTokens: Map<string, string> = new Map();
 
   constructor(options?: {
     secureStore: ISecureStore;
     lockDir: string;
     logger?: IDebugLogger;
+    currentProcessOwnerMetadataBuilder?: () =>
+      | LockOwnerMetadata
+      | Promise<LockOwnerMetadata>;
   }) {
     if (options?.secureStore === undefined) {
       throw new Error(
@@ -126,6 +130,9 @@ export class KeyringTokenStore implements TokenStore {
     this.secureStore = options.secureStore;
     this.logger = options.logger ?? KeyringTokenStore.NO_OP_LOGGER;
     this.lockDir = options.lockDir;
+    this.currentProcessOwnerMetadataBuilder = async () =>
+      options.currentProcessOwnerMetadataBuilder?.() ??
+      buildCurrentProcessOwnerMetadata();
   }
 
   private validateName(name: string, label: string): void {
@@ -181,20 +188,22 @@ export class KeyringTokenStore implements TokenStore {
       return false;
     }
 
-    const startTime = Date.now();
-    const deadline = startTime + waitMs;
     await this.ensureLockDir();
-    const owner = await buildCurrentProcessOwnerMetadata(
-      Math.max(0, deadline - Date.now()),
-    );
+    const owner = await this.currentProcessOwnerMetadataBuilder();
+    const deadline = Date.now() + Math.max(0, waitMs);
 
     this.logger.debug(`[acquireLock] wait=${waitMs}`);
 
     let attempt = 0;
-    while (Date.now() < deadline) {
+    let firstAttempt = true;
+    while (firstAttempt || Date.now() < deadline) {
+      firstAttempt = false;
       const acquired = await this.tryCreateLock(lockPath, owner);
       if (acquired) {
         return true;
+      }
+      if (Date.now() >= deadline) {
+        return false;
       }
       const recovered = await this.maybeRecoverDeadOwnerLock(
         lockPath,

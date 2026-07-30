@@ -53,6 +53,12 @@ type MultiBucketAuthResult = {
 
 type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
 
+type AuthFlight = {
+  readonly promise: Promise<void>;
+  signalAuthCompletion: boolean;
+  completionSignaled: boolean;
+};
+
 type MultiBucketAuthenticatorLike = {
   fromCallbacks(opts: {
     onAuthBucket(
@@ -89,7 +95,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   // Same-process single-flight: concurrent authenticate() calls for the
   // same provider+bucket join the in-flight promise instead of failing
   // on the heldTokens lock check and timing out.
-  private readonly authInFlight: Map<string, Promise<void>> = new Map();
+  private readonly authInFlight: Map<string, AuthFlight> = new Map();
 
   constructor(
     private readonly tokenStore: TokenStore,
@@ -157,27 +163,37 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       logger.debug(
         () => `[FLOW] authenticate() joining in-flight auth for ${flightKey}`,
       );
-      await existing;
+      existing.signalAuthCompletion ||= shouldSignalAuthCompletion;
+      await existing.promise;
+      this.signalAuthFlightCompletion(existing);
       return;
     }
 
-    const authPromise = this.authenticateInternal(
-      providerName,
-      bucket,
-      shouldSignalAuthCompletion,
-    );
-    this.authInFlight.set(flightKey, authPromise);
+    const flight: AuthFlight = {
+      promise: this.authenticateInternal(providerName, bucket),
+      signalAuthCompletion: shouldSignalAuthCompletion,
+      completionSignaled: false,
+    };
+    this.authInFlight.set(flightKey, flight);
     try {
-      await authPromise;
+      await flight.promise;
+      this.signalAuthFlightCompletion(flight);
     } finally {
       this.authInFlight.delete(flightKey);
     }
   }
 
+  private signalAuthFlightCompletion(flight: AuthFlight): void {
+    if (!flight.signalAuthCompletion || flight.completionSignaled) {
+      return;
+    }
+    flight.completionSignaled = true;
+    markGlobalAuthComplete();
+  }
+
   private async authenticateInternal(
     providerName: string,
     bucket: string | undefined,
-    shouldSignalAuthCompletion: boolean,
   ): Promise<void> {
     const provider = this.providerRegistry.getProvider(providerName);
     if (!provider) {
@@ -194,20 +210,15 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       if (lockOutcome === 'timed-out') {
         await this.handleAuthLockTimeout(providerName, bucket);
       }
-      if (shouldSignalAuthCompletion) {
-        markGlobalAuthComplete();
-      }
       return;
     }
 
-    let authenticated = false;
     try {
       const earlyReturn = await this.checkDiskTokenUnderLock(
         providerName,
         bucket,
       );
       if (earlyReturn) {
-        authenticated = true;
         return;
       }
 
@@ -218,12 +229,10 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         diskToken ?? undefined,
       );
       if (refreshed) {
-        authenticated = true;
         return;
       }
 
       await this.doInitiateAuth(providerName, bucket, provider);
-      authenticated = true;
     } catch (error) {
       logger.debug(
         () =>
@@ -237,9 +246,6 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       );
     } finally {
       await this.tokenStore.releaseAuthLock(providerName, bucket);
-      if (authenticated && shouldSignalAuthCompletion) {
-        markGlobalAuthComplete();
-      }
       logger.debug(() => `[FLOW] Released auth lock for ${providerName}`);
     }
   }

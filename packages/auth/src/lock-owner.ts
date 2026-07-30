@@ -44,35 +44,59 @@ export function buildOwnerMetadata(
   };
 }
 
-let cachedCurrentProcessStartTime:
-  | Promise<{ startTimeMs: number; startTimeSource: StartTimeSource }>
+type ProcessStartTimeReader = (
+  pid: number,
+  timeoutMs?: number,
+) => Promise<number | null>;
+
+type CanonicalProcessStartTime = {
+  readonly startTimeMs: number;
+  readonly startTimeSource: 'canonical';
+};
+
+let cachedCurrentProcessStartTime: CanonicalProcessStartTime | undefined;
+let currentProcessStartTimeLookup:
+  | {
+      readonly reader: ProcessStartTimeReader;
+      readonly promise: Promise<number | null>;
+    }
   | undefined;
 
 export async function buildCurrentProcessOwnerMetadata(
   timeoutMs: number = PROCESS_PROBE_TIMEOUT_MS,
+  readStartTime: ProcessStartTimeReader = readProcessStartTimeMs,
 ): Promise<LockOwnerMetadata> {
-  if (cachedCurrentProcessStartTime === undefined) {
-    const lookup: Promise<{
-      startTimeMs: number;
-      startTimeSource: StartTimeSource;
-    }> = readProcessStartTimeMs(process.pid, timeoutMs).then((value) => {
-      if (value !== null) {
-        return { startTimeMs: value, startTimeSource: 'canonical' };
-      }
-      return {
-        startTimeMs: getProcessStartTimeMs(),
-        startTimeSource: 'approximate',
-      };
-    });
-    cachedCurrentProcessStartTime = lookup;
-    lookup.then(undefined, () => {
-      if (cachedCurrentProcessStartTime === lookup) {
-        cachedCurrentProcessStartTime = undefined;
-      }
-    });
+  const cached = cachedCurrentProcessStartTime;
+  if (cached !== undefined) {
+    return buildOwnerMetadata(cached.startTimeMs, cached.startTimeSource);
   }
-  const cached = await cachedCurrentProcessStartTime;
-  return buildOwnerMetadata(cached.startTimeMs, cached.startTimeSource);
+
+  const activeLookup = currentProcessStartTimeLookup;
+  const lookup =
+    activeLookup?.reader === readStartTime
+      ? activeLookup.promise
+      : readStartTime(process.pid, timeoutMs);
+  const lookupEntry = { reader: readStartTime, promise: lookup };
+  currentProcessStartTimeLookup = lookupEntry;
+  let value: number | null;
+  try {
+    value = await lookup;
+  } finally {
+    if (currentProcessStartTimeLookup === lookupEntry) {
+      currentProcessStartTimeLookup = undefined;
+    }
+  }
+
+  if (value === null) {
+    return buildOwnerMetadata(getProcessStartTimeMs(), 'approximate');
+  }
+
+  const canonical: CanonicalProcessStartTime = {
+    startTimeMs: value,
+    startTimeSource: 'canonical',
+  };
+  cachedCurrentProcessStartTime = canonical;
+  return buildOwnerMetadata(canonical.startTimeMs, canonical.startTimeSource);
 }
 
 export function serializeOwnerMetadata(owner: LockOwnerMetadata): string {
@@ -236,6 +260,7 @@ export async function readProcessStartTimeMs(
 export function _resetProcessStartTimeForTests(): void {
   cachedProcessStartTimeMs = undefined;
   cachedCurrentProcessStartTime = undefined;
+  currentProcessStartTimeLookup = undefined;
 }
 
 export interface LegacyLockRecord {

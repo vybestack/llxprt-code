@@ -81,28 +81,28 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(status.classification).toBe('absent');
   });
 
-  it('reports current-schema lock with canonical owner identity', async () => {
-    const store = createStore();
-    const realOwner = await buildCurrentProcessOwnerMetadata(500);
-    const owner = {
-      ...realOwner,
-      startTimeSource: 'canonical' as const,
-    };
-    const lockPath = authLockPath('codex', 'default');
-    await fs.mkdir(lockDir, { recursive: true });
-    await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
-      mode: 0o600,
-    });
+  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+    'reports current-schema lock with canonical owner identity',
+    async () => {
+      const store = createStore();
+      const owner = await buildCurrentProcessOwnerMetadata(500);
+      expect(owner.startTimeSource).toBe('canonical');
+      const lockPath = authLockPath('codex', 'default');
+      await fs.mkdir(lockDir, { recursive: true });
+      await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
+        mode: 0o600,
+      });
 
-    const status = await store.inspectAuthLock('codex', 'default');
-    expect(status.exists).toBe(true);
-    expect(status.classification).toBe('versioned');
-    expect(status.canonicalPath).toBe(lockPath);
-    expect(status.ownerPid).toBe(process.pid);
-    expect(status.ownerStartTimeSource).toBe('canonical');
-    expect(status.liveness.status).toBe('live');
-    expect(status.tokenVisibility.status).toBe('invalid');
-  });
+      const status = await store.inspectAuthLock('codex', 'default');
+      expect(status.exists).toBe(true);
+      expect(status.classification).toBe('versioned');
+      expect(status.canonicalPath).toBe(lockPath);
+      expect(status.ownerPid).toBe(process.pid);
+      expect(status.ownerStartTimeSource).toBe('canonical');
+      expect(status.liveness.status).toBe('live');
+      expect(status.tokenVisibility.status).toBe('invalid');
+    },
+  );
 
   it('reports legacy lock classification as unverifiable', async () => {
     const store = createStore();
@@ -139,10 +139,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     const store = createStore();
     await store.saveToken('codex', validToken, 'default');
 
-    const owner = {
-      ...(await buildCurrentProcessOwnerMetadata(500)),
-      startTimeSource: 'canonical' as const,
-    };
+    const owner = await buildCurrentProcessOwnerMetadata(500);
     const lockPath = authLockPath('codex', 'default');
     await fs.mkdir(lockDir, { recursive: true });
     await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
@@ -194,10 +191,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
 
   it('never exposes owner tokens or credentials in status', async () => {
     const store = createStore();
-    const owner = {
-      ...(await buildCurrentProcessOwnerMetadata(500)),
-      startTimeSource: 'canonical' as const,
-    };
+    const owner = await buildCurrentProcessOwnerMetadata(500);
     const lockPath = authLockPath('codex', 'default');
     await fs.mkdir(lockDir, { recursive: true });
     await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
@@ -240,23 +234,24 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(token?.access_token).toBe('test-access-token');
   });
 
-  it('recoverAuthLock refuses a verified-live owner', async () => {
-    const store = createStore();
-    const owner = {
-      ...(await buildCurrentProcessOwnerMetadata(500)),
-      startTimeSource: 'canonical' as const,
-    };
-    const lockPath = authLockPath('codex', 'default');
-    await fs.mkdir(lockDir, { recursive: true });
-    await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
-      mode: 0o600,
-    });
+  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+    'recoverAuthLock refuses a verified-live owner',
+    async () => {
+      const store = createStore();
+      const owner = await buildCurrentProcessOwnerMetadata(500);
+      expect(owner.startTimeSource).toBe('canonical');
+      const lockPath = authLockPath('codex', 'default');
+      await fs.mkdir(lockDir, { recursive: true });
+      await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
+        mode: 0o600,
+      });
 
-    const result = await store.recoverAuthLock('codex', 'default');
-    expect(result.recovered).toBe(false);
-    expect(result.reason).toContain('live');
-    await expect(fs.stat(lockPath)).resolves.toBeDefined();
-  });
+      const result = await store.recoverAuthLock('codex', 'default');
+      expect(result.recovered).toBe(false);
+      expect(result.reason).toContain('live');
+      await expect(fs.stat(lockPath)).resolves.toBeDefined();
+    },
+  );
 
   it('recoverAuthLock directs legacy lock recovery to the force path', async () => {
     const store = createStore();
@@ -298,25 +293,26 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(token).not.toBeNull();
   });
 
-  it('forceRecoverAuthLock refuses a verified-live owner even with acknowledgment', async () => {
-    const store = createStore();
-    const owner = {
-      ...(await buildCurrentProcessOwnerMetadata(500)),
-      startTimeSource: 'canonical' as const,
-    };
-    const lockPath = authLockPath('codex', 'default');
-    await fs.mkdir(lockDir, { recursive: true });
-    await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
-      mode: 0o600,
-    });
+  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+    'forceRecoverAuthLock refuses a verified-live owner even with acknowledgment',
+    async () => {
+      const store = createStore();
+      const owner = await buildCurrentProcessOwnerMetadata(500);
+      expect(owner.startTimeSource).toBe('canonical');
+      const lockPath = authLockPath('codex', 'default');
+      await fs.mkdir(lockDir, { recursive: true });
+      await fs.writeFile(lockPath, serializeOwnerMetadata(owner), {
+        mode: 0o600,
+      });
 
-    const result = await store.forceRecoverAuthLock('codex', 'default', {
-      acknowledgeAllStopped: true,
-    });
-    expect(result.recovered).toBe(false);
-    expect(result.reason).toContain('live');
-    await expect(fs.stat(lockPath)).resolves.toBeDefined();
-  });
+      const result = await store.forceRecoverAuthLock('codex', 'default', {
+        acknowledgeAllStopped: true,
+      });
+      expect(result.recovered).toBe(false);
+      expect(result.reason).toContain('live');
+      await expect(fs.stat(lockPath)).resolves.toBeDefined();
+    },
+  );
 
   it('forceRecoverAuthLock requires explicit acknowledgment for legacy residue', async () => {
     const store = createStore();
@@ -351,7 +347,6 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     const successor = {
       ...(await buildCurrentProcessOwnerMetadata(500)),
       ownerToken: 'live-successor-after-inspection',
-      startTimeSource: 'canonical' as const,
     };
     const originalLink = fs.link.bind(fs);
     const linkSpy = vi

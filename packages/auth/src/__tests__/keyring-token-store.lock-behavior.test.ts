@@ -11,6 +11,7 @@ import { once } from 'node:events';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { KeyringTokenStore } from '../keyring-token-store.js';
+import { buildOwnerMetadata } from '../lock-owner.js';
 import type { IDebugLogger, ISecureStore } from '../interfaces/index.js';
 
 function createInMemorySecureStore(): ISecureStore {
@@ -39,10 +40,14 @@ const CHILD_EXIT_TIMEOUT_MS = 2_000;
 async function waitForChildReady(
   child: ReturnType<typeof spawn>,
 ): Promise<void> {
+  const stdout = child.stdout;
+  if (stdout === null) {
+    throw new Error('Lock-owner child stdout is not piped');
+  }
   await new Promise<void>((resolve, reject) => {
     const cleanup = (): void => {
       clearTimeout(timeout);
-      child.stdout.removeListener('data', onData);
+      stdout.removeListener('data', onData);
       child.removeListener('error', onError);
       child.removeListener('exit', onExit);
     };
@@ -69,7 +74,7 @@ async function waitForChildReady(
       cleanup();
       reject(new Error('Timed out waiting for lock-owner child readiness'));
     }, CHILD_READY_TIMEOUT_MS);
-    child.stdout.once('data', onData);
+    stdout.once('data', onData);
     child.once('error', onError);
     child.once('exit', onExit);
   });
@@ -104,11 +109,16 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  function createStore(): KeyringTokenStore {
+  function createStore(
+    currentProcessOwnerMetadataBuilder?: () =>
+      | ReturnType<typeof buildOwnerMetadata>
+      | Promise<ReturnType<typeof buildOwnerMetadata>>,
+  ): KeyringTokenStore {
     return new KeyringTokenStore({
       secureStore: createInMemorySecureStore(),
       lockDir,
       logger: createNoOpLogger(),
+      currentProcessOwnerMetadataBuilder,
     });
   }
 
@@ -134,6 +144,35 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     expect(stat.isFile()).toBe(true);
 
     await store.releaseRefreshLock('codex');
+  });
+
+  it('makes an uncontended acquisition attempt when waitMs is zero', async () => {
+    const store = createStore();
+
+    expect(await store.acquireRefreshLock('zero-wait', { waitMs: 0 })).toBe(
+      true,
+    );
+
+    await store.releaseRefreshLock('zero-wait');
+  });
+
+  it('starts the wait budget after current-process metadata probing', async () => {
+    let metadataProbeFinished = false;
+    const store = createStore(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      metadataProbeFinished = true;
+      return buildOwnerMetadata(Date.now() - process.uptime() * 1000);
+    });
+
+    const acquired = await store.acquireRefreshLock('metadata-budget', {
+      waitMs: 1,
+    });
+    expect({ acquired, metadataProbeFinished }).toStrictEqual({
+      acquired: true,
+      metadataProbeFinished: true,
+    });
+
+    await store.releaseRefreshLock('metadata-budget');
   });
 
   it('serializes two live contenders across separate instances', async () => {
@@ -378,49 +417,54 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     }
   });
 
-  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform)).each([
-    {
-      lockType: 'auth',
-      acquire: (store: KeyringTokenStore, waitMs: number) =>
-        store.acquireAuthLock('subprocess', { waitMs }),
-      release: (store: KeyringTokenStore) =>
-        store.releaseAuthLock('subprocess'),
-    },
-    {
-      lockType: 'refresh',
-      acquire: (store: KeyringTokenStore, waitMs: number) =>
-        store.acquireRefreshLock('subprocess', { waitMs }),
-      release: (store: KeyringTokenStore) =>
-        store.releaseRefreshLock('subprocess'),
-    },
-  ])(
-    'defers to a real live subprocess $lockType owner and recovers after it exits',
-    async ({ lockType, acquire, release }) => {
-      const lockFile = path.join(lockDir, `subprocess-${lockType}.lock`);
-      await fs.mkdir(lockDir, { recursive: true });
-      const child = spawn(process.execPath, [
-        '-e',
-        [
-          "const fs=require('node:fs')",
-          "const os=require('node:os')",
-          "const cp=require('node:child_process')",
-          "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
-          "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started}),{mode:0o600})",
-          "process.stdout.write('ready\\n')",
-          'setInterval(()=>{},1000)',
-        ].join(';'),
-        lockFile,
-      ]);
-      const store = createStore();
+  describe.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+    'OS-observed subprocess owner identity',
+    () => {
+      it.each([
+        {
+          lockType: 'auth',
+          acquire: (store: KeyringTokenStore, waitMs: number) =>
+            store.acquireAuthLock('subprocess', { waitMs }),
+          release: (store: KeyringTokenStore) =>
+            store.releaseAuthLock('subprocess'),
+        },
+        {
+          lockType: 'refresh',
+          acquire: (store: KeyringTokenStore, waitMs: number) =>
+            store.acquireRefreshLock('subprocess', { waitMs }),
+          release: (store: KeyringTokenStore) =>
+            store.releaseRefreshLock('subprocess'),
+        },
+      ])(
+        'defers to a real live subprocess $lockType owner and recovers after it exits',
+        async ({ lockType, acquire, release }) => {
+          const lockFile = path.join(lockDir, `subprocess-${lockType}.lock`);
+          await fs.mkdir(lockDir, { recursive: true });
+          const child = spawn(process.execPath, [
+            '-e',
+            [
+              "const fs=require('node:fs')",
+              "const os=require('node:os')",
+              "const cp=require('node:child_process')",
+              "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
+              "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
+              "process.stdout.write('ready\\n')",
+              'setInterval(()=>{},1000)',
+            ].join(';'),
+            lockFile,
+          ]);
+          const store = createStore();
 
-      try {
-        await waitForChildReady(child);
-        expect(await acquire(store, 150)).toBe(false);
-      } finally {
-        await stopChild(child);
-      }
-      expect(await acquire(store, 1_000)).toBe(true);
-      await release(store);
+          try {
+            await waitForChildReady(child);
+            expect(await acquire(store, 150)).toBe(false);
+          } finally {
+            await stopChild(child);
+          }
+          expect(await acquire(store, 1_000)).toBe(true);
+          await release(store);
+        },
+      );
     },
   );
 });

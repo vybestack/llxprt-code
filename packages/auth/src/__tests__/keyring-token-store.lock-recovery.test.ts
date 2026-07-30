@@ -13,6 +13,7 @@ import {
   KeyringTokenStore,
 } from '../keyring-token-store.js';
 import {
+  buildCurrentProcessOwnerMetadata,
   buildOwnerMetadata,
   getProcessStartTimeMs,
   parseOwnerMetadata,
@@ -181,29 +182,28 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
     });
   });
 
-  describe('recycled-PID recovery', () => {
-    it('recovers when a dead predecessor shared our PID but had a different start time', async () => {
-      const lockFile = refreshLockPath('gemini');
-      // Same PID as us, but start time from 2 minutes ago → predecessor died,
-      // our process recycled the PID. Requires canonical startTimeSource
-      // because PID-reuse proof depends on OS-observed process identity.
-      await writeVersionedLock(lockFile, {
-        version: 1,
-        ownerToken: 'predecessor-owner',
-        pid: process.pid,
-        hostname: os.hostname(),
-        startTimeMs: getProcessStartTimeMs() - 120_000,
-        startTimeSource: 'canonical',
-      });
+  describe.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+    'recycled-PID recovery',
+    () => {
+      it('recovers when a dead predecessor shared our PID but had a different start time', async () => {
+        const lockFile = refreshLockPath('gemini');
+        const currentOwner = await buildCurrentProcessOwnerMetadata(500);
+        expect(currentOwner.startTimeSource).toBe('canonical');
+        await writeVersionedLock(lockFile, {
+          ...currentOwner,
+          ownerToken: 'predecessor-owner',
+          startTimeMs: currentOwner.startTimeMs - 120_000,
+        });
 
-      const store = createStore();
-      const acquired = await store.acquireRefreshLock('gemini', {
-        waitMs: 1000,
+        const store = createStore();
+        const acquired = await store.acquireRefreshLock('gemini', {
+          waitMs: 1000,
+        });
+        expect(acquired).toBe(true);
+        await store.releaseRefreshLock('gemini');
       });
-      expect(acquired).toBe(true);
-      await store.releaseRefreshLock('gemini');
-    });
-  });
+    },
+  );
 
   describe('conservative deferral', () => {
     it('treats a lock owned by a different host as unverifiable and defers', async () => {

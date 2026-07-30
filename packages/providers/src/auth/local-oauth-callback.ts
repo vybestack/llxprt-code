@@ -244,19 +244,20 @@ const createCallbackServer = async (
   await listen(server, port, options.signal);
 
   const state = createCallbackState();
-  const onAbort = (): void => {
-    settleCallback(state, abortError(options.signal));
-    void shutdownCallbackServer(server, state);
-  };
-  if (options.signal?.aborted === true) {
-    await shutdownCallbackServer(server, state);
-    throw abortError(options.signal);
-  }
-  options.signal?.addEventListener('abort', onAbort, { once: true });
   const shutdown = async (): Promise<void> => {
     options.signal?.removeEventListener('abort', onAbort);
     await shutdownCallbackServer(server, state);
   };
+  const onAbort = (): void => {
+    settleCallback(state, abortError(options.signal));
+    void shutdown();
+  };
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  if (options.signal?.aborted === true) {
+    const error = abortError(options.signal);
+    await shutdown();
+    throw error;
+  }
 
   server.on(
     'request',
