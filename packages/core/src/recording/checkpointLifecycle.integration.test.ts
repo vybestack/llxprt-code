@@ -467,4 +467,38 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
     ).rejects.toThrow('sequence-corrupt recording');
     expect(await fs.readFile(filePath, 'utf-8')).toBe(corruptBytes);
   });
+
+  describe('SessionRecordingService disposal failures', () => {
+    let tempDir: string;
+    let chatsDir: string;
+    let service: SessionRecordingService | undefined;
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-dispose-'));
+      chatsDir = path.join(tempDir, 'chats');
+      await fs.mkdir(chatsDir, { recursive: true });
+    });
+
+    afterEach(async () => {
+      await service?.dispose().catch(() => undefined);
+      await fs.rm(tempDir, { recursive: true, force: true });
+    });
+
+    it('releases its lock and becomes inactive when the final flush fails', async () => {
+      const config = makeConfig(chatsDir, {
+        sessionId: 'dispose-flush-failure-session',
+      });
+      service = await SessionRecordingService.createLocked(config);
+      vi.spyOn(service, 'flush').mockRejectedValueOnce(
+        new Error('final flush failed'),
+      );
+
+      await expect(service.dispose()).rejects.toThrow('final flush failed');
+
+      expect(service.isActive()).toBe(false);
+      expect(
+        await SessionLockManager.isLocked(chatsDir, config.sessionId),
+      ).toBe(false);
+    });
+  });
 });
