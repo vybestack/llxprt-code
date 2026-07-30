@@ -55,6 +55,11 @@ describe('readEnvMs', () => {
     expect(readEnvMs(ENV_KEY, 30_000)).toBe(30_000);
   });
 
+  it('falls back to the default when the value is negative', () => {
+    process.env[ENV_KEY] = '-1';
+    expect(readEnvMs(ENV_KEY, 30_000)).toBe(30_000);
+  });
+
   it('falls back to the default when the value is non-numeric', () => {
     process.env[ENV_KEY] = 'not-a-number';
     expect(readEnvMs(ENV_KEY, 30_000)).toBe(30_000);

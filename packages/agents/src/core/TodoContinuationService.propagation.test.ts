@@ -49,7 +49,9 @@ describe('TodoContinuationService — resolver-propagation (real store/disk)', (
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    if (tempDir !== undefined) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('readTodoSnapshot returns what was written to disk via the real store', async () => {
