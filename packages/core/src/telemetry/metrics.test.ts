@@ -78,7 +78,7 @@ const {
   initializeMetrics,
   recordTokenUsageMetrics,
   recordFileOperationMetric,
-  resetMetricsForTesting,
+  resetMetricsState,
 } = await import('./metrics.js');
 
 /**
@@ -107,7 +107,7 @@ function resetMockDefaults(): void {
 
 describe('Telemetry Metrics', () => {
   beforeEach(() => {
-    resetMetricsForTesting();
+    resetMetricsState();
     resetMockDefaults();
   });
 
