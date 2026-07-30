@@ -47,7 +47,9 @@ const server = createServer((request, response) => {
     return;
   }
   try {
-    checkpoints.push(captureOsCheckpoint(target.pid, name, artifactDir));
+    checkpoints.push(
+      captureOsCheckpoint(target.pid, checkpoints.length, name, artifactDir),
+    );
     response.writeHead(204).end();
   } catch (error) {
     response.writeHead(500).end(String(error));
@@ -125,15 +127,21 @@ writeFileSync(
 );
 process.stdout.write(`${artifactDir}\n`);
 
+const CHECKPOINT_FILES = [
+  'checkpoint-0',
+  'checkpoint-1',
+  'checkpoint-2',
+  'checkpoint-3',
+  'checkpoint-4',
+] as const;
+
 function captureOsCheckpoint(
   pid: number,
-  name: string,
+  index: number,
+  _name: string,
   outputDir: string,
 ): OsCheckpoint {
-  // Validate name to prevent path traversal — only alphanumeric and hyphen
-  if (!/^[a-z0-9-]+$/i.test(name)) {
-    throw new Error(`Invalid checkpoint name: ${name}`);
-  }
+  const filePrefix = CHECKPOINT_FILES[index] ?? `checkpoint-${index}`;
   const ps = run('/bin/ps', ['-p', String(pid), '-o', 'pid=,rss=,command=']);
   const vmmap = run('/usr/bin/vmmap', ['-summary', String(pid)]);
   const footprint = run('/usr/bin/footprint', [
@@ -142,12 +150,11 @@ function captureOsCheckpoint(
     '--pid',
     String(pid),
   ]);
-  const safeName = name.replace(/[^a-z0-9-]/gi, '');
-  writeFileSync(resolve(outputDir, `${safeName}.ps.txt`), ps);
-  writeFileSync(resolve(outputDir, `${safeName}.vmmap.txt`), vmmap);
-  writeFileSync(resolve(outputDir, `${safeName}.footprint.txt`), footprint);
+  writeFileSync(resolve(outputDir, `${filePrefix}.ps.txt`), ps);
+  writeFileSync(resolve(outputDir, `${filePrefix}.vmmap.txt`), vmmap);
+  writeFileSync(resolve(outputDir, `${filePrefix}.footprint.txt`), footprint);
   return {
-    name,
+    name: _name,
     rssBytes: parsePsRssBytes(ps, pid),
     vmmap: parseVmmapSummary(vmmap),
     footprintBytes: parseFootprintBytes(footprint),
