@@ -278,13 +278,11 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       content('human', 'C'),
       content('ai', 'D'),
     ];
-    const setHistory = vi.fn();
     Object.assign(context.services.config, {
       getAgentClient: () => ({
         hasChatInitialized: () => true,
         getChat: () => ({
           getHistory: () => history,
-          setHistory,
         }),
       }),
     });
@@ -302,7 +300,6 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       ],
       clientHistory: history.slice(0, 2),
     });
-    expect(setHistory).toHaveBeenCalledWith(history.slice(0, 2));
     const replay = await replaySession(
       recording.getFilePath() ?? '',
       PROJECT_HASH,

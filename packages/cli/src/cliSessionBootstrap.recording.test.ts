@@ -50,13 +50,16 @@ describe('recording bootstrap checkpoint resolution', () => {
       const recording = new SessionRecordingService(
         recordingConfig(chatsDir, sessionId),
       );
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: sessionId }],
-      });
-      await recording.createCheckpoint('duplicate-name');
-      await recording.flush();
-      await recording.dispose();
+      try {
+        recording.recordContent({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: sessionId }],
+        });
+        await recording.createCheckpoint('duplicate-name');
+        await recording.flush();
+      } finally {
+        await recording.dispose();
+      }
     }
 
     const config = new Config({

@@ -387,20 +387,38 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 181-185
    */
   async dispose(): Promise<void> {
+    const failures: unknown[] = [];
     if (this.active) {
-      await this.flush();
+      try {
+        await this.flush();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
     }
     this.active = false;
     this.queue = [];
     this.preContentBuffer = [];
     if (this.chatsDirWatcher) {
-      this.chatsDirWatcher.close();
+      try {
+        this.chatsDirWatcher.close();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
       this.chatsDirWatcher = null;
     }
     const lockHandle = this.lockHandle;
-    await lockHandle?.release();
-    if (this.lockHandle === lockHandle) {
-      this.lockHandle = null;
+    try {
+      await lockHandle?.release();
+    } catch (error: unknown) {
+      failures.push(error);
+    } finally {
+      if (this.lockHandle === lockHandle) {
+        this.lockHandle = null;
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Failed to dispose recording service');
     }
   }
 

@@ -343,6 +343,33 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
         'Line 4: malformed sequence number, skipping',
       );
     });
+
+    it('does not treat an unsafe sequence as a completed bounded replay', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      const checkpoint = await svc.createCheckpoint('atA');
+      await svc.dispose();
+      const filePath = svc.getFilePath()!;
+      const unsafe = JSON.stringify({
+        v: 1,
+        seq: Number.MAX_SAFE_INTEGER + 1,
+        ts: '2026-01-01T00:00:00.000Z',
+        type: 'content',
+        payload: { content: makeContent('invalid', 'ai') },
+      });
+      await fs.appendFile(filePath, `${unsafe}\n`, 'utf-8');
+
+      const result = await replaySessionThroughSequence(
+        filePath,
+        PROJECT_HASH,
+        checkpoint.sequence,
+      );
+      requireReplaySuccess(result);
+      expect(result.history).toStrictEqual([makeContent('A', 'human')]);
+      expect(result.warnings).toContain(
+        'Line 4: malformed sequence number, skipping',
+      );
+    });
   });
 
   it('keeps the maximum sequence and marks [1,5,3] recordings corrupt', async () => {
@@ -494,6 +521,33 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       expect(replay.checkpoints).toStrictEqual([]);
     });
 
+    it('warns and skips a checkpoint rename event without a usable name', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      const checkpoint = await svc.createCheckpoint('original');
+      await svc.dispose();
+      const filePath = svc.getFilePath()!;
+      const events = await readJsonlFile(filePath);
+      await fs.appendFile(
+        filePath,
+        `${JSON.stringify({
+          v: 1,
+          seq: (events.at(-1)?.seq ?? 0) + 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          type: 'checkpoint_renamed',
+          payload: { checkpointId: checkpoint.checkpointId, name: '   ' },
+        })}\n`,
+        'utf-8',
+      );
+
+      const replay = await replaySession(filePath, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.warnings).toContain(
+        `Line ${events.length + 1}: malformed checkpoint_renamed event (missing name), skipping`,
+      );
+      expect(replay.checkpoints?.[0]?.name).toBe('original');
+    });
+
     it('does not revive a tombstoned checkpoint when a duplicate create event is encountered', () => {
       const events: SessionRecordLine[] = [
         {
@@ -570,6 +624,37 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       const replay = await replaySession(child.getFilePath()!, PROJECT_HASH);
       requireReplaySuccess(replay);
       expect(replay.ancestry).toStrictEqual(payload);
+    });
+
+    it('rejects fork ancestry with an unsafe parent sequence', async () => {
+      const child = new SessionRecordingService(makeConfig(chatsDir));
+      child.recordContent(makeContent('A', 'human'));
+      await child.dispose();
+      const filePath = child.getFilePath()!;
+      const events = await readJsonlFile(filePath);
+      await fs.appendFile(
+        filePath,
+        `${JSON.stringify({
+          v: 1,
+          seq: (events.at(-1)?.seq ?? 0) + 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          type: 'session_forked',
+          payload: {
+            parentSessionId: 'parent',
+            parentSequence: Number.MAX_SAFE_INTEGER + 1,
+            checkpointId: 'checkpoint',
+            checkpointName: 'checkpoint-name',
+          },
+        })}\n`,
+        'utf-8',
+      );
+
+      const replay = await replaySession(filePath, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.ancestry).toBeUndefined();
+      expect(replay.warnings).toContain(
+        `Line ${events.length + 1}: malformed session_forked event, skipping`,
+      );
     });
   });
 

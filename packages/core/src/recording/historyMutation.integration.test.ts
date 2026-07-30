@@ -305,10 +305,12 @@ describe('durable history mutation @plan:2026-07-28-issue-2625', () => {
       // Dispose to make the recording inactive
       await svc.dispose();
 
+      const originalHistory = [...history];
       const mutator = new HistoryMutationService();
       const result = await mutator.clear(history, svc);
       requireMutationFailure(result);
       expect(result.error).toContain('not active');
+      expect(history).toStrictEqual(originalHistory);
     });
   });
 });

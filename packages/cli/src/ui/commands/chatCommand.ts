@@ -107,7 +107,11 @@ const getSavedChatTags = async (
         name: checkpoint.checkpointName,
         mtime: checkpoint.source.lastModified.toISOString(),
       }))
-      .sort((left, right) => left.mtime.localeCompare(right.mtime));
+      .sort(
+        (left, right) =>
+          left.mtime.localeCompare(right.mtime) ||
+          left.name.localeCompare(right.name),
+      );
   } catch (error: unknown) {
     debugLogger.warn(`Failed to list saved chat checkpoints: ${String(error)}`);
     return [];
@@ -530,10 +534,8 @@ const restoreHistory = async (
     };
   }
 
-  // Apply the new history only after persistence succeeds
-  chat.setHistory(result.remainingHistory);
-
-  // Convert to UI history items for display
+  // Convert to UI history items for display. The slash-command result handler
+  // applies the client history exactly once after durable persistence succeeds.
   const uiHistory: HistoryItemWithoutId[] = result.remainingHistory.map(
     (content: IContent) => {
       const textBlocks = content.blocks.filter(

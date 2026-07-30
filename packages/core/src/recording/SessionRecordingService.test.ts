@@ -26,7 +26,7 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
@@ -38,6 +38,7 @@ import {
   type SessionRecordLine,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
+import { SessionLockManager } from './SessionLockManager.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -609,6 +610,24 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       await service.dispose();
 
       expect(service.isActive()).toBe(false);
+    });
+
+    it('releases its lock and becomes inactive when the final flush fails', async () => {
+      const config = makeConfig({
+        chatsDir,
+        sessionId: 'dispose-flush-failure-session',
+      });
+      service = await SessionRecordingService.createLocked(config);
+      vi.spyOn(service, 'flush').mockRejectedValueOnce(
+        new Error('final flush failed'),
+      );
+
+      await expect(service.dispose()).rejects.toThrow('final flush failed');
+
+      expect(service.isActive()).toBe(false);
+      expect(
+        await SessionLockManager.isLocked(chatsDir, config.sessionId),
+      ).toBe(false);
     });
 
     it('recordSessionFork rejects an inactive recording', async () => {

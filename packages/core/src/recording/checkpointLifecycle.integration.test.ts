@@ -20,7 +20,7 @@
  * Uses real recording files in temp dirs.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -282,6 +282,45 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
           }),
         );
       } finally {
+        await recording.dispose();
+      }
+    });
+
+    it('restores an overwritten checkpoint when the replacement action fails', async () => {
+      const recording = await SessionRecordingService.createLocked(
+        makeConfig(chatsDir()),
+      );
+      recording.recordContent(makeContent('source'));
+      const existing = await recording.createCheckpoint('shared-name');
+      recording.recordContent(makeContent('tail'));
+      const createSpy = vi
+        .spyOn(recording, 'createCheckpoint')
+        .mockRejectedValueOnce(new Error('replacement failed'));
+
+      try {
+        await expect(
+          new CheckpointService().createCheckpoint(
+            recording,
+            PROJECT_HASH,
+            'shared-name',
+            true,
+          ),
+        ).rejects.toThrow('replacement failed');
+
+        const replay = await replaySession(
+          recording.getFilePath()!,
+          PROJECT_HASH,
+        );
+        requireReplaySuccess(replay);
+        expect(replay.checkpoints).toContainEqual(
+          expect.objectContaining({
+            checkpointId: existing.checkpointId,
+            name: 'shared-name',
+            deleted: false,
+          }),
+        );
+      } finally {
+        createSpy.mockRestore();
         await recording.dispose();
       }
     });

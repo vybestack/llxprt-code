@@ -360,6 +360,10 @@ function handleDirectoriesChanged(
   }
 }
 
+function isValidSequence(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 function applyParsedEvent(
   parsed: Record<string, unknown> | null,
   acc: ReplayAccumulators,
@@ -368,11 +372,7 @@ function applyParsedEvent(
   if (parsed === null) {
     return undefined;
   }
-  if (
-    typeof parsed.seq !== 'number' ||
-    !Number.isSafeInteger(parsed.seq) ||
-    parsed.seq < 0
-  ) {
+  if (!isValidSequence(parsed.seq)) {
     acc.malformedCount++;
     acc.warnings.push(
       `Line ${acc.lineNumber}: malformed sequence number, skipping`,
@@ -443,10 +443,20 @@ function collectMetadataEvent(
     );
     return;
   }
-  if (type === 'checkpoint_created' && typeof payload.name !== 'string') {
+  if (
+    (type === 'checkpoint_created' || type === 'checkpoint_renamed') &&
+    (typeof payload.name !== 'string' || payload.name.trim() === '')
+  ) {
     acc.malformedCount++;
     acc.warnings.push(
-      `Line ${lineNumber}: malformed checkpoint_created event (missing name), skipping`,
+      `Line ${lineNumber}: malformed ${type} event (missing name), skipping`,
+    );
+    return;
+  }
+  if (type === 'session_forked' && !isSessionForkedPayload(payload)) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed session_forked event, skipping`,
     );
     return;
   }
@@ -598,7 +608,13 @@ function appendCheckpointMetadataWarnings(
     const checkpointId = extractCheckpointId(line);
     if (checkpointId === null) continue;
     if (line.type === 'checkpoint_created') {
-      knownIds.add(checkpointId);
+      if (knownIds.has(checkpointId)) {
+        warnings.push(
+          `Sequence ${line.seq}: checkpoint_created duplicates checkpoint ${checkpointId}`,
+        );
+      } else {
+        knownIds.add(checkpointId);
+      }
     } else if (
       line.type === 'checkpoint_renamed' ||
       line.type === 'checkpoint_deleted'
@@ -684,7 +700,7 @@ function isSessionForkedPayload(value: unknown): value is SessionForkedPayload {
   if (!('checkpointId' in value) || !('checkpointName' in value)) return false;
   return (
     typeof value.parentSessionId === 'string' &&
-    typeof value.parentSequence === 'number' &&
+    isValidSequence(value.parentSequence) &&
     typeof value.checkpointId === 'string' &&
     typeof value.checkpointName === 'string'
   );
@@ -775,8 +791,11 @@ async function readSessionStream(
       warnings: acc.warnings,
     };
   } finally {
-    reader?.close();
-    stream?.destroy();
+    try {
+      reader?.close();
+    } finally {
+      stream?.destroy();
+    }
   }
   return finalizeReplay(acc);
 }
@@ -811,7 +830,7 @@ function applyBoundedReplayLine(
   if (rawLine.trim() === '') return undefined;
   const parsed = parseLine(rawLine, acc.lineNumber, acc);
   if (parsed === null) return undefined;
-  if (typeof parsed.seq === 'number' && parsed.seq > maxSequence) {
+  if (isValidSequence(parsed.seq) && parsed.seq > maxSequence) {
     return 'complete';
   }
   return applyParsedEvent(parsed, acc, expectedProjectHash);

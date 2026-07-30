@@ -47,6 +47,54 @@ type NamedOperation =
 
 type NamedOperationAction<T> = (name: string) => Promise<T>;
 
+type FileSnapshot = {
+  readonly filePath: string;
+  readonly content: Buffer;
+};
+
+function targetFilePath(target: ContinueTarget): string {
+  return target.kind === 'session'
+    ? target.session.filePath
+    : target.source.filePath;
+}
+
+async function captureFiles(
+  targets: readonly ContinueTarget[],
+): Promise<FileSnapshot[]> {
+  const filePaths = [...new Set(targets.map(targetFilePath))];
+  return Promise.all(
+    filePaths.map(async (filePath) => ({
+      filePath,
+      content: await fs.readFile(filePath),
+    })),
+  );
+}
+
+async function runWithFileRollback<T>(
+  snapshots: readonly FileSnapshot[],
+  action: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await action();
+  } catch (error: unknown) {
+    const failures: unknown[] = [error];
+    for (const snapshot of snapshots) {
+      try {
+        await fs.writeFile(snapshot.filePath, snapshot.content);
+      } catch (rollbackError: unknown) {
+        failures.push(rollbackError);
+      }
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(
+        failures,
+        'Checkpoint overwrite rollback failed',
+      );
+    }
+    throw error;
+  }
+}
+
 function targetSessionId(target: ContinueTarget): string {
   return target.kind === 'session'
     ? target.session.sessionId
@@ -255,12 +303,15 @@ export class CheckpointService {
           throw new Error(`Name '${trimmed}' changed while acquiring locks`);
         }
         await this.requireLiveCheckpoint(filePath, projectHash, checkpointId);
-        for (const collision of refreshedCollisions) {
-          await this.tombstoneClosedCollision(collision, projectHash);
-        }
-        await appendEvent(filePath, projectHash, 'checkpoint_renamed', {
-          checkpointId,
-          name: trimmed,
+        const snapshots = await captureFiles(refreshedCollisions);
+        await runWithFileRollback(snapshots, async () => {
+          for (const collision of refreshedCollisions) {
+            await this.tombstoneClosedCollision(collision, projectHash);
+          }
+          await appendEvent(filePath, projectHash, 'checkpoint_renamed', {
+            checkpointId,
+            name: trimmed,
+          });
         });
       } finally {
         for (const lock of [...locks].reverse()) {
@@ -372,7 +423,7 @@ export class CheckpointService {
         chatsDir,
       );
       try {
-        await this.verifyAndTombstoneCollisions(
+        const refreshedCollisions = await this.refreshLockedCollisions(
           collisions,
           recording,
           chatsDir,
@@ -380,7 +431,13 @@ export class CheckpointService {
           operation,
           name,
         );
-        return await action(name);
+        const snapshots = await captureFiles(refreshedCollisions);
+        return await runWithFileRollback(snapshots, async () => {
+          for (const collision of refreshedCollisions) {
+            await this.tombstoneCollision(collision, recording, projectHash);
+          }
+          return action(name);
+        });
       } finally {
         for (const lock of [...locks].reverse()) {
           await lock.release().catch(() => undefined);
@@ -459,14 +516,14 @@ export class CheckpointService {
     }
   }
 
-  private async verifyAndTombstoneCollisions(
+  private async refreshLockedCollisions(
     lockedCollisions: readonly ContinueTarget[],
     recording: SessionRecordingService,
     chatsDir: string,
     projectHash: string,
     operation: NamedOperation,
     name: string,
-  ): Promise<void> {
+  ): Promise<ContinueTarget[]> {
     const refreshed = await SessionDiscovery.listContinueTargets(
       chatsDir,
       projectHash,
@@ -483,9 +540,7 @@ export class CheckpointService {
     if (unlockedCollision !== undefined) {
       throw new Error(`Name '${name}' changed while acquiring locks`);
     }
-    for (const collision of collisions) {
-      await this.tombstoneCollision(collision, recording, projectHash);
-    }
+    return collisions;
   }
 
   private async tombstoneCollision(

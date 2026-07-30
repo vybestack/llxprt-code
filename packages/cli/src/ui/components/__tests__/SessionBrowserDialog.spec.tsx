@@ -611,6 +611,10 @@ describe('SessionBrowserDialog', () => {
   });
   describe('Error Display', () => {
     it('should show a dedicated error state when loading yields no sessions', () => {
+      mockHookState.sessions = [];
+      mockHookState.filteredSessions = [];
+      mockHookState.pageItems = [];
+      mockHookState.selectedSession = null;
       mockHookState.error = 'Failed to load sessions: Permission denied';
       mockHookState.isLoading = false;
 
