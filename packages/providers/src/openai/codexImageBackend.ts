@@ -291,10 +291,14 @@ export class CodexImageBackend implements ImageGenerationBackend {
       );
     }
 
-    const dataUrls: string[] = [];
-    for (const inputPath of request.inputPaths) {
-      dataUrls.push(await readAndEncodeInputImage(inputPath));
+    if (signal.aborted) {
+      throw new ImageGenerationError('Image edit was aborted.', {
+        cause: new Error('Aborted'),
+      });
     }
+    const dataUrls = await Promise.all(
+      request.inputPaths.map(readAndEncodeInputImage),
+    );
 
     const credential = await this.getCredential();
     const endpoint = buildCodexImageEditEndpoint(this.getBaseUrl());

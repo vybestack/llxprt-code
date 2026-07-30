@@ -78,7 +78,7 @@ function makeRealMinimalPng(): Buffer {
   const storedLen = Buffer.alloc(2);
   storedLen.writeUInt16LE(rawScanline.length, 0);
   const storedNlen = Buffer.alloc(2);
-  storedLen.writeUInt16LE(~rawScanline.length & 0xffff, 0);
+  storedNlen.writeUInt16LE(~rawScanline.length & 0xffff, 0);
   let a = 1;
   let b = 0;
   for (const byte of rawScanline) {

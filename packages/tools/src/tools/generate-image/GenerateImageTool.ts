@@ -236,7 +236,7 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
       });
       return this.buildSuccessResult(result);
     } catch (error) {
-      return this.mapRunnerError(error, signal);
+      return this.mapRunnerError(error);
     }
   }
 
@@ -258,10 +258,10 @@ Saved to: ${result.absoluteOutputPath}`,
     };
   }
 
-  private mapRunnerError(error: unknown, signal: AbortSignal): ToolResult {
+  private mapRunnerError(error: unknown): ToolResult {
     const message = error instanceof Error ? error.message : String(error);
 
-    if (isAbortError(error) || signal.aborted) {
+    if (isAbortError(error)) {
       return {
         llmContent: `Image generation timed out or was cancelled: ${message}`,
         returnDisplay: 'Image generation timed out or was cancelled.',

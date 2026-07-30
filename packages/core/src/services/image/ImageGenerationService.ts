@@ -171,6 +171,10 @@ const BASE64_VALID_BYTES = (() => {
 const PNG_IEND_TYPE = Buffer.from([0x49, 0x45, 0x4e, 0x44]); // "IEND"
 const PNG_IHDR_TYPE = Buffer.from([0x49, 0x48, 0x44, 0x52]); // "IHDR"
 
+const MAX_BASE64_LENGTH = 20 * 1024 * 1024;
+
+const MAX_PNG_CHUNKS = 10_000;
+
 // PNG CRC-32 table (IEEE 802.3, reflected, init/final xor 0xffffffff).
 const PNG_CRC_TABLE = (() => {
   const table = new Int32Array(256);
@@ -216,6 +220,11 @@ export function strictBase64Decode(input: string): Buffer {
   }
   if (input.length === 0) {
     throw new ImagePersistenceError('Image result data is empty.');
+  }
+  if (input.length > MAX_BASE64_LENGTH) {
+    throw new ImagePersistenceError(
+      'Image result data exceeds the maximum allowed size.',
+    );
   }
   if (input.length % 4 !== 0) {
     throw new ImagePersistenceError(
@@ -294,8 +303,13 @@ export function validatePngStructure(bytes: Buffer): void {
   let offset = PNG_SIGNATURE.length;
   let sawIhdr = false;
   let sawIend = false;
+  let chunkCount = 0;
 
   while (offset < bytes.length) {
+    if (chunkCount >= MAX_PNG_CHUNKS) {
+      throw new ImagePersistenceError('PNG contains too many chunks.');
+    }
+    chunkCount++;
     if (sawIend) {
       throw new ImagePersistenceError(
         'PNG has trailing bytes after the IEND chunk.',

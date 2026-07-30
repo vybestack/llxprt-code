@@ -216,9 +216,12 @@ export async function completeImageCommand(
   if (state.phase === 'output') {
     // Output path: suggest directories and a hint for a new .png filename.
     const suggestions = dirs.map(quotePath);
-    if (state.partial.endsWith('.png') || state.partial === '') {
-      suggestions.push(`${state.partial}output.png`);
-    } else if (!state.partial.endsWith(path.sep)) {
+    if (state.partial === '') {
+      suggestions.push('output.png');
+    } else if (
+      !state.partial.endsWith('.png') &&
+      !state.partial.endsWith(path.sep)
+    ) {
       suggestions.push(`${state.partial}.png`);
     }
     return suggestions;

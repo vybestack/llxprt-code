@@ -126,20 +126,54 @@ export async function runImageOperation(
   deps: ImageOperationDispatchDeps,
 ): Promise<ImageOperationResult> {
   const signal = input.signal ?? deps.signal ?? new AbortController().signal;
-  const request = buildNormalizedImageRequest(input);
+  let request;
+  try {
+    request = buildNormalizedImageRequest(input);
+  } catch (error) {
+    if (error instanceof ImageOperationError) throw error;
+    throw new ImageOperationError(
+      `Image request validation failed: ${error instanceof Error ? error.message : String(error)}`,
+      'input-validation',
+      { cause: error },
+    );
+  }
 
-  const { absolute, relative } = await resolveOutputPath(
-    request.outputPath,
-    deps.workspaceRoot,
-  );
+  let resolvedOutputPath: {
+    readonly absolute: string;
+    readonly relative: string;
+  };
+  try {
+    resolvedOutputPath = await resolveOutputPath(
+      request.outputPath,
+      deps.workspaceRoot,
+    );
+  } catch (error) {
+    if (error instanceof ImageOperationError) throw error;
+    throw new ImageOperationError(
+      `Output path validation failed: ${error instanceof Error ? error.message : String(error)}`,
+      'input-validation',
+      { cause: error },
+    );
+  }
+  const { absolute, relative } = resolvedOutputPath;
 
   // Prevalidate ALL input paths before any billable provider request so a
   // validation failure never reaches the backend. Canonical absolute paths
   // are passed to the backend (the backend owns encoding them as data URLs).
-  const resolvedInputPaths = await resolveInputPaths(
-    request.inputPaths,
-    deps.workspaceRoot,
-  );
+  let resolvedInputPaths: readonly string[];
+  try {
+    resolvedInputPaths = await resolveInputPaths(
+      request.inputPaths,
+      deps.workspaceRoot,
+    );
+  } catch (error) {
+    if (error instanceof ImageOperationError) throw error;
+    throw new ImageOperationError(
+      `Input path validation failed: ${error instanceof Error ? error.message : String(error)}`,
+      'input-validation',
+      { cause: error },
+    );
+  }
 
   const backend = deps.resolveBackend();
   if (backend === null) {

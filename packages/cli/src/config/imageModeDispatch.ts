@@ -42,11 +42,13 @@ export function resolveDirectImageMode(
 ): ReturnType<typeof detectImageMode> {
   return detectImageMode(
     {
-      ...(argv.imageInput !== undefined ? { imageInput: argv.imageInput } : {}),
-      ...(argv.imageOutput !== undefined
+      ...(argv.imageInput !== undefined && argv.imageInput.length > 0
+        ? { imageInput: argv.imageInput }
+        : {}),
+      ...(argv.imageOutput !== undefined && argv.imageOutput.trim() !== ''
         ? { imageOutput: argv.imageOutput }
         : {}),
-      ...(argv.imagePrompt !== undefined
+      ...(argv.imagePrompt !== undefined && argv.imagePrompt.trim() !== ''
         ? { imagePrompt: argv.imagePrompt }
         : {}),
     },

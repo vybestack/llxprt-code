@@ -34,7 +34,7 @@ import path from 'node:path';
 
 const runningInCI = process.env.CI === 'true';
 const realProviderOptIn = process.env.LLXPRT_RUN_REAL_PROVIDER_TESTS === 'true';
-const codexProfileName = process.env.LLXPRT_CODEX_IMAGE_PROFILE ?? 'codex';
+const codexProfileName = process.env.LLXPRT_CODEX_IMAGE_PROFILE || 'codex';
 const skipTests = runningInCI || !realProviderOptIn;
 
 const PNG_SIGNATURE = Buffer.from([

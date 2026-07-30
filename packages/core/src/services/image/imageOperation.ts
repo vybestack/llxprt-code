@@ -190,9 +190,9 @@ export function buildNormalizedImageRequest(
 
 /**
  * Reject if the output path itself is a symlink that escapes the workspace.
- * Uses readlink to get the target lexically (works for dangling symlinks),
- * then resolves it relative to the symlink's directory and checks containment.
- * ENOENT (new file) is expected and allowed.
+ * Uses realpath to fully canonicalize the symlink (multi-hop chains included),
+ * then checks containment against the real workspace root. ENOENT (new file)
+ * is expected and allowed.
  */
 async function rejectSymlinkEscape(
   candidateAbsolute: string,
@@ -212,20 +212,16 @@ async function rejectSymlinkEscape(
   }
   if (!stat.isSymbolicLink()) return;
 
-  let linkTarget: string;
+  let resolvedTarget: string;
   try {
-    linkTarget = await fs.readlink(candidateAbsolute);
+    resolvedTarget = await fs.realpath(candidateAbsolute);
   } catch (error) {
     throw new ImageOperationError(
-      `Failed to read output symlink: ${candidateAbsolute}.`,
+      `Failed to canonicalize output symlink: ${candidateAbsolute}.`,
       'output-resolution',
       { cause: error },
     );
   }
-  const resolvedTarget = path.resolve(
-    path.dirname(candidateAbsolute),
-    linkTarget,
-  );
   const targetRel = path.relative(realWorkspaceRoot, resolvedTarget);
   if (targetRel.startsWith('..') || path.isAbsolute(targetRel)) {
     throw new ImageOperationError(
@@ -362,8 +358,9 @@ export async function writeImageAtomically(
   };
 
   const onAbort = () => {
-    // Best-effort cleanup; the awaited path below also cleans up.
-    void cleanupTemp();
+    // No cleanup here: deleting the temp file during publishTempToTarget
+    // (fs.link) would cause a spurious ENOENT. The finally block guarantees
+    // cleanup on all paths.
   };
   signal.addEventListener('abort', onAbort, { once: true });
 

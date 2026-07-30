@@ -54,7 +54,7 @@ export const imageCommand: SlashCommand = {
 
     const resolveRunner = context.services.config?.getRunImageOperation;
     const runner = resolveRunner !== undefined ? resolveRunner() : undefined;
-    if (runner === undefined) {
+    if (typeof runner !== 'function') {
       context.ui.addItem(
         {
           type: MessageType.ERROR,
