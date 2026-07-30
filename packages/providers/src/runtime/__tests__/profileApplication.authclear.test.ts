@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   switchActiveProviderMock,
@@ -244,7 +245,7 @@ describe('Profile application clears stale auth state (issue #2132)', () => {
     expect(configStub.getEphemeralSetting('auth-key-name')).toBeUndefined();
     // auth-keyfile should be set from the new profile
     expect(configStub.getEphemeralSetting('auth-keyfile')).toBe(
-      '/home/user/.glm_key',
+      path.resolve('/home/user/.glm_key'),
     );
   });
 

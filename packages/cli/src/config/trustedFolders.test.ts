@@ -41,6 +41,8 @@ import {
 } from './trustedFolders.js';
 import type { Settings } from './settings.js';
 
+const CANONICAL_NEW_PATH = path.resolve('/new/path');
+
 function createErrorWithCode(message: string, code: string): Error {
   return Object.assign(new Error(message), { code });
 }
@@ -261,14 +263,18 @@ describe('Trusted Folders Loading', () => {
   it('setValue should update the user config and save it', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
-    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+    loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
-    expect(loadedFolders.user.config['/new/path']).toBe(
+    expect(loadedFolders.user.config[CANONICAL_NEW_PATH]).toBe(
       TrustLevel.TRUST_FOLDER,
     );
     expect(mockFsWriteFileSync).toHaveBeenCalledWith(
       expect.stringContaining('.trustedFolders.json.'),
-      JSON.stringify({ '/new/path': TrustLevel.TRUST_FOLDER }, null, 2),
+      JSON.stringify(
+        { [CANONICAL_NEW_PATH]: TrustLevel.TRUST_FOLDER },
+        null,
+        2,
+      ),
       { encoding: 'utf-8', mode: TRUSTED_FOLDERS_FILE_MODE, flag: 'wx' },
     );
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
@@ -358,10 +364,10 @@ describe('Trusted Folders Loading', () => {
       throw unsupportedError;
     });
 
-    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+    loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
     expect(mockFsRenameSync).toHaveBeenCalledOnce();
-    expect(loadedFolders.user.config['/new/path']).toBe(
+    expect(loadedFolders.user.config[CANONICAL_NEW_PATH]).toBe(
       TrustLevel.TRUST_FOLDER,
     );
     expect(warnSpy).toHaveBeenCalledWith(
@@ -379,10 +385,10 @@ describe('Trusted Folders Loading', () => {
       throw unsupportedError;
     });
 
-    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+    loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
     expect(mockFsRenameSync).toHaveBeenCalledOnce();
-    expect(loadedFolders.user.config['/new/path']).toBe(
+    expect(loadedFolders.user.config[CANONICAL_NEW_PATH]).toBe(
       TrustLevel.TRUST_FOLDER,
     );
     expect(warnSpy).toHaveBeenCalledWith(
@@ -399,10 +405,10 @@ describe('Trusted Folders Loading', () => {
     });
 
     expect(() =>
-      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+      loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER),
     ).toThrow('disk full');
 
-    expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+    expect(loadedFolders.user.config[CANONICAL_NEW_PATH]).toBeUndefined();
     expect(mockFsRenameSync).not.toHaveBeenCalled();
   });
 
@@ -414,12 +420,12 @@ describe('Trusted Folders Loading', () => {
     });
 
     expect(() =>
-      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+      loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER),
     ).toThrow('rename denied');
 
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
     expect(mockFsUnlinkSync).toHaveBeenCalledWith(temporaryPath);
-    expect(loadedFolders.user.config['/new/path']).toBeUndefined();
+    expect(loadedFolders.user.config[CANONICAL_NEW_PATH]).toBeUndefined();
   });
 
   it('warns when a failed atomic rename cannot remove its temporary file', () => {
@@ -435,7 +441,7 @@ describe('Trusted Folders Loading', () => {
     });
 
     expect(() =>
-      loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER),
+      loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER),
     ).toThrow('rename denied');
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -450,7 +456,7 @@ describe('Trusted Folders Loading', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
     const loadedFolders = loadTrustedFolders();
 
-    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+    loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
     const temporaryPath = vi.mocked(fs.writeFileSync).mock.calls[0][0];
     expect(mockFsChmodSync).not.toHaveBeenCalled();
@@ -465,7 +471,7 @@ describe('Trusted Folders Loading', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const loadedFolders = loadTrustedFolders();
 
-    loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
+    loadedFolders.setValue(CANONICAL_NEW_PATH, TrustLevel.TRUST_FOLDER);
 
     expect(mockFsWriteFileSync).toHaveBeenCalledOnce();
     expect(mockFsChmodSync).toHaveBeenCalledOnce();

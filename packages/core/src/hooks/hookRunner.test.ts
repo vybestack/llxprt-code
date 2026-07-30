@@ -19,6 +19,16 @@ import type { Config } from '../config/config.js';
 import type { HookInput } from './types.js';
 import type { Readable, Writable } from 'node:stream';
 
+function decodeSpawnCommand(args: readonly string[]): string {
+  const shellCommand = String(args.at(-1) ?? '');
+  const encodedCommand = shellCommand.match(
+    /FromBase64String\('([^']+)'\)/,
+  )?.[1];
+  return encodedCommand
+    ? Buffer.from(encodedCommand, 'base64').toString('utf8')
+    : shellCommand;
+}
+
 /** Checks for escaped version of malicious path in ls command. */
 function isMaliciousPathEscaped(s: string): boolean {
   if (!s.startsWith('ls ')) {
@@ -141,6 +151,47 @@ describe('HookRunner', () => {
         command: './hooks/test.sh',
         timeout: 5000,
       };
+
+      if (process.platform === 'win32') {
+        it('should preserve native and PowerShell command failures', async () => {
+          mockSpawn.mockProcessOn.mockImplementation(
+            (event: string, callback: (code: number) => void) => {
+              if (event === 'close') {
+                setImmediate(() => callback(2));
+              }
+            },
+          );
+
+          const result = await hookRunner.executeHook(
+            commandConfig,
+            HookEventName.BeforeTool,
+            mockInput,
+          );
+
+          expect(result.success).toBe(false);
+          expect(result.exitCode).toBe(2);
+          expect(spawn).toHaveBeenCalledWith(
+            expect.stringMatching(/powershell/i),
+            expect.arrayContaining([
+              expect.stringContaining('[Convert]::FromBase64String'),
+              expect.stringContaining('[ScriptBlock]::Create'),
+              expect.stringContaining('$global:LASTEXITCODE = 0'),
+              expect.stringContaining('$global:__LLXPRT_HOOK_SUCCEEDED = $?'),
+              expect.stringContaining(
+                '$global:__LLXPRT_HOOK_EXIT_CODE = $LASTEXITCODE',
+              ),
+              expect.stringContaining(
+                'if ($global:__LLXPRT_HOOK_SUCCEEDED) { exit 0 }',
+              ),
+              expect.stringContaining(
+                'if ($global:__LLXPRT_HOOK_EXIT_CODE -ne 0) { exit $global:__LLXPRT_HOOK_EXIT_CODE }',
+              ),
+              expect.stringContaining('exit 1'),
+            ]),
+            expect.objectContaining({ shell: false }),
+          );
+        });
+      }
 
       it('should execute command hook successfully', async () => {
         const mockOutput = { decision: 'allow', reason: 'All good' };
@@ -357,20 +408,21 @@ describe('HookRunner', () => {
         );
 
         // SECURITY: Verify spawn is called with shell executable and expanded path
-        // Note: Safe paths without metacharacters may not be quoted
-        const expectedPath =
-          process.platform === 'win32'
-            ? /'\/test\/project'\/hooks\/test\.sh/
-            : /\/test\/project\/hooks\/test\.sh/;
-        expect(spawn).toHaveBeenCalledWith(
-          expect.stringMatching(/bash|powershell/),
-          expect.arrayContaining([expect.stringMatching(expectedPath)]),
+        const spawnCall = vi.mocked(spawn).mock.calls[0];
+        expect(spawnCall[0]).toMatch(/bash|powershell/i);
+        expect(spawnCall[2]).toStrictEqual(
           expect.objectContaining({
             shell: false,
             env: expect.objectContaining({
               LLXPRT_PROJECT_DIR: '/test/project',
             }),
           }),
+        );
+        const expandedCommand = decodeSpawnCommand(spawnCall[1]);
+        expect(expandedCommand).toContain(
+          process.platform === 'win32'
+            ? "'/test/project'/hooks/test.sh"
+            : '/test/project/hooks/test.sh',
         );
       });
 
@@ -417,13 +469,11 @@ describe('HookRunner', () => {
           }),
         );
 
-        // Verify the command argument contains the escaped malicious path
-        const spawnCalls = vi.mocked(spawn).mock.calls;
-        const commandArgs = spawnCalls[0][1];
-        const escapedArg = Array.isArray(commandArgs)
-          ? commandArgs.find((arg) => isMaliciousPathEscaped(String(arg)))
-          : undefined;
-        expect(escapedArg).toBeDefined();
+        // Verify the decoded command contains the escaped malicious path.
+        const commandArgs = vi.mocked(spawn).mock.calls[0][1];
+        expect(isMaliciousPathEscaped(decodeSpawnCommand(commandArgs))).toBe(
+          true,
+        );
       });
     });
   });
@@ -500,8 +550,7 @@ describe('HookRunner', () => {
             const args = vi.mocked(spawn).mock.calls[
               executionOrder.length
             ][1] as string[];
-            const command = args[args.length - 1]; // Last arg is the command string
-            executionOrder.push(command);
+            executionOrder.push(decodeSpawnCommand(args));
             setImmediate(() => callback(0));
           }
         },

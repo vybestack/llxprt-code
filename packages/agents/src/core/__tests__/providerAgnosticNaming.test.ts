@@ -17,6 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { resolve, join, relative, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import ts from 'typescript';
 import {
   extractDeclaredIdentifiers,
@@ -31,7 +32,10 @@ import {
   ALLOWED_EXPORT_TUPLES,
 } from './providerAgnosticNamingAllowlist.js';
 
-const PACKAGES_DIR = resolve(__dirname, '../../../..');
+const PACKAGES_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
 const REPOSITORY_ROOT = dirname(PACKAGES_DIR);
 const CORE_DIR = resolve(PACKAGES_DIR, 'core');
 const CLI_DIR = resolve(PACKAGES_DIR, 'cli');
@@ -41,22 +45,35 @@ function getWorkspaceRoots(): readonly string[] {
     readFileSync(resolve(REPOSITORY_ROOT, 'package.json'), 'utf-8'),
   );
   if (typeof rootPackage !== 'object' || rootPackage === null) {
-    return [];
+    throw new Error(
+      `Root package.json is not a JSON object: ${typeof rootPackage}`,
+    );
   }
   const workspaces = Reflect.get(rootPackage, 'workspaces');
   if (!Array.isArray(workspaces)) {
-    return [];
+    throw new Error(
+      `Root package.json "workspaces" is not an array: ${typeof workspaces}`,
+    );
   }
-  return workspaces
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => resolve(REPOSITORY_ROOT, entry))
-    .filter((entry) => {
-      try {
-        return statSync(entry).isDirectory();
-      } catch {
-        return false;
-      }
-    });
+  return workspaces.map((entry, index) => {
+    if (typeof entry !== 'string') {
+      throw new Error(
+        `Root package.json "workspaces[${index}]" is not a string: ${typeof entry}`,
+      );
+    }
+    const resolved = resolve(REPOSITORY_ROOT, entry);
+    let st: ReturnType<typeof statSync>;
+    try {
+      st = statSync(resolved);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to stat workspace root "${resolved}": ${msg}`);
+    }
+    if (!st.isDirectory()) {
+      throw new Error(`Workspace root "${resolved}" is not a directory`);
+    }
+    return resolved;
+  });
 }
 
 /** Enumerate the exact package workspaces declared by the root package. */
@@ -165,7 +182,8 @@ const SKIP_DIR_NAMES = new Set([
 ]);
 
 function isExcludedPath(filePath: string): boolean {
-  return EXCLUDE_TOKENS.some((tok) => filePath.includes(tok));
+  const normalized = normalizePath(filePath);
+  return EXCLUDE_TOKENS.some((tok) => normalized.includes(tok));
 }
 
 function isSourceFileEntry(name: string, fullPath: string): boolean {
@@ -182,16 +200,18 @@ function collectSourceFiles(rootDir: string): string[] {
     let entries: string[];
     try {
       entries = readdirSync(dir);
-    } catch {
-      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read directory ${dir}: ${message}`);
     }
     for (const entry of entries) {
       const full = join(dir, entry);
       let st: ReturnType<typeof statSync>;
       try {
         st = statSync(full);
-      } catch {
-        continue;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to stat ${full}: ${message}`);
       }
       if (st.isDirectory()) {
         if (!SKIP_DIR_NAMES.has(entry)) walk(full);
@@ -228,8 +248,9 @@ function scanFile(absPath: string): ScannedFile | undefined {
   let text: string;
   try {
     text = readFileSync(absPath, 'utf-8');
-  } catch {
-    return undefined;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to read source file ${absPath}: ${message}`);
   }
   const relPath = normalizePath(relative(PACKAGES_DIR, absPath));
   if (!shouldScanForGemini(text, relPath)) {

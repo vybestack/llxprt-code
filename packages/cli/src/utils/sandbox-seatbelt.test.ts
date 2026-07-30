@@ -183,23 +183,26 @@ describe('buildSeatbeltArgs: canonical root resolution', () => {
     },
   );
 
-  it('creates missing canonical root directories with mode 0o700', () => {
-    // Point CONFIG_DIR at a path that does NOT exist yet so
-    // resolveRealpathSync must create it. The auto-created directory
-    // must have a restrictive mode (0o700), not a permissive default.
-    const newConfigDir = path.join(tmpRoot, 'fresh-config');
-    expect(fs.existsSync(newConfigDir)).toBe(false);
-    process.env['LLXPRT_CONFIG_HOME'] = newConfigDir;
+  it.skipIf(process.platform === 'win32')(
+    'creates missing canonical root directories with mode 0o700',
+    () => {
+      // Point CONFIG_DIR at a path that does NOT exist yet so
+      // resolveRealpathSync must create it. The auto-created directory
+      // must have a restrictive mode (0o700), not a permissive default.
+      const newConfigDir = path.join(tmpRoot, 'fresh-config');
+      expect(fs.existsSync(newConfigDir)).toBe(false);
+      process.env['LLXPRT_CONFIG_HOME'] = newConfigDir;
 
-    buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
+      buildSeatbeltArgs('/tmp/profile.sb', 'node-opts');
 
-    expect(fs.existsSync(newConfigDir)).toBe(true);
-    const stat = fs.statSync(newConfigDir);
-    // On macOS/Linux the mode is masked by umask, but 0o700 as the requested
-    // mode means the result has no group/other bits. We assert that group
-    // and other bits are absent (owner-only access).
-    expect(stat.mode & 0o077).toBe(0);
-  });
+      expect(fs.existsSync(newConfigDir)).toBe(true);
+      const stat = fs.statSync(newConfigDir);
+      // On macOS/Linux the mode is masked by umask, but 0o700 as the requested
+      // mode means the result has no group/other bits. We assert that group
+      // and other bits are absent (owner-only access).
+      expect(stat.mode & 0o077).toBe(0);
+    },
+  );
 });
 
 // ─── Real macOS sandbox-exec behavioral test (gated to macOS) ─────────────
@@ -353,71 +356,74 @@ const PERMISSIVE_OPEN_PROFILE = path.join(
 
 describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () => {
   /**
-   * Cross-platform behavioral test through the real exported
+   * Behavioral test through the real exported
    * runSeatbeltSandbox path. Begins with dirty capability markers in
    * process.env and asserts the actual spawned child env lacks
-   * token/fd/socket. Uses a stub sandbox-exec binary on PATH that prints
-   * its environment so this works on ALL platforms without a real
-   * sandbox-exec.
+   * token/fd/socket. Uses a POSIX shell stub sandbox-exec binary on PATH
+   * so this works without a real sandbox-exec.
    */
-  it('runSeatbeltSandbox: child env lacks LLXPRT_CAPABILITY_* and LLXPRT_CREDENTIAL_SOCKET even when parent env has dirty markers', async () => {
-    const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-stub-'));
-    const stubPath = path.join(stubDir, 'sandbox-exec');
-    const capturedEnvPath = path.join(stubDir, 'child-env');
-    fs.writeFileSync(stubPath, '#!/bin/sh\nenv > "$SEATBELT_ENV_CAPTURE"\n', {
-      mode: 0o755,
-    });
-    const savedFd = process.env.LLXPRT_CAPABILITY_FD;
-    const savedTok = process.env.LLXPRT_CAPABILITY_TOKEN;
-    const savedSock = process.env.LLXPRT_CREDENTIAL_SOCKET;
-    const savedProfile = process.env.SEATBELT_PROFILE;
-    const savedPath = process.env.PATH;
-    process.env.LLXPRT_CAPABILITY_TOKEN = 'd'.repeat(64);
-    process.env.LLXPRT_CAPABILITY_FD = '3';
-    process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/fake-dirty.sock';
-    process.env.SEATBELT_PROFILE = 'permissive-open';
-    process.env.SEATBELT_ENV_CAPTURE = capturedEnvPath;
-    // Under vitest, import.meta.url inside sandbox-seatbelt.ts may resolve
-    // to a transform-relative path, so the builtin .sb profile may not be
-    // found. Spy on fs.existsSync to allow the profile check to pass; the
-    // stub sandbox-exec binary ignores the profile entirely.
-    const realExistsSync = fs.existsSync;
-    const existsSpy = vi
-      .spyOn(fs, 'existsSync')
-      .mockImplementation((p: fs.PathLike) => {
-        if (String(p).includes('sandbox-macos-permissive-open.sb')) return true;
-        return realExistsSync(p);
+  it.skipIf(process.platform === 'win32')(
+    'runSeatbeltSandbox: child env lacks LLXPRT_CAPABILITY_* and LLXPRT_CREDENTIAL_SOCKET even when parent env has dirty markers',
+    async () => {
+      const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-stub-'));
+      const stubPath = path.join(stubDir, 'sandbox-exec');
+      const capturedEnvPath = path.join(stubDir, 'child-env');
+      fs.writeFileSync(stubPath, '#!/bin/sh\nenv > "$SEATBELT_ENV_CAPTURE"\n', {
+        mode: 0o755,
       });
-    process.env.PATH = `${stubDir}:${process.env.PATH ?? ''}`;
-    try {
-      await runSeatbeltSandbox(
-        { command: 'sandbox-exec', image: 'test' } as never,
-        [],
-        undefined,
-        [],
-      );
-      const childEnvOutput = fs.readFileSync(capturedEnvPath, 'utf8');
-      expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_TOKEN');
-      expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_FD');
-      expect(childEnvOutput).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
-    } finally {
-      if (savedFd !== undefined) process.env.LLXPRT_CAPABILITY_FD = savedFd;
-      else delete process.env.LLXPRT_CAPABILITY_FD;
-      if (savedTok !== undefined)
-        process.env.LLXPRT_CAPABILITY_TOKEN = savedTok;
-      else delete process.env.LLXPRT_CAPABILITY_TOKEN;
-      if (savedSock !== undefined)
-        process.env.LLXPRT_CREDENTIAL_SOCKET = savedSock;
-      else delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      if (savedProfile !== undefined)
-        process.env.SEATBELT_PROFILE = savedProfile;
-      else delete process.env.SEATBELT_PROFILE;
-      process.env.PATH = savedPath;
-      delete process.env.SEATBELT_ENV_CAPTURE;
-      fs.rmSync(stubDir, { recursive: true, force: true });
-      existsSpy.mockRestore();
-    }
-  });
+      const savedFd = process.env.LLXPRT_CAPABILITY_FD;
+      const savedTok = process.env.LLXPRT_CAPABILITY_TOKEN;
+      const savedSock = process.env.LLXPRT_CREDENTIAL_SOCKET;
+      const savedProfile = process.env.SEATBELT_PROFILE;
+      const savedPath = process.env.PATH;
+      process.env.LLXPRT_CAPABILITY_TOKEN = 'd'.repeat(64);
+      process.env.LLXPRT_CAPABILITY_FD = '3';
+      process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/fake-dirty.sock';
+      process.env.SEATBELT_PROFILE = 'permissive-open';
+      process.env.SEATBELT_ENV_CAPTURE = capturedEnvPath;
+      // Under vitest, import.meta.url inside sandbox-seatbelt.ts may resolve
+      // to a transform-relative path, so the builtin .sb profile may not be
+      // found. Spy on fs.existsSync to allow the profile check to pass; the
+      // stub sandbox-exec binary ignores the profile entirely.
+      const realExistsSync = fs.existsSync;
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((p: fs.PathLike) => {
+          if (String(p).includes('sandbox-macos-permissive-open.sb'))
+            return true;
+          return realExistsSync(p);
+        });
+      process.env.PATH = `${stubDir}:${process.env.PATH ?? ''}`;
+      try {
+        await runSeatbeltSandbox(
+          { command: 'sandbox-exec', image: 'test' } as never,
+          [],
+          undefined,
+          [],
+        );
+        const childEnvOutput = fs.readFileSync(capturedEnvPath, 'utf8');
+        expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_TOKEN');
+        expect(childEnvOutput).not.toContain('LLXPRT_CAPABILITY_FD');
+        expect(childEnvOutput).not.toContain('LLXPRT_CREDENTIAL_SOCKET');
+      } finally {
+        if (savedFd !== undefined) process.env.LLXPRT_CAPABILITY_FD = savedFd;
+        else delete process.env.LLXPRT_CAPABILITY_FD;
+        if (savedTok !== undefined)
+          process.env.LLXPRT_CAPABILITY_TOKEN = savedTok;
+        else delete process.env.LLXPRT_CAPABILITY_TOKEN;
+        if (savedSock !== undefined)
+          process.env.LLXPRT_CREDENTIAL_SOCKET = savedSock;
+        else delete process.env.LLXPRT_CREDENTIAL_SOCKET;
+        if (savedProfile !== undefined)
+          process.env.SEATBELT_PROFILE = savedProfile;
+        else delete process.env.SEATBELT_PROFILE;
+        process.env.PATH = savedPath;
+        delete process.env.SEATBELT_ENV_CAPTURE;
+        fs.rmSync(stubDir, { recursive: true, force: true });
+        existsSpy.mockRestore();
+      }
+    },
+  );
 
   it.runIf(isMacOS)(
     'real sandbox-exec child inherits no capability transport markers from the post-consumption parent env',

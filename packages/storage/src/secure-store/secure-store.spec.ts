@@ -97,37 +97,72 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       expect(await store.get('stale-key')).toBe('new-value');
     });
 
-    it('should clean up both current and legacy fallback paths after a verified OAuth write', async () => {
-      const key = 'oauth:default';
-      const staleStore = new SecureStore('test-service', {
-        fallbackDir: tempDir,
-        fallbackPolicy: 'allow',
-        keyringLoader: async () => null,
-      });
-      await staleStore.set(key, 'old-value');
-      const currentPath = path.join(tempDir, 'oauth%3Adefault.enc');
-      const legacyPath = path.join(tempDir, 'oauth:default.enc');
-      await fs.rename(currentPath, legacyPath);
+    it.skipIf(process.platform === 'win32')(
+      'should clean up both current and legacy fallback paths after a verified OAuth write',
+      async () => {
+        const key = 'oauth:default';
+        const staleStore = new SecureStore('test-service', {
+          fallbackDir: tempDir,
+          fallbackPolicy: 'allow',
+          keyringLoader: async () => null,
+        });
+        await staleStore.set(key, 'old-value');
+        const currentPath = path.join(tempDir, 'oauth%3Adefault.enc');
+        const legacyPath = path.join(tempDir, 'oauth:default.enc');
+        await fs.rename(currentPath, legacyPath);
 
-      const stored: Record<string, string> = {};
-      const mockKeyring: KeyringAdapter = {
-        getPassword: async (_service, account) => stored[account] ?? null,
-        setPassword: async (_service, account, password) => {
-          stored[account] = password;
-        },
-        deletePassword: async (_service, account) => delete stored[account],
-      };
-      store = new SecureStore('test-service', {
-        fallbackDir: tempDir,
-        fallbackPolicy: 'allow',
-        keyringLoader: async () => mockKeyring,
-      });
+        const stored: Record<string, string> = {};
+        const mockKeyring: KeyringAdapter = {
+          getPassword: async (_service, account) => stored[account] ?? null,
+          setPassword: async (_service, account, password) => {
+            stored[account] = password;
+          },
+          deletePassword: async (_service, account) => delete stored[account],
+        };
+        store = new SecureStore('test-service', {
+          fallbackDir: tempDir,
+          fallbackPolicy: 'allow',
+          keyringLoader: async () => mockKeyring,
+        });
 
-      await store.set(key, 'new-value');
-      await expect(fs.access(currentPath)).rejects.toThrow('ENOENT');
-      await expect(fs.access(legacyPath)).rejects.toThrow('ENOENT');
-      expect(await store.get(key)).toBe('new-value');
-    });
+        await store.set(key, 'new-value');
+        await expect(fs.access(currentPath)).rejects.toThrow('ENOENT');
+        await expect(fs.access(legacyPath)).rejects.toThrow('ENOENT');
+        expect(await store.get(key)).toBe('new-value');
+      },
+    );
+
+    it.runIf(process.platform === 'win32')(
+      'should clean up the current fallback path after a verified OAuth write on Windows',
+      async () => {
+        const key = 'oauth:default';
+        const staleStore = new SecureStore('test-service', {
+          fallbackDir: tempDir,
+          fallbackPolicy: 'allow',
+          keyringLoader: async () => null,
+        });
+        await staleStore.set(key, 'old-value');
+        const currentPath = path.join(tempDir, 'oauth%3Adefault.enc');
+
+        const stored: Record<string, string> = {};
+        const mockKeyring: KeyringAdapter = {
+          getPassword: async (_service, account) => stored[account] ?? null,
+          setPassword: async (_service, account, password) => {
+            stored[account] = password;
+          },
+          deletePassword: async (_service, account) => delete stored[account],
+        };
+        store = new SecureStore('test-service', {
+          fallbackDir: tempDir,
+          fallbackPolicy: 'allow',
+          keyringLoader: async () => mockKeyring,
+        });
+
+        await store.set(key, 'new-value');
+        await expect(fs.access(currentPath)).rejects.toThrow('ENOENT');
+        expect(await store.get(key)).toBe('new-value');
+      },
+    );
   });
 
   describe('Issue #1895 fallback safety: keyring write succeeds but read-back fails', () => {

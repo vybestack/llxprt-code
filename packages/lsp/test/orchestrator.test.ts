@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fc from 'fast-check';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { createOrchestrator } from '../src/service/orchestrator';
 import type { Diagnostic, LspConfig } from '../src/service/diagnostics';
 
-const WORKSPACE_ROOT = '/workspace';
-const FIXTURE_PATH = new URL('./fixtures/fake-lsp-server.ts', import.meta.url)
-  .pathname;
+const WORKSPACE_ROOT = path.resolve('/workspace');
+const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
+const FIXTURE_PATH = fileURLToPath(
+  new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
+);
 
 type AnyOrchestrator = ReturnType<typeof createOrchestrator>;
 
@@ -19,7 +24,7 @@ function createFakeServer(
     id,
     command: process.execPath,
     args: [FIXTURE_PATH, ...extraArgs],
-    rootUri: `file://${WORKSPACE_ROOT}`,
+    rootUri: WORKSPACE_URI,
     extensions,
   };
 }
@@ -50,19 +55,38 @@ describe('Orchestrator unit tests against real implementation', () => {
 
   it('returns empty diagnostics for files outside workspace', async () => {
     await expect(
-      orchestrator.checkFile('/outside/file.ts', 'TYPE_ERROR'),
+      orchestrator.checkFile(path.resolve('/outside/file.ts'), 'TYPE_ERROR'),
     ).resolves.toEqual([]);
+  });
+
+  it('platform-correct workspace boundary: sibling dir with same prefix is rejected', async () => {
+    // A directory like /workspace-extra must NOT be treated as inside /workspace.
+    const sibling = path.resolve(`${WORKSPACE_ROOT}-extra`, 'file.ts');
+    await expect(
+      orchestrator.checkFile(sibling, 'TYPE_ERROR'),
+    ).resolves.toEqual([]);
+  });
+
+  it('platform-correct workspace boundary: nested file is accepted', async () => {
+    const result = await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src', 'nested.ts'),
+      'const x = TYPE_ERROR',
+    );
+    expect(result.length).toBeGreaterThan(0);
   });
 
   it('returns empty diagnostics for unknown extension', async () => {
     await expect(
-      orchestrator.checkFile('/workspace/file.md', 'TYPE_ERROR'),
+      orchestrator.checkFile(
+        path.join(WORKSPACE_ROOT, 'file.md'),
+        'TYPE_ERROR',
+      ),
     ).resolves.toEqual([]);
   });
 
   it('collects diagnostics for matching extension', async () => {
     const result = await orchestrator.checkFile(
-      '/workspace/src/a.ts',
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
       'const x = TYPE_ERROR',
     );
     expect(result.length).toBeGreaterThan(0);
@@ -85,7 +109,7 @@ describe('Orchestrator unit tests against real implementation', () => {
       );
       try {
         await broken.checkFile(
-          '/workspace/src/crash.ts',
+          path.join(WORKSPACE_ROOT, 'src/crash.ts'),
           'const x = TYPE_ERROR',
         );
         const status = await broken.status();
@@ -102,7 +126,7 @@ describe('Orchestrator unit tests against real implementation', () => {
 
   it('gotoDefinition returns empty for unknown extension', async () => {
     await expect(
-      orchestrator.gotoDefinition('/workspace/src/a.py', 0, 0),
+      orchestrator.gotoDefinition(path.join(WORKSPACE_ROOT, 'src/a.py'), 0, 0),
     ).resolves.toEqual([]);
   });
 
@@ -128,7 +152,7 @@ describe('Orchestrator unit tests against real implementation', () => {
         setTimeout(() => reject(new Error('timeout')), testTimeoutMs),
       );
       const result = await Promise.race([
-        hanging.gotoDefinition('/workspace/src/n.ts', 0, 0),
+        hanging.gotoDefinition(path.join(WORKSPACE_ROOT, 'src/n.ts'), 0, 0),
         timeout,
       ]);
       expect(result.length).toBeGreaterThan(0);
@@ -138,17 +162,27 @@ describe('Orchestrator unit tests against real implementation', () => {
   });
 
   it('findReferences returns locations for matching server', async () => {
-    const refs = await orchestrator.findReferences('/workspace/src/a.ts', 0, 0);
+    const refs = await orchestrator.findReferences(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      0,
+      0,
+    );
     expect(Array.isArray(refs)).toBe(true);
   });
 
   it('hover returns string or null without throwing', async () => {
-    const hover = await orchestrator.hover('/workspace/src/a.ts', 0, 0);
+    const hover = await orchestrator.hover(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      0,
+      0,
+    );
     expect(typeof hover === 'string' || hover === null).toBe(true);
   });
 
   it('documentSymbols returns typed LSP symbols with numeric kind', async () => {
-    const symbols = await orchestrator.documentSymbols('/workspace/src/a.ts');
+    const symbols = await orchestrator.documentSymbols(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+    );
     expect(symbols[0]).toMatchObject({
       name: 'fakeSymbol',
       kind: 12,
@@ -157,27 +191,42 @@ describe('Orchestrator unit tests against real implementation', () => {
   });
 
   it('getAllDiagnostics returns touched files only', async () => {
-    await orchestrator.checkFile('/workspace/src/a.ts', 'const x = TYPE_ERROR');
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
     const all = await orchestrator.getAllDiagnostics();
-    expect(Object.keys(all)).toEqual(['/workspace/src/a.ts']);
+    expect(Object.keys(all)).toEqual([path.join(WORKSPACE_ROOT, 'src/a.ts')]);
   });
 
   it('diagnostic epoch increases after checks', async () => {
     const before = orchestrator.getDiagnosticEpoch();
-    await orchestrator.checkFile('/workspace/src/a.ts', 'const x = TYPE_ERROR');
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
     expect(orchestrator.getDiagnosticEpoch()).toBeGreaterThan(before);
   });
 
   it('getAllDiagnosticsAfter returns only newer touched files', async () => {
-    await orchestrator.checkFile('/workspace/src/a.ts', 'const x = TYPE_ERROR');
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
     const epoch = orchestrator.getDiagnosticEpoch();
-    await orchestrator.checkFile('/workspace/src/b.ts', 'const y = TYPE_ERROR');
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/b.ts'),
+      'const y = TYPE_ERROR',
+    );
     const after = await orchestrator.getAllDiagnosticsAfter(epoch);
-    expect(Object.keys(after)).toEqual(['/workspace/src/b.ts']);
+    expect(Object.keys(after)).toEqual([path.join(WORKSPACE_ROOT, 'src/b.ts')]);
   });
 
   it('shutdown clears runtime state', async () => {
-    await orchestrator.checkFile('/workspace/src/a.ts', 'const x = TYPE_ERROR');
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
     await orchestrator.shutdown();
     expect(await orchestrator.getAllDiagnostics()).toEqual({});
     expect(orchestrator.getDiagnosticEpoch()).toBe(0);
@@ -200,8 +249,14 @@ describe('Orchestrator unit tests against real implementation', () => {
     );
     try {
       const [firstDiagnostics, secondDiagnostics] = await Promise.all([
-        delayed.checkFile('/workspace/src/a.ts', 'const a = TYPE_ERROR'),
-        delayed.checkFile('/workspace/src/b.ts', 'const b = TYPE_ERROR'),
+        delayed.checkFile(
+          path.join(WORKSPACE_ROOT, 'src/a.ts'),
+          'const a = TYPE_ERROR',
+        ),
+        delayed.checkFile(
+          path.join(WORKSPACE_ROOT, 'src/b.ts'),
+          'const b = TYPE_ERROR',
+        ),
       ]);
 
       expect(firstDiagnostics.length).toBeGreaterThan(0);
@@ -225,7 +280,7 @@ describe('Orchestrator unit tests against real implementation', () => {
           const ext = extRaw.replace(/[^a-z]/gi, 'x') || 'x';
           if (ext.toLowerCase() === 'ts') return;
           const out = await orchestrator.checkFile(
-            `/workspace/src/a.${ext}`,
+            path.join(WORKSPACE_ROOT, 'src', `a.${ext}`),
             'TYPE_ERROR',
           );
           expect(out).toEqual([]);
@@ -239,11 +294,15 @@ describe('Orchestrator unit tests against real implementation', () => {
       fc.asyncProperty(
         fc.string({ minLength: 1, maxLength: 20 }),
         async (name) => {
-          const clean = name.replace(/\//g, '_');
-          const out = await orchestrator.checkFile(
-            `/tmp/${clean}.ts`,
-            'TYPE_ERROR',
-          );
+          const clean = Buffer.from(name).toString('hex');
+          const outsidePath = path.join(os.tmpdir(), `${clean}.ts`);
+          const relativePath = path.relative(WORKSPACE_ROOT, outsidePath);
+          expect(
+            path.isAbsolute(relativePath) ||
+              relativePath === '..' ||
+              relativePath.startsWith(`..${path.sep}`),
+          ).toBe(true);
+          const out = await orchestrator.checkFile(outsidePath, 'TYPE_ERROR');
           expect(out).toEqual([]);
         },
       ),
@@ -284,14 +343,19 @@ describe('Orchestrator unit tests against real implementation', () => {
         try {
           for (let i = 0; i < n; i += 1) {
             await o.checkFile(
-              `/workspace/src/p${i}.ts`,
+              path.join(WORKSPACE_ROOT, 'src', `p${i}.ts`),
               'const x = TYPE_ERROR',
             );
           }
           const epoch = o.getDiagnosticEpoch();
-          await o.checkFile('/workspace/src/newer.ts', 'const y = TYPE_ERROR');
+          await o.checkFile(
+            path.join(WORKSPACE_ROOT, 'src/newer.ts'),
+            'const y = TYPE_ERROR',
+          );
           const out = await o.getAllDiagnosticsAfter(epoch);
-          expect(Object.keys(out)).toEqual(['/workspace/src/newer.ts']);
+          expect(Object.keys(out)).toEqual([
+            path.join(WORKSPACE_ROOT, 'src/newer.ts'),
+          ]);
         } finally {
           await o.shutdown();
         }
@@ -307,7 +371,7 @@ describe('Orchestrator unit tests against real implementation', () => {
         fc.integer({ min: 0, max: 10 }),
         async (line, char) => {
           const out = await orchestrator.gotoDefinition(
-            '/workspace/src/a.py',
+            path.join(WORKSPACE_ROOT, 'src/a.py'),
             line,
             char,
           );
@@ -323,7 +387,7 @@ describe('Orchestrator unit tests against real implementation', () => {
         fc.string({ minLength: 1, maxLength: 20 }),
         async (content) => {
           const out = await orchestrator.checkFile(
-            '/workspace/src/prop.unknown',
+            path.join(WORKSPACE_ROOT, 'src/prop.unknown'),
             content,
           );
           expect(Array.isArray(out)).toBe(true);
@@ -343,7 +407,7 @@ describe('Orchestrator unit tests against real implementation', () => {
     );
     try {
       await o.checkFile(
-        '/workspace/src/req-timeout.ts',
+        path.join(WORKSPACE_ROOT, 'src/req-timeout.ts'),
         'const x = TYPE_ERROR',
       );
       const status = await o.status();
@@ -372,12 +436,18 @@ describe('Orchestrator unit tests against real implementation', () => {
       // When hover is delayed, withTimeout should return the fallback value
       // AND abort the underlying LspClient request so it doesn't hang
       // until the client's own requestTimeoutMs expires.
-      const result = await o.hover('/workspace/src/slow-hover.ts', 0, 0);
+      const result = await o.hover(
+        path.join(WORKSPACE_ROOT, 'src/slow-hover.ts'),
+        0,
+        0,
+      );
       expect(result).toBeNull();
 
       // After the navigation timeout returns fallback, the client should still
       // be alive for other requests
-      const symbols = await o.documentSymbols('/workspace/src/slow-hover.ts');
+      const symbols = await o.documentSymbols(
+        path.join(WORKSPACE_ROOT, 'src/slow-hover.ts'),
+      );
       expect(Array.isArray(symbols)).toBe(true);
     } finally {
       await o.shutdown();
@@ -405,12 +475,16 @@ describe('Orchestrator unit tests against real implementation', () => {
     try {
       // hover is delayed by the server; withTimeout returns null fallback
       // after 300ms and aborts the pending LspClient hover request
-      const result = await o.hover('/workspace/src/req-timeout-hover.ts', 0, 0);
+      const result = await o.hover(
+        path.join(WORKSPACE_ROOT, 'src/req-timeout-hover.ts'),
+        0,
+        0,
+      );
       expect(result).toBeNull();
 
       // Non-delayed method should still work
       const symbols = await o.documentSymbols(
-        '/workspace/src/req-timeout-hover.ts',
+        path.join(WORKSPACE_ROOT, 'src/req-timeout-hover.ts'),
       );
       expect(Array.isArray(symbols)).toBe(true);
     } finally {
@@ -440,12 +514,16 @@ describe('Orchestrator unit tests against real implementation', () => {
     try {
       // Hover times out at the client level (200ms), withTimeout catches it
       // and returns the fallback
-      const result = await o.hover('/workspace/src/short-req-hover.ts', 0, 0);
+      const result = await o.hover(
+        path.join(WORKSPACE_ROOT, 'src/short-req-hover.ts'),
+        0,
+        0,
+      );
       expect(result).toBeNull();
 
       // Non-delayed method should still work
       const symbols = await o.documentSymbols(
-        '/workspace/src/short-req-hover.ts',
+        path.join(WORKSPACE_ROOT, 'src/short-req-hover.ts'),
       );
       expect(Array.isArray(symbols)).toBe(true);
     } finally {

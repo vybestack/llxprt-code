@@ -6,7 +6,10 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import type * as acp from '@agentclientprotocol/sdk';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  getShellConfiguration,
+} from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { buildCommandToExecute } from '@vybestack/llxprt-code-tools';
 
@@ -94,10 +97,11 @@ describe('Zed terminal execution', () => {
       new AbortController().signal,
     );
 
+    const shell = getShellConfiguration();
     expect(connection.createTerminalCalls).toStrictEqual([
       {
-        command: 'bash',
-        args: ['-c', preparedEcho],
+        command: shell.executable,
+        args: [...shell.argsPrefix, preparedEcho],
         cwd: '/project',
         sessionId: 'test-session-id',
       },

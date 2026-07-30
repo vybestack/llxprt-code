@@ -26,7 +26,14 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
+import {
+  mkdirSync,
+  existsSync,
+  watch,
+  watchFile,
+  unwatchFile,
+  type Stats,
+} from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
@@ -56,7 +63,7 @@ export class SessionRecordingService {
   private readonly sessionId: string;
   private readonly chatsDir: string;
   private preContentBuffer: SessionRecordLine[] = [];
-  private chatsDirWatcher: FSWatcher | null = null;
+  private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
 
   /**
@@ -376,35 +383,57 @@ export class SessionRecordingService {
   private startChatsDirWatcher(): void {
     if (this.chatsDirWatcher) return;
     try {
-      this.chatsDirWatcher = watch(
+      if (process.platform === 'win32') {
+        const listener = (currentStats: Stats): void => {
+          if (currentStats.nlink === 0) {
+            this.handleChatsDirChange(this.chatsDir);
+          }
+        };
+        watchFile(
+          this.chatsDir,
+          { persistent: false, interval: 100 },
+          listener,
+        );
+        this.chatsDirWatcher = {
+          close: () => unwatchFile(this.chatsDir, listener),
+        };
+        return;
+      }
+
+      const watcher = watch(
         this.chatsDir,
         { persistent: false },
         (eventType) => {
-          if (eventType === 'rename' && !existsSync(this.chatsDir)) {
-            debugLogger.error(
-              `[SessionRecording] chatsDir was removed at ${new Date().toISOString()}!
-` +
-                `  path: ${this.chatsDir}
-` +
-                `  sessionId: ${this.sessionId}
-` +
-                `  filePath: ${this.filePath}
-` +
-                `  Check the preceding shell command for the culprit.`,
-            );
-            this.chatsDirWatcher?.close();
-            this.chatsDirWatcher = null;
+          if (eventType === 'rename') {
+            this.handleChatsDirChange(this.chatsDir);
           }
         },
       );
-      this.chatsDirWatcher.on('error', () => {
-        // Watcher error is expected if the directory was removed
-        this.chatsDirWatcher?.close();
-        this.chatsDirWatcher = null;
+      this.chatsDirWatcher = watcher;
+      watcher.on('error', () => {
+        watcher.close();
+        if (this.chatsDirWatcher === watcher) {
+          this.chatsDirWatcher = null;
+        }
       });
     } catch {
       // If watch fails (e.g. directory already gone), silently skip
     }
+  }
+
+  private handleChatsDirChange(watchDir: string): void {
+    if (existsSync(watchDir)) {
+      return;
+    }
+    debugLogger.error(
+      `[SessionRecording] chatsDir was removed at ${new Date().toISOString()}!\n` +
+        `  path: ${this.chatsDir}\n` +
+        `  sessionId: ${this.sessionId}\n` +
+        `  filePath: ${this.filePath}\n` +
+        `  Check the preceding shell command for the culprit.`,
+    );
+    this.chatsDirWatcher?.close();
+    this.chatsDirWatcher = null;
   }
 
   // -------------------------------------------------------------------------

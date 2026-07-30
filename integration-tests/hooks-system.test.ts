@@ -92,9 +92,7 @@ describe('Hooks System Integration', () => {
                   hooks: [
                     {
                       type: 'command',
-                      // Exit with code 2 and write reason to stderr
-                      command:
-                        'node -e "process.stderr.write(\'File writing blocked by security policy\'); process.exit(2)"',
+                      command: 'bun stderr_block_hook.ts',
                       timeout: 5000,
                     },
                   ],
@@ -103,6 +101,15 @@ describe('Hooks System Integration', () => {
             },
           },
         },
+      );
+      const stderrHookPath = join(rig.testDir!, 'stderr_block_hook.ts');
+      writeFileSync(
+        stderrHookPath,
+        `import process from 'node:process';
+
+process.stderr.write('File writing blocked by security policy');
+process.exit(2);
+`,
       );
 
       const result = await rig.run({
@@ -1488,7 +1495,7 @@ console.log(JSON.stringify({
         { length: 4000 },
         (_, i) => `token-${i}`,
       ).join(' ');
-      await rig.run({ args: largeInput });
+      await rig.run({ stdin: largeInput });
 
       await rig.waitForTelemetryReady();
 
@@ -1873,17 +1880,22 @@ console.log(JSON.stringify({decision: "block", systemMessage: "Disabled hook sho
       ) as {
         hookSpecificOutput?: { tool_input?: { file_path?: string } };
       };
-      expect(hookOutputPayload.hookSpecificOutput?.tool_input?.file_path).toBe(
-        modifiedFilePath,
+      const actualPath =
+        hookOutputPayload.hookSpecificOutput?.tool_input?.file_path;
+      expect(actualPath).toBeDefined();
+      expect(actualPath!.split('\\').join('/')).toBe(
+        modifiedFilePath.split('\\').join('/'),
       );
 
       // 4. Verify telemetry for tool_call remains request-oriented
       const toolLogs = rig.readToolLogs();
       expect(toolLogs.length).toBeGreaterThanOrEqual(1);
       expect(toolLogs[0].toolRequest.name).toBe('write_file');
-      expect(JSON.parse(toolLogs[0].toolRequest.args).file_path).toBe(
-        join(rig.testDir!, 'original.txt'),
-      );
+      expect(
+        JSON.parse(toolLogs[0].toolRequest.args)
+          .file_path.split('\\')
+          .join('/'),
+      ).toBe(join(rig.testDir!, 'original.txt').split('\\').join('/'));
     });
   });
 

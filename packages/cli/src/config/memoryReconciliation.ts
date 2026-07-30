@@ -738,9 +738,9 @@ function publishConfigAtomic(configPath: string, merged: string): void {
   const base = path.basename(configPath);
   const tmpPath = uniqueTempPath(dir, base, '.reconcile.tmp');
   try {
-    fs.writeFileSync(tmpPath, merged, { encoding: 'utf8', mode: 0o644 });
-    const fd = fs.openSync(tmpPath, 'r');
+    const fd = fs.openSync(tmpPath, 'wx', 0o644);
     try {
+      fs.writeFileSync(fd, merged, { encoding: 'utf8' });
       fs.fsyncSync(fd);
     } finally {
       fs.closeSync(fd);
@@ -782,18 +782,28 @@ function archiveSource(dataPath: string, archivePath: string): void {
     return;
   }
   const target = exclusiveArchiveTarget(archivePath);
-  // copy+unlink (not rename) so we can use COPYFILE_EXCL to guarantee we
-  // never overwrite an existing backup. If the copy succeeds but the unlink
-  // fails, a retry sees the archive present and just cleans up the source.
-  fs.copyFileSync(dataPath, target, fs.constants.COPYFILE_EXCL);
-  // fsync the backup content to disk BEFORE removing the source, so a crash
-  // after the source is removed cannot lose the only copy of the data
-  // (durability — the backup must outlive source removal).
-  const fd = fs.openSync(target, 'r');
+  const sourceContent = fs.readFileSync(dataPath);
+  const sourceMode = fs.statSync(dataPath).mode & 0o777;
   try {
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
+    const archiveFd = fs.openSync(target, 'wx', 0o600);
+    try {
+      fs.writeFileSync(archiveFd, sourceContent);
+      if (sourceMode !== 0o600) {
+        fs.chmodSync(target, sourceMode);
+      }
+      fs.fsyncSync(archiveFd);
+    } finally {
+      fs.closeSync(archiveFd);
+    }
+  } catch (error) {
+    const cleanupError = cleanupTempQuietly(target);
+    if (cleanupError !== undefined) {
+      throw new AggregateError(
+        [error, cleanupError],
+        `Archive creation failed and temp cleanup failed for ${target}`,
+      );
+    }
+    throw error;
   }
   // Archive durability: fsync the parent directory BEFORE unlinking the
   // source so the archive's directory entry is durably established. A crash
@@ -1090,13 +1100,9 @@ function writeReconcileMarkerCaptureError(
     const base = path.basename(markerPath);
     const tmp = uniqueTempPath(dir, base, '.marker.tmp');
     try {
-      fs.writeFileSync(tmp, payload, {
-        encoding: 'utf8',
-        mode: 0o644,
-        flag: 'wx',
-      });
-      const fd = fs.openSync(tmp, 'r');
+      const fd = fs.openSync(tmp, 'wx', 0o644);
       try {
+        fs.writeFileSync(fd, payload, { encoding: 'utf8' });
         fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
