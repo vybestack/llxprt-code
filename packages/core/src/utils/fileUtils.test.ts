@@ -265,11 +265,6 @@ describe('fileUtils', () => {
     });
 
     it.each([
-      { type: 'image', file: 'file.png', mime: 'image/png' },
-      { type: 'image', file: 'file.jpg', mime: 'image/jpeg' },
-      { type: 'pdf', file: 'file.pdf', mime: 'application/pdf' },
-      { type: 'audio', file: 'song.mp3', mime: 'audio/mpeg' },
-      { type: 'video', file: 'movie.mp4', mime: 'video/mp4' },
       { type: 'binary', file: 'archive.zip', mime: 'application/zip' },
       { type: 'binary', file: 'app.exe', mime: 'application/octet-stream' },
     ])(
@@ -279,6 +274,181 @@ describe('fileUtils', () => {
         expect(await detectFileType(file)).toBe(type);
       },
     );
+
+    // --- Content-signature verification for media classification (#2723) ---
+
+    it.each([
+      {
+        label: 'png',
+        file: 'file.png',
+        mime: 'image/png',
+        content: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      },
+      {
+        label: 'jpeg',
+        file: 'file.jpg',
+        mime: 'image/jpeg',
+        content: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      },
+      {
+        label: 'gif',
+        file: 'file.gif',
+        mime: 'image/gif',
+        content: Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]),
+      },
+      {
+        label: 'webp',
+        file: 'file.webp',
+        mime: 'image/webp',
+        content: Buffer.from([
+          0x52, 0x49, 0x46, 0x46, 0x1c, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42,
+          0x50,
+        ]),
+      },
+      {
+        label: 'bmp',
+        file: 'file.bmp',
+        mime: 'image/bmp',
+        content: Buffer.from([0x42, 0x4d, 0x00, 0x00]),
+      },
+    ])(
+      'should classify real $label image as image when signature verifies (#2723)',
+      async ({ file, mime: mimeType, content }) => {
+        const filePath = path.join(tempRootDir, file);
+        actualNodeFs.writeFileSync(filePath, content);
+        mockMimeLookup.mockReturnValueOnce(mimeType);
+        expect(await detectFileType(filePath)).toBe('image');
+      },
+    );
+
+    it.each([
+      {
+        label: 'mp3',
+        file: 'song.mp3',
+        mime: 'audio/mpeg',
+        content: Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00]),
+      },
+      {
+        label: 'wav',
+        file: 'sound.wav',
+        mime: 'audio/wav',
+        content: Buffer.from([
+          0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56,
+          0x45,
+        ]),
+      },
+      {
+        label: 'flac',
+        file: 'audio.flac',
+        mime: 'audio/flac',
+        content: Buffer.from([0x66, 0x4c, 0x61, 0x43, 0x00]),
+      },
+      {
+        label: 'ogg',
+        file: 'audio.ogg',
+        mime: 'audio/ogg',
+        content: Buffer.from([0x4f, 0x67, 0x67, 0x53, 0x00]),
+      },
+    ])(
+      'should classify real $label audio as audio when signature verifies (#2723)',
+      async ({ file, mime: mimeType, content }) => {
+        const filePath = path.join(tempRootDir, file);
+        actualNodeFs.writeFileSync(filePath, content);
+        mockMimeLookup.mockReturnValueOnce(mimeType);
+        expect(await detectFileType(filePath)).toBe('audio');
+      },
+    );
+
+    it.each([
+      {
+        label: 'mp4',
+        file: 'movie.mp4',
+        mime: 'video/mp4',
+        content: Buffer.from([
+          0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f,
+          0x6d,
+        ]),
+      },
+      {
+        label: 'avi',
+        file: 'clip.avi',
+        mime: 'video/x-msvideo',
+        content: Buffer.from([
+          0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x41, 0x56, 0x49,
+          0x20,
+        ]),
+      },
+      {
+        label: 'webm',
+        file: 'video.webm',
+        mime: 'video/webm',
+        content: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01]),
+      },
+    ])(
+      'should classify real $label video as video when signature verifies (#2723)',
+      async ({ file, mime: mimeType, content }) => {
+        const filePath = path.join(tempRootDir, file);
+        actualNodeFs.writeFileSync(filePath, content);
+        mockMimeLookup.mockReturnValueOnce(mimeType);
+        expect(await detectFileType(filePath)).toBe('video');
+      },
+    );
+
+    it('should classify real pdf as pdf when signature verifies (#2723)', async () => {
+      const filePath = path.join(tempRootDir, 'document.pdf');
+      actualNodeFs.writeFileSync(
+        filePath,
+        Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a]),
+      );
+      mockMimeLookup.mockReturnValueOnce('application/pdf');
+      expect(await detectFileType(filePath)).toBe('pdf');
+    });
+
+    it.each([
+      { label: 'image', file: 'shader.png', mime: 'image/png' },
+      { label: 'audio', file: 'config.mp3', mime: 'audio/mpeg' },
+      { label: 'video', file: 'data.mp4', mime: 'video/mp4' },
+      { label: 'pdf', file: 'notes.pdf', mime: 'application/pdf' },
+    ])(
+      'should reclassify text content with $label mime as text, not media (#2723)',
+      async ({ file, mime: mimeType }) => {
+        const filePath = path.join(tempRootDir, file);
+        actualNodeFs.writeFileSync(filePath, 'console.log("hello world");');
+        mockMimeLookup.mockReturnValueOnce(mimeType);
+        expect(await detectFileType(filePath)).toBe('text');
+      },
+    );
+
+    it('should classify binary content with unverified signature as binary (#2723)', async () => {
+      const filePath = path.join(tempRootDir, 'mystery.png');
+      actualNodeFs.writeFileSync(
+        filePath,
+        Buffer.from([
+          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        ]),
+      );
+      mockMimeLookup.mockReturnValueOnce('image/png');
+      expect(await detectFileType(filePath)).toBe('binary');
+    });
+
+    it('should reject partial RIFF match (AND semantics) as non-media text (#2723)', async () => {
+      const filePath = path.join(tempRootDir, 'fake.webp');
+      actualNodeFs.writeFileSync(
+        filePath,
+        Buffer.from([
+          0x52, 0x49, 0x46, 0x46, 0x41, 0x42, 0x43, 0x44, 0x58, 0x58, 0x58,
+          0x58,
+        ]),
+      );
+      mockMimeLookup.mockReturnValueOnce('image/webp');
+      expect(await detectFileType(filePath)).toBe('text');
+    });
+
+    it('should fall through to text for non-existent file with media mime (#2723)', async () => {
+      const filePath = path.join(tempRootDir, 'nonexistent.png');
+      mockMimeLookup.mockReturnValueOnce('image/png');
+      expect(await detectFileType(filePath)).toBe('text');
+    });
 
     it('should detect svg type by extension', async () => {
       expect(await detectFileType('image.svg')).toBe('svg');
@@ -396,7 +566,9 @@ describe('fileUtils', () => {
     });
 
     it('should process an image file', async () => {
-      const fakePngData = Buffer.from('fake png data');
+      const fakePngData = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x66, 0x61, 0x6b, 0x65,
+      ]);
       actualNodeFs.writeFileSync(testImageFilePath, fakePngData);
       mockMimeLookup.mockReturnValue('image/png');
       const result = await processSingleFileContent(
@@ -418,7 +590,9 @@ describe('fileUtils', () => {
     });
 
     it('should process a PDF file', async () => {
-      const fakePdfData = Buffer.from('fake pdf data');
+      const fakePdfData = Buffer.from([
+        0x25, 0x50, 0x44, 0x46, 0x2d, 0x66, 0x61, 0x6b, 0x65,
+      ]);
       actualNodeFs.writeFileSync(testPdfFilePath, fakePdfData);
       mockMimeLookup.mockReturnValue('application/pdf');
       const result = await processSingleFileContent(
@@ -440,7 +614,9 @@ describe('fileUtils', () => {
     });
 
     it('should process an audio file', async () => {
-      const fakeMp3Data = Buffer.from('fake mp3 data');
+      const fakeMp3Data = Buffer.from([
+        0x49, 0x44, 0x33, 0x03, 0x00, 0x66, 0x61, 0x6b, 0x65,
+      ]);
       actualNodeFs.writeFileSync(testAudioFilePath, fakeMp3Data);
       mockMimeLookup.mockReturnValue('audio/mpeg');
       const result = await processSingleFileContent(

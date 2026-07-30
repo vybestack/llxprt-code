@@ -216,6 +216,128 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
   }
 }
 
+// --- Media magic-byte signatures --------------------------------------------
+// Before trusting an extension-derived media mime we verify the file's actual
+// bytes against known magic-number signatures. This prevents text/source files
+// whose extension collides with a media mime (e.g. .fh -> image/x-freehand,
+// .ts -> video/mp2t) from being misclassified and sent as base64 media, which
+// causes provider 400 errors. Files whose signature does not verify fall
+// through to the content sniff; the check reads only the leading bytes and
+// costs sub-ms / sub-KB, so no caching is needed.
+
+interface BytePattern {
+  readonly offset: number;
+  readonly bytes: readonly number[];
+}
+
+type MediaSignature = readonly BytePattern[];
+
+const IMAGE_SIGNATURES: readonly MediaSignature[] = [
+  [{ offset: 0, bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }],
+  [{ offset: 0, bytes: [0xff, 0xd8, 0xff] }],
+  [{ offset: 0, bytes: [0x47, 0x49, 0x46, 0x38, 0x37, 0x61] }],
+  [{ offset: 0, bytes: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61] }],
+  [{ offset: 0, bytes: [0x42, 0x4d] }],
+  [{ offset: 0, bytes: [0x49, 0x49, 0x2a, 0x00] }],
+  [{ offset: 0, bytes: [0x4d, 0x4d, 0x00, 0x2a] }],
+  [{ offset: 0, bytes: [0x00, 0x00, 0x01, 0x00] }],
+  [
+    { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
+    { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] },
+  ],
+];
+
+const AUDIO_SIGNATURES: readonly MediaSignature[] = [
+  [{ offset: 0, bytes: [0x49, 0x44, 0x33] }],
+  [{ offset: 0, bytes: [0xff, 0xfb] }],
+  [{ offset: 0, bytes: [0xff, 0xfa] }],
+  [{ offset: 0, bytes: [0xff, 0xf3] }],
+  [{ offset: 0, bytes: [0xff, 0xf2] }],
+  [{ offset: 0, bytes: [0xff, 0xe3] }],
+  [{ offset: 0, bytes: [0xff, 0xe2] }],
+  [
+    { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
+    { offset: 8, bytes: [0x57, 0x41, 0x56, 0x45] },
+  ],
+  [{ offset: 0, bytes: [0x66, 0x4c, 0x61, 0x43] }],
+  [{ offset: 0, bytes: [0x4f, 0x67, 0x67, 0x53] }],
+  [{ offset: 0, bytes: [0xff, 0xf1] }],
+  [{ offset: 0, bytes: [0xff, 0xf9] }],
+  [{ offset: 0, bytes: [0xff, 0xf0] }],
+  [{ offset: 0, bytes: [0xff, 0xf8] }],
+];
+
+const VIDEO_SIGNATURES: readonly MediaSignature[] = [
+  [{ offset: 4, bytes: [0x66, 0x74, 0x79, 0x70] }],
+  [
+    { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
+    { offset: 8, bytes: [0x41, 0x56, 0x49, 0x20] },
+  ],
+  [{ offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3] }],
+];
+
+const PDF_SIGNATURES: readonly MediaSignature[] = [
+  [{ offset: 0, bytes: [0x25, 0x50, 0x44, 0x46] }],
+];
+
+interface MediaCategory {
+  readonly type: 'image' | 'audio' | 'video' | 'pdf';
+  readonly signatures: readonly MediaSignature[];
+}
+
+function resolveMediaCategory(mimeType: string): MediaCategory | null {
+  if (mimeType.startsWith('image/')) {
+    return { type: 'image', signatures: IMAGE_SIGNATURES };
+  }
+  if (mimeType.startsWith('audio/')) {
+    return { type: 'audio', signatures: AUDIO_SIGNATURES };
+  }
+  if (mimeType.startsWith('video/')) {
+    return { type: 'video', signatures: VIDEO_SIGNATURES };
+  }
+  if (mimeType === 'application/pdf') {
+    return { type: 'pdf', signatures: PDF_SIGNATURES };
+  }
+  return null;
+}
+
+function headerMatches(
+  header: Buffer,
+  signatures: readonly MediaSignature[],
+): boolean {
+  return signatures.some((sig) =>
+    sig.every(({ offset, bytes }) => {
+      if (offset + bytes.length > header.length) return false;
+      return bytes.every((b, i) => header[offset + i] === b);
+    }),
+  );
+}
+
+async function verifyMediaSignature(
+  filePath: string,
+  signatures: readonly MediaSignature[],
+): Promise<boolean> {
+  let fh: fs.promises.FileHandle | null = null;
+  try {
+    fh = await fs.promises.open(filePath, 'r');
+    const buf = Buffer.alloc(32);
+    const { bytesRead } = await fh.read(buf, 0, 32, 0);
+    const header = buf.subarray(0, bytesRead);
+    if (header.length === 0) return false;
+    return headerMatches(header, signatures);
+  } catch {
+    return false;
+  } finally {
+    if (fh) {
+      try {
+        await fh.close();
+      } catch {
+        // ignore close errors
+      }
+    }
+  }
+}
+
 export async function detectFileType(
   filePath: string,
 ): Promise<'text' | 'image' | 'pdf' | 'audio' | 'video' | 'binary' | 'svg'> {
@@ -240,10 +362,21 @@ export async function detectFileType(
     lookedUpMimeType !== '' &&
     !freehandExtensions.includes(ext)
   ) {
-    if (lookedUpMimeType.startsWith('image/')) return 'image';
-    if (lookedUpMimeType.startsWith('audio/')) return 'audio';
-    if (lookedUpMimeType.startsWith('video/')) return 'video';
-    if (lookedUpMimeType === 'application/pdf') return 'pdf';
+    const category = resolveMediaCategory(lookedUpMimeType);
+    if (category) {
+      if (await verifyMediaSignature(filePath, category.signatures)) {
+        return category.type;
+      }
+      // Signature did not verify. If the content is clearly text, reclassify
+      // as text to avoid sending source/text as base64 media (provider 400).
+      // Binary-but-unrecognized content is classified as binary rather than
+      // the media type: an unverified binary blob sent as base64 media would
+      // trigger the same provider 400 errors this feature prevents.
+      if (!(await isBinaryFile(filePath))) {
+        return 'text';
+      }
+      return 'binary';
+    }
   }
 
   if (BINARY_EXTENSIONS.includes(ext)) {
