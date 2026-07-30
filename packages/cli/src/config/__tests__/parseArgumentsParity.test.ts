@@ -28,10 +28,7 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
-function expectParseExit(): {
-  mockExit: ReturnType<typeof vi.spyOn>;
-  mockErr: ReturnType<typeof vi.spyOn>;
-} {
+function expectParseExit() {
   const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
     throw new Error('process.exit called');
   });
