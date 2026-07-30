@@ -143,11 +143,8 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
         textMessage('model', 'source reply'),
       ]);
       const checkpoint = await agent.session.createCheckpoint('branch-point');
-      await agent.setHistory([
-        textMessage('user', 'branch source'),
-        textMessage('model', 'source reply'),
-        textMessage('user', 'source-only tail'),
-      ]);
+      const parentPath = agent.session.getRecording().path ?? '';
+      await agent.restoreHistory([textMessage('user', 'source-only tail')]);
 
       const child = await agent.session.forkFromCheckpoint(
         checkpoint.checkpointId,
@@ -160,6 +157,7 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
         'branch source',
         'source reply',
       ]);
+      expect(readFileSync(parentPath, 'utf8')).toContain('source-only tail');
     });
   });
 

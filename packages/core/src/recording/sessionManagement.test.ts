@@ -597,6 +597,20 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
       expect(result.ok).toBe(false);
       expect(await fileExists(filePath)).toBe(true);
     });
+
+    itProp(
+      'fails closed when the session file contains invalid JSON',
+      async () => {
+        const sessionId = 'invalid-json-blocker-session';
+        const { filePath } = await createTestSession(chatsDir, { sessionId });
+        await fs.writeFile(filePath, '{"v":1,"seq":1', 'utf-8');
+
+        const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+
+        expect(result.ok).toBe(false);
+        expect(await fileExists(filePath)).toBe(true);
+      },
+    );
   });
 
   describe('Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {

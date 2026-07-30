@@ -337,6 +337,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           blocks: [{ type: 'text', text: 'checkpoint content' }],
         });
         await recording.createCheckpoint('release-ready');
+        const sessionId = recording.getSessionId();
 
         ctx = createMockCommandContext({
           services: {
@@ -362,6 +363,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           typeof completion === 'string' ? completion : completion.value,
         );
         expect(values).toContain('release-ready');
+        expect(values).toContain(sessionId);
       } finally {
         try {
           await recording.dispose();

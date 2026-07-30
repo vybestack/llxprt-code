@@ -110,16 +110,17 @@ describe('HistoryService replaceAll serialization', () => {
     expect(service.getAll()).toStrictEqual([]);
   });
 
-  it('reports both an initial listener failure and a queued mutation failure', () => {
+  it('reports every initial and queued listener failure', () => {
     const service = new HistoryService();
     let invocation = 0;
     service.on('contentAdded', () => {
       invocation += 1;
       if (invocation === 1) {
-        service.add(createUserMessage('queued'));
+        service.add(createUserMessage('queued first'));
+        service.add(createUserMessage('queued second'));
         throw new Error('initial failure');
       }
-      throw new Error('queued failure');
+      throw new Error(`queued failure ${invocation - 1}`);
     });
 
     let thrown: unknown;
@@ -130,11 +131,14 @@ describe('HistoryService replaceAll serialization', () => {
     }
 
     expect(thrown).toBeInstanceOf(AggregateError);
+    const aggregate = thrown as AggregateError;
+    expect(aggregate.errors[0]).toMatchObject({ message: 'initial failure' });
+    expect(aggregate.errors[1]).toBeInstanceOf(AggregateError);
     expect(
-      (thrown as AggregateError).errors.map((error) =>
+      (aggregate.errors[1] as AggregateError).errors.map((error) =>
         error instanceof Error ? error.message : String(error),
       ),
-    ).toStrictEqual(['initial failure', 'queued failure']);
+    ).toStrictEqual(['queued failure 1', 'queued failure 2']);
     expect(service.getAll()).toStrictEqual([]);
   });
 });

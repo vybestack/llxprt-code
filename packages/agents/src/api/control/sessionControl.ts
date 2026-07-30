@@ -641,22 +641,32 @@ export class SessionControl implements AgentSessionControl {
       );
       if (!result.ok) throw new Error(result.error);
       this.integration?.unsubscribeFromHistory();
-      let mutationError: unknown;
+      const mutationFailures: unknown[] = [];
+      let resetSucceeded = false;
       try {
         await client.resetChat();
+        resetSucceeded = true;
         await client.restoreHistory(result.remainingHistory);
       } catch (error: unknown) {
-        mutationError = error;
+        mutationFailures.push(error);
+        if (resetSucceeded) {
+          try {
+            await client.restoreHistory(history);
+          } catch (rollbackError: unknown) {
+            mutationFailures.push(rollbackError);
+          }
+        }
       }
       const resubscribeError = this.resubscribeIntegration();
-      if (mutationError !== undefined && resubscribeError !== undefined) {
+      if (resubscribeError !== undefined)
+        mutationFailures.push(resubscribeError);
+      if (mutationFailures.length > 1) {
         throw new AggregateError(
-          [mutationError, resubscribeError],
-          'History mutation and recording resubscription both failed',
+          mutationFailures,
+          'History mutation, rollback, or recording resubscription failed',
         );
       }
-      if (mutationError !== undefined) throw mutationError;
-      if (resubscribeError !== undefined) throw resubscribeError;
+      if (mutationFailures.length === 1) throw mutationFailures[0];
     });
   }
 

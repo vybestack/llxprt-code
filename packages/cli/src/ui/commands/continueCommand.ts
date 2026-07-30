@@ -14,6 +14,7 @@ import type {
 import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { SessionDiscovery } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { basename } from 'node:path';
 
 /**
@@ -50,28 +51,23 @@ const continueSchema: CommandArgumentSchema = [
           storage.getProjectChatsDir(),
           basename(storage.getProjectTempDir()),
         );
-      } catch {
+      } catch (error: unknown) {
+        debugLogger.warn('Failed to discover /continue completions:', error);
         return [latest];
       }
       return [
         latest,
-        ...targets.flatMap((target) => {
+        ...targets.map((target) => {
           if (target.kind === 'checkpoint') {
-            return [
-              {
-                value: target.checkpointName,
-                description: 'Recording checkpoint',
-              },
-            ];
+            return {
+              value: target.checkpointName,
+              description: 'Recording checkpoint',
+            };
           }
-          return target.session.name
-            ? [
-                {
-                  value: target.session.name,
-                  description: 'Named session',
-                },
-              ]
-            : [];
+          return {
+            value: target.session.name ?? target.session.sessionId,
+            description: target.session.name ? 'Named session' : 'Session ID',
+          };
         }),
       ];
     },

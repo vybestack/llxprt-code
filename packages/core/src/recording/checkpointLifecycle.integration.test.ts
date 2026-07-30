@@ -87,7 +87,7 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
   const chatsDir = () => path.join(tmp.getDir(), 'chats');
 
   describe('A6: lifecycle folds by stable ID', () => {
-    it('rename preserves ID and watermark', async () => {
+    it('rename preserves ID and sequence', async () => {
       const svc = new SessionRecordingService(makeConfig(chatsDir()));
       svc.recordContent(makeContent('A', 'human'));
       svc.recordContent(makeContent('B', 'ai'));
@@ -246,6 +246,44 @@ describe('checkpoint lifecycle on closed sessions @plan:2026-07-28-issue-2625', 
           deleted: false,
         }),
       );
+    });
+
+    it('overwrites a colliding checkpoint in the active recording', async () => {
+      const recording = await SessionRecordingService.createLocked(
+        makeConfig(chatsDir()),
+      );
+      recording.recordContent(makeContent('source'));
+      const replaced = await recording.createCheckpoint('shared-name');
+      recording.recordContent(makeContent('tail'));
+
+      try {
+        const created = await new CheckpointService().createCheckpoint(
+          recording,
+          PROJECT_HASH,
+          'shared-name',
+          true,
+        );
+
+        const replay = await replaySession(
+          recording.getFilePath()!,
+          PROJECT_HASH,
+        );
+        requireReplaySuccess(replay);
+        expect(
+          replay.checkpoints?.find(
+            (checkpoint) => checkpoint.checkpointId === replaced.checkpointId,
+          )?.deleted,
+        ).toBe(true);
+        expect(replay.checkpoints).toContainEqual(
+          expect.objectContaining({
+            checkpointId: created.checkpointId,
+            name: 'shared-name',
+            deleted: false,
+          }),
+        );
+      } finally {
+        await recording.dispose();
+      }
     });
   });
 

@@ -407,6 +407,39 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
     });
   });
 
+  it('restores the original history when the cleared-history restore fails', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const sessionId = 'clear-restore-rollback';
+      const originalHistory = [
+        humanText('initial turn'),
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
+        humanText('later turn'),
+      ];
+      const config = buildFakeConfig(projectRoot);
+      const client = buildFakeClient(originalHistory);
+      const control = new SessionControl(
+        buildDeps(config, client.contract, sessionId),
+      );
+      await control.setRecording({ enabled: true });
+      const restoreHistory = client.contract.restoreHistory.bind(
+        client.contract,
+      );
+      let restoreAttempt = 0;
+      client.contract.restoreHistory = async (history) => {
+        restoreAttempt += 1;
+        if (restoreAttempt === 1) throw new Error('remaining restore failed');
+        await restoreHistory(history);
+      };
+
+      await expect(control.clearHistory()).rejects.toThrow(
+        'remaining restore failed',
+      );
+      expect(await client.contract.getHistory()).toStrictEqual(originalHistory);
+      expect(restoreAttempt).toBe(2);
+      await control.dispose();
+    });
+  });
+
   it('A3: an integration left unsubscribed (HistoryService unavailable at enable) is re-attached by the next operation, so later content events reach the recording @requirement:REQ-010', async () => {
     await withProjectRoot(async (projectRoot) => {
       const sessionId = 'reattach-session';

@@ -323,7 +323,7 @@ export class HistoryService
       try {
         mutation.execute();
       } catch (error: unknown) {
-        if (!failure.failed) failure = { failed: true, error };
+        failure = combineMutationFailures(failure, { failed: true, error });
       }
     }
     return failure;

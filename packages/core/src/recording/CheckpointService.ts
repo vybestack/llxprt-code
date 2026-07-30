@@ -476,9 +476,10 @@ export class CheckpointService {
         targetName(target) === name && !isSameReference(target, operation),
     );
     const lockedIds = new Set(lockedCollisions.map(targetSessionId));
-    const unlockedCollision = collisions.find(
-      (target) => !lockedIds.has(targetSessionId(target)),
-    );
+    const unlockedCollision = collisions.find((target) => {
+      const sessionId = targetSessionId(target);
+      return !recording.ownsLockFor(sessionId) && !lockedIds.has(sessionId);
+    });
     if (unlockedCollision !== undefined) {
       throw new Error(`Name '${name}' changed while acquiring locks`);
     }
