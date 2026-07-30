@@ -213,11 +213,12 @@ export function buildArtifactContext(
       ? prAuthor.data.login
       : undefined;
   const rawCommits = pr.commits;
-  const commitCount = Array.isArray(rawCommits)
-    ? rawCommits.length
-    : typeof rawCommits === 'number'
-      ? rawCommits
-      : undefined;
+  let commitCount: number | undefined;
+  if (Array.isArray(rawCommits)) {
+    commitCount = rawCommits.length;
+  } else if (typeof rawCommits === 'number') {
+    commitCount = rawCommits;
+  }
   return {
     prContext: {
       number: pr.number,
