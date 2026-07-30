@@ -724,7 +724,9 @@ export abstract class BaseProvider implements IProvider {
     if (runtimeToken !== undefined && runtimeToken !== '') {
       return runtimeToken;
     }
-    return this.getAuthTokenForPrompt();
+    return this.activeCallContext.run(options, () =>
+      this.getAuthTokenForPrompt(),
+    );
   }
 
   /**

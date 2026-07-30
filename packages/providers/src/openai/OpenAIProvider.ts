@@ -150,8 +150,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
   }
 
-  private resolveOpenAIResponsesEnabled(): boolean | undefined {
-    const settingsService = this.resolveSettingsService();
+  private resolveOpenAIResponsesEnabled(
+    settingsService = this.resolveSettingsService(),
+  ): boolean | undefined {
     const providerValue = settingsService.getProviderSettings(this.name)[
       'openaiResponsesEnabled'
     ];
@@ -170,8 +171,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private resolveTransport(
     model: string,
     baseURL: string | undefined,
+    settingsService = this.resolveSettingsService(),
   ): { useResponses: boolean } {
-    const settingsService = this.resolveSettingsService();
     const providerSettings = settingsService.getProviderSettings(this.name);
     const explicitMode = resolveExplicitTransportModeFromSources(
       providerSettings,
@@ -181,7 +182,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       baseURL,
       explicitMode,
-      openaiResponsesEnabled: this.resolveOpenAIResponsesEnabled(),
+      openaiResponsesEnabled:
+        this.resolveOpenAIResponsesEnabled(settingsService),
     });
   }
 
@@ -845,6 +847,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const useResponses = this.resolveTransport(
       normalized.resolved.model,
       normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
+      normalized.settings,
     ).useResponses;
     return prepareOpenAIPromptProjection({
       normalized,

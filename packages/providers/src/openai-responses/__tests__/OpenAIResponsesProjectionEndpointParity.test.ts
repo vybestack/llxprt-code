@@ -119,6 +119,18 @@ function buildSettings(
   return settings;
 }
 
+function buildChatSettings(
+  providerName: string,
+  baseURL: string | undefined,
+): SettingsService {
+  const settings = new SettingsService();
+  settings.setProviderSetting(providerName, 'responsesMode', 'chat');
+  if (baseURL !== undefined) {
+    settings.setProviderSetting(providerName, 'base-url', baseURL);
+  }
+  return settings;
+}
+
 function buildCallOptions(
   providerName: string,
   settings: SettingsService,
@@ -199,6 +211,18 @@ describe('Responses projection endpoint parity (issue #2817)', () => {
       expect(provider.readPreparedRawBaseURL(projection.transportToken)).toBe(
         CANONICAL_BASE_URL,
       );
+    });
+
+    it('selects projection transport from per-call settings', async () => {
+      const provider = new TestOpenAIProvider();
+      const options = buildCallOptions(
+        'openai',
+        buildChatSettings('openai', undefined),
+      );
+
+      const projection = await provider.projectPromptEnvelope(options);
+
+      expect(projection.protocol).toBe('openai-chat');
     });
 
     it('sends the prepared envelope without an endpoint drift rejection', async () => {
