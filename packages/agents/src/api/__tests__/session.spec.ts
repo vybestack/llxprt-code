@@ -200,12 +200,26 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
   it('resets an already-empty chat while recording is enabled', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
       await agent.setHistory([textMessage('user', 'stale previous history')]);
-      await agent.resetChat();
       await agent.session.setRecording({ enabled: true });
+      const recordingPath = agent.session.getRecording().path ?? '';
+      await agent.setHistory([]);
 
       await agent.resetChat();
+      const rewindCountAfterFirstReset = readFileSync(recordingPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { type: string })
+        .filter((line) => line.type === 'rewind').length;
+      await agent.resetChat();
+      await agent.session.setRecording({ enabled: false });
+      const rewindCountAfterSecondReset = readFileSync(recordingPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { type: string })
+        .filter((line) => line.type === 'rewind').length;
+
       expect(await agent.getHistory()).toStrictEqual([]);
-      expect(agent.session.getRecording().enabled).toBe(true);
+      expect(rewindCountAfterSecondReset).toBe(rewindCountAfterFirstReset);
     });
   });
 

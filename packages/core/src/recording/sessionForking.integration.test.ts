@@ -146,10 +146,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
         expect(texts).toStrictEqual(['A', 'B', 'C']);
 
         // Child recording is active and can append F/G
-        result.recording.recordContent(makeContent('F', 'ai'));
-        result.recording.recordContent(makeContent('G', 'human'));
-        await result.recording.flush();
         try {
+          result.recording.recordContent(makeContent('F', 'ai'));
+          result.recording.recordContent(makeContent('G', 'human'));
+          await result.recording.flush();
           await result.recording.dispose();
         } finally {
           await result.lockHandle.release();
@@ -249,9 +249,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       );
       requireForkSuccess(result);
 
-      result.recording.recordContent(makeContent('F', 'ai'));
-      await result.recording.flush();
       try {
+        result.recording.recordContent(makeContent('F', 'ai'));
+        await result.recording.flush();
         await result.recording.dispose();
       } finally {
         await result.lockHandle.release();

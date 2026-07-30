@@ -233,27 +233,15 @@ export class SessionControl implements AgentSessionControl {
    *  2. resumeSession() builds the resumed recording (already seeded with the
    *     resumed history) + acquires its session lock. These are held in LOCALS,
    *     NOT committed to the instance fields yet.
-   *  3. The PRIOR integration is disposed (unsubscribed) BEFORE restoreHistory so
-   *     the restoreHistory-driven 'contentAdded' events (HistoryService.addAll
-   *     emits one per item) are NOT double-recorded into the prior file; the
-   *     prior recording service + lock are torn down here too. A prior-teardown
-   *     failure releases the freshly-acquired resumed resources and rethrows so
-   *     nothing leaks (mirrors the old FINDING F7 surface-first ordering).
-   *  4. restoreHistory() runs with NO integration subscribed (prior disposed,
-   *     resumed not yet subscribed) so the resumed items — already in the resumed
-   *     recording file — are not re-recorded.
-   *  5. A fresh integration is built + subscribed BEFORE committing the fields /
-   *     Config (FINDING A2, mirroring the startRecording F8 ordering). Only after
-   *     a successful subscribe are this.recording / Config / this.integration /
-   *     the lock committed. On subscribe failure the resumed recording + lock are
-   *     disposed/released and the fields are left CLEANLY DISABLED (Config is NOT
-   *     left pointing at the resumed service, no lock file leaks) — half-enabled
-   *     recording (turns silently dropped) can no longer occur.
-   *
-   * Prior state cannot be "left intact" on a late failure because step 3 must
-   * tear it down early to avoid the restoreHistory double-record; the safe
-   * fallback is therefore a clean DISABLED state, never a stale reference to a
-   * disposed service/lock.
+   *  3. The prior integration is unsubscribed before history replacement, so
+   *     replacement events are not appended to the prior recording. Its service,
+   *     lock, and instance fields remain available until commit succeeds.
+   *  4. The replacement runs with neither integration subscribed; the resumed
+   *     items already in the resumed recording are therefore not duplicated.
+   *  5. The resumed integration is subscribed and committed atomically. On any
+   *     failure, prior history and subscription state are restored before the
+   *     prepared recording and lock are released. Only after successful commit
+   *     are the prior integration, recording, and lock disposed.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
@@ -294,7 +282,12 @@ export class SessionControl implements AgentSessionControl {
     const priorHistory = await client.getHistory();
     const integration = new RecordingIntegration(recording);
     let historyReplacementAttempted = false;
+    let priorIntegrationUnsubscribed = false;
     try {
+      if (priorIntegration !== null && !priorNeedsSubscribe) {
+        priorIntegration.unsubscribeFromHistory();
+        priorIntegrationUnsubscribed = true;
+      }
       historyReplacementAttempted = true;
       await client.setHistory(history);
       const subscribed = this.attachIntegrationToHistory(integration);
@@ -309,20 +302,38 @@ export class SessionControl implements AgentSessionControl {
       this.integration = priorIntegration;
       this.integrationNeedsSubscribe = priorNeedsSubscribe;
       this.currentLockHandle = priorLockHandle;
-      let rollbackError: unknown;
+      const rollbackFailures: unknown[] = [];
       try {
         this.deps.config.setSessionRecordingService(
           priorRecording ?? undefined,
         );
-        if (historyReplacementAttempted) {
-          await client.setHistory(priorHistory);
-        }
       } catch (failure: unknown) {
-        rollbackError = failure;
+        rollbackFailures.push(failure);
+      }
+      if (historyReplacementAttempted) {
+        try {
+          await client.setHistory(priorHistory);
+        } catch (failure: unknown) {
+          rollbackFailures.push(failure);
+        }
+      }
+      if (priorIntegrationUnsubscribed && priorIntegration !== null) {
+        this.integrationNeedsSubscribe = true;
+        try {
+          this.integrationNeedsSubscribe =
+            !this.attachIntegrationToHistory(priorIntegration);
+        } catch (failure: unknown) {
+          rollbackFailures.push(failure);
+        }
       }
       await this.disposeServiceQuietly(recording);
       await this.releaseLockQuietly(lockHandle);
-      if (rollbackError !== undefined) throw rollbackError;
+      if (rollbackFailures.length > 0) {
+        throw new AggregateError(
+          [error, ...rollbackFailures],
+          'Session transition and rollback both failed',
+        );
+      }
       throw error;
     }
 
