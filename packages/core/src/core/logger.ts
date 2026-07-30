@@ -41,7 +41,6 @@ function isValidLogEntry(entry: unknown): entry is LogEntry {
 }
 
 export class Logger {
-  private llxprtDir: string | undefined;
   private logFilePath: string | undefined;
   private sessionId: string | undefined;
   private messageId = 0; // Instance-specific counter for the next messageId
@@ -450,7 +449,6 @@ export class Logger {
 
     ensureDir(Storage.getGlobalLogDir());
     const llxprtDir = this.storage.getProjectTempDir();
-    this.llxprtDir = llxprtDir;
     this.logFilePath = path.join(llxprtDir, LOG_FILE_NAME);
 
     try {
@@ -556,7 +554,6 @@ export class Logger {
       }
     }
     this.initialized = false;
-    this.llxprtDir = undefined;
     this.logFilePath = undefined;
     this.logs = [];
     this.sessionId = undefined;
