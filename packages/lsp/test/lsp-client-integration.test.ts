@@ -212,7 +212,7 @@ describe('LspClient integration with fake LSP server', () => {
     createdClients.push(client);
 
     await client.initialize();
-    await expect(client.shutdown()).resolves.toBeUndefined();
+    await client.shutdown();
     expect(client.isAlive()).toBe(false);
   });
 
@@ -241,7 +241,7 @@ describe('LspClient integration with fake LSP server', () => {
     expect(isPidAlive(pid)).toBe(true);
 
     const start = Date.now();
-    await expect(client.shutdown()).resolves.toBeUndefined();
+    await client.shutdown();
     const elapsed = Date.now() - start;
 
     expect(client.isAlive()).toBe(false);
@@ -307,7 +307,7 @@ describe('LspClient integration with fake LSP server', () => {
     const pid = readPid(pidFile);
     expect(isPidAlive(pid)).toBe(true);
 
-    await expect(client.shutdown()).resolves.toBeUndefined();
+    await client.shutdown();
     expect(client.isAlive()).toBe(false);
     expect(isPidAlive(pid)).toBe(false);
   });
