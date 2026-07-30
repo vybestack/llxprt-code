@@ -196,8 +196,13 @@ export class TokenAccessCoordinator {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    const metadata = await this.getCurrentProfileSessionMetadata(providerName);
+    const bucket = await this.getCurrentProfileSessionBucket(
+      providerName,
+      metadata,
+    );
     try {
-      return await this.tokenStore.getToken(providerName);
+      return await this.tokenStore.getToken(providerName, bucket);
     } catch (error) {
       logger.debug(`Failed to load stored token for ${providerName}:`, error);
       return null;
@@ -230,26 +235,17 @@ export class TokenAccessCoordinator {
 
     const { explicitBucket, requestMetadata } =
       this.resolveTokenRequestBucket(bucket);
-
-    const bucketToUse = explicitBucket
-      ? (bucket as string)
-      : await this.resolveImplicitBucket(providerName, requestMetadata);
-
-    try {
-      return await this.readAndValidateToken(providerName, bucketToUse);
-    } catch (error) {
-      logger.debug(
-        () =>
-          `[FLOW] getOAuthToken() ERROR for ${providerName}: ${error instanceof Error ? error.message : error}`,
-      );
-      if (
-        error instanceof Error &&
-        error.message.includes('Unknown provider')
-      ) {
-        throw error;
-      }
-      return null;
-    }
+    const effectiveMetadata = await this.resolveEffectiveMetadata(
+      providerName,
+      explicitBucket,
+      requestMetadata,
+    );
+    return this.getOAuthTokenForRequest(
+      providerName,
+      explicitBucket,
+      bucket,
+      effectiveMetadata,
+    );
   }
 
   /**
@@ -424,6 +420,42 @@ export class TokenAccessCoordinator {
     }
   }
 
+  private async resolveEffectiveMetadata(
+    providerName: string,
+    explicitBucket: boolean,
+    requestMetadata: OAuthTokenRequestMetadata | undefined,
+  ): Promise<OAuthTokenRequestMetadata | undefined> {
+    return !explicitBucket && requestMetadata === undefined
+      ? this.getCurrentProfileSessionMetadata(providerName)
+      : requestMetadata;
+  }
+
+  private async getOAuthTokenForRequest(
+    providerName: string,
+    explicitBucket: boolean,
+    bucket: string | unknown,
+    effectiveMetadata: OAuthTokenRequestMetadata | undefined,
+  ): Promise<OAuthToken | null> {
+    const bucketToUse = explicitBucket
+      ? (bucket as string)
+      : await this.resolveImplicitBucket(providerName, effectiveMetadata);
+    try {
+      return await this.readAndValidateToken(providerName, bucketToUse);
+    } catch (error) {
+      logger.debug(
+        () =>
+          `[FLOW] getOAuthToken() ERROR for ${providerName}: ${error instanceof Error ? error.message : error}`,
+      );
+      if (
+        error instanceof Error &&
+        error.message.includes('Unknown provider')
+      ) {
+        throw error;
+      }
+      return null;
+    }
+  }
+
   private resolveTokenRequestBucket(bucket: string | unknown): {
     explicitBucket: boolean;
     requestMetadata: OAuthTokenRequestMetadata | undefined;
@@ -484,7 +516,18 @@ export class TokenAccessCoordinator {
     );
     const { explicitBucket, requestMetadata } =
       this.resolveTokenRequestBucket(bucket);
-    const token = await this.getOAuthToken(providerName, bucket);
+    const effectiveMetadata = await this.resolveEffectiveMetadata(
+      providerName,
+      explicitBucket,
+      requestMetadata,
+    );
+    const authRequestContext = explicitBucket ? bucket : effectiveMetadata;
+    const token = await this.getOAuthTokenForRequest(
+      providerName,
+      explicitBucket,
+      bucket,
+      effectiveMetadata,
+    );
 
     if (token) {
       logger.debug(
@@ -500,7 +543,7 @@ export class TokenAccessCoordinator {
     const peekResult = await this.peekImplicitTokenRequest(
       providerName,
       explicitBucket,
-      requestMetadata,
+      effectiveMetadata,
     );
     if (peekResult !== null) {
       return peekResult;
@@ -522,9 +565,9 @@ export class TokenAccessCoordinator {
 
     return this.getTokenTriggerAuthIfNeeded(
       providerName,
-      bucket,
+      authRequestContext,
       explicitBucket,
-      requestMetadata,
+      effectiveMetadata,
     );
   }
 

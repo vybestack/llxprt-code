@@ -142,3 +142,41 @@ export async function resolveCurrentProfileSessionMetadata(
     profileId: currentProfileName.trim(),
   };
 }
+
+export interface CurrentProfileOAuthContext {
+  readonly metadata: OAuthTokenRequestMetadata;
+  readonly providerMatches: boolean;
+  readonly hasExplicitBucketPolicy: boolean;
+}
+
+export async function resolveCurrentProfileOAuthContext(
+  providerName: string,
+): Promise<CurrentProfileOAuthContext | undefined> {
+  const metadata = await resolveCurrentProfileSessionMetadata(providerName);
+  if (metadata?.profileId === undefined) {
+    return undefined;
+  }
+
+  const profileManager = await createProfileManager();
+  const profile = await profileManager.loadProfile(metadata.profileId);
+  const profileProvider =
+    'provider' in profile && typeof profile.provider === 'string'
+      ? profile.provider
+      : null;
+  const providerMatches = profileProvider === providerName;
+  const hasExplicitBucketPolicy = hasNonEmptyOAuthBuckets(profile);
+
+  return { metadata, providerMatches, hasExplicitBucketPolicy };
+}
+
+function hasNonEmptyOAuthBuckets(profile: object): boolean {
+  const auth = (profile as Record<string, unknown>).auth;
+  if (auth === null || auth === undefined || typeof auth !== 'object') {
+    return false;
+  }
+  const authRecord = auth as Record<string, unknown>;
+  if (authRecord.type !== 'oauth') {
+    return false;
+  }
+  return Array.isArray(authRecord.buckets) && authRecord.buckets.length > 0;
+}
