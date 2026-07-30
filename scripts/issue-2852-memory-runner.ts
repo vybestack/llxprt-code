@@ -130,6 +130,10 @@ function captureOsCheckpoint(
   name: string,
   outputDir: string,
 ): OsCheckpoint {
+  // Validate name to prevent path traversal — only alphanumeric and hyphen
+  if (!/^[a-z0-9-]+$/i.test(name)) {
+    throw new Error(`Invalid checkpoint name: ${name}`);
+  }
   const ps = run('/bin/ps', ['-p', String(pid), '-o', 'pid=,rss=,command=']);
   const vmmap = run('/usr/bin/vmmap', ['-summary', String(pid)]);
   const footprint = run('/usr/bin/footprint', [
@@ -138,9 +142,10 @@ function captureOsCheckpoint(
     '--pid',
     String(pid),
   ]);
-  writeFileSync(resolve(outputDir, `${name}.ps.txt`), ps);
-  writeFileSync(resolve(outputDir, `${name}.vmmap.txt`), vmmap);
-  writeFileSync(resolve(outputDir, `${name}.footprint.txt`), footprint);
+  const safeName = name.replace(/[^a-z0-9-]/gi, '');
+  writeFileSync(resolve(outputDir, `${safeName}.ps.txt`), ps);
+  writeFileSync(resolve(outputDir, `${safeName}.vmmap.txt`), vmmap);
+  writeFileSync(resolve(outputDir, `${safeName}.footprint.txt`), footprint);
   return {
     name,
     rssBytes: parsePsRssBytes(ps, pid),
