@@ -184,3 +184,57 @@ describe('Kimi K3 XTML segment encoding (acceptance criterion 3)', () => {
     expect(withEmpty).not.toBe(withoutEmpty);
   });
 });
+
+/**
+ * Golden token-count fixtures with exact expected counts.
+ *
+ * These values were computed from the pinned BPE assets at the time of
+ * implementation. Any change to the BPE file, regex pattern, or special
+ * token map will cause these assertions to fail, catching regressions
+ * that broad-range assertions would miss.
+ */
+describe('Golden token-count fixtures (exact counts)', () => {
+  const kimi = new KimiK3Tokenizer();
+  const glm = new GlmTokenizer();
+  const minimax = new MinimaxTokenizer();
+  afterAll(() => {
+    kimi.dispose();
+    glm.dispose();
+    minimax.dispose();
+  });
+
+  it('prose: exact counts match pinned BPE output', () => {
+    const text = 'The quick brown fox jumps over the lazy dog.';
+    expect(kimi.countTokens(text)).toBe(10);
+    expect(glm.countTokens(text)).toBe(10);
+    expect(minimax.countTokens(text)).toBe(10);
+  });
+
+  it('code: exact counts match pinned BPE output', () => {
+    const text = 'function add(a, b) { return a + b; }';
+    expect(kimi.countTokens(text)).toBe(13);
+    expect(glm.countTokens(text)).toBe(13);
+    expect(minimax.countTokens(text)).toBe(13);
+  });
+
+  it('JSON/tool-like: exact counts match pinned BPE output', () => {
+    const text = '{"name":"test","value":42,"active":true}';
+    expect(kimi.countTokens(text)).toBe(13);
+    expect(glm.countTokens(text)).toBe(13);
+    expect(minimax.countTokens(text)).toBe(13);
+  });
+
+  it('CJK: exact counts match pinned BPE output', () => {
+    const text = '你好世界，这是一个中文测试。';
+    expect(kimi.countTokens(text)).toBe(7);
+    expect(glm.countTokens(text)).toBe(7);
+    expect(minimax.countTokens(text)).toBe(6);
+  });
+
+  it('emoji/Unicode: exact counts match pinned BPE output', () => {
+    const text = 'Hello 👋 World 🌍 emoji test 😀🎉';
+    expect(kimi.countTokens(text)).toBe(13);
+    expect(glm.countTokens(text)).toBe(11);
+    expect(minimax.countTokens(text)).toBe(11);
+  });
+});

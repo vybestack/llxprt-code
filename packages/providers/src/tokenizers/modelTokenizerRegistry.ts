@@ -59,14 +59,15 @@ const instanceCache = new Map<string, RuntimeTokenizer>();
 export function getRegisteredTokenizer(
   model: string,
 ): RuntimeTokenizer | undefined {
-  const factory = MODEL_REGISTRY.get(model.toLowerCase());
+  const normalizedModel = model.toLowerCase();
+  const factory = MODEL_REGISTRY.get(normalizedModel);
   if (factory === undefined) {
     return undefined;
   }
-  let instance = instanceCache.get(model);
+  let instance = instanceCache.get(normalizedModel);
   if (instance === undefined) {
     instance = factory();
-    instanceCache.set(model, instance);
+    instanceCache.set(normalizedModel, instance);
   }
   return instance;
 }

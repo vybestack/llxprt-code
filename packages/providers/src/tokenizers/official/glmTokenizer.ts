@@ -107,7 +107,7 @@ export class GlmTokenizer implements RuntimeTokenizer {
 
   countTokens(content: unknown): number {
     const text =
-      typeof content === 'string' ? content : JSON.stringify(content);
+      typeof content === 'string' ? content : JSON.stringify(content) || '';
     return this.runtime.countOrdinary(text);
   }
 
