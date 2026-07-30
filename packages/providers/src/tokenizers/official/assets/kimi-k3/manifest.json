@@ -1,0 +1,10 @@
+{
+  "model": "kimi-k3",
+  "source": "huggingface.co/moonshotai/Kimi-K3",
+  "revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569",
+  "sourceFile": "tiktoken.model",
+  "assetFile": "tokenizer.bpe",
+  "sha256": "b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103",
+  "license": "kimi-k3",
+  "conversion": "direct"
+}

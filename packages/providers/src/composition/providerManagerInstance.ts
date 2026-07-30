@@ -27,6 +27,7 @@ import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
 import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
 import { AnthropicTokenizer } from '../tokenizers/AnthropicTokenizer.js';
+import { createRegisteredTokenizerFactory } from '../tokenizers/modelTokenizerRegistry.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
@@ -123,7 +124,7 @@ function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
   const openaiTokenizer = new OpenAITokenizer();
   const anthropicTokenizer = new AnthropicTokenizer();
 
-  return {
+  const legacyFactory: RuntimeTokenizerFactory = {
     getTokenizer(
       providerName: string,
       model?: string,
@@ -147,6 +148,8 @@ function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
       return undefined;
     },
   };
+
+  return createRegisteredTokenizerFactory(legacyFactory);
 }
 
 function createRuntimeContentGeneratorFactory(
