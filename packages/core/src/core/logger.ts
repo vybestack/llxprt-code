@@ -791,10 +791,22 @@ export class Logger {
   }
 
   async close(): Promise<void> {
-    // Wait for any in-flight write to settle before clearing state. Without
-    // this, a resumed _appendEntry (suspended at an `await`) would push into
-    // the already-cleared this.logs or operate on an undefined logFilePath.
-    await this._writeQueue.catch(() => {});
+    // Drain pending writes until the queue reference stops changing. A single
+    // `await this._writeQueue` would miss a write chained onto a newer queue
+    // during the await; that write would resume after state is cleared and
+    // silently fail. Looping until no new write arrived during an await
+    // guarantees every in-flight logMessage settles first.
+    let pending = this._writeQueue;
+    let stable = false;
+    while (!stable) {
+      await pending.catch(() => {});
+      const next = this._writeQueue;
+      if (next === pending) {
+        stable = true;
+      } else {
+        pending = next;
+      }
+    }
     this.initialized = false;
     this.llxprtDir = undefined;
     this.logFilePath = undefined;
