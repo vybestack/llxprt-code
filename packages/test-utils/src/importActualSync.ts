@@ -15,11 +15,19 @@ import { vi } from 'vitest';
  * factories must be synchronous. This helper replaces the common
  * `await vi.importActual(id)` pattern inside `vi.mock` factories.
  *
- * Under Vitest: `vi.importActualSync` is provided by each workspace's
- * test-setup.ts via `createRequire`, which bypasses vi.mock interception.
+ * Under Vitest: mock factories can be async, so `importActualSync` is only
+ * reached if a sync factory calls it. If `vi.importActualSync` is not defined,
+ * this throws a clear error directing the caller to use the async pattern.
  */
 export function importActualSync<T>(id: string): T {
-  return (
-    vi as unknown as { importActualSync: (modulePath: string) => T }
-  ).importActualSync(id);
+  const viWithSync = vi as unknown as {
+    importActualSync?: (modulePath: string) => T;
+  };
+  if (typeof viWithSync.importActualSync === 'function') {
+    return viWithSync.importActualSync(id);
+  }
+  throw new Error(
+    `importActualSync('${id}') requires Bun (vi.importActualSync is not available under Vitest). ` +
+      'Use "await vi.importActual(id)" inside an async mock factory instead.',
+  );
 }
