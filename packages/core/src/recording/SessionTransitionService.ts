@@ -117,8 +117,9 @@ async function cleanupFailedChild(
   lockHandle: LockHandle | null,
 ): Promise<void> {
   const filePath = recording?.getFilePath() ?? null;
+  const ownedLock = recording?.getOwnedLockHandle() ?? lockHandle;
   await recording?.dispose().catch(() => undefined);
-  await lockHandle?.release().catch(() => undefined);
+  await ownedLock?.release().catch(() => undefined);
   if (filePath !== null) {
     await fs.unlink(filePath).catch(() => undefined);
   }

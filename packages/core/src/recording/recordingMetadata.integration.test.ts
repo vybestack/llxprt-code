@@ -142,6 +142,31 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       expect(replay.checkpoints?.[0]?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
+    it('returns each concurrently created checkpoint event sequence', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      await svc.flush();
+
+      const [first, second] = await Promise.all([
+        svc.createCheckpoint('first'),
+        svc.createCheckpoint('second'),
+      ]);
+      await svc.dispose();
+
+      const events = (await readJsonlFile(svc.getFilePath()!)).filter(
+        (event) => event.type === 'checkpoint_created',
+      );
+      const sequenceByName = new Map(
+        events.map((event) => [
+          (event.payload as CheckpointCreatedPayload).name,
+          event.seq,
+        ]),
+      );
+      expect(sequenceByName.get(first.name)).toBe(first.sequence);
+      expect(sequenceByName.get(second.name)).toBe(second.sequence);
+      expect(new Set(events.map((event) => event.seq)).size).toBe(2);
+    });
+
     it('rejects checkpoint creation on an empty/unmaterialized conversation', async () => {
       const svc = new SessionRecordingService(makeConfig(chatsDir));
       await expect(svc.createCheckpoint('empty')).rejects.toThrow(
@@ -343,6 +368,10 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
     requireReplaySuccess(replay);
     expect(replay.lastSeq).toBe(5);
     expect(replay.sequenceCorrupt).toBe(true);
+    expect(replay.history).toStrictEqual([
+      makeContent('A', 'human'),
+      makeContent('late lower sequence', 'ai'),
+    ]);
   });
 
   describe('checkpoint metadata folding', () => {
@@ -402,6 +431,69 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
         `Sequence ${lastSeq + 1}: checkpoint_renamed references unknown checkpoint missing`,
       );
     });
+
+    it('warns when lifecycle metadata targets a deleted checkpoint', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      const checkpoint = await svc.createCheckpoint('deleted');
+      await svc.deleteCheckpoint(checkpoint.checkpointId);
+      await svc.dispose();
+      const filePath = svc.getFilePath()!;
+      const events = await readJsonlFile(filePath);
+      const lastSeq = events.at(-1)?.seq ?? 0;
+      await fs.appendFile(
+        filePath,
+        `${JSON.stringify({
+          v: 1,
+          seq: lastSeq + 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          type: 'checkpoint_renamed',
+          payload: { checkpointId: checkpoint.checkpointId, name: 'late' },
+        })}\n`,
+        'utf-8',
+      );
+
+      const replay = await replaySession(filePath, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.warnings).toContain(
+        `Sequence ${lastSeq + 1}: checkpoint_renamed references deleted checkpoint ${checkpoint.checkpointId}`,
+      );
+      expect(replay.checkpoints).toStrictEqual([
+        expect.objectContaining({
+          checkpointId: checkpoint.checkpointId,
+          name: 'late',
+          deleted: true,
+        }),
+      ]);
+    });
+
+    it('warns and skips a checkpoint creation event without a name', async () => {
+      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      svc.recordContent(makeContent('A', 'human'));
+      await svc.dispose();
+      const filePath = svc.getFilePath()!;
+      const events = await readJsonlFile(filePath);
+      const lastSeq = events.at(-1)?.seq ?? 0;
+      await fs.appendFile(
+        filePath,
+        `${JSON.stringify({
+          v: 1,
+          seq: lastSeq + 1,
+          ts: '2026-01-01T00:00:00.000Z',
+          type: 'checkpoint_created',
+          payload: { checkpointId: 'missing-name' },
+        })}\n`,
+        'utf-8',
+      );
+
+      const replay = await replaySession(filePath, PROJECT_HASH);
+      requireReplaySuccess(replay);
+      expect(replay.warnings).toContain(
+        `Line ${events.length + 1}: malformed checkpoint_created event (missing name), skipping`,
+      );
+      expect(replay.checkpoints).toStrictEqual([]);
+    });
+
     it('does not revive a tombstoned checkpoint when a duplicate create event is encountered', () => {
       const events: SessionRecordLine[] = [
         {
@@ -472,6 +564,7 @@ describe('recording metadata events and replay @plan:2026-07-28-issue-2625', () 
       expect(forked).toHaveLength(1);
       const payload = forked[0].payload as SessionForkedPayload;
       expect(payload.parentSessionId).toBe(parentSessionId);
+      expect(payload.parentSequence).toBe(checkpoint.sequence);
       expect(payload.checkpointName).toBe('atC');
 
       const replay = await replaySession(child.getFilePath()!, PROJECT_HASH);

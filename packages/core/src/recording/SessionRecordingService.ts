@@ -138,8 +138,8 @@ export class SessionRecordingService {
    * @requirement REQ-REC-003, REQ-REC-004
    * @pseudocode session-recording-service.md lines 81-110
    */
-  enqueue(type: SessionEventType, payload: unknown): void {
-    if (!this.active) return;
+  enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
+    if (!this.active) return null;
 
     if (
       (type === 'content' ||
@@ -157,7 +157,7 @@ export class SessionRecordingService {
 
     if (!this.materialized && type !== 'content') {
       this.bufferPreContent(type, payload);
-      return;
+      return this.preContentBuffer[this.preContentBuffer.length - 1] ?? null;
     }
 
     this.seq++;
@@ -170,6 +170,7 @@ export class SessionRecordingService {
     };
     this.queue.push(line);
     this.scheduleDrain();
+    return line;
   }
 
   /**
@@ -607,11 +608,16 @@ export class SessionRecordingService {
     }
 
     const checkpointId = crypto.randomUUID();
-    const sequence = this.seq + 1;
-    this.enqueue('checkpoint_created', { checkpointId, name: trimmed });
+    const event = this.enqueue('checkpoint_created', {
+      checkpointId,
+      name: trimmed,
+    });
+    if (event === null) {
+      throw new Error('Cannot create checkpoint: recording is not active');
+    }
     await this.flushAndRequireActive('create checkpoint');
 
-    return { checkpointId, name: trimmed, sequence };
+    return { checkpointId, name: trimmed, sequence: event.seq };
   }
 
   /**

@@ -443,6 +443,13 @@ function collectMetadataEvent(
     );
     return;
   }
+  if (type === 'checkpoint_created' && typeof payload.name !== 'string') {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed checkpoint_created event (missing name), skipping`,
+    );
+    return;
+  }
   acc.rawMetadataEvents.push({
     v: 1,
     seq,
@@ -586,19 +593,26 @@ function appendCheckpointMetadataWarnings(
   warnings: string[],
 ): void {
   const knownIds = new Set<string>();
+  const deletedIds = new Set<string>();
   for (const line of events) {
     const checkpointId = extractCheckpointId(line);
     if (checkpointId === null) continue;
     if (line.type === 'checkpoint_created') {
       knownIds.add(checkpointId);
     } else if (
-      (line.type === 'checkpoint_renamed' ||
-        line.type === 'checkpoint_deleted') &&
-      !knownIds.has(checkpointId)
+      line.type === 'checkpoint_renamed' ||
+      line.type === 'checkpoint_deleted'
     ) {
-      warnings.push(
-        `Sequence ${line.seq}: ${line.type} references unknown checkpoint ${checkpointId}`,
-      );
+      if (!knownIds.has(checkpointId)) {
+        warnings.push(
+          `Sequence ${line.seq}: ${line.type} references unknown checkpoint ${checkpointId}`,
+        );
+      } else if (deletedIds.has(checkpointId)) {
+        warnings.push(
+          `Sequence ${line.seq}: ${line.type} references deleted checkpoint ${checkpointId}`,
+        );
+      }
+      if (line.type === 'checkpoint_deleted') deletedIds.add(checkpointId);
     }
   }
 }
@@ -737,10 +751,11 @@ async function readSessionStream(
   ) => LineProcessorResult,
 ): Promise<ReplayResult> {
   const acc = createAccumulators();
+  let stream: fs.ReadStream | undefined;
+  let reader: readline.Interface | undefined;
   try {
-    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-    const reader = readline.createInterface({ input: stream });
-
+    stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    reader = readline.createInterface({ input: stream });
     for await (let rawLine of reader) {
       acc.lineNumber++;
       acc.totalLines = acc.lineNumber;
@@ -748,16 +763,8 @@ async function readSessionStream(
         rawLine = rawLine.slice(1);
       }
       const outcome = processLine(rawLine, acc);
-      if (outcome === 'complete') {
-        reader.close();
-        stream.destroy();
-        return finalizeReplay(acc);
-      }
-      if (outcome !== undefined) {
-        reader.close();
-        stream.destroy();
-        return outcome;
-      }
+      if (outcome === 'complete') return finalizeReplay(acc);
+      if (outcome !== undefined) return outcome;
     }
   } catch (streamError: unknown) {
     const message =
@@ -767,6 +774,9 @@ async function readSessionStream(
       error: `Failed to read file: ${message}`,
       warnings: acc.warnings,
     };
+  } finally {
+    reader?.close();
+    stream?.destroy();
   }
   return finalizeReplay(acc);
 }

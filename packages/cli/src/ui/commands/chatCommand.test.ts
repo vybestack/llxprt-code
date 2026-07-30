@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +18,7 @@ import { assertDefined } from '../../test-utils/assertions.js';
 import { chatCommand } from './chatCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import type { CommandContext, SlashCommand } from './types.js';
+import { MessageType } from '../types.js';
 
 const PROJECT_HASH = 'chat-command-checkpoints';
 
@@ -267,6 +268,48 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       type: 'message',
       messageType: 'info',
       content: 'No conversation to clear.',
+    });
+  });
+
+  it('restores the requested human turn and persists its rewind', async () => {
+    const history = [
+      content('human', 'A'),
+      content('ai', 'B'),
+      content('human', 'C'),
+      content('ai', 'D'),
+    ];
+    const setHistory = vi.fn();
+    Object.assign(context.services.config, {
+      getAgentClient: () => ({
+        hasChatInitialized: () => true,
+        getChat: () => ({
+          getHistory: () => history,
+          setHistory,
+        }),
+      }),
+    });
+    recording.recordContent(content('human', 'C'));
+    recording.recordContent(content('ai', 'D'));
+    await recording.flush();
+
+    const result = await command('restore').action?.(context, '1');
+
+    expect(result).toStrictEqual({
+      type: 'load_history',
+      history: [
+        { type: MessageType.USER, text: 'A' },
+        { type: MessageType.AI, text: 'B' },
+      ],
+      clientHistory: history.slice(0, 2),
+    });
+    expect(setHistory).toHaveBeenCalledWith(history.slice(0, 2));
+    const replay = await replaySession(
+      recording.getFilePath() ?? '',
+      PROJECT_HASH,
+    );
+    expect(replay).toMatchObject({
+      ok: true,
+      history: [content('human', 'A'), content('ai', 'B')],
     });
   });
 

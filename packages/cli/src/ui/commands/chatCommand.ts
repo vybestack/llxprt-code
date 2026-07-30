@@ -33,6 +33,7 @@ import type {
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 function getProjectHashForContext(context: CommandContext): string | null {
   const recording = getRecording(context);
@@ -99,13 +100,18 @@ async function listProjectCheckpoints(
 const getSavedChatTags = async (
   context: CommandContext,
 ): Promise<ChatDetail[]> => {
-  const checkpoints = await listProjectCheckpoints(context);
-  return checkpoints
-    .map((checkpoint) => ({
-      name: checkpoint.checkpointName,
-      mtime: checkpoint.source.lastModified.toISOString(),
-    }))
-    .sort((left, right) => left.mtime.localeCompare(right.mtime));
+  try {
+    const checkpoints = await listProjectCheckpoints(context);
+    return checkpoints
+      .map((checkpoint) => ({
+        name: checkpoint.checkpointName,
+        mtime: checkpoint.source.lastModified.toISOString(),
+      }))
+      .sort((left, right) => left.mtime.localeCompare(right.mtime));
+  } catch (error: unknown) {
+    debugLogger.warn(`Failed to list saved chat checkpoints: ${String(error)}`);
+    return [];
+  }
 };
 
 const checkpointSuggestionDescription = 'Saved conversation checkpoint';

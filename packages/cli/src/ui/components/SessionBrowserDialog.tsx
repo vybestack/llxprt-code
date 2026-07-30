@@ -448,6 +448,19 @@ const ErrorMessage: React.FC<{ error: string | null }> = ({ error }) => {
   );
 };
 
+const ErrorState: React.FC<{ error: string; isNarrow: boolean }> = ({
+  error,
+  isNarrow,
+}) => (
+  <Box flexDirection="column" padding={1}>
+    <Text bold color={SemanticColors.text.primary}>
+      {isNarrow ? 'Sessions' : 'Session Browser'}
+    </Text>
+    <ErrorMessage error={error} />
+    <Text color={SemanticColors.text.secondary}>Press Esc to close</Text>
+  </Box>
+);
+
 const SkippedNotice: React.FC<{ skippedCount: number }> = ({
   skippedCount,
 }) => {
@@ -670,7 +683,10 @@ export function SessionBrowserDialog(
 
   const noLoadedSessionState =
     state.sessions.length + state.pageItems.length + state.skippedCount === 0;
-  if (noLoadedSessionState && state.searchTerm === '' && state.error === null) {
+  if (noLoadedSessionState && state.searchTerm === '') {
+    if (state.error !== null) {
+      return <ErrorState error={state.error} isNarrow={isNarrow} />;
+    }
     return <EmptyState isNarrow={isNarrow} />;
   }
 

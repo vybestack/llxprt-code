@@ -610,17 +610,25 @@ describe('SessionBrowserDialog', () => {
     });
   });
   describe('Error Display', () => {
-    it('should show error message when error state is set', () => {
+    it('should show a dedicated error state when loading yields no sessions', () => {
       mockHookState.error = 'Failed to load sessions: Permission denied';
       mockHookState.isLoading = false;
 
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
+      expect(output).toContain('Session Browser');
       expect(output).toContain('Permission denied');
+      expect(output).toContain('Esc');
+      expect(output).not.toContain('No sessions');
     });
 
-    it('should display error inline above controls', () => {
+    it('should display error inline above controls when sessions remain', () => {
+      const session = createMockSession();
+      mockHookState.sessions = [session];
+      mockHookState.filteredSessions = [session];
+      mockHookState.pageItems = [session];
+      mockHookState.selectedSession = session;
       mockHookState.error = 'Session is in use by another process';
       mockHookState.isLoading = false;
 
@@ -628,6 +636,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       expect(output).toContain('Session is in use');
+      expect(output).toContain('Write me a haiku');
     });
   });
   describe('Skipped Sessions Notice', () => {

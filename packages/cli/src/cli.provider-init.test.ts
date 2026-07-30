@@ -215,12 +215,15 @@ describe('cli main provider initialization', () => {
   });
 
   afterEach(async () => {
-    if (projectTempDir !== '') {
-      await rm(projectTempDir, { recursive: true, force: true });
+    try {
+      if (projectTempDir !== '') {
+        await rm(projectTempDir, { recursive: true, force: true });
+      }
+    } finally {
+      process.stdin.isTTY = originalIsTTY;
+      dynamicSettingsRegistry.reset();
+      vi.resetModules();
     }
-    process.stdin.isTTY = originalIsTTY;
-    dynamicSettingsRegistry.reset();
-    vi.resetModules();
   });
 
   it('initializes content generator config before interactive provider usage', async () => {
