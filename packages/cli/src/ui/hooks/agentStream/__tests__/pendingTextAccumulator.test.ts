@@ -31,7 +31,8 @@ describe('PendingTextAccumulator', () => {
     const accumulator = new PendingTextAccumulator(32);
     accumulator.append('markdown');
     const result = accumulator.append('\n');
-    expect(result).toStrictEqual({ publish: true, text: 'markdown\n' });
+    expect(result.publish).toBe(true);
+    expect(result.text).toBe('markdown\n');
   });
 
   it('replaces and clears retained terminal state', () => {

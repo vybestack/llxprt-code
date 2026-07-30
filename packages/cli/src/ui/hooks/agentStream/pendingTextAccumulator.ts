@@ -12,6 +12,7 @@ interface TextSegment {
 export interface PendingTextAppendResult {
   readonly publish: boolean;
   readonly text: string;
+  readonly deltaCount: number;
 }
 
 export class PendingTextAccumulator {
@@ -29,10 +30,15 @@ export class PendingTextAccumulator {
     this.segments = appendSegment(this.segments, { text: delta, level: 0 });
     const publish =
       this.deltaCount % this.publishInterval === 0 || delta.includes('\n');
+    const result: PendingTextAppendResult = {
+      publish,
+      text: publish ? this.materialize() : '',
+      deltaCount: this.deltaCount,
+    };
     if (publish) {
       this.deltaCount = 0;
     }
-    return { publish, text: publish ? this.materialize() : '' };
+    return result;
   }
 
   replace(text: string): void {
