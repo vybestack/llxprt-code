@@ -122,6 +122,14 @@ describe('fileUtils.detectFileType', () => {
       mime: 'image/bmp',
       content: Buffer.from([0x42, 0x4d, 0x00, 0x00]),
     },
+    {
+      label: 'heic',
+      file: 'photo.heic',
+      mime: 'image/heic',
+      content: Buffer.from([
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
+      ]),
+    },
   ])(
     'should classify real $label image as image when signature verifies (#2723)',
     async ({ file, mime: mimeType, content }) => {
@@ -158,6 +166,14 @@ describe('fileUtils.detectFileType', () => {
       file: 'audio.ogg',
       mime: 'audio/ogg',
       content: Buffer.from([0x4f, 0x67, 0x67, 0x53, 0x00]),
+    },
+    {
+      label: 'm4a',
+      file: 'track.m4a',
+      mime: 'audio/mp4',
+      content: Buffer.from([
+        0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41, 0x20,
+      ]),
     },
   ])(
     'should classify real $label audio as audio when signature verifies (#2723)',

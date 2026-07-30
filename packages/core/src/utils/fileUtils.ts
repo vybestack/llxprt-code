@@ -277,6 +277,7 @@ const IMAGE_SIGNATURES: readonly MediaSignature[] = [
     { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
     { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] },
   ],
+  [{ offset: 4, bytes: [0x66, 0x74, 0x79, 0x70] }],
 ];
 
 const AUDIO_SIGNATURES: readonly MediaSignature[] = [
@@ -297,6 +298,12 @@ const AUDIO_SIGNATURES: readonly MediaSignature[] = [
   [{ offset: 0, bytes: [0xff, 0xf9] }],
   [{ offset: 0, bytes: [0xff, 0xf0] }],
   [{ offset: 0, bytes: [0xff, 0xf8] }],
+  [{ offset: 4, bytes: [0x66, 0x74, 0x79, 0x70] }],
+  [{ offset: 0, bytes: [0x4d, 0x54, 0x68, 0x64] }],
+  [
+    { offset: 0, bytes: [0x46, 0x4f, 0x52, 0x4d] },
+    { offset: 8, bytes: [0x41, 0x49, 0x46, 0x46] },
+  ],
 ];
 
 const VIDEO_SIGNATURES: readonly MediaSignature[] = [
@@ -357,7 +364,11 @@ async function verifyMediaSignature(
     const header = buf.subarray(0, bytesRead);
     if (header.length === 0) return false;
     return headerMatches(header, signatures);
-  } catch {
+  } catch (error) {
+    debugLogger.warn(
+      `Failed to verify media signature for: ${filePath}`,
+      error instanceof Error ? error.message : String(error),
+    );
     return false;
   } finally {
     if (fh) {
