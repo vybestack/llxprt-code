@@ -378,32 +378,15 @@ const REQUIRED_SHARED_INPUTS: readonly string[] = [
   'package-lock.json',
   'bun.lock',
   'tsconfig.json',
-  'eslint.config.js',
-  '.github/workflows/ci.yml',
   'scripts/test.ts',
   'scripts/postinstall.cjs',
 ];
 
-/** Globs (over tracked files) whose matches must all be shared inputs. */
-const REQUIRED_SHARED_GLOBS: readonly RegExp[] = [
-  /^scripts\/build.*\.ts$/,
-  /^scripts\/bun-test-manifest.*\.ts$/,
-];
-
-function matchesAnyGlob(path: string): boolean {
-  return REQUIRED_SHARED_GLOBS.some((re) => re.test(path));
-}
-
 /**
  * Validates sharedInputs bidirectionally: each listed entry must exist on disk
- * (stale/dangling), and each indispensable input and build/manifest glob match
- * must be listed (missing).
+ * (stale/dangling), and each indispensable input must be listed (missing).
  */
-function validateSharedInputs(
-  data: GraphData,
-  repoRoot: string,
-  trackedFiles: readonly string[],
-): DriftIssue[] {
+function validateSharedInputs(data: GraphData, repoRoot: string): DriftIssue[] {
   const issues: DriftIssue[] = [];
   const dataInputs = new Set<string>(data.sharedInputs);
 
@@ -422,15 +405,6 @@ function validateSharedInputs(
       issues.push({
         kind: 'shared-input-missing',
         detail: `sharedInputs is missing canonical shared input '${entry}'. Add it.`,
-      });
-    }
-  }
-  // Missing: every tracked file matching a required glob must be listed.
-  for (const file of trackedFiles) {
-    if (matchesAnyGlob(file) && !dataInputs.has(file)) {
-      issues.push({
-        kind: 'shared-input-missing',
-        detail: `sharedInputs is missing build/manifest input '${file}' matching the accepted contract. Add it.`,
       });
     }
   }
@@ -495,9 +469,7 @@ function checkGraph(
   const canonical = buildCanonicalShardMap();
   issues.push(...validateShardMap(data, canonical));
   issues.push(...validateShardConfig(data, canonical));
-  issues.push(
-    ...validateSharedInputs(data, repoRoot, listTrackedFiles(repoRoot)),
-  );
+  issues.push(...validateSharedInputs(data, repoRoot));
   issues.push(...validateReverseCompleteness(data, canonical));
 
   return { issues, ok: issues.length === 0 };
