@@ -62,6 +62,17 @@ export interface ChildExitInfo {
  */
 const PER_FILE_PROCESS_TIMEOUT_MS = 120_000;
 
+/**
+ * Safely decodes a Bun.spawnSync output buffer, handling null values
+ * that occur when the child produces no output or is killed early.
+ */
+function decodeOutput(
+  output: string | Buffer | Uint8Array | null | undefined,
+): string {
+  if (!output) return '';
+  return typeof output === 'string' ? output : new TextDecoder().decode(output);
+}
+
 interface FileTestResult {
   readonly name: string;
   readonly passed: boolean;
@@ -438,18 +449,11 @@ function main(): void {
     resolveTsconfig: resolveTsconfigOverride,
     spawn: (command, options) => {
       const result = Bun.spawnSync([...command], options);
-      // Echo captured stdout/stderr so the user sees test output in real time
-      const stdoutText =
-        typeof result.stdout === 'string'
-          ? result.stdout
-          : new TextDecoder().decode(result.stdout);
+      const stdoutText = decodeOutput(result.stdout);
       if (stdoutText) {
         process.stdout.write(stdoutText);
       }
-      const stderrText =
-        typeof result.stderr === 'string'
-          ? result.stderr
-          : new TextDecoder().decode(result.stderr);
+      const stderrText = decodeOutput(result.stderr);
       if (stderrText) {
         process.stderr.write(stderrText);
       }

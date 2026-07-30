@@ -62,22 +62,13 @@ import {
   _internal as runtimeAccessorsInternal,
   getCliRuntimeServices,
 } from './runtimeAccessors.js';
-import { beforeAll, describe } from 'vitest';
 
-let buildModelProfileInfoPayload: typeof import('./profileSnapshot.js').buildModelProfileInfoPayload;
-let applyProfileSnapshot: typeof import('./profileSnapshot.js').applyProfileSnapshot;
-let buildRuntimeProfileSnapshot: typeof import('./profileSnapshot.js').buildRuntimeProfileSnapshot;
-let getProfileByName: typeof import('./profileSnapshot.js').getProfileByName;
-
-describe('profileSnapshot module', () => {
-  beforeAll(async () => {
-    const mod = await import('./profileSnapshot.js');
-    buildModelProfileInfoPayload = mod.buildModelProfileInfoPayload;
-    applyProfileSnapshot = mod.applyProfileSnapshot;
-    buildRuntimeProfileSnapshot = mod.buildRuntimeProfileSnapshot;
-    getProfileByName = mod.getProfileByName;
-  });
-});
+const {
+  buildModelProfileInfoPayload,
+  applyProfileSnapshot,
+  buildRuntimeProfileSnapshot,
+  getProfileByName,
+} = await import('./profileSnapshot.js');
 
 describe('buildModelProfileInfoPayload', () => {
   it('builds payload with profile name as displayLabel when profile is active', () => {
