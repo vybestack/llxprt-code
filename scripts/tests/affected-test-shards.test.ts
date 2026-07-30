@@ -309,31 +309,34 @@ describe('affected-test-shards selector — shared inputs', () => {
     expect(result.selectedShards).toEqual(ALL_SHARDS);
   });
 
-  it('selects all shards for a build script change', async () => {
+  it('selects scripts shard for a build script change (issue #2878)', async () => {
     const { selectAffectedShards } = await loadSelector();
     const result = selectAffectedShards({
       event: PR_EVENT,
       changedPaths: ['scripts/build.ts'],
     });
-    expect(result.selectedShards).toEqual(ALL_SHARDS);
+    expect(result.selectedShards).toEqual(['scripts']);
+    expect(result.fullRunReason).toBeNull();
   });
 
-  it('selects all shards for the selector data change', async () => {
+  it('selects scripts shard for a selector data change (issue #2878)', async () => {
     const { selectAffectedShards } = await loadSelector();
     const result = selectAffectedShards({
       event: PR_EVENT,
       changedPaths: ['scripts/affected-test-shards.data.json'],
     });
-    expect(result.selectedShards).toEqual(ALL_SHARDS);
+    expect(result.selectedShards).toEqual(['scripts']);
+    expect(result.fullRunReason).toBeNull();
   });
 
-  it('selects all shards for the selector script change', async () => {
+  it('selects scripts shard for a selector script change (issue #2878)', async () => {
     const { selectAffectedShards } = await loadSelector();
     const result = selectAffectedShards({
       event: PR_EVENT,
       changedPaths: ['scripts/affected-test-shards.ts'],
     });
-    expect(result.selectedShards).toEqual(ALL_SHARDS);
+    expect(result.selectedShards).toEqual(['scripts']);
+    expect(result.fullRunReason).toBeNull();
   });
 });
 
@@ -545,22 +548,35 @@ describe('affected-test-shards selector — data graph integrity', () => {
 });
 
 describe('affected-test-shards selector — integration-tests protection', () => {
-  const integrationCases = [
-    'integration-tests/file-system.test.ts',
-    'integration-tests/some.fixture.md',
-  ];
-
-  for (const path of integrationCases) {
-    it(`selects all shards for ${path}`, async () => {
-      const { selectAffectedShards } = await loadSelector();
-      const result = selectAffectedShards({
-        event: PR_EVENT,
-        changedPaths: [path],
-      });
-      expect(result.fullRunReason).toContain('integration-tests');
-      expect(result.selectedShards).toEqual(ALL_SHARDS);
+  it('selects all shards for an integration-tests harness .ts file', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['integration-tests/file-system.test.ts'],
     });
-  }
+    expect(result.fullRunReason).toContain('integration-tests');
+    expect(result.selectedShards).toEqual(ALL_SHARDS);
+  });
+
+  it('selects scripts shard for an integration-tests fixture (issue #2878)', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['integration-tests/some.fixture.md'],
+    });
+    expect(result.selectedShards).toEqual(['scripts']);
+    expect(result.fullRunReason).toBeNull();
+  });
+
+  it('selects scripts shard for a .responses fixture (issue #2878)', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['integration-tests/hooks-system.before-model.responses'],
+    });
+    expect(result.selectedShards).toEqual(['scripts']);
+    expect(result.fullRunReason).toBeNull();
+  });
 });
 
 describe('affected-test-shards selector — event gating (PR-only selection)', () => {
@@ -609,15 +625,7 @@ describe('affected-test-shards selector — .github/.husky narrow selection', ()
 });
 
 describe('affected-test-shards selector — complete shared inputs', () => {
-  const sharedInputCases = [
-    'package-lock.json',
-    'scripts/build_sandbox.ts',
-    'scripts/build_vscode_companion.ts',
-    'scripts/postinstall.cjs',
-    'scripts/bun-test-manifest.ts',
-    'eslint.config.js',
-    '.github/workflows/ci.yml',
-  ];
+  const sharedInputCases = ['package-lock.json', 'scripts/postinstall.cjs'];
 
   for (const path of sharedInputCases) {
     it(`selects all shards for a ${path} change`, async () => {
@@ -629,6 +637,16 @@ describe('affected-test-shards selector — complete shared inputs', () => {
       expect(result.selectedShards).toEqual(ALL_SHARDS);
     });
   }
+
+  it('selects scripts shard for a .github/workflows/ci.yml change (issue #2878)', async () => {
+    const { selectAffectedShards } = await loadSelector();
+    const result = selectAffectedShards({
+      event: PR_EVENT,
+      changedPaths: ['.github/workflows/ci.yml'],
+    });
+    expect(result.selectedShards).toEqual(['scripts']);
+    expect(result.fullRunReason).toBeNull();
+  });
 });
 
 describe('affected-test-shards selector — replay validation', () => {
@@ -640,6 +658,50 @@ describe('affected-test-shards selector — replay validation', () => {
       );
     }
   });
+});
+
+describe('affected-test-shards selector — repo config/infra paths (issue #2878)', () => {
+  const noShardCases = [
+    '.allstar/branch_protection.yaml',
+    '.claude/settings.json',
+    '.gcp/release-docker.yaml',
+    '.gemini/commands/introspect.toml',
+    '.llxprt/settings.json',
+    'shell-scripts/codex-call.sh',
+    'test-scripts/integration-testing.ts',
+    '.npmrc',
+    'bunfig.toml',
+    'junit-integration.xml',
+    'tsconfig.scripts.json',
+  ];
+
+  for (const path of noShardCases) {
+    it(`selects no test shard for ${path}`, async () => {
+      const { selectAffectedShards } = await loadSelector();
+      const result = selectAffectedShards({
+        event: PR_EVENT,
+        changedPaths: [path],
+      });
+      expect(result.hasTests).toBe(false);
+      expect(result.fullRunReason).toBeNull();
+    });
+  }
+
+  // Config files exercised by scripts-shard guard tests (eslint-guard,
+  // vitest-coverage) must select the scripts shard, not zero shards.
+  const scriptsShardCases = ['eslint.config.js', 'vitest.coverage.ts'];
+
+  for (const path of scriptsShardCases) {
+    it(`selects scripts shard for ${path}`, async () => {
+      const { selectAffectedShards } = await loadSelector();
+      const result = selectAffectedShards({
+        event: PR_EVENT,
+        changedPaths: [path],
+      });
+      expect(result.selectedShards).toEqual(['scripts']);
+      expect(result.fullRunReason).toBeNull();
+    });
+  }
 });
 
 describe('affected-test-shards selector — GitHub output safety', () => {
