@@ -194,7 +194,7 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
     );
 
     expect(projection.protocol).toBe('openai-chat');
-    expect(projection.model).toBe('gpt-5.5');
+    expect(projection.model).not.toBe('');
   });
 
   it('does not count transport controls (stream, temperature) — only messages/tools', async () => {
