@@ -696,7 +696,7 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should not trigger overflow warning for requests with large binary data (PDFs/images)', async () => {
+    it('should forward large binary requests to provider enforcement without client overflow preflight', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000000; // 1M tokens
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
@@ -708,16 +708,16 @@ describe('AgentClient (client.ts)', () => {
       };
       client['chat'] = mockChat as ChatSession;
 
-      // Simulate a PDF file with large base64 data (11MB when encoded)
-      // In the old implementation, this would incorrectly estimate ~2.7M tokens
-      // In the new implementation, only the text part is counted
+      // Simulate a PDF file with large base64 data (11MB when encoded).
+      // The client forwards binary-bearing requests without estimating them;
+      // finalized-envelope enforcement belongs to the provider send seam.
       const largePdfBase64 = 'A'.repeat(11 * 1024 * 1024);
       const request: ContentBlock[] = [
         { type: 'text', text: 'Please analyze this PDF document' }, // ~35 chars = ~8 tokens
         {
           type: 'media',
           mimeType: 'application/pdf',
-          data: largePdfBase64, // This should be ignored in token estimation
+          data: largePdfBase64,
           encoding: 'base64',
         },
       ];
@@ -737,15 +737,13 @@ describe('AgentClient (client.ts)', () => {
 
       const events = await fromAsync(stream);
 
-      // Assert
-      // Should NOT contain overflow warning
+      // Assert: the client did not run a legacy overflow preflight.
       expect(events).not.toContainEqual(
         expect.objectContaining({
           type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
 
-      // Turn.run should be called (processing should continue)
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 

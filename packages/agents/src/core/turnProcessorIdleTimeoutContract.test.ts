@@ -10,13 +10,13 @@
  *
  * `StreamIdleTimeoutError` is the codified contract — `turn.ts` maps it to the
  * dedicated StreamIdleTimeout event, so it must not be collapsed into
- * `AbortError`. Its message ("Stream idle timeout") nevertheless matches the
- * transient-network phrase list, so this test pins that
- * `shouldRetryStreamAttempt` still declines to re-send it.
+ * `AbortError`. The error is intentionally outside the transient-network
+ * classification and must not trigger a re-send.
  */
 
 import { describe, expect, it } from 'vitest';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { readProviderStreamResponse } from './turnLogging.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
 import type { SendMessageParams } from './chatSession.js';
@@ -56,6 +56,7 @@ describe('TurnProcessor stream idle timeout error contract (issue #2817)', () =>
     const error = await readWithIdleTimeout();
     const params = { message: [] } as unknown as SendMessageParams;
 
+    expect(isNetworkTransientError(error)).toBe(false);
     expect(shouldRetryStreamAttempt(error, params, 0)).toBe(false);
   });
 });

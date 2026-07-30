@@ -202,6 +202,25 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(inflatedTokens).toBe(baselineTokens);
   });
 
+  it('keeps binary-size invariant for data URLs with MIME parameters', async () => {
+    const project = (size: number) =>
+      projectAnthropicPromptEnvelope({
+        model: 'claude-3-5-sonnet',
+        messages: [
+          {
+            role: 'user',
+            content: `Embedded document: data:text/html;charset=utf-8;base64,${'A'.repeat(size)}`,
+          },
+        ],
+      }).countProjectedTokens();
+
+    const baselineTokens = await project(1_000);
+    const inflatedTokens = await project(100_000);
+
+    expect(baselineTokens).toBeGreaterThan(0);
+    expect(inflatedTokens).toBe(baselineTokens);
+  });
+
   it('scrubs all data URIs when a single string field contains multiple data URLs', async () => {
     const build = (bytes: number) => ({
       model: 'claude-3-5-sonnet',

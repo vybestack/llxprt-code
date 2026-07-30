@@ -311,7 +311,9 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }
     };
 
-    await expect(drain()).rejects.toThrow(/freshly prepared prompt envelope/i);
+    await expect(drain()).rejects.toThrow(
+      'OpenAI Responses transport endpoint does not match the prepared prompt envelope',
+    );
     expect(provider.promptAuthResolutions).toStrictEqual([]);
   });
 

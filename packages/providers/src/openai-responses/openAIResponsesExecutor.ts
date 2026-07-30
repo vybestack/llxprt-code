@@ -289,7 +289,7 @@ async function resolveResponsesTransportContext(
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   if (rawBaseURL !== prepared.rawBaseURL) {
     throw new Error(
-      'OpenAI Responses transport endpoint changed after preparation; retry with a freshly prepared prompt envelope',
+      'OpenAI Responses transport endpoint does not match the prepared prompt envelope',
     );
   }
   return {

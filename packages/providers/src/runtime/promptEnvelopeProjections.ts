@@ -120,7 +120,7 @@ function canonicalizePromptString(value: string): string {
 
 function replaceAllBase64DataUris(value: string): string {
   return value.replace(
-    /data:[^;]*;base64,[A-Za-z0-9+/=]+/gi,
+    /data:(?:[^;,]+)?(?:;[^;,]*)*;base64,[A-Za-z0-9+/=]+/gi,
     (match) =>
       match.slice(0, match.toLowerCase().indexOf(';base64,') + 8) +
       BINARY_PAYLOAD_PLACEHOLDER,

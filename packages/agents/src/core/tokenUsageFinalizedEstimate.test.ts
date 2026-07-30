@@ -30,10 +30,13 @@ async function createLogger(): Promise<{
   const logFilePath = path.join(dir, 'token-usage.jsonl');
   return {
     logger: new TokenUsageLogger(true, logFilePath),
-    readRecord: async () =>
-      JSON.parse(
-        (await readFile(logFilePath, 'utf8')).trim(),
-      ) as SerializedTokenUsageRecord,
+    readRecord: async () => {
+      const lines = (await readFile(logFilePath, 'utf8'))
+        .split('\n')
+        .filter(Boolean);
+      expect(lines).toHaveLength(1);
+      return JSON.parse(lines.join('')) as SerializedTokenUsageRecord;
+    },
   };
 }
 

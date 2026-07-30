@@ -9,9 +9,9 @@
  * send seam (issue #2817).
  *
  * These tests exercise the REAL ChatSession → TurnProcessor code path. The
- * only mock is the provider (the infrastructure boundary). The fake provider
- * implements projectPromptEnvelope using the REAL projection helpers so the
- * estimate reflects actual preparation, not a fabricated value.
+ * provider is the infrastructure-boundary test double; its projection uses a
+ * deterministic serialized-length estimate so the tests can assert ChatSession
+ * plumbing and finalized-send-seam behavior independently of provider tokenizers.
  *
  * Proves:
  * - A6: The pre-send estimate reflects history, pending content, system

@@ -186,7 +186,7 @@ export function validateProviderForSend(
   });
   if (typeof provider.generateChatCompletion !== 'function') {
     throw new Error(
-      `Provider ${provider.name} does not support IContent interface`,
+      `Provider ${provider.name} does not implement generateChatCompletion`,
     );
   }
 }
