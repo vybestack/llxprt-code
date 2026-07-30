@@ -425,9 +425,7 @@ function buildInput(
     options.invocation.getModelBehavior<boolean>(
       'reasoning.includeInContext',
     ) ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'reasoning.includeInContext',
-    );
+    readOptionalSetting(options, 'reasoning.includeInContext');
   const outputLimiterConfig =
     options.config ??
     options.runtime?.config ??

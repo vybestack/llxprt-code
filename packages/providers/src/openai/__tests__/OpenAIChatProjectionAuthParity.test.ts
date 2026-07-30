@@ -56,8 +56,6 @@ const MEDIA_CAPABLE_CONFIG: IProviderConfig = {
  * options carry no resolved token.
  */
 class AmbientCredentialProvider extends OpenAIProvider {
-  promptCredentialReads = 0;
-
   constructor() {
     super(undefined, 'https://api.moonshot.cn/v1', MEDIA_CAPABLE_CONFIG);
   }
@@ -75,7 +73,6 @@ class AmbientCredentialProvider extends OpenAIProvider {
   }
 
   protected override async getAuthTokenForPrompt(): Promise<string> {
-    this.promptCredentialReads += 1;
     return 'ambient-token';
   }
 }
@@ -117,6 +114,6 @@ describe('OpenAI Chat projection credential parity (issue #2817)', () => {
 
     expect(projection.protocol).toBe('openai-chat');
     expect(await projection.countProjectedTokens()).toBeGreaterThan(0);
-    expect(provider.promptCredentialReads).toBeGreaterThan(0);
+    expect(projection.transportToken).toBeDefined();
   });
 });

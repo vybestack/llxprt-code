@@ -16,7 +16,7 @@
  * envelope that gets sent — exactly the drift issue #2817 exists to remove.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type {
@@ -189,6 +189,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     expect(base.projectionInput?.normalizerApplied).toBe(
       base.transportInput?.normalizerApplied,
     );
+    expect(base.projectionInput?.metadataSource).toBe(
+      base.transportInput?.metadataSource,
+    );
   });
 
   it('fails fast when no runtime context can be resolved for a projection', async () => {
@@ -216,15 +219,21 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     };
     const settings = new SettingsService();
     const wrapper = new LoggingProviderWrapper(plain);
+    const normalize = vi.fn((options: GenerateChatOptions) => options);
+    const options = { contents: [makeContent('Hello')] };
+    const snapshot = structuredClone(options);
     wrapper.setRuntimeContextResolver(() => ({
       settingsService: settings,
       config: buildConfigStub(),
       runtimeId: 'plain-runtime',
       metadata: {},
     }));
+    wrapper.setOptionsNormalizer(normalize);
 
     await expect(
-      wrapper.projectPromptEnvelope({ contents: [makeContent('Hello')] }),
+      wrapper.projectPromptEnvelope(options),
     ).resolves.toBeUndefined();
+    expect(normalize).not.toHaveBeenCalled();
+    expect(options).toStrictEqual(snapshot);
   });
 });

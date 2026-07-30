@@ -317,6 +317,36 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     expect(provider.promptAuthResolutions).toStrictEqual([]);
   });
 
+  it('excludes unsupported media bytes from projected token counts', async () => {
+    const provider = new TestResponsesProvider();
+    const project = (data: string) =>
+      provider.projectPromptEnvelope(
+        buildCallOptions(provider, {
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [
+                {
+                  type: 'media',
+                  mimeType: 'audio/wav',
+                  data,
+                  encoding: 'base64',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+    const small = await project('AAAA');
+    const large = await project('A'.repeat(100_000));
+
+    expect(small.unsupportedMedia[0]?.mediaType).toBe('audio');
+    expect(await large.countProjectedTokens()).toBe(
+      await small.countProjectedTokens(),
+    );
+  });
+
   it('surfaces disabled PDFs and all unsupported substitutions structurally', async () => {
     const provider = new TestResponsesProvider();
     const projection = await provider.projectPromptEnvelope(

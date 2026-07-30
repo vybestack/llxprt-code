@@ -585,12 +585,13 @@ export class LoggingProviderWrapper implements IProvider {
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection | undefined> {
+    if (this.wrapped.projectPromptEnvelope === undefined) return undefined;
     const normalizedOptions = this.normalizeChatCompletionOptions(
       options,
       options.tools,
     );
     this.ensureRuntimeContext(normalizedOptions);
-    return this.wrapped.projectPromptEnvelope?.(normalizedOptions);
+    return this.wrapped.projectPromptEnvelope(normalizedOptions);
   }
 
   /**
