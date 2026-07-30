@@ -643,7 +643,8 @@ for (const [key, value] of Object.entries(viAugmentations)) {
 // Add describe.sequential as an alias for describe. Bun runs tests
 // sequentially by default (--max-concurrency 1 in bun test), so the
 // semantic guarantee is preserved without explicit opt-in.
-if (!(bunDescribe as Record<string, unknown>).sequential) {
+const describeRecord = bunDescribe as unknown as Record<string, unknown>;
+if (!describeRecord.sequential) {
   try {
     Object.defineProperty(bunDescribe, 'sequential', {
       value: bunDescribe,
@@ -654,7 +655,7 @@ if (!(bunDescribe as Record<string, unknown>).sequential) {
   } catch {
     // If defineProperty fails (non-configurable), try direct assignment.
     try {
-      (bunDescribe as Record<string, unknown>).sequential = bunDescribe;
+      describeRecord.sequential = bunDescribe;
     } catch {
       // Property is truly read-only; skip.
     }
