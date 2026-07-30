@@ -38,7 +38,7 @@
  *   bun run test:bun
  */
 
-import { spawnSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -218,91 +218,17 @@ function extractExitCode(error: unknown): number {
   return (propertyValue(error, 'status') as number | undefined) ?? 1;
 }
 
-function extractNumberBefore(output: string, keywordIdx: number): number {
-  if (keywordIdx === -1) return -1;
-  let end = keywordIdx;
-  while (end > 0 && output[end - 1] === ' ') end--;
-  let start = end;
-  while (start > 0 && output[start - 1] >= '0' && output[start - 1] <= '9') {
-    start--;
-  }
-  if (start === end) return -1;
-  return parseInt(output.slice(start, end), 10);
-}
-
-/**
- * When spawnSync kills a hung bun test process via SIGKILL timeout, check
- * the tee'd output log for the test summary. Bun test prints "N pass" and
- * "N fail" before hanging on process teardown. If all tests passed, treat
- * the timeout as success — the tests themselves are correct, only the
- * process exit hung (a Bun 1.3.x runtime bug on Linux).
- *
- * Extracted as a separate function to avoid deep nesting that triggers
- * sonarjs/nested-control-flow. Uses simple character classes instead of
- * \d+ to avoid sonarjs/slow-regex false positives.
- */
-function checkTimeoutLogForTestResults(logFile: string): {
-  success: boolean;
-  exitCode: number;
-} {
-  let output: string;
-  try {
-    output = readFileSync(logFile, 'utf-8');
-  } catch {
-    return { success: false, exitCode: 124 };
-  }
-
-  // Parse "N pass" / "N fail" from the output without regex (avoids
-  // sonarjs/slow-regex false positives on backtracking patterns).
-  const passIdx = output.lastIndexOf(' pass');
-  const failIdx = output.lastIndexOf(' fail');
-  const passes = extractNumberBefore(output, passIdx);
-  const fails = extractNumberBefore(output, failIdx);
-
-  const allTestsPassed = passes > 0 && fails === 0;
-  return allTestsPassed
-    ? { success: true, exitCode: 0 }
-    : { success: false, exitCode: 124 };
-}
-
 // Mirrors `npm run` semantics: commands from package.json scripts are
 // executed through a shell. This relies on repository trust — package.json
 // files are part of the trusted source tree, just as they are for npm.
-// Uses spawnSync with a timeout to prevent hung test processes (e.g. Bun
-// 1.3.x on Linux leaving open handles after tests complete) from blocking
-// CI indefinitely. When a timeout occurs, the output log is checked for
-// test results — if all tests passed (0 failures), the timeout is treated
-// as success since only the process teardown hung, not the tests.
 export const defaultRunner: CommandRunner = (
   command,
   cwd,
   env = process.env,
 ) => {
-  // Tee output to a temp file so we can inspect it on timeout while still
-  // showing live output in CI.
-  const logFile = `/tmp/test-output-${Date.now()}.log`;
-  const loggedCommand = `${command} 2>&1 | tee ${logFile}`;
-
   try {
-    const result = spawnSync(loggedCommand, {
-      cwd,
-      stdio: 'inherit',
-      env,
-      shell: true,
-      timeout: 600_000, // 10 minutes — tests complete in <2 min; allow for slow CI
-      killSignal: 'SIGKILL',
-    });
-
-    if (result.signal === 'SIGKILL') {
-      // Process was killed by timeout. Check if tests passed by inspecting
-      // the tee'd output log. Bun test prints a summary like "5590 pass /
-      // 0 fail" before hanging on process teardown.
-      return checkTimeoutLogForTestResults(logFile);
-    }
-    if (result.status === null) {
-      return { success: false, exitCode: 1 };
-    }
-    return { success: result.status === 0, exitCode: result.status };
+    execSync(command, { cwd, stdio: 'inherit', env });
+    return { success: true, exitCode: 0 };
   } catch (error) {
     return { success: false, exitCode: extractExitCode(error) };
   }
