@@ -166,6 +166,84 @@ describe('OpenAIRequestPreparation.prepareRequest prompt_cache_key sanitization 
     expect(result.requestBody.temperature).toBe(0.5);
   });
 
+  it('passes a 64-character prompt_cache_key through unchanged (exact boundary)', async () => {
+    // The shared sanitizer has a hard cutoff at 64 chars and returns keys
+    // of exactly that length unchanged. An off-by-one regression would not
+    // be caught without this boundary test.
+    const exactKey = 'a'.repeat(64);
+    expect(exactKey.length).toBe(64);
+
+    const options = createMockOptions(
+      {
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
+      },
+      { prompt_cache_key: exactKey },
+    );
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    expect(result.requestBody.prompt_cache_key).toBe(exactKey);
+  });
+
+  it('omits prompt_cache_key from the request body when modelParams has no cache key', async () => {
+    // Exercises the early-return branch when prompt_cache_key is undefined.
+    // This is the most common real-world case (no modelParams supplied).
+    const options = createMockOptions(
+      {
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
+      },
+      { temperature: 0.5 },
+    );
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    expect(result.requestBody.prompt_cache_key).toBeUndefined();
+    // Other params still flow through
+    expect(result.requestBody.temperature).toBe(0.5);
+  });
+
+  it('drops null prompt_cache_key instead of forwarding it', async () => {
+    // null is treated as invalid (typeof null === 'object') and dropped.
+    const options = createMockOptions(
+      {
+        resolved: {
+          model: 'gpt-4o',
+          authToken: { token: 'test-token', type: 'api-key' },
+        },
+      },
+      { prompt_cache_key: null, temperature: 0.7 },
+    );
+
+    const result = await prepareRequest(
+      options,
+      'gpt-4o',
+      undefined,
+      logger,
+      'openai',
+    );
+
+    expect(result.requestBody.prompt_cache_key).toBeUndefined();
+    expect(result.requestBody.temperature).toBe(0.7);
+  });
+
   it('preserves other model params including provider-specific extensions (issue #2853 scope)', async () => {
     // The fix must ONLY sanitize prompt_cache_key; all other model params,
     //including canonical Chat Completions fields and provider-specific
