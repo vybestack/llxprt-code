@@ -205,6 +205,29 @@ describe('P26: providerContentEnforcement characterization', () => {
     expect(harness.performCompression).not.toHaveBeenCalled();
   });
 
+  it('uses the finalized prompt-envelope estimate for first-turn compression decisions', async () => {
+    const harness = buildEnforcerHarness({
+      compressionThreshold: 0.1,
+      contextLimit: 100000,
+      generationConfig: { maxOutputTokens: 100 },
+    });
+    const contents: IContent[] = [textContent('human', 'small pending prompt')];
+    const genericEstimate = vi
+      .spyOn(harness.historyService, 'estimateTokensForContents')
+      .mockResolvedValue(1);
+    const finalizedEstimate = vi.fn(async () => 15000);
+    harness.deps.estimateFinalizedPromptTokens = finalizedEstimate;
+
+    await harness.enforcer.enforce(
+      buildEnvelope(contents, contents),
+      'prompt-finalized-envelope',
+    );
+
+    expect(finalizedEstimate).toHaveBeenCalled();
+    expect(genericEstimate).not.toHaveBeenCalled();
+    expect(harness.performCompression).toHaveBeenCalled();
+  });
+
   it('triggers compression when projected tokens exceed the compression threshold', async () => {
     // Use a tiny completion budget so the compression threshold is dominated
     // by the token estimate rather than the default 65_536 budget.

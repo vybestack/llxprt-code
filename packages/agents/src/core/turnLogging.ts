@@ -13,6 +13,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { safeJsonStringify } from './turnJsonUtils.js';
 
 /**
  * Extract request text from neutral contents for logging.
@@ -21,7 +22,7 @@ import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js'
  * @requirement:REQ-008
  */
 export function getRequestTextFromContents(contents: IContent[]): string {
-  return JSON.stringify(contents);
+  return safeJsonStringify(contents);
 }
 
 /**
@@ -91,6 +92,22 @@ export function logApiResponse(
   });
 }
 
+export function logModelOutputResponse(
+  runtimeContext: AgentRuntimeContext,
+  promptId: string,
+  durationMs: number,
+  response: { usage?: UsageStats },
+): void {
+  logApiResponse(
+    runtimeContext,
+    runtimeContext.state,
+    runtimeContext.state.model,
+    promptId,
+    durationMs,
+    response.usage,
+    safeJsonStringify(response),
+  );
+}
 /**
  * Log API error to telemetry
  */

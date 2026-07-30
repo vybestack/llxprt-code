@@ -14,6 +14,7 @@ vi.mock('./clientHelpers.js', () => ({
 
 import {
   estimateStructuredTokensOrFallback,
+  recordFinalizedPromptEnvelopeEstimate,
   recordTokenEstimate,
   resolveEstimatorType,
 } from './tokenUsageEstimateLogger.js';
@@ -130,6 +131,33 @@ describe('recordTokenEstimate', () => {
         1,
         'openai',
         'gpt-4',
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe('recordFinalizedPromptEnvelopeEstimate', () => {
+  it('keeps synchronous logger failures from disrupting a valid send', () => {
+    const usageLogger = {
+      isEnabled: () => true,
+      recordEstimate: () => {
+        throw new Error('record failed');
+      },
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'recordEstimate'>;
+
+    expect(() =>
+      recordFinalizedPromptEnvelopeEstimate(
+        usageLogger,
+        'prompt-finalized',
+        {
+          estimatedPromptTokens: 12,
+          model: 'gpt-4o',
+          protocol: 'openai-chat',
+          method: 'chat/completions/v1',
+          projectionRevision: 2,
+          unsupportedMedia: [],
+        },
+        'openai',
       ),
     ).not.toThrow();
   });

@@ -28,6 +28,7 @@ import {
   type GenerateChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
@@ -229,6 +230,24 @@ export class RetryOrchestrator implements IProvider {
 
   clearAuth?(): void {
     this.wrappedProvider.clearAuth?.();
+  }
+
+  /**
+   * Delegate projectPromptEnvelope to the wrapped provider so the
+   * prompt-envelope estimation capability is visible through the wrapper chain
+   * (issue #2817, finding #1). Without this delegation, ProviderManager
+   * returns a wrapped provider that hides the capability from the agent layer.
+   *
+   * Resolves to `undefined` when the wrapped provider does not implement the
+   * seam. Because ProviderManager wraps EVERY provider, throwing here would
+   * break sends for every out-of-scope protocol (Gemini, OpenAI-Vercel,
+   * load-balanced providers); absence of the capability is a normal state,
+   * not an error.
+   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection | undefined> {
+    return this.wrappedProvider.projectPromptEnvelope?.(options);
   }
 
   /**

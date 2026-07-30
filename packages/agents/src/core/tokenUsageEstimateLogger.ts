@@ -12,6 +12,7 @@ import type {
   TokenUsageLogger,
   TokenEstimatorType,
 } from './TokenUsageLogger.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
 const logger = new DebugLogger('llxprt:token-usage-estimate');
 
@@ -63,6 +64,31 @@ export function recordTokenEstimate(
   } catch (error) {
     logger.error(
       `Failed to record token estimate for prompt ${promptId}`,
+      error,
+    );
+  }
+}
+export function recordFinalizedPromptEnvelopeEstimate(
+  usageLogger: TokenUsageLogger | null | undefined,
+  promptId: string,
+  estimate: PromptEnvelopeEstimate | null,
+  providerName: string,
+): void {
+  if (estimate === null) return;
+  if (usageLogger === undefined || usageLogger === null) return;
+  if (!usageLogger.isEnabled()) return;
+  try {
+    usageLogger.recordEstimate(promptId, {
+      provider: providerName,
+      model: estimate.model,
+      estimatedTokens: estimate.estimatedPromptTokens,
+      estimator: resolveEstimatorType(providerName),
+      tiktokenTokens: null,
+      tiktokenEstimationFailed: false,
+    });
+  } catch (error) {
+    logger.error(
+      `Failed to record finalized prompt-envelope estimate for prompt ${promptId}`,
       error,
     );
   }

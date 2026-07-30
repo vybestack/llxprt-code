@@ -11,6 +11,7 @@ import {
   type GenerateChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
@@ -563,6 +564,22 @@ export class LoggingProviderWrapper implements IProvider {
 
   getContextLimit?(): number | undefined {
     return this.wrapped.getContextLimit?.();
+  }
+
+  /**
+   * Delegate projectPromptEnvelope to the wrapped provider so the
+   * prompt-envelope estimation capability is visible through the wrapper chain
+   * (issue #2817, finding #1). Without this delegation, ProviderManager
+   * returns a wrapped provider that hides the capability from the agent layer.
+   *
+   * Resolves to `undefined` when the wrapped provider does not implement the
+   * seam — absence of the capability is a normal state for out-of-scope
+   * protocols, not an error.
+   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection | undefined> {
+    return this.wrapped.projectPromptEnvelope?.(options);
   }
 
   /**

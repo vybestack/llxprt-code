@@ -30,6 +30,12 @@ import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+import {
+  prepareAtSendSeam,
+  preparePromptEnvelopeAfterEnforcement,
+} from './promptEnvelopeSendSeam.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -82,6 +88,7 @@ import {
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
+import { safeJsonStringify } from './turnJsonUtils.js';
 
 /**
  * Extract the allowedFunctionNames array from a tool-config object.
@@ -109,6 +116,11 @@ interface BeforeModelHookFireResult {
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
+  private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+
+  getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
+    return this.currentPromptEnvelopeEstimate;
+  }
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
@@ -139,6 +151,7 @@ export class StreamProcessor {
     promptId: string,
     userContent: IContent | IContent[],
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    this.currentPromptEnvelopeEstimate = null;
     const provider = this.providerResolver('stream');
 
     const providerBaseUrl = this.runtimeContext.state.baseUrl;
@@ -259,28 +272,22 @@ export class StreamProcessor {
       this._buildRequestContents(userContent);
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
-    const requestTools = this._selectRequestTools(params);
     const toolSelection = await this._applyToolSelectionHook(
       configForHooks,
-      requestTools,
+      this._selectRequestTools(params),
     );
-    const tools = toolSelection.tools;
-
     const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(requestContents, tools, params);
+      this._prepareRequestPayload(requestContents, toolSelection.tools, params);
 
     try {
       const originalContents = requestPayload.contents;
-      const {
-        contents: finalContents,
-        hookOutput,
-        snapshot,
-      } = await this._fireBeforeModelHook(
+      const hookResult = await this._fireBeforeModelHook(
         configForHooks,
         originalContents,
-        tools as ProviderToolset | undefined,
+        toolSelection.tools as ProviderToolset | undefined,
         toolSelection.allowedFunctionNames,
       );
+      const { contents: finalContents, hookOutput, snapshot } = hookResult;
       const pendingContents = resolvePendingBoundaryFromHook(
         originalContents,
         finalContents,
@@ -290,16 +297,27 @@ export class StreamProcessor {
         snapshot,
       );
 
-      requestPayload.contents =
-        await this.compressionHandler.enforceProviderContents(
-          {
-            contents: finalContents,
-            pendingContents,
-          },
-          promptId,
-          provider,
-        );
-
+      const streamPreparation = await preparePromptEnvelopeAfterEnforcement({
+        provider,
+        contents: finalContents,
+        buildOptions: (contents) =>
+          this._buildStreamChatOptions(
+            { contents, tools: toolSelection.tools },
+            runtimeContext,
+            baseRuntimeContext,
+            params,
+          ),
+        enforce: (contents, estimate) =>
+          this.compressionHandler.enforceProviderContents(
+            { contents, pendingContents },
+            promptId,
+            provider,
+            estimate,
+          ),
+        fallbackEstimate: (contents) =>
+          this.compressionHandler.estimatePendingTokens(contents),
+      });
+      requestPayload.contents = streamPreparation.contents;
       logOutgoingRequest(
         this.runtimeContext,
         requestPayload,
@@ -315,6 +333,7 @@ export class StreamProcessor {
         params,
         promptId,
         toolSelection.allowedFunctionNames,
+        streamPreparation.prepared,
       );
       return withCompressionCallbackCleanup(
         stream,
@@ -433,6 +452,34 @@ export class StreamProcessor {
     return buildRuntimeContext(baseRuntimeContext, params);
   }
 
+  private _buildStreamChatOptions(
+    requestPayload: { contents: IContent[]; tools: unknown },
+    runtimeContext: ProviderRuntimeContext,
+    baseRuntimeContext: ProviderRuntimeContext,
+    params: SendMessageParams,
+  ): GenerateChatOptions {
+    const userMemory = resolveUserMemory(baseRuntimeContext.config);
+    return {
+      contents: requestPayload.contents,
+      tools: requestPayload.tools as ProviderToolset | undefined,
+      config: runtimeContext.config,
+      runtime: runtimeContext,
+      onProviderError: params.config?.onProviderError,
+      onStreamLiveness: params.config?.onStreamLiveness,
+      settings:
+        runtimeContext.settingsService as GenerateChatOptions['settings'],
+      metadata: {
+        ...runtimeContext.metadata,
+        abortSignal: params.config?.abortSignal,
+        _retryRequestContext: params.config?.providerRequestContext,
+      },
+      userMemory,
+      systemInstruction: extractSystemInstructionText(
+        this.generationConfig.systemInstruction,
+      ),
+    } as GenerateChatOptions;
+  }
+
   private async _sendProviderRequest(
     provider: IProvider,
     requestPayload: { contents: IContent[]; tools: unknown },
@@ -441,29 +488,30 @@ export class StreamProcessor {
     params: SendMessageParams,
     promptId: string,
     hookRestrictedAllowedTools: string[] | undefined,
+    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const startTime = Date.now();
     try {
-      const userMemory = resolveUserMemory(baseRuntimeContext.config);
-      const streamResponse = provider.generateChatCompletion({
-        contents: requestPayload.contents,
-        tools: requestPayload.tools as ProviderToolset | undefined,
-        config: runtimeContext.config,
-        runtime: runtimeContext,
-        onProviderError: params.config?.onProviderError,
-        onStreamLiveness: params.config?.onStreamLiveness,
-        settings:
-          runtimeContext.settingsService as GenerateChatOptions['settings'],
-        metadata: {
-          ...runtimeContext.metadata,
-          abortSignal: params.config?.abortSignal,
-          _retryRequestContext: params.config?.providerRequestContext,
-        },
-        userMemory,
-        systemInstruction: extractSystemInstructionText(
-          this.generationConfig.systemInstruction,
-        ),
-      } as GenerateChatOptions);
+      const prepared =
+        preparedAtEnforcement ??
+        (await prepareAtSendSeam(
+          provider,
+          this._buildStreamChatOptions(
+            requestPayload,
+            runtimeContext,
+            baseRuntimeContext,
+            params,
+          ),
+        ));
+      this.currentPromptEnvelopeEstimate = prepared.estimate;
+      recordFinalizedPromptEnvelopeEstimate(
+        this.compressionHandler.tokenUsageLogger,
+        promptId,
+        prepared.estimate,
+        provider.name,
+      );
+
+      const streamResponse = provider.generateChatCompletion(prepared.options);
 
       return await this._consumeFirstChunkAndReturn(
         streamResponse,
@@ -776,7 +824,7 @@ export class StreamProcessor {
         telemetryContext.promptId,
         durationMs,
         usage ? { ...usage } : undefined,
-        JSON.stringify(lastIContent),
+        safeJsonStringify(lastIContent),
       );
 
       await recordActualTokenUsage(

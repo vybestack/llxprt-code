@@ -244,9 +244,14 @@ describe('AgentClient (client.ts)', () => {
           todoContinuationService: { todoToolsAvailable: boolean };
         }
       ).todoContinuationService.todoToolsAvailable = true;
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
     });
 
-    it('should yield ContextWindowWillOverflow when the context window is about to overflow', async () => {
+    it('should defer overflow decisions to finalized provider enforcement', async () => {
       // Arrange
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
@@ -278,9 +283,7 @@ describe('AgentClient (client.ts)', () => {
       // A string of length 400 is roughly 100 tokens.
       const longText = 'a'.repeat(400);
       const request = [{ type: 'text' as const, text: longText }];
-      // Structured fallback counts the text content (400 chars), not JSON structure.
-      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
-      const remainingTokenCount = MOCKED_TOKEN_LIMIT - lastPromptTokenCount;
+      // Client preflight must not make the authoritative overflow decision.
 
       // Act
       const stream = client.sendMessageStream(
@@ -292,20 +295,15 @@ describe('AgentClient (client.ts)', () => {
       const events = await fromAsync(stream);
 
       // Assert
-      expect(events).toContainEqual({
-        type: AgentEventType.ContextWindowWillOverflow,
-        value: {
-          estimatedRequestTokenCount,
-          remainingTokenCount,
-        },
-      });
-      // Ensure turn.run is not called
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
-      // Recovery must have attempted (auto) compression before bailing (#2402).
-      expect(mockChat.performCompression).toHaveBeenCalledWith(
-        'prompt-id-overflow',
-        { bypassCooldown: true, trigger: 'auto' },
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: AgentEventType.ContextWindowWillOverflow,
+        }),
       );
+      // The turn reaches provider-level finalized-envelope enforcement.
+      expect(mockTurnRunFn).toHaveBeenCalled();
+      // Legacy client-side compression recovery is no longer consulted.
+      expect(mockChat.performCompression).not.toHaveBeenCalled();
     });
 
     it('should NOT emit ContextWindowWillOverflow when remaining capacity is already negative (issue 2139)', async () => {
@@ -425,9 +423,8 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should use the model-aware tokenizer (estimatePendingTokens + iContentFromAgentMessageInput) when remaining capacity is positive', async () => {
-      // Arrange — proves the positive-remaining path routes through the
-      // tokenizer-backed sizing path rather than the text-only fallback.
+    it('should defer model-aware tokenization to finalized provider enforcement when remaining capacity is positive', async () => {
+      // Arrange — legacy client preflight must not invoke generic tokenization.
       const MOCKED_TOKEN_LIMIT = 10000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 1000;
@@ -459,16 +456,9 @@ describe('AgentClient (client.ts)', () => {
       );
       await fromAsync(stream);
 
-      // Assert — tokenizer path was used; estimatePendingTokens receives the
-      // IContent[] produced by iContentFromAgentMessageInput.
-      expect(estimateSpy).toHaveBeenCalledTimes(1);
-      expect(estimateSpy).toHaveBeenCalledWith([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'continue' }],
-        },
-      ]);
-      // No overflow since 50 < (9000 * 0.95).
+      // Assert — estimation occurs against the provider's finalized envelope.
+      expect(estimateSpy).not.toHaveBeenCalled();
+      // The turn proceeds to authoritative enforcement.
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
@@ -517,10 +507,9 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should count functionResponse payload tokens in the structured fallback (no tokenizer available)', async () => {
-      // Arrange — a minimal chat double WITHOUT tokenizer methods forces the
-      // structured fallback. A tool-response-only request must be estimated
-      // as > 0 tokens (its JSON payload), unlike the old text-only estimate.
+    it('should defer functionResponse sizing to finalized provider enforcement when no tokenizer is available', async () => {
+      // Arrange — a minimal chat double without tokenizer methods must still proceed
+      // to finalized provider enforcement.
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
@@ -560,23 +549,17 @@ describe('AgentClient (client.ts)', () => {
       );
       const events = await fromAsync(stream);
 
-      // Assert — the payload is counted (would be 0 under the old text-only
-      // estimate), so the guard correctly fires.
+      // Assert — client preflight does not size the raw tool response.
       const overflow = events.find(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflow).toBeDefined();
-      // JSON of the tool_response result is well over 4000 chars → > 950 tokens.
-      expect(
-        (overflow as { value: { estimatedRequestTokenCount: number } }).value
-          .estimatedRequestTokenCount,
-      ).toBeGreaterThan(950);
+      expect(overflow).toBeUndefined();
+      // Provider projection owns the authoritative count.
+      expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should use structured fallback when tokenizer throws before sizing', async () => {
-      // Arrange — estimatePendingTokens throws (e.g. uninitialized internals
-      // during early preflight). The fallback still needs to run instead of
-      // rejecting the stream.
+    it('should avoid obsolete structured fallback when the legacy tokenizer would throw', async () => {
+      // Arrange — the obsolete client tokenizer would throw if invoked.
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
@@ -611,13 +594,12 @@ describe('AgentClient (client.ts)', () => {
       );
       const events = await fromAsync(stream);
 
-      // Assert — fallback counted the tool_response payload and emitted the
-      // same preflight overflow event rather than throwing.
+      // Assert — client preflight neither invokes the tokenizer nor emits overflow.
       const overflow = events.find(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflow).toBeDefined();
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
+      expect(overflow).toBeUndefined();
+      expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
     it('should ignore inlineData/fileData in the structured fallback to avoid false positives', async () => {
@@ -668,7 +650,7 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it("should use the sticky model's token limit for the overflow check", async () => {
+    it('should defer sticky-model limit enforcement to the finalized provider envelope', async () => {
       const STICKY_MODEL_LIMIT = 1000;
       client['currentSequenceModel'] = 'gemini-1.5-flash';
       vi.mocked(tokenLimit).mockReturnValue(STICKY_MODEL_LIMIT);
@@ -692,9 +674,7 @@ describe('AgentClient (client.ts)', () => {
       // We need a request > 95 tokens.
       const longText = 'a'.repeat(400);
       const request = [{ type: 'text' as const, text: longText }];
-      // Structured fallback counts the text content (400 chars), not JSON structure.
-      const estimatedRequestTokenCount = Math.floor(longText.length / 4);
-      const remainingTokenCount = STICKY_MODEL_LIMIT - lastPromptTokenCount;
+      // Client preflight must not make the authoritative overflow decision.
 
       // Act
       const stream = client.sendMessageStream(
@@ -706,16 +686,14 @@ describe('AgentClient (client.ts)', () => {
       const events = await fromAsync(stream);
 
       // Assert
-      // Should overflow based on the sticky model's limit
-      expect(events).toContainEqual({
-        type: AgentEventType.ContextWindowWillOverflow,
-        value: {
-          estimatedRequestTokenCount,
-          remainingTokenCount,
-        },
-      });
-      expect(mockChat.getContextLimit).toHaveBeenCalled();
-      expect(mockTurnRunFn).not.toHaveBeenCalled();
+      // Provider-level enforcement owns the sticky model's context limit.
+      expect(events).not.toContainEqual(
+        expect.objectContaining({
+          type: AgentEventType.ContextWindowWillOverflow,
+        }),
+      );
+      expect(mockChat.getContextLimit).not.toHaveBeenCalled();
+      expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
     it('should not trigger overflow warning for requests with large binary data (PDFs/images)', async () => {

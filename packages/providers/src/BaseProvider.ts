@@ -668,6 +668,24 @@ export abstract class BaseProvider implements IProvider {
   ): AsyncIterableIterator<IContent>;
 
   /**
+   * Normalize caller-supplied chat options for prompt-envelope projection
+   * (issue #2817).
+   *
+   * The agent send seam builds the same un-normalized `GenerateChatOptions`
+   * it passes to `generateChatCompletion`, which normalizes internally. A
+   * projection must therefore normalize identically, otherwise it would read
+   * `resolved.model` / `invocation` fields that only exist post-normalization.
+   *
+   * Unlike the transport path this does NOT swap the ambient runtime context
+   * or clear the resolved auth token, because projection is a pure read.
+   */
+  protected async normalizeOptionsForProjection(
+    options: GenerateChatOptions,
+  ): Promise<NormalizedGenerateChatOptions> {
+    return this.normalizeGenerateChatOptions(options, options.tools, false);
+  }
+
+  /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
@@ -744,6 +762,7 @@ export abstract class BaseProvider implements IProvider {
   private async normalizeGenerateChatOptions(
     contentsOrOptions: IContent[] | GenerateChatOptions,
     maybeTools?: ProviderToolset,
+    resolveAuthentication: boolean = true,
   ): Promise<NormalizedGenerateChatOptions> {
     const providedOptions: GenerateChatOptions = Array.isArray(
       contentsOrOptions,
@@ -760,13 +779,14 @@ export abstract class BaseProvider implements IProvider {
         | ProviderSettings
         | undefined) ?? ({} as ProviderSettings);
     const resolvedBaseURL = this.computeBaseURL(settings);
-    const resolvedAuth =
-      (await this.authResolver.resolveAuthentication({
-        settingsService: settings,
-        includeOAuth: this.isOAuthEligible(
-          providedOptions.resolved?.baseURL ?? resolvedBaseURL,
-        ),
-      })) ?? '';
+    const resolvedAuth = resolveAuthentication
+      ? ((await this.authResolver.resolveAuthentication({
+          settingsService: settings,
+          includeOAuth: this.isOAuthEligible(
+            providedOptions.resolved?.baseURL ?? resolvedBaseURL,
+          ),
+        })) ?? '')
+      : (providedOptions.resolved?.authToken ?? '');
 
     return normalizeProviderGenerateChatOptions(this, providedOptions, {
       providerName: this.name,

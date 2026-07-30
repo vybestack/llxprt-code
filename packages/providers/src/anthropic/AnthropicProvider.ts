@@ -17,6 +17,7 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -40,11 +41,14 @@ import {
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import {
   buildAnthropicCustomHeaders,
   createAnthropicApiCall,
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
+import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
@@ -54,6 +58,15 @@ export class AnthropicProvider extends BaseProvider {
 
   // Rate limit state tracking - updated on each API response
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
+  private readonly preparedPromptEnvelopes = new WeakMap<
+    object,
+    {
+      readonly requestContext: Awaited<
+        ReturnType<typeof prepareAnthropicRequest>
+      >;
+      readonly isOAuth: boolean;
+    }
+  >();
 
   constructor(
     apiKey?: string,
@@ -557,9 +570,22 @@ export class AnthropicProvider extends BaseProvider {
       options,
       options.resolved.telemetry,
     );
-    const isOAuth = this.classifyOAuthToken(authToken);
-
-    const requestContext = await this.prepareRequestContext(options, isOAuth);
+    const prepared =
+      options.promptEnvelopeTransportToken === undefined
+        ? undefined
+        : this.preparedPromptEnvelopes.get(
+            options.promptEnvelopeTransportToken,
+          );
+    if (
+      options.promptEnvelopeTransportToken !== undefined &&
+      prepared === undefined
+    ) {
+      throw new Error('Unknown Anthropic prompt-envelope transport token');
+    }
+    const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
+    const requestContext =
+      prepared?.requestContext ??
+      (await this.prepareRequestContext(options, isOAuth));
 
     const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
 
@@ -614,6 +640,44 @@ export class AnthropicProvider extends BaseProvider {
       logger: this.getLogger(),
       toolsLogger: this.getToolsLogger(),
       cacheLogger: this.getCacheLogger(),
+    });
+  }
+
+  /**
+   * Project the finalized Anthropic Messages envelope (issue #2817).
+   *
+   * Runs the SAME `prepareAnthropicRequest` path transport uses, so the
+   * estimate is derived from the exact `requestBody` that will be sent. No
+   * client is constructed and no credential is exchanged: estimation must not
+   * trigger auth side effects (e.g. an OAuth refresh) on the send hot path.
+   * The OAuth flavor only selects tool-name prefixing and cache formatting, so
+   * it is derived from the already-resolved token when one is present.
+   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
+    const normalized = await this.normalizeOptionsForProjection(options);
+    const resolvedToken = normalized.resolved.authToken;
+    const isOAuth =
+      typeof resolvedToken === 'string' && resolvedToken !== ''
+        ? this.classifyOAuthToken(resolvedToken)
+        : this.baseProviderConfig.oauthProvider === 'claudecode' &&
+          isAnthropicOAuthBaseURL(normalized.resolved.baseURL);
+    const requestContext = await this.prepareRequestContext(
+      normalized,
+      isOAuth,
+    );
+    const transportToken = Object.freeze({});
+    this.preparedPromptEnvelopes.set(transportToken, {
+      requestContext,
+      isOAuth,
+    });
+    return projectAnthropicPromptEnvelope(requestContext.requestBody, {
+      transportToken,
+      unsupportedMedia: collectUnsupportedMedia(
+        normalized.contents,
+        (category) => category === 'image' || category === 'pdf',
+      ),
     });
   }
 

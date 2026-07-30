@@ -12,12 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ChatSession } from './chatSession.js';
-import {
-  AgentEventType,
-  DEFAULT_AGENT_ID,
-  Turn,
-  type ServerAgentStreamEvent,
-} from './turn.js';
+
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -76,20 +71,6 @@ function createNoncooperativeStream(
       return this;
     },
   };
-}
-
-async function collectTurnEvents(
-  turn: Turn,
-  request: string,
-): Promise<ServerAgentStreamEvent[]> {
-  const events: ServerAgentStreamEvent[] = [];
-  for await (const event of turn.run(
-    [{ type: 'text', text: request }],
-    new AbortController().signal,
-  )) {
-    events.push(event);
-  }
-  return events;
 }
 
 describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessageProcessor', () => {
@@ -238,15 +219,28 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localConfig.setProviderManager(localManager);
       let transports = 0;
       let pendingReads = 0;
+      let firstTransportSignal: AbortSignal | undefined;
+      const preparedRequests = new WeakMap<object, string>();
       const provider: IProvider = {
         name: 'stub',
         isDefault: true,
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
         generateChatCompletion: vi.fn(
-          (_options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
+          (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
             transports++;
+            const transportToken = options.promptEnvelopeTransportToken;
+            if (
+              transportToken === undefined ||
+              preparedRequests.get(transportToken) === undefined
+            ) {
+              throw new Error('transport did not consume the prepared request');
+            }
             if (transports === 1) {
+              firstTransportSignal = options.invocation?.signal;
+              if (firstTransportSignal === undefined) {
+                throw new Error('transport did not receive an abort signal');
+              }
               return createNoncooperativeStream(() => {
                 pendingReads++;
               });
@@ -264,6 +258,22 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
             })();
           },
         ),
+        projectPromptEnvelope: async (options) => {
+          const transportToken = Object.freeze({});
+          preparedRequests.set(
+            transportToken,
+            JSON.stringify(options.contents),
+          );
+          return {
+            model: 'stub-model',
+            protocol: 'openai-chat',
+            method: 'chat/completions/v1',
+            projectionRevision: 2,
+            unsupportedMedia: [],
+            transportToken,
+            countProjectedTokens: () => Promise.resolve(10),
+          };
+        },
         getServerTools: () => [],
         invokeServerTool: vi.fn(),
       };
@@ -290,38 +300,30 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         {},
         [],
       );
-      const firstEventsPromise = collectTurnEvents(
-        new Turn(chat, 'first-prompt', DEFAULT_AGENT_ID, 'stub'),
-        'first request',
-      );
+      const firstSend = chat
+        .sendMessage({ message: [{ text: 'first request' }] }, 'first-prompt')
+        .catch((error: unknown) => error);
 
       await vi.waitFor(() => expect(pendingReads).toBe(1), {
         interval: 1,
         timeout: 100,
       });
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
-      const secondEventsPromise = collectTurnEvents(
-        new Turn(chat, 'second-prompt', DEFAULT_AGENT_ID, 'stub'),
-        'second request',
-      );
-      await vi.waitFor(() => expect(transports).toBe(2), {
-        interval: 1,
-        timeout: 100,
-      });
+      expect(firstTransportSignal?.aborted).toBe(true);
+      const firstError = await firstSend;
+      expect(firstError).toBeInstanceOf(Error);
+      expect(firstError).toMatchObject({ name: 'StreamIdleTimeoutError' });
+      expect(String(firstError)).toContain('Stream idle timeout');
 
-      const [firstEvents, secondEvents] = await Promise.all([
-        firstEventsPromise,
-        secondEventsPromise,
-      ]);
-      expect(firstEvents).toContainEqual(
-        expect.objectContaining({ type: AgentEventType.StreamIdleTimeout }),
+      const secondResponse = await chat.sendMessage(
+        { message: [{ text: 'second request' }] },
+        'second-prompt',
       );
-      expect(secondEvents).toContainEqual(
-        expect.objectContaining({
-          type: AgentEventType.Content,
-          value: 'OK',
-        }),
-      );
+      expect(transports).toBe(2);
+      expect(secondResponse.content.blocks).toContainEqual({
+        type: 'text',
+        text: 'OK',
+      });
     });
 
     it('env var precedence: env var overrides config setting', async () => {
