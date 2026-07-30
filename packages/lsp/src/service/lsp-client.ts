@@ -147,8 +147,10 @@ export class LspClient {
     const firstArg = args[0];
     const fixtureMode =
       isNodeCommand && typeof firstArg === 'string' && firstArg.endsWith('.ts');
-    const spawnCommand = fixtureMode ? 'bun' : this.config.config.command;
-    const spawnArgs = fixtureMode ? ['run', ...args] : args;
+    const spawnCommand = fixtureMode
+      ? process.execPath
+      : this.config.config.command;
+    const spawnArgs = args;
     const spawnCwd = existsSync(this.workspaceRoot)
       ? this.workspaceRoot
       : process.cwd();
