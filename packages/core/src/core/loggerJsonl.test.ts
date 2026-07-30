@@ -159,12 +159,22 @@ describe('Logger JSONL format', () => {
     );
     await newLogger.initialize();
 
-    const logContent = await readLogFile();
-    expect(logContent).toHaveLength(2);
-    expect(logContent[0].message).toBe('Valid1');
-    expect(logContent[1].message).toBe('Valid2');
+    // Valid entries should be loaded into the in-memory cache.
+    const cachedLogs = newLogger['logs'];
+    expect(cachedLogs).toHaveLength(2);
+    expect(cachedLogs[0].message).toBe('Valid1');
+    expect(cachedLogs[1].message).toBe('Valid2');
 
+    // A partial_corruption backup should exist so corrupted lines are
+    // recoverable; no malformed_line backup (that's for total corruption).
     const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
+    expect(
+      dirContents.some(
+        (f) =>
+          f.startsWith(LOG_FILE_NAME + '.partial_corruption') &&
+          f.endsWith('.bak'),
+      ),
+    ).toBe(true);
     expect(hasMalformedBackup(dirContents)).toBe(false);
     newLogger.close();
   });

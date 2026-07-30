@@ -138,10 +138,16 @@ export class Logger {
 
   /**
    * Parse JSONL content, preserving valid entries even when some lines are
-   * corrupted. Only throws when every line fails to parse, signaling total
+   * corrupted. Throws when every line fails to parse, signaling total
    * corruption so the caller can back up the file and start fresh.
+   *
+   * Returns `{ entries, skipped }` so the caller can back up the file when
+   * partial corruption is detected.
    */
-  private _parseJsonl(trimmed: string): LogEntry[] {
+  private _parseJsonl(trimmed: string): {
+    entries: LogEntry[];
+    skipped: number;
+  } {
     const lines = trimmed
       .split('\n')
       .map((line) => line.trim())
@@ -167,7 +173,7 @@ export class Logger {
     if (entries.length === 0 && lines.length > 0) {
       throw new SyntaxError('All JSONL lines failed to parse');
     }
-    return entries;
+    return { entries, skipped };
   }
 
   private _tryParseJsonlLine(
@@ -223,7 +229,14 @@ export class Logger {
       return legacy;
     }
     try {
-      return this._parseJsonl(trimmed);
+      const { entries, skipped } = this._parseJsonl(trimmed);
+      if (skipped > 0 && this.logFilePath) {
+        debugLogger.debug(
+          `Backing up log file with ${skipped} corrupted line(s) before returning valid entries.`,
+        );
+        this._backupCorruptedLogFileSync('partial_corruption');
+      }
+      return entries;
     } catch (parseError) {
       if (parseError instanceof SyntaxError) {
         debugLogger.debug(
@@ -428,7 +441,14 @@ export class Logger {
       }
       // JSONL format: one JSON object per line.
       try {
-        return this._parseJsonl(trimmed);
+        const { entries, skipped } = this._parseJsonl(trimmed);
+        if (skipped > 0) {
+          debugLogger.debug(
+            `Backing up log file with ${skipped} corrupted line(s) before returning valid entries.`,
+          );
+          await this._backupCorruptedLogFile('partial_corruption');
+        }
+        return entries;
       } catch (parseError) {
         if (parseError instanceof SyntaxError) {
           debugLogger.debug(
