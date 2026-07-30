@@ -49,7 +49,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('any sequence of content events produces history of same length @requirement:REQ-RPL-002', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.array(
             fc.record({
               text: fc.string({ minLength: 1, maxLength: 100 }),
@@ -89,7 +89,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('compression always resets to exactly 1+post items @requirement:REQ-RPL-003', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.integer({ min: 1, max: 10 }),
           fc.integer({ min: 0, max: 10 }),
           async (preCount, postCount) => {
@@ -129,7 +129,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('rewind(N) on history of size M produces max(0, M-N) items @requirement:REQ-RPL-002d', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.integer({ min: 1, max: 15 }),
           fc.integer({ min: 0, max: 20 }),
           async (historySize, rewindCount) => {
@@ -167,7 +167,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('replaying the same file twice produces identical results @requirement:REQ-RPL-001', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.array(
             fc.record({
               text: fc.string({ minLength: 1, maxLength: 50 }),
@@ -214,7 +214,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('session metadata always present after replay @requirement:REQ-RPL-007', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.array(
             fc.constantFrom(
               'content' as const,
@@ -275,31 +275,34 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('lastSeq always equals the final event seq regardless of event count @requirement:REQ-RPL-001', () =>
       fc.assert(
-        fc.property(fc.integer({ min: 1, max: 30 }), async (eventCount) => {
-          const localTempDir = await fs.mkdtemp(
-            path.join(os.tmpdir(), 'prop-lastseq-'),
-          );
-          const localChatsDir = path.join(localTempDir, 'chats');
-          await fs.mkdir(localChatsDir, { recursive: true });
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 30 }),
+          async (eventCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-lastseq-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-          try {
-            const filePath = await createValidFile(localChatsDir, (svc) => {
-              for (let i = 0; i < eventCount; i++) {
-                svc.recordContent(
-                  makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
-                );
-              }
-            });
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                for (let i = 0; i < eventCount; i++) {
+                  svc.recordContent(
+                    makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
+                  );
+                }
+              });
 
-            const result = await replaySession(filePath, PROJECT_HASH);
+              const result = await replaySession(filePath, PROJECT_HASH);
 
-            assertReplayOk(result);
-            // session_start (seq=1) + eventCount content events
-            expect(result.lastSeq).toBe(eventCount + 1);
-          } finally {
-            await fs.rm(localTempDir, { recursive: true, force: true });
-          }
-        }),
+              assertReplayOk(result);
+              // session_start (seq=1) + eventCount content events
+              expect(result.lastSeq).toBe(eventCount + 1);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
       ));
 
     /**
@@ -307,244 +310,266 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([fc.integer({ min: 1, max: 20 }), fc.boolean()])(
-      'eventCount matches total valid events regardless of optional corrupt last line @requirement:REQ-RPL-001',
-      async (contentCount: number, hasCorruptLastLine: boolean) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-evcount-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
-
-        try {
-          const lines: string[] = [sessionStartLine(1)];
-          for (let i = 0; i < contentCount; i++) {
-            lines.push(contentLine(i + 2, makeContent(`msg ${i}`, 'human')));
-          }
-          if (hasCorruptLastLine) {
-            lines.push(
-              '{"v":1,"seq":999,"type":"content","payload":{"content":{"spea',
+    it('eventCount matches total valid events regardless of optional corrupt last line @requirement:REQ-RPL-001', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 20 }),
+          fc.boolean(),
+          async (contentCount: number, hasCorruptLastLine: boolean) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-evcount-'),
             );
-          }
-          const filePath = path.join(
-            localChatsDir,
-            `evcount-${contentCount}.jsonl`,
-          );
-          await writeJsonlFile(filePath, lines);
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-          const result = await replaySession(filePath, PROJECT_HASH);
+            try {
+              const lines: string[] = [sessionStartLine(1)];
+              for (let i = 0; i < contentCount; i++) {
+                lines.push(
+                  contentLine(i + 2, makeContent(`msg ${i}`, 'human')),
+                );
+              }
+              if (hasCorruptLastLine) {
+                lines.push(
+                  '{"v":1,"seq":999,"type":"content","payload":{"content":{"spea',
+                );
+              }
+              const filePath = path.join(
+                localChatsDir,
+                `evcount-${contentCount}.jsonl`,
+              );
+              await writeJsonlFile(filePath, lines);
 
-          assertReplayOk(result);
-          // session_start + contentCount valid content events
-          expect(result.eventCount).toBe(1 + contentCount);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+              // session_start + contentCount valid content events
+              expect(result.eventCount).toBe(1 + contentCount);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+      );
+    });
 
     /**
      * Test 50: Any valid IContent round-trips through record -> replay losslessly.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002
      */
-    it.prop([
-      fc.record({
-        speaker: fc.constantFrom('human' as const, 'ai' as const),
-        text: fc.string({ minLength: 1, maxLength: 200 }),
-      }),
-    ])(
-      'any valid IContent round-trips through record -> replay losslessly @requirement:REQ-RPL-002',
-      async ({ speaker, text }) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-roundtrip-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('any valid IContent round-trips through record -> replay losslessly @requirement:REQ-RPL-002', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            speaker: fc.constantFrom('human' as const, 'ai' as const),
+            text: fc.string({ minLength: 1, maxLength: 200 }),
+          }),
+          async ({ speaker, text }) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-roundtrip-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const content: IContent = {
-            speaker,
-            blocks: [{ type: 'text', text }],
-          };
+            try {
+              const content: IContent = {
+                speaker,
+                blocks: [{ type: 'text', text }],
+              };
 
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            svc.recordContent(content);
-          });
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                svc.recordContent(content);
+              });
 
-          const result = await replaySession(filePath, PROJECT_HASH);
+              const result = await replaySession(filePath, PROJECT_HASH);
 
-          assertReplayOk(result);
-          expect(result.history).toHaveLength(1);
-          expect(result.history[0]).toStrictEqual(content);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              assertReplayOk(result);
+              expect(result.history).toHaveLength(1);
+              expect(result.history[0]).toStrictEqual(content);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+      );
+    });
 
     /**
      * Test 51: Warnings array is always present (possibly empty) regardless of input.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([
-      fc.array(
-        fc.record({
-          text: fc.string({ minLength: 1, maxLength: 50 }),
-          speaker: fc.constantFrom('human' as const, 'ai' as const),
-        }),
-        { minLength: 1, maxLength: 10 },
-      ),
-    ])(
-      'warnings array is always present regardless of input @requirement:REQ-RPL-001',
-      async (contents) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-warn-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('warnings array is always present regardless of input @requirement:REQ-RPL-001', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(
+            fc.record({
+              text: fc.string({ minLength: 1, maxLength: 50 }),
+              speaker: fc.constantFrom('human' as const, 'ai' as const),
+            }),
+            { minLength: 1, maxLength: 10 },
+          ),
+          async (contents) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-warn-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            for (const c of contents) {
-              svc.recordContent(makeContent(c.text, c.speaker));
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                for (const c of contents) {
+                  svc.recordContent(makeContent(c.text, c.speaker));
+                }
+              });
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+              expect(Array.isArray(result.warnings)).toBe(true);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-          });
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-          expect(Array.isArray(result.warnings)).toBe(true);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      );
+    });
 
     /**
      * Test 52: seq monotonicity is preserved across any number of resumes.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 10 })])(
-      'seq monotonicity preserved across N resumes @requirement:REQ-RPL-001',
-      async (resumeCount, turnsPerSegment) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-resume-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('seq monotonicity preserved across N resumes @requirement:REQ-RPL-001', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 5 }),
+          fc.integer({ min: 1, max: 10 }),
+          async (resumeCount: number, turnsPerSegment: number) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-resume-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          let seq = 1;
-          const lines: string[] = [sessionStartLine(seq)];
+            try {
+              let seq = 1;
+              const lines: string[] = [sessionStartLine(seq)];
 
-          for (let r = 0; r <= resumeCount; r++) {
-            if (r > 0) {
-              seq++;
-              lines.push(
-                sessionEventLine(seq, 'info', `Session resumed at T${r}`),
+              for (let r = 0; r <= resumeCount; r++) {
+                if (r > 0) {
+                  seq++;
+                  lines.push(
+                    sessionEventLine(seq, 'info', `Session resumed at T${r}`),
+                  );
+                }
+                for (let t = 0; t < turnsPerSegment; t++) {
+                  seq++;
+                  lines.push(
+                    contentLine(seq, makeContent(`r${r}-t${t}`, 'human')),
+                  );
+                }
+              }
+
+              const filePath = path.join(
+                localChatsDir,
+                `resume-mono-${resumeCount}.jsonl`,
               );
+              await writeJsonlFile(filePath, lines);
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+
+              const expectedContentCount = (resumeCount + 1) * turnsPerSegment;
+              expect(result.history).toHaveLength(expectedContentCount);
+              expect(result.sessionEvents).toHaveLength(resumeCount);
+              expect(result.lastSeq).toBe(seq);
+              expect(result.warnings).toHaveLength(0);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-            for (let t = 0; t < turnsPerSegment; t++) {
-              seq++;
-              lines.push(contentLine(seq, makeContent(`r${r}-t${t}`, 'human')));
-            }
-          }
-
-          const filePath = path.join(
-            localChatsDir,
-            `resume-mono-${resumeCount}.jsonl`,
-          );
-          await writeJsonlFile(filePath, lines);
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-
-          const expectedContentCount = (resumeCount + 1) * turnsPerSegment;
-          expect(result.history).toHaveLength(expectedContentCount);
-          expect(result.sessionEvents).toHaveLength(resumeCount);
-          expect(result.lastSeq).toBe(seq);
-          expect(result.warnings).toHaveLength(0);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      );
+    });
 
     /**
      * Test 53: Arbitrary interleaving of content/compressed/rewind produces valid history.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002
      */
-    it.prop([
-      fc.array(
-        fc.oneof(
-          fc.constant('content' as const),
-          fc.constant('compressed' as const),
-          fc.constant('rewind' as const),
-        ),
-        { minLength: 1, maxLength: 15 },
-      ),
-    ])(
-      'arbitrary interleaving of content/compressed/rewind produces valid history @requirement:REQ-RPL-002',
-      async (eventTypes) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-interleave-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('arbitrary interleaving of content/compressed/rewind produces valid history @requirement:REQ-RPL-002', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.array(
+            fc.oneof(
+              fc.constant('content' as const),
+              fc.constant('compressed' as const),
+              fc.constant('rewind' as const),
+            ),
+            { minLength: 1, maxLength: 15 },
+          ),
+          async (
+            eventTypes: ReadonlyArray<'content' | 'compressed' | 'rewind'>,
+          ) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-interleave-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          let seq = 1;
-          const lines: string[] = [sessionStartLine(seq)];
+            try {
+              let seq = 1;
+              const lines: string[] = [sessionStartLine(seq)];
 
-          // Always start with one content event
-          seq++;
-          lines.push(contentLine(seq, makeContent('seed', 'human')));
+              // Always start with one content event
+              seq++;
+              lines.push(contentLine(seq, makeContent('seed', 'human')));
 
-          for (const eventType of eventTypes) {
-            seq++;
-            switch (eventType) {
-              case 'content':
-                lines.push(
-                  contentLine(seq, makeContent(`msg-${seq}`, 'human')),
-                );
-                break;
-              case 'compressed':
-                lines.push(
-                  compressedLine(seq, makeContent('summary', 'ai'), 1),
-                );
-                break;
-              case 'rewind':
-                lines.push(rewindLine(seq, 1));
-                break;
-              default:
-                break;
+              for (const eventType of eventTypes) {
+                seq++;
+                switch (eventType) {
+                  case 'content':
+                    lines.push(
+                      contentLine(seq, makeContent(`msg-${seq}`, 'human')),
+                    );
+                    break;
+                  case 'compressed':
+                    lines.push(
+                      compressedLine(seq, makeContent('summary', 'ai'), 1),
+                    );
+                    break;
+                  case 'rewind':
+                    lines.push(rewindLine(seq, 1));
+                    break;
+                  default:
+                    break;
+                }
+              }
+
+              const filePath = path.join(localChatsDir, 'interleave.jsonl');
+              await writeJsonlFile(filePath, lines);
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+
+              // History length should be non-negative
+              expect(result.history.length).toBeGreaterThanOrEqual(0);
+              // No undefined items
+              for (const item of result.history) {
+                expect(item).toBeDefined();
+                expect(item.speaker).toBeTruthy();
+                expect(Array.isArray(item.blocks)).toBe(true);
+              }
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-          }
-
-          const filePath = path.join(localChatsDir, 'interleave.jsonl');
-          await writeJsonlFile(filePath, lines);
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-
-          // History length should be non-negative
-          expect(result.history.length).toBeGreaterThanOrEqual(0);
-          // No undefined items
-          for (const item of result.history) {
-            expect(item).toBeDefined();
-            expect(item.speaker).toBeTruthy();
-            expect(Array.isArray(item.blocks)).toBe(true);
-          }
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      );
+    });
   });
 });
