@@ -378,6 +378,27 @@ describe('validateSetting — validation', () => {
     expect(result.success).toBe(false);
   });
 
+  it('validates the image resize enabled profile setting', () => {
+    expect(validateSetting('image-resize.enabled', true).success).toBe(true);
+    expect(validateSetting('image-resize.enabled', false).success).toBe(true);
+    expect(validateSetting('image-resize.enabled', 'yes').success).toBe(false);
+  });
+
+  it.each([
+    'image-resize.maxLongEdge',
+    'image-resize.maxShortEdge',
+    'image-resize.maxPixels',
+  ])('validates numeric image resize profile setting %s', (key) => {
+    expect(validateSetting(key, 2048).success).toBe(true);
+    expect(validateSetting(key, 0).success).toBe(false);
+    expect(validateSetting(key, -1).success).toBe(false);
+    expect(validateSetting(key, 1.5).success).toBe(false);
+    expect(validateSetting(key, '2048').success).toBe(false);
+    expect(validateSetting(key, NaN).success).toBe(false);
+    expect(validateSetting(key, Infinity).success).toBe(false);
+    expect(getProfilePersistableKeys()).toContain(key);
+  });
+
   it('rejects Infinity for compression-threshold', () => {
     const result = validateSetting('compression-threshold', Infinity);
     expect(result.success).toBe(false);

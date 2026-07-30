@@ -27,6 +27,8 @@ import type { GitLineChangeMarker } from '../utils/gitLineChanges.js';
 import { getGitLineChanges } from '../utils/gitLineChanges.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
+import { resolveImageResizePolicy } from '../utils/imageResize.js';
+import { ToolErrorType } from '../types/tool-error.js';
 
 /**
  * Parameters for the ReadFile tool
@@ -62,6 +64,11 @@ export interface ReadFileToolParams {
    * When true, prefixes each text line with a git-change marker column.
    */
   showGitChanges?: boolean;
+
+  /**
+   * When true, returns original image bytes for this call.
+   */
+  skip_image_resize?: boolean;
 }
 
 function formatWithLineNumbers(content: string, startLine: number): string {
@@ -283,12 +290,27 @@ ${formattedContent}`;
       this.params.limit ??
       (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
       DEFAULT_MAX_LINES_TEXT_FILE;
+    let imageResizePolicy;
+    try {
+      imageResizePolicy = resolveImageResizePolicy(
+        ephemeralSettings,
+        this.params.skip_image_resize === true,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        llmContent: message,
+        returnDisplay: `## Image Resize Configuration Error\n\n${message}`,
+        error: { message, type: ToolErrorType.READ_CONTENT_FAILURE },
+      };
+    }
 
     const result = await processSingleFileContent(
       this.getFilePath(),
       this.host.getTargetDir(),
       this.params.offset,
       effectiveLimit,
+      imageResizePolicy,
     );
 
     if (result.error) {
@@ -396,6 +418,11 @@ If git status cannot be read, the tool will still return file content and includ
           showGitChanges: {
             description:
               "Optional: When true (text files only), prefixes each returned line with a single-character git-change marker column computed relative to HEAD (includes staged and unstaged changes). This marker column is virtual and not part of the file content. Legend: '░' unchanged, 'N' new, 'M' modified, 'D' deletion after line. Column order: git marker first, then (optional) the virtual line number column, then line content. If git status cannot be read, content is still returned and a brief warning is included.",
+            type: 'boolean',
+          },
+          skip_image_resize: {
+            description:
+              'Optional: When true, returns original image bytes without applying configured automatic resizing. This has no effect on non-image files.',
             type: 'boolean',
           },
         },
