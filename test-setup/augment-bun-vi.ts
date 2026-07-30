@@ -22,6 +22,7 @@ import {
   vi as bunVi,
   mock,
   setSystemTime as bunSetSystemTime,
+  describe as bunDescribe,
 } from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
 import {
@@ -635,6 +636,27 @@ for (const [key, value] of Object.entries(viAugmentations)) {
       } catch {
         // Property is truly read-only; skip.
       }
+    }
+  }
+}
+
+// Add describe.sequential as an alias for describe. Bun runs tests
+// sequentially by default (--max-concurrency 1 in bun test), so the
+// semantic guarantee is preserved without explicit opt-in.
+if (!(bunDescribe as Record<string, unknown>).sequential) {
+  try {
+    Object.defineProperty(bunDescribe, 'sequential', {
+      value: bunDescribe,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } catch {
+    // If defineProperty fails (non-configurable), try direct assignment.
+    try {
+      (bunDescribe as Record<string, unknown>).sequential = bunDescribe;
+    } catch {
+      // Property is truly read-only; skip.
     }
   }
 }

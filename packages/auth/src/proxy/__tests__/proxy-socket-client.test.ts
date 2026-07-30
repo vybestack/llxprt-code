@@ -30,6 +30,8 @@ import { encodeFrame, FrameDecoder } from '../framing.js';
 const trackedServers = new Map<net.Server, Set<net.Socket>>();
 
 function trackServerSockets(srv: net.Server): void {
+  // Idempotent: only register the connection listener once per server.
+  if (trackedServers.has(srv)) return;
   const sockets = new Set<net.Socket>();
   srv.on('connection', (socket) => {
     sockets.add(socket);

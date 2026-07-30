@@ -210,7 +210,7 @@ function createLockDirTracker(): LockDirTracker {
 // `describe.sequential` is the minimal, explicit enforcement that keeps the
 // tracker pattern safe while preserving observable cleanup failures.
 
-describe('KeyringTokenStore DI behavioral tests', () => {
+describe.sequential('KeyringTokenStore DI behavioral tests', () => {
   // Per-suite ownership: this describe owns its own tracker so concurrent
   // test files / sibling suites do not share mutable lock-dir state.
   // Sequential execution (describe.sequential) keeps the tracker's mutable
@@ -554,7 +554,7 @@ describe('KeyringTokenStore DI behavioral tests', () => {
   });
 });
 
-describe('KeyringTokenStore lockDir contract (P8)', () => {
+describe.sequential('KeyringTokenStore lockDir contract (P8)', () => {
   // Per-suite ownership: this sibling describe owns its own tracker so it does
   // not rely on (or mutate) the first suite's mutable state, and its
   // afterEach cleanup is wired directly here (sibling scopes do not inherit

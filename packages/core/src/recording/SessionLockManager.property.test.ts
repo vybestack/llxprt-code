@@ -36,6 +36,7 @@ import { fork, type ChildProcess } from 'child_process';
 import {
   SessionLockManager,
   SessionLockedError,
+  type LockHandle,
 } from './SessionLockManager.js';
 import * as fs from 'node:fs/promises';
 

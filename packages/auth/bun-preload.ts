@@ -13,6 +13,11 @@
  * modules.
  */
 
+// Safety: mark environment as CI to prevent any test from launching a
+// real browser via openBrowserSecurely (mock.module can leak across files
+// in Bun's single-process test runner).
+process.env.CI = 'true';
+
 // Isolate Storage roots BEFORE any test module imports Storage.
 // This is identical to test-setup-storage-isolation.ts.
 import { isolateStorageRoots } from '../storage/src/testing.js';

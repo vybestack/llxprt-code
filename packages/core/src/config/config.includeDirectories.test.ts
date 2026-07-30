@@ -49,9 +49,7 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
 }));
 
 vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(
-    importOriginal() as typeof import('@vybestack/llxprt-code-tools'),
-  ),
+  buildToolsMockBody(importOriginal()),
 );
 
 vi.mock('../core/contentGenerator.js', (importOriginal) =>
@@ -65,9 +63,7 @@ vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(
-    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration'),
-  ),
+  buildIdeIntegrationMockBody(importOriginal()),
 );
 
 vi.mock('../utils/memoryDiscovery.js', () =>

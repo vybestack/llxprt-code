@@ -47,9 +47,7 @@ vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
 vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
-  buildToolsMockBody(
-    importOriginal() as typeof import('@vybestack/llxprt-code-tools'),
-  ),
+  buildToolsMockBody(importOriginal()),
 );
 
 // Mock individual tools if their constructors are complex or have side effects
@@ -65,9 +63,7 @@ vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
-  buildIdeIntegrationMockBody(
-    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration'),
-  ),
+  buildIdeIntegrationMockBody(importOriginal()),
 );
 
 vi.mock('../utils/memoryDiscovery.js', () =>
