@@ -125,7 +125,7 @@ describe('Logger', () => {
   });
 
   afterEach(async () => {
-    logger.close();
+    await logger.close();
     // Clean up after the test
     await cleanupLogAndCheckpointFiles();
     vi.useRealTimers();
@@ -203,7 +203,7 @@ describe('Logger', () => {
       await newLogger.initialize();
       expect(newLogger['messageId']).toBe(2);
       expect(newLogger['logs']).toStrictEqual(existingLogs);
-      newLogger.close();
+      await newLogger.close();
     });
 
     it('should set messageId to 0 for a new session if log file exists but has no logs for current session', async () => {
@@ -220,7 +220,7 @@ describe('Logger', () => {
       const newLogger = new Logger('a-new-session', new Storage(process.cwd()));
       await newLogger.initialize();
       expect(newLogger['messageId']).toBe(0);
-      newLogger.close();
+      await newLogger.close();
     });
 
     it('should be idempotent', async () => {
@@ -271,7 +271,7 @@ describe('Logger', () => {
         testSessionId,
         new Storage(process.cwd()),
       );
-      uninitializedLogger.close(); // Ensure it's treated as uninitialized
+      await uninitializedLogger.close(); // Ensure it's treated as uninitialized
       const consoleDebugSpy = vi
         .spyOn(debugLogger, 'debug')
         .mockImplementation(() => {});
@@ -280,7 +280,119 @@ describe('Logger', () => {
         'Logger not initialized or session ID missing. Cannot log message.',
       );
       expect((await readLogFile()).length).toBe(0);
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
+    });
+
+    it('should not re-read the log file on the steady-state write path (O(1) append)', async () => {
+      // Seed the file with one entry for the test session before init.
+      const seed: LogEntry = {
+        sessionId: testSessionId,
+        messageId: 0,
+        timestamp: new Date('2025-01-01T11:00:00.000Z').toISOString(),
+        type: MessageSenderType.USER,
+        message: 'seed',
+      };
+      await fs.writeFile(TEST_LOG_FILE_PATH, toJsonl([seed]));
+
+      const steadyLogger = new Logger(
+        testSessionId,
+        new Storage(process.cwd()),
+      );
+      await steadyLogger.initialize();
+      expect(steadyLogger['messageId']).toBe(1);
+
+      // First write establishes steady state.
+      await steadyLogger.logMessage(MessageSenderType.USER, 'first');
+      expect(steadyLogger['messageId']).toBe(2);
+
+      // Externally append a much higher messageId directly to the file. A
+      // write path that re-reads the whole file would jump to id 101; a
+      // cache-based O(1) path must keep incrementing from the in-memory
+      // cache (id 2).
+      const external: LogEntry = {
+        sessionId: testSessionId,
+        messageId: 100,
+        timestamp: new Date('2025-01-01T11:30:00.000Z').toISOString(),
+        type: MessageSenderType.USER,
+        message: 'external',
+      };
+      await fs.appendFile(TEST_LOG_FILE_PATH, JSON.stringify(external) + '\n');
+
+      await steadyLogger.logMessage(MessageSenderType.USER, 'second');
+
+      const logs = await readLogFile();
+      const second = logs.find((entry) => entry.message === 'second');
+      expect(second?.messageId).toBe(2);
+      await steadyLogger.close();
+    });
+
+    it('must not perform any file read during steady-state logMessage', async () => {
+      await logger.logMessage(MessageSenderType.USER, 'warmup');
+      const readFileSpy = vi.spyOn(fs, 'readFile');
+      await logger.logMessage(MessageSenderType.USER, 'steady-state');
+      expect(readFileSpy).not.toHaveBeenCalled();
+      readFileSpy.mockRestore();
+    });
+  });
+
+  describe('legacy migration', () => {
+    it('migrates a legacy JSON-array log to JSONL reading the file exactly once', async () => {
+      const legacyEntries: LogEntry[] = [
+        {
+          sessionId: testSessionId,
+          messageId: 0,
+          timestamp: new Date('2025-01-01T10:00:00.000Z').toISOString(),
+          type: MessageSenderType.USER,
+          message: 'legacy-0',
+        },
+        {
+          sessionId: testSessionId,
+          messageId: 1,
+          timestamp: new Date('2025-01-01T10:00:01.000Z').toISOString(),
+          type: MessageSenderType.USER,
+          message: 'legacy-1',
+        },
+      ];
+      // Write a legacy pretty-printed JSON array (pre-JSONL on-disk format).
+      await fs.writeFile(
+        TEST_LOG_FILE_PATH,
+        JSON.stringify(legacyEntries, null, 2),
+      );
+
+      const readFileSpy = vi.spyOn(fs, 'readFile');
+      const legacyLogger = new Logger(
+        testSessionId,
+        new Storage(process.cwd()),
+      );
+      await legacyLogger.initialize();
+      await legacyLogger.logMessage(MessageSenderType.USER, 'after-migration');
+      // Exactly one file read across initialization and all writes: the
+      // initial load. Migration and the append never re-read the file.
+      expect(readFileSpy).toHaveBeenCalledTimes(1);
+      readFileSpy.mockRestore();
+
+      // In-memory cache reflects the migrated entries.
+      expect(legacyLogger['logs']).toStrictEqual([
+        ...legacyEntries,
+        expect.objectContaining({
+          sessionId: testSessionId,
+          messageId: 2,
+          message: 'after-migration',
+        }),
+      ]);
+      expect(legacyLogger['messageId']).toBe(3);
+
+      // The on-disk file is now JSONL, migrated from the single read.
+      const onDisk = await fs.readFile(TEST_LOG_FILE_PATH, 'utf-8');
+      expect(onDisk.trim().startsWith('[')).toBe(false);
+      const diskEntries = await readLogFile();
+      expect(diskEntries.length).toBe(3);
+      expect(diskEntries[2]).toMatchObject({
+        sessionId: testSessionId,
+        messageId: 2,
+        message: 'after-migration',
+      });
+      await legacyLogger.close();
     });
   });
 
@@ -303,8 +415,8 @@ describe('Logger', () => {
       );
       vi.advanceTimersByTime(1000);
       await loggerSort2.logMessage(MessageSenderType.USER, 'S2M1_ts104000');
-      loggerSort.close();
-      loggerSort2.close();
+      await loggerSort.close();
+      await loggerSort2.close();
 
       const finalLogger = new Logger(
         'final-session',
@@ -319,7 +431,7 @@ describe('Logger', () => {
         'S1M1_ts101000',
         'S1M0_ts100000',
       ]);
-      finalLogger.close();
+      await finalLogger.close();
     });
 
     it('should return empty array if no user messages exist', async () => {
@@ -333,10 +445,10 @@ describe('Logger', () => {
         testSessionId,
         new Storage(process.cwd()),
       );
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
       const messages = await uninitializedLogger.getPreviousUserMessages();
       expect(messages).toStrictEqual([]);
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
     });
   });
 
@@ -379,7 +491,7 @@ describe('Logger', () => {
         testSessionId,
         new Storage(process.cwd()),
       );
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
       const consoleErrorSpy = vi
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
@@ -479,7 +591,7 @@ describe('Logger', () => {
         testSessionId,
         new Storage(process.cwd()),
       );
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
       const consoleErrorSpy = vi
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
@@ -570,7 +682,7 @@ describe('Logger', () => {
         testSessionId,
         new Storage(process.cwd()),
       );
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
       const consoleErrorSpy = vi
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
@@ -611,7 +723,7 @@ describe('Logger', () => {
         testSessionId,
         new Storage(process.cwd()),
       );
-      uninitializedLogger.close();
+      await uninitializedLogger.close();
 
       await expect(uninitializedLogger.checkpointExists(tag)).rejects.toThrow(
         'Logger not initialized. Cannot check for checkpoint existence.',
@@ -666,7 +778,7 @@ describe('Logger', () => {
   describe('close', () => {
     it('should reset logger state', async () => {
       await logger.logMessage(MessageSenderType.USER, 'A message');
-      logger.close();
+      await logger.close();
       const consoleDebugSpy = vi
         .spyOn(debugLogger, 'debug')
         .mockImplementation(() => {});
@@ -681,6 +793,17 @@ describe('Logger', () => {
       expect(logger['logs']).toStrictEqual([]);
       expect(logger['sessionId']).toBeUndefined();
       expect(logger['messageId']).toBe(0);
+    });
+
+    it('should reset _needsNewlineCheck on close so a reused instance re-checks the trailing newline', async () => {
+      await logger.logMessage(MessageSenderType.USER, 'A message');
+      // A successful JSONL append clears the trailing-newline check.
+      expect(logger['_needsNewlineCheck']).toBe(false);
+      await logger.close();
+      // close() must reset ALL mutable instance state, otherwise a reused
+      // instance would silently skip the trailing-newline safety check.
+      expect(logger['_needsNewlineCheck']).toBe(true);
+      expect(logger['llxprtDir']).toBeUndefined();
     });
   });
 });
