@@ -218,10 +218,7 @@ function extractExitCode(error: unknown): number {
   return (propertyValue(error, 'status') as number | undefined) ?? 1;
 }
 
-function extractNumberBefore(
-  output: string,
-  keywordIdx: number,
-): number {
+function extractNumberBefore(output: string, keywordIdx: number): number {
   if (keywordIdx === -1) return -1;
   let end = keywordIdx;
   while (end > 0 && output[end - 1] === ' ') end--;
@@ -244,9 +241,10 @@ function extractNumberBefore(
  * sonarjs/nested-control-flow. Uses simple character classes instead of
  * \d+ to avoid sonarjs/slow-regex false positives.
  */
-function checkTimeoutLogForTestResults(
-  logFile: string,
-): { success: boolean; exitCode: number } {
+function checkTimeoutLogForTestResults(logFile: string): {
+  success: boolean;
+  exitCode: number;
+} {
   let output: string;
   try {
     output = readFileSync(logFile, 'utf-8');
