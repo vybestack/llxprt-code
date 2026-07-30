@@ -70,10 +70,6 @@ function abortReason(signal?: AbortSignal): unknown {
 
 function waitForDelay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted === true) {
-      reject(abortReason(signal));
-      return;
-    }
     const onAbort = (): void => {
       clearTimeout(timeout);
       reject(abortReason(signal));
@@ -83,6 +79,9 @@ function waitForDelay(ms: number, signal?: AbortSignal): Promise<void> {
       resolve();
     }, ms);
     signal?.addEventListener('abort', onAbort, { once: true });
+    if (signal?.aborted === true) {
+      onAbort();
+    }
   });
 }
 
@@ -218,10 +217,10 @@ export class CodexDeviceFlow {
   ): Promise<ConsumedResponse> {
     const controller = new AbortController();
     const abort = (): void => controller.abort(abortReason(signal));
+    signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted === true) {
+      signal.removeEventListener('abort', abort);
       throw abortReason(signal);
-    } else {
-      signal?.addEventListener('abort', abort, { once: true });
     }
     const timeout = setTimeout(
       () =>
