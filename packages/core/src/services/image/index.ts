@@ -16,4 +16,29 @@ export {
   ImagePersistenceError,
   validateImagePrompt,
   persistBase64ImageResult,
+  strictBase64Decode,
+  validatePngStructure,
 } from './ImageGenerationService.js';
+
+export type {
+  ImageOperation,
+  ImageOperationRequest,
+  ImageOperationInput,
+  ImageBackendResult,
+  ImageOperationResult,
+  ImageOperationBackend,
+} from './imageOperation.js';
+export {
+  ImageOperationError,
+  buildNormalizedImageRequest,
+  resolveOutputPath,
+  resolveInputPaths,
+  writeImageAtomically,
+  MAX_INPUT_IMAGES,
+} from './imageOperation.js';
+
+export type {
+  ImageOperationBackendResolver,
+  ImageOperationDispatchDeps,
+} from './imageOperationDispatch.js';
+export { runImageOperation } from './imageOperationDispatch.js';

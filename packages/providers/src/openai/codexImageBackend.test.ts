@@ -58,10 +58,14 @@ function makeStubFetch(response: { status: number; body: unknown }): {
 function makeBackend(overrides?: {
   fetchImpl?: typeof fetch;
   getBaseUrl?: () => string | undefined;
+  credential?: { accessToken: string; accountId: string };
 }): CodexImageBackend {
   return new CodexImageBackend({
-    getAccessToken: async () => 'token-abc',
-    getAccountId: async () => 'account-xyz',
+    getCredential: async () =>
+      overrides?.credential ?? {
+        accessToken: 'token-abc',
+        accountId: 'account-xyz',
+      },
     getBaseUrl: overrides?.getBaseUrl ?? (() => undefined),
     fetchImpl: overrides?.fetchImpl ?? fetch,
   });

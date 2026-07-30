@@ -298,6 +298,31 @@ export abstract class ConfigBaseCore {
     this.imageBackendResolver = resolver;
   }
   /**
+   * Inject the common image-operation runner so `/image`, direct CLI image
+   * mode, and the generate_image tool converge on one service.
+   */
+  setRunImageOperation(
+    runner:
+      | ((input: {
+          readonly prompt: string;
+          readonly outputPath: string;
+          readonly inputPaths?: readonly string[];
+          readonly signal?: AbortSignal;
+        }) => Promise<{
+          readonly operation: 'generate' | 'edit';
+          readonly absoluteOutputPath: string;
+          readonly relativeOutputPath: string;
+          readonly mimeType: string;
+          readonly backend: string;
+          readonly provider: string;
+          readonly model: string;
+          readonly inputPaths: readonly string[];
+        }>)
+      | undefined,
+  ): void {
+    this.runImageOperationCapability = runner;
+  }
+  /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    */
@@ -313,12 +338,28 @@ export abstract class ConfigBaseCore {
    */
   protected taskToolRegistration: TaskToolRegistration | undefined;
   /**
-   * Injected image-backend resolver closure (suitable for GenerateImageTool's
-   * `resolveBackend` dependency). Typed loosely (`unknown`) so core does not
-   * import the providers package; the CLI composition root sets the concrete
-   * resolver from the providers package.
+   * Injected image-backend resolver closure (used by the common image-operation
+   * runner, NOT by GenerateImageTool directly). Typed loosely (`unknown`) so
+   * core does not import the providers package.
    */
   protected imageBackendResolver: (() => unknown) | null | undefined;
+  protected runImageOperationCapability:
+    | ((input: {
+        readonly prompt: string;
+        readonly outputPath: string;
+        readonly inputPaths?: readonly string[];
+        readonly signal?: AbortSignal;
+      }) => Promise<{
+        readonly operation: 'generate' | 'edit';
+        readonly absoluteOutputPath: string;
+        readonly relativeOutputPath: string;
+        readonly mimeType: string;
+        readonly backend: string;
+        readonly provider: string;
+        readonly model: string;
+        readonly inputPaths: readonly string[];
+      }>)
+    | undefined;
   protected postSkillDiscoveryToolRegistrar:
     | PostSkillDiscoveryToolRegistrar
     | undefined;
@@ -877,6 +918,25 @@ export abstract class ConfigBaseCore {
   }
   getImageBackendResolver(): (() => unknown) | null | undefined {
     return this.imageBackendResolver;
+  }
+  getRunImageOperation():
+    | ((input: {
+        readonly prompt: string;
+        readonly outputPath: string;
+        readonly inputPaths?: readonly string[];
+        readonly signal?: AbortSignal;
+      }) => Promise<{
+        readonly operation: 'generate' | 'edit';
+        readonly absoluteOutputPath: string;
+        readonly relativeOutputPath: string;
+        readonly mimeType: string;
+        readonly backend: string;
+        readonly provider: string;
+        readonly model: string;
+        readonly inputPaths: readonly string[];
+      }>)
+    | undefined {
+    return this.runImageOperationCapability;
   }
   getPostSkillDiscoveryToolRegistrar():
     | PostSkillDiscoveryToolRegistrar

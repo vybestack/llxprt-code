@@ -51,8 +51,8 @@ import { CoreSubagentServiceAdapter } from '../tools-adapters/CoreSubagentServic
 import { CoreAsyncTaskServiceAdapter } from '../tools-adapters/CoreAsyncTaskServiceAdapter.js';
 import { CoreToolRegistryHostAdapter } from '../tools-adapters/CoreToolRegistryHostAdapter.js';
 import { CoreTodoServiceAdapter } from '../tools-adapters/CoreTodoServiceAdapter.js';
-import { persistBase64ImageResult } from '../services/image/ImageGenerationService.js';
-import type { ImageResult } from '../services/image/ImageGenerationService.js';
+import { runImageOperation } from '../services/image/imageOperationDispatch.js';
+import type { ImageOperationBackend } from '../services/image/imageOperation.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -140,12 +140,13 @@ export interface ToolRegistryHost {
    */
   getTaskToolRegistration(): TaskToolRegistration | undefined;
   /**
-   * Returns the injected image-backend resolver closure (suitable for
-   * GenerateImageTool's `resolveBackend` dependency), or undefined/null to
-   * register the tool with a null resolver (graceful "unavailable").
+   * Returns the injected image-backend resolver closure (used by the common
+   * image-operation runner's `resolveBackend` dependency, NOT by
+   * GenerateImageTool directly), or undefined/null to register the runner with
+   * a null resolver (graceful "unavailable").
    *
    * The type is intentionally loose (`unknown`) so core does not need to
-   * import the providers package; the tool's own dependency injection
+   * import the providers package; the runner's own dependency injection
    * enforces the structural contract at the composition root.
    */
   getImageBackendResolver?(): (() => unknown) | null | undefined;
@@ -420,26 +421,49 @@ function registerStandardTools(
   });
   registerCoreTool(DirectWebFetchTool, toolHostAdapter);
 
-  // The image-backend resolver is injected by the composition root (CLI layer)
-  // via the host. We wrap it in a lazy closure that reads from the host
-  // dynamically — the CLI sets the resolver AFTER config.initialize() creates
-  // the tool registry, so capturing the value eagerly would always see null.
-  // When absent (e.g. tests, non-Codex runtimes) the tool gracefully reports
-  // unavailable.
-  registerCoreTool(GenerateImageTool, {
-    resolveBackend: () => {
-      const resolver = host.getImageBackendResolver?.();
-      if (resolver === null || resolver === undefined) {
-        return null;
-      }
-      return resolver();
-    },
-    persistImageResult: (result: ImageResult) =>
-      persistBase64ImageResult(result, config.getTargetDir()),
-  });
+  registerImageTool(registerCoreTool, config, host);
 
   void CoreIdeServiceAdapter;
   void CoreLspServiceAdapter;
+}
+
+function resolveBackendFromHost(
+  host: ToolRegistryHost,
+): ImageOperationBackend | null {
+  const resolver = host.getImageBackendResolver?.();
+  if (resolver === null || resolver === undefined) {
+    return null;
+  }
+  return resolver() as ImageOperationBackend | null;
+}
+
+function registerImageTool(
+  registerCoreTool: RegisterCoreToolFn,
+  config: Config,
+  host: ToolRegistryHost,
+): void {
+  registerCoreTool(GenerateImageTool, {
+    runImage: (input: {
+      readonly prompt: string;
+      readonly output_path: string;
+      readonly input_paths?: readonly string[];
+      readonly signal?: AbortSignal;
+    }) =>
+      runImageOperation(
+        {
+          prompt: input.prompt,
+          outputPath: input.output_path,
+          ...(input.input_paths !== undefined
+            ? { inputPaths: input.input_paths }
+            : {}),
+          ...(input.signal !== undefined ? { signal: input.signal } : {}),
+        },
+        {
+          workspaceRoot: config.getTargetDir(),
+          resolveBackend: () => resolveBackendFromHost(host),
+        },
+      ),
+  });
 }
 
 function resolveManagers(host: ToolRegistryHost): {

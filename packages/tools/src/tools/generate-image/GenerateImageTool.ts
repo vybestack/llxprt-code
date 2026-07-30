@@ -16,8 +16,7 @@ import {
 } from '../tools.js';
 
 /**
- * Structural duplicate of the {@link ImageGenerationBackend} contract from
- * `@vybestack/llxprt-code-core/services/image`.
+ * Structural duplicate of the backend-neutral image contract.
  *
  * The tools package is a leaf workspace package with zero workspace deps, so
  * it cannot import the core contract directly. TypeScript's structural typing
@@ -31,119 +30,102 @@ export interface ImageBackendResult {
   readonly revisedPrompt?: string;
 }
 
-export interface ImageBackendGenerateRequest {
-  readonly prompt: string;
-  readonly model?: string;
-  readonly background?: 'auto' | 'transparent' | 'opaque';
-  readonly quality?: 'auto' | 'high' | 'medium' | 'low';
-  readonly size?: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
-  readonly n?: number;
-  readonly sessionId?: string;
-}
-
 export interface ImageGenerationBackendLike {
   readonly name: string;
+  readonly provider: string;
+  readonly model: string;
   generate(
-    request: ImageBackendGenerateRequest,
+    request: { readonly prompt: string; readonly sessionId?: string },
+    signal: AbortSignal,
+  ): Promise<ImageBackendResult>;
+  edit(
+    request: {
+      readonly prompt: string;
+      readonly inputPaths: readonly string[];
+      readonly sessionId?: string;
+    },
     signal: AbortSignal,
   ): Promise<ImageBackendResult>;
 }
 
+/**
+ * The provider-independent tool surface required by issue #2128.
+ *
+ * `output_path` is REQUIRED and caller-selected. `input_paths` is optional;
+ * zero inputs generates, one-to-five edits. There is no `model` parameter —
+ * the backend owns the model identity and callers cannot override it.
+ */
 export interface GenerateImageToolParams {
   readonly prompt: string;
-  readonly background?: 'auto' | 'transparent' | 'opaque';
-  readonly quality?: 'auto' | 'high' | 'medium' | 'low';
-  readonly size?: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
-  readonly n?: number;
-  readonly sessionId?: string;
+  readonly output_path: string;
+  readonly input_paths?: string[];
+}
+
+/**
+ * Normalized result produced by the common image-operation runner.
+ *
+ * The tools package cannot import the core contract, so this is a structural
+ * duplicate of `ImageOperationResult` carrying only the fields the tool needs.
+ */
+export interface ImageOperationRunnerResult {
+  readonly operation: 'generate' | 'edit';
+  readonly absoluteOutputPath: string;
+  readonly relativeOutputPath: string;
+  readonly mimeType: string;
+  readonly backend: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly inputPaths: readonly string[];
+  readonly media: {
+    readonly mimeType: string;
+    readonly encoding: 'base64';
+    readonly data: string;
+  };
+}
+
+/**
+ * A stage-tagged error surfaced by the common runner. Structural duplicate of
+ * `ImageOperationError` carrying only the fields the tool maps to error types.
+ */
+export interface ImageOperationRunnerError extends Error {
+  readonly stage:
+    | 'input-validation'
+    | 'capability'
+    | 'output-resolution'
+    | 'provider'
+    | 'response-validation'
+    | 'artifact-write';
 }
 
 export interface GenerateImageToolDependencies {
   /**
-   * Resolves the active image-generation backend, or null when no
-   * image-capable backend is registered (e.g. non-Codex active provider).
+   * The COMMON image-operation runner that all three entry points (tool,
+   * `/image`, CLI flags) converge on. The tool delegates the entire operation
+   * — capability resolution, request normalization, output/input path
+   * validation, provider dispatch, atomic write, and normalized result — to
+   * this single function so behavior never diverges across entry points.
+   *
+   * The runner is the single authority for capability: when no image-capable
+   * backend is registered it throws a stage='capability' error, which the tool
+   * maps to TOOL_DISABLED. There is NO separate resolveBackend precheck.
    */
-  readonly resolveBackend: () => ImageGenerationBackendLike | null;
-  /**
-   * Persistence capability. The tool ALWAYS persists the normalized backend
-   * result to the workspace and surfaces the returned absolute path in the
-   * textual hint and display — there is no success branch without
-   * persistence. The tools package is a leaf workspace package with zero
-   * workspace deps, so this is structurally typed; the composition root in
-   * core supplies a closure rooted at the workspace target directory backed
-   * by the shared image service.
-   */
-  readonly persistImageResult: (result: ImageBackendResult) => Promise<string>;
+  readonly runImage: (input: {
+    readonly prompt: string;
+    readonly output_path: string;
+    readonly input_paths?: readonly string[];
+    readonly signal?: AbortSignal;
+  }) => Promise<ImageOperationRunnerResult>;
 }
 
-/**
- * `generate_image` tool: model-callable entry point for image generation.
- *
- * Resolves a backend via an injected dependency. When no backend is available,
- * it returns a graceful {@link ToolErrorType.TOOL_DISABLED} result without any
- * network call (A8). The backend owns validation, transport, and error
- * mapping; the tool maps backend errors onto {@link ToolResult} error types.
- */
-export class GenerateImageTool extends BaseDeclarativeTool<
-  GenerateImageToolParams,
-  ToolResult
-> {
-  static readonly Name = 'generate_image';
+const MAX_INPUT_IMAGES = 5;
 
-  constructor(private readonly dependencies: GenerateImageToolDependencies) {
-    super(
-      GenerateImageTool.Name,
-      'GenerateImage',
-      'Generate an image from a text description. Returns the generated image as base64-encoded data plus a caption the model can reference.',
-      Kind.Other,
-      {
-        type: 'object',
-        properties: {
-          prompt: {
-            type: 'string',
-            description: 'Text description of the image to generate',
-          },
-          background: {
-            type: 'string',
-            enum: ['auto', 'transparent', 'opaque'],
-            description:
-              "Background mode (default: 'auto') — 'transparent' forces transparency where supported",
-          },
-          quality: {
-            type: 'string',
-            enum: ['auto', 'high', 'medium', 'low'],
-            description: "Image quality (default: 'auto')",
-          },
-          size: {
-            type: 'string',
-            enum: ['auto', '1024x1024', '1024x1536', '1536x1024'],
-            description: "Image dimensions (default: 'auto')",
-          },
-          n: {
-            type: 'integer',
-            minimum: 1,
-            description: 'Number of images to generate (default: 1)',
-          },
-          sessionId: {
-            type: 'string',
-            description: 'Optional session identifier passed to the backend',
-          },
-        },
-        required: ['prompt'],
-      },
-    );
-  }
-
-  protected createInvocation(
-    params: GenerateImageToolParams,
-    messageBus?: IToolMessageBus,
-  ): ToolInvocation<GenerateImageToolParams, ToolResult> {
-    return new GenerateImageToolInvocation(
-      this.dependencies,
-      params,
-      messageBus,
-    );
-  }
+function isImageOperationRunnerError(
+  error: unknown,
+): error is ImageOperationRunnerError {
+  return (
+    error instanceof Error &&
+    typeof (error as ImageOperationRunnerError).stage === 'string'
+  );
 }
 
 function isAbortError(error: unknown): boolean {
@@ -158,6 +140,69 @@ function isAbortError(error: unknown): boolean {
     error instanceof DOMException &&
     error.name === 'AbortError'
   );
+}
+
+/**
+ * `generate_image` tool: model-callable entry point for image generation and
+ * editing. Provider-independent surface `{ prompt, output_path, input_paths? }`.
+ *
+ * Zero inputs → generation; one-to-five inputs → editing. All paths are
+ * validated by the common service before any billable provider request. The
+ * exact saved path is returned as text alongside the image media. The active
+ * conversational provider/model is never changed; no model override is
+ * possible.
+ *
+ * The tool contains NO image business logic: it maps params to the common
+ * runner and translates the normalized result/error into a tool result.
+ */
+export class GenerateImageTool extends BaseDeclarativeTool<
+  GenerateImageToolParams,
+  ToolResult
+> {
+  static readonly Name = 'generate_image';
+
+  constructor(private readonly dependencies: GenerateImageToolDependencies) {
+    super(
+      GenerateImageTool.Name,
+      'GenerateImage',
+      'Generate or edit an image from a text description. Returns the saved image file path plus the image as media. Requires an explicit .png output path. Zero input_paths generates; one-to-five input_paths edits an existing image.',
+      Kind.Other,
+      {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description:
+              'Text description of the image to generate or the edit to apply.',
+          },
+          output_path: {
+            type: 'string',
+            description:
+              'Required explicit output path ending in .png, relative to the workspace root or absolute within the workspace.',
+          },
+          input_paths: {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: MAX_INPUT_IMAGES,
+            description:
+              'Optional zero-to-five existing workspace image paths to use as edit/reference sources. Omit for generation.',
+          },
+        },
+        required: ['prompt', 'output_path'],
+      },
+    );
+  }
+
+  protected createInvocation(
+    params: GenerateImageToolParams,
+    messageBus?: IToolMessageBus,
+  ): ToolInvocation<GenerateImageToolParams, ToolResult> {
+    return new GenerateImageToolInvocation(
+      this.dependencies,
+      params,
+      messageBus,
+    );
+  }
 }
 
 class GenerateImageToolInvocation extends BaseToolInvocation<
@@ -180,115 +225,81 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     _updateOutput?: (update: LiveOutputUpdate) => void,
   ): Promise<ToolResult> {
-    // A8: when no backend resolves, report unavailable without any network call.
-    const backend = this.dependencies.resolveBackend();
-    if (backend === null) {
-      return {
-        llmContent:
-          'Image generation is unavailable: no image-capable backend is registered for the current setup.',
-        returnDisplay: 'Image generation unavailable.',
-        error: {
-          message:
-            'Image generation is unavailable for the current setup (no Codex-capable backend registered).',
-          type: ToolErrorType.TOOL_DISABLED,
-        },
-      };
-    }
-
-    // The backend contract returns a single image; reject n > 1 to avoid
-    // silently discarding additional generated images.
-    if (this.params.n !== undefined && this.params.n > 1) {
-      return {
-        llmContent:
-          'Image generation failed: generating multiple images (n > 1) is not yet supported.',
-        returnDisplay: 'Image generation failed.',
-        error: {
-          message:
-            'Generating multiple images (n > 1) is not supported. Use n=1 or omit the parameter.',
-          type: ToolErrorType.INVALID_TOOL_PARAMS,
-        },
-      };
-    }
-
     try {
-      const result = await backend.generate(
-        {
-          prompt: this.params.prompt,
-          background: this.params.background,
-          quality: this.params.quality,
-          size: this.params.size,
-          n: this.params.n,
-          sessionId: this.params.sessionId,
-        },
+      const result = await this.dependencies.runImage({
+        prompt: this.params.prompt,
+        output_path: this.params.output_path,
         signal,
-      );
-
-      return await this.buildImageSuccessResult(result);
+        ...(this.params.input_paths !== undefined
+          ? { input_paths: this.params.input_paths }
+          : {}),
+      });
+      return this.buildSuccessResult(result);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-
-      if (isAbortError(error) || signal.aborted) {
-        return {
-          llmContent: `Image generation timed out or was cancelled: ${message}`,
-          returnDisplay: 'Image generation timed out or was cancelled.',
-          error: { message, type: ToolErrorType.TIMEOUT },
-        };
-      }
-
-      // Validation errors map to INVALID_TOOL_PARAMS so the model can correct.
-      const isValidationError =
-        error instanceof Error && error.name === 'ImageValidationError';
-      return {
-        llmContent: `Image generation failed: ${message}`,
-        returnDisplay: `Image generation failed.`,
-        error: {
-          message,
-          type: isValidationError
-            ? ToolErrorType.INVALID_TOOL_PARAMS
-            : ToolErrorType.EXECUTION_FAILED,
-        },
-      };
+      return this.mapRunnerError(error, signal);
     }
   }
 
-  private async buildImageSuccessResult(
-    result: ImageBackendResult,
-  ): Promise<ToolResult> {
-    const caption = result.caption ?? this.params.prompt;
+  private buildSuccessResult(result: ImageOperationRunnerResult): ToolResult {
+    const operation = result.operation === 'generate' ? 'Generated' : 'Edited';
+    const textPart = `${operation} image.
+Saved to: ${result.absoluteOutputPath}`;
     const inlinePart = {
       inlineData: {
-        mimeType: result.mimeType,
-        data: result.data,
+        mimeType: result.media.mimeType,
+        data: result.media.data,
       },
     };
 
-    // Persistence is mandatory: there is no success branch without it. A
-    // persistence failure is surfaced as a tool execution failure so the
-    // model never observes a success that left nothing on disk.
-    let savedPath: string;
-    try {
-      savedPath = await this.dependencies.persistImageResult(result);
-    } catch (persistError) {
-      const persistMessage =
-        persistError instanceof Error
-          ? persistError.message
-          : String(persistError);
+    return {
+      llmContent: [inlinePart, textPart],
+      returnDisplay: `${operation} image.
+Saved to: ${result.absoluteOutputPath}`,
+    };
+  }
+
+  private mapRunnerError(error: unknown, signal: AbortSignal): ToolResult {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (isAbortError(error) || signal.aborted) {
       return {
-        llmContent: `Image generated but failed to save: ${persistMessage}`,
-        returnDisplay: `Image generated but failed to save.`,
-        error: {
-          message: persistMessage,
-          type: ToolErrorType.EXECUTION_FAILED,
-        },
+        llmContent: `Image generation timed out or was cancelled: ${message}`,
+        returnDisplay: 'Image generation timed out or was cancelled.',
+        error: { message, type: ToolErrorType.TIMEOUT },
       };
     }
 
-    const textPart = `Image generated. Caption: ${caption}
-Saved to: ${savedPath}`;
+    if (isImageOperationRunnerError(error)) {
+      if (
+        error.stage === 'input-validation' ||
+        error.stage === 'output-resolution'
+      ) {
+        return {
+          llmContent: `Image generation failed: ${message}`,
+          returnDisplay: 'Image generation failed.',
+          error: { message, type: ToolErrorType.INVALID_TOOL_PARAMS },
+        };
+      }
+      if (error.stage === 'capability') {
+        return {
+          llmContent: `Image generation unavailable: ${message}`,
+          returnDisplay: 'Image generation unavailable.',
+          error: { message, type: ToolErrorType.TOOL_DISABLED },
+        };
+      }
+      return {
+        llmContent: `Image generation failed: ${message}`,
+        returnDisplay: 'Image generation failed.',
+        error: { message, type: ToolErrorType.EXECUTION_FAILED },
+      };
+    }
+
     return {
-      llmContent: [inlinePart, textPart],
-      returnDisplay: `Generated image: ${caption}
-Saved to: ${savedPath}`,
+      llmContent: `Image generation failed: ${message}`,
+      returnDisplay: 'Image generation failed.',
+      error: { message, type: ToolErrorType.EXECUTION_FAILED },
     };
   }
 }
+
+export { MAX_INPUT_IMAGES };

@@ -12,6 +12,8 @@ import {
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
 } from '@vybestack/llxprt-code-core';
+import { runImageOperation } from '@vybestack/llxprt-code-core/services/image/imageOperationDispatch.js';
+import type { ImageOperationBackend } from '@vybestack/llxprt-code-core/services/image/imageOperation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type {
@@ -303,11 +305,38 @@ async function setupRuntimeContext(
   // (when the model invokes generate_image), so even though the tool registry
   // was already created during config.initialize(), the lazy closure reads
   // this resolver at invocation time.
-  config.setImageBackendResolver(
-    createCodexImageBackendResolver({
-      oauthManager: finalRuntime.oauthManager,
-      getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
-    }),
+  const imageBackendResolver = createCodexImageBackendResolver({
+    oauthManager: finalRuntime.oauthManager,
+    getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
+  });
+  config.setImageBackendResolver(imageBackendResolver);
+
+  // Wire the common image-operation runner so `/image` and direct CLI image
+  // mode converge on the SAME service as the generate_image tool. The runner
+  // is bound to the workspace root and the image backend resolver; it owns
+  // request normalization, output/input path validation, provider dispatch,
+  // atomic write, and the normalized result.
+  config.setRunImageOperation((input) =>
+    runImageOperation(
+      {
+        prompt: input.prompt,
+        outputPath: input.outputPath,
+        ...(input.inputPaths !== undefined
+          ? { inputPaths: input.inputPaths }
+          : {}),
+        ...(input.signal !== undefined ? { signal: input.signal } : {}),
+      },
+      {
+        workspaceRoot: config.getTargetDir(),
+        resolveBackend: () => {
+          const backend = imageBackendResolver();
+          if (backend === null) {
+            return null;
+          }
+          return backend as ImageOperationBackend | null;
+        },
+      },
+    ),
   );
 
   logger.debug(

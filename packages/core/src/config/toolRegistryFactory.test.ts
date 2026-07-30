@@ -343,6 +343,8 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
     let generateReached = false;
     const backend = {
       name: 'stub-image-backend',
+      provider: 'stub',
+      model: 'stub-model',
       async generate() {
         generateReached = true;
         return {
@@ -351,6 +353,9 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
           data: pngBase64,
           caption: 'a registry cat',
         };
+      },
+      async edit() {
+        throw new Error('edit not used');
       },
     };
 
@@ -378,22 +383,15 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
     expect(tool).toBeDefined();
 
     const result = await tool!
-      .build({ prompt: 'a registry cat' })
+      .build({ prompt: 'a registry cat', output_path: 'cat.png' })
       .execute(new AbortController().signal);
 
     expect(generateReached).toBe(true);
     expect(result.error).toBeUndefined();
 
-    // Persistence wired through the real persistBase64ImageResult rooted at
-    // getTargetDir(); a file must exist under generated-images/.
-    const persistDir = path.join(tempWorkspace, 'generated-images');
-    const entries = await fs.promises.readdir(persistDir);
-    const pngFiles = entries.filter((e) => e.endsWith('.png'));
-    expect(pngFiles.length).toBe(1);
-
-    const [pngFile] = pngFiles;
-    expect(pngFile).toBeDefined();
-    const savedPath = path.join(persistDir, pngFile);
+    // Persistence wired through the caller-selected output path rooted at
+    // getTargetDir(); the file must exist at the exact requested path.
+    const savedPath = path.join(tempWorkspace, 'cat.png');
     const written = await fs.promises.readFile(savedPath);
     expect(written.equals(makeRealMinimalPng())).toBe(true);
     expect(result.returnDisplay).toContain(savedPath);

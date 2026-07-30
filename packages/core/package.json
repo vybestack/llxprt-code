@@ -153,6 +153,16 @@
       "bun": "./src/services/image/ImageGenerationService.ts",
       "import": "./dist/src/services/image/ImageGenerationService.js"
     },
+    "./services/image/imageOperation.js": {
+      "types": "./dist/src/services/image/imageOperation.d.ts",
+      "bun": "./src/services/image/imageOperation.ts",
+      "import": "./dist/src/services/image/imageOperation.js"
+    },
+    "./services/image/imageOperationDispatch.js": {
+      "types": "./dist/src/services/image/imageOperationDispatch.d.ts",
+      "bun": "./src/services/image/imageOperationDispatch.ts",
+      "import": "./dist/src/services/image/imageOperationDispatch.js"
+    },
     "./services/history/ContentConverters.js": {
       "bun": "./src/services/history/ContentConverters.ts",
       "import": "./dist/src/services/history/ContentConverters.js"

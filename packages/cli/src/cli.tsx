@@ -101,6 +101,7 @@ import {
 } from './cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
 import { formatNonInteractiveError } from './session/errorReporting.js';
+import { runDirectImageModeAndExit } from './config/imageModeDispatch.js';
 import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
   installNonInteractiveSigintHandler,
@@ -362,6 +363,16 @@ export async function main() {
   if (initialAuthFailed) {
     await runExitCleanup();
     process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
+  }
+
+  // Direct image mode: detect after configuration/auth/backend setup but BEFORE
+  // interactive/non-interactive conversational dispatch. Image mode must NOT
+  // construct or invoke the conversational agent loop — it runs the common
+  // image-operation service directly and exits.
+  const imageExitCode = await runDirectImageModeAndExit(argv, config);
+  if (imageExitCode !== null) {
+    await runExitCleanup();
+    process.exit(imageExitCode);
   }
 
   // Cleanup sessions before agent construction.

@@ -210,7 +210,7 @@ function pngCrc32(buf: Buffer): number {
  * (`bytes.toString('base64') === input`) rejects anything Node's permissive
  * decoder would have silently accepted (e.g. truncation, re-canonicalization).
  */
-function strictBase64Decode(input: string): Buffer {
+export function strictBase64Decode(input: string): Buffer {
   if (typeof input !== 'string') {
     throw new ImagePersistenceError('Image result data must be a string.');
   }
@@ -279,7 +279,7 @@ function strictBase64Decode(input: string): Buffer {
  *
  * Throws {@link ImagePersistenceError} on any structural violation.
  */
-function validatePngStructure(bytes: Buffer): void {
+export function validatePngStructure(bytes: Buffer): void {
   if (bytes.length < PNG_SIGNATURE.length) {
     throw new ImagePersistenceError(
       'Decoded image bytes are shorter than a valid PNG signature.',

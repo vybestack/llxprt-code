@@ -18,8 +18,11 @@
 
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 
-import { CodexImageBackend } from './codexImageBackend.js';
-import type { CodexImageBackendDeps } from './codexImageBackend.js';
+import {
+  CodexImageBackend,
+  type CodexImageBackendDeps,
+  type CodexImageCredential,
+} from './codexImageBackend.js';
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import type { IProvider } from '../IProvider.js';
 
@@ -31,6 +34,8 @@ import type { IProvider } from '../IProvider.js';
  */
 export interface ResolvedImageBackendLike {
   readonly name: string;
+  readonly provider: string;
+  readonly model: string;
   generate(
     request: {
       readonly prompt: string;
@@ -39,6 +44,19 @@ export interface ResolvedImageBackendLike {
       readonly quality?: string;
       readonly size?: string;
       readonly n?: number;
+      readonly sessionId?: string;
+    },
+    signal: AbortSignal,
+  ): Promise<{
+    readonly mimeType: string;
+    readonly data: string;
+    readonly encoding: 'url' | 'base64';
+    readonly caption?: string;
+  }>;
+  edit(
+    request: {
+      readonly prompt: string;
+      readonly inputPaths: readonly string[];
       readonly sessionId?: string;
     },
     signal: AbortSignal,
@@ -61,11 +79,43 @@ function isCodexBaseUrl(baseUrl: string | undefined): boolean {
 }
 
 /**
+ * Fetch ONE fresh Codex OAuth token and validate it as a typed Codex token,
+ * returning a consistently-paired `{ accessToken, accountId }` credential.
+ *
+ * Called exactly once per generate()/edit() so the access token and account id
+ * always originate from the same token fetch and never diverge.
+ */
+async function resolveFreshCredential(
+  oauthManager: NonNullable<OAuthManager>,
+): Promise<CodexImageCredential> {
+  const token = await oauthManager.getOAuthToken?.('codex');
+  if (token === null || token === undefined) {
+    throw new Error(
+      'Codex image generation requires OAuth authentication. Run /auth codex enable.',
+    );
+  }
+  const accessToken = token.access_token;
+  if (typeof accessToken !== 'string' || accessToken === '') {
+    throw new Error(
+      'Codex image generation requires an OAuth token with a non-empty access_token.',
+    );
+  }
+  const accountId = (token as Record<string, unknown>)['account_id'];
+  if (typeof accountId !== 'string' || accountId === '') {
+    throw new Error(
+      'Codex image generation requires an OAuth token with account_id.',
+    );
+  }
+  return { accessToken, accountId };
+}
+
+/**
  * Build a lazy resolver that returns a CodexImageBackend when the active
  * provider is in Codex mode, or null otherwise.
  *
- * Auth is resolved lazily inside the backend's getAccessToken/getAccountId
- * so the token is fetched fresh on each generate() call, not cached.
+ * Auth is resolved lazily and exactly once per generate()/edit() call via the
+ * backend's injected `getCredential` callback, so each operation fetches a
+ * fresh, consistently-paired credential object (not cached globally).
  */
 export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,
@@ -85,37 +135,13 @@ export function createCodexImageBackendResolver(
       return null;
     }
 
+    const oauthManager = deps.oauthManager;
     const backendDeps: CodexImageBackendDeps = {
-      getAccessToken: async () => {
-        const token = await deps.oauthManager!.getOAuthToken?.('codex');
-        if (token === null || token === undefined) {
-          throw new Error(
-            'Codex image generation requires OAuth authentication. Run /auth codex enable.',
-          );
-        }
-        return token.access_token;
-      },
-      getAccountId: async () => {
-        const token = await deps.oauthManager!.getOAuthToken?.('codex');
-        if (token === null || token === undefined) {
-          throw new Error(
-            'Codex image generation requires OAuth authentication. Run /auth codex enable.',
-          );
-        }
-        const accountId = (token as Record<string, unknown>)['account_id'];
-        if (typeof accountId !== 'string' || accountId === '') {
-          throw new Error(
-            'Codex image generation requires an OAuth token with account_id.',
-          );
-        }
-        return accountId;
-      },
+      getCredential: () => resolveFreshCredential(oauthManager),
       getBaseUrl: () => baseUrl,
       ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
     };
 
-    return new CodexImageBackend(
-      backendDeps,
-    ) as unknown as ResolvedImageBackendLike;
+    return new CodexImageBackend(backendDeps);
   };
 }

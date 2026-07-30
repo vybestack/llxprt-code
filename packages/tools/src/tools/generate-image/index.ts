@@ -10,5 +10,7 @@ export {
   type GenerateImageToolDependencies,
   type ImageGenerationBackendLike,
   type ImageBackendResult,
-  type ImageBackendGenerateRequest,
+  type ImageOperationRunnerResult,
+  type ImageOperationRunnerError,
+  MAX_INPUT_IMAGES,
 } from './GenerateImageTool.js';

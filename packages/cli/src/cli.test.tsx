@@ -562,6 +562,9 @@ describe('cli.tsx main function', () => {
       nobrowser: undefined,
       listSessions: undefined,
       deleteSession: undefined,
+      imageInput: undefined,
+      imageOutput: undefined,
+      imagePrompt: undefined,
       quiet: undefined,
     });
 
@@ -715,6 +718,9 @@ describe('cli.tsx main function', () => {
       nobrowser: undefined,
       listSessions: undefined,
       deleteSession: undefined,
+      imageInput: undefined,
+      imageOutput: undefined,
+      imagePrompt: undefined,
       quiet: undefined,
     });
 

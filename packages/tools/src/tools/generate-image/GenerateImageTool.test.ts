@@ -9,129 +9,87 @@ import { GenerateImageTool } from './GenerateImageTool.js';
 import { ToolErrorType } from '../../types/tool-error.js';
 import type {
   GenerateImageToolParams,
-  ImageGenerationBackendLike,
+  ImageOperationRunnerResult,
+  ImageOperationRunnerError,
 } from './GenerateImageTool.js';
 
-const STUB_SAVED_PATH = '/workspace/generated-images/image-stub.png';
+const VALID_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
-/**
- * A real stub backend implementing the structural ImageGenerationBackendLike
- * contract. This is infrastructure — the tool itself is never mocked.
- */
-interface StubBackendState {
-  readonly generateCalls: Array<{
-    readonly request: GenerateImageToolParams;
-    readonly signalAborted: boolean;
-  }>;
-}
-
-function makeStubBackend(
-  result: {
-    mimeType: string;
-    encoding: 'base64' | 'url';
-    data: string;
-    caption?: string;
-  },
-  options: { throwOnGenerate?: Error } = {},
-): { backend: ImageGenerationBackendLike; state: StubBackendState } {
-  const state: StubBackendState = { generateCalls: [] };
-  const backend: ImageGenerationBackendLike = {
-    name: 'stub-image-backend',
-    async generate(request, signal) {
-      state.generateCalls.push({
-        request,
-        signalAborted: signal.aborted,
-      });
-      if (options.throwOnGenerate) {
-        throw options.throwOnGenerate;
-      }
-      return result;
-    },
-  };
-  return { backend, state };
-}
-
-interface StubPersistState {
-  readonly persistCalls: Array<{
-    readonly result: {
-      readonly mimeType: string;
-      readonly encoding: string;
-      readonly data: string;
-      readonly caption?: string;
-    };
-  }>;
-}
-
-function makeStubPersist(
-  options: {
-    returnedPath?: string;
-    throwOnPersist?: Error;
-  } = {},
-): {
-  persist: (result: {
-    mimeType: string;
-    encoding: string;
-    data: string;
-    caption?: string;
-  }) => Promise<string>;
-  persistState: StubPersistState;
-} {
-  const persistState: StubPersistState = { persistCalls: [] };
-  const returnedPath = options.returnedPath ?? STUB_SAVED_PATH;
-  const persist = async (result: {
-    mimeType: string;
-    encoding: string;
-    data: string;
-    caption?: string;
-  }): Promise<string> => {
-    persistState.persistCalls.push({ result });
-    if (options.throwOnPersist) {
-      throw options.throwOnPersist;
-    }
-    return returnedPath;
-  };
-  return { persist, persistState };
-}
-
-/**
- * Compose a GenerateImageTool with a real stub backend and a real stub
- * persistence dependency. Every success-path test MUST go through here so
- * there is no way to construct a tool that can succeed without persistence.
- */
-function makeToolWithPersistence(
-  backendResult: {
-    mimeType: string;
-    encoding: 'base64' | 'url';
-    data: string;
-    caption?: string;
-  } = {
+function makeRunnerResult(
+  overrides: Partial<ImageOperationRunnerResult> = {},
+): ImageOperationRunnerResult {
+  return {
+    operation: 'generate',
+    absoluteOutputPath: '/workspace/cat.png',
+    relativeOutputPath: 'cat.png',
     mimeType: 'image/png',
-    encoding: 'base64',
-    data: 'aGVsbG8=',
-    caption: 'a cat',
-  },
-  options: {
-    backendThrows?: Error;
-    persistThrows?: Error;
-    persistPath?: string;
-  } = {},
-): {
+    backend: 'stub',
+    provider: 'stub',
+    model: 'stub-model',
+    inputPaths: [],
+    media: {
+      mimeType: 'image/png',
+      encoding: 'base64',
+      data: VALID_PNG_BASE64,
+    },
+    ...overrides,
+  };
+}
+
+function makeRunnerError(
+  message: string,
+  stage: ImageOperationRunnerError['stage'],
+): ImageOperationRunnerError {
+  const error = new Error(message) as ImageOperationRunnerError;
+  error.name = 'ImageOperationError';
+  error.stage = stage;
+  return error;
+}
+
+interface ToolOptions {
+  runImageImpl?: (input: {
+    readonly prompt: string;
+    readonly output_path: string;
+    readonly input_paths?: readonly string[];
+    readonly signal?: AbortSignal;
+  }) => Promise<ImageOperationRunnerResult>;
+  runImageError?: Error;
+  capturedInput?: { value: GenerateImageToolParams['input_paths'] };
+}
+
+function makeTool(options: ToolOptions = {}): {
   tool: GenerateImageTool;
-  backendState: StubBackendState;
-  persistState: StubPersistState;
+  runImageCalls: Array<{
+    prompt: string;
+    output_path: string;
+    input_paths?: readonly string[];
+    signal?: AbortSignal;
+  }>;
 } {
-  const { backend, state } = makeStubBackend(backendResult, {
-    throwOnGenerate: options.backendThrows,
-  });
-  const { persist, persistState } = makeStubPersist({
-    returnedPath: options.persistPath,
-    throwOnPersist: options.persistThrows,
-  });
+  const runImageCalls: Array<{
+    prompt: string;
+    output_path: string;
+    input_paths?: readonly string[];
+    signal?: AbortSignal;
+  }> = [];
   const tool = new GenerateImageTool({
-    resolveBackend: () => backend,
-    persistImageResult: persist,
+    runImage: async (input) => {
+      runImageCalls.push(input);
+      if (options.runImageError) throw options.runImageError;
+      if (options.runImageImpl) return options.runImageImpl(input);
+      return makeRunnerResult({
+        absoluteOutputPath: `/workspace/${input.output_path}`,
+        relativeOutputPath: input.output_path,
+        operation:
+          input.input_paths && input.input_paths.length > 0
+            ? 'edit'
+            : 'generate',
+        inputPaths: input.input_paths ? [...input.input_paths] : [],
+      });
+    },
   });
-  return { tool, backendState: state, persistState };
+  return { tool, runImageCalls };
 }
 
 describe('GenerateImageTool', () => {
@@ -139,242 +97,154 @@ describe('GenerateImageTool', () => {
     expect(GenerateImageTool.Name).toBe('generate_image');
   });
 
-  it('does not expose a "model" property in its JSON schema (callers cannot override the backend model)', () => {
-    // The schema is constructed eagerly in the constructor; introspecting it
-    // proves the model-override attack surface is removed at the contract
-    // boundary, not just at the forwarding site.
-    const { tool } = makeToolWithPersistence();
-    const schema = tool.schema.parametersJsonSchema as {
-      properties?: Record<string, unknown>;
-    };
-    expect(schema.properties).toBeDefined();
-    expect(schema.properties).not.toHaveProperty('model');
+  it('delegates generate to the common runner and returns media + saved path', async () => {
+    const { tool, runImageCalls } = makeTool();
+
+    const result = await tool
+      .build({ prompt: 'a cat', output_path: 'cat.png' })
+      .execute(new AbortController().signal);
+
+    expect(result.error).toBeUndefined();
+    expect(runImageCalls).toHaveLength(1);
+    expect(runImageCalls[0]?.prompt).toBe('a cat');
+    expect(runImageCalls[0]?.output_path).toBe('cat.png');
+
+    const parts = result.llmContent as unknown[];
+    const inlinePart = parts.find(
+      (p): p is { inlineData?: { mimeType?: string; data?: string } } =>
+        typeof p === 'object' &&
+        p !== null &&
+        'inlineData' in p &&
+        p.inlineData !== undefined,
+    );
+    expect(inlinePart?.inlineData?.mimeType).toBe('image/png');
+
+    const textPart = parts.find((p): p is string => typeof p === 'string');
+    expect(textPart).toContain('/workspace/cat.png');
   });
 
-  describe('A6 — valid prompt yields an image content part plus a text hint', () => {
-    it('returns llmContent with an inlineData image/png base64 part and a text part', async () => {
-      const { tool, backendState } = makeToolWithPersistence({
-        mimeType: 'image/png',
-        encoding: 'base64',
-        data: 'aGVsbG8=',
-        caption: 'a cat',
-      });
+  it('delegates edit to the common runner with input_paths', async () => {
+    const { tool, runImageCalls } = makeTool();
 
-      const result = await tool
-        .build({ prompt: 'a cat wearing a tiny hat' })
-        .execute(new AbortController().signal);
+    const result = await tool
+      .build({
+        prompt: 'add a mouse',
+        output_path: 'out.png',
+        input_paths: ['in.png'],
+      })
+      .execute(new AbortController().signal);
 
-      expect(result.error).toBeUndefined();
-      expect(Array.isArray(result.llmContent)).toBe(true);
-      const parts = result.llmContent as unknown[];
-      expect(parts.length).toBeGreaterThanOrEqual(2);
+    expect(result.error).toBeUndefined();
+    expect(runImageCalls).toHaveLength(1);
+    expect(runImageCalls[0]?.input_paths).toEqual(['in.png']);
+  });
 
-      const inlinePart = parts.find(
-        (p): p is { inlineData?: { mimeType?: string; data?: string } } =>
-          typeof p === 'object' &&
-          p !== null &&
-          'inlineData' in p &&
-          p.inlineData !== undefined,
-      );
-      expect(inlinePart).toBeDefined();
-      expect(inlinePart?.inlineData?.mimeType).toBe('image/png');
-      expect(inlinePart?.inlineData?.data).toBe('aGVsbG8=');
-
-      const textPart = parts.find((p): p is string => typeof p === 'string');
-      expect(textPart).toBeDefined();
-      expect(textPart).toMatch(/image/i);
-
-      expect(backendState.generateCalls).toHaveLength(1);
-      expect(backendState.generateCalls[0]?.request.prompt).toBe(
-        'a cat wearing a tiny hat',
-      );
+  it('maps a capability runner error to TOOL_DISABLED and calls the runner exactly once', async () => {
+    const { tool, runImageCalls } = makeTool({
+      runImageError: makeRunnerError('no backend', 'capability'),
     });
 
-    it('passes the backend result to the persistence dependency and includes the returned path in the text hint and display', async () => {
-      const savedPath = '/workspace/generated-images/cat-1234.png';
-      const { tool, persistState } = makeToolWithPersistence(
-        {
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data: 'aGVsbG8=',
-          caption: 'a cat',
-        },
-        { persistPath: savedPath },
-      );
+    const result = await tool
+      .build({ prompt: 'a cat', output_path: 'out.png' })
+      .execute(new AbortController().signal);
 
-      const result = await tool
-        .build({ prompt: 'a cat wearing a tiny hat' })
-        .execute(new AbortController().signal);
+    expect(result.error?.type).toBe(ToolErrorType.TOOL_DISABLED);
+    // The runner is the single authority — called exactly once, no separate
+    // resolveBackend precheck.
+    expect(runImageCalls).toHaveLength(1);
+  });
 
-      expect(persistState.persistCalls).toHaveLength(1);
-      const persisted = persistState.persistCalls[0].result;
-      expect(persisted.mimeType).toBe('image/png');
-      expect(persisted.encoding).toBe('base64');
-      expect(persisted.data).toBe('aGVsbG8=');
-      expect(persisted.caption).toBe('a cat');
+  it('forwards the execute AbortSignal to the common runner', async () => {
+    const { tool, runImageCalls } = makeTool();
+    const controller = new AbortController();
 
-      const parts = result.llmContent as unknown[];
-      const textPart = parts.find((p): p is string => typeof p === 'string');
-      expect(textPart).toBeDefined();
-      expect(textPart).toContain(savedPath);
-      expect(result.returnDisplay).toContain(savedPath);
+    await tool
+      .build({ prompt: 'a cat', output_path: 'out.png' })
+      .execute(controller.signal);
+
+    expect(runImageCalls).toHaveLength(1);
+    expect(runImageCalls[0]?.signal).toBe(controller.signal);
+  });
+
+  it('maps an input-validation runner error to INVALID_TOOL_PARAMS', async () => {
+    const { tool } = makeTool({
+      runImageError: makeRunnerError('bad output path', 'input-validation'),
     });
 
-    it('preserves the inline image part for model context alongside the persisted path hint', async () => {
-      const { tool } = makeToolWithPersistence({
-        mimeType: 'image/png',
-        encoding: 'base64',
-        data: 'aGVsbG8=',
-        caption: 'a cat',
-      });
+    const result = await tool
+      .build({ prompt: 'a cat', output_path: 'out.png' })
+      .execute(new AbortController().signal);
 
-      const result = await tool
-        .build({ prompt: 'a cat' })
-        .execute(new AbortController().signal);
+    expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+    expect(result.error?.message).toContain('bad output path');
+  });
 
-      const parts = result.llmContent as unknown[];
-      const inlinePart = parts.find(
-        (p): p is { inlineData?: { mimeType?: string; data?: string } } =>
-          typeof p === 'object' &&
-          p !== null &&
-          'inlineData' in p &&
-          p.inlineData !== undefined,
-      );
-      expect(inlinePart).toBeDefined();
-      expect(inlinePart?.inlineData?.mimeType).toBe('image/png');
-      expect(inlinePart?.inlineData?.data).toBe('aGVsbG8=');
+  it('maps a provider runner error to EXECUTION_FAILED', async () => {
+    const { tool } = makeTool({
+      runImageError: makeRunnerError('provider down', 'provider'),
     });
 
-    it('never forwards a "model" field to the backend even when one is present in the raw params', async () => {
-      // Even though `model` is removed from GenerateImageToolParams, a model
-      // could attempt to pass it. The tool must not forward it. We cast here
-      // only to simulate an adversarial caller bypassing the typed contract.
-      const { tool, backendState } = makeToolWithPersistence();
-      const adversarialParams = {
+    const result = await tool
+      .build({ prompt: 'a cat', output_path: 'out.png' })
+      .execute(new AbortController().signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+    expect(result.error?.message).toContain('provider down');
+  });
+
+  it('maps an artifact-write runner error to EXECUTION_FAILED', async () => {
+    const { tool } = makeTool({
+      runImageError: makeRunnerError('disk full', 'artifact-write'),
+    });
+
+    const result = await tool
+      .build({ prompt: 'a cat', output_path: 'out.png' })
+      .execute(new AbortController().signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+    expect(result.error?.message).toContain('disk full');
+  });
+
+  it('forwards abort and maps to TIMEOUT', async () => {
+    const abortError = new Error('The operation was aborted.');
+    abortError.name = 'AbortError';
+    const { tool } = makeTool({ runImageError: abortError });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await tool
+      .build({ prompt: 'a sunset', output_path: 'out.png' })
+      .execute(controller.signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.TIMEOUT);
+  });
+
+  it('maps a generic Error to EXECUTION_FAILED', async () => {
+    const { tool } = makeTool({
+      runImageError: new Error('network failure'),
+    });
+
+    const result = await tool
+      .build({ prompt: 'a sunset', output_path: 'out.png' })
+      .execute(new AbortController().signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+    expect(result.error?.message).toContain('network failure');
+  });
+
+  it('does not forward a model field to the runner', async () => {
+    const { tool, runImageCalls } = makeTool();
+    await tool
+      .build({
         prompt: 'a cat',
-        model: 'gpt-evil-override',
-      } as unknown as GenerateImageToolParams;
+        output_path: 'out.png',
+        model: 'evil',
+      } as unknown as GenerateImageToolParams)
+      .execute(new AbortController().signal);
 
-      await tool.build(adversarialParams).execute(new AbortController().signal);
-
-      expect(backendState.generateCalls).toHaveLength(1);
-      const forwarded = backendState.generateCalls[0]?.request as Record<
-        string,
-        unknown
-      >;
-      expect(forwarded['model']).toBeUndefined();
-    });
-  });
-
-  describe('persistence failure surfaces as tool execution failure', () => {
-    it('maps a persistence error to EXECUTION_FAILED and never claims success', async () => {
-      const { tool, persistState } = makeToolWithPersistence(
-        {
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data: 'aGVsbG8=',
-        },
-        { persistThrows: new Error('disk full') },
-      );
-
-      const result = await tool
-        .build({ prompt: 'a cat' })
-        .execute(new AbortController().signal);
-
-      expect(persistState.persistCalls).toHaveLength(1);
-      expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
-      expect(result.error?.message).toContain('disk full');
-      expect(typeof result.llmContent).toBe('string');
-      expect(result.llmContent).toContain('failed to save');
-      expect(result.returnDisplay).not.toContain('Saved to:');
-    });
-  });
-
-  describe('A8 — no backend resolved', () => {
-    it('returns a TOOL_DISABLED error and never calls the backend or persistence', async () => {
-      // Persistence is a required dependency, but the no-backend path must
-      // short-circuit before either the backend or persistence is touched.
-      let persistCalled = false;
-      const tool = new GenerateImageTool({
-        resolveBackend: () => null,
-        persistImageResult: async () => {
-          persistCalled = true;
-          return '/unused.png';
-        },
-      });
-
-      const result = await tool
-        .build({ prompt: 'a dog' })
-        .execute(new AbortController().signal);
-
-      expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe(ToolErrorType.TOOL_DISABLED);
-      expect(persistCalled).toBe(false);
-    });
-  });
-
-  describe('abort propagation', () => {
-    it('forwards the abort signal to the backend and maps abort to TIMEOUT', async () => {
-      const abortError = new Error('The operation was aborted.');
-      abortError.name = 'AbortError';
-      const { tool, backendState, persistState } = makeToolWithPersistence(
-        {
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data: 'aGVsbG8=',
-        },
-        { backendThrows: abortError },
-      );
-      const controller = new AbortController();
-      controller.abort();
-
-      const result = await tool
-        .build({ prompt: 'a sunset' })
-        .execute(controller.signal);
-
-      expect(backendState.generateCalls).toHaveLength(1);
-      expect(backendState.generateCalls[0]?.signalAborted).toBe(true);
-      expect(persistState.persistCalls).toHaveLength(0);
-      expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe(ToolErrorType.TIMEOUT);
-    });
-  });
-
-  describe('n > 1 rejection', () => {
-    it('rejects n > 1 with INVALID_TOOL_PARAMS before calling the backend', async () => {
-      const { tool, backendState, persistState } = makeToolWithPersistence();
-
-      const result = await tool
-        .build({ prompt: 'a sunset', n: 3 })
-        .execute(new AbortController().signal);
-
-      expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
-      expect(backendState.generateCalls).toHaveLength(0);
-      expect(persistState.persistCalls).toHaveLength(0);
-    });
-  });
-
-  describe('generic backend error mapping', () => {
-    it('maps a generic backend Error to EXECUTION_FAILED', async () => {
-      const { tool, persistState } = makeToolWithPersistence(
-        {
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data: 'aGVsbG8=',
-        },
-        { backendThrows: new Error('network failure') },
-      );
-
-      const result = await tool
-        .build({ prompt: 'a sunset' })
-        .execute(new AbortController().signal);
-
-      expect(persistState.persistCalls).toHaveLength(0);
-      expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
-      expect(result.error?.message).toContain('network failure');
-    });
+    expect(runImageCalls[0]).toBeDefined();
+    expect(
+      (runImageCalls[0] as Record<string, unknown>)['model'],
+    ).toBeUndefined();
   });
 });

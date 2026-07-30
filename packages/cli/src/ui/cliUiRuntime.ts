@@ -452,6 +452,24 @@ export interface StreamRuntime {
   interactive: InteractiveRuntime;
   ephemeral: EphemeralSettingsRuntime;
   storage: Storage;
+  /**
+   * Resolves the image-operation runner bound to the Config composition root,
+   * or undefined when no image backend is configured. Forwarded from the bare
+   * source so nested runtime consumers can resolve image capability.
+   */
+  getRunImageOperation?: () =>
+    | ((request: {
+        readonly prompt: string;
+        readonly outputPath: string;
+        readonly inputPaths?: readonly string[];
+        readonly signal?: AbortSignal;
+      }) => Promise<{
+        readonly operation: 'generate' | 'edit';
+        readonly absoluteOutputPath: string;
+        readonly relativeOutputPath: string;
+        readonly mimeType: string;
+      }>)
+    | undefined;
 }
 
 /**
@@ -493,6 +511,25 @@ export interface StreamRuntimeBareSource
     InteractiveRuntime,
     EphemeralSettingsRuntime {
   readonly storage: Storage;
+  /**
+   * Resolves the image-operation runner bound to the Config composition root,
+   * or undefined when no image backend is configured. Used by the `/image`
+   * slash command. Exposed as a getter so the runtime adapts the Config
+   * capability without exposing a mutable property.
+   */
+  getRunImageOperation?: () =>
+    | ((request: {
+        readonly prompt: string;
+        readonly outputPath: string;
+        readonly inputPaths?: readonly string[];
+        readonly signal?: AbortSignal;
+      }) => Promise<{
+        readonly operation: 'generate' | 'edit';
+        readonly absoluteOutputPath: string;
+        readonly relativeOutputPath: string;
+        readonly mimeType: string;
+      }>)
+    | undefined;
 }
 
 export interface UiRuntimeBareSource
@@ -711,6 +748,9 @@ function buildStreamRuntimeFromSource(
       getEphemeralSetting: (key) => source.getEphemeralSetting(key),
     },
     storage: source.storage,
+    ...(source.getRunImageOperation !== undefined
+      ? { getRunImageOperation: source.getRunImageOperation }
+      : {}),
   };
 }
 

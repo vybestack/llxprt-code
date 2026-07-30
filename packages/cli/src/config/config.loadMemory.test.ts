@@ -42,6 +42,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         setRuntimeMessageBus: vi.fn(),
         setRuntimeOAuthManager: vi.fn(),
         setImageBackendResolver: vi.fn(),
+        setRunImageOperation: vi.fn(),
         initialize: vi.fn(),
         getModel: vi.fn(() => model),
         setModel: vi.fn((next: string) => {
@@ -405,6 +406,9 @@ describe('loadCliConfig memory discovery', () => {
       nobrowser: undefined,
       listSessions: undefined,
       deleteSession: undefined,
+      imageInput: undefined,
+      imageOutput: undefined,
+      imagePrompt: undefined,
       quiet: undefined,
     };
 
