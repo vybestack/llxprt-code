@@ -34,7 +34,7 @@ class FileExporter {
   }
 
   protected serialize(data: unknown): string {
-    return JSON.stringify(data, null, 2) + '\n';
+    return JSON.stringify(data) + '\n';
   }
 
   protected writeToFile(data: string): void {
@@ -54,13 +54,37 @@ class FileExporter {
   }
 }
 
+function toSerializableSpan(span: ReadableSpan): object {
+  return {
+    name: span.name,
+    kind: span.kind,
+    spanContext: span.spanContext(),
+    parentSpanId: span.parentSpanContext?.spanId ?? null,
+    startTime: span.startTime,
+    endTime: span.endTime,
+    status: span.status,
+    attributes: span.attributes,
+    links: span.links,
+    events: span.events,
+    duration: span.duration,
+    ended: span.ended,
+    resource: span.resource,
+    instrumentationScope: span.instrumentationScope,
+    droppedAttributesCount: span.droppedAttributesCount,
+    droppedEventsCount: span.droppedEventsCount,
+    droppedLinksCount: span.droppedLinksCount,
+  };
+}
+
 export class FileSpanExporter extends FileExporter implements SpanExporter {
   export(
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
     try {
-      const data = spans.map((span) => this.serialize(span)).join('');
+      const data = spans
+        .map((span) => this.serialize(toSerializableSpan(span)))
+        .join('');
       this.writeToFile(data);
       resultCallback({
         code: ExportResultCode.SUCCESS,

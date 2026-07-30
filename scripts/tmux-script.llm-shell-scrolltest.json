@@ -34,7 +34,7 @@
     },
     {
       "type": "line",
-      "text": "Use the run_shell_command tool (NOT shell mode) to run: node scripts/scrollback-load.js --total 60 --interval-ms 250. Do not explain.",
+      "text": "Use the run_shell_command tool (NOT shell mode) to run: bun scripts/scrollback-load.ts --total 60 --interval-ms 250. Do not explain.",
       "submitKeys": ["Enter"]
     },
     {

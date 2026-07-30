@@ -2,12 +2,20 @@ import http from 'node:http';
 
 import { CLAUDE_CAT_BASE64, CODEX_HAND_BASE64 } from './codex-success-image.js';
 
+function abortError(signal?: AbortSignal): Error {
+  const reason = signal?.reason;
+  return reason instanceof Error
+    ? reason
+    : new Error(String(reason ?? 'aborted'));
+}
+
 export interface LocalOAuthCallbackOptions {
   readonly state: string;
   readonly portRange: readonly [number, number];
   readonly timeoutMs: number;
   /** Provider name for customized success page (e.g., 'codex' for OpenAI/Codex) */
   readonly provider?: 'codex' | 'claude';
+  readonly signal?: AbortSignal;
 }
 
 export interface LocalOAuthCallbackServer {
@@ -233,10 +241,23 @@ const createCallbackServer = async (
   const redirectUri = `http://localhost:${port}${callbackPath}`;
   const server = http.createServer();
 
-  await listen(server, port);
+  await listen(server, port, options.signal);
 
   const state = createCallbackState();
-  const shutdown = () => shutdownCallbackServer(server, state);
+  const shutdown = async (): Promise<void> => {
+    options.signal?.removeEventListener('abort', onAbort);
+    await shutdownCallbackServer(server, state);
+  };
+  const onAbort = (): void => {
+    settleCallback(state, abortError(options.signal));
+    void shutdown();
+  };
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  if (options.signal?.aborted === true) {
+    const error = abortError(options.signal);
+    await shutdown();
+    throw error;
+  }
 
   server.on(
     'request',
@@ -263,20 +284,38 @@ const createCallbackServer = async (
   };
 };
 
-const listen = (server: http.Server, port: number): Promise<void> =>
+const listen = (
+  server: http.Server,
+  port: number,
+  signal?: AbortSignal,
+): Promise<void> =>
   new Promise((resolve, reject) => {
-    const handleError = (error: Error) => {
+    const cleanup = (): void => {
+      server.removeListener('error', handleError);
       server.removeListener('listening', handleListening);
+      signal?.removeEventListener('abort', handleAbort);
+    };
+    const handleError = (error: Error): void => {
+      cleanup();
       reject(error);
     };
-
-    const handleListening = () => {
-      server.removeListener('error', handleError);
+    const handleListening = (): void => {
+      cleanup();
       resolve();
     };
+    const handleAbort = (): void => {
+      cleanup();
+      const error = abortError(signal);
+      server.close(() => reject(error));
+    };
 
+    if (signal?.aborted === true) {
+      handleAbort();
+      return;
+    }
     server.once('error', handleError);
     server.once('listening', handleListening);
+    signal?.addEventListener('abort', handleAbort, { once: true });
     server.listen(port, '127.0.0.1');
   });
 

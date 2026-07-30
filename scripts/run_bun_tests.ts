@@ -139,7 +139,11 @@ function parseArgs(argv: string[]): CliOptions {
       case '--timeout': {
         const value = readOptionValue(argv, i++, arg);
         const timeout = Number(value);
-        if (!Number.isFinite(timeout) || timeout <= 0) {
+        if (
+          !Number.isFinite(timeout) ||
+          timeout <= 0 ||
+          !Number.isInteger(timeout)
+        ) {
           throw new Error(`Invalid --timeout value: ${value}`);
         }
         options.timeout = timeout;

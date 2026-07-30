@@ -6,7 +6,7 @@
 
 /// <reference types="vitest" />
 import { existsSync } from 'node:fs';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
@@ -224,7 +224,7 @@ const sharedResolve = {
 };
 
 const sharedTestOptions = {
-  exclude: ['**/node_modules/**', '**/dist/**'],
+  exclude: [...configDefaults.exclude],
   globals: true,
   silent: true,
   reporters: ['default', 'junit'],
@@ -286,7 +286,7 @@ export default defineConfig({
   resolve: sharedResolve,
   test: {
     include: INCLUDE_PATTERNS,
-    exclude: baseExcludePatterns,
+    exclude: [...configDefaults.exclude, ...baseExcludePatterns],
     environment: 'jsdom',
     globals: true,
     reporters: ['default', 'junit'],

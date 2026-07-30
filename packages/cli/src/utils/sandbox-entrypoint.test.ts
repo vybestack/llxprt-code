@@ -148,11 +148,13 @@ describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
   let origToken: string | undefined;
   let origSocket: string | undefined;
   let origHome: string | undefined;
+  let origUserProfile: string | undefined;
 
   beforeEach(() => {
     origToken = process.env.LLXPRT_CAPABILITY_TOKEN;
     origSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
     origHome = process.env.HOME;
+    origUserProfile = process.env.USERPROFILE;
     process.env.LLXPRT_CAPABILITY_TOKEN = VALID_TOKEN;
   });
 
@@ -166,72 +168,83 @@ describe('sandbox-entrypoint: host-only capability env-file (AC1, F4)', () => {
     // #10: restore HOME correctly when it was originally undefined.
     if (origHome !== undefined) process.env.HOME = origHome;
     else delete process.env.HOME;
+    if (origUserProfile !== undefined)
+      process.env.USERPROFILE = origUserProfile;
+    else delete process.env.USERPROFILE;
   });
 
-  it('writes in a host-only dir under host HOME (outside mounts) with mode 0700 dir / 0600 file; raw token not in argv', () => {
-    const result = createHostOnlyCapabilityEnvFile(
-      VALID_TOKEN,
-    ) as HostOnlyCapabilityResult;
-    const hostDir = path.dirname(result.envFilePath);
-    expect(hostDir.startsWith(os.homedir())).toBe(true);
-    expect(result.envFilePath.startsWith(getTmpDir())).toBe(false);
-    expect(fs.statSync(hostDir).mode & 0o777).toBe(0o700);
-    expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
-    expect(fs.readFileSync(result.envFilePath, 'utf8')).toContain(VALID_TOKEN);
-    for (const arg of result.args) expect(arg).not.toContain(VALID_TOKEN);
-    expect(result.args[result.args.indexOf('--env-file') + 1]).toBe(
-      result.envFilePath,
-    );
-  });
+  it.skipIf(process.platform === 'win32')(
+    'writes in a host-only dir under host HOME (outside mounts) with mode 0700 dir / 0600 file; raw token not in argv',
+    () => {
+      const result = createHostOnlyCapabilityEnvFile(
+        VALID_TOKEN,
+      ) as HostOnlyCapabilityResult;
+      const hostDir = path.dirname(result.envFilePath);
+      expect(hostDir.startsWith(os.homedir())).toBe(true);
+      expect(result.envFilePath.startsWith(getTmpDir())).toBe(false);
+      expect(fs.statSync(hostDir).mode & 0o777).toBe(0o700);
+      expect(fs.statSync(result.envFilePath).mode & 0o777).toBe(0o600);
+      expect(fs.readFileSync(result.envFilePath, 'utf8')).toContain(
+        VALID_TOKEN,
+      );
+      for (const arg of result.args) expect(arg).not.toContain(VALID_TOKEN);
+      expect(result.args[result.args.indexOf('--env-file') + 1]).toBe(
+        result.envFilePath,
+      );
+    },
+  );
 
   it('returns undefined when no capability token (tokenless path)', () => {
     expect(createHostOnlyCapabilityEnvFile(undefined)).toBeUndefined();
   });
 
-  it('cleanup removes file+dir and is idempotent', () => {
-    const result = createHostOnlyCapabilityEnvFile(
-      VALID_TOKEN,
-    ) as HostOnlyCapabilityResult;
-    expect(fs.existsSync(result.envFilePath)).toBe(true);
-    result.cleanup();
-    expect(fs.existsSync(result.envFilePath)).toBe(false);
-    expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(false);
-    expect(() => result.cleanup()).not.toThrow();
-  });
+  it.skipIf(process.platform === 'win32')(
+    'cleanup removes file+dir and is idempotent',
+    () => {
+      const result = createHostOnlyCapabilityEnvFile(
+        VALID_TOKEN,
+      ) as HostOnlyCapabilityResult;
+      expect(fs.existsSync(result.envFilePath)).toBe(true);
+      result.cleanup();
+      expect(fs.existsSync(result.envFilePath)).toBe(false);
+      expect(fs.existsSync(path.dirname(result.envFilePath))).toBe(false);
+      expect(() => result.cleanup()).not.toThrow();
+    },
+  );
 
-  it('a concurrent attacker cannot discover the host-only file via the mounted temp dir', () => {
-    const result = createHostOnlyCapabilityEnvFile(
-      VALID_TOKEN,
-    ) as HostOnlyCapabilityResult;
-    const mount = getTmpDir();
-    const probe = spawnSync(
-      NODE,
-      [
-        '-e',
-        `
+  it.skipIf(process.platform === 'win32')(
+    'a concurrent attacker cannot discover the host-only file via the mounted temp dir',
+    () => {
+      const result = createHostOnlyCapabilityEnvFile(
+        VALID_TOKEN,
+      ) as HostOnlyCapabilityResult;
+      const mount = getTmpDir();
+      const probe = spawnSync(
+        NODE,
+        [
+          '-e',
+          `
       const fs=require('node:fs'); let found=false;
       try{for(const e of fs.readdirSync(${JSON.stringify(mount)}))if(e.includes('capability')||e.includes('env'))found=true;}catch{}
       process.stdout.write(JSON.stringify({found}));
     `,
-      ],
-      { encoding: 'utf8' },
-    );
-    void result;
-    expect(JSON.parse(probe.stdout.trim()).found).toBe(false);
-  });
+        ],
+        { encoding: 'utf8' },
+      );
+      void result;
+      expect(JSON.parse(probe.stdout.trim()).found).toBe(false);
+    },
+  );
 
   it('fail-fast: directory-creation failure surfaces', () => {
-    const controlledHome = fs.mkdtempSync(path.join(os.tmpdir(), 'home-ff-'));
-    process.env.HOME = controlledHome;
-    fs.chmodSync(controlledHome, 0o500);
-    try {
-      expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
-        /host-only directory/i,
-      );
-    } finally {
-      fs.chmodSync(controlledHome, 0o755);
-      fs.rmSync(controlledHome, { recursive: true, force: true });
-    }
+    const blockedHome = path.join(getTmpDir(), 'not-a-directory');
+    fs.writeFileSync(blockedHome, 'file blocks child directory creation');
+    process.env.HOME = blockedHome;
+    process.env.USERPROFILE = blockedHome;
+
+    expect(() => createHostOnlyCapabilityEnvFile(VALID_TOKEN)).toThrow(
+      /host-only directory/i,
+    );
   });
 });
 
@@ -270,27 +283,30 @@ describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10
     };
   }
 
-  it('captures and unsets the token; passes it on fd 3 to the final CLI (PATH recorder)', () => {
-    const tmpDir = getTmpDir();
-    const binDir = path.join(tmpDir, 'bin');
-    const sentinel = path.join(tmpDir, 'rec.json');
-    const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir);
-    const result = runCmd(
-      cmd,
-      recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
-    );
-    expect(result.exit).toBe(0);
-    const rec = readJson<{
-      tokenValid: boolean;
-      envToken: string;
-      fdMarker: string;
-    }>(sentinel);
-    expect(rec.tokenValid).toBe(true);
-    expect(rec.envToken).toBe('UNSET');
-    expect(rec.fdMarker).toBe('3');
-  });
+  it.skipIf(process.platform === 'win32')(
+    'captures and unsets the token; passes it on fd 3 to the final CLI (PATH recorder)',
+    () => {
+      const tmpDir = getTmpDir();
+      const binDir = path.join(tmpDir, 'bin');
+      const sentinel = path.join(tmpDir, 'rec.json');
+      const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir);
+      const result = runCmd(
+        cmd,
+        recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
+      );
+      expect(result.exit).toBe(0);
+      const rec = readJson<{
+        tokenValid: boolean;
+        envToken: string;
+        fdMarker: string;
+      }>(sentinel);
+      expect(rec.tokenValid).toBe(true);
+      expect(rec.envToken).toBe('UNSET');
+      expect(rec.fdMarker).toBe('3');
+    },
+  );
 
-  it.each([
+  it.skipIf(process.platform === 'win32').each([
     [
       'BASH_ENV',
       (tmpDir: string, stealerSentinel: string): NodeJS.ProcessEnv => {
@@ -334,69 +350,80 @@ describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10
     },
   );
 
-  it('F7: always unsets the env token even when fd 3 is pre-opened (su path)', () => {
-    const tmpDir = getTmpDir();
-    const binDir = path.join(tmpDir, 'bin');
-    const sentinel = path.join(tmpDir, 'rec.json');
-    const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir);
-    const innerScriptPath = writeInnerScript(tmpDir, cmd[cmd.length - 1]);
-    const rootWrapper = [
-      `__cap="${BASH_CAP_REF}"`,
-      `exec 3<<<"${'$'}{__cap}"`,
-      'unset __cap LLXPRT_CAPABILITY_TOKEN',
-      `LLXPRT_CAPABILITY_FD=3 env -u BASH_ENV bash --noprofile --norc ${innerScriptPath}`,
-    ].join('\n');
-    const result = runBash(
-      rootWrapper,
-      recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
-    );
-    expect(result.exit).toBe(0);
-    const rec = readJson<{ tokenValid: boolean; envToken: string }>(sentinel);
-    expect(rec.tokenValid).toBe(true);
-    expect(rec.envToken).toBe('UNSET');
-  });
+  it.skipIf(process.platform === 'win32')(
+    'F7: always unsets the env token even when fd 3 is pre-opened (su path)',
+    () => {
+      const tmpDir = getTmpDir();
+      const binDir = path.join(tmpDir, 'bin');
+      const sentinel = path.join(tmpDir, 'rec.json');
+      const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir);
+      const innerScriptPath = writeInnerScript(tmpDir, cmd[cmd.length - 1]);
+      const rootWrapper = [
+        `__cap="${BASH_CAP_REF}"`,
+        `exec 3<<<"${'$'}{__cap}"`,
+        'unset __cap LLXPRT_CAPABILITY_TOKEN',
+        `LLXPRT_CAPABILITY_FD=3 env -u BASH_ENV bash --noprofile --norc ${innerScriptPath}`,
+      ].join('\n');
+      const result = runBash(
+        rootWrapper,
+        recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
+      );
+      expect(result.exit).toBe(0);
+      const rec = readJson<{ tokenValid: boolean; envToken: string }>(sentinel);
+      expect(rec.tokenValid).toBe(true);
+      expect(rec.envToken).toBe('UNSET');
+    },
+  );
 
-  it('F7: tokenless path never sets the marker and never touches an unrelated pre-opened fd 3', () => {
-    const tmpDir = getTmpDir();
-    const binDir = path.join(tmpDir, 'bin');
-    const sentinel = path.join(tmpDir, 'rec.json');
-    const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir);
-    const innerScriptPath = writeInnerScript(tmpDir, cmd[cmd.length - 1]);
-    const rootWrapper = [
-      'exec 3<<<"UNRELATED_PREOPENED_CONTENT"',
-      `env -u BASH_ENV bash --noprofile --norc ${innerScriptPath}`,
-    ].join('\n');
-    const result = runBash(rootWrapper, recorderEnv(binDir));
-    expect(result.exit).toBe(0);
-    const rec = readJson<{
-      tokenValid: boolean;
-      envToken: string;
-      fdMarker: string | undefined;
-    }>(sentinel);
-    expect(rec.tokenValid).toBe(false);
-    expect(rec.envToken).toBe('UNSET');
-    expect(rec.fdMarker).toBeUndefined();
-  });
+  it.skipIf(process.platform === 'win32')(
+    'F7: tokenless path never sets the marker and never touches an unrelated pre-opened fd 3',
+    () => {
+      const tmpDir = getTmpDir();
+      const binDir = path.join(tmpDir, 'bin');
+      const sentinel = path.join(tmpDir, 'rec.json');
+      const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir);
+      const innerScriptPath = writeInnerScript(tmpDir, cmd[cmd.length - 1]);
+      const rootWrapper = [
+        'exec 3<<<"UNRELATED_PREOPENED_CONTENT"',
+        `env -u BASH_ENV bash --noprofile --norc ${innerScriptPath}`,
+      ].join('\n');
+      const result = runBash(rootWrapper, recorderEnv(binDir));
+      expect(result.exit).toBe(0);
+      const rec = readJson<{
+        tokenValid: boolean;
+        envToken: string;
+        fdMarker: string | undefined;
+      }>(sentinel);
+      expect(rec.tokenValid).toBe(false);
+      expect(rec.envToken).toBe('UNSET');
+      expect(rec.fdMarker).toBeUndefined();
+    },
+  );
 
-  it('F1: prefixes compose AFTER capability capture into the script body (not into the BASH_ENV argv element)', () => {
-    const tmpDir = getTmpDir();
-    const binDir = path.join(tmpDir, 'bin');
-    const sentinel = path.join(tmpDir, 'rec.json');
-    const prefixSentinel = path.join(tmpDir, 'prefix-env.json');
-    const fakePrefix = `python3 - > ${JSON.stringify(prefixSentinel)} 2>/dev/null <<'LLXPRT_PREFIX_PROBE_EOF'\nimport os, json, sys\nout = {"tokenPresent": os.environ.get("LLXPRT_CAPABILITY_TOKEN") is not None}\nsys.stdout.write(json.dumps(out))\nLLXPRT_PREFIX_PROBE_EOF`;
-    const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir, [fakePrefix]);
-    const result = runCmd(
-      cmd,
-      recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
-    );
-    expect(result.exit).toBe(0);
-    expect(
-      readJson<{ tokenPresent: boolean }>(prefixSentinel).tokenPresent,
-    ).toBe(false);
-    const rec = readJson<{ tokenValid: boolean; envToken: string }>(sentinel);
-    expect(rec.tokenValid).toBe(true);
-    expect(rec.envToken).toBe('UNSET');
-  });
+  it.skipIf(process.platform === 'win32')(
+    'F1: prefixes compose AFTER capability capture into the script body (not into the BASH_ENV argv element)',
+    () => {
+      const tmpDir = getTmpDir();
+      const binDir = path.join(tmpDir, 'bin');
+      const sentinel = path.join(tmpDir, 'rec.json');
+      const prefixSentinel = path.join(tmpDir, 'prefix-env.json');
+      const fakePrefix = `python3 - > ${JSON.stringify(prefixSentinel)} 2>/dev/null <<'LLXPRT_PREFIX_PROBE_EOF'\nimport os, json, sys\nout = {"tokenPresent": os.environ.get("LLXPRT_CAPABILITY_TOKEN") is not None}\nsys.stdout.write(json.dumps(out))\nLLXPRT_PREFIX_PROBE_EOF`;
+      const cmd = buildRecorderEntrypoint(tmpDir, sentinel, binDir, [
+        fakePrefix,
+      ]);
+      const result = runCmd(
+        cmd,
+        recorderEnv(binDir, { LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN }),
+      );
+      expect(result.exit).toBe(0);
+      expect(
+        readJson<{ tokenPresent: boolean }>(prefixSentinel).tokenPresent,
+      ).toBe(false);
+      const rec = readJson<{ tokenValid: boolean; envToken: string }>(sentinel);
+      expect(rec.tokenValid).toBe(true);
+      expect(rec.envToken).toBe('UNSET');
+    },
+  );
 
   it('F1: command array structure is [env,-u,BASH_ENV,bash,--noprofile,--norc,-c,SCRIPT] with prefix in SCRIPT', () => {
     const cmd = entrypoint(getTmpDir(), [], undefined, ['echo PREFIX_MARKER']);
@@ -437,18 +464,25 @@ describe('sandbox-entrypoint: trusted entrypoint security (AC2, AC3, F1, F7, F10
     }
   });
 
-  it('O21: fails fast when marker 3 is set but fd 3 cannot be read (with/without token)', () => {
-    const cmd = entrypoint(getTmpDir(), ['llxprt']);
-    const baseEnv = { ...process.env, LLXPRT_CAPABILITY_FD: '3', BASH_ENV: '' };
-    for (const env of [
-      baseEnv,
-      { ...baseEnv, LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN },
-    ]) {
-      const result = runCmd(cmd, env);
-      expect(result.exit).not.toBe(0);
-      expect(result.stderr).toMatch(/cannot be read|fd 3/i);
-    }
-  });
+  it.skipIf(process.platform === 'win32')(
+    'O21: fails fast when marker 3 is set but fd 3 cannot be read (with/without token)',
+    () => {
+      const cmd = entrypoint(getTmpDir(), ['llxprt']);
+      const baseEnv = {
+        ...process.env,
+        LLXPRT_CAPABILITY_FD: '3',
+        BASH_ENV: '',
+      };
+      for (const env of [
+        baseEnv,
+        { ...baseEnv, LLXPRT_CAPABILITY_TOKEN: VALID_TOKEN },
+      ]) {
+        const result = runCmd(cmd, env);
+        expect(result.exit).not.toBe(0);
+        expect(result.stderr).toMatch(/cannot be read|fd 3/i);
+      }
+    },
+  );
 });
 
 /**

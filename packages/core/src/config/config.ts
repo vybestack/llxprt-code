@@ -45,6 +45,7 @@ import {
   requireAgentClientFactory,
   transferHistoryToNewClient,
 } from './agentClientLifecycle.js';
+import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
 import {
   getOrCreateAsyncTaskManager,
   getOrCreateAsyncTaskReminderService,
@@ -197,6 +198,7 @@ export class Config extends ConfigBase {
         'Config.initialize requires an explicit session/runtime MessageBus dependency.',
       );
     }
+    this.setRuntimeMessageBus(initializationMessageBus);
     this.cachedEffectiveTrust = this.isTrustedFolder();
     this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
@@ -432,6 +434,11 @@ export class Config extends ConfigBase {
    */
   async refreshMcpContext(): Promise<void> {
     await this.refreshMemory();
+    await syncActivateMcpServerTool(
+      this.getToolRegistry(),
+      this.getRuntimeMessageBus(),
+      () => this.refreshMcpContext(),
+    );
     const client = this.getAgentClientIfReady();
     if (client) {
       await client.setTools();
@@ -574,14 +581,8 @@ export class Config extends ConfigBase {
     };
   }
 
-  getTelemetrySettings(): TelemetrySettings & {
-    remoteConsentGiven?: boolean;
-    [key: string]: unknown;
-  } {
-    return {
-      ...this.telemetrySettings,
-      remoteConsentGiven: this.telemetrySettings.remoteConsentGiven,
-    };
+  getTelemetrySettings(): TelemetrySettings {
+    return { ...this.telemetrySettings };
   }
 
   updateTelemetrySettings(settings: Partial<TelemetrySettings>): void {
@@ -884,8 +885,7 @@ export class Config extends ConfigBase {
   getHookSystem(): HookSystem | undefined {
     // @requirement:HOOK-002 - Return no hook system when hooks are disabled.
     if (!this.enableHooks) {
-      const disabledHookSystem = undefined;
-      return disabledHookSystem;
+      return undefined;
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access

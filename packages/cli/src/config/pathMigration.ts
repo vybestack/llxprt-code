@@ -215,9 +215,11 @@ function writeMarker(
     const base = path.basename(markerPath);
     const tmpPath = uniqueTempPath(dir, base, '.marker.tmp');
     try {
-      fs.writeFileSync(tmpPath, payload, { encoding: 'utf-8', flag: 'wx' });
-      const markerFd = fs.openSync(tmpPath, 'r');
+      // Open with wx so the fd is a writable creation descriptor from
+      // creation through fsync (the same fd writes and fsyncs).
+      const markerFd = fs.openSync(tmpPath, 'wx');
       try {
+        fs.writeSync(markerFd, payload, undefined, 'utf-8');
         fs.fsyncSync(markerFd);
       } finally {
         fs.closeSync(markerFd);

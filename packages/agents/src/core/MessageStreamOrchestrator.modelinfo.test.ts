@@ -26,10 +26,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
-import {
-  tokenLimit,
-  resolveEffectiveContextLimit,
-} from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   buildEffectiveModelIdentity,
   type EffectiveModelIdentity,
@@ -122,6 +119,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
   orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
   state: HarnessState;
   tokenUsageLogger: RecordingTokenUsageLogger;
+  mockChat: { getContextLimit: ReturnType<typeof vi.fn> };
 } {
   const state: HarnessState = {
     identity: {
@@ -141,6 +139,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getHistory: vi.fn().mockReturnValue([]),
     getTokenUsageLogger: () => tokenUsageLogger,
     estimatePendingTokens: options.estimatePendingTokens,
+    getContextLimit: vi.fn(() => state.contextLimit ?? tokenLimit()),
   };
 
   const config = {
@@ -252,6 +251,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     orchestrator: new MessageStreamOrchestrator(deps),
     state,
     tokenUsageLogger,
+    mockChat,
   };
 }
 
@@ -390,7 +390,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
   });
 
   it('uses the configured context-limit for preflight overflow checks', async () => {
-    const { orchestrator } = buildOrchestrator({
+    const { orchestrator, mockChat } = buildOrchestrator({
       model: 'claude-opus-4-8',
       providerName: 'anthropic',
       profileName: 'opusthinking',
@@ -399,12 +399,9 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     await collectModelInfos(orchestrator, 'prompt-context-limit');
 
+    expect(mockChat.getContextLimit).toHaveBeenCalled();
     expect(
-      vi
-        .mocked(resolveEffectiveContextLimit)
-        .mock.calls.some(
-          (call) => call[0] === 'claude-opus-4-8' && call[1] === 200_000,
-        ),
+      mockChat.getContextLimit.mock.results.some((r) => r.value === 200_000),
     ).toBe(true);
   });
 

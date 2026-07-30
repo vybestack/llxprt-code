@@ -65,6 +65,11 @@ import {
   streamOverHttp,
   type StreamResponsesParams,
 } from './openAIResponsesHttpStream.js';
+import {
+  shouldDumpSDKContext,
+  dumpSDKRequestContext,
+} from '../utils/dumpSDKContext.js';
+import type { DumpMode } from '../utils/dumpContext.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -148,6 +153,8 @@ export async function* executeOpenAIResponsesRequest(
     invocationEphemerals,
     deps,
   );
+
+  await dumpFinalizedRequest(requestContext, invocationEphemerals, deps);
 
   yield* streamResponses(
     {
@@ -679,6 +686,32 @@ function applyPromptCaching(
 
   request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
   if (!isCodex) request.prompt_cache_retention = '24h';
+}
+
+/**
+ * Dumps the finalized Responses request at the common pre-transport seam when
+ * context dumping is enabled, matching OpenAI Chat and Anthropic parity.
+ * Best-effort: failures are logged and never block the request.
+ */
+async function dumpFinalizedRequest(
+  requestContext: RequestContext,
+  invocationEphemerals: Record<string, unknown>,
+  deps: ResponsesExecutorDeps,
+): Promise<void> {
+  const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
+  if (!shouldDumpSDKContext(dumpMode, false)) return;
+  try {
+    await dumpSDKRequestContext(
+      deps.providerName,
+      '/responses',
+      requestContext.request,
+      requestContext.baseURL,
+    );
+  } catch (error) {
+    deps.logger.debug(
+      () => `Best-effort Responses request dump failed: ${String(error)}`,
+    );
+  }
 }
 
 async function* streamResponses(

@@ -146,6 +146,10 @@ export interface UIActions {
   }) => void;
   closeModelsDialog: () => void;
 
+  // Model config dialog
+  openModelConfigDialog: () => void;
+  closeModelConfigDialog: () => void;
+
   /**
    * Session browser dialog
    * @plan PLAN-20260214-SESSIONBROWSER.P21

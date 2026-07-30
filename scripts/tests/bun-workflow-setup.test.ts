@@ -8,6 +8,12 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  asRecord,
+  jobSteps,
+  parseWorkflowYaml,
+  type WorkflowJob,
+} from './typed-test-helpers.ts';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -18,9 +24,7 @@ interface PackageJson {
 }
 
 function readRootPackageJson(): PackageJson {
-  return JSON.parse(
-    readFileSync(resolve(repoRoot, 'package.json'), 'utf-8'),
-  ) as PackageJson;
+  return JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf-8'));
 }
 
 const rootPkg = readRootPackageJson();
@@ -47,7 +51,7 @@ function isEnoent(error: unknown): boolean {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return false;
   }
-  return (error as Record<string, unknown>).code === 'ENOENT';
+  return asRecord(error).code === 'ENOENT';
 }
 
 describe('Issue #2242: workflow jobs running Bun-backed npm scripts set up Bun', () => {
@@ -127,7 +131,7 @@ describe('Issue #2242: workflow jobs running Bun-backed npm scripts set up Bun',
     return jobs;
   }
 
-  function readWorkflowDirEntries(): ReturnType<typeof readdirSync> | null {
+  function readWorkflowDirEntries(): Array<import('node:fs').Dirent> | null {
     try {
       return readdirSync(WORKFLOWS_DIR, { withFileTypes: true });
     } catch (error) {
@@ -148,9 +152,10 @@ describe('Issue #2242: workflow jobs running Bun-backed npm scripts set up Bun',
       .filter(
         (entry) =>
           entry.isFile() &&
-          (entry.name.endsWith('.yml') || entry.name.endsWith('.yaml')),
+          (String(entry.name).endsWith('.yml') ||
+            String(entry.name).endsWith('.yaml')),
       )
-      .map((entry) => join(WORKFLOWS_DIR, entry.name))
+      .map((entry) => join(WORKFLOWS_DIR, String(entry.name)))
       .sort();
   }
 
@@ -159,7 +164,10 @@ describe('Issue #2242: workflow jobs running Bun-backed npm scripts set up Bun',
     [...BUN_BACKED_SCRIPT_KEYS].map((key) => {
       const escapedKey = escapeRegExp(key);
       const npmRun = `npm\\s+(?:run|run-script)\\s+${escapedKey}(?![-:\\w])`;
-      return [key, new RegExp(SHELL_COMMAND_BOUNDARY + npmRun)] as const;
+      return [
+        key,
+        new RegExp(SHELL_COMMAND_BOUNDARY + npmRun),
+      ] satisfies readonly [string, RegExp];
     }),
   );
 
@@ -315,6 +323,30 @@ describe('Issue #2242: workflow jobs running Bun-backed npm scripts set up Bun',
       BUN_BACKED_SCRIPT_KEYS.size,
       'Expected at least one Bun-backed npm script in package.json.',
     ).toBeGreaterThan(0);
+  });
+
+  function invalidExecutorSteps(
+    file: string,
+    jobName: string,
+    job: WorkflowJob,
+  ): string[] {
+    return jobSteps(job).flatMap((step, stepIndex) => {
+      const hasRun = typeof step.run === 'string';
+      const hasUses = typeof step['uses'] === 'string';
+      return hasRun === hasUses
+        ? [`${relativeToRepo(file)}:${jobName}:${step.name ?? stepIndex + 1}`]
+        : [];
+    });
+  }
+
+  it('every workflow step has exactly one executor', () => {
+    const invalidSteps = collectWorkflowFiles().flatMap((file) => {
+      const workflow = parseWorkflowYaml(readFileSync(file, 'utf-8'));
+      return Object.entries(workflow.jobs ?? {}).flatMap(([jobName, job]) =>
+        invalidExecutorSteps(file, jobName, job),
+      );
+    });
+    expect(invalidSteps).toEqual([]);
   });
 
   it('every job running a Bun-backed npm script also sets up Bun', () => {

@@ -11,7 +11,7 @@ export function isErrnoException(
   if (!(error instanceof Error) || !Object.hasOwn(error, 'code')) {
     return false;
   }
-  const errorCode = (error as NodeJS.ErrnoException).code;
+  const errorCode = Reflect.get(error, 'code');
   return errorCode === code;
 }
 
@@ -27,5 +27,13 @@ export function propertyValue(error: unknown, property: PropertyKey): unknown {
   ) {
     return undefined;
   }
-  return (error as Record<PropertyKey, unknown>)[property];
+  return Reflect.get(error, property);
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function toRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
 }

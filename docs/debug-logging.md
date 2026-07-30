@@ -268,7 +268,7 @@ llxprt --debug llxprt:*
 
 Default location: `<log>/debug/` (see [Application Directories](./reference/application-directories.md)).
 
-- Files are named by date: `debug-YYYY-MM-DD.jsonl`
+- Files are named by process id: `llxprt-debug-<PID>.jsonl`
 - Check permissions on the directory
 - Verify output target includes "file"
 

@@ -13,6 +13,7 @@ import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
+import { useResolvedWorkspaceDirectories } from '../../hooks/useResolvedWorkspaceDirectories.js';
 
 interface AiMessageProps {
   text: string;
@@ -22,6 +23,7 @@ interface AiMessageProps {
   model?: string;
   profileName?: string;
   thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
+  workspaceDirectories?: readonly string[];
 }
 
 export function getVisibleThinkingBlocks(
@@ -42,6 +44,7 @@ export const AiMessage: React.FC<AiMessageProps> = ({
   model,
   profileName,
   thinkingBlocks,
+  workspaceDirectories,
 }) => {
   /**
    * @plan:PLAN-20251202-THINKING-UI.P06
@@ -52,6 +55,8 @@ export const AiMessage: React.FC<AiMessageProps> = ({
   const showThinking = (getEphemeralSetting('reasoning.includeInResponse') ??
     true) as boolean;
   const { renderMarkdown } = useUIState();
+  const resolvedWorkspaceDirectories =
+    useResolvedWorkspaceDirectories(workspaceDirectories);
 
   const prefix = ' ';
   const prefixWidth = prefix.length;
@@ -99,6 +104,7 @@ export const AiMessage: React.FC<AiMessageProps> = ({
             availableTerminalHeight={availableTerminalHeight}
             terminalWidth={terminalWidth}
             renderMarkdown={renderMarkdown}
+            workspaceDirectories={resolvedWorkspaceDirectories}
           />
         </Box>
       </Box>

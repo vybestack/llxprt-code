@@ -484,6 +484,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
       - name: Fetch PR head and compute merge-base
         shell: bash
         env:
@@ -905,12 +910,28 @@ jobs:
         # is written from this trusted workflow only (env-provided JSON); no
         # PR-supplied OCR rules are ever loaded.
         #
+        # The "rules" array carries generation-time prompt calibration (issue
+        # #2678): senior-engineer review priorities, severity calibration,
+        # JSDoc/documentation suppression, resource-leak emphasis, and the
+        # maintainability-nit / test-suggestion suppressions that reduce
+        # low-value noise. It explicitly protects bug/correctness/security
+        # findings from suppression. When this calibration text changes, bump
+        # the OCR_RULES_HASH repo variable so incremental-review checkpoints
+        # invalidate and the updated rules take effect.
+        #
         # Include patterns cover this TypeScript monorepo's test layout:
         # *.test.ts(x), *.spec.ts(x), *.test.js(x), *.spec.js(x),
         # *.test.mjs/cjs, *.spec.mjs/cjs, __tests__/**, tests/**, test/**.
         env:
           OCR_RULES_JSON: |
             {
+              "rules": [
+                {
+                  "path": "**/*",
+                  "merge_system_rule": true,
+                  "rule": "Perform a thorough, senior-engineer review. Prioritize, in order: (1) Correctness/logic bugs — trace control flow, off-by-one, inverted conditions, wrong operator, state/race conditions, resource leaks, missing error/exception handling paths (including async rejections and promises whose catch does not cover synchronous throws in arguments). (2) Contract/intent mismatches — where the code's behavior contradicts its comments, names, or documented intent. (3) Edge cases & boundary conditions — empty/null/undefined, negative numbers, very large inputs, concurrent/early-init scenarios. (4) Type safety — avoid erasing discriminated unions to Record<string,unknown> or any; prefer narrowing. (5) Security — injection, unvalidated input, secrets. (6) Maintainability — dead/unreachable code, duplication, non-idiomatic patterns. For test files specifically: scrutinize whether assertions test behavior vs. implementation details (mock/spy call-counts are weak), coverage of edge/error cases, and missing scenarios. Always report each finding with the exact file path and line range, a concrete root-cause explanation, and a minimal fix. Do not speculate without grounding in the shown code. Additionally, enforce lint/complexity policy invariance and treat any weakening of static-analysis guardrails as High priority: (a) new suppression directives anywhere — eslint-disable / eslint-disable-next-line / eslint-disable-line / eslint-enable, file-level /* eslint-disable */, or TypeScript @ts-ignore / @ts-expect-error / @ts-nocheck; (b) any ESLint rule severity downgrade (error->warn or error->off) or a new 'off' entry; (c) any INCREASE to a complexity/size threshold (complexity, max-lines, max-lines-per-function, max-statements, max-params, max-depth, sonarjs/cognitive-complexity, or a 'max:' object option); (d) additions to .eslintignore or a config 'ignores:' block that excludes source from linting. For each, require that the underlying issue be fixed rather than silenced or loosened.\n\nSeverity and noise calibration: Do NOT report JSDoc/comment/documentation-only issues unless the comment actively contradicts the code, is an API/user-facing contract likely to mislead future maintainers/agents, or hides a real behavior mismatch. Do not nitpick missing/extra blank lines, comment completeness, wording, or whether a helper is called pure unless that wording materially misleads a future implementer into unsafe changes. Prefer code-behavior findings over comment/style findings. Reserve 'high' severity for correctness/security defects that cause wrong behavior, data loss, or vulnerabilities. Use 'medium' for behavioral concerns with real impact (error handling gaps, resource leaks, race conditions). Use 'low' only for minor style/maintainability items that do not affect behavior.\n\nDo NOT create exhaustive test-wishlist churn. Report missing tests only when the missing scenario protects issue-critical behavior, a plausible regression, cleanup/retry/error paths, security/isolation boundaries, concurrency/race behavior, or previously observed failures. Avoid requesting tests for trivial implementation details when equivalent behavior is already covered.\n\nDo treat resource leaks, async/sync cleanup gaps, swallowed cleanup failures, orphaned processes/sockets/tempdirs, race windows, unhandled promise/synchronous-throw paths, and state reset after failed cleanup as real code-quality findings. Do not down-rank these as mere edge-case nits when they can leak resources, orphan processes, mask failures, or break recoverability. Classify plausible leaks/recoverability bugs at least Medium, High when they can corrupt state, lose access to resources, or affect unrelated sessions.\n\nMaintainability-nit suppression (issue #2678): Do NOT report the following low-value maintainability patterns: (1) Hardcoded constants that are build-time, configuration, or test-fixture values — these are intentional and not a code smell; do not flag a constant in a build script, config, or test fixture as something that should be extracted or parameterized. (2) Error/diagnostic verbosity — do not suggest adding more arguments or context to error messages or spawn/process diagnostics unless the current diagnostics are actively misleading or missing actionable information needed to diagnose a real failure. (3) Naming style — do not suggest that a variable, function, or parameter name 'could be more descriptive' unless the name is actively misleading about the value or behavior it represents. (4) Modularity refactors — do not suggest extracting code to a shared file or helper 'for future reuse' unless there is active duplication (three or more copies of the same logic) that hurts maintainability today. These are style preferences, not defects.\n\nTest-suggestion suppression (issue #2678): Do NOT suggest adding a test unless a specific untested code path has a plausible defect (not merely 'untested'). Do not suggest refactoring existing test structure or adding tests that would change behavior. The codebase has established test patterns (contract, behavioral, structural); respect them and do not propose test reorganization.\n\nSignal preservation: Do NOT suppress bug, correctness, or security findings at any severity. These categories are the primary signal and must always be reported regardless of the suppression guidance above. Only low-value maintainability style-nits and non-actionable test suggestions are being suppressed.\n\nBefore returning findings, deduplicate by factual root cause or invariant. When one root cause affects multiple locations, emit one representative finding at the best current-source location and explicitly list every additional affected path or symbol as members; do not emit semantically equivalent rephrasings. Keep identical prose about different symbols or distinct invariants separate. Immediately before emitting each finding, re-read the current source and verify the path, symbol, line range, and quoted existing code. Correct mismatches and omit claims not supported by current source, tests, or contracts. Treat every finding as a hypothesis, not authority."
+                }
+              ],
               "include": [
                 "**/*.test.{js,jsx,mjs,cjs,ts,tsx}",
                 "**/*.spec.{js,jsx,mjs,cjs,ts,tsx}",
@@ -1173,27 +1194,70 @@ jobs:
             mark_infrastructure_failure "preview" "OCR preview normalization failed"
             exit 0
           fi
-          if ! grep -Eq '^Will review[[:space:]]*\([0-9]+\):' ocr-preview.txt; then
+          if ! node <<'NODE'
+          const fs = require('fs');
+
+          function previewSelectionFromOutput(output) {
+            const lines = String(output).split(/\r?\n/);
+            const headingIndexes = [];
+            for (let index = 0; index < lines.length; index += 1) {
+              if (/^Will review\s*\(/.test(lines[index])) {
+                headingIndexes.push(index);
+              }
+            }
+            if (headingIndexes.length !== 1) {
+              throw new Error('OCR preview must contain exactly one Will review heading');
+            }
+            const headingIndex = headingIndexes[0];
+            const heading = /^Will review\s*\(([^)]*)\):\s*$/.exec(lines[headingIndex]);
+            if (!heading || !/^\d+$/.test(heading[1])) {
+              throw new Error('OCR preview Will review count is malformed');
+            }
+            const declaredCount = Number(heading[1]);
+            if (!Number.isSafeInteger(declaredCount) || declaredCount < 0) {
+              throw new Error('OCR preview Will review count is unsafe');
+            }
+            const selected = [];
+            const seen = new Set();
+            for (const rawLine of lines.slice(headingIndex + 1)) {
+              if (/^[A-Za-z][A-Za-z ]*\s*\(\d+\):\s*$/.test(rawLine)) {
+                break;
+              }
+              let path = rawLine.trim()
+                .replace(/^[-*]\s*/, '')
+                .replace(/^\[[^\]]*\]\s*/, '')
+                .replace(/\s+[-+]\d+(?:\s+[-+]\d+)?\s*$/, '')
+                .trim();
+              if ((path.startsWith('"') && path.endsWith('"'))
+                || (path.startsWith("'") && path.endsWith("'"))) {
+                path = path.slice(1, -1).trim();
+              }
+              if (path && !seen.has(path)) {
+                seen.add(path);
+                selected.push(path);
+              }
+            }
+            if (selected.length !== declaredCount) {
+              throw new Error(`OCR preview declared ${declaredCount} files but yielded ${selected.length} unique paths`);
+            }
+            return Object.freeze(selected);
+          }
+
+          const selected = previewSelectionFromOutput(
+            fs.readFileSync('ocr-preview.txt', 'utf8'),
+          );
+          fs.writeFileSync(
+            'ocr-selected-files.txt',
+            selected.length > 0 ? `${selected.join('\n')}\n` : '',
+          );
+          NODE
+          then
             echo "1" > ocr-exit-code.txt
-            mark_infrastructure_failure "preview" "OCR preview output was malformed"
+            mark_infrastructure_failure "preview" "OCR preview extraction or cardinality validation failed"
             exit 0
           fi
           echo "true" > ocr-preview-succeeded.txt
-          reviewed="$(awk '
-            BEGIN { IGNORECASE = 1; in_section = 0 }
-            /^Will review[[:space:]]*\(/ { in_section = 1; next }
-            /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { in_section = 0 }
-            in_section { print }
-          ' ocr-preview.txt || true)"
-          printf '%s\n' "$reviewed" | sed -e 's/^[[:space:]]*//' \
-            -e 's/^[-*][[:space:]]*//' \
-            -e 's/^\[[^]]*\][[:space:]]*//' \
-            -e 's/^"\(.*\)"$/\1/' \
-            -e "s/^'\(.*\)'$/\1/" \
-            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
-            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
-            | grep -v '^[[:space:]]*$' \
-            | awk '!seen[$0]++' > ocr-selected-files.txt || true
+          reviewed="$(cat ocr-selected-files.txt)"
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
             echo "$changed_tests"
@@ -1981,16 +2045,46 @@ jobs:
                 || decision.policyFailure
                 || decision.failedFindings !== 0
                 || decision.completionState !== 'complete'
+                || decision.manifestCompleteness !== 'complete'
                 || decision.publicationState !== 'complete'
+                || decision.previewValidated !== true
+                || decision.completedFilesValid !== true
                 || decision.resultSource === 'synthesized') {
                 return false;
               }
-              const selected = Number(decision.selectedFiles);
-              const completed = Number(decision.completedFiles);
-              if (!Number.isFinite(selected) || selected <= 0) {
+              const selected = decision.selectedFiles;
+              const completed = decision.completedFiles;
+              const ocrCompleted = decision.ocrCompletedFiles;
+              if (!Number.isSafeInteger(selected) || selected <= 0
+                || !Number.isSafeInteger(completed) || completed < 0
+                || !Number.isSafeInteger(ocrCompleted) || ocrCompleted < 0) {
                 return false;
               }
-              return completed >= selected;
+              return completed === selected && ocrCompleted === selected;
+            }
+
+            function buildCheckpoint(data) {
+              const eligibleFiles = Object.freeze([...data.eligibleFiles]);
+              return Object.freeze({
+                schema: 1,
+                pr_number: data.prNumber,
+                head_sha: data.headSha,
+                base_sha: data.baseSha,
+                merge_base: data.mergeBase,
+                reviewed_at: data.reviewedAt,
+                run_url: data.runUrl,
+                ocr_version: data.ocrVersion,
+                ocr_model: data.ocrModel,
+                rules_hash: data.rulesHash,
+                policy_hash: data.policyHash,
+                workflow_schema_hash: data.workflowSchemaHash,
+                completion_state: 'complete',
+                range_mode: data.rangeMode,
+                selected_files: eligibleFiles.length,
+                completed_files: data.completedFiles,
+                eligible_files: eligibleFiles,
+                publication_state: data.publicationState,
+              });
             }
 
             function completionStateForResult(status, resultSource) {
@@ -2008,11 +2102,16 @@ jobs:
                 : {};
               const cacheRead = Number(summary.cache_read_tokens || 0);
               const cacheWrite = Number(summary.cache_write_tokens || 0);
+              const rawCompletedFiles = summary.files_reviewed;
+              const completedFilesValid = typeof rawCompletedFiles === 'number'
+                && Number.isSafeInteger(rawCompletedFiles)
+                && rawCompletedFiles >= 0;
               const resultSource = result && typeof result === 'object'
                 ? (result.resultSource || 'parsed')
                 : 'parsed';
               return {
-                completed_files: Number(summary.files_reviewed || 0),
+                completed_files: completedFilesValid ? rawCompletedFiles : 0,
+                completed_files_valid: completedFilesValid,
                 elapsed: String(summary.elapsed || 'unknown'),
                 tokens: {
                   input: Number(summary.input_tokens || 0),
@@ -2813,6 +2912,24 @@ jobs:
               return result;
             }
 
+            function eligibleCompletedFilesForReview(params) {
+              const eligibleFiles = Array.isArray(params.eligibleFiles)
+                ? params.eligibleFiles
+                : [];
+              const validStatus = params.ocrStatus === 'success'
+                || params.ocrStatus === 'completed';
+              const exactCount = params.completedFilesValid === true
+                && Number.isSafeInteger(params.completedFiles)
+                && params.completedFiles === eligibleFiles.length;
+              return params.ran === true
+                && params.exitCode === 0
+                && params.previewValidated === true
+                && validStatus
+                && exactCount
+                ? Object.freeze([...eligibleFiles])
+                : Object.freeze([]);
+            }
+
             function evidencedPathsFromResult(result) {
               if (!result) {
                 return [];
@@ -3346,18 +3463,21 @@ jobs:
             // tracking. The manifest records selected/completed/failed/waived
             // file sets and a terminal completeness state.
             const ocrStatusValue = readTrimmed('ocr-status.txt', '') || '';
+            const previewValidated = readTrimmed('ocr-preview-succeeded.txt', '') === 'true';
             const selectedFilesContent = readTrimmed('ocr-selected-files.txt', '');
-            const selectedFilesList = selectedFilesContent
-              ? selectedFilesContent.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0)
-              : [];
-            // C2: completedFiles must only be set to all selected files when
-            // the OCR status is a recognized success AND exit code is 0.
-            // For completed_with_errors we do not know which files actually
-            // completed, so leave completedFiles empty (conservative).
-            const manifestCompletedFiles =
-              ran && (ocrStatusValue === 'success' || ocrStatusValue === 'completed') && exitCode === 0
-                ? selectedFilesList
-                : [];
+            const eligibleFiles = Object.freeze(normalizeFilePaths(
+              selectedFilesContent.split(String.fromCharCode(10)),
+            ));
+            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
+            const eligibleCompletedFiles = eligibleCompletedFilesForReview({
+              ran,
+              exitCode,
+              ocrStatus: ocrStatusValue,
+              previewValidated,
+              eligibleFiles,
+              completedFiles: ocrObservation.completed_files,
+              completedFilesValid: ocrObservation.completed_files_valid,
+            });
             const manifestFailedFiles = failedFilesFromResult(parsedOcrResult);
             const readFailureFiles = manifestFailedFiles.filter((filePath) => {
               const warnings = Array.isArray(parsedOcrResult?.warnings)
@@ -3375,16 +3495,16 @@ jobs:
             const manifestCompleteness = resolveCompleteness({
               ocrExitCode: exitCode,
               ocrStatus: ocrStatusValue || null,
-              selectedFiles: selectedFilesList,
-              completedFiles: manifestCompletedFiles,
+              selectedFiles: eligibleFiles,
+              completedFiles: eligibleCompletedFiles,
               failedFiles: manifestFailedFiles,
               reusedFiles: [],
               waivedFiles: [],
               skipped: false,
             });
             const manifestCoverage = computeCoverage({
-              completed: manifestCompletedFiles.length,
-              selected: selectedFilesList.length,
+              completed: eligibleCompletedFiles.length,
+              selected: eligibleFiles.length,
             });
             const statusLine = process.env.RANGE_MODE === 'noop'
               ? 'Same head; no new changes to review.'
@@ -3415,7 +3535,6 @@ jobs:
                     lines: { additions: 0, deletions: 0, total: 0 },
                   },
                 };
-            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
             let body = [
               MARKER,
               `## OpenCodeReview — PR #${number}`,
@@ -3575,7 +3694,7 @@ jobs:
                 ...structuredFailures,
               ]);
               coverageReport = buildCoverageReport({
-                previewFiles: selectedFilesList,
+                previewFiles: eligibleFiles,
                 evidencedFiles,
                 readFailureFiles,
                 thresholdPercentage: coverageThreshold,
@@ -3728,8 +3847,8 @@ jobs:
               providerModel: readTrimmed('ocr-preflight.txt', '').split(String.fromCharCode(10))[0] || '',
               concurrency: Number(process.env.OCR_CONCURRENCY) || 0,
               ruleConfigHash: process.env.OCR_RULE_CONFIG_HASH || '',
-              selectedFiles: selectedFilesList,
-              completedFiles: manifestCompletedFiles,
+              selectedFiles: eligibleFiles,
+              completedFiles: eligibleCompletedFiles,
               failedFiles: manifestFailedFiles,
               reusedFiles: [],
               waivedFiles: [],
@@ -3752,16 +3871,21 @@ jobs:
               fs.writeFileSync(INFRA_FAILURE_FILE, infraMessage);
               fs.writeFileSync('ocr-phase.txt', 'manifest\n');
             }
+            const checkpointInfrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
             const checkpointDecision = {
               ran,
               exitCode,
-              infrastructureFailure,
+              infrastructureFailure: checkpointInfrastructureFailure,
               policyFailure,
               failedFindings: failedInline,
               completionState: ocrObservation.completion_state,
+              manifestCompleteness,
               publicationState,
-              selectedFiles: rangeMetadata.selected.files,
-              completedFiles: ocrObservation.completed_files,
+              previewValidated,
+              selectedFiles: eligibleFiles.length,
+              completedFiles: eligibleCompletedFiles.length,
+              ocrCompletedFiles: ocrObservation.completed_files,
+              completedFilesValid: ocrObservation.completed_files_valid,
               resultSource: ocrObservation.result_source,
             };
 
@@ -3808,25 +3932,23 @@ jobs:
             // If any of those fail, checkpointAfter remains checkpointBefore
             // and the durable checkpoint is not corrupted.
             if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id) {
-              checkpointAfter = {
-                schema: 1,
-                pr_number: number,
-                head_sha: headSha,
-                base_sha: process.env.API_BASE_SHA,
-                merge_base: process.env.BASE_SHA,
-                reviewed_at: new Date().toISOString(),
-                run_url: runUrl,
-                ocr_version: process.env.OCR_VERSION,
-                ocr_model: process.env.OCR_MODEL || 'unknown',
-                rules_hash: process.env.OCR_RULES_HASH || '',
-                policy_hash: process.env.OCR_POLICY_HASH || '',
-                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
-                completion_state: 'complete',
-                range_mode: process.env.RANGE_MODE,
-                selected_files: rangeMetadata.selected.files,
-                completed_files: ocrObservation.completed_files,
-                publication_state: publicationState,
-              };
+              checkpointAfter = buildCheckpoint({
+                prNumber: number,
+                headSha,
+                baseSha: process.env.API_BASE_SHA,
+                mergeBase: process.env.BASE_SHA,
+                reviewedAt: new Date().toISOString(),
+                runUrl,
+                ocrVersion: process.env.OCR_VERSION,
+                ocrModel: process.env.OCR_MODEL || 'unknown',
+                rulesHash: process.env.OCR_RULES_HASH || '',
+                policyHash: process.env.OCR_POLICY_HASH || '',
+                workflowSchemaHash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+                rangeMode: process.env.RANGE_MODE,
+                eligibleFiles,
+                completedFiles: eligibleCompletedFiles.length,
+                publicationState,
+              });
               const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
               try {
                 await github.rest.issues.updateComment({
@@ -4650,12 +4772,12 @@ jobs:
         run: |
           set -euo pipefail
           export GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-$RUNNER_TEMP/ocr-step-summary.md}"
-          if node scripts/ocr-telemetry.js; then
+          if bun scripts/ocr-telemetry.ts; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "phase=telemetry; reason=OCR telemetry producer failed" >> ocr-infrastructure-failure.txt
-          if node scripts/ocr-telemetry.js --failure "OCR telemetry producer failed"; then
+          if bun scripts/ocr-telemetry.ts --failure "OCR telemetry producer failed"; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -4727,12 +4849,12 @@ jobs:
           OCR_TELEMETRY_STATE: failed
         run: |
           set -euo pipefail
-          if ! node scripts/ocr-telemetry.js --redact ocr-telemetry.json || \
-             ! node scripts/ocr-telemetry.js --validate ocr-telemetry.json; then
+          if ! bun scripts/ocr-telemetry.ts --redact ocr-telemetry.json || \
+             ! bun scripts/ocr-telemetry.ts --validate ocr-telemetry.json; then
             echo "phase=telemetry; reason=post-redaction telemetry validation failed" >> ocr-infrastructure-failure.txt
-            node scripts/ocr-telemetry.js --failure "post-redaction telemetry validation failed"
-            node scripts/ocr-telemetry.js --redact ocr-telemetry.json
-            node scripts/ocr-telemetry.js --validate ocr-telemetry.json
+            bun scripts/ocr-telemetry.ts --failure "post-redaction telemetry validation failed"
+            bun scripts/ocr-telemetry.ts --redact ocr-telemetry.json
+            bun scripts/ocr-telemetry.ts --validate ocr-telemetry.json
           fi
           echo "valid=true" >> "$GITHUB_OUTPUT"
 

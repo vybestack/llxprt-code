@@ -87,8 +87,6 @@ export interface AgentFileFiltering {
 
 export interface AgentTelemetry {
   readonly enabled?: boolean;
-  readonly target?: 'local' | 'gcp';
-  readonly otlpEndpoint?: string;
   readonly logPrompts?: boolean;
   readonly outfile?: string;
   readonly redactSensitiveData?: boolean;

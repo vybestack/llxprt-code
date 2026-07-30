@@ -88,8 +88,6 @@ vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
 
 vi.mock('../../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
-  DEFAULT_TELEMETRY_TARGET: 'local',
-  DEFAULT_OTLP_ENDPOINT: 'http://localhost:4318',
   logCliConfiguration: vi.fn(),
   StartSessionEvent: vi.fn(),
 }));

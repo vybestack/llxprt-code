@@ -38,6 +38,7 @@ export function createInitialRetryState(initialDelayMs: number): {
   consecutive429s: number;
   consecutiveAuthErrors: number;
   consecutiveNetworkErrors: number;
+  consecutiveServerErrors: number;
 } {
   return {
     attempt: 0,
@@ -45,5 +46,6 @@ export function createInitialRetryState(initialDelayMs: number): {
     consecutive429s: 0,
     consecutiveAuthErrors: 0,
     consecutiveNetworkErrors: 0,
+    consecutiveServerErrors: 0,
   };
 }

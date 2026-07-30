@@ -705,7 +705,7 @@ export default tseslint.config(
   // can apply without a forced rewrite of the fixture. All other quality
   // rules still apply to this file.
   {
-    files: ['scripts/tests/eslint-guard.test.js'],
+    files: ['scripts/tests/eslint-guard.test.ts'],
     rules: {
       'max-lines': 'off', // eslint-policy-allow-off: #2282 exhaustive guard fixture
     },
@@ -909,7 +909,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/vscode-ide-companion/esbuild.js'],
+    files: ['packages/vscode-ide-companion/esbuild.ts'],
     languageOptions: {
       globals: {
         ...globals.node,

@@ -375,46 +375,50 @@ describe('relaunchUnderBunIfNeeded', () => {
     }
 
     /** @plan project-plans/issue-1954-sandbox-hardening.md (O9-O12) — real spawn with guaranteed fd 3. */
-    it('O9/O10: direct platform fd-forwarding — explicit stdio array maps parent fd 3 to child fd 3', async () => {
-      const pathMod = await import('node:path');
-      const fsMod = await import('node:fs');
-      const dir = await mkLauncherTmpDir('launcher-o9-');
-      try {
-        const sentinel = pathMod.join(dir, 'child.json');
-        const recorder = pathMod.join(dir, 'rec.js');
-        const tokenFile = pathMod.join(dir, 'token.txt');
-        const token = 'b'.repeat(64) + '\n';
-        fsMod.writeFileSync(tokenFile, token);
-        fsMod.writeFileSync(
-          recorder,
-          '#!/usr/bin/env node\nconst fs=require("fs");let r=Buffer.alloc(0),c=Buffer.alloc(128),n;try{while((n=fs.readSync(3,c,0,128,null))>0)r=Buffer.concat([r,c.subarray(0,n)]);}catch{}try{fs.closeSync(3);}catch{}fs.writeFileSync(' +
-            JSON.stringify(sentinel) +
-            ',JSON.stringify({len:r.length,text:r.toString("utf8")}));',
-        );
-        fsMod.chmodSync(recorder, 0o755);
-        const harness = pathMod.join(dir, 'h.js');
-        fsMod.writeFileSync(
-          harness,
-          'const{spawn}=require("child_process");const c=spawn(' +
-            JSON.stringify(recorder) +
-            ',[],{stdio:[0,1,2,0],env:{...process.env,LLXPRT_BUN_RELAUNCHED:"true"}});c.on("close",e=>process.exit(e));',
-        );
-        const result = (await import('node:child_process')).spawnSync(
-          process.execPath,
-          [harness],
-          { encoding: 'utf8', timeout: 10000, input: token },
-        );
-        expect(result.status).toBe(0);
-        const rec = JSON.parse(fsMod.readFileSync(sentinel, 'utf8')) as {
-          len: number;
-          text: string;
-        };
-        expect(rec.len).toBe(65);
-        expect(rec.text).toBe(token);
-      } finally {
-        await rmLauncherTmpDir(dir);
-      }
-    }, 10000);
+    it.skipIf(process.platform === 'win32')(
+      'O9/O10: direct platform fd-forwarding — explicit stdio array maps parent fd 3 to child fd 3',
+      async () => {
+        const pathMod = await import('node:path');
+        const fsMod = await import('node:fs');
+        const dir = await mkLauncherTmpDir('launcher-o9-');
+        try {
+          const sentinel = pathMod.join(dir, 'child.json');
+          const recorder = pathMod.join(dir, 'rec.js');
+          const tokenFile = pathMod.join(dir, 'token.txt');
+          const token = 'b'.repeat(64) + '\n';
+          fsMod.writeFileSync(tokenFile, token);
+          fsMod.writeFileSync(
+            recorder,
+            '#!/usr/bin/env node\nconst fs=require("fs");let r=Buffer.alloc(0),c=Buffer.alloc(128),n;try{while((n=fs.readSync(3,c,0,128,null))>0)r=Buffer.concat([r,c.subarray(0,n)]);}catch{}try{fs.closeSync(3);}catch{}fs.writeFileSync(' +
+              JSON.stringify(sentinel) +
+              ',JSON.stringify({len:r.length,text:r.toString("utf8")}));',
+          );
+          fsMod.chmodSync(recorder, 0o755);
+          const harness = pathMod.join(dir, 'h.js');
+          fsMod.writeFileSync(
+            harness,
+            'const{spawn}=require("child_process");const c=spawn(' +
+              JSON.stringify(recorder) +
+              ',[],{stdio:[0,1,2,0],env:{...process.env,LLXPRT_BUN_RELAUNCHED:"true"}});c.on("close",e=>process.exit(e));',
+          );
+          const result = (await import('node:child_process')).spawnSync(
+            process.execPath,
+            [harness],
+            { encoding: 'utf8', timeout: 10000, input: token },
+          );
+          expect(result.status).toBe(0);
+          const rec = JSON.parse(fsMod.readFileSync(sentinel, 'utf8')) as {
+            len: number;
+            text: string;
+          };
+          expect(rec.len).toBe(65);
+          expect(rec.text).toBe(token);
+        } finally {
+          await rmLauncherTmpDir(dir);
+        }
+      },
+      10000,
+    );
 
     /** O11/O12: Verify real relaunchUnderBunIfNeeded closes parent fd 3 after spawn, with guaranteed fd 3. */
     it('O11/O12: real relaunchUnderBunIfNeeded closes the parent fd 3 after successful spawn', async () => {

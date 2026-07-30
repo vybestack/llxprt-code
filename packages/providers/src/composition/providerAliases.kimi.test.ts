@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { computeModelDefaults } from '../runtime/providerMutations.js';
 import { loadProviderAliasEntries } from './providerAliases.js';
 
 describe('builtin kimi provider alias', () => {
@@ -26,24 +27,27 @@ describe('builtin kimi provider alias', () => {
     expect(ephemerals?.['user-agent']).toBe('RooCode/1.0');
   });
 
-  it('has modelDefaults with a broad kimi.* rule and a kimi-k3 override', () => {
+  it('has modelDefaults with a broad rule plus kimi-k3 and k3-256k overrides', () => {
     const entries = loadProviderAliasEntries();
     const entry = entries.find((candidate) => candidate.alias === 'kimi');
 
     expect(entry?.config.modelDefaults).toBeDefined();
     expect(Array.isArray(entry?.config.modelDefaults)).toBe(true);
-    expect(entry?.config.modelDefaults).toHaveLength(2);
+    expect(entry?.config.modelDefaults).toHaveLength(3);
 
-    // The broad rule MUST come before the kimi-k3 rule so array-order
-    // precedence lets the K3-specific keys win for kimi-k3 models.
+    // The broad rule MUST come before the kimi-k3/k3-256k rules so
+    // array-order precedence lets the specific keys win for those models.
     const patterns = (entry?.config.modelDefaults ?? []).map((r) => r.pattern);
-    expect(patterns.indexOf('kimi.*')).toBeLessThan(
+    expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
       patterns.indexOf('kimi-k3'),
     );
+    expect(patterns.indexOf('^kimi|^k3-256k$')).toBeLessThan(
+      patterns.indexOf('k3-256k'),
+    );
 
-    // Broad K2.x rule — locate by pattern rather than array index.
+    // Broad rule — locate by pattern rather than array index.
     const broadRule = entry?.config.modelDefaults?.find(
-      (rule) => rule.pattern === 'kimi.*',
+      (rule) => rule.pattern === '^kimi|^k3-256k$',
     );
     expect(broadRule).toBeDefined();
 
@@ -58,6 +62,56 @@ describe('builtin kimi provider alias', () => {
     // with the K3-specific values when switching to kimi-k3.
     expect(broadDefaults?.max_tokens).toBe(32768);
     expect(broadDefaults?.['context-limit']).toBe(262144);
+
+    // Kimi sampling params are fixed server-side; the dialog must hide them.
+    expect(broadRule?.unallowedParameters).toStrictEqual([
+      'temperature',
+      'top_p',
+      'top_k',
+      'frequency_penalty',
+      'presence_penalty',
+    ]);
+
+    // The broad pattern must NOT bleed kimi's suppression onto foreign
+    // models that merely contain 'k3' or 'kimi' as substrings.
+    const broadRegex = new RegExp(broadRule!.pattern);
+    expect(broadRegex.test('k3-256k')).toBe(true);
+    expect(broadRegex.test('kimi-k3')).toBe(true);
+    expect(broadRegex.test('claude-k3')).toBe(false);
+    expect(broadRegex.test('k3-foreign-model')).toBe(false);
+    expect(broadRegex.test('qwen-k3')).toBe(false);
+  });
+
+  it('ships a k3-256k modelDefaults rule with 256K geometry', () => {
+    const entries = loadProviderAliasEntries();
+    const entry = entries.find((candidate) => candidate.alias === 'kimi');
+
+    const rule = entry?.config.modelDefaults?.find(
+      (candidate) => candidate.pattern === 'k3-256k',
+    );
+    expect(rule).toBeDefined();
+    expect(new RegExp(rule!.pattern).test('k3-256k')).toBe(true);
+    expect(rule!.ephemeralSettings.max_tokens).toBe(131072);
+    expect(rule!.ephemeralSettings['context-limit']).toBe(262144);
+  });
+
+  it('ships staticModels so the dialog lists real Kimi models, not API fallbacks', () => {
+    const entries = loadProviderAliasEntries();
+    const entry = entries.find((candidate) => candidate.alias === 'kimi');
+
+    const ids = (entry?.config.staticModels ?? []).map((model) => model.id);
+    expect(ids).toStrictEqual(
+      expect.arrayContaining(['kimi-for-coding', 'kimi-k3', 'k3-256k']),
+    );
+    const k3 = entry?.config.staticModels?.find(
+      (model) => model.id === 'kimi-k3',
+    );
+    expect(k3?.contextWindow).toBe(1048576);
+    expect(k3?.maxOutputTokens).toBe(131072);
+    const k3256 = entry?.config.staticModels?.find(
+      (model) => model.id === 'k3-256k',
+    );
+    expect(k3256?.contextWindow).toBe(262144);
   });
 
   it('ships a kimi-k3 modelDefaults rule with K3-valid geometry and effort', () => {
@@ -89,5 +143,27 @@ describe('builtin kimi provider alias', () => {
     expect(entry?.config.mediaSupport?.inlineImages).toBe(true);
     expect(entry?.config.mediaSupport?.fileUpload).toBe(true);
     expect(entry?.config.mediaSupport?.videoSupport).toBe(true);
+  });
+
+  it('applies family-wide image limits to Kimi vision models', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) => candidate.alias === 'kimi',
+    );
+    const broadRule = entry?.config.modelDefaults?.find(
+      (rule) => rule.pattern === '^kimi|^k3-256k$',
+    );
+
+    const imageLimits = {
+      'image-resize.maxLongEdge': 4096,
+      'image-resize.maxShortEdge': 2160,
+      'image-resize.maxPixels': 8_847_360,
+    };
+    expect(broadRule?.ephemeralSettings).toMatchObject(imageLimits);
+    const rules = entry?.config.modelDefaults ?? [];
+    expect(computeModelDefaults('kimi-k3', rules)).toMatchObject(imageLimits);
+    expect(computeModelDefaults('k3-256k', rules)).toMatchObject(imageLimits);
+    expect(computeModelDefaults('custom-model', rules)).not.toHaveProperty(
+      'image-resize.maxLongEdge',
+    );
   });
 });

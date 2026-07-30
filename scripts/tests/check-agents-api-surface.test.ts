@@ -5,7 +5,7 @@
  */
 
 /**
- * Behavioral tests for scripts/check-agents-api-surface.mjs.
+ * Behavioral tests for scripts/check-agents-api-surface.ts.
  *
  * Two test areas are covered:
  *
@@ -35,10 +35,10 @@ import {
   resolveBuildTimeoutMs,
   describeTscSpawnError,
   DEFAULT_BUILD_TIMEOUT_MS,
-} from '../check-agents-api-surface.mjs';
+} from '../check-agents-api-surface.ts';
 
 const repoRoot = resolve(import.meta.dirname, '../..');
-const checkerPath = join(repoRoot, 'scripts', 'check-agents-api-surface.mjs');
+const checkerPath = join(repoRoot, 'scripts', 'check-agents-api-surface.ts');
 
 describe('resolveBuildTimeoutMs', () => {
   it('returns the default when the env var is absent', () => {
@@ -130,7 +130,7 @@ describe('resolveBuildTimeoutMs', () => {
 describe('describeTscSpawnError', () => {
   it('classifies a SIGTERM-without-status (timeout) and includes the configured timeout', () => {
     const msg = describeTscSpawnError(
-      { signal: 'SIGTERM', status: null as unknown as undefined },
+      { signal: 'SIGTERM', status: null },
       180000,
     );
     expect(msg).toContain('timed out');
@@ -140,7 +140,7 @@ describe('describeTscSpawnError', () => {
   it('uses the default timeout in the timeout message when none is passed', () => {
     const msg = describeTscSpawnError({
       signal: 'SIGTERM',
-      status: null as unknown as undefined,
+      status: null,
     });
     expect(msg).toContain(`${DEFAULT_BUILD_TIMEOUT_MS}ms`);
   });
@@ -162,7 +162,7 @@ describe('describeTscSpawnError', () => {
   it('classifies an arbitrary signal termination', () => {
     const msg = describeTscSpawnError({
       signal: 'SIGKILL',
-      status: null as unknown as undefined,
+      status: null,
     });
     expect(msg).toContain('SIGKILL');
     expect(msg).toContain('terminated by signal');
@@ -175,13 +175,22 @@ describe('describeTscSpawnError', () => {
       syscall: 'spawn',
       path: '/usr/bin/npx',
       message: 'permission denied',
-      status: null as unknown as undefined,
+      status: null,
     };
     const msg = describeTscSpawnError(err);
     expect(msg).toContain('EACCES');
     expect(msg).toContain('errno');
     expect(msg).toContain('spawn');
     expect(msg).toContain('permission denied');
+  });
+
+  it('preserves Error-valued spawn messages through string coercion', () => {
+    const msg = describeTscSpawnError({
+      code: 'EACCES',
+      message: new Error('permission denied'),
+      status: null,
+    });
+    expect(msg).toContain('Error: permission denied');
   });
 
   it('returns null for an ordinary non-zero exit (no special classification)', () => {

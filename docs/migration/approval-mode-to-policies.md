@@ -258,7 +258,7 @@ Add to your [user `settings.json`](../reference/application-directories.md):
 }
 ```
 
-**Important:** Use absolute paths, not `~` or relative paths. The example shows the macOS config-directory location; on Linux use `~/.config/llxprt-code/my-policy.toml` and on Windows use `%APPDATA%\llxprt-code\Config\my-policy.toml`. See [Application Directories](../reference/application-directories.md) for the canonical paths on each OS.
+**Important:** Use absolute paths, not `~` or relative paths. The example shows the macOS config-directory location; on Linux use `/home/yourname/.config/llxprt-code/my-policy.toml` and on Windows use `%APPDATA%\llxprt-code\Config\my-policy.toml`. See [Application Directories](../reference/application-directories.md) for the canonical paths on each OS.
 
 ### Step 5: Verify and Test
 

@@ -44,7 +44,7 @@ async function main() {
   }
   try {
     const { buildComparison, isComparisonResult } = await import(
-      path.join(__dirname, 'lib', 'ocr-concurrency-canary-2673-comparator.js')
+      path.join(__dirname, 'lib', 'ocr-concurrency-canary-2673-comparator.ts')
     );
     const artifacts = argv.map((filePath) => readArtifact(filePath));
     const result = buildComparison(artifacts);

@@ -378,6 +378,27 @@ describe('validateSetting — validation', () => {
     expect(result.success).toBe(false);
   });
 
+  it('validates the image resize enabled profile setting', () => {
+    expect(validateSetting('image-resize.enabled', true).success).toBe(true);
+    expect(validateSetting('image-resize.enabled', false).success).toBe(true);
+    expect(validateSetting('image-resize.enabled', 'yes').success).toBe(false);
+  });
+
+  it.each([
+    'image-resize.maxLongEdge',
+    'image-resize.maxShortEdge',
+    'image-resize.maxPixels',
+  ])('validates numeric image resize profile setting %s', (key) => {
+    expect(validateSetting(key, 2048).success).toBe(true);
+    expect(validateSetting(key, 0).success).toBe(false);
+    expect(validateSetting(key, -1).success).toBe(false);
+    expect(validateSetting(key, 1.5).success).toBe(false);
+    expect(validateSetting(key, '2048').success).toBe(false);
+    expect(validateSetting(key, NaN).success).toBe(false);
+    expect(validateSetting(key, Infinity).success).toBe(false);
+    expect(getProfilePersistableKeys()).toContain(key);
+  });
+
   it('rejects Infinity for compression-threshold', () => {
     const result = validateSetting('compression-threshold', Infinity);
     expect(result.success).toBe(false);
@@ -843,5 +864,50 @@ describe('compression strategy values in registry', () => {
       const result = validateSetting('compression.strategy', strategy);
       expect(result.success).toBe(true);
     }
+  });
+});
+
+describe('mcp.lazy and mcp.eagerServers ephemeral settings', () => {
+  it('mcp.lazy has type boolean', () => {
+    const spec = getSettingSpec('mcp.lazy');
+    expect(spec).toBeDefined();
+    expect(spec?.type).toBe('boolean');
+  });
+
+  it('mcp.lazy is persistable to profile', () => {
+    const spec = getSettingSpec('mcp.lazy');
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('mcp.lazy appears in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+    expect(keys).toContain('mcp.lazy');
+  });
+
+  it('mcp.eagerServers has type string-array', () => {
+    const spec = getSettingSpec('mcp.eagerServers');
+    expect(spec).toBeDefined();
+    expect(spec?.type).toBe('string-array');
+  });
+
+  it('mcp.eagerServers parses a JSON array value as a string array', () => {
+    const parsed = parseSetting('mcp.eagerServers', '["server-a","server-b"]');
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toStrictEqual(['server-a', 'server-b']);
+  });
+
+  it('mcp.eagerServers ignores malformed values', () => {
+    const parsed = parseSetting('mcp.eagerServers', 'not-valid-json');
+    expect(parsed).toBe('not-valid-json');
+  });
+
+  it('mcp.eagerServers is persistable to profile', () => {
+    const spec = getSettingSpec('mcp.eagerServers');
+    expect(spec?.persistToProfile).toBe(true);
+  });
+
+  it('mcp.eagerServers appears in profile persistable keys', () => {
+    const keys = getProfilePersistableKeys();
+    expect(keys).toContain('mcp.eagerServers');
   });
 });

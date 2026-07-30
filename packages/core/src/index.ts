@@ -603,7 +603,6 @@ export type {
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
 } from './runtime/AgentRuntimeContext.js';
-export { TelemetryTarget } from './runtime/AgentRuntimeContext.js';
 export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
 
 // Export settings runtime adapter helpers so CLI code can resolve/activate the

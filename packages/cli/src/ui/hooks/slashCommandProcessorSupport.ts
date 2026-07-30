@@ -86,7 +86,6 @@ function convertMessageToHistoryItem(message: Message): HistoryItemWithoutId {
         osVersion: message.osVersion,
         sandboxEnv: message.sandboxEnv,
         modelVersion: message.modelVersion,
-        gcpProject: message.gcpProject,
         keyfile: message.keyfile || '',
         key: message.key || '',
         ideClient: message.ideClient,
