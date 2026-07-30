@@ -9,7 +9,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 const FORCE_KILL_CLOSE_TIMEOUT_MS = 1_500;
-const WINDOWS_PROCESS_NOT_FOUND_EXIT_CODE = 128;
 
 export function observeProcessClose(
   proc: ChildProcessWithoutNullStreams,
@@ -167,13 +166,17 @@ async function forceKillWindows(
 
 function runTaskkill(pid: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const killer = spawn('taskkill', ['/pid', String(pid), '/t', '/f'], {
-      stdio: 'ignore',
-      windowsHide: true,
-    });
+    const killer = spawn(
+      'taskkill',
+      ['/f', '/fi', `PID eq ${pid}`, '/im', '*', '/t'],
+      {
+        stdio: 'ignore',
+        windowsHide: true,
+      },
+    );
     killer.once('error', reject);
     killer.once('close', (code) => {
-      if (code === 0 || code === WINDOWS_PROCESS_NOT_FOUND_EXIT_CODE) {
+      if (code === 0) {
         resolve();
       } else {
         reject(new Error(`taskkill exited with code ${String(code)}`));
