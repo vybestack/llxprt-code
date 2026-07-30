@@ -97,4 +97,44 @@ describe('HistoryService replaceAll serialization', () => {
     expect(service.getAll()).toStrictEqual([]);
     await expectConsistentTokenCount(service);
   });
+
+  it('rolls back an add when a content listener rejects it', () => {
+    const service = new HistoryService();
+    service.on('contentAdded', () => {
+      throw new Error('listener failed');
+    });
+
+    expect(() => service.add(createUserMessage('rejected'))).toThrow(
+      'listener failed',
+    );
+    expect(service.getAll()).toStrictEqual([]);
+  });
+
+  it('reports both an initial listener failure and a queued mutation failure', () => {
+    const service = new HistoryService();
+    let invocation = 0;
+    service.on('contentAdded', () => {
+      invocation += 1;
+      if (invocation === 1) {
+        service.add(createUserMessage('queued'));
+        throw new Error('initial failure');
+      }
+      throw new Error('queued failure');
+    });
+
+    let thrown: unknown;
+    try {
+      service.add(createUserMessage('initial'));
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect(
+      (thrown as AggregateError).errors.map((error) =>
+        error instanceof Error ? error.message : String(error),
+      ),
+    ).toStrictEqual(['initial failure', 'queued failure']);
+    expect(service.getAll()).toStrictEqual([]);
+  });
 });

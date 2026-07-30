@@ -85,9 +85,11 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
 
   afterEach(async () => {
     try {
-      await recording.dispose();
+      if (typeof recording !== 'undefined') await recording.dispose();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      if (typeof root !== 'undefined') {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 

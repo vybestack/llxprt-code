@@ -358,6 +358,55 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
     });
   });
 
+  it('reports both a live clear failure and recording resubscription failure', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const sessionId = 'clear-dual-failure';
+      const config = buildFakeConfig(projectRoot);
+      const client = buildFakeClient([
+        humanText('initial turn'),
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
+      ]);
+      const liveHistory = new HistoryService();
+      client.setHistoryService(liveHistory);
+      const control = new SessionControl(
+        buildDeps(config, client.contract, sessionId),
+      );
+      await control.setRecording({ enabled: true });
+
+      client.contract.resetChat = async () => {
+        throw new Error('clear failed');
+      };
+      const originalOn = liveHistory.on.bind(liveHistory);
+      liveHistory.on = ((
+        event: string,
+        listener: (...args: never[]) => void,
+      ) => {
+        if (event === 'contentAdded') {
+          throw new Error('resubscribe failed');
+        }
+        return originalOn(
+          event as Parameters<typeof originalOn>[0],
+          listener as Parameters<typeof originalOn>[1],
+        );
+      }) as HistoryService['on'];
+
+      let thrown: unknown;
+      try {
+        await control.clearHistory();
+      } catch (error: unknown) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect(
+        (thrown as AggregateError).errors.map((error) =>
+          error instanceof Error ? error.message : String(error),
+        ),
+      ).toStrictEqual(['clear failed', 'resubscribe failed']);
+      await control.dispose();
+    });
+  });
+
   it('A3: an integration left unsubscribed (HistoryService unavailable at enable) is re-attached by the next operation, so later content events reach the recording @requirement:REQ-010', async () => {
     await withProjectRoot(async (projectRoot) => {
       const sessionId = 'reattach-session';

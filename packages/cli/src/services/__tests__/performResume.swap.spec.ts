@@ -356,7 +356,8 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
           throw new Error('restore session ID failed');
         },
       ];
-      context.adoptSessionId = () => adoptionOutcomes.shift()?.();
+      const adoptSessionId = vi.fn(() => adoptionOutcomes.shift()?.());
+      context.adoptSessionId = adoptSessionId;
       context.recordingCallbacks.setRecording = () => {
         throw new Error('commit failed');
       };
@@ -376,6 +377,8 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
         expect(historyService.getAll()).toStrictEqual([
           makeContent('previous history'),
         ]);
+        expect(disposeSpy).toHaveBeenCalled();
+        expect(adoptSessionId).toHaveBeenCalledTimes(2);
         expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(
           false,
         );
@@ -394,7 +397,7 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const historyService = new HistoryService();
       historyService.add(makeContent('previous history'));
       let shouldThrow = false;
-      historyService.on('contentAdded', () => {
+      historyService.on('tokensUpdated', () => {
         if (shouldThrow) throw new Error('rollback restore failed');
       });
       const context = makeResumeContext(chatsDir, {
@@ -409,8 +412,12 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const result = await performResume(targetId, context);
       expect(result).toStrictEqual({
         ok: false,
-        error: 'Failed to commit session transition: commit failed',
+        error:
+          'Failed to commit session transition: commit failed; failed to restore prior history: rollback restore failed',
       });
+      expect(historyService.getAll()).toStrictEqual([
+        makeContent('replacement history'),
+      ]);
       expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
     });
   });

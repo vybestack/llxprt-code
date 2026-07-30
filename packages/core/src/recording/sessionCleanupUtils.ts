@@ -224,10 +224,10 @@ export async function shouldDeleteSession(
  * @requirement REQ-CLN-004
  * @pseudocode session-cleanup.md lines 85-130
  *
- * Cleans up stale and orphaned `.lock` files in the chats directory.
- * Orphaned locks (no corresponding `.jsonl` file) are always removed.
- * Stale locks (PID no longer running) are removed but the data file is
- * left for normal retention policy evaluation.
+ * Cleans up stale `.lock` files in the chats directory.
+ * Locks are removed only when their PID is missing or no longer running,
+ * including locks whose corresponding `.jsonl` file is absent. A live PID's
+ * lock is retained because its session file may not have materialized yet.
  *
  * @param chatsDir - Path to the chats directory to scan for lock files
  * @returns Number of lock files cleaned up

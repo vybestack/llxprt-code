@@ -809,7 +809,7 @@ function applyBoundedReplayLine(
 
 /**
  * Replay a session through an inclusive maximum sequence number.
- * Events with `seq > maxSequence` are ignored entirely (not even parsed).
+ * Processing stops at the first valid event whose `seq` exceeds maxSequence.
  * Used for checkpoint fork creation: replay through the checkpoint watermark.
  */
 export async function replaySessionThroughSequence(

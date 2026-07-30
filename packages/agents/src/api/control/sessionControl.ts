@@ -649,6 +649,12 @@ export class SessionControl implements AgentSessionControl {
         mutationError = error;
       }
       const resubscribeError = this.resubscribeIntegration();
+      if (mutationError !== undefined && resubscribeError !== undefined) {
+        throw new AggregateError(
+          [mutationError, resubscribeError],
+          'History mutation and recording resubscription both failed',
+        );
+      }
       if (mutationError !== undefined) throw mutationError;
       if (resubscribeError !== undefined) throw resubscribeError;
     });

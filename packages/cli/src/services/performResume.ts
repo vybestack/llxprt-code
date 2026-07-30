@@ -280,13 +280,20 @@ async function restorePreviousHistory(
   historyService: HistoryService,
   previousHistory: IContent[] | null,
   logger?: DebugLogger,
-): Promise<void> {
-  if (previousHistory === null) return;
+): Promise<unknown | undefined> {
+  if (previousHistory === null) return undefined;
   try {
     await historyService.replaceAll(previousHistory);
+    return undefined;
   } catch (error: unknown) {
     logger?.warn(`Failed to restore prior session history: ${error}`);
+    return error;
   }
+}
+
+function formatHistoryRollbackFailure(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return `; failed to restore prior history: ${detail}`;
 }
 
 async function commitPreparedTransition(
@@ -320,13 +327,14 @@ async function commitPreparedTransition(
         `Failed to dispose prepared recording integration: ${disposeError}`,
       );
     }
-    if (historyService !== null) {
-      await restorePreviousHistory(
-        historyService,
-        previousHistory,
-        context.logger,
-      );
-    }
+    const historyRollbackError =
+      historyService === null
+        ? undefined
+        : await restorePreviousHistory(
+            historyService,
+            previousHistory,
+            context.logger,
+          );
     try {
       context.adoptSessionId?.(context.currentSessionId);
     } catch (adoptError: unknown) {
@@ -342,9 +350,13 @@ async function commitPreparedTransition(
       await unlink(filePath).catch(() => undefined);
     }
     const detail = error instanceof Error ? error.message : String(error);
+    const rollbackDetail =
+      historyRollbackError === undefined
+        ? ''
+        : formatHistoryRollbackFailure(historyRollbackError);
     return {
       ok: false,
-      error: `Failed to commit session transition: ${detail}`,
+      error: `Failed to commit session transition: ${detail}${rollbackDetail}`,
     };
   }
   try {

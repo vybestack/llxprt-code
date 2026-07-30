@@ -68,6 +68,21 @@ export type { CompressionConfig };
 
 type MutationFailure = { failed: false } | { failed: true; error: unknown };
 
+function combineMutationFailures(
+  primary: MutationFailure,
+  queued: MutationFailure,
+): MutationFailure {
+  if (!primary.failed) return queued;
+  if (!queued.failed) return primary;
+  return {
+    failed: true,
+    error: new AggregateError(
+      [primary.error, queued.error],
+      'Multiple history mutations failed',
+    ),
+  };
+}
+
 type QueuedHistoryMutation =
   | { kind: 'synchronous'; execute: () => void }
   | {
@@ -296,8 +311,8 @@ export class HistoryService
     this.historyMutationInProgress = false;
     this.processHistoryMutationQueue();
 
-    if (failure.failed) throw failure.error;
-    if (queuedFailure.failed) throw queuedFailure.error;
+    const combinedFailure = combineMutationFailures(failure, queuedFailure);
+    if (combinedFailure.failed) throw combinedFailure.error;
   }
 
   private drainSynchronousHistoryMutations(): MutationFailure {
@@ -355,7 +370,7 @@ export class HistoryService
   ): void {
     const queuedFailure = this.drainSynchronousHistoryMutations();
     this.historyMutationInProgress = false;
-    const result = failure.failed ? failure : queuedFailure;
+    const result = combineMutationFailures(failure, queuedFailure);
     if (result.failed) mutation.reject(result.error);
     else mutation.resolve();
     this.processHistoryMutationQueue();
@@ -415,7 +430,12 @@ export class HistoryService
         this.history.length,
       );
 
-      this.emit('contentAdded', content);
+      try {
+        this.emit('contentAdded', content);
+      } catch (error: unknown) {
+        this.history.pop();
+        throw error;
+      }
 
       // Update token count asynchronously but atomically
       void this.updateTokenCount(content, modelName, generation);
