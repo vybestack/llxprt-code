@@ -559,6 +559,13 @@ describe('Dual-process lock contention @requirement:REQ-CON-004,REQ-CON-005 @pla
       childProcess.kill('SIGKILL');
       await waitForExit(childProcess).catch(() => {});
     }
+    if (childProcess) {
+      try {
+        childProcess.disconnect();
+      } catch {
+        // Already disconnected
+      }
+    }
     childProcess = null;
     await fs.rm(tempDir, { recursive: true, force: true });
   });
@@ -605,6 +612,8 @@ process.on('message', async (msg) => {
       childProcess = fork(helperScript, [lockPath], {
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       });
+      // Don't let the child's IPC channel keep the test process alive
+      childProcess.unref();
 
       await waitForMessage(childProcess, 'lock-acquired');
 
