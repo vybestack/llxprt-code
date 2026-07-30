@@ -27,10 +27,11 @@
  *   --workspace <name>    Only run tests for the named workspace
  *   --tsconfig <path>     Path to tsconfig override (passed via --tsconfig-override)
  *   --timeout <ms>        Per-test timeout in milliseconds (defaults to 30000)
+ *   --junit <path>        Write a JUnit XML report to this path after the run
  *   --dry-run             List files that would be run without executing them
  */
 
-import { statSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -60,6 +61,67 @@ export interface ChildExitInfo {
  * lets slow files complete while catching genuine hangs.
  */
 const PER_FILE_PROCESS_TIMEOUT_MS = 120_000;
+
+interface FileTestResult {
+  readonly name: string;
+  readonly passed: boolean;
+  readonly stdout: string;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Generates a minimal JUnit XML report at the given path. Each test file
+ * becomes a testsuite with a single testcase representing the per-file
+ * pass/fail outcome. Consumed by CI integrations (dorny/test-reporter).
+ */
+export function writeJUnitReport(
+  outputPath: string,
+  files: readonly FileTestResult[],
+): void {
+  const NL = String.fromCharCode(10);
+  const failCount = files.filter((f) => !f.passed).length;
+  const suites = files
+    .map((f) => {
+      const safeName = escapeXml(f.name);
+      const failAttr = f.passed ? '0' : '1';
+      const tag = f.passed
+        ? '<testcase classname="' +
+          safeName +
+          '" name="bun-test (passed)" time="0" />'
+        : '<testcase classname="' +
+          safeName +
+          '" name="bun-test (failed)" time="0"><failure message="failed" /></testcase>';
+      return [
+        '    <testsuite name="' +
+          safeName +
+          '" tests="1" failures="' +
+          failAttr +
+          '" errors="0" skipped="0" time="0">',
+        '      ' + tag,
+        '    </testsuite>',
+      ].join(NL);
+    })
+    .join(NL);
+  const header = '<?xml version="1.0" encoding="UTF-8" ?>';
+  const open =
+    '<testsuites name="bun tests" tests="' +
+    files.length +
+    '" failures="' +
+    failCount +
+    '" errors="0" time="0">';
+  writeFileSync(
+    outputPath,
+    [header, open, suites, '</testsuites>'].join(NL) + NL,
+    'utf-8',
+  );
+}
 
 /**
  * Regex that matches Bun's "0 fail" summary line, which appears in stdout
@@ -129,6 +191,7 @@ interface CliOptions {
   tsconfig: string | null;
   timeout: number;
   dryRun: boolean;
+  junit: string | null;
 }
 
 function readOptionValue(
@@ -164,6 +227,7 @@ function parseArgs(argv: string[]): CliOptions {
     tsconfig: null,
     timeout: 30_000,
     dryRun: false,
+    junit: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -175,6 +239,9 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case '--tsconfig':
         options.tsconfig = readOptionValue(argv, i++, arg);
+        break;
+      case '--junit':
+        options.junit = readOptionValue(argv, i++, arg);
         break;
       case '--timeout': {
         const value = readOptionValue(argv, i++, arg);
@@ -262,6 +329,42 @@ function buildSpawnArgs(
   return args;
 }
 
+function runSingleTestFile(
+  entry: BunTestFile,
+  baseArgs: readonly string[],
+  dependencies: BunTestRunnerDependencies,
+): FileTestResult {
+  const relativeName = entry.file.replace(entry.cwd + '/', '');
+  try {
+    const child = dependencies.spawn(
+      buildSpawnArgs(dependencies.executable, baseArgs, entry),
+      {
+        cwd: entry.cwd,
+        env: dependencies.environment,
+        stdin: 'inherit',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        timeout: PER_FILE_PROCESS_TIMEOUT_MS,
+      },
+    );
+
+    const passed = isChildSuccess(child);
+    if (!passed) {
+      dependencies.stderr(
+        `Native Bun test failed: ${entry.file}${formatFailureDiagnostic(child)}`,
+      );
+    }
+    return { name: relativeName, passed, stdout: child.stdout ?? '' };
+  } catch (error: unknown) {
+    const diagnostic =
+      error instanceof Error
+        ? (error.stack ?? error.toString())
+        : String(error);
+    dependencies.stderr(`Native Bun test failed: ${entry.file}\n${diagnostic}`);
+    return { name: relativeName, passed: false, stdout: '' };
+  }
+}
+
 export function runBunTests(
   argv: string[],
   dependencies: BunTestRunnerDependencies,
@@ -302,48 +405,24 @@ export function runBunTests(
   );
 
   const baseArgs = buildBaseArgs(tsconfigOverride, options.timeout);
+  const testResults: FileTestResult[] = files.map((entry) =>
+    runSingleTestFile(entry, baseArgs, dependencies),
+  );
 
-  let passed = 0;
-  let failed = 0;
-
-  for (const entry of files) {
-    try {
-      const child = dependencies.spawn(
-        buildSpawnArgs(dependencies.executable, baseArgs, entry),
-        {
-          cwd: entry.cwd,
-          env: dependencies.environment,
-          stdin: 'inherit',
-          stdout: 'pipe',
-          stderr: 'pipe',
-          timeout: PER_FILE_PROCESS_TIMEOUT_MS,
-        },
-      );
-
-      if (!isChildSuccess(child)) {
-        dependencies.stderr(
-          `Native Bun test failed: ${entry.file}${formatFailureDiagnostic(child)}`,
-        );
-        failed++;
-      } else {
-        passed++;
-      }
-    } catch (error: unknown) {
-      const diagnostic =
-        error instanceof Error
-          ? (error.stack ?? error.toString())
-          : String(error);
-      dependencies.stderr(
-        `Native Bun test failed: ${entry.file}\n${diagnostic}`,
-      );
-      failed++;
-    }
-  }
+  const passed = testResults.filter((r) => r.passed).length;
+  const failed = testResults.length - passed;
 
   dependencies.stdout(
     `Passed ${passed}/${files.length} isolated native Bun test files` +
       (failed > 0 ? ` (${failed} failed)` : ''),
   );
+
+  if (options.junit) {
+    const junitPath = resolve(dependencies.invocationDirectory, options.junit);
+    writeJUnitReport(junitPath, testResults);
+    dependencies.stdout(`JUnit report written to ${junitPath}`);
+  }
+
   return failed > 0 ? 1 : 0;
 }
 
