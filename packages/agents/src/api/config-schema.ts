@@ -73,8 +73,6 @@ export const AgentFileFilteringSchema = z
 export const AgentTelemetrySchema = z
   .object({
     enabled: z.boolean().optional(),
-    target: z.string().optional(),
-    otlpEndpoint: z.string().optional(),
     logPrompts: z.boolean().optional(),
     outfile: z.string().optional(),
     redactSensitiveData: z.boolean().optional(),

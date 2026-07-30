@@ -500,7 +500,7 @@ jobs:
           npm run typecheck
 
       - name: 'Run sensitive keyword linter'
-        run: 'node scripts/lint.js --sensitive-keywords'
+        run: 'bun scripts/lint.ts --sensitive-keywords'
 
   #
   # Lint: Shell
@@ -666,12 +666,12 @@ jobs:
 
       - name: 'Verify Bun linked every declared local workspace package'
         # Runs the committed verifier (also runnable locally via
-        # `bun install && node scripts/verify-bun-workspace-links.mjs`) so the
+        # `bun install && bun scripts/verify-bun-workspace-links.ts`) so the
         # link-check logic lives in one tested place instead of an inline
         # heredoc. Executed with `bun` — already set up for this job — to avoid
         # relying on an implicitly-provided Node on the runner.
         run: |-
-          bun scripts/verify-bun-workspace-links.mjs
+          bun scripts/verify-bun-workspace-links.ts
 
   #
   # Bun: Native-module smoke (issue 2239, S2)

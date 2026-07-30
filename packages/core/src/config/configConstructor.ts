@@ -50,11 +50,7 @@ import {
 import { SkillManager } from '../skills/skillManager.js';
 import { setLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
-import {
-  initializeTelemetry,
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
-} from '../telemetry/index.js';
+import { initializeTelemetry } from '../telemetry/index.js';
 import { OutputFormat } from '../utils/output-format.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import {
@@ -323,8 +319,6 @@ function resolveTelemetrySettings(
   return {
     ...(telemetry ?? {}),
     enabled: telemetry?.enabled ?? false,
-    target: telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
-    otlpEndpoint: telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
     logPrompts: telemetry?.logPrompts ?? true,
     outfile: telemetry?.outfile,
     logConversations: telemetry?.logConversations ?? false,

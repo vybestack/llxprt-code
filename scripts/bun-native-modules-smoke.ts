@@ -21,7 +21,6 @@
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import type { IPty, IDisposable } from '@lydell/node-pty';
 
 const require = createRequire(import.meta.url);
 
@@ -51,7 +50,7 @@ if (!isWindows) {
 
 let failures = 0;
 
-function pass(name: string): void {
+function pass(name: string) {
   console.log(`[PASS] ${name}`);
 }
 
@@ -62,34 +61,31 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-function fail(name: string, error: unknown): void {
+function fail(name: string, error: unknown) {
   failures += 1;
   console.error(`[FAIL] ${name}: ${formatError(error)}`);
 }
 
-interface ExitInfo {
-  exitCode: number;
-  signal?: number;
-}
-
-interface ExitPromise {
-  resolve(exitInfo: ExitInfo | null): void;
-  promise: Promise<ExitInfo | null>;
-}
-
-function createExitPromise(timeoutMs: number): ExitPromise {
+function createExitPromise(timeoutMs: number): {
+  resolve: (exitInfo: { exitCode: number; signal?: number } | null) => void;
+  promise: Promise<{ exitCode: number; signal?: number } | null>;
+} {
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  let resolveExit: ((exitInfo: ExitInfo | null) => void) | null = null;
-  const promise = new Promise<ExitInfo | null>((resolve) => {
-    resolveExit = resolve;
-    timeout = setTimeout(() => resolve(null), timeoutMs);
-  }).finally(() => {
+  let resolveExit:
+    | ((value: { exitCode: number; signal?: number } | null) => void)
+    | null = null;
+  const promise = new Promise<{ exitCode: number; signal?: number } | null>(
+    (resolve) => {
+      resolveExit = resolve;
+      timeout = setTimeout(() => resolve(null), timeoutMs);
+    },
+  ).finally(() => {
     if (timeout) {
       clearTimeout(timeout);
     }
   });
   return {
-    resolve(exitInfo: ExitInfo | null): void {
+    resolve(exitInfo: { exitCode: number; signal?: number } | null) {
       if (resolveExit === null) {
         return;
       }
@@ -104,7 +100,7 @@ function createExitPromise(timeoutMs: number): ExitPromise {
 // ---------------------------------------------------------------------------
 // 1. @ast-grep/napi
 // ---------------------------------------------------------------------------
-async function checkAstGrep(): Promise<void> {
+async function checkAstGrep() {
   try {
     const { Lang, parse } = await import('@ast-grep/napi');
     const ts = Lang.TypeScript;
@@ -122,7 +118,7 @@ async function checkAstGrep(): Promise<void> {
 // ---------------------------------------------------------------------------
 // 2. @napi-rs/keyring (construct-only; no credential I/O)
 // ---------------------------------------------------------------------------
-async function checkKeyring(): Promise<void> {
+async function checkKeyring() {
   try {
     const { Entry } = await import('@napi-rs/keyring');
     const entry = new Entry('llxprt-smoke-test', 'llxprt-smoke-account');
@@ -141,7 +137,7 @@ async function checkKeyring(): Promise<void> {
 // ---------------------------------------------------------------------------
 // 3. web-tree-sitter + tree-sitter-bash WASM
 // ---------------------------------------------------------------------------
-async function checkTreeSitter(): Promise<void> {
+async function checkTreeSitter() {
   try {
     const { Parser, Language } = await import('web-tree-sitter');
     await Parser.init();
@@ -151,8 +147,8 @@ async function checkTreeSitter(): Promise<void> {
     const bashLanguage = await Language.load(wasmBytes);
     parser.setLanguage(bashLanguage);
     const tree = parser.parse('echo hello');
-    if (tree === null) {
-      throw new Error('parser returned null tree');
+    if (!tree) {
+      throw new Error('tree-sitter parser returned null tree');
     }
     if (tree.rootNode.type !== 'program') {
       throw new Error(
@@ -170,13 +166,13 @@ async function checkTreeSitter(): Promise<void> {
 // ---------------------------------------------------------------------------
 const NODE_PTY_TIMEOUT_MS = 10000;
 
-async function checkNodePty(): Promise<void> {
+async function checkNodePty() {
   if (!isWindows) {
     return;
   }
-  let ptyProcess: IPty | undefined;
-  const disposables: IDisposable[] = [];
-  let exitPromise: ExitPromise | undefined;
+  let ptyProcess: import('@lydell/node-pty').IPty | null = null;
+  let exitPromise: ReturnType<typeof createExitPromise> | null = null;
+  let didExit = false;
   try {
     const nodePty = await import('@lydell/node-pty');
     const spawn = nodePty.default?.spawn ?? nodePty.spawn;
@@ -197,28 +193,41 @@ async function checkNodePty(): Promise<void> {
       },
     );
 
-    if (typeof ptyProcess.pid !== 'number' || ptyProcess.pid <= 0) {
-      throw new Error(`invalid pid: ${ptyProcess.pid}`);
+    if (
+      ptyProcess === null ||
+      typeof ptyProcess.pid !== 'number' ||
+      ptyProcess.pid <= 0
+    ) {
+      throw new Error(`invalid pid: ${ptyProcess?.pid}`);
     }
-    for (const methodName of ['onData', 'onExit', 'kill'] as const) {
-      if (typeof ptyProcess[methodName] !== 'function') {
-        throw new Error(`@lydell/node-pty process is missing ${methodName}()`);
+    const onData = ptyProcess.onData;
+    const onExit = ptyProcess.onExit;
+    if (typeof onData !== 'function') {
+      throw new Error('@lydell/node-pty process is missing onData()');
+    }
+    if (typeof onExit !== 'function') {
+      throw new Error('@lydell/node-pty process is missing onExit()');
+    }
+    if (typeof ptyProcess.kill !== 'function') {
+      throw new Error('@lydell/node-pty process is missing kill()');
+    }
+
+    onData((data: string) => {
+      output += data;
+    });
+
+    onExit((exitInfo: { exitCode: number; signal?: number }) => {
+      didExit = true;
+      if (exitPromise !== null) {
+        exitPromise.resolve(exitInfo);
       }
+    });
+
+    const resolvedPromise = exitPromise;
+    if (resolvedPromise === null) {
+      throw new Error('exit promise not initialized');
     }
-
-    disposables.push(
-      ptyProcess.onData((data: string) => {
-        output += data;
-      }),
-    );
-
-    disposables.push(
-      ptyProcess.onExit((exitInfo: ExitInfo) => {
-        exitPromise!.resolve(exitInfo);
-      }),
-    );
-
-    const exitInfo = await exitPromise.promise;
+    const exitInfo = await resolvedPromise.promise;
 
     if (!exitInfo) {
       throw new Error('timeout waiting for ConPTY exit');
@@ -238,31 +247,33 @@ async function checkNodePty(): Promise<void> {
   } catch (e) {
     fail('@lydell/node-pty ConPTY', e);
   } finally {
-    for (const disposable of disposables) {
-      disposable.dispose();
-    }
     exitPromise?.resolve(null);
-    ptyProcess?.kill();
+    if (ptyProcess && !didExit) {
+      try {
+        ptyProcess.kill();
+      } catch {
+        // Process may already have exited.
+      }
+    }
   }
 }
 
 // ---------------------------------------------------------------------------
 // 5. Bun.Terminal PTY adapter (the bun-pty seam; POSIX-only)
 // ---------------------------------------------------------------------------
-async function checkBunPty(): Promise<void> {
+async function checkBunPty() {
   if (!isPosix) {
     return;
   }
-  let pty: (IPty & { destroy(): void }) | undefined;
-  const disposables: IDisposable[] = [];
-  let exitPromise: ExitPromise | undefined;
+  let pty: (import('@lydell/node-pty').IPty & { destroy(): void }) | null =
+    null;
   try {
     const { createBunPty } = await import(
       '../packages/core/src/utils/bunPtyAdapter.ts'
     );
 
     let output = '';
-    exitPromise = createExitPromise(5000);
+    const exitPromise = createExitPromise(5000);
 
     pty = createBunPty('/bin/sh', ['-c', 'echo bun-pty-smoke-ok'], {
       cols: 80,
@@ -274,17 +285,13 @@ async function checkBunPty(): Promise<void> {
       throw new Error(`invalid pid: ${pty.pid}`);
     }
 
-    disposables.push(
-      pty.onData((data: string) => {
-        output += data;
-      }),
-    );
+    pty.onData((data) => {
+      output += data;
+    });
 
-    disposables.push(
-      pty.onExit((exitInfo: ExitInfo) => {
-        exitPromise!.resolve(exitInfo);
-      }),
-    );
+    pty.onExit((exitInfo) => {
+      exitPromise.resolve(exitInfo);
+    });
 
     const exitInfo = await exitPromise.promise;
 
@@ -306,11 +313,13 @@ async function checkBunPty(): Promise<void> {
   } catch (e) {
     fail('Bun.Terminal PTY adapter', e);
   } finally {
-    for (const disposable of disposables) {
-      disposable.dispose();
+    if (pty) {
+      try {
+        pty.destroy();
+      } catch {
+        // PTY may already have exited.
+      }
     }
-    exitPromise?.resolve(null);
-    pty?.destroy();
   }
 }
 

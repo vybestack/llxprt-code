@@ -61,6 +61,17 @@ jobs:
           ref: '${{ github.event.pull_request.base.sha }}'
           fetch-depth: 0
 
+      - name: 'Setup Bun'
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install review-script dependencies'
+        # The walkthrough orchestrator (`bun scripts/pr-review-walkthrough.ts`)
+        # imports zod and other npm dependencies. Without this step, Bun cannot
+        # resolve those modules at runtime.
+        run: bun install
+
       - name: 'Prepare review workspace'
         run: |
           set -euo pipefail
@@ -195,7 +206,7 @@ jobs:
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'quota'
         continue-on-error: true
-        run: node scripts/ci-quota-check.js
+        run: bun scripts/ci-quota-check.ts
         env:
           KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
           OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
@@ -378,7 +389,7 @@ jobs:
           # review/comment.md on failure. Redirect stderr to a log artifact
           # only — never into the comment (would leak sanitized secrets or
           # internal diagnostics to the public PR).
-          node scripts/pr-review-walkthrough.mjs 2> >(tee review/walkthrough-error.log >&2)
+          bun scripts/pr-review-walkthrough.ts 2> >(tee review/walkthrough-error.log >&2)
 
       - name: 'Upload walkthrough diagnostics'
         if: always()

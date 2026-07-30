@@ -364,9 +364,6 @@ function makeSettingsRuntime(
     getTelemetryEnabled: () => call(source, 'getTelemetryEnabled', false),
     getTelemetryOutfile: () =>
       call(source, 'getTelemetryOutfile', undefined as string | undefined),
-    getTelemetryTarget: () => call(source, 'getTelemetryTarget', 'local'),
-    getTelemetryOtlpEndpoint: () =>
-      call(source, 'getTelemetryOtlpEndpoint', ''),
     getConversationLoggingEnabled: () =>
       call(source, 'getConversationLoggingEnabled', false),
     getEmbeddingModel: () =>

@@ -14,6 +14,7 @@ import { type Todo } from '../types/todo-schemas.js';
 import { Type } from '../types/schema-type.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
 import { formatTodoListForDisplay } from '../utils/todoFormatter.js';
+import { resolveTodoRead } from './todo-store.js';
 import type { ITodoService } from '../interfaces/ITodoService.js';
 
 export type TodoReadParams = Record<string, never>;
@@ -51,7 +52,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     const agentId = this.context?.agentId;
 
     const store = this.todoService.getTodoStore(this.context);
-    const rawTodos = await this.readTodosFromStore(store, sessionId, agentId);
+    const rawTodos = await resolveTodoRead(store, sessionId, agentId);
     const todos = rawTodos;
 
     const paused = store.readPausedState
@@ -84,30 +85,6 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
         suggestedAction,
       },
     };
-  }
-
-  private async readTodosFromStore(
-    store: {
-      readTodos?: () => Promise<Todo[]>;
-      getTodos?: () => Todo[];
-    },
-    sessionId: string,
-    agentId: string | undefined,
-  ): Promise<Todo[]> {
-    if (store.readTodos) {
-      return store.readTodos();
-    }
-    if (store.getTodos) {
-      return store.getTodos();
-    }
-    // No fallback: TodoStore now requires an explicit canonical data dir
-    // injected by the composition root. Reaching here means the tool was
-    // constructed without a wired ITodoService.
-    throw new Error(
-      `TodoRead cannot read todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
-        'no ITodoService store was injected. Construct the tool via the tool registry so ' +
-        'the composition root can wire Storage.getGlobalDataDir().',
-    );
   }
 
   private calculateStatistics(todos: Todo[]): {

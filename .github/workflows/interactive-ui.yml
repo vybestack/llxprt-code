@@ -7,7 +7,7 @@ on:
       - 'release/**'
     paths:
       # Harness infrastructure
-      - 'scripts/tmux-harness.js'
+      - 'scripts/tmux-harness.ts'
       - 'scripts/tmux-script*.json'
       - 'scripts/tests/**'
       - 'scripts/fixtures/**'
@@ -33,7 +33,7 @@ on:
     branches:
       - 'main'
     paths:
-      - 'scripts/tmux-harness.js'
+      - 'scripts/tmux-harness.ts'
       - 'scripts/tmux-script*.json'
       - 'scripts/tests/**'
       - 'scripts/fixtures/**'

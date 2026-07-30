@@ -216,12 +216,25 @@ jobs:
         with:
           node-version: '${{ matrix.node-version }}'
 
+      - name: 'Setup Bun'
+        # The trusted quota selector runs under Bun before PR code is checked
+        # out, so Bun must be on PATH before that step. npm run build below is
+        # also backed by bun scripts/build.ts.
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
       - name: 'Check API quota and select optimal key'
         id: 'quota'
         shell: 'bash'
         run: |
           set -euo pipefail
-          node scripts/ci-quota-check.js
+          quota_selectors=(scripts/ci-quota-check.*)
+          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
+            echo 'Trusted checkout must contain exactly one quota selector' >&2
+            exit 1
+          fi
+          bun "${quota_selectors[0]}"
 
           # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
           # it before checking out PR code; downstream steps resolve one secret.
@@ -261,13 +274,6 @@ jobs:
           ref: '${{ github.ref }}'
           persist-credentials: false
           clean: false
-
-      - name: 'Setup Bun'
-        # npm run build below is backed by bun scripts/build.ts and requires
-        # the Bun runtime to be on PATH.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies'
         run: 'npm ci'
@@ -312,18 +318,18 @@ jobs:
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
             npm run test:integration:sandbox:docker -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               --exclude="**/run_shell_command.test.ts"
             npm run test:integration:sandbox:docker -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
               --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           else
             npm run test:integration:sandbox:none -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               --exclude="**/run_shell_command.test.ts"
             npm run test:integration:sandbox:none -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
               --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           fi
@@ -377,12 +383,25 @@ jobs:
         with:
           node-version: '24.x'
 
+      - name: 'Setup Bun'
+        # The trusted quota selector runs under Bun before PR code is checked
+        # out, so Bun must be on PATH before that step. npm run build below is
+        # also backed by bun scripts/build.ts.
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
       - name: 'Check API quota and select optimal key (macOS)'
         id: 'quota_macos'
         shell: 'bash'
         run: |
           set -euo pipefail
-          node scripts/ci-quota-check.js
+          quota_selectors=(scripts/ci-quota-check.*)
+          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
+            echo 'Trusted checkout must contain exactly one quota selector' >&2
+            exit 1
+          fi
+          bun "${quota_selectors[0]}"
 
           # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
           # it before checking out PR code; downstream steps resolve one secret.
@@ -422,13 +441,6 @@ jobs:
           ref: '${{ github.ref }}'
           persist-credentials: false
           clean: false
-
-      - name: 'Setup Bun'
-        # npm run build below is backed by bun scripts/build.ts and requires
-        # the Bun runtime to be on PATH.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies'
         run: 'npm ci'
@@ -474,9 +486,9 @@ jobs:
         shell: 'bash'
         run: |
           npm run test:integration:sandbox:none -- \
-            --exclude="**/todo-continuation.e2e.test.js" \
+            --exclude="**/todo-continuation.e2e.test.ts" \
             --exclude="**/run_shell_command.test.ts"
           npm run test:integration:sandbox:none -- \
-            --exclude="**/todo-continuation.e2e.test.js" \
+            --exclude="**/todo-continuation.e2e.test.ts" \
             integration-tests/run_shell_command.test.ts \
             --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"

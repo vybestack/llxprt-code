@@ -40,7 +40,7 @@
 
     {
       "type": "line",
-      "text": "node scripts/scrollback-load.js --total 40 --interval-ms 200 --prefix LIVE",
+      "text": "bun scripts/scrollback-load.ts --total 40 --interval-ms 200 --prefix LIVE",
       "submitKeys": ["Enter"]
     },
     { "type": "wait", "ms": 1500 },

@@ -382,7 +382,7 @@ Extension commands use the format `/<extension-name>/<command-name>` to avoid co
 
 At commands include file content in your prompt. Type `@` followed by a file path:
 
-```
+```text
 @src/main.ts explain this file
 @docs/README.md what does this project do?
 ```
@@ -400,7 +400,7 @@ If a file path is invalid or the file doesn't exist, LLxprt shows an error and t
 
 Prefix a command with `!` to run it in your shell and include the output in the conversation:
 
-```
+```bash
 !ls -la
 !git log --oneline -5
 !cat package.json

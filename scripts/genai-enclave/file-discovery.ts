@@ -169,22 +169,40 @@ function collectStatusSets(repoRoot: string): {
 
   const deleted = new Set<string>();
   const untracked: string[] = [];
-  for (const entry of status.split('\0')) {
+  // git status -z separates entries with NUL. Rename (R) and copy (C) records
+  // produce TWO consecutive NUL-delimited entries: "R  oldpath\0newpath\0".
+  // The second entry (the new path) is a bare path with no status prefix; if
+  // iterated independently it could be misparsed as a standalone status entry
+  // (especially for short paths). Iterate by index and consume the trailing
+  // new-path token when an R/C status is detected so it is never treated as a
+  // separate entry.
+  const entries = status.split('\0');
+  let i = 0;
+  while (i < entries.length) {
+    const entry = entries[i];
     const parsed = entry.length > 0 ? parseStatusEntry(entry) : undefined;
-    if (parsed === undefined) {
-      continue;
-    }
-    const { x, y, pathPart } = parsed;
-    if (x === 'D' || y === 'D') {
-      deleted.add(pathPart);
-    }
-    if (
-      x === '?' &&
-      y === '?' &&
-      pathPart.startsWith('packages/') &&
-      isScannableFile(pathPart)
-    ) {
-      untracked.push(pathPart);
+    if (parsed !== undefined) {
+      const { x, y, pathPart } = parsed;
+      if (x === 'D' || y === 'D') {
+        deleted.add(pathPart);
+      }
+      if (
+        x === '?' &&
+        y === '?' &&
+        pathPart.startsWith('packages/') &&
+        isScannableFile(pathPart)
+      ) {
+        untracked.push(pathPart);
+      }
+      // Rename/copy records carry a second NUL-delimited path (the new path).
+      // Consume it so it is not treated as a standalone entry.
+      if (x === 'R' || x === 'C' || y === 'R' || y === 'C') {
+        i += 2;
+      } else {
+        i += 1;
+      }
+    } else {
+      i += 1;
     }
   }
   return { deleted, untracked };
