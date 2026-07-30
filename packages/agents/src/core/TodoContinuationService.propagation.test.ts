@@ -32,7 +32,7 @@ function makeConfig(sessionId: string): Config {
 }
 
 describe('TodoContinuationService — resolver-propagation (real store/disk)', () => {
-  let tempDir: string;
+  let tempDir = '';
   let service: TodoContinuationService;
 
   beforeEach(() => {
@@ -49,7 +49,7 @@ describe('TodoContinuationService — resolver-propagation (real store/disk)', (
   });
 
   afterEach(() => {
-    if (tempDir !== undefined) {
+    if (tempDir !== '') {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
