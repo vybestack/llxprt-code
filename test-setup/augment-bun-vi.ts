@@ -92,29 +92,18 @@ const realClearAllTimers = (bunVi as BunViBase).clearAllTimers.bind(bunVi);
 const realIsFakeTimers = (bunVi as BunViBase).isFakeTimers.bind(bunVi);
 
 /**
- * Captured before any fake-timer activation so async timer helpers can await
- * a real event-loop turn to drain recursively queued microtasks. Under Bun's
- * fake timers, `setImmediate` itself is faked and will not advance the real
- * event loop, so the captured reference is used instead.
+ * Drains recursively queued microtasks from async timer callbacks. Each
+ * `await Promise.resolve()` yields one microtask round, draining one level
+ * of async nesting (e.g. `await lockAcquire()` → `await getToken()` → …).
+ * We chain enough rounds to settle typical multi-level async callback trees
+ * without depending on `setImmediate`, which may not fire promptly under
+ * Bun's fake timers on some platforms.
  */
-const realSetImmediate: (callback: () => void) => NodeJS.Immediate =
-  setImmediate;
-
-/**
- * Drains recursively queued microtasks by yielding to the real event loop.
- * A single `Promise.resolve()` only flushes one round of microtasks; nested
- * `.then()` chains (e.g. `Promise.resolve().then(() => Promise.resolve())`)
- * and async-generator continuations require MULTIPLE macrotask boundaries
- * to settle completely. We loop until a full macrotask turn produces no new
- * microtask work.
- */
+const MICROTASK_DRAIN_ROUNDS = 20;
 const flushPendingTasks = async (): Promise<void> => {
-  // Drain pending microtasks by yielding to the real event loop. A single
-  // realSetImmediate boundary is sufficient for most timer callbacks and
-  // async continuations. The original multi-round version had a bug where
-  // the microtask sentinel always ran before the macrotask, causing 100
-  // iterations per call and extreme slowness in timer-advance loops.
-  await new Promise<void>((resolve) => realSetImmediate(resolve));
+  for (let i = 0; i < MICROTASK_DRAIN_ROUNDS; i++) {
+    await Promise.resolve();
+  }
 };
 
 const MAX_TIMER_ADVANCE = 4_294_967_295;
