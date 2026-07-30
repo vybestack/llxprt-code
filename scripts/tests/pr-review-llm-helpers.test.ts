@@ -60,6 +60,22 @@ describe('isParseError', () => {
     expect(isParseError('string error')).toBe(false);
     expect(isParseError(42)).toBe(false);
   });
+
+  it.each([
+    'Direct parse: expected JSON object but got array',
+    'Fenced JSON parse: expected JSON object but got array',
+    'Balanced-object parse: expected JSON object but got array',
+  ])('recognizes the exact non-object parser prefix in "%s"', (message) => {
+    expect(isParseError(new Error(message))).toBe(true);
+  });
+
+  it.each([
+    'Something: expected JSON object but got array',
+    'context Direct parse: expected JSON object but got array',
+    'Direct parse: expected JSON object but gotten array',
+  ])('does not broadly classify the unrelated error "%s"', (message) => {
+    expect(isParseError(new Error(message))).toBe(false);
+  });
 });
 
 describe('runLlxprtPromptWithParse', () => {
@@ -89,8 +105,58 @@ describe('runLlxprtPromptWithParse', () => {
       maxRetries: 2,
       delayMs: async () => {},
     });
-    expect(calls).toBe(2);
-    expect(result.summary).toBe('ok');
+    expect({ calls, summary: result.summary }).toEqual({
+      calls: 2,
+      summary: 'ok',
+    });
+  });
+
+  it.each([
+    ['array', '[1, 2, 3]'],
+    ['string', '"just a string"'],
+    ['number', '42'],
+    ['boolean', 'true'],
+    ['null', 'null'],
+    ['fenced array', '```json\n["not", "an", "object"]\n```'],
+  ])(
+    'retries a %s response through the real parser and returns a later object',
+    async (_shape, firstResponse) => {
+      let calls = 0;
+      const llm = async () => {
+        calls += 1;
+        return calls === 1
+          ? firstResponse
+          : '{"summary":"ok","signature":"foo()","triage":"fix"}';
+      };
+      const result = await runLlxprtPromptWithParse(llm, parseMapResponse, {
+        delayMs: async () => {},
+      });
+      expect({ calls, result }).toEqual({
+        calls: 2,
+        result: { summary: 'ok', signature: 'foo()', triage: 'fix' },
+      });
+    },
+  );
+
+  it('exhausts the existing bounded retry count for a direct non-object value', async () => {
+    let calls = 0;
+    let errorMessage = '';
+    try {
+      await runLlxprtPromptWithParse(
+        async () => {
+          calls += 1;
+          return '[1, 2, 3]';
+        },
+        parseMapResponse,
+        { delayMs: async () => {} },
+      );
+    } catch (error) {
+      errorMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect({ calls, errorMessage }).toEqual({
+      calls: 3,
+      errorMessage: 'Direct parse: expected JSON object but got array',
+    });
   });
 
   it('preserves the immediate default retry behavior', async () => {
@@ -209,6 +275,64 @@ describe('runLlxprtPromptWithParse', () => {
       }),
     ).rejects.toThrow();
     expect(calls).toBe(1);
+  });
+});
+
+describe('final non-object diagnostics', () => {
+  it('writes the final raw response, phase, and prompt evidence', async () => {
+    const os = await import('node:os');
+    const nodeFs = await import('node:fs');
+    const pathMod = (await import('node:path')).default;
+    const reviewDir = await nodeFs.promises.mkdtemp(
+      pathMod.join(os.tmpdir(), 'test-parse-exhaust-'),
+    );
+    try {
+      const promptLength = 999;
+      await expect(
+        runLlxprtPromptWithParse(async () => '[1, 2, 3]', parseMapResponse, {
+          delayMs: async () => {},
+          phase: 'map',
+          saveParseFailure: (phase: string, raw: string, length: number) =>
+            saveParseFailureArtifact(reviewDir, phase, raw, {
+              promptLength: length,
+            }),
+          promptLength,
+        }),
+      ).rejects.toThrow('Direct parse: expected JSON object but got array');
+
+      const files = await nodeFs.promises.readdir(reviewDir);
+      const rawFile = files.find((file) =>
+        file.startsWith('parse-failure-raw-map-'),
+      );
+      const infoFile = files.find((file) =>
+        file.startsWith('parse-failure-info-'),
+      );
+      if (!rawFile || !infoFile) {
+        throw new Error('Expected parse-failure diagnostic files');
+      }
+      const rawContent = await nodeFs.promises.readFile(
+        pathMod.join(reviewDir, rawFile),
+        'utf8',
+      );
+      const infoContent = asRecord(
+        JSON.parse(
+          await nodeFs.promises.readFile(
+            pathMod.join(reviewDir, infoFile),
+            'utf8',
+          ),
+        ),
+      );
+      expect({ rawContent, infoContent }).toEqual({
+        rawContent: '[1, 2, 3]',
+        infoContent: expect.objectContaining({
+          phase: 'map',
+          promptLength,
+          rawLength: '[1, 2, 3]'.length,
+        }),
+      });
+    } finally {
+      await nodeFs.promises.rm(reviewDir, { recursive: true });
+    }
   });
 });
 
