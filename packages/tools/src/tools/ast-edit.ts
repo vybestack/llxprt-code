@@ -131,7 +131,7 @@ export class ASTEditTool
           },
           old_string: {
             description:
-              'The exact literal text to replace. Must match existing content exactly including whitespace and indentation.',
+              'The exact literal text to replace. Must match existing content exactly including whitespace, indentation, newlines, and surrounding code. Must be unique in the file: if old_string appears more than once the edit is rejected — include enough surrounding context to target exactly one occurrence.',
             type: 'string',
           },
           new_string: {
