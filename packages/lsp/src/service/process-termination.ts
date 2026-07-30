@@ -6,11 +6,7 @@
  * @requirement REQ-LIFE-010
  */
 
-import {
-  spawn,
-  spawnSync,
-  type ChildProcessWithoutNullStreams,
-} from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 const FORCE_KILL_CLOSE_TIMEOUT_MS = 1_500;
 
@@ -103,7 +99,7 @@ async function isProcessAliveAsync(
     return true;
   }
   if (process.platform === 'win32') {
-    return isWindowsPidAlive(pid);
+    return await isWindowsPidAlive(pid);
   }
   return isPosixPidAlive(pid);
 }
@@ -167,7 +163,7 @@ async function forceKillWindows(
   // ChildProcess bookkeeping may be stale, but the OS-level PID is gone.
   // Since tasklist confirms external termination, there is no need to wait
   // for a close event that may never be emitted by Bun's stale wrapper.
-  if (!isWindowsPidAlive(pid)) {
+  if (!(await isWindowsPidAlive(pid))) {
     return;
   }
 
@@ -182,7 +178,7 @@ async function forceKillWindows(
     // between our pre-check and the kill attempt. Use the OS-native tasklist
     // query to confirm whether the process is genuinely gone; a confirmed
     // absent PID is successful cleanup.
-    if (!isWindowsPidAlive(pid)) {
+    if (!(await isWindowsPidAlive(pid))) {
       return;
     }
     const signalError = !proc.kill('SIGKILL')
@@ -238,23 +234,41 @@ function runTaskkill(pid: number): Promise<void> {
  * tasklist confirms the PID is absent. A tasklist invocation error surfaces
  * as true (fail-safe: a query error must not be treated as success).
  */
-function isWindowsPidAlive(pid: number): boolean {
-  const result = spawnSync(
-    'tasklist',
-    ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
-    {
-      windowsHide: true,
-      encoding: 'utf8',
-      timeout: FORCE_KILL_CLOSE_TIMEOUT_MS,
-    },
-  );
-  if (result.error !== undefined || result.status !== 0) {
-    // tasklist itself failed or timed out — fail-safe: treat as alive so the
-    // caller surfaces the error rather than silently succeeding.
-    return true;
-  }
-  const stdout = result.stdout ?? '';
-  return parseTasklistCsvForPid(stdout, pid);
+function isWindowsPidAlive(pid: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const query = spawn(
+      'tasklist',
+      ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
+      {
+        windowsHide: true,
+      },
+    );
+    let stdout = '';
+    let settled = false;
+    const finish = (alive: boolean): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      resolve(alive);
+    };
+    const timer = setTimeout(() => {
+      query.kill();
+      finish(true);
+    }, FORCE_KILL_CLOSE_TIMEOUT_MS);
+
+    query.stdout.setEncoding('utf8');
+    query.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    query.once('error', () => finish(true));
+    query.once('close', (code) => {
+      // Query failures are conservatively treated as alive so cleanup cannot
+      // silently succeed without confirmation from the operating system.
+      finish(code === 0 ? parseTasklistCsvForPid(stdout, pid) : true);
+    });
+  });
 }
 
 /**
