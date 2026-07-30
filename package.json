@@ -338,6 +338,7 @@
     "react": "^19.2.0",
     "read-package-up": "^11.0.0",
     "shell-quote": "^1.8.4",
+    "sharp": "^0.35.3",
     "simple-git": "^3.36.0",
     "string-width": "^8.1.0",
     "strip-ansi": "^7.1.0",

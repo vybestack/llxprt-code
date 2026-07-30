@@ -44,7 +44,7 @@ describe('ProfileCreateWizard saveProfile — settings persistence API', () => {
     await fsp.rm(configHome, { recursive: true, force: true });
   });
 
-  it('creates a new profile with 0600 mode', async () => {
+  it('creates a new profile with expected content', async () => {
     const result = await saveProfile(
       'myprof',
       { version: 1, provider: 'openai', model: 'gpt-4' },
@@ -56,9 +56,29 @@ describe('ProfileCreateWizard saveProfile — settings persistence API', () => {
     const profilesDir = profilesDirForConfigHome(Storage.getGlobalConfigDir());
     const profilePath = path.join(profilesDir, 'myprof.json');
     expect(fs.existsSync(profilePath)).toBe(true);
-    const stat = fs.statSync(profilePath);
-    expect(stat.mode & 0o777).toBe(0o600);
+    expect(JSON.parse(fs.readFileSync(profilePath, 'utf8'))).toStrictEqual({
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4',
+    });
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'creates a new profile with owner-only mode on POSIX',
+    async () => {
+      await saveProfile(
+        'mode-profile',
+        { version: 1, provider: 'openai', model: 'gpt-4' },
+        { overwrite: false },
+      );
+
+      const profilePath = path.join(
+        profilesDirForConfigHome(Storage.getGlobalConfigDir()),
+        'mode-profile.json',
+      );
+      expect(fs.statSync(profilePath).mode & 0o777).toBe(0o600);
+    },
+  );
 
   it('create collision returns alreadyExists without overwriting', async () => {
     const profilesDir = profilesDirForConfigHome(Storage.getGlobalConfigDir());

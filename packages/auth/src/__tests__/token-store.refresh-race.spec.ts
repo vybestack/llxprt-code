@@ -148,10 +148,7 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
     await clientBStore.releaseRefreshLock('anthropic');
   });
 
-  it('should defer on a dead-owner lock (no PID reclaim, safety over availability)', async () => {
-    // Create a lock file with a dead PID to simulate a stale lock.
-    // No PID-liveness reclaim: the lock is treated as busy and deferred.
-    // The caller must restart or remove the orphan manually.
+  it('defers on a legacy lock with a non-existent PID because its owner is unverifiable', async () => {
     const lockDir = join(tempDir, 'locks');
     await fs.mkdir(lockDir, { recursive: true });
     const lockFile = join(lockDir, 'anthropic-refresh.lock');
@@ -164,13 +161,34 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
       mode: 0o600,
     });
 
-    // Acquire should defer (return false) — no reclaim.
+    // Legacy records lack hostname/start-time identity, so local ESRCH
+    // cannot prove a remote process dead. Auto-reclaim is stopped.
+    const acquired = await tokenStore.acquireRefreshLock('anthropic', {
+      waitMs: 300,
+    });
+    expect(acquired).toBe(false);
+
+    await expect(fs.readFile(lockFile, 'utf8')).resolves.toBeDefined();
+  });
+
+  it('defers on a legacy lock whose PID is still alive', async () => {
+    const lockDir = join(tempDir, 'locks');
+    await fs.mkdir(lockDir, { recursive: true });
+    const lockFile = join(lockDir, 'anthropic-refresh.lock');
+    const staleLockInfo = {
+      pid: process.pid,
+      timestamp: Date.now(),
+      token: 'live-owner',
+    };
+    await fs.writeFile(lockFile, JSON.stringify(staleLockInfo), {
+      mode: 0o600,
+    });
+
     const acquired = await tokenStore.acquireRefreshLock('anthropic', {
       waitMs: 200,
     });
     expect(acquired).toBe(false);
 
-    // The orphaned lock is left in place for manual cleanup.
     await expect(fs.readFile(lockFile, 'utf8')).resolves.toBeDefined();
   });
 

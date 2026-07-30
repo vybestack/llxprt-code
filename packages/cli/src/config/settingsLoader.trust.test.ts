@@ -149,7 +149,7 @@ describe('settingsLoader workspace trust provenance', () => {
     });
     (vi.mocked(fs.realpathSync) as Mock).mockImplementation(
       (location: fs.PathLike): string =>
-        String(location) === '/mock/home/user'
+        String(location) === path.resolve('/mock/home/user')
           ? String(location)
           : realFs.realpathSync(location),
     );

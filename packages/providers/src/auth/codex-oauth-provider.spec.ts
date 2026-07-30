@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
+import * as secureBrowserLauncher from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
 describe('CodexOAuthProvider - Concurrency and State Management', () => {
   let provider: CodexOAuthProvider;
@@ -27,6 +28,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
     };
 
     provider = new CodexOAuthProvider(mockTokenStore);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('Concurrent initiateAuth Prevention', () => {
@@ -107,6 +113,42 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       expect(callCount).toBe(2);
 
       performAuthSpy.mockRestore();
+    });
+
+    it('rejects at the overall deadline and retains a late token for the next initiation', async () => {
+      vi.useFakeTimers();
+      const pendingAuth = Promise.withResolvers<{
+        access_token: string;
+        token_type: 'Bearer';
+        expiry: number;
+        account_id: string;
+      }>();
+      vi.spyOn(
+        provider as unknown as {
+          performAuth: () => Promise<Awaited<typeof pendingAuth.promise>>;
+        },
+        'performAuth',
+      ).mockReturnValue(pendingAuth.promise);
+
+      const authentication = provider.initiateAuth();
+      const rejection = authentication.then(
+        () => 'resolved',
+        (error: unknown) =>
+          error instanceof Error ? error.message : String(error),
+      );
+      await vi.advanceTimersByTimeAsync(20 * 60 * 1000);
+      expect(await rejection).toBe('Codex OAuth flow timed out');
+
+      const lateToken = {
+        access_token: 'too-late',
+        token_type: 'Bearer' as const,
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        account_id: 'late-account',
+      };
+      pendingAuth.resolve(lateToken);
+      await vi.runAllTimersAsync();
+
+      await expect(provider.initiateAuth()).resolves.toStrictEqual(lateToken);
     });
   });
 
@@ -356,6 +398,60 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       expect(redirectUri).not.toBe(
         'https://auth.openai.com/api/accounts/deviceauth/callback',
       );
+    });
+  });
+
+  describe('Browser launch graceful degradation (issue #2819)', () => {
+    const getDisplayMethod = (): ((
+      url: string,
+      requestBucket: string,
+      signal: AbortSignal,
+    ) => Promise<boolean>) =>
+      (
+        provider as unknown as {
+          displayAuthUrlAndOpenBrowser: (
+            url: string,
+            requestBucket: string,
+            signal: AbortSignal,
+          ) => Promise<boolean>;
+        }
+      ).displayAuthUrlAndOpenBrowser.bind(provider);
+
+    it('reports a non-abort browser launch failure to the caller', async () => {
+      const browserSpy = vi
+        .spyOn(secureBrowserLauncher, 'openBrowserSecurely')
+        .mockRejectedValue(new Error('No browser available'));
+
+      const displayMethod = getDisplayMethod();
+
+      const controller = new AbortController();
+
+      await expect(
+        displayMethod(
+          'https://auth.openai.com/oauth/authorize',
+          'default',
+          controller.signal,
+        ),
+      ).resolves.toBe(false);
+
+      browserSpy.mockRestore();
+    });
+
+    it('propagates an already-aborted signal before browser launch', async () => {
+      const browserSpy = vi.spyOn(secureBrowserLauncher, 'openBrowserSecurely');
+      const displayMethod = getDisplayMethod();
+
+      const controller = new AbortController();
+      controller.abort(new Error('parent auth aborted'));
+
+      await expect(
+        displayMethod(
+          'https://auth.openai.com/oauth/authorize',
+          'default',
+          controller.signal,
+        ),
+      ).rejects.toThrow('parent auth aborted');
+      expect(browserSpy).not.toHaveBeenCalled();
     });
   });
 });

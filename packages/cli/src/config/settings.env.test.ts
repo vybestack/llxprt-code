@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import path from 'node:path';
 import { getSystemSettingsPath, getSystemDefaultsPath } from './settings.js';
 
 /**
@@ -61,18 +62,22 @@ describe('CLI system-settings resolution delegates to Storage', () => {
 
   it('honors the canonical env var LLXPRT_SYSTEM_SETTINGS_PATH', () => {
     process.env[CANONICAL] = '/canonical/settings.json';
-    expect(getSystemSettingsPath()).toBe('/canonical/settings.json');
+    expect(getSystemSettingsPath()).toBe(
+      path.resolve('/canonical/settings.json'),
+    );
   });
 
   it('honors the legacy alias LLXPRT_CODE_SYSTEM_SETTINGS_PATH when canonical is unset', () => {
     process.env[LEGACY] = '/legacy/settings.json';
-    expect(getSystemSettingsPath()).toBe('/legacy/settings.json');
+    expect(getSystemSettingsPath()).toBe(path.resolve('/legacy/settings.json'));
   });
 
   it('canonical takes precedence over the legacy alias when both are set', () => {
     process.env[CANONICAL] = '/canonical/settings.json';
     process.env[LEGACY] = '/legacy/settings.json';
-    expect(getSystemSettingsPath()).toBe('/canonical/settings.json');
+    expect(getSystemSettingsPath()).toBe(
+      path.resolve('/canonical/settings.json'),
+    );
   });
 
   it('ignores a relative override in favor of the platform default', () => {
@@ -106,12 +111,14 @@ describe('CLI system-settings resolution delegates to Storage', () => {
 
   it('getSystemDefaultsPath honors the canonical defaults env var', () => {
     process.env[CANONICAL_DEFAULTS] = '/canonical/defaults.json';
-    expect(getSystemDefaultsPath()).toBe('/canonical/defaults.json');
+    expect(getSystemDefaultsPath()).toBe(
+      path.resolve('/canonical/defaults.json'),
+    );
   });
 
   it('getSystemDefaultsPath honors the legacy defaults alias', () => {
     process.env[LEGACY_DEFAULTS] = '/legacy/defaults.json';
-    expect(getSystemDefaultsPath()).toBe('/legacy/defaults.json');
+    expect(getSystemDefaultsPath()).toBe(path.resolve('/legacy/defaults.json'));
   });
 });
 

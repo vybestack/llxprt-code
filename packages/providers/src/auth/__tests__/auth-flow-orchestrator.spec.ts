@@ -125,6 +125,8 @@ describe('AuthFlowOrchestrator', () => {
 
   afterEach(() => {
     oauthRuntimeBridge.setAccessors(undefined);
+    delete (global as { __oauth_auth_complete?: boolean })
+      .__oauth_auth_complete;
   });
 
   describe('authenticate() — auth lock parameters', () => {
@@ -421,6 +423,98 @@ describe('AuthFlowOrchestrator', () => {
       expect(
         (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
       ).toBeUndefined();
+    });
+  });
+
+  describe('authenticate() — joined auth completion signaling', () => {
+    it('honors a joining caller completion request after shared authentication succeeds', async () => {
+      const pendingAuth = Promise.withResolvers<OAuthToken>();
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.initiateAuth).mockImplementation(
+        async () => pendingAuth.promise,
+      );
+      registry.registerProvider(provider);
+      const orchestrator = createOrchestrator(tokenStore, registry);
+
+      const initiator = orchestrator.authenticate('anthropic', 'default');
+      await vi.waitFor(() =>
+        expect(provider.initiateAuth).toHaveBeenCalledOnce(),
+      );
+      const joiner = orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+      pendingAuth.resolve(makeToken('shared-token'));
+
+      await Promise.all([initiator, joiner]);
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBe(true);
+    });
+
+    it('does not signal completion when a joined authentication rejects', async () => {
+      const pendingAuth = Promise.withResolvers<OAuthToken>();
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.initiateAuth).mockImplementation(
+        async () => pendingAuth.promise,
+      );
+      registry.registerProvider(provider);
+      const orchestrator = createOrchestrator(tokenStore, registry);
+
+      const initiator = orchestrator.authenticate('anthropic', 'default');
+      await vi.waitFor(() =>
+        expect(provider.initiateAuth).toHaveBeenCalledOnce(),
+      );
+      const joiner = orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+      pendingAuth.reject(new Error('shared auth failed'));
+
+      const results = await Promise.allSettled([initiator, joiner]);
+      expect(results.map((result) => result.status)).toStrictEqual([
+        'rejected',
+        'rejected',
+      ]);
+      expect(
+        (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
+      ).toBeUndefined();
+    });
+
+    it('signals completion once when both joined callers request it', async () => {
+      const pendingAuth = Promise.withResolvers<OAuthToken>();
+      const tokenStore = createTokenStore();
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      vi.mocked(provider.initiateAuth).mockImplementation(
+        async () => pendingAuth.promise,
+      );
+      registry.registerProvider(provider);
+      const orchestrator = createOrchestrator(tokenStore, registry);
+      let signalCount = 0;
+      Object.defineProperty(global, '__oauth_auth_complete', {
+        configurable: true,
+        get: () => signalCount > 0,
+        set: () => {
+          signalCount += 1;
+        },
+      });
+
+      const initiator = orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+      await vi.waitFor(() =>
+        expect(provider.initiateAuth).toHaveBeenCalledOnce(),
+      );
+      const joiner = orchestrator.authenticate('anthropic', 'default', {
+        signalAuthCompletion: true,
+      });
+      pendingAuth.resolve(makeToken('shared-token'));
+
+      await Promise.all([initiator, joiner]);
+      expect(signalCount).toBe(1);
     });
   });
 

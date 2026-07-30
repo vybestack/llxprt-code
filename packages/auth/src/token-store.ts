@@ -10,6 +10,61 @@
  */
 
 import { type OAuthToken, type BucketStats } from './types.js';
+import type { OwnerLiveness } from './lock-owner.js';
+
+export type LockSchemaClassification =
+  | 'absent'
+  | 'versioned'
+  | 'legacy'
+  | 'malformed';
+
+export type LockStartTimeSource = 'canonical' | 'approximate' | 'unavailable';
+
+/**
+ * Advisory visibility of the token stored for this provider+bucket.
+ *
+ * This is intentionally decoupled from filesystem lock safety. A keychain
+ * backend error yields 'unknown' so status, safe recovery, and forced
+ * recovery can still operate; the diagnostic is surfaced for CLI display.
+ * 'valid' means a non-expired token is present; 'invalid' means absent or
+ * expired.
+ */
+export type TokenVisibility =
+  | { readonly status: 'valid' }
+  | { readonly status: 'invalid' }
+  | { readonly status: 'unknown'; readonly diagnostic: string };
+
+export interface AuthLockStatus {
+  readonly provider: string;
+  readonly bucket: string;
+  readonly exists: boolean;
+  readonly canonicalPath: string;
+  readonly classification: LockSchemaClassification;
+  readonly ownerPid: number | null;
+  readonly ownerHostname: string | null;
+  readonly ownerStartTimeMs: number | null;
+  readonly ownerStartTimeSource: LockStartTimeSource;
+  readonly liveness: OwnerLiveness;
+  readonly ageMs: number | null;
+  /**
+   * Advisory token visibility, decoupled from lock safety.
+   * Replaces the former boolean `hasValidToken`.
+   */
+  readonly tokenVisibility: TokenVisibility;
+}
+
+export interface AuthLockRecoveryResult {
+  readonly provider: string;
+  readonly bucket: string;
+  readonly recovered: boolean;
+  readonly reason: string;
+  readonly canonicalPath: string;
+  readonly cleanupDiagnostic?: string;
+}
+
+export interface ForceRecoverOptions {
+  readonly acknowledgeAllStopped: boolean;
+}
 
 /**
  * Interface for multi-provider OAuth token storage
@@ -93,7 +148,11 @@ export interface TokenStore {
    */
   acquireAuthLock(
     provider: string,
-    options?: { waitMs?: number; bucket?: string },
+    options?: {
+      waitMs?: number;
+      bucket?: string;
+      onWait?: () => Promise<boolean>;
+    },
   ): Promise<boolean>;
 
   /**
@@ -102,4 +161,33 @@ export interface TokenStore {
    * @param bucket - Optional bucket name for multi-account support
    */
   releaseAuthLock(provider: string, bucket?: string): Promise<void>;
+
+  /**
+   * Optionally inspect the auth lock status for a provider+bucket without
+   * modifying it. Never exposes owner tokens or credentials. Callers must
+   * check that this method exists before invoking it.
+   */
+  inspectAuthLock?(provider: string, bucket?: string): Promise<AuthLockStatus>;
+
+  /**
+   * Attempt fenced recovery of a proven-dead auth lock.
+   * Only succeeds when the lock owner is definitively absent.
+   */
+  recoverAuthLock?(
+    provider: string,
+    bucket?: string,
+  ): Promise<AuthLockRecoveryResult>;
+
+  /**
+   * Force-remove a stuck auth lock.
+   * Refuses verified-live owners.
+   * For legacy/malformed/unverifiable residue, requires explicit acknowledgment
+   * that all LLxprt processes sharing the path have been stopped.
+   * Removes only the lock file, never tokens.
+   */
+  forceRecoverAuthLock?(
+    provider: string,
+    bucket?: string,
+    options?: ForceRecoverOptions,
+  ): Promise<AuthLockRecoveryResult>;
 }

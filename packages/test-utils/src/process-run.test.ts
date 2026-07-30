@@ -172,70 +172,76 @@ describe('process run capture', () => {
     });
   });
 
-  it('captures a timed-out run that exits gracefully after SIGTERM', async () => {
-    let capture: RunCapture | undefined;
-    const run = spawnRunWithTimeout(
-      bunContext(
-        [
-          'process.on("SIGTERM", () => {',
-          '  process.stdout.write(" graceful-out");',
-          '  process.stderr.write("graceful-err");',
-          '  process.exit(0);',
-          '});',
-          'process.stdout.write("started");',
-          'setInterval(() => {}, 1000);',
-        ].join('\n'),
-        makeTempDir(),
-      ),
-      {},
-      false,
-      identityTransform,
-      SPAWN_TIMEOUT_MS,
-      (value) => {
-        capture = value;
-      },
-    );
+  it.skipIf(process.platform === 'win32')(
+    'captures a timed-out run that exits gracefully after SIGTERM',
+    async () => {
+      let capture: RunCapture | undefined;
+      const run = spawnRunWithTimeout(
+        bunContext(
+          [
+            'process.on("SIGTERM", () => {',
+            '  process.stdout.write(" graceful-out");',
+            '  process.stderr.write("graceful-err");',
+            '  process.exit(0);',
+            '});',
+            'process.stdout.write("started");',
+            'setInterval(() => {}, 1000);',
+          ].join('\n'),
+          makeTempDir(),
+        ),
+        {},
+        false,
+        identityTransform,
+        SPAWN_TIMEOUT_MS,
+        (value) => {
+          capture = value;
+        },
+      );
 
-    await expect(run).rejects.toThrow(/timed out/);
-    expect(capture).toStrictEqual({
-      stdout: 'started graceful-out',
-      stderr: 'graceful-err',
-      exitCode: 0,
-      timedOut: true,
-    });
-  });
+      await expect(run).rejects.toThrow(/timed out/);
+      expect(capture).toStrictEqual({
+        stdout: 'started graceful-out',
+        stderr: 'graceful-err',
+        exitCode: 0,
+        timedOut: true,
+      });
+    },
+  );
 
-  it('captures shutdown output and force-kills a run that ignores SIGTERM', async () => {
-    let capture: RunCapture | undefined;
-    const run = spawnRunWithTimeout(
-      bunContext(
-        [
-          'process.on("SIGTERM", () => {',
-          '  process.stdout.write(" shutdown-out");',
-          '  process.stderr.write("shutdown-err");',
-          '});',
-          'process.stdout.write("started");',
-          'setInterval(() => {}, 1000);',
-        ].join('\n'),
-        makeTempDir(),
-      ),
-      {},
-      false,
-      identityTransform,
-      SPAWN_TIMEOUT_MS,
-      (value) => {
-        capture = value;
-      },
-    );
+  it.skipIf(process.platform === 'win32')(
+    'captures shutdown output and force-kills a run that ignores SIGTERM',
+    async () => {
+      let capture: RunCapture | undefined;
+      const run = spawnRunWithTimeout(
+        bunContext(
+          [
+            'process.on("SIGTERM", () => {',
+            '  process.stdout.write(" shutdown-out");',
+            '  process.stderr.write("shutdown-err");',
+            '});',
+            'process.stdout.write("started");',
+            'setInterval(() => {}, 1000);',
+          ].join('\n'),
+          makeTempDir(),
+        ),
+        {},
+        false,
+        identityTransform,
+        SPAWN_TIMEOUT_MS,
+        (value) => {
+          capture = value;
+        },
+      );
 
-    await expect(run).rejects.toThrow(/timed out/);
-    expect(capture).toStrictEqual({
-      stdout: 'started shutdown-out',
-      stderr: 'shutdown-err',
-      exitCode: null,
-      timedOut: true,
-    });
-  });
+      await expect(run).rejects.toThrow(/timed out/);
+      expect(capture).toStrictEqual({
+        stdout: 'started shutdown-out',
+        stderr: 'shutdown-err',
+        exitCode: null,
+        timedOut: true,
+      });
+    },
+  );
 
   it('preserves process and capture failures together', async () => {
     const processErrorPattern = /code 3/;
@@ -431,28 +437,31 @@ describe('process-run quota guard integration', () => {
     expect(getQuotaGuardTrip()).toBeNull();
   });
 
-  it('reports the signal name (not "code null") when the child is signal-killed', async () => {
-    const dir = activateGuard();
-    const ctx: RunContext = {
-      command: process.execPath,
-      commandArgs: [
-        '-e',
-        // The child terminates itself with SIGTERM, so Node's close event emits
-        // `code: null, signal: "SIGTERM"`. The error message must name the
-        // signal rather than the misleading "exited with code null".
-        'process.kill(process.pid, "SIGTERM")',
-      ],
-      testDir: dir,
-    };
+  it.skipIf(process.platform === 'win32')(
+    'reports the signal name (not "code null") when the child is signal-killed',
+    async () => {
+      const dir = activateGuard();
+      const ctx: RunContext = {
+        command: process.execPath,
+        commandArgs: [
+          '-e',
+          // The child terminates itself with SIGTERM, so Node's close event emits
+          // `code: null, signal: "SIGTERM"`. The error message must name the
+          // signal rather than the misleading "exited with code null".
+          'process.kill(process.pid, "SIGTERM")',
+        ],
+        testDir: dir,
+      };
 
-    const error = await captureRejection(
-      spawnRun(ctx, {}, false, identityTransform),
-    );
+      const error = await captureRejection(
+        spawnRun(ctx, {}, false, identityTransform),
+      );
 
-    expect(error.message).toContain('terminated by signal SIGTERM');
-    expect(error.message).not.toContain('code null');
-    expect(getQuotaGuardTrip()).toBeNull();
-  });
+      expect(error.message).toContain('terminated by signal SIGTERM');
+      expect(error.message).not.toContain('code null');
+      expect(getQuotaGuardTrip()).toBeNull();
+    },
+  );
 
   it('does not trip the guard when the run uses fake responses', async () => {
     const dir = activateGuard();
@@ -463,7 +472,10 @@ describe('process-run quota guard integration', () => {
         'console.error("HTTP 429 Too Many Requests"); process.exit(1)',
       ],
       testDir: dir,
-      childEnv: { ...process.env, LLXPRT_FAKE_RESPONSES: '/tmp/fake.jsonl' },
+      childEnv: {
+        ...process.env,
+        LLXPRT_FAKE_RESPONSES: join(tmpdir(), 'fake.jsonl'),
+      },
     };
 
     const error = await captureRejection(

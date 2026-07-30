@@ -5,6 +5,8 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
 import {
   assertProviderConfig,
@@ -20,7 +22,9 @@ describe('cli-args helpers', () => {
   });
 
   it('uses fake provider args when fake responses are configured', () => {
-    expect(buildExtraArgs('/tmp/fake-responses.json', true)).toStrictEqual([
+    expect(
+      buildExtraArgs(path.join(os.tmpdir(), 'fake-responses.json'), true),
+    ).toStrictEqual([
       '--yolo',
       '--ide-mode',
       'disable',
@@ -45,7 +49,7 @@ describe('cli-args helpers', () => {
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'model');
     setEnv('OPENAI_API_KEY', '');
-    setEnv('LLXPRT_TEST_PROFILE_KEYFILE', '/tmp/keyfile');
+    setEnv('LLXPRT_TEST_PROFILE_KEYFILE', path.join(os.tmpdir(), 'keyfile'));
 
     expect(() => assertProviderConfig(undefined)).not.toThrow();
   });
@@ -75,15 +79,18 @@ describe('cli-args helpers', () => {
     setEnv('TERM_PROGRAM_VERSION', '1.0.0');
     setEnv('KEEP_ME', 'yes');
 
-    const childEnv = buildChildEnv('/tmp/test-dir', '/tmp/fake.json');
+    const testDir = path.join(os.tmpdir(), 'test-dir');
+    const fakePath = path.join(os.tmpdir(), 'fake.json');
+
+    const childEnv = buildChildEnv(testDir, fakePath);
 
     expect(childEnv['TERM_PROGRAM']).toBeUndefined();
     expect(childEnv['TERM_PROGRAM_VERSION']).toBeUndefined();
     expect(childEnv['KEEP_ME']).toBe('yes');
     expect(childEnv['NO_BROWSER']).toBe('true');
-    expect(childEnv['LLXPRT_FAKE_RESPONSES']).toBe('/tmp/fake.json');
+    expect(childEnv['LLXPRT_FAKE_RESPONSES']).toBe(fakePath);
     expect(childEnv['LLXPRT_CODE_WELCOME_CONFIG_PATH']).toBe(
-      '/tmp/test-dir/welcomeConfig.json',
+      path.join(testDir, 'welcomeConfig.json'),
     );
   });
 

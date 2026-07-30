@@ -15,6 +15,7 @@ import {
   shouldAllocateSandboxTty,
 } from './sandbox.js';
 import { buildSandboxCommandArgs } from './sandbox-exec.js';
+import { getContainerPath } from './sandbox-env.js';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -352,6 +353,8 @@ describe('sandbox rebuild uses Bun + scripts/build_sandbox.ts', () => {
 // --- Fix 3: Git config mounts (R3.1-R3.7) ---
 
 describe('mountGitConfigFiles', () => {
+  const hostHome = path.resolve('/Users/alice');
+  const containerHome = '/home/node';
   let existsSyncSpy: MockInstance<typeof fs.existsSync>;
 
   beforeEach(() => {
@@ -363,38 +366,42 @@ describe('mountGitConfigFiles', () => {
   });
 
   it('adds --volume for ~/.gitconfig when file exists (R3.1)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
     existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === '/Users/alice/.gitconfig',
+      (p: fs.PathLike) => String(p) === gitConfig,
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     expect(args).toContain('--volume');
     const volumeArg = args.find(
       (a) => a.includes('.gitconfig') && a.includes(':ro'),
     );
     expect(volumeArg).toBeDefined();
-    expect(volumeArg).toContain('/Users/alice/.gitconfig');
+    expect(volumeArg).toContain(gitConfig);
   });
 
   it('adds --volume for ~/.config/git/config when file exists (R3.2)', () => {
     existsSyncSpy.mockImplementation(
       (p: fs.PathLike) =>
-        String(p) === path.join('/Users/alice', '.config', 'git', 'config'),
+        String(p) === path.join(hostHome, '.config', 'git', 'config'),
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     const volumeArg = args.find(
-      (a) => a.includes('.config/git/config') && a.includes(':ro'),
+      (a) =>
+        a.includes(path.posix.join('.config', 'git', 'config')) &&
+        a.includes(':ro'),
     );
     expect(volumeArg).toBeDefined();
   });
 
   it('adds --volume for ~/.gitignore_global when file exists (R3.3)', () => {
     existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === '/Users/alice/.gitignore_global',
+      (p: fs.PathLike) =>
+        String(p) === path.join(hostHome, '.gitignore_global'),
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     const volumeArg = args.find(
       (a) => a.includes('.gitignore_global') && a.includes(':ro'),
     );
@@ -402,45 +409,72 @@ describe('mountGitConfigFiles', () => {
   });
 
   it('mounts at both host and container home paths when they differ (R3.4)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
     existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === '/Users/alice/.gitconfig',
+      (p: fs.PathLike) => String(p) === gitConfig,
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
-    const hostMount = args.find((a) =>
-      a.startsWith('/Users/alice/.gitconfig:'),
-    );
+    mountGitConfigFiles(args, hostHome, containerHome);
+    const hostMount = args.find((a) => a.startsWith(`${gitConfig}:`));
     const containerMount = args.find((a) =>
-      a.includes('/home/node/.gitconfig'),
+      a.includes(path.posix.join(containerHome, '.gitconfig')),
     );
     expect(hostMount).toBeDefined();
     expect(containerMount).toBeDefined();
   });
 
   it('does not duplicate mount when host and container home are identical (R3.4)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
     existsSyncSpy.mockImplementation(
-      (p: fs.PathLike) => String(p) === '/home/node/.gitconfig',
+      (p: fs.PathLike) => String(p) === gitConfig,
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, '/home/node', '/home/node');
+    mountGitConfigFiles(args, hostHome, hostHome);
     const volumeArgs = args.filter(
       (a) => a.includes('.gitconfig') && a.includes(':ro'),
     );
     expect(volumeArgs).toHaveLength(1);
   });
 
+  it('produces exact forward-slash container-side target paths (R3.8)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
+    existsSyncSpy.mockImplementation(
+      (p: fs.PathLike) => String(p) === gitConfig,
+    );
+    const args: string[] = [];
+    mountGitConfigFiles(args, hostHome, containerHome);
+
+    expect(args).toContain(`${gitConfig}:/home/node/.gitconfig:ro`);
+  });
+
+  it('normalizes a host-shaped container home before constructing its target (R3.9)', () => {
+    const gitConfig = path.join(hostHome, '.gitconfig');
+    existsSyncSpy.mockImplementation(
+      (p: fs.PathLike) => String(p) === gitConfig,
+    );
+    const args: string[] = [];
+    mountGitConfigFiles(args, hostHome, hostHome);
+
+    const expectedTarget = `${getContainerPath(gitConfig)}:ro`;
+    const volumeArgs = args.filter(
+      (a) => a.includes('.gitconfig') && a.endsWith(':ro'),
+    );
+    expect(volumeArgs).toHaveLength(1);
+    expect(volumeArgs[0]).toBe(`${gitConfig}:${expectedTarget}`);
+  });
+
   it('all mounts use :ro mode (R3.5)', () => {
     existsSyncSpy.mockImplementation((p: fs.PathLike) => {
       const s = String(p);
       return (
-        s === '/Users/alice/.gitconfig' ||
-        s === path.join('/Users/alice', '.config', 'git', 'config') ||
-        s === '/Users/alice/.gitignore_global' ||
-        s === path.join('/Users/alice', '.ssh', 'known_hosts')
+        s === path.join(hostHome, '.gitconfig') ||
+        s === path.join(hostHome, '.config', 'git', 'config') ||
+        s === path.join(hostHome, '.gitignore_global') ||
+        s === path.join(hostHome, '.ssh', 'known_hosts')
       );
     });
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     const volumeArgs = args.filter(
       (_, i) => i > 0 && args[i - 1] === '--volume',
     );
@@ -452,7 +486,7 @@ describe('mountGitConfigFiles', () => {
   it('skips mount for files that do not exist (R3.6)', () => {
     existsSyncSpy.mockReturnValue(false);
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     expect(args).toHaveLength(0);
   });
 
@@ -460,12 +494,12 @@ describe('mountGitConfigFiles', () => {
     existsSyncSpy.mockImplementation((p: fs.PathLike) => {
       const s = String(p);
       return (
-        s === '/Users/alice/.gitconfig' ||
-        s === '/Users/alice/.gitignore_global'
+        s === path.join(hostHome, '.gitconfig') ||
+        s === path.join(hostHome, '.gitignore_global')
       );
     });
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     // Two files exist, each gets host + container path (4 mounts)
     const volumeCount = args.filter((a) => a === '--volume').length;
     expect(volumeCount).toBe(4);
@@ -474,7 +508,7 @@ describe('mountGitConfigFiles', () => {
   it('does not mount ~/.git-credentials even when it exists (R3.7)', () => {
     existsSyncSpy.mockReturnValue(true);
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
+    mountGitConfigFiles(args, hostHome, containerHome);
     const hasCredentials = args.some((a) => a.includes('.git-credentials'));
     expect(hasCredentials).toBe(false);
   });
@@ -484,8 +518,10 @@ describe('mountGitConfigFiles', () => {
       String(p).includes('known_hosts'),
     );
     const args: string[] = [];
-    mountGitConfigFiles(args, '/Users/alice', '/home/node');
-    const vol = args.find((a) => a.includes('.ssh/known_hosts'));
+    mountGitConfigFiles(args, hostHome, containerHome);
+    const vol = args.find((a) =>
+      a.includes(path.posix.join('.ssh', 'known_hosts')),
+    );
     expect(vol).toBeDefined();
     expect(vol).toMatch(/:ro$/);
   });

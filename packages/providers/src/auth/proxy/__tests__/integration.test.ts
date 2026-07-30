@@ -272,77 +272,90 @@ describe('proxy integration (phase 31)', () => {
     await stopProxy();
   });
 
-  it('consumes fd capability for both factories and reauthenticates after reconnect', async () => {
-    const capabilityToken = 'c'.repeat(64);
-    const started = await startServer(capabilityToken);
-    try {
-      await started.tokenStore.saveToken('openai', {
-        access_token: 'factory-token',
-        expiry: Date.now() + 60_000,
-        token_type: 'Bearer',
-      });
-      await started.keyStorage.saveKey('openai', 'factory-key');
-      // O11/O12: guarantee fd 3 rather than assuming openSync returns 3.
-      // Open the capability file, then dup2 it to fd 3 using POSIX dup2
-      // available via node:fs on the current process. This is done in-process
-      // so the proxy server's event loop stays responsive (spawnSync would
-      // block it).
-      const capabilityFile = path.join(tmpDir, 'capability');
-      fs.writeFileSync(capabilityFile, `${capabilityToken}\n`, { mode: 0o600 });
-      // Open the file on whatever fd openSync returns.
-      const openedFd = fs.openSync(capabilityFile, 'r');
-      // If openedFd is not already 3, use bash to move it to fd 3.
-      // We use a child process via spawn (async) so the parent's event loop
-      // stays responsive for the proxy server.
-      const { spawn } = await import('node:child_process');
-      const { fileURLToPath } = await import('node:url');
-      const factoryPath = fileURLToPath(
-        new URL('../credential-store-factory.ts', import.meta.url),
-      );
-      const childScript = [
-        `const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } = require(${JSON.stringify(factoryPath)});`,
-        'resetFactorySingletons();',
-        'const tokenStore = createTokenStore();',
-        'const keyStorage = createProviderKeyStorage();',
-        'Promise.all([tokenStore.getToken("openai"), keyStorage.getKey("openai")])',
-        '  .then(([t, k]) => {',
-        '    process.stdout.write(JSON.stringify({ token: t?.access_token, key: k, isProxy: tokenStore.constructor.name === "ProxyTokenStore" }));',
-        '    process.exit(0);',
-        '  })',
-        '  .catch((e) => {',
-        '    process.stdout.write(JSON.stringify({ error: e.message }));',
-        '    process.exit(0);',
-        '  });',
-      ].join('');
-      const bashScript = `exec 3<${JSON.stringify(capabilityFile)}\nLLXPRT_CREDENTIAL_SOCKET=${JSON.stringify(started.socketPath)} LLXPRT_CAPABILITY_FD=3 exec bun -e ${JSON.stringify(childScript)}`;
-      const child = spawn(
-        'env',
-        ['-u', 'BASH_ENV', 'bash', '--noprofile', '--norc', '-c', bashScript],
-        { encoding: 'utf8' },
-      );
-      let childStdout = '';
-      let childStderr = '';
-      child.stdout.on('data', (d) => (childStdout += d.toString()));
-      child.stderr.on('data', (d) => (childStderr += d.toString()));
-      const exitCode = await new Promise<number>((resolve) => {
-        child.on('close', resolve);
-      });
-      fs.closeSync(openedFd);
-      expect(exitCode).toBe(0);
-      const payload = JSON.parse(childStdout.trim()) as {
-        token?: string;
-        key?: string;
-        isProxy?: boolean;
-        error?: string;
-      };
-      expect(payload.error, `child error: ${payload.error}`).toBeUndefined();
-      expect(payload.token).toBe('factory-token');
-      expect(payload.key).toBe('factory-key');
-      expect(payload.isProxy).toBe(true);
-    } finally {
-      await started.server.stop();
-    }
-  });
+  it.skipIf(isWindows)(
+    'consumes fd capability for both factories and reauthenticates after reconnect',
+    async () => {
+      const capabilityToken = 'c'.repeat(64);
+      const started = await startServer(capabilityToken);
+      try {
+        await started.tokenStore.saveToken('openai', {
+          access_token: 'factory-token',
+          expiry: Date.now() + 60_000,
+          token_type: 'Bearer',
+        });
+        await started.keyStorage.saveKey('openai', 'factory-key');
+        const capabilityFile = path.join(tmpDir, 'capability');
+        fs.writeFileSync(capabilityFile, `${capabilityToken}\n`, {
+          mode: 0o600,
+        });
+        // The bash wrapper assigns the capability file to fd 3. The child stays
+        // asynchronous so the proxy server's event loop remains responsive.
+        const { spawn } = await import('node:child_process');
+        const { fileURLToPath } = await import('node:url');
+        const factoryPath = fileURLToPath(
+          new URL('../credential-store-factory.ts', import.meta.url),
+        );
+        const childScript = [
+          `const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } = require(${JSON.stringify(factoryPath)});`,
+          'resetFactorySingletons();',
+          'const tokenStore = createTokenStore();',
+          'const keyStorage = createProviderKeyStorage();',
+          'Promise.all([tokenStore.getToken("openai"), keyStorage.getKey("openai")])',
+          '  .then(([t, k]) => {',
+          '    process.stdout.write(JSON.stringify({ token: t?.access_token, key: k, isProxy: tokenStore.constructor.name === "ProxyTokenStore" }));',
+          '    process.exit(0);',
+          '  })',
+          '  .catch((e) => {',
+          '    process.stdout.write(JSON.stringify({ error: e.message }));',
+          '    process.exit(0);',
+          '  });',
+        ].join('');
+        const bashScript = `exec 3<${JSON.stringify(capabilityFile)}\nLLXPRT_CREDENTIAL_SOCKET=${JSON.stringify(started.socketPath)} LLXPRT_CAPABILITY_FD=3 exec bun -e ${JSON.stringify(childScript)}`;
+        let childStdout = '';
+        let childStderr = '';
+        const child = spawn('env', [
+          '-u',
+          'BASH_ENV',
+          'bash',
+          '--noprofile',
+          '--norc',
+          '-c',
+          bashScript,
+        ]);
+        child.stdout.on('data', (d) => (childStdout += d.toString()));
+        child.stderr.on('data', (d) => (childStderr += d.toString()));
+        const exitCode = await new Promise<number>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            child.kill('SIGKILL');
+            reject(
+              new Error(`Child process timed out. stderr: ${childStderr}`),
+            );
+          }, 15_000);
+          child.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+          });
+          child.on('close', (code) => {
+            clearTimeout(timer);
+            resolve(code ?? -1);
+          });
+        });
+        expect(exitCode, `child stderr: ${childStderr}`).toBe(0);
+        const payload = JSON.parse(childStdout.trim()) as {
+          token?: string;
+          key?: string;
+          isProxy?: boolean;
+          error?: string;
+        };
+        expect(payload.error, `child error: ${payload.error}`).toBeUndefined();
+        expect(payload.token).toBe('factory-token');
+        expect(payload.key).toBe('factory-key');
+        expect(payload.isProxy).toBe(true);
+      } finally {
+        await started.server.stop();
+      }
+    },
+  );
 
   it('clears capability token after proxy stop', async () => {
     // @scenario Lifecycle should clear the capability token on stop.

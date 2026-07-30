@@ -386,17 +386,23 @@ describe('profileStore — writeProfileFile create mode', () => {
     );
   });
 
-  it('applies 0600 mode to new files', async () => {
-    await writeProfileFile(tempDir, 'secure', '{"a":1}', 'create');
-    const stat = fs.statSync(path.join(tempDir, 'secure.json'));
-    expect(stat.mode & 0o777).toBe(0o600);
-  });
+  it.skipIf(process.platform === 'win32')(
+    'applies 0600 mode to new files',
+    async () => {
+      await writeProfileFile(tempDir, 'secure', '{"a":1}', 'create');
+      const stat = fs.statSync(path.join(tempDir, 'secure.json'));
+      expect(stat.mode & 0o777).toBe(0o600);
+    },
+  );
 
-  it('creates a new profiles directory with owner-only permissions', async () => {
-    const profilesDir = path.join(tempDir, 'profiles');
-    await writeProfileFile(profilesDir, 'secure', '{"a":1}', 'create');
-    expect(fs.statSync(profilesDir).mode & 0o777).toBe(0o700);
-  });
+  it.skipIf(process.platform === 'win32')(
+    'creates a new profiles directory with owner-only permissions',
+    async () => {
+      const profilesDir = path.join(tempDir, 'profiles');
+      await writeProfileFile(profilesDir, 'secure', '{"a":1}', 'create');
+      expect(fs.statSync(profilesDir).mode & 0o777).toBe(0o700);
+    },
+  );
 
   it.each([
     '',

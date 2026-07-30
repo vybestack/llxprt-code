@@ -536,5 +536,101 @@ describe('bucketFailoverIntegration', () => {
       expect(result.bucket).toBe('bucket2');
       expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
     });
+
+    it('fails over on HTTP 5xx server error (issue #1726)', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      const serverError = new Error('Internal server error');
+      (serverError as { status?: number }).status = 500;
+      const failGenerator = () => createThrowingGenerator(serverError);
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+      expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails over on Anthropic api_error body type (issue #1726)', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      const apiError = new Error('Internal server error');
+      (
+        apiError as { error?: { type?: string; error?: { type?: string } } }
+      ).error = {
+        type: 'error',
+        error: {
+          type: 'api_error',
+          message: 'Internal server error',
+        },
+      };
+      const failGenerator = () => createThrowingGenerator(apiError);
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+      expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails over on "internal server error" in message text', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      const serverError = new Error(
+        'API Error: {"type":"error","error":{"type":"api_error","message":"Internal server error"}}',
+      );
+      const failGenerator = () => createThrowingGenerator(serverError);
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+      expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    });
   });
 });
