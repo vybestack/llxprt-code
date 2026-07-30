@@ -107,11 +107,12 @@ const getSavedChatTags = async (
         name: checkpoint.checkpointName,
         mtime: checkpoint.source.lastModified.toISOString(),
       }))
-      .sort(
-        (left, right) =>
-          left.mtime.localeCompare(right.mtime) ||
-          left.name.localeCompare(right.name),
-      );
+      .sort((left, right) => {
+        const byModifiedTime = left.mtime.localeCompare(right.mtime);
+        return byModifiedTime === 0
+          ? left.name.localeCompare(right.name)
+          : byModifiedTime;
+      });
   } catch (error: unknown) {
     debugLogger.warn(`Failed to list saved chat checkpoints: ${String(error)}`);
     return [];
@@ -490,8 +491,7 @@ const restoreHistory = async (
     };
   }
 
-  const chat = client.getChat();
-  const currentHistory = chat.getHistory();
+  const currentHistory = client.getChat().getHistory();
   const turnsToRestore = Math.abs(turns);
 
   if (turnsToRestore < 1) {
