@@ -43,7 +43,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('malformed payload for any known event type is skipped without crash @requirement:REQ-RPL-005', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.constantFrom(
             'content' as const,
             'compressed' as const,
@@ -101,7 +101,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('rewind after compression: max(0, 1+postCount - rewindN) items @requirement:REQ-RPL-002d, REQ-RPL-003', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.integer({ min: 1, max: 10 }),
           fc.integer({ min: 0, max: 15 }),
           async (postCount, rewindN) => {
@@ -141,7 +141,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('provider switch always updates metadata to latest provider/model @requirement:REQ-RPL-007', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.array(
             fc.record({
               provider: fc.constantFrom(
@@ -190,7 +190,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('directories_changed always updates metadata to latest directories @requirement:REQ-RPL-007', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.array(
             fc.array(fc.string({ minLength: 1, maxLength: 30 }), {
               minLength: 1,
@@ -233,7 +233,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('session_events never appear in history regardless of count @requirement:REQ-RPL-008', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.integer({ min: 1, max: 10 }),
           fc.integer({ min: 1, max: 10 }),
           async (contentCount, eventCount) => {
@@ -275,7 +275,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('BOM on first line never prevents replay @requirement:REQ-RPL-005', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.integer({ min: 1, max: 10 }),
           fc.boolean(),
           async (contentCount: number, hasBom: boolean) => {
@@ -315,7 +315,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('multiple compressions: only post-last-compression content survives @requirement:REQ-RPL-003', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.integer({ min: 1, max: 5 }),
           fc.integer({ min: 1, max: 5 }),
           fc.integer({ min: 0, max: 5 }),
@@ -370,7 +370,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      */
     it('readSessionHeader returns matching metadata for valid files @requirement:REQ-RPL-001', () =>
       fc.assert(
-        fc.property(
+        fc.asyncProperty(
           fc.record({
             sessionId: fc.uuid(),
             provider: fc.constantFrom('anthropic', 'openai', 'google'),
@@ -411,37 +411,42 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-005
      */
-    it.prop([fc.integer({ min: 1, max: 15 })])(
-      'corrupt last line is always silently discarded regardless of event count @requirement:REQ-RPL-005',
-      async (contentCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-corrupt-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('corrupt last line is always silently discarded regardless of event count @requirement:REQ-RPL-005', () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 15 }),
+          async (contentCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-corrupt-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const lines: string[] = [sessionStartLine(1)];
-          for (let i = 0; i < contentCount; i++) {
-            lines.push(contentLine(i + 2, makeContent(`msg ${i}`, 'human')));
-          }
-          // Add truncated last line
-          lines.push(
-            '{"v":1,"seq":999,"type":"content","payload":{"content":{"spe',
-          );
-          const filePath = path.join(localChatsDir, 'corrupt-last.jsonl');
-          await writeJsonlFile(filePath, lines);
+            try {
+              const lines: string[] = [sessionStartLine(1)];
+              for (let i = 0; i < contentCount; i++) {
+                lines.push(
+                  contentLine(i + 2, makeContent(`msg ${i}`, 'human')),
+                );
+              }
+              // Add truncated last line
+              lines.push(
+                '{"v":1,"seq":999,"type":"content","payload":{"content":{"spe',
+              );
+              const filePath = path.join(localChatsDir, 'corrupt-last.jsonl');
+              await writeJsonlFile(filePath, lines);
 
-          const result = await replaySession(filePath, PROJECT_HASH);
+              const result = await replaySession(filePath, PROJECT_HASH);
 
-          assertReplayOk(result);
-          expect(result.history).toHaveLength(contentCount);
-          // Silent discard — no warnings for corrupt last line
-          expect(result.warnings).toHaveLength(0);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              assertReplayOk(result);
+              expect(result.history).toHaveLength(contentCount);
+              // Silent discard — no warnings for corrupt last line
+              expect(result.warnings).toHaveLength(0);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+      ));
   });
 });

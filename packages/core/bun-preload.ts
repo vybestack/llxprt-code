@@ -19,6 +19,9 @@ import { beforeAll, beforeEach, afterEach } from 'bun:test';
 // (shouldLaunchBrowser) short-circuit. This prevents any test from
 // inadvertently launching a real browser.
 process.env.CI = 'true';
+// Block the shouldLaunchBrowser check by setting a blocklisted BROWSER value.
+// This is a second safety net in case CI is unset by a test.
+process.env.BROWSER = 'www-browser';
 
 // 1. Isolate Storage roots BEFORE any test module imports Storage.
 //    This is identical to test-setup-storage-isolation.ts.
