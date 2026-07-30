@@ -314,7 +314,7 @@ SessionEnd → Extract and store memories
 
 **Prerequisites:**
 
-- Node.js 18+
+- Node.js 24+
 - LLxprt Code installed
 
 **Setup:**
