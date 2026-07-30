@@ -126,10 +126,18 @@ describe('activateNamedLoginBucket cache invalidation (issue #2819)', () => {
       access_token: 'configured-token',
       token_type: 'Bearer',
     } as OAuthToken);
+    await tokenStore.saveToken(
+      'codex',
+      validToken('configured-token'),
+      'configured',
+    );
 
     await manager.activateNamedLoginBucket('codex', 'named');
 
     expect(getValidCachedEntry(state, 'codex', profileId)).not.toBeNull();
+    expect((await manager.getOAuthToken('codex'))?.access_token).toBe(
+      'configured-token',
+    );
   });
 
   it('resolves the activated named bucket token for an unbucketed profile', async () => {

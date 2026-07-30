@@ -305,8 +305,8 @@ const listen = (
     };
     const handleAbort = (): void => {
       cleanup();
-      server.close();
-      reject(abortError(signal));
+      const error = abortError(signal);
+      server.close(() => reject(error));
     };
 
     if (signal?.aborted === true) {

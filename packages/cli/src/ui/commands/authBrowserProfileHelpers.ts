@@ -119,7 +119,8 @@ export function handleManageBrowserProfile(
       };
     }
 
-    if (selector === '--clear') {
+    const trimmedSelector = selector.trim();
+    if (trimmedSelector === '--clear') {
       oauthManager.clearBrowserProfileAssociation(provider, bucket);
       return {
         type: 'message',
@@ -128,7 +129,7 @@ export function handleManageBrowserProfile(
       };
     }
 
-    const resolved = resolveProfileSelector(selector);
+    const resolved = resolveProfileSelector(trimmedSelector);
 
     if (resolved === undefined) {
       return {

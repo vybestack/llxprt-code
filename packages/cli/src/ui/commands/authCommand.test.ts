@@ -714,7 +714,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Authenticated claudecode, but failed to activate bucket mybucket: session activation failed. Retry login or run /auth claudecode switch mybucket.',
+          'Authenticated claudecode, but failed to activate bucket mybucket: session activation failed. Run /auth claudecode switch mybucket.',
       });
     });
 
@@ -731,10 +731,10 @@ describe('AuthCommandExecutor OAuth Support', () => {
       );
     });
 
-    it('@given --clear flag @when profile clear @then clears association', async () => {
+    it('@given whitespace-padded --clear flag @when profile clear @then clears association', async () => {
       const result = await executor.execute(
         mockContext,
-        'claudecode profile mybucket --clear',
+        'claudecode profile mybucket   --clear   ',
       );
 
       expect(clearBrowserProfileAssociationMock).toHaveBeenCalledWith(

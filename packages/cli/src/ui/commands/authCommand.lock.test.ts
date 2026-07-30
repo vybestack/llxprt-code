@@ -245,7 +245,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     expect(result.content).toContain('work');
   });
 
-  it('force unlock requires --i-have-stopped-all-processes for legacy residue', async () => {
+  it('surfaces the backend acknowledgment requirement for legacy residue', async () => {
     manager.forceRecoverAuthLock.mockResolvedValue({
       provider: 'codex',
       bucket: 'default',

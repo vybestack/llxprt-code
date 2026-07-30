@@ -178,16 +178,37 @@ function buildOwnerFingerprint(rawContent: string): OwnerFingerprint {
   };
 }
 
+async function closeHandle(
+  handle: fs.FileHandle,
+  operationError: unknown,
+): Promise<void> {
+  try {
+    await handle.close();
+  } catch (closeError) {
+    if (operationError === undefined) {
+      throw closeError;
+    }
+  }
+}
+
+async function readOpenLockFile(handle: fs.FileHandle): Promise<LockFileRead> {
+  let operationError: unknown;
+  try {
+    const stat = await handle.stat();
+    const content = await handle.readFile('utf8');
+    return { content, mtimeMs: Number(stat.mtimeMs) };
+  } catch (error) {
+    operationError = error;
+    throw error;
+  } finally {
+    await closeHandle(handle, operationError);
+  }
+}
+
 async function readLockFile(lockPath: string): Promise<LockFileRead> {
   try {
     const handle = await fs.open(lockPath, 'r');
-    try {
-      const stat = await handle.stat();
-      const content = await handle.readFile('utf8');
-      return { content, mtimeMs: Number(stat.mtimeMs) };
-    } finally {
-      await handle.close();
-    }
+    return await readOpenLockFile(handle);
   } catch (error) {
     if (!isErrnoCode(error, 'ENOENT')) {
       throw error;

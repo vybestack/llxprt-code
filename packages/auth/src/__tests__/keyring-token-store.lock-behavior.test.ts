@@ -440,19 +440,25 @@ describe('KeyringTokenStore advisory lock behavior', () => {
         async ({ lockType, acquire, release }) => {
           const lockFile = path.join(lockDir, `subprocess-${lockType}.lock`);
           await fs.mkdir(lockDir, { recursive: true });
-          const child = spawn(process.execPath, [
-            '-e',
+          const child = spawn(
+            process.execPath,
             [
-              "const fs=require('node:fs')",
-              "const os=require('node:os')",
-              "const cp=require('node:child_process')",
-              "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
-              "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
-              "process.stdout.write('ready\\n')",
-              'setInterval(()=>{},1000)',
-            ].join(';'),
-            lockFile,
-          ]);
+              '-e',
+              [
+                "const fs=require('node:fs')",
+                "const os=require('node:os')",
+                "const cp=require('node:child_process')",
+                "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
+                "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
+                "process.stdout.write('ready\\n')",
+                'setInterval(()=>{},1000)',
+              ].join(';'),
+              lockFile,
+            ],
+            {
+              env: { ...process.env, LC_ALL: 'C' },
+            },
+          );
           const store = createStore();
 
           try {

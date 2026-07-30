@@ -114,19 +114,20 @@ describe('startLocalOAuthCallback', () => {
     });
   });
 
-  it('closes the listener and rejects when aborted as startup completes', async () => {
+  it('closes the listener and rejects the callback when aborted after startup', async () => {
     const port = await findAvailablePort();
     const controller = new AbortController();
-    const startup = startLocalOAuthCallback({
+    const server = await startLocalOAuthCallback({
       state: 'abort-state',
       portRange: [port, port],
       timeoutMs: 5_000,
       signal: controller.signal,
     });
+    const callback = server.waitForCallback();
 
     controller.abort();
 
-    await expect(startup).rejects.toThrow(/abort/i);
+    await expect(callback).rejects.toThrow(/abort/i);
     const replacement = net.createServer();
     await new Promise<void>((resolve, reject) => {
       replacement.once('error', reject);

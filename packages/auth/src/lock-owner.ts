@@ -248,7 +248,11 @@ export async function readProcessStartTimeMs(
     const { stdout } = await execFileAsync(
       'ps',
       ['-o', 'lstart=', '-p', String(pid)],
-      { timeout: Math.max(1, timeoutMs), killSignal: 'SIGKILL' },
+      {
+        timeout: Math.max(1, timeoutMs),
+        killSignal: 'SIGKILL',
+        env: { ...process.env, LC_ALL: 'C' },
+      },
     );
     const value = Date.parse(stdout.trim());
     return Number.isFinite(value) ? value : null;
