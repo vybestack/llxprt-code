@@ -171,6 +171,29 @@ jobs:
           IS_PREVIEW: ${{ steps.vars.outputs.is_preview }}
           MANUAL_VERSION: ${{ inputs.version }}
 
+      # Scheduled nightlies can collide with a manual nightly that already
+      # published the same commit + UTC-date version. npm versions are
+      # immutable, so detect an already-published canonical package and skip
+      # the rest of the pipeline instead of failing at publish time. Manual
+      # releases remain strict because this step only runs for the schedule
+      # event.
+      - name: Check for duplicate scheduled nightly
+        id: duplicate_check
+        if: github.event_name == 'schedule'
+        run: |
+          RELEASE_VERSION="${{ steps.version.outputs.RELEASE_VERSION }}"
+          if OUTPUT=$(npm view "@vybestack/llxprt-code-tools@${RELEASE_VERSION}" version 2>&1); then
+            echo "::notice::Scheduled nightly ${RELEASE_VERSION} is already published; skipping the release pipeline."
+            echo "is_duplicate=true" >> "$GITHUB_OUTPUT"
+          elif echo "$OUTPUT" | grep -qiE 'E404|404|not found|no match'; then
+            echo "Version ${RELEASE_VERSION} is not published yet; proceeding with release."
+            echo "is_duplicate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unable to verify whether ${RELEASE_VERSION} is already published; npm registry check was inconclusive."
+            echo "$OUTPUT" >&2
+            exit 1
+          fi
+
       - name: Determine if release branch should be created
         id: branch_decision
         run: |
@@ -193,8 +216,10 @@ jobs:
       - name: Check API quota and select optimal key
         id: quota
         if: >-
-          github.event.inputs.force_skip_tests != 'true' ||
-          (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')
+          (
+            github.event.inputs.force_skip_tests != 'true' ||
+            (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')
+          ) && steps.duplicate_check.outputs.is_duplicate != 'true'
         continue-on-error: ${{ github.event.inputs.force_skip_tests == 'true' }}
         run: bun scripts/ci-quota-check.ts
         env:
@@ -203,7 +228,7 @@ jobs:
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
 
       - name: Run Preflight Checks
-        if: github.event.inputs.force_skip_tests != 'true'
+        if: ${{ github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: bun scripts/preflight-ci.ts
         env:
           OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
@@ -216,7 +241,7 @@ jobs:
           LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
 
       - name: Run Integration Tests
-        if: github.event.inputs.force_skip_tests != 'true'
+        if: ${{ github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |
           npm run test:integration:sandbox:none
           # Skipping Docker tests due to flakiness
@@ -231,6 +256,7 @@ jobs:
           LLXPRT_AUTH_TYPE: none
 
       - name: Configure Git User
+        if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -244,12 +270,12 @@ jobs:
           echo "BRANCH_NAME=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Update package versions
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |
           npm run release:version ${{ steps.version.outputs.RELEASE_VERSION }}
 
       - name: Bind release dependencies
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: bun scripts/bind-release-deps.ts
 
       - name: Commit and Conditionally Push package versions
@@ -272,6 +298,7 @@ jobs:
           fi
 
       - name: Build and Prepare Packages
+        if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |
           rm -rf packages/*/dist
           npm run build:packages
@@ -299,7 +326,7 @@ jobs:
           echo "VSIX_PATH=$VSIX_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Generate Release Notes
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         id: release_notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -339,55 +366,55 @@ jobs:
           npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --azure-credential --skip-duplicate
 
       - name: Publish @vybestack/llxprt-code-tools
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-tools --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-storage
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-storage --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-auth
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-auth --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-settings
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-settings --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-telemetry
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-telemetry --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-ide-integration
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-ide-integration --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-policy
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-policy --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-mcp
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-mcp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-core
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-core --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-lsp
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-lsp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-providers
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-providers --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-agents
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-agents --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Wait for npm propagation
@@ -404,7 +431,7 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.GH_SECRET }}
 
       - name: Prepare sandbox package tarballs
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |
           mkdir -p packages/tools/dist packages/cli/dist packages/storage/dist packages/auth/dist packages/settings/dist packages/telemetry/dist packages/ide-integration/dist packages/policy/dist packages/mcp/dist packages/core/dist packages/providers/dist packages/agents/dist
           rm -f packages/tools/dist/vybestack-llxprt-code-tools-*.tgz packages/cli/dist/vybestack-llxprt-code-*.tgz packages/storage/dist/vybestack-llxprt-code-storage-*.tgz packages/auth/dist/vybestack-llxprt-code-auth-*.tgz packages/settings/dist/vybestack-llxprt-code-settings-*.tgz packages/telemetry/dist/vybestack-llxprt-code-telemetry-*.tgz packages/ide-integration/dist/vybestack-llxprt-code-ide-integration-*.tgz packages/policy/dist/vybestack-llxprt-code-policy-*.tgz packages/mcp/dist/vybestack-llxprt-code-mcp-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz packages/providers/dist/vybestack-llxprt-code-providers-*.tgz packages/agents/dist/vybestack-llxprt-code-agents-*.tgz
@@ -422,7 +449,7 @@ jobs:
           npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
 
       - name: Log in to Container Registry
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # ratchet:docker/login-action@v3.3.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -430,7 +457,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract sandbox image metadata
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         id: sandbox_meta
         uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # ratchet:docker/metadata-action@v5.5.1
         with:
@@ -440,13 +467,13 @@ jobs:
             type=raw,value=latest,enable=${{ steps.vars.outputs.is_nightly != 'true' }}
 
       - name: Set up Docker Buildx
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
         with:
           driver: docker-container
 
       - name: Build and push sandbox image
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # ratchet:docker/build-push-action@v6.9.0
         with:
           context: .
@@ -458,7 +485,7 @@ jobs:
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
       - name: Create GitHub Release and Tag
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BRANCH: ${{ steps.release_branch.outputs.BRANCH_NAME }}
