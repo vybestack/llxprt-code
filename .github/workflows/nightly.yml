@@ -201,10 +201,12 @@ jobs:
         # forks plus the vitest main process saturate all 3 cores, starving
         # the main process and causing onTaskUpdate RPC timeouts. A single
         # fork leaves a spare core for the main process to stay responsive.
+        # VITEST_TEST_TIMEOUT is not set here because the step-level env on
+        # "Run tests and generate reports" sets it to 15000, which takes
+        # precedence over $GITHUB_ENV.
         run: |
           echo "VITEST_MAX_FORKS=1" >> "$GITHUB_ENV"
           echo "VITEST_MIN_FORKS=1" >> "$GITHUB_ENV"
-          echo "VITEST_TEST_TIMEOUT=30000" >> "$GITHUB_ENV"
           echo "VITEST_POOL_TIMEOUT=60000" >> "$GITHUB_ENV"
 
       - name: 'Run tests and generate reports'
