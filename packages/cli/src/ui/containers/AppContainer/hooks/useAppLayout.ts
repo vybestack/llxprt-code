@@ -72,6 +72,7 @@ export interface AppLayoutParams {
 
   // From input
   streamingState: AppInputResult['streamingState'];
+  clearQueuedSubmissions: () => void;
   pendingHistoryItems: AppInputResult['pendingHistoryItems'];
   confirmationRequest: AppInputResult['confirmationRequest'];
   cancelOngoingRequest: AppInputResult['cancelOngoingRequest'];
@@ -117,6 +118,7 @@ function buildKeybindingsConfig(
     setIsTodoPanelCollapsed: AppLayoutParams['setIsTodoPanelCollapsed'];
     isQueuedMessagesPanelCollapsed: AppLayoutParams['isQueuedMessagesPanelCollapsed'];
     setIsQueuedMessagesPanelCollapsed: AppLayoutParams['setIsQueuedMessagesPanelCollapsed'];
+    clearQueuedSubmissions: AppLayoutParams['clearQueuedSubmissions'];
     constrainHeight: AppLayoutParams['constrainHeight'];
     setConstrainHeight: AppLayoutParams['setConstrainHeight'];
     refreshStatic: AppLayoutParams['refreshStatic'];
@@ -168,6 +170,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     setIsTodoPanelCollapsed,
     isQueuedMessagesPanelCollapsed,
     setIsQueuedMessagesPanelCollapsed,
+    clearQueuedSubmissions,
     ideContextState,
     activeShellPtyId,
     setEmbeddedShellFocused,
@@ -202,6 +205,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
         setIsTodoPanelCollapsed,
         isQueuedMessagesPanelCollapsed,
         setIsQueuedMessagesPanelCollapsed,
+        clearQueuedSubmissions,
         constrainHeight,
         setConstrainHeight,
         refreshStatic,

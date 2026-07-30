@@ -54,6 +54,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
         useCancellation(
           StreamingState.Responding,
           turnCancelledRef,
+          () => {},
           abortControllerRef,
           () => {},
           pendingHistoryItemRef,
@@ -129,6 +130,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
         useCancellation(
           StreamingState.Responding,
           turnCancelledRef,
+          () => {},
           newTurnAbortRef,
           () => {},
           pendingHistoryItemRef,

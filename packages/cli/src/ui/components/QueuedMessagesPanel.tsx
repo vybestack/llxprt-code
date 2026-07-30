@@ -29,6 +29,7 @@ const PANEL_HEIGHT_RATIO = 0.2;
 const COLLAPSED_PREVIEW_WIDTH_RATIO = 0.55;
 const FALLBACK_KEY_PREVIEW_LENGTH = 20;
 const MIN_EXPANDED_PANEL_HEIGHT = 3;
+const COLLAPSED_PANEL_HEIGHT = 2;
 const QUEUED_MESSAGES_KEY_HINT = getDefaultKeyBindingHint(
   Command.TOGGLE_QUEUED_MESSAGES,
 );
@@ -198,14 +199,14 @@ export function prepareQueuedMessagesPanelView({
     return { kind: 'empty' };
   }
 
-  const panelHeight = calculatePanelHeight(rows);
+  const expandedPanelHeight = calculatePanelHeight(rows);
   const boundedWidth = Math.max(1, Math.min(width, columns));
 
   if (collapsed) {
     return {
       kind: 'collapsed',
       width: boundedWidth,
-      panelHeight,
+      panelHeight: COLLAPSED_PANEL_HEIGHT,
       summary: queuedMessageSummary(messages.length),
       nextPreview: truncateEnd(
         extractPreviewText(messages[0].query),
@@ -214,7 +215,7 @@ export function prepareQueuedMessagesPanelView({
     };
   }
 
-  if (panelHeight < MIN_EXPANDED_PANEL_HEIGHT) {
+  if (expandedPanelHeight < MIN_EXPANDED_PANEL_HEIGHT) {
     return {
       kind: 'compact',
       width: boundedWidth,
@@ -223,7 +224,7 @@ export function prepareQueuedMessagesPanelView({
   }
 
   const maxVisibleItems = calculateMaxVisibleItems(
-    panelHeight,
+    expandedPanelHeight,
     messages.length,
   );
   const visibleMessages = messages.slice(0, maxVisibleItems);
@@ -232,7 +233,7 @@ export function prepareQueuedMessagesPanelView({
   return {
     kind: 'expanded',
     width: boundedWidth,
-    panelHeight,
+    panelHeight: expandedPanelHeight,
     heading: `Queued Messages (${messages.length})`,
     messages: visibleMessages.map((message, index) => {
       const preview = extractPreviewText(message.query);

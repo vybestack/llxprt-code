@@ -145,6 +145,7 @@ function renderUseSubmitQuery(
     settings: {} as never,
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
+    setTurnCancelled: vi.fn(),
     onAuthError: deps.onAuthError,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),

@@ -64,6 +64,7 @@ interface HookHarness {
   setRenderMarkdown: ReturnType<typeof vi.fn>;
   setIsTodoPanelCollapsed: ReturnType<typeof vi.fn>;
   setIsQueuedMessagesPanelCollapsed: ReturnType<typeof vi.fn>;
+  clearQueuedSubmissions: ReturnType<typeof vi.fn>;
   setConstrainHeight: ReturnType<typeof vi.fn>;
   refreshStatic: ReturnType<typeof vi.fn>;
   addItem: ReturnType<typeof vi.fn>;
@@ -76,6 +77,14 @@ const CTRL_BRACKET_KEY: Key = {
   ctrl: true,
   meta: false,
   shift: false,
+  name: ']',
+  sequence: ']',
+};
+
+const CTRL_SHIFT_BRACKET_KEY: Key = {
+  ctrl: true,
+  meta: false,
+  shift: true,
   name: ']',
   sequence: ']',
 };
@@ -97,6 +106,7 @@ const createHarness = (): HookHarness => ({
   setRenderMarkdown: vi.fn(),
   setIsTodoPanelCollapsed: vi.fn(),
   setIsQueuedMessagesPanelCollapsed: vi.fn(),
+  clearQueuedSubmissions: vi.fn(),
   setConstrainHeight: vi.fn(),
   refreshStatic: vi.fn(),
   addItem: vi.fn().mockReturnValue(1),
@@ -122,6 +132,7 @@ const buildDisplay = (
   setIsTodoPanelCollapsed: harness.setIsTodoPanelCollapsed,
   isQueuedMessagesPanelCollapsed: false,
   setIsQueuedMessagesPanelCollapsed: harness.setIsQueuedMessagesPanelCollapsed,
+  clearQueuedSubmissions: harness.clearQueuedSubmissions,
   constrainHeight: true,
   setConstrainHeight: harness.setConstrainHeight,
   refreshStatic: harness.refreshStatic,
@@ -520,6 +531,61 @@ describe('useKeybindings', () => {
 
       expect(harness.setIsTodoPanelCollapsed).toHaveBeenCalledWith(true);
       expect(harness.setIsQueuedMessagesPanelCollapsed).not.toHaveBeenCalled();
+    });
+
+    it('Ctrl+Shift+] clears all queued messages', () => {
+      const harness = createHarness();
+
+      renderUseKeybindings(harness);
+
+      const handler = getRegisteredHandler();
+
+      act(() => {
+        handler(CTRL_SHIFT_BRACKET_KEY);
+      });
+
+      expect(harness.clearQueuedSubmissions).toHaveBeenCalledTimes(1);
+      expect(harness.setIsQueuedMessagesPanelCollapsed).not.toHaveBeenCalled();
+    });
+
+    it('Ctrl+Shift+] does not toggle the panel', () => {
+      const harness = createHarness();
+
+      renderUseKeybindings(harness, {
+        display: buildDisplay(harness, {
+          isQueuedMessagesPanelCollapsed: false,
+        }),
+      });
+
+      const handler = getRegisteredHandler();
+
+      act(() => {
+        handler(CTRL_SHIFT_BRACKET_KEY);
+      });
+
+      expect(harness.setIsQueuedMessagesPanelCollapsed).not.toHaveBeenCalled();
+      expect(harness.clearQueuedSubmissions).toHaveBeenCalledTimes(1);
+    });
+
+    it('Ctrl+] does not clear the queue', () => {
+      const harness = createHarness();
+
+      renderUseKeybindings(harness, {
+        display: buildDisplay(harness, {
+          isQueuedMessagesPanelCollapsed: false,
+        }),
+      });
+
+      const handler = getRegisteredHandler();
+
+      act(() => {
+        handler(CTRL_BRACKET_KEY);
+      });
+
+      expect(harness.clearQueuedSubmissions).not.toHaveBeenCalled();
+      expect(harness.setIsQueuedMessagesPanelCollapsed).toHaveBeenCalledTimes(
+        1,
+      );
     });
   });
 });

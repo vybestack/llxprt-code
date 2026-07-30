@@ -106,9 +106,7 @@ function createQueueOperations(ref: { current: QueuedSubmission[] }) {
       ref.current = rest;
       return first;
     },
-    clearSubmissions: () => {
-      ref.current = [];
-    },
+    clearSubmissions: () => void (ref.current = []),
   };
 }
 
@@ -227,6 +225,7 @@ function createUseSubmitQueryDeps(
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
     thinkingBlocksRef: { current: [] },
     turnCancelledRef: overrides.turnCancelledRef ?? { current: false },
+    setTurnCancelled: vi.fn(),
     queuedSubmissionsRef,
     ...queueOperations,
     tryReserveDrain: overrides.tryReserveDrain ?? vi.fn().mockReturnValue(true),
@@ -288,6 +287,7 @@ function renderUseSubmitQueryWithCancellation(
       const cancellation = useCancellation(
         streamingState,
         turnCancelledRef,
+        (v: boolean) => void (turnCancelledRef.current = v),
         deps.abortControllerRef,
         vi.fn(),
         deps.pendingHistoryItemRef,
@@ -609,7 +609,6 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     // to runStream — it is NOT queued or dropped.
     expect(queuedSubmissionsRef.current).toHaveLength(0);
     expect(runStream).toHaveBeenCalledTimes(1);
-    // No "Waiting for MCP servers" info message is added.
     for (const call of addItem.mock.calls) {
       const item = call[0] as { type?: string; text?: string };
       expect(item.text).not.toMatch(/Waiting for MCP servers/i);

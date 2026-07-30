@@ -100,6 +100,7 @@ export function useAgentStreamOrchestration(
   const streamingState = useStreamingState(
     st.isResponding,
     scheduler.toolCalls,
+    st.turnCancelled,
   );
   // Cancels EVERY running async subagent on ESC, not only those launched by the
   // current foreground turn. This is intentional (issue #2074): an async task
@@ -116,6 +117,7 @@ export function useAgentStreamOrchestration(
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
+    st.setTurnCancelled,
     st.abortControllerRef,
     scheduler.cancelAllToolCalls,
     st.pendingHistoryItemRef,
@@ -341,6 +343,7 @@ function buildSubmitQueryDeps({
     pendingHistoryItemRef: st.pendingHistoryItemRef,
     thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,
+    setTurnCancelled: st.setTurnCancelled,
     queuedSubmissionsRef: st.queuedSubmissionsRef,
     enqueueSubmission: st.enqueueSubmission,
     requeueSubmission: st.requeueSubmission,

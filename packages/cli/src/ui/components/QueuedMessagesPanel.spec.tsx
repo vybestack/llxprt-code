@@ -126,7 +126,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       ).toStrictEqual({
         kind: 'collapsed',
         width: 80,
-        panelHeight: 4,
+        panelHeight: 2,
         summary: '2 queued messages',
         nextPreview: 'one',
       });
@@ -144,7 +144,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       ).toStrictEqual({
         kind: 'collapsed',
         width: 80,
-        panelHeight: 4,
+        panelHeight: 2,
         summary: '1 queued message',
         nextPreview: 'one',
       });
@@ -298,8 +298,9 @@ describe('QueuedMessagesPanel content preparation', () => {
   });
 
   describe('collapsed precedence over compact', () => {
-    it('stays collapsed even when panelHeight is 1', () => {
-      // rows=5 → panelHeight = floor(5 * 0.2) = 1
+    it('stays collapsed even when the expanded panelHeight would be 1', () => {
+      // rows=5 → expanded panelHeight = floor(5 * 0.2) = 1, but collapsed
+      // always uses the fixed COLLAPSED_PANEL_HEIGHT regardless of rows.
       const view = prepareQueuedMessagesPanelView({
         width: 80,
         collapsed: true,
@@ -311,7 +312,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       expect(view).toStrictEqual({
         kind: 'collapsed',
         width: 80,
-        panelHeight: 1,
+        panelHeight: 2,
         summary: '2 queued messages',
         nextPreview: 'one',
       });

@@ -183,6 +183,7 @@ function buildLayoutParams(
     setEmbeddedShellFocused: dialogs.setEmbeddedShellFocused,
     startupGuardsInitialized: dialogs.startupGuardsInitialized,
     streamingState: input.streamingState,
+    clearQueuedSubmissions: input.clearQueuedSubmissions,
     pendingHistoryItems: input.pendingHistoryItems,
     confirmationRequest: input.confirmationRequest,
     cancelOngoingRequest: input.cancelOngoingRequest,

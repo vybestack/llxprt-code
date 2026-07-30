@@ -93,6 +93,7 @@ export interface UseSubmitQueryDeps {
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
+  setTurnCancelled: (value: boolean) => void;
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
   enqueueSubmission: (submission: QueuedSubmission) => void;
   requeueSubmission: (submission: QueuedSubmission) => void;
@@ -679,7 +680,7 @@ function initTurn(
   const userMessageTimestamp = Date.now();
   deps.abortControllerRef.current = new AbortController();
   const abortSignal = deps.abortControllerRef.current.signal;
-  deps.turnCancelledRef.current = false;
+  deps.setTurnCancelled(false);
 
   const resolvedPromptId =
     promptId ??

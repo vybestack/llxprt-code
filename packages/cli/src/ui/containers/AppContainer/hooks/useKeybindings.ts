@@ -50,6 +50,7 @@ export interface DisplayKeybindingDeps {
   setIsTodoPanelCollapsed: (v: boolean) => void;
   isQueuedMessagesPanelCollapsed: boolean;
   setIsQueuedMessagesPanelCollapsed: (v: boolean) => void;
+  clearQueuedSubmissions: () => void;
   constrainHeight: boolean;
   setConstrainHeight: (v: boolean) => void;
   refreshStatic: () => void;
@@ -201,6 +202,11 @@ function handleDisplayKeys(
     display.setIsQueuedMessagesPanelCollapsed(
       !display.isQueuedMessagesPanelCollapsed,
     );
+    return;
+  }
+
+  if (keyMatchers[Command.CLEAR_QUEUED_MESSAGES](key)) {
+    display.clearQueuedSubmissions();
     return;
   }
 

@@ -75,6 +75,7 @@ export enum Command {
   TOGGLE_TOOL_DESCRIPTIONS = 'toggleToolDescriptions', // LLXPRT-SPECIFIC
   TOGGLE_TODO_DIALOG = 'toggleTodoDialog', // LLXPRT-SPECIFIC
   TOGGLE_QUEUED_MESSAGES = 'toggleQueuedMessages', // LLXPRT-SPECIFIC
+  CLEAR_QUEUED_MESSAGES = 'clearQueuedMessages', // LLXPRT-SPECIFIC
   SHOW_IDE_CONTEXT_DETAIL = 'showIDEContextDetail',
   TOGGLE_MARKDOWN = 'toggleMarkdown',
   TOGGLE_COPY_MODE = 'toggleCopyMode',
@@ -255,7 +256,8 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
   [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
-  [Command.TOGGLE_QUEUED_MESSAGES]: [{ key: ']', ctrl: true }],
+  [Command.TOGGLE_QUEUED_MESSAGES]: [{ key: ']', ctrl: true, shift: false }],
+  [Command.CLEAR_QUEUED_MESSAGES]: [{ key: ']', ctrl: true, shift: true }],
   [Command.SHOW_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.TOGGLE_MARKDOWN]: [{ key: 'm', command: true }],
   [Command.TOGGLE_COPY_MODE]: [{ key: 's', ctrl: true }],
@@ -403,7 +405,7 @@ export const commandCategories: readonly CommandCategory[] = [
   },
   {
     title: 'Queued Messages',
-    commands: [Command.TOGGLE_QUEUED_MESSAGES],
+    commands: [Command.TOGGLE_QUEUED_MESSAGES, Command.CLEAR_QUEUED_MESSAGES],
   },
   {
     title: 'Mouse',
@@ -488,6 +490,7 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
   [Command.TOGGLE_QUEUED_MESSAGES]:
     'Toggle the queued messages panel visibility.',
+  [Command.CLEAR_QUEUED_MESSAGES]: 'Clear all queued messages from the panel.',
   [Command.SHOW_IDE_CONTEXT_DETAIL]: 'Show IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]: 'Toggle copy mode when in alternate buffer mode.',
