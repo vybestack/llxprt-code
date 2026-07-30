@@ -10,6 +10,7 @@ import {
   asRecord,
   asRecordArray,
   asString,
+  asStringArray,
   parseWorkflowYaml,
 } from './typed-test-helpers.ts';
 import {
@@ -84,6 +85,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
   let placeholderRun: string;
   let uploadStep: Record<string, unknown> | undefined;
   let metadataFunctions: LoadedFunctions | undefined;
+  let previewFunctions: LoadedFunctions | undefined;
 
   function completeCheckpoint(
     overrides: Record<string, unknown> = {},
@@ -106,6 +108,28 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       selected_files: 7,
       completed_files: 7,
       publication_state: 'complete',
+      ...overrides,
+    };
+  }
+
+  function completeDecision(
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    return {
+      ran: true,
+      exitCode: 0,
+      infrastructureFailure: '',
+      policyFailure: '',
+      failedFindings: 0,
+      completionState: 'complete',
+      manifestCompleteness: 'complete',
+      publicationState: 'complete',
+      previewValidated: true,
+      selectedFiles: 7,
+      completedFiles: 7,
+      ocrCompletedFiles: 7,
+      completedFilesValid: true,
+      resultSource: 'parsed',
       ...overrides,
     };
   }
@@ -159,6 +183,9 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
     reviewStep = stepNamed(job, 'Run OpenCodeReview');
     reviewRun = commandText(reviewStep);
     previewStep = stepNamed(job, 'Verify review scope includes changed tests');
+    previewFunctions = loadFunctions(commandText(previewStep), [
+      'previewSelectionFromOutput',
+    ]);
     redactStep = stepNamed(job, 'Redact OCR diagnostic artifacts');
     redactRun = commandText(redactStep);
     placeholderStep = stepNamed(job, 'Ensure OCR artifact placeholders exist');
@@ -168,26 +195,21 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       'shouldAdvanceCheckpoint',
       'completionStateForResult',
       'ocrObservabilityFromResult',
+      'eligibleCompletedFilesForReview',
+      'normalizeFilePaths',
+      'resolveCompleteness',
+      'buildCheckpoint',
+      'serializeCheckpoint',
+      'deserializeCheckpoint',
       'findingDistribution',
       'buildOcrMetadata',
     ]);
   });
 
   describe('checkpoint advancement and terminal state behavior', () => {
-    it('advances only a successful, fully published review with proven file coverage', () => {
+    it('advances only a successful, validated, complete review', () => {
       expect(
-        metadataFunctions?.shouldAdvanceCheckpoint({
-          ran: true,
-          exitCode: 0,
-          infrastructureFailure: '',
-          policyFailure: '',
-          failedFindings: 0,
-          completionState: 'complete',
-          publicationState: 'complete',
-          selectedFiles: 7,
-          completedFiles: 7,
-          resultSource: 'parsed',
-        }),
+        metadataFunctions?.shouldAdvanceCheckpoint(completeDecision()),
       ).toBe(true);
     });
 
@@ -198,26 +220,55 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       ['policy failure', { policyFailure: 'tests omitted' }],
       ['failed finding publication', { failedFindings: 1 }],
       ['partial OCR result', { completionState: 'partial' }],
+      ['partial manifest', { manifestCompleteness: 'partial' }],
+      ['unvalidated preview', { previewValidated: false }],
       ['ambiguous publication', { publicationState: 'ambiguous' }],
       ['synthesized result', { resultSource: 'synthesized' }],
       ['zero selected files', { selectedFiles: 0 }],
-      ['incomplete file coverage', { completedFiles: 5, selectedFiles: 7 }],
+      ['fewer eligible completions', { completedFiles: 5 }],
+      ['more eligible completions', { completedFiles: 8 }],
+      ['fewer OCR completions', { ocrCompletedFiles: 5 }],
+      ['more OCR completions', { ocrCompletedFiles: 8 }],
+      ['invalid OCR completion evidence', { completedFilesValid: false }],
     ])('does not advance when the review %s', (_label, override) => {
       expect(
-        metadataFunctions?.shouldAdvanceCheckpoint({
-          ran: true,
-          exitCode: 0,
-          infrastructureFailure: '',
-          policyFailure: '',
-          failedFindings: 0,
-          completionState: 'complete',
-          publicationState: 'complete',
-          selectedFiles: 7,
-          completedFiles: 7,
-          resultSource: 'parsed',
-          ...override,
-        }),
+        metadataFunctions?.shouldAdvanceCheckpoint(completeDecision(override)),
       ).toBe(false);
+    });
+
+    it.each([
+      ['NaN selected', { selectedFiles: Number.NaN }],
+      ['NaN completed', { completedFiles: Number.NaN }],
+      ['Infinity selected', { selectedFiles: Number.POSITIVE_INFINITY }],
+      ['Infinity completed', { completedFiles: Number.POSITIVE_INFINITY }],
+      ['fraction selected', { selectedFiles: 2.5 }],
+      ['unsafe completed', { completedFiles: Number.MAX_SAFE_INTEGER + 1 }],
+    ])('does not advance when counts are %s', (_label, override) => {
+      expect(
+        metadataFunctions?.shouldAdvanceCheckpoint(completeDecision(override)),
+      ).toBe(false);
+    });
+
+    it.each([
+      ['numeric string', '3'],
+      ['boolean', true],
+      ['array', [3]],
+      ['fraction', 3.5],
+      ['negative', -1],
+      ['unsafe integer', Number.MAX_SAFE_INTEGER + 1],
+      ['Infinity', Number.POSITIVE_INFINITY],
+      ['NaN', Number.NaN],
+      ['missing', undefined],
+      ['null', null],
+    ])('rejects %s files_reviewed evidence', (_label, filesReviewed) => {
+      const observation = asRecord(
+        metadataFunctions?.ocrObservabilityFromResult({
+          status: 'success',
+          summary: { files_reviewed: filesReviewed },
+        }),
+      );
+
+      expect(observation.completed_files_valid).toBe(false);
     });
 
     it('treats success, warnings, and skipped no-op results as complete', () => {
@@ -272,6 +323,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
         }),
       ).toEqual({
         completed_files: 7,
+        completed_files_valid: true,
         elapsed: '46m31s',
         tokens: {
           input: 300,
@@ -567,5 +619,236 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
         '${{ vars.OCR_WORKFLOW_SCHEMA_HASH }}',
       );
     });
+  });
+
+  describe('preview-eligible checkpoint behavior (issue #2861)', () => {
+    const eligiblePaths = ['src/a.ts', 'src/b.ts', 'src/c.ts'];
+    const defaultPreview = [
+      'Will review (3):',
+      '- [typescript] "src/a.ts"',
+      '* src/b.ts +10 -2',
+      "'src/c.ts'",
+      'Excluded (1):',
+      'project-plans/excluded.md',
+    ].join('\n');
+
+    function runCheckpointFixture(
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      const broadFiles = asStringArray(
+        overrides.broadFiles ?? [...eligiblePaths, 'project-plans/excluded.md'],
+      );
+      const previewOutput = asString(overrides.previewOutput ?? defaultPreview);
+      const parsedPreview = asStringArray(
+        previewFunctions?.previewSelectionFromOutput(previewOutput),
+      );
+      const normalizedEligible = asStringArray(
+        metadataFunctions?.normalizeFilePaths(parsedPreview),
+      );
+      const filesReviewed = Reflect.get(
+        { filesReviewed: normalizedEligible.length, ...overrides },
+        'filesReviewed',
+      );
+      const ocrStatus = Reflect.get(
+        { ocrStatus: 'success', ...overrides },
+        'ocrStatus',
+      );
+      const observation = asRecord(
+        metadataFunctions?.ocrObservabilityFromResult({
+          status: ocrStatus,
+          resultSource: overrides.resultSource ?? 'parsed',
+          summary: { files_reviewed: filesReviewed },
+        }),
+      );
+      const ran = overrides.ran ?? true;
+      const exitCode = overrides.exitCode ?? 0;
+      const previewValidated = overrides.previewValidated ?? true;
+      const completedFiles = asStringArray(
+        metadataFunctions?.eligibleCompletedFilesForReview({
+          ran,
+          exitCode,
+          ocrStatus,
+          previewValidated,
+          eligibleFiles: normalizedEligible,
+          completedFiles: observation.completed_files,
+          completedFilesValid: observation.completed_files_valid,
+        }),
+      );
+      const manifestCompleteness = asString(
+        metadataFunctions?.resolveCompleteness({
+          ocrExitCode: exitCode,
+          ocrStatus,
+          selectedFiles: normalizedEligible,
+          completedFiles,
+          failedFiles: [],
+          reusedFiles: [],
+          waivedFiles: [],
+          skipped: false,
+        }),
+      );
+      const decision = completeDecision({
+        ran,
+        exitCode,
+        infrastructureFailure: overrides.infrastructureFailure ?? '',
+        policyFailure: overrides.policyFailure ?? '',
+        failedFindings: overrides.failedFindings ?? 0,
+        completionState: observation.completion_state,
+        manifestCompleteness,
+        publicationState: overrides.publicationState ?? 'complete',
+        previewValidated,
+        selectedFiles: normalizedEligible.length,
+        completedFiles: completedFiles.length,
+        ocrCompletedFiles: observation.completed_files,
+        completedFilesValid: observation.completed_files_valid,
+        resultSource: observation.result_source,
+      });
+      const advances = metadataFunctions?.shouldAdvanceCheckpoint(decision);
+      const checkpoint = advances
+        ? asRecord(
+            metadataFunctions?.buildCheckpoint({
+              prNumber: 2861,
+              headSha: 'head-sha',
+              baseSha: 'base-sha',
+              mergeBase: 'merge-base',
+              reviewedAt: '2026-07-30T12:00:00.000Z',
+              runUrl: 'https://github.com/owner/repo/actions/runs/2861',
+              ocrVersion: '1.7.17',
+              ocrModel: 'test-model',
+              rulesHash: 'rules',
+              policyHash: 'policy',
+              workflowSchemaHash: 'workflow',
+              rangeMode: 'incremental',
+              eligibleFiles: normalizedEligible,
+              completedFiles: completedFiles.length,
+              publicationState: 'complete',
+            }),
+          )
+        : null;
+      const persistedCheckpoint = checkpoint
+        ? asRecord(
+            metadataFunctions?.deserializeCheckpoint(
+              metadataFunctions?.serializeCheckpoint(checkpoint),
+            ),
+          )
+        : null;
+      const metadata = asRecord(
+        metadataFunctions?.buildOcrMetadata({
+          cumulative: { files: broadFiles.length },
+          selected: { files: broadFiles.length },
+          checkpointAfter: persistedCheckpoint,
+        }),
+      );
+      return {
+        advances,
+        broadFiles,
+        eligibleFiles: normalizedEligible,
+        completedFiles,
+        manifestCompleteness,
+        persistedCheckpoint,
+        metadata,
+      };
+    }
+
+    it('advances the cohesive 4 broad / 3 eligible fixture and persists exact eligible paths', () => {
+      const fixture = runCheckpointFixture();
+      const checkpoint = asRecord(fixture.persistedCheckpoint);
+      const metadata = asRecord(fixture.metadata);
+      const range = asRecord(metadata.range);
+
+      expect({
+        advances: fixture.advances,
+        eligibleFiles: fixture.eligibleFiles,
+        completedFiles: fixture.completedFiles,
+        manifestCompleteness: fixture.manifestCompleteness,
+        persistedSelected: checkpoint.selected_files,
+        persistedCompleted: checkpoint.completed_files,
+        persistedEligible: checkpoint.eligible_files,
+        broadSelected: asRecord(range.selected).files,
+      }).toEqual({
+        advances: true,
+        eligibleFiles: eligiblePaths,
+        completedFiles: eligiblePaths,
+        manifestCompleteness: 'complete',
+        persistedSelected: 3,
+        persistedCompleted: 3,
+        persistedEligible: eligiblePaths,
+        broadSelected: 4,
+      });
+    });
+
+    it('advances when broad and preview-eligible sets are equal', () => {
+      expect(runCheckpointFixture({ broadFiles: eligiblePaths }).advances).toBe(
+        true,
+      );
+    });
+
+    it.each([
+      ['excluded', 'project-plans/excluded.md'],
+      ['deleted', 'src/deleted.ts'],
+      ['unsupported', 'assets/logo.bin'],
+      ['generated', 'dist/generated.js'],
+    ])(
+      'keeps a %s broad-only path out of eligible persistence',
+      (_label, path) => {
+        const fixture = runCheckpointFixture({
+          broadFiles: [...eligiblePaths, path],
+        });
+        const checkpoint = asRecord(fixture.persistedCheckpoint);
+
+        expect(checkpoint.eligible_files).toEqual(eligiblePaths);
+      },
+    );
+
+    it('does not advance zero eligible files', () => {
+      const fixture = runCheckpointFixture({
+        broadFiles: ['project-plans/excluded.md'],
+        previewOutput:
+          'Will review (0):\nExcluded (1):\nproject-plans/excluded.md',
+        filesReviewed: 0,
+      });
+
+      expect(fixture.advances).toBe(false);
+    });
+
+    it.each([
+      ['declared fewer', 'Will review (1):\nsrc/a.ts\nsrc/b.ts'],
+      ['declared more', 'Will review (3):\nsrc/a.ts\nsrc/b.ts'],
+      ['duplicate extraction', 'Will review (2):\nsrc/a.ts\nsrc/a.ts'],
+      [
+        'unsafe count',
+        `Will review (${Number.MAX_SAFE_INTEGER + 1}):\nsrc/a.ts`,
+      ],
+    ])('rejects malformed preview cardinality: %s', (_label, previewOutput) => {
+      expect(() => runCheckpointFixture({ previewOutput })).toThrow();
+    });
+
+    it.each(['3', true, [3], 3.5, -1, Number.POSITIVE_INFINITY, null])(
+      'does not advance coercible or malformed completion evidence %j',
+      (filesReviewed) => {
+        expect(runCheckpointFixture({ filesReviewed }).advances).toBe(false);
+      },
+    );
+
+    it.each([2, 4])(
+      'does not advance completed scope drift at %i reviewed files',
+      (filesReviewed) => {
+        const fixture = runCheckpointFixture({ filesReviewed });
+        expect({
+          advances: fixture.advances,
+          manifestCompleteness: fixture.manifestCompleteness,
+        }).toEqual({ advances: false, manifestCompleteness: 'partial' });
+      },
+    );
+
+    it.each([undefined, '', 'completed_with_warnings', 'unknown'])(
+      'does not advance missing, malformed, or warning status evidence %j',
+      (ocrStatus) => {
+        const fixture = runCheckpointFixture({ ocrStatus });
+        expect({
+          advances: fixture.advances,
+          manifestCompleteness: fixture.manifestCompleteness,
+        }).toEqual({ advances: false, manifestCompleteness: 'partial' });
+      },
+    );
   });
 });

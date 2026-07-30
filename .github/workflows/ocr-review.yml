@@ -1194,27 +1194,70 @@ jobs:
             mark_infrastructure_failure "preview" "OCR preview normalization failed"
             exit 0
           fi
-          if ! grep -Eq '^Will review[[:space:]]*\([0-9]+\):' ocr-preview.txt; then
+          if ! node <<'NODE'
+          const fs = require('fs');
+
+          function previewSelectionFromOutput(output) {
+            const lines = String(output).split(/\r?\n/);
+            const headingIndexes = [];
+            for (let index = 0; index < lines.length; index += 1) {
+              if (/^Will review\s*\(/.test(lines[index])) {
+                headingIndexes.push(index);
+              }
+            }
+            if (headingIndexes.length !== 1) {
+              throw new Error('OCR preview must contain exactly one Will review heading');
+            }
+            const headingIndex = headingIndexes[0];
+            const heading = /^Will review\s*\(([^)]*)\):\s*$/.exec(lines[headingIndex]);
+            if (!heading || !/^\d+$/.test(heading[1])) {
+              throw new Error('OCR preview Will review count is malformed');
+            }
+            const declaredCount = Number(heading[1]);
+            if (!Number.isSafeInteger(declaredCount) || declaredCount < 0) {
+              throw new Error('OCR preview Will review count is unsafe');
+            }
+            const selected = [];
+            const seen = new Set();
+            for (const rawLine of lines.slice(headingIndex + 1)) {
+              if (/^[A-Za-z][A-Za-z ]*\s*\(\d+\):\s*$/.test(rawLine)) {
+                break;
+              }
+              let path = rawLine.trim()
+                .replace(/^[-*]\s*/, '')
+                .replace(/^\[[^\]]*\]\s*/, '')
+                .replace(/\s+[-+]\d+(?:\s+[-+]\d+)?\s*$/, '')
+                .trim();
+              if ((path.startsWith('"') && path.endsWith('"'))
+                || (path.startsWith("'") && path.endsWith("'"))) {
+                path = path.slice(1, -1).trim();
+              }
+              if (path && !seen.has(path)) {
+                seen.add(path);
+                selected.push(path);
+              }
+            }
+            if (selected.length !== declaredCount) {
+              throw new Error(`OCR preview declared ${declaredCount} files but yielded ${selected.length} unique paths`);
+            }
+            return Object.freeze(selected);
+          }
+
+          const selected = previewSelectionFromOutput(
+            fs.readFileSync('ocr-preview.txt', 'utf8'),
+          );
+          fs.writeFileSync(
+            'ocr-selected-files.txt',
+            selected.length > 0 ? `${selected.join('\n')}\n` : '',
+          );
+          NODE
+          then
             echo "1" > ocr-exit-code.txt
-            mark_infrastructure_failure "preview" "OCR preview output was malformed"
+            mark_infrastructure_failure "preview" "OCR preview extraction or cardinality validation failed"
             exit 0
           fi
           echo "true" > ocr-preview-succeeded.txt
-          reviewed="$(awk '
-            BEGIN { IGNORECASE = 1; in_section = 0 }
-            /^Will review[[:space:]]*\(/ { in_section = 1; next }
-            /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { in_section = 0 }
-            in_section { print }
-          ' ocr-preview.txt || true)"
-          printf '%s\n' "$reviewed" | sed -e 's/^[[:space:]]*//' \
-            -e 's/^[-*][[:space:]]*//' \
-            -e 's/^\[[^]]*\][[:space:]]*//' \
-            -e 's/^"\(.*\)"$/\1/' \
-            -e "s/^'\(.*\)'$/\1/" \
-            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
-            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
-            | grep -v '^[[:space:]]*$' \
-            | awk '!seen[$0]++' > ocr-selected-files.txt || true
+          reviewed="$(cat ocr-selected-files.txt)"
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
             echo "$changed_tests"
@@ -2002,16 +2045,46 @@ jobs:
                 || decision.policyFailure
                 || decision.failedFindings !== 0
                 || decision.completionState !== 'complete'
+                || decision.manifestCompleteness !== 'complete'
                 || decision.publicationState !== 'complete'
+                || decision.previewValidated !== true
+                || decision.completedFilesValid !== true
                 || decision.resultSource === 'synthesized') {
                 return false;
               }
-              const selected = Number(decision.selectedFiles);
-              const completed = Number(decision.completedFiles);
-              if (!Number.isFinite(selected) || selected <= 0) {
+              const selected = decision.selectedFiles;
+              const completed = decision.completedFiles;
+              const ocrCompleted = decision.ocrCompletedFiles;
+              if (!Number.isSafeInteger(selected) || selected <= 0
+                || !Number.isSafeInteger(completed) || completed < 0
+                || !Number.isSafeInteger(ocrCompleted) || ocrCompleted < 0) {
                 return false;
               }
-              return completed >= selected;
+              return completed === selected && ocrCompleted === selected;
+            }
+
+            function buildCheckpoint(data) {
+              const eligibleFiles = Object.freeze([...data.eligibleFiles]);
+              return Object.freeze({
+                schema: 1,
+                pr_number: data.prNumber,
+                head_sha: data.headSha,
+                base_sha: data.baseSha,
+                merge_base: data.mergeBase,
+                reviewed_at: data.reviewedAt,
+                run_url: data.runUrl,
+                ocr_version: data.ocrVersion,
+                ocr_model: data.ocrModel,
+                rules_hash: data.rulesHash,
+                policy_hash: data.policyHash,
+                workflow_schema_hash: data.workflowSchemaHash,
+                completion_state: 'complete',
+                range_mode: data.rangeMode,
+                selected_files: eligibleFiles.length,
+                completed_files: data.completedFiles,
+                eligible_files: eligibleFiles,
+                publication_state: data.publicationState,
+              });
             }
 
             function completionStateForResult(status, resultSource) {
@@ -2029,11 +2102,16 @@ jobs:
                 : {};
               const cacheRead = Number(summary.cache_read_tokens || 0);
               const cacheWrite = Number(summary.cache_write_tokens || 0);
+              const rawCompletedFiles = summary.files_reviewed;
+              const completedFilesValid = typeof rawCompletedFiles === 'number'
+                && Number.isSafeInteger(rawCompletedFiles)
+                && rawCompletedFiles >= 0;
               const resultSource = result && typeof result === 'object'
                 ? (result.resultSource || 'parsed')
                 : 'parsed';
               return {
-                completed_files: Number(summary.files_reviewed || 0),
+                completed_files: completedFilesValid ? rawCompletedFiles : 0,
+                completed_files_valid: completedFilesValid,
                 elapsed: String(summary.elapsed || 'unknown'),
                 tokens: {
                   input: Number(summary.input_tokens || 0),
@@ -2834,6 +2912,24 @@ jobs:
               return result;
             }
 
+            function eligibleCompletedFilesForReview(params) {
+              const eligibleFiles = Array.isArray(params.eligibleFiles)
+                ? params.eligibleFiles
+                : [];
+              const validStatus = params.ocrStatus === 'success'
+                || params.ocrStatus === 'completed';
+              const exactCount = params.completedFilesValid === true
+                && Number.isSafeInteger(params.completedFiles)
+                && params.completedFiles === eligibleFiles.length;
+              return params.ran === true
+                && params.exitCode === 0
+                && params.previewValidated === true
+                && validStatus
+                && exactCount
+                ? Object.freeze([...eligibleFiles])
+                : Object.freeze([]);
+            }
+
             function evidencedPathsFromResult(result) {
               if (!result) {
                 return [];
@@ -3367,18 +3463,21 @@ jobs:
             // tracking. The manifest records selected/completed/failed/waived
             // file sets and a terminal completeness state.
             const ocrStatusValue = readTrimmed('ocr-status.txt', '') || '';
+            const previewValidated = readTrimmed('ocr-preview-succeeded.txt', '') === 'true';
             const selectedFilesContent = readTrimmed('ocr-selected-files.txt', '');
-            const selectedFilesList = selectedFilesContent
-              ? selectedFilesContent.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0)
-              : [];
-            // C2: completedFiles must only be set to all selected files when
-            // the OCR status is a recognized success AND exit code is 0.
-            // For completed_with_errors we do not know which files actually
-            // completed, so leave completedFiles empty (conservative).
-            const manifestCompletedFiles =
-              ran && (ocrStatusValue === 'success' || ocrStatusValue === 'completed') && exitCode === 0
-                ? selectedFilesList
-                : [];
+            const eligibleFiles = Object.freeze(normalizeFilePaths(
+              selectedFilesContent.split(String.fromCharCode(10)),
+            ));
+            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
+            const eligibleCompletedFiles = eligibleCompletedFilesForReview({
+              ran,
+              exitCode,
+              ocrStatus: ocrStatusValue,
+              previewValidated,
+              eligibleFiles,
+              completedFiles: ocrObservation.completed_files,
+              completedFilesValid: ocrObservation.completed_files_valid,
+            });
             const manifestFailedFiles = failedFilesFromResult(parsedOcrResult);
             const readFailureFiles = manifestFailedFiles.filter((filePath) => {
               const warnings = Array.isArray(parsedOcrResult?.warnings)
@@ -3396,16 +3495,16 @@ jobs:
             const manifestCompleteness = resolveCompleteness({
               ocrExitCode: exitCode,
               ocrStatus: ocrStatusValue || null,
-              selectedFiles: selectedFilesList,
-              completedFiles: manifestCompletedFiles,
+              selectedFiles: eligibleFiles,
+              completedFiles: eligibleCompletedFiles,
               failedFiles: manifestFailedFiles,
               reusedFiles: [],
               waivedFiles: [],
               skipped: false,
             });
             const manifestCoverage = computeCoverage({
-              completed: manifestCompletedFiles.length,
-              selected: selectedFilesList.length,
+              completed: eligibleCompletedFiles.length,
+              selected: eligibleFiles.length,
             });
             const statusLine = process.env.RANGE_MODE === 'noop'
               ? 'Same head; no new changes to review.'
@@ -3436,7 +3535,6 @@ jobs:
                     lines: { additions: 0, deletions: 0, total: 0 },
                   },
                 };
-            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
             let body = [
               MARKER,
               `## OpenCodeReview — PR #${number}`,
@@ -3596,7 +3694,7 @@ jobs:
                 ...structuredFailures,
               ]);
               coverageReport = buildCoverageReport({
-                previewFiles: selectedFilesList,
+                previewFiles: eligibleFiles,
                 evidencedFiles,
                 readFailureFiles,
                 thresholdPercentage: coverageThreshold,
@@ -3749,8 +3847,8 @@ jobs:
               providerModel: readTrimmed('ocr-preflight.txt', '').split(String.fromCharCode(10))[0] || '',
               concurrency: Number(process.env.OCR_CONCURRENCY) || 0,
               ruleConfigHash: process.env.OCR_RULE_CONFIG_HASH || '',
-              selectedFiles: selectedFilesList,
-              completedFiles: manifestCompletedFiles,
+              selectedFiles: eligibleFiles,
+              completedFiles: eligibleCompletedFiles,
               failedFiles: manifestFailedFiles,
               reusedFiles: [],
               waivedFiles: [],
@@ -3773,16 +3871,21 @@ jobs:
               fs.writeFileSync(INFRA_FAILURE_FILE, infraMessage);
               fs.writeFileSync('ocr-phase.txt', 'manifest\n');
             }
+            const checkpointInfrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
             const checkpointDecision = {
               ran,
               exitCode,
-              infrastructureFailure,
+              infrastructureFailure: checkpointInfrastructureFailure,
               policyFailure,
               failedFindings: failedInline,
               completionState: ocrObservation.completion_state,
+              manifestCompleteness,
               publicationState,
-              selectedFiles: rangeMetadata.selected.files,
-              completedFiles: ocrObservation.completed_files,
+              previewValidated,
+              selectedFiles: eligibleFiles.length,
+              completedFiles: eligibleCompletedFiles.length,
+              ocrCompletedFiles: ocrObservation.completed_files,
+              completedFilesValid: ocrObservation.completed_files_valid,
               resultSource: ocrObservation.result_source,
             };
 
@@ -3829,25 +3932,23 @@ jobs:
             // If any of those fail, checkpointAfter remains checkpointBefore
             // and the durable checkpoint is not corrupted.
             if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id) {
-              checkpointAfter = {
-                schema: 1,
-                pr_number: number,
-                head_sha: headSha,
-                base_sha: process.env.API_BASE_SHA,
-                merge_base: process.env.BASE_SHA,
-                reviewed_at: new Date().toISOString(),
-                run_url: runUrl,
-                ocr_version: process.env.OCR_VERSION,
-                ocr_model: process.env.OCR_MODEL || 'unknown',
-                rules_hash: process.env.OCR_RULES_HASH || '',
-                policy_hash: process.env.OCR_POLICY_HASH || '',
-                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
-                completion_state: 'complete',
-                range_mode: process.env.RANGE_MODE,
-                selected_files: rangeMetadata.selected.files,
-                completed_files: ocrObservation.completed_files,
-                publication_state: publicationState,
-              };
+              checkpointAfter = buildCheckpoint({
+                prNumber: number,
+                headSha,
+                baseSha: process.env.API_BASE_SHA,
+                mergeBase: process.env.BASE_SHA,
+                reviewedAt: new Date().toISOString(),
+                runUrl,
+                ocrVersion: process.env.OCR_VERSION,
+                ocrModel: process.env.OCR_MODEL || 'unknown',
+                rulesHash: process.env.OCR_RULES_HASH || '',
+                policyHash: process.env.OCR_POLICY_HASH || '',
+                workflowSchemaHash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+                rangeMode: process.env.RANGE_MODE,
+                eligibleFiles,
+                completedFiles: eligibleCompletedFiles.length,
+                publicationState,
+              });
               const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
               try {
                 await github.rest.issues.updateComment({

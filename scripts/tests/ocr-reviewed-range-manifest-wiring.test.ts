@@ -598,4 +598,42 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
       );
     });
   });
+
+  describe('checkpoint evidence wiring (issue #2861)', () => {
+    it('wires the immutable eligible set through manifest, coverage, decision, and persistence', () => {
+      const decisionIndex = ctx.postScript.indexOf(
+        'const checkpointDecision = {',
+      );
+      const decisionBlock = ctx.postScript.slice(
+        decisionIndex,
+        decisionIndex + 800,
+      );
+
+      expect(decisionBlock).toContain(
+        'completedFiles: eligibleCompletedFiles.length',
+      );
+      expect(decisionBlock).toContain('manifestCompleteness');
+      expect(decisionBlock).toContain('completedFilesValid');
+      expect(decisionBlock).toContain('ocrCompletedFiles');
+      expect(decisionBlock).toContain('previewValidated');
+    });
+
+    it('re-reads infrastructure failure immediately before checkpoint evaluation', () => {
+      const decisionIndex = ctx.postScript.indexOf(
+        'const checkpointDecision = {',
+      );
+      const rereadIndex = ctx.postScript.lastIndexOf(
+        "readTrimmed(INFRA_FAILURE_FILE, '')",
+        decisionIndex,
+      );
+      const manifestWriteIndex = ctx.postScript.indexOf(
+        "fs.writeFileSync('ocr-reviewed-range-manifest.json'",
+      );
+
+      expect(rereadIndex).toBeGreaterThan(manifestWriteIndex);
+      expect(ctx.postScript.slice(rereadIndex, decisionIndex)).not.toContain(
+        'const manifest =',
+      );
+    });
+  });
 });
