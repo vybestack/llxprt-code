@@ -22,13 +22,14 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
  *
  * Failover triggers:
  * - 429 rate limit
+ * - 5xx server errors (including Anthropic api_error / Internal server error)
  * - Quota exceeded
  * - 402 payment required
  * - Token renewal failure
  *
  * Does NOT failover:
  * - 400 bad request
- * - Other API errors
+ * - Other client errors
  */
 function shouldFailover(error: Error): boolean {
   const message = error.message.toLowerCase();
@@ -38,21 +39,34 @@ function shouldFailover(error: Error): boolean {
   if (errorStatus === 401 || errorStatus === 403) {
     return true;
   }
+  if (errorStatus !== undefined && errorStatus >= 500 && errorStatus < 600) {
+    return true;
+  }
 
-  // Check for Anthropic body-level error types (rate_limit_error, overloaded_error)
-  const bodyError = error as { error?: { type?: string } };
+  // Check for Anthropic body-level error types (rate_limit_error,
+  // overloaded_error, api_error — the latter covers "Internal server error")
+  const bodyError = error as {
+    error?: { type?: string; error?: { type?: string } };
+  };
+  const bodyType = bodyError.error?.error?.type ?? bodyError.error?.type ?? '';
   if (
-    bodyError.error?.type === 'rate_limit_error' ||
-    bodyError.error?.type === 'overloaded_error'
+    bodyType === 'rate_limit_error' ||
+    bodyType === 'overloaded_error' ||
+    bodyType === 'api_error'
   ) {
     return true;
   }
 
-  const hasStatusCode =
-    message.includes('429') ||
-    message.includes('401') ||
-    message.includes('403') ||
-    message.includes('402');
+  const FAIL_OVER_STATUS_STRINGS = [
+    '429',
+    '401',
+    '403',
+    '402',
+    'internal server error',
+  ];
+  const hasStatusCode = FAIL_OVER_STATUS_STRINGS.some((s) =>
+    message.includes(s),
+  );
   const hasRateLimitText =
     message.includes('rate limit') || message.includes('quota');
   const hasPaymentText =

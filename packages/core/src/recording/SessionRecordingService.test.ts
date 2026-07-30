@@ -26,13 +26,14 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
+import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
 import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import { debugLogger } from '../utils/debugLogger.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionRecordLine,
@@ -757,6 +758,37 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       expect(startPayload.sessionId).toBe(config.sessionId);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Windows temp-root watcher (Issue 2800)
+  // -------------------------------------------------------------------------
+
+  if (process.platform === 'win32') {
+    it('reports removal through the canonical Windows temp watcher', async () => {
+      const errorSpy = vi
+        .spyOn(debugLogger, 'error')
+        .mockImplementation(() => {});
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+
+      try {
+        service.recordContent(makeContent('materialize watcher'));
+        await service.flush();
+        await fs.rm(chatsDir, { recursive: true, force: true });
+
+        await vi.waitFor(
+          () => {
+            expect(errorSpy).toHaveBeenCalledWith(
+              expect.stringContaining('chatsDir was removed'),
+            );
+          },
+          { timeout: 5000 },
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+  }
 
   // =========================================================================
   // Property-Based Tests (≥30% of total — 9 property tests out of 24 total)

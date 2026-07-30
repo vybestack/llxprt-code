@@ -301,6 +301,7 @@ interface RetryLoopState {
   currentDelay: number;
   consecutive429s: number;
   consecutiveAuthErrors: number;
+  consecutiveServerErrors: number;
 }
 
 /** Classifies an error into categories used by retry logic. */
@@ -343,6 +344,7 @@ async function handleContentRetry<T>(
 function updateErrorCounters(
   is429: boolean,
   isAuthError: boolean,
+  is500: boolean,
   canAttemptFailover: boolean,
   failoverThreshold: number,
   state: RetryLoopState,
@@ -358,15 +360,15 @@ function updateErrorCounters(
     state.consecutive429s = 0;
   }
 
-  if (isAuthError) {
-    state.consecutiveAuthErrors++;
-  } else {
-    state.consecutiveAuthErrors = 0;
-  }
+  state.consecutiveAuthErrors = isAuthError
+    ? state.consecutiveAuthErrors + 1
+    : 0;
+
+  state.consecutiveServerErrors =
+    is500 && !is429 && !isAuthError ? state.consecutiveServerErrors + 1 : 0;
 
   const shouldAttemptRefreshRetry =
     isAuthError && canAttemptFailover && state.consecutiveAuthErrors === 1;
-
   return { shouldAttemptRefreshRetry };
 }
 
@@ -414,6 +416,7 @@ async function attemptFailover(
   is429: boolean,
   is402: boolean,
   isAuthError: boolean,
+  is500: boolean,
   errorStatus: number | undefined,
   options: Partial<RetryOptions> | undefined,
   state: RetryLoopState,
@@ -424,13 +427,21 @@ async function attemptFailover(
   const canAttemptFailover = Boolean(options?.onPersistent429);
   const thresholdReached = is429 && state.consecutive429s >= failoverThreshold;
   const authFailoverReached = isAuthError && state.consecutiveAuthErrors > 1;
+  const serverFailoverReached =
+    is500 && state.consecutiveServerErrors >= failoverThreshold;
+  const failoverConditions = [
+    thresholdReached,
+    is402,
+    authFailoverReached,
+    serverFailoverReached,
+  ];
   const shouldAttemptFailover =
-    canAttemptFailover && (thresholdReached || is402 || authFailoverReached);
+    canAttemptFailover && failoverConditions.some((c) => c);
 
   logger.debug(
     () =>
-      `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, isAuthError=${isAuthError}, ` +
-      `consecutive429s=${state.consecutive429s}, consecutiveAuthErrors=${state.consecutiveAuthErrors}, ` +
+      `[issue1029] Failover decision: errorStatus=${errorStatus}, is429=${is429}, is402=${is402}, isAuthError=${isAuthError}, is500=${is500}, ` +
+      `consecutive429s=${state.consecutive429s}, consecutiveAuthErrors=${state.consecutiveAuthErrors}, consecutiveServerErrors=${state.consecutiveServerErrors}, ` +
       `canAttemptFailover=${canAttemptFailover}, shouldAttemptFailover=${shouldAttemptFailover}`,
   );
 
@@ -445,9 +456,10 @@ async function attemptFailover(
     return 'proceed';
   }
 
-  const failoverReason = is429
-    ? `${state.consecutive429s} consecutive 429 errors`
-    : `status ${errorStatus}`;
+  let failoverReason = `status ${errorStatus}`;
+  if (is429) failoverReason = `${state.consecutive429s} consecutive 429 errors`;
+  else if (is500)
+    failoverReason = `${state.consecutiveServerErrors} consecutive server errors`;
   logger.debug(() => `Attempting bucket failover after ${failoverReason}`);
   const failoverResult = await options.onPersistent429(error);
 
@@ -460,6 +472,7 @@ async function attemptFailover(
     logger.debug(() => `Bucket failover successful, resetting retry state`);
     state.consecutive429s = 0;
     state.consecutiveAuthErrors = 0;
+    state.consecutiveServerErrors = 0;
     state.currentDelay = initialDelayMs;
     state.attempt--;
     return 'continue';
@@ -629,6 +642,7 @@ async function runRetryGuards(
     classified.is429,
     classified.is402,
     classified.isAuthError,
+    classified.is500,
     classified.errorStatus,
     context.options,
     state,
@@ -679,6 +693,7 @@ async function handleRetryFailure(
   const { shouldAttemptRefreshRetry } = updateErrorCounters(
     classified.is429,
     classified.isAuthError,
+    classified.is500,
     context.options?.onPersistent429 !== undefined,
     context.failoverThreshold,
     state,
@@ -772,6 +787,7 @@ export async function retryWithBackoff<T>(
     currentDelay: initialDelayMs,
     consecutive429s: 0,
     consecutiveAuthErrors: 0,
+    consecutiveServerErrors: 0,
   };
 
   while (state.attempt < maxAttempts) {
@@ -783,6 +799,7 @@ export async function retryWithBackoff<T>(
       const result = await fn();
       state.consecutive429s = 0;
       state.consecutiveAuthErrors = 0;
+      state.consecutiveServerErrors = 0;
 
       if (
         await handleContentRetry(

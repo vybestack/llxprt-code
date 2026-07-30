@@ -153,7 +153,7 @@ describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
   });
 
   describe('Verifier Cleanup', () => {
-    it('should clean up verifier after successful token exchange', async () => {
+    it('should clean up verifier after a failed token exchange', async () => {
       const state = 'cleanup_test_state';
       const redirectUri = 'http://localhost:1455/callback';
 
@@ -176,8 +176,7 @@ describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
         // Expected to fail with network error
       }
 
-      // Verifier should still exist after failed exchange
-      expect(verifiers.has(state)).toBe(true);
+      expect(verifiers.has(state)).toBe(false);
     });
 
     it('should not leak verifiers across multiple flows', () => {

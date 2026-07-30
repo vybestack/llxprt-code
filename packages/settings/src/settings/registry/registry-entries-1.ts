@@ -407,6 +407,45 @@ export const REGISTRY_ENTRIES_PART_1: readonly SettingSpec[] = [
     },
   },
   {
+    key: 'image-resize.enabled',
+    category: 'cli-behavior',
+    description: 'Enable automatic model-aware resizing for image file reads',
+    type: 'boolean',
+    persistToProfile: true,
+  },
+  ...[
+    {
+      key: 'image-resize.maxLongEdge',
+      description: 'Maximum image long edge in pixels',
+    },
+    {
+      key: 'image-resize.maxShortEdge',
+      description: 'Maximum image short edge in pixels',
+    },
+    {
+      key: 'image-resize.maxPixels',
+      description: 'Maximum total decoded image pixels',
+    },
+  ].map(
+    ({ key, description }): SettingSpec => ({
+      key,
+      category: 'cli-behavior',
+      description,
+      type: 'number',
+      hint: 'positive integer pixels',
+      persistToProfile: true,
+      validate: (value: unknown): ValidationResult => {
+        if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+          return { success: true, value };
+        }
+        return {
+          success: false,
+          message: `${key} must be a positive integer`,
+        };
+      },
+    }),
+  ),
+  {
     key: 'tool-output-max-tokens',
     category: 'cli-behavior',
     description: 'Maximum tokens in tool output',

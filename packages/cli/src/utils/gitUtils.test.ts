@@ -6,6 +6,7 @@
 
 import { vi, describe, expect, it, afterEach, beforeEach } from 'vitest';
 import * as child_process from 'child_process';
+import * as path from 'node:path';
 import {
   isGitHubRepository,
   getGitRepoRoot,
@@ -165,7 +166,7 @@ describe('getWorkspaceIdentity', () => {
 
     const result = getWorkspaceIdentity();
 
-    expect(result).toBe('/Users/test/projects/my-repo');
+    expect(result).toBe(path.resolve('/Users/test/projects/my-repo'));
     expect(child_process.execSync).toHaveBeenCalledWith(
       'git rev-parse --show-toplevel',
       expect.objectContaining({ encoding: 'utf-8' }),
@@ -195,14 +196,15 @@ describe('getWorkspaceIdentity', () => {
 
   it('should return the same identity from different subdirectories in same repo', () => {
     const repoRoot = '/Users/test/projects/my-repo';
+    const expectedRepoRoot = path.resolve(repoRoot);
     vi.mocked(child_process.execSync).mockReturnValue(repoRoot);
 
     // Simulate multiple calls (as if from different subdirs)
     const result1 = getWorkspaceIdentity();
     const result2 = getWorkspaceIdentity();
 
-    expect(result1).toBe(repoRoot);
-    expect(result2).toBe(repoRoot);
+    expect(result1).toBe(expectedRepoRoot);
+    expect(result2).toBe(expectedRepoRoot);
     expect(result1).toBe(result2);
   });
 
@@ -225,7 +227,7 @@ describe('getWorkspaceIdentity', () => {
     const result = getWorkspaceIdentity();
 
     // Should trim and normalize
-    expect(result).toBe('/Users/test/projects/my-repo');
+    expect(result).toBe(path.resolve('/Users/test/projects/my-repo'));
     expect(result).not.toContain('\n');
     expect(result).not.toMatch(/^\s/);
     expect(result).not.toMatch(/\s$/);

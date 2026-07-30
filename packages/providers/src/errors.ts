@@ -423,12 +423,13 @@ export class AuthenticationError extends ProviderError {
 
 /**
  * Error for server errors (5xx)
- * Retryable with exponential backoff, does not trigger bucket failover
+ * Retryable with exponential backoff, triggers bucket failover after
+ * threshold (issue #1726).
  */
 export class ServerError extends ProviderError {
   readonly category = 'server_error' as const;
   readonly isRetryable = true;
-  readonly shouldFailover = false;
+  readonly shouldFailover = true;
 }
 
 /**

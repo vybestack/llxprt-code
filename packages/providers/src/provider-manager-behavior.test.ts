@@ -439,11 +439,11 @@ describe('Provider error hierarchy behavioral tests', () => {
    * @plan:PLAN-20260603-ISSUE1584.P10
    * @requirement:REQ-TEST-001
    */
-  it('ServerError is retryable but does not trigger failover', () => {
+  it('ServerError is retryable and triggers failover (issue #1726)', () => {
     const error = new ServerError('server error', { status: 500 });
     expect(error.category).toBe('server_error');
     expect(error.isRetryable).toBe(true);
-    expect(error.shouldFailover).toBe(false);
+    expect(error.shouldFailover).toBe(true);
   });
 
   /**

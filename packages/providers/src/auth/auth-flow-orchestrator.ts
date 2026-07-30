@@ -41,10 +41,22 @@ function markGlobalAuthComplete(): void {
   (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete = true;
 }
 
+/** Maximum time to wait for an auth lock before timing out and surfacing
+ * a recovery hint to the user. Matches the interactive login window. */
+const AUTH_LOCK_WAIT_MS = 60_000;
+
 type MultiBucketAuthResult = {
   cancelled: boolean;
   authenticatedBuckets: string[];
   failedBuckets: string[];
+};
+
+type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
+
+type AuthFlight = {
+  readonly promise: Promise<void>;
+  signalAuthCompletion: boolean;
+  completionSignaled: boolean;
 };
 
 type MultiBucketAuthenticatorLike = {
@@ -79,6 +91,11 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   // Session-scoped flag: user dismissed the BucketAuthConfirmation dialog.
   // When true, subsequent auth attempts skip the dialog and proceed directly.
   userDismissedAuthPrompt = false;
+
+  // Same-process single-flight: concurrent authenticate() calls for the
+  // same provider+bucket join the in-flight promise instead of failing
+  // on the heldTokens lock check and timing out.
+  private readonly authInFlight: Map<string, AuthFlight> = new Map();
 
   constructor(
     private readonly tokenStore: TokenStore,
@@ -136,32 +153,72 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       throw new Error('Provider name must be a non-empty string');
     }
 
+    // Same-process single-flight: if an auth flow is already in-flight
+    // for this provider+bucket, join it. This prevents the second caller
+    // from failing the heldTokens lock check and timing out while the
+    // first caller is performing the actual OAuth flow.
+    const flightKey = `${providerName}:${bucket ?? 'default'}`;
+    const existing = this.authInFlight.get(flightKey);
+    if (existing !== undefined) {
+      logger.debug(
+        () => `[FLOW] authenticate() joining in-flight auth for ${flightKey}`,
+      );
+      existing.signalAuthCompletion ||= shouldSignalAuthCompletion;
+      await existing.promise;
+      this.signalAuthFlightCompletion(existing);
+      return;
+    }
+
+    const flight: AuthFlight = {
+      promise: this.authenticateInternal(providerName, bucket),
+      signalAuthCompletion: shouldSignalAuthCompletion,
+      completionSignaled: false,
+    };
+    this.authInFlight.set(flightKey, flight);
+    try {
+      await flight.promise;
+      this.signalAuthFlightCompletion(flight);
+    } finally {
+      this.authInFlight.delete(flightKey);
+    }
+  }
+
+  private signalAuthFlightCompletion(flight: AuthFlight): void {
+    if (!flight.signalAuthCompletion || flight.completionSignaled) {
+      return;
+    }
+    flight.completionSignaled = true;
+    markGlobalAuthComplete();
+  }
+
+  private async authenticateInternal(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<void> {
     const provider = this.providerRegistry.getProvider(providerName);
     if (!provider) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
-    const lockAcquired = await this.tokenStore.acquireAuthLock(providerName, {
-      waitMs: 60000, // Wait up to 60 seconds
+    const lockOutcome = await this.waitForAuthLockOrToken(
+      providerName,
       bucket,
-    });
+      AUTH_LOCK_WAIT_MS,
+    );
 
-    if (!lockAcquired) {
-      await this.handleAuthLockTimeout(providerName, bucket);
-      if (shouldSignalAuthCompletion) {
-        markGlobalAuthComplete();
+    if (lockOutcome !== 'acquired') {
+      if (lockOutcome === 'timed-out') {
+        await this.handleAuthLockTimeout(providerName, bucket);
       }
       return;
     }
 
-    let authenticated = false;
     try {
       const earlyReturn = await this.checkDiskTokenUnderLock(
         providerName,
         bucket,
       );
       if (earlyReturn) {
-        authenticated = true;
         return;
       }
 
@@ -172,12 +229,10 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         diskToken ?? undefined,
       );
       if (refreshed) {
-        authenticated = true;
         return;
       }
 
       await this.doInitiateAuth(providerName, bucket, provider);
-      authenticated = true;
     } catch (error) {
       logger.debug(
         () =>
@@ -191,11 +246,44 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       );
     } finally {
       await this.tokenStore.releaseAuthLock(providerName, bucket);
-      if (authenticated && shouldSignalAuthCompletion) {
-        markGlobalAuthComplete();
-      }
       logger.debug(() => `[FLOW] Released auth lock for ${providerName}`);
     }
+  }
+
+  private async waitForAuthLockOrToken(
+    providerName: string,
+    bucket: string | undefined,
+    waitMs: number,
+  ): Promise<AuthLockWaitOutcome> {
+    const waitState: { outcome: AuthLockWaitOutcome } = {
+      outcome: 'timed-out',
+    };
+    const acquired = await this.tokenStore.acquireAuthLock(providerName, {
+      waitMs,
+      bucket,
+      onWait: async () => {
+        if (await this.findAndActivateValidDiskToken(providerName, bucket)) {
+          waitState.outcome = 'token-found';
+          return true;
+        }
+        return false;
+      },
+    });
+    return acquired ? 'acquired' : waitState.outcome;
+  }
+
+  private async findAndActivateValidDiskToken(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<boolean> {
+    const token = await this.tokenStore.getToken(providerName, bucket);
+    if (token === null || token.expiry <= Math.floor(Date.now() / 1000) + 30) {
+      return false;
+    }
+    if (!this.providerRegistry.isOAuthEnabled(providerName)) {
+      this.providerRegistry.setOAuthEnabledState(providerName, true);
+    }
+    return true;
   }
 
   /**
@@ -206,21 +294,17 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
   ): Promise<boolean> {
-    const diskToken = await this.tokenStore.getToken(providerName, bucket);
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    const thirtySecondsFromNow = nowInSeconds + 30;
-
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
-      if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-        this.providerRegistry.setOAuthEnabledState(providerName, true);
-      }
+    const found = await this.findAndActivateValidDiskToken(
+      providerName,
+      bucket,
+    );
+    if (found) {
       logger.debug(
         () =>
           `[FLOW] Found valid token on disk after acquiring lock for ${providerName}, skipping auth`,
       );
-      return true;
     }
-    return false;
+    return found;
   }
 
   /**
@@ -273,14 +357,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
   ): Promise<void> {
-    const diskToken = await this.tokenStore.getToken(providerName, bucket);
-    const nowInSeconds = Math.floor(Date.now() / 1000);
-    const thirtySecondsFromNow = nowInSeconds + 30;
-
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
-      if (!this.providerRegistry.isOAuthEnabled(providerName)) {
-        this.providerRegistry.setOAuthEnabledState(providerName, true);
-      }
+    if (await this.findAndActivateValidDiskToken(providerName, bucket)) {
       logger.debug(
         () =>
           `[FLOW] Lock timeout but found valid token on disk for ${providerName}, using it`,
@@ -288,9 +365,95 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       return;
     }
 
-    throw new Error(
-      `Failed to acquire auth lock for ${providerName}${bucket ? `/${bucket}` : ''} and no valid token on disk`,
-    );
+    const recoveryHint = await this.buildLockRecoveryHint(providerName, bucket);
+    throw new Error(recoveryHint);
+  }
+
+  private buildAuthCommand(
+    providerName: string,
+    action: 'lock status' | 'unlock',
+    bucket: string | undefined,
+    flags: string = '',
+  ): string {
+    const bucketArgument = bucket === undefined ? '' : ` ${bucket}`;
+    const flagArguments = flags === '' ? '' : ` ${flags}`;
+    return `/auth ${providerName} ${action}${bucketArgument}${flagArguments}`;
+  }
+
+  private async buildLockRecoveryHint(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<string> {
+    const bucketLabel = bucket ? `/${bucket}` : '';
+    const base = `Failed to acquire auth lock for ${providerName}${bucketLabel}`;
+
+    if (typeof this.tokenStore.inspectAuthLock !== 'function') {
+      return `${base}. Run ${this.buildAuthCommand(providerName, 'lock status', bucket)} for details.`;
+    }
+
+    try {
+      const status = await this.tokenStore.inspectAuthLock(
+        providerName,
+        bucket,
+      );
+      const parts: string[] = [base];
+
+      if (!status.exists) {
+        // Absent lock: no recovery action needed. Do not suggest force
+        // just because liveness defaults to 'unverifiable' for absent
+        // locks.
+        parts.push(`Lock file not found at ${status.canonicalPath}`);
+        return parts.join('. ') + '.';
+      }
+
+      const ownerInfo: string[] = [];
+      if (status.classification !== 'absent') {
+        ownerInfo.push(`schema: ${status.classification}`);
+      }
+      if (status.ownerPid !== null) {
+        ownerInfo.push(`PID: ${status.ownerPid}`);
+      }
+      if (status.ownerHostname !== null) {
+        ownerInfo.push(`host: ${status.ownerHostname}`);
+      }
+      ownerInfo.push(`liveness: ${status.liveness.status}`);
+      if (status.ageMs !== null) {
+        ownerInfo.push(`age: ${Math.floor(status.ageMs / 1000)}s`);
+      }
+      parts.push(`Lock owner: ${ownerInfo.join(', ')}`);
+      parts.push(`Lock path: ${status.canonicalPath}`);
+
+      if (status.liveness.status === 'dead') {
+        parts.push(
+          `Recover with: ${this.buildAuthCommand(providerName, 'unlock', bucket)}`,
+        );
+      } else if (
+        status.classification === 'legacy' ||
+        status.classification === 'malformed' ||
+        status.liveness.status === 'unverifiable'
+      ) {
+        parts.push(
+          `Inspect with: ${this.buildAuthCommand(providerName, 'lock status', bucket)}`,
+        );
+        parts.push(
+          `Force-remove with: ${this.buildAuthCommand(providerName, 'unlock', bucket, '--force --i-have-stopped-all-processes')}`,
+        );
+      } else {
+        parts.push(
+          `Inspect with: ${this.buildAuthCommand(providerName, 'lock status', bucket)}`,
+        );
+      }
+
+      return parts.join('. ') + '.';
+    } catch (error) {
+      // Preserve useful error details instead of only directing the user
+      // to repeat the same failing command.
+      const detail = error instanceof Error ? error.message : String(error);
+      return (
+        `${base}. Lock inspection failed: ${detail}. ` +
+        `Check permissions on the lock directory or run ${this.buildAuthCommand(providerName, 'lock status', bucket)} manually.`
+      );
+    }
   }
 
   /**

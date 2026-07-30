@@ -73,6 +73,10 @@ export interface EphemeralSettings {
   'tool-output-max-tokens'?: number;
   'tool-output-truncate-mode'?: 'warn' | 'truncate' | 'sample';
   'tool-output-item-size-limit'?: number;
+  'image-resize.enabled'?: boolean;
+  'image-resize.maxLongEdge'?: number;
+  'image-resize.maxShortEdge'?: number;
+  'image-resize.maxPixels'?: number;
   'max-prompt-tokens'?: number;
   'disabled-tools'?: string[];
   'shell-replacement'?: 'allowlist' | 'all' | 'none' | boolean;

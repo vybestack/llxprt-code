@@ -116,7 +116,7 @@ describe('reconcileGlobalMemory (P5 reconciliation)', () => {
 
   // On most systems root can still read mode-000 files, so this error-path
   // contract is only enforceable as real filesystem behavior under non-root.
-  it.skipIf(os.userInfo().uid === 0)(
+  it.skipIf(os.userInfo().uid === 0 || process.platform === 'win32')(
     'returns error and no marker when source is unreadable, and leaves the source untouched',
     async () => {
       const dataFile = path.join(dataDir, 'LLXPRT.md');

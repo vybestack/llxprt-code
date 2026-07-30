@@ -60,6 +60,23 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function buildPowerShellExitCodeWrapper(encodedCommand: string): string {
+  return (
+    '& { ' +
+    `$hookCommand = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedCommand}')); ` +
+    '$global:LASTEXITCODE = 0; ' +
+    '$global:__LLXPRT_HOOK_SUCCEEDED = $false; ' +
+    '$global:__LLXPRT_HOOK_EXIT_CODE = 0; ' +
+    '$hookScript = [ScriptBlock]::Create($hookCommand + [Environment]::NewLine + ' +
+    "'$global:__LLXPRT_HOOK_SUCCEEDED = $?; $global:__LLXPRT_HOOK_EXIT_CODE = $LASTEXITCODE'); " +
+    '& $hookScript; ' +
+    'if ($global:__LLXPRT_HOOK_SUCCEEDED) { exit 0 }; ' +
+    'if ($global:__LLXPRT_HOOK_EXIT_CODE -ne 0) { exit $global:__LLXPRT_HOOK_EXIT_CODE }; ' +
+    'exit 1 ' +
+    '}'
+  );
+}
+
 /**
  * Hook runner that executes command hooks
  */
@@ -524,14 +541,24 @@ export class HookRunner {
       LLXPRT_PROJECT_DIR: input.cwd,
     };
 
+    const encodedCommand = Buffer.from(command, 'utf8').toString('base64');
+    const shellCommand =
+      shellConfig.shell === 'powershell'
+        ? buildPowerShellExitCodeWrapper(encodedCommand)
+        : command;
+
     // SECURITY: Use explicit shell executable with shell: false
     // This prevents Node's shell interpretation layer
-    return spawn(shellConfig.executable, [...shellConfig.argsPrefix, command], {
-      env,
-      cwd: input.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      shell: false, // CRITICAL: must be false to prevent injection
-    });
+    return spawn(
+      shellConfig.executable,
+      [...shellConfig.argsPrefix, shellCommand],
+      {
+        env,
+        cwd: input.cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false, // CRITICAL: must be false to prevent injection
+      },
+    );
   }
 
   private parseHookOutput(
