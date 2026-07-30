@@ -360,18 +360,6 @@ function automockValue(
   return mockedObject;
 }
 
-const automockModule = async (resolvedId: string): Promise<object> => {
-  const actual = await importResolvedActual(resolvedId);
-  if ((typeof actual !== 'object' && typeof actual !== 'function') || !actual) {
-    throw new TypeError(`Cannot automock non-object module "${resolvedId}"`);
-  }
-  const mocked = automockValue(actual, new Map());
-  if (typeof mocked !== 'object' || !mocked) {
-    throw new TypeError(`Cannot automock module "${resolvedId}"`);
-  }
-  return mocked;
-};
-
 const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
@@ -386,7 +374,28 @@ const registerModuleMock = (
   const mockId = id;
 
   if (!factory) {
-    return mock.module(mockId, () => automockModule(resolvedId));
+    // Pre-load and cache the real module BEFORE mock.module registration.
+    // The automock factory runs lazily (when the module is first imported),
+    // at which point require() would return the mocked namespace.
+    const realModule = loadIsolatedModuleSync(resolvedId);
+    const actualSnapshot: Record<string | symbol, unknown> = {};
+    if (typeof realModule === 'object' && realModule !== null) {
+      for (const key of Reflect.ownKeys(realModule)) {
+        const descriptor = Object.getOwnPropertyDescriptor(realModule, key);
+        if (descriptor) {
+          Object.defineProperty(actualSnapshot, key, {
+            configurable: true,
+            enumerable: descriptor.enumerable,
+            writable: true,
+            value: descriptor.value,
+          });
+        }
+      }
+    } else {
+      Object.assign(actualSnapshot, { default: realModule });
+    }
+    actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
+    return mock.module(mockId, () => automockValue(realModule, new Map()));
   }
 
   // Bun's mock.module does NOT drain the microtask queue inside factory
@@ -403,6 +412,28 @@ const registerModuleMock = (
   //    — calling mock.module again with the same id replaces the previous
   //    registration.
   const syncActual = loadIsolatedModuleSync(resolvedId);
+  // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
+  // REAL exports, not the mock.module-patched namespace. Bun's mock.module
+  // patches the module namespace object IN PLACE, so storing a reference to
+  // the namespace would later reflect the mocked values. A shallow clone
+  // preserves the original export values at registration time.
+  const actualSnapshot: Record<string | symbol, unknown> = {};
+  if (typeof syncActual === 'object' && syncActual !== null) {
+    for (const key of Reflect.ownKeys(syncActual)) {
+      const descriptor = Object.getOwnPropertyDescriptor(syncActual, key);
+      if (descriptor) {
+        Object.defineProperty(actualSnapshot, key, {
+          configurable: true,
+          enumerable: descriptor.enumerable,
+          writable: true,
+          value: descriptor.value,
+        });
+      }
+    }
+  } else {
+    Object.assign(actualSnapshot, { default: syncActual });
+  }
+  actualModules.set(resolvedId, Promise.resolve(actualSnapshot));
   const importOriginal = (): unknown => syncActual;
   const factoryResult = factory(importOriginal as () => Promise<unknown>);
 

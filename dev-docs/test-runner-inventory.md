@@ -50,6 +50,7 @@ shim and a workspace-specific `bun-preload.ts` that replicates the vitest
 setupFiles (storage isolation, provider runtime bootstrap).
 
 Migration changes:
+
 - 5 files refactored to remove `vi.resetModules()` (Bun does not support module
   resetting; refactored to test-reset exports or module-level imports)
 - 8 files refactored to remove `resolves.not.toThrow()` (broken in Bun —
@@ -74,6 +75,7 @@ use `bun test` directly. A `bunfig.toml` preloads the compat shim and a
 workspace-specific `bun-preload.ts` for storage isolation.
 
 Migration changes:
+
 - 1 file refactored to remove `resolves.not.toThrow()`
 - `proxy-socket-client.test.ts` refactored: removed `if (server)` conditionals
   (lint), added socket tracking for cleanup, replaced fake-timer-dependent
