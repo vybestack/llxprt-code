@@ -92,7 +92,7 @@ describe('createFilePathLink', () => {
 
     expect(link).not.toBeNull();
     const resolved = path.resolve(tempDir, 'src/index.ts');
-    expect(link).toContain(resolved);
+    expect(extractOsc8Label(link ?? '')).toBe('src/index.ts');
     expect(link).toContain(pathToFileURL(resolved).href);
   });
 
@@ -115,7 +115,7 @@ describe('createFilePathLink', () => {
     const link = createFilePathLink('config.yaml', [tempDir, otherDir]);
 
     expect(link).not.toBeNull();
-    expect(link).toContain(nested);
+    expect(extractOsc8Label(link ?? '')).toBe('config.yaml');
     expect(link).toContain(pathToFileURL(nested).href);
   });
 
