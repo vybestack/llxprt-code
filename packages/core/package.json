@@ -500,8 +500,8 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "bun test --parallel --no-orphans --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml",
-    "test:ci": "bun test --parallel --no-orphans --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml --coverage --coverage-reporter=lcov --coverage-dir=coverage",
+    "test": "bun run-bun-tests.ts",
+    "test:ci": "bun run-bun-tests.ts",
     "test:vitest": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
