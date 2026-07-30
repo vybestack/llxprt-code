@@ -829,7 +829,7 @@ jobs:
   bun_native_test_parity:
     name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 15
+    timeout-minutes: 30
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}

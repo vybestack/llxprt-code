@@ -171,8 +171,7 @@ describe('syntheticUsageInfo', () => {
 
   describe('formatSyntheticUsage', () => {
     beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-02-11T18:00:00Z'));
+      vi.useFakeTimers({ now: new Date('2026-02-11T18:00:00Z') });
     });
 
     afterEach(() => {

@@ -32,9 +32,6 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 describe('auth import isolation @issue:2417', () => {
   afterEach(() => {
-    vi.doUnmock('@vybestack/llxprt-code-tools/tools/activate-skill.js');
-    vi.doUnmock('@ast-grep/napi');
-    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -55,8 +52,6 @@ describe('auth import isolation @issue:2417', () => {
       );
     });
     vi.doMock('@ast-grep/napi', napiSpy);
-
-    vi.resetModules();
 
     // Dynamically import the auth entry from source (not dist) to verify
     // the source-level import graph does not reach tool implementations.

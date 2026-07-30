@@ -115,8 +115,6 @@ describe('startLocalOAuthCallback', () => {
   });
 
   it('rejects when callback does not arrive within timeout', async () => {
-    vi.useFakeTimers();
-
     const port = await findAvailablePort();
     const server = await startLocalOAuthCallback({
       state: 'timeout-state',
@@ -125,13 +123,8 @@ describe('startLocalOAuthCallback', () => {
     });
 
     const callbackPromise = server.waitForCallback();
-    const rejectionObserver = callbackPromise.catch(() => undefined);
 
-    await vi.advanceTimersByTimeAsync(150);
-    await rejectionObserver;
-    await expect(callbackPromise).rejects.toThrowError(
-      'OAuth callback timed out',
-    );
+    await expect(callbackPromise).rejects.toThrow('OAuth callback timed out');
 
     await server.shutdown();
   });

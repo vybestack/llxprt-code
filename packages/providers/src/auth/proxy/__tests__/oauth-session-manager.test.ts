@@ -19,8 +19,7 @@ describe('PKCESessionStore', () => {
   const peerB = { type: 'uid', uid: 2000 };
 
   beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(baseNow);
+    vi.useFakeTimers({ now: baseNow });
     delete process.env.LLXPRT_OAUTH_SESSION_TIMEOUT_SECONDS;
   });
 

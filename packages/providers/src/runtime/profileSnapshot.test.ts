@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
@@ -44,8 +45,8 @@ vi.mock('./profileApplication.js', () => ({
 
 const profileManagerLoadProfileMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const actual = await vi.importActual<
+vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = importActualSync<
     typeof import('@vybestack/llxprt-code-settings')
   >('@vybestack/llxprt-code-settings');
   return {
@@ -58,15 +59,25 @@ vi.mock('@vybestack/llxprt-code-settings', async () => {
 });
 
 import {
-  applyProfileSnapshot,
-  buildRuntimeProfileSnapshot,
-  buildModelProfileInfoPayload,
-  getProfileByName,
-} from './profileSnapshot.js';
-import {
-  getCliRuntimeServices,
   _internal as runtimeAccessorsInternal,
+  getCliRuntimeServices,
 } from './runtimeAccessors.js';
+import { beforeAll, describe } from 'vitest';
+
+let buildModelProfileInfoPayload: typeof import('./profileSnapshot.js').buildModelProfileInfoPayload;
+let applyProfileSnapshot: typeof import('./profileSnapshot.js').applyProfileSnapshot;
+let buildRuntimeProfileSnapshot: typeof import('./profileSnapshot.js').buildRuntimeProfileSnapshot;
+let getProfileByName: typeof import('./profileSnapshot.js').getProfileByName;
+
+describe('profileSnapshot module', () => {
+  beforeAll(async () => {
+    const mod = await import('./profileSnapshot.js');
+    buildModelProfileInfoPayload = mod.buildModelProfileInfoPayload;
+    applyProfileSnapshot = mod.applyProfileSnapshot;
+    buildRuntimeProfileSnapshot = mod.buildRuntimeProfileSnapshot;
+    getProfileByName = mod.getProfileByName;
+  });
+});
 
 describe('buildModelProfileInfoPayload', () => {
   it('builds payload with profile name as displayLabel when profile is active', () => {

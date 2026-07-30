@@ -332,12 +332,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        const results: IContent[] = [];
-        for await (const chunk of provider.generateChatCompletion(options)) {
-          results.push(chunk);
-        }
-      }).rejects.toThrow(/failover exhausted/);
+      await expect(
+        (async () => {
+          const results: IContent[] = [];
+          for await (const chunk of provider.generateChatCompletion(options)) {
+            results.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow(/failover exhausted/);
     });
   });
 });

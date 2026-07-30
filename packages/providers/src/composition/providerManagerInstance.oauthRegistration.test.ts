@@ -10,52 +10,80 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // This test tests provider registration behavior, needs real providerAliases
-vi.unmock('./providerAliases.js');
 
-/**
- * Mock the concrete provider modules (imported relatively by the composition
- * SUT chain) so registration can be observed without constructing real
- * providers. ProviderManager is replaced wholesale, so its internal runtime
- * context dependencies (sourced from core) are never loaded.
- */
-function mockProviderModules(opts: {
-  openai: unknown;
-  openaiResponses: unknown;
-  openaiVercel: unknown;
-  anthropic: unknown;
-}): void {
-  vi.doMock('../ProviderManager.js', () => {
-    class MockProviderManager {
-      setConfig(): void {}
-      setActiveProvider(): void {}
-      registerProvider(): void {}
-    }
-    return { ProviderManager: MockProviderManager };
-  });
-  vi.doMock('../gemini/GeminiProvider.js', () => {
-    class MockGeminiProvider {
-      setConfig(): void {}
-    }
-    return { GeminiProvider: MockGeminiProvider };
-  });
-  vi.doMock('../openai/OpenAIProvider.js', () => ({
-    OpenAIProvider: opts.openai,
-  }));
-  vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
-    OpenAIResponsesProvider: opts.openaiResponses,
-  }));
-  vi.doMock('../openai-vercel/index.js', () => ({
-    OpenAIVercelProvider: opts.openaiVercel,
-  }));
-  vi.doMock('../anthropic/AnthropicProvider.js', () => ({
-    AnthropicProvider: opts.anthropic,
-  }));
+// Shared mutable mock state — Bun cannot reset modules between tests, so the
+// mock factories use wrapper functions that read mutable variables at call
+// time. Each test updates these variables before running its assertions.
+let openaiCtorState: new (...args: unknown[]) => unknown = class {};
+let openaiResponsesCtorState: new (...args: unknown[]) => unknown = class {};
+let openaiVercelCtorState: new (...args: unknown[]) => unknown = class {};
+let anthropicCtorState: new (...args: unknown[]) => unknown = class {};
+
+// Wrapper constructors so each test can swap the target without needing
+// vi.resetModules (unsupported in Bun).
+function makeWrapper(
+  get: () => new (...args: unknown[]) => unknown,
+): new (...args: unknown[]) => unknown {
+  return function (...args: unknown[]) {
+    return Reflect.construct(get(), args, new.target);
+  };
 }
+
+vi.doMock('../ProviderManager.js', () => {
+  class MockProviderManager {
+    setConfig(): void {}
+    setActiveProvider(): void {}
+    registerProvider(): void {}
+  }
+  return { ProviderManager: MockProviderManager };
+});
+vi.doMock('../gemini/GeminiProvider.js', () => {
+  class MockGeminiProvider {
+    setConfig(): void {}
+  }
+  return { GeminiProvider: MockGeminiProvider };
+});
+vi.doMock('../openai/OpenAIProvider.js', () => ({
+  OpenAIProvider: makeWrapper(() => openaiCtorState),
+}));
+vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
+  OpenAIResponsesProvider: makeWrapper(() => openaiResponsesCtorState),
+}));
+vi.doMock('../openai-vercel/index.js', () => ({
+  OpenAIVercelProvider: makeWrapper(() => openaiVercelCtorState),
+}));
+vi.doMock('../anthropic/AnthropicProvider.js', () => ({
+  AnthropicProvider: makeWrapper(() => anthropicCtorState),
+}));
+vi.doMock('./oauth-provider-registration.js', () => ({
+  ensureOAuthProviderRegistered: (...args: unknown[]) =>
+    ensureOAuthProviderRegisteredState(...args),
+  registerStandardOAuthProviders: (
+    oauthManager: unknown,
+    tokenStore?: unknown,
+    addItem?: unknown,
+  ) => registerStandardOAuthProvidersState(oauthManager, tokenStore, addItem),
+  isOAuthProviderRegistered: (...args: unknown[]) =>
+    isOAuthProviderRegisteredState(...args),
+  resetRegisteredProviders: (...args: unknown[]) =>
+    resetRegisteredProvidersState(...args),
+}));
+
+// Mutable state for the oauth-provider-registration mock
+let ensureOAuthProviderRegisteredState: (...args: unknown[]) => void = () => {};
+let registerStandardOAuthProvidersState: (
+  oauthManager: unknown,
+  tokenStore?: unknown,
+  addItem?: unknown,
+) => void = () => {};
+let isOAuthProviderRegisteredState: (...args: unknown[]) => boolean = () =>
+  false;
+let resetRegisteredProvidersState: (...args: unknown[]) => void = () => {};
 
 function createRegisterStandardOAuthProvidersMock(
   ensureMock: ReturnType<typeof vi.fn>,
@@ -68,56 +96,35 @@ function createRegisterStandardOAuthProvidersMock(
 }
 
 describe('claudecode OAuth registration with environment key', () => {
-  let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
-  let anthropicCtor: ReturnType<typeof vi.fn>;
-  let openaiCtor: ReturnType<typeof vi.fn>;
-  let openaiResponsesCtor: ReturnType<typeof vi.fn>;
-  let openaivercelCtor: ReturnType<typeof vi.fn>;
-  let mockSettingsService: SettingsService;
-
-  beforeEach(() => {
-    vi.resetModules();
-    vi.clearAllMocks();
-    ensureOAuthProviderRegisteredMock = vi.fn();
-    anthropicCtor = vi.fn(() => ({}));
-    openaiCtor = vi.fn(() => ({}));
-    openaiResponsesCtor = vi.fn(() => ({}));
-    openaivercelCtor = vi.fn(() => ({}));
-    mockSettingsService = new SettingsService();
-  });
-
   afterEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
-    vi.resetModules();
     vi.clearAllMocks();
   });
 
   it('registers claudecode OAuth provider even when ANTHROPIC_API_KEY is set', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
 
-    vi.doMock('./oauth-provider-registration.js', () => ({
-      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
-      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
-        ensureOAuthProviderRegisteredMock,
-      ),
-      isOAuthProviderRegistered: vi.fn(),
-      resetRegisteredProviders: vi.fn(),
-    }));
+    const ensureOAuthProviderRegisteredMock = vi.fn();
+    const anthropicCtor = vi.fn(() => ({}));
 
+    // Wire mutable state for this test
+    ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
+    registerStandardOAuthProvidersState =
+      createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      );
+    isOAuthProviderRegisteredState = vi.fn();
+    resetRegisteredProvidersState = vi.fn();
+    openaiCtorState = class {} as new (...args: unknown[]) => unknown;
+    openaiResponsesCtorState = class {} as new (...args: unknown[]) => unknown;
+    anthropicCtorState = anthropicCtor;
+
+    const mockSettingsService = new SettingsService();
     const activeContext = {
       settingsService: mockSettingsService,
       metadata: { scope: 'test' },
     };
-    class MockProvider {}
-    mockProviderModules({
-      openai: MockProvider,
-      openaiResponses: MockProvider,
-      openaiVercel: openaivercelCtor,
-      anthropic: anthropicCtor,
-    });
-
-    vi.clearAllMocks();
 
     const {
       createProviderManager,
@@ -155,27 +162,38 @@ describe('claudecode OAuth registration with environment key', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
     process.env.OPENAI_API_KEY = 'sk-test-openai';
 
-    vi.doMock('./oauth-provider-registration.js', () => ({
-      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
-      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
-        ensureOAuthProviderRegisteredMock,
-      ),
-      isOAuthProviderRegistered: vi.fn(),
-      resetRegisteredProviders: vi.fn(),
-    }));
+    const ensureOAuthProviderRegisteredMock = vi.fn();
+    const openaiCtor = vi.fn(() => ({}));
+    const openaiResponsesCtor = vi.fn(() => ({}));
+    const openaivercelCtor = vi.fn(() => ({}));
+    const anthropicCtor = vi.fn(() => ({}));
 
+    // Wire mutable state for this test
+    ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
+    registerStandardOAuthProvidersState =
+      createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      );
+    isOAuthProviderRegisteredState = vi.fn();
+    resetRegisteredProvidersState = vi.fn();
+    openaiCtorState = openaiCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    openaiResponsesCtorState = openaiResponsesCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    openaiVercelCtorState = openaivercelCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    anthropicCtorState = anthropicCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+
+    const mockSettingsService = new SettingsService();
     const activeContext = {
       settingsService: mockSettingsService,
       metadata: { scope: 'test' },
     };
-    mockProviderModules({
-      openai: openaiCtor,
-      openaiResponses: openaiResponsesCtor,
-      openaiVercel: openaivercelCtor,
-      anthropic: anthropicCtor,
-    });
-
-    vi.clearAllMocks();
 
     const {
       createProviderManager,
@@ -216,27 +234,38 @@ describe('claudecode OAuth registration with environment key', () => {
   });
 
   it('threads OAuth manager only into OAuth-capable alias providers', async () => {
-    vi.doMock('./oauth-provider-registration.js', () => ({
-      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
-      registerStandardOAuthProviders: createRegisterStandardOAuthProvidersMock(
-        ensureOAuthProviderRegisteredMock,
-      ),
-      isOAuthProviderRegistered: vi.fn(),
-      resetRegisteredProviders: vi.fn(),
-    }));
+    const ensureOAuthProviderRegisteredMock = vi.fn();
+    const openaiCtor = vi.fn(() => ({}));
+    const openaiResponsesCtor = vi.fn(() => ({}));
+    const openaivercelCtor = vi.fn(() => ({}));
+    const anthropicCtor = vi.fn(() => ({}));
 
+    // Wire mutable state for this test
+    ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
+    registerStandardOAuthProvidersState =
+      createRegisterStandardOAuthProvidersMock(
+        ensureOAuthProviderRegisteredMock,
+      );
+    isOAuthProviderRegisteredState = vi.fn();
+    resetRegisteredProvidersState = vi.fn();
+    openaiCtorState = openaiCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    openaiResponsesCtorState = openaiResponsesCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    openaiVercelCtorState = openaivercelCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+    anthropicCtorState = anthropicCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
+
+    const mockSettingsService = new SettingsService();
     const activeContext = {
       settingsService: mockSettingsService,
       metadata: { scope: 'test' },
     };
-    mockProviderModules({
-      openai: openaiCtor,
-      openaiResponses: openaiResponsesCtor,
-      openaiVercel: openaivercelCtor,
-      anthropic: anthropicCtor,
-    });
-
-    vi.clearAllMocks();
 
     const {
       createProviderManager,

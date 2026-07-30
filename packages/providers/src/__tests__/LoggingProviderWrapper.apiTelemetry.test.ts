@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -24,21 +25,20 @@ import {
 } from './LoggingProviderWrapper.test-helpers.js';
 
 // Mock the loggers module
-vi.mock(
-  '@vybestack/llxprt-code-telemetry/telemetry/loggers.js',
-  async (importOriginal) => {
-    const actual = await importOriginal<typeof loggers>();
-    return {
-      ...actual,
-      logApiResponse: vi.fn(),
-      logApiError: vi.fn(),
-      logApiRequest: vi.fn(),
-      logConversationRequest: vi.fn(),
-      logConversationResponse: vi.fn(),
-      logTokenUsage: vi.fn(),
-    };
-  },
-);
+vi.mock('@vybestack/llxprt-code-telemetry/telemetry/loggers.js', () => {
+  const actual = importActualSync<typeof loggers>(
+    '@vybestack/llxprt-code-telemetry/telemetry/loggers.js',
+  );
+  return {
+    ...actual,
+    logApiResponse: vi.fn(),
+    logApiError: vi.fn(),
+    logApiRequest: vi.fn(),
+    logConversationRequest: vi.fn(),
+    logConversationResponse: vi.fn(),
+    logTokenUsage: vi.fn(),
+  };
+});
 
 describe('LoggingProviderWrapper API Telemetry', () => {
   beforeEach(() => {
@@ -170,11 +170,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
         }),
       );
 
-      await expect(async () => {
-        for await (const _chunk of iterator) {
-          // Consume
-        }
-      }).rejects.toThrow('Simulated API error');
+      await expect(
+        (async () => {
+          for await (const _chunk of iterator) {
+            // Consume
+          }
+        })(),
+      ).rejects.toThrow('Simulated API error');
 
       expect(loggers.logApiError).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiError).mock.calls[0];

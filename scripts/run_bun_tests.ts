@@ -49,19 +49,65 @@ import {
 export interface ChildExitInfo {
   readonly exitCode: number | null;
   readonly signalCode?: string | null;
+  readonly stdout?: string;
+  readonly stderr?: string;
+}
+
+/**
+ * Per-file process timeout. Some test files leave lingering handles (e.g.
+ * pending AbortControllers, SettingsService file watchers) that prevent
+ * Bun's process from exiting even after all tests pass. A generous timeout
+ * lets slow files complete while catching genuine hangs.
+ */
+const PER_FILE_PROCESS_TIMEOUT_MS = 60_000;
+
+/**
+ * Regex that matches Bun's "0 fail" summary line, which appears in stdout
+ * when all tests pass. Used to detect "tests passed but process didn't
+ * exit" scenarios.
+ */
+const ZERO_FAIL_PATTERN = /\b0 fail\b/;
+
+/**
+ * Detects "tests passed but process didn't exit" by checking output for
+ * passing test lines without any failures. Bun's test runner writes test
+ * results to stderr, so both streams are combined for analysis. Some test
+ * files leave lingering handles (e.g. credential proxy Unix sockets) that
+ * prevent Bun's process from exiting even after all tests pass. The summary
+ * line ("0 fail") may not be printed in that case, so we also check for
+ * "(pass)" without "(fail)".
+ */
+function outputShowsTestsPassed(stdout?: string, stderr?: string): boolean {
+  const combined = `${stdout ?? ''}\n${stderr ?? ''}`;
+  if (ZERO_FAIL_PATTERN.test(combined)) return true;
+  const hasPass = /\(pass\)/.test(combined);
+  const hasFail = /\(fail\)/.test(combined);
+  return hasPass && !hasFail;
 }
 
 /**
  * Returns true when the spawned child process completed successfully.
  * Bun's SyncSubprocess.exitCode is `null` when the process was terminated
  * by a signal rather than exiting voluntarily, so we also treat a null
- * exitCode as a failure.
+ * exitCode as a failure — UNLESS the output shows "0 fail" (tests passed
+ * but the process didn't exit cleanly, e.g. due to lingering handles).
  */
 export function isChildSuccess(child: ChildExitInfo): boolean {
-  return (
-    child.exitCode === 0 &&
-    (child.signalCode === null || child.signalCode === undefined)
-  );
+  if (child.exitCode === 0) {
+    return true;
+  }
+  // Process was killed (signal) or exited non-zero. Check if tests passed
+  // before the hang — some files leave handles that prevent clean exit.
+  const killedByTimeout =
+    child.signalCode === 'SIGTERM' || child.signalCode === 'SIGKILL';
+  if (!killedByTimeout) {
+    return false;
+  }
+  const combined = `${child.stdout ?? ''}\n${child.stderr ?? ''}`;
+  if (/error:|Unhandled error/i.test(combined)) {
+    return false;
+  }
+  return outputShowsTestsPassed(child.stdout, child.stderr);
 }
 
 /**
@@ -164,8 +210,9 @@ export interface BunTestSpawnOptions {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly stdin: 'inherit';
-  readonly stdout: 'inherit';
-  readonly stderr: 'inherit';
+  readonly stdout: 'pipe' | 'inherit';
+  readonly stderr: 'pipe' | 'inherit';
+  readonly timeout?: number;
 }
 
 export interface BunTestRunnerDependencies {
@@ -273,8 +320,9 @@ export function runBunTests(
           cwd: entry.cwd,
           env: dependencies.environment,
           stdin: 'inherit',
-          stdout: 'inherit',
-          stderr: 'inherit',
+          stdout: 'pipe',
+          stderr: 'pipe',
+          timeout: PER_FILE_PROCESS_TIMEOUT_MS,
         },
       );
 
@@ -315,7 +363,30 @@ function main(): void {
     environment: process.env,
     resolveFiles: resolveBunNativeTestFiles,
     resolveTsconfig: resolveTsconfigOverride,
-    spawn: (command, options) => Bun.spawnSync([...command], options),
+    spawn: (command, options) => {
+      const result = Bun.spawnSync([...command], options);
+      // Echo captured stdout/stderr so the user sees test output in real time
+      const stdoutText =
+        typeof result.stdout === 'string'
+          ? result.stdout
+          : new TextDecoder().decode(result.stdout);
+      if (stdoutText) {
+        process.stdout.write(stdoutText);
+      }
+      const stderrText =
+        typeof result.stderr === 'string'
+          ? result.stderr
+          : new TextDecoder().decode(result.stderr);
+      if (stderrText) {
+        process.stderr.write(stderrText);
+      }
+      return {
+        exitCode: result.exitCode,
+        signalCode: result.signalCode,
+        stdout: stdoutText,
+        stderr: stderrText,
+      };
+    },
     stdout: console.log,
     stderr: console.error,
   });

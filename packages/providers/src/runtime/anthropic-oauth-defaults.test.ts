@@ -12,6 +12,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 const {
   StubSettingsService: StubSettingsServiceClass,
@@ -176,9 +177,10 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = importActualSync<typeof import('@vybestack/llxprt-code-core')>(
+    '@vybestack/llxprt-code-core',
+  );
 
   let activeContext: {
     settingsService: StubSettingsServiceInstance;
@@ -223,9 +225,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerAliases.js',
-  () => ({
-    loadProviderAliasEntries: () => [],
-  }),
+  () => {
+    const actual = importActualSync<
+      typeof import('@vybestack/llxprt-code-providers/composition/providerAliases.js')
+    >('@vybestack/llxprt-code-providers/composition/providerAliases.js');
+    return {
+      ...actual,
+      loadProviderAliasEntries: () => [],
+    };
+  },
 );
 
 const {

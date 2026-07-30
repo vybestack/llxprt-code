@@ -17,12 +17,13 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type * as Ai from 'ai';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 /**
  * Mock the Vercel AI SDK to control streaming responses
  */
-vi.mock('ai', async () => {
-  const actual = await vi.importActual<typeof Ai>('ai');
+vi.mock('ai', () => {
+  const actual = importActualSync<typeof Ai>('ai');
   return {
     ...actual,
     streamText: vi.fn(),

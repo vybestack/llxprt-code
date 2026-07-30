@@ -256,8 +256,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
 
   describe('Latency tracking', () => {
     it('should calculate latency from start to finish', async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(0);
+      vi.useFakeTimers({ now: 0 });
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
@@ -293,8 +292,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
     });
 
     it('should compute average latency correctly', async () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(0);
+      vi.useFakeTimers({ now: 0 });
 
       const lb = new LoadBalancingProvider(config, providerManager);
 

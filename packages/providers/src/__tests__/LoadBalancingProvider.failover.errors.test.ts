@@ -231,13 +231,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         providerManager,
       );
 
-      await expect(async () => {
-        for await (const _chunk of provider.generateChatCompletion({
-          contents: [],
-        })) {
-          await Promise.resolve();
-        }
-      }).rejects.toBe(terminalFailure);
+      await expect(
+        (async () => {
+          for await (const _chunk of provider.generateChatCompletion({
+            contents: [],
+          })) {
+            await Promise.resolve();
+          }
+        })(),
+      ).rejects.toBe(terminalFailure);
       expect(calls).toBe(1);
     });
 
@@ -286,11 +288,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       };
 
       for (let request = 0; request < 2; request++) {
-        await expect(async () => {
-          for await (const _chunk of provider.generateChatCompletion(options)) {
-            await Promise.resolve();
-          }
-        }).rejects.toBeInstanceOf(LoadBalancerFailoverError);
+        await expect(
+          (async () => {
+            for await (const _chunk of provider.generateChatCompletion(
+              options,
+            )) {
+              await Promise.resolve();
+            }
+          })(),
+        ).rejects.toBeInstanceOf(LoadBalancerFailoverError);
       }
 
       expect(observed).toHaveLength(2);
@@ -338,12 +344,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        const results: IContent[] = [];
-        for await (const chunk of provider.generateChatCompletion(options)) {
-          results.push(chunk);
-        }
-      }).rejects.toThrow(/failover/i);
+      await expect(
+        (async () => {
+          const results: IContent[] = [];
+          for await (const chunk of provider.generateChatCompletion(options)) {
+            results.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow(/failover/i);
     });
 
     it('should include profile name in error message', async () => {
@@ -388,12 +396,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        const results: IContent[] = [];
-        for await (const chunk of provider.generateChatCompletion(options)) {
-          results.push(chunk);
-        }
-      }).rejects.toThrow(/my-test-profile/i);
+      await expect(
+        (async () => {
+          const results: IContent[] = [];
+          for await (const chunk of provider.generateChatCompletion(options)) {
+            results.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow(/my-test-profile/i);
     });
 
     it('should include all backend names that failed', async () => {
@@ -438,12 +448,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        const results: IContent[] = [];
-        for await (const chunk of provider.generateChatCompletion(options)) {
-          results.push(chunk);
-        }
-      }).rejects.toThrow(/(backend-one|backend-two)/i);
+      await expect(
+        (async () => {
+          const results: IContent[] = [];
+          for await (const chunk of provider.generateChatCompletion(options)) {
+            results.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow(/(backend-one|backend-two)/i);
     });
 
     it('includes per-backend failure messages when multiple backends fail', async () => {
@@ -495,12 +507,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        const results: IContent[] = [];
-        for await (const chunk of provider.generateChatCompletion(options)) {
-          results.push(chunk);
-        }
-      }).rejects.toThrow(
+      await expect(
+        (async () => {
+          const results: IContent[] = [];
+          for await (const chunk of provider.generateChatCompletion(options)) {
+            results.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow(
         'zai: rate limited by vendor; glm51: authentication failed',
       );
     });
@@ -562,12 +576,14 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        const results: IContent[] = [];
-        for await (const chunk of provider.generateChatCompletion(options)) {
-          results.push(chunk);
-        }
-      }).rejects.toThrow(
+      await expect(
+        (async () => {
+          const results: IContent[] = [];
+          for await (const chunk of provider.generateChatCompletion(options)) {
+            results.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow(
         'zai: Unauthorized (status: 401); glm51: Rate limit (status: 429)',
       );
     });
