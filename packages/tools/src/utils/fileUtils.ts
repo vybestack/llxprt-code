@@ -287,8 +287,8 @@ export async function shouldResizeExplicitImage(
 ): Promise<boolean> {
   return (
     hasResizePolicy &&
-    (await detectFileType(filePath)) === 'image' &&
-    isAssetExplicitlyRequested(filePath, inputPatterns)
+    isAssetExplicitlyRequested(filePath, inputPatterns) &&
+    (await detectFileType(filePath)) === 'image'
   );
 }
 

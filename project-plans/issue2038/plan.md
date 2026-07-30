@@ -211,12 +211,12 @@ ledger and obtaining approval where the policy requires it.
 
 | Category | Planned files | Planned net lines | Actual files | Actual net lines |
 | --- | ---: | ---: | ---: | ---: |
-| Plan | 1 | 340 | 1 | 339 |
-| Dependency and locks | 4 | 680 | 4 | 719 |
-| Production/config source | 13 | 400 | 13 | 466 |
-| Behavioral/settings tests | 7 | 800 | 7 | 829 |
+| Plan | 1 | 340 | 1 | 358 |
+| Dependency and locks | 4 | 680 | 4 | 721 |
+| Production/config source | 13 | 400 | 13 | 540 |
+| Behavioral/settings tests | 7 | 800 | 7 | 812 |
 | Documentation | 1 | 45 | 1 | 13 |
-| **Total** | **26** | **2,265** | **26** | **2,366** |
+| **Total** | **26** | **2,265** | **26** | **2,444** |
 
 Targets and stops:
 
@@ -231,11 +231,11 @@ Targets and stops:
 - Generated lockfile changes and all incidental tracked/untracked files count.
 - Do not consume the hard budget for optional cleanup or hardening.
 
-Final scope reconciliation: 26 paths and 2,366 net text-equivalent lines
-remain below the 40-path/2,500-line hard stop. This includes every line in the
-three untracked planned files and measures the binary-attributed npm lock after
-normalizing both JSON versions, producing 562 additions and 3 deletions. No path
-outside the reconciled list was changed.
+Final scope reconciliation: 26 paths and 2,444 net text-equivalent lines
+remain below the 40-path/2,500-line hard stop. The exact candidate diff contributes
+1,725 net lines excluding `bun.lock`; formatting both Bun lock versions as JSON
+adds 160 normalized lines. The 559-line npm lock change is included in the
+721-line dependency/lock category. No path outside the reconciled list changed.
 
 ## Approval gate: new dependency
 

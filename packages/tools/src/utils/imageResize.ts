@@ -25,7 +25,7 @@ interface ImageDimensions {
   readonly frames: number;
 }
 
-const MIME_FORMATS = new Map<string, string>([
+const MIME_FORMATS: ReadonlyMap<string, string> = new Map([
   ['image/jpeg', 'jpeg'],
   ['image/png', 'png'],
   ['image/gif', 'gif'],
@@ -66,19 +66,19 @@ function getScale(
   return Math.min(...scales);
 }
 
+const MIME_ENCODERS: ReadonlyMap<string, (pipeline: Sharp) => Sharp> = new Map([
+  ['image/jpeg', (pipeline) => pipeline.jpeg()],
+  ['image/png', (pipeline) => pipeline.png()],
+  ['image/gif', (pipeline) => pipeline.gif()],
+  ['image/webp', (pipeline) => pipeline.webp()],
+]);
+
 function encodeSourceFormat(pipeline: Sharp, mimeType: string): Sharp {
-  switch (mimeType) {
-    case 'image/jpeg':
-      return pipeline.jpeg();
-    case 'image/png':
-      return pipeline.png();
-    case 'image/gif':
-      return pipeline.gif();
-    case 'image/webp':
-      return pipeline.webp();
-    default:
-      throw new Error(`resizing does not support ${mimeType} output`);
+  const encode = MIME_ENCODERS.get(mimeType);
+  if (encode === undefined) {
+    throw new Error(`resizing does not support ${mimeType} output`);
   }
+  return encode(pipeline);
 }
 
 function isWithinLimit(value: number, limit: number | undefined): boolean {
