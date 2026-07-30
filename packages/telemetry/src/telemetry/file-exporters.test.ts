@@ -112,10 +112,10 @@ async function makeReadableLogRecord(body: string): Promise<ReadableLogRecord> {
     attributes: { 'test.attr': 'value' },
   });
   const records = exporter.getFinishedLogRecords();
+  await loggerProvider.shutdown();
   if (records.length === 0) {
     throw new Error('Expected at least one finished log record');
   }
-  await loggerProvider.shutdown();
   return records[0];
 }
 
@@ -197,6 +197,27 @@ describe('FileLogExporter serialization format', () => {
     expect(content).not.toContain('\n  ');
     const parsed = JSON.parse(content.trim());
     expect(parsed._body).toBe('compact-log-body');
+  });
+
+  it('appends each export call as a new JSONL line (no full-file rewrite)', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-log-multi-test-'));
+    directories.push(directory);
+    const outfile = join(directory, 'logs-multi.jsonl');
+    const exporter = new FileLogExporter(outfile);
+    const rec1 = await makeReadableLogRecord('log-one');
+    const rec2 = await makeReadableLogRecord('log-two');
+
+    await new Promise<ExportResult>((resolve) => {
+      exporter.export([rec1], resolve);
+    });
+    await new Promise<ExportResult>((resolve) => {
+      exporter.export([rec2], resolve);
+    });
+
+    const lines = readFileSync(outfile, 'utf-8').trim().split('\n');
+    expect(lines.length).toBe(2);
+    expect(JSON.parse(lines[0])._body).toBe('log-one');
+    expect(JSON.parse(lines[1])._body).toBe('log-two');
   });
 });
 

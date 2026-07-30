@@ -114,10 +114,8 @@ describe('Logger JSONL format', () => {
   });
 
   it('should handle fully-corrupted JSONL by backing it up and starting fresh', async () => {
-    await fs.writeFile(
-      TEST_LOG_FILE_PATH,
-      'this is not valid json\nalso not json\n',
-    );
+    const corruptedContent = 'this is not valid json\nalso not json\n';
+    await fs.writeFile(TEST_LOG_FILE_PATH, corruptedContent);
     vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
 
     const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
@@ -127,6 +125,19 @@ describe('Logger JSONL format', () => {
     expect(logContent).toStrictEqual([]);
     const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
     expect(hasMalformedBackup(dirContents)).toBe(true);
+
+    // Verify the backup contains the original corrupted data.
+    const backupName = dirContents.find(
+      (f) =>
+        f.startsWith(LOG_FILE_NAME + '.malformed_line') && f.endsWith('.bak'),
+    );
+    expect(backupName).toBeDefined();
+    const backupContent = await fs.readFile(
+      path.join(TEST_LLXPRT_DIR, backupName!),
+      'utf-8',
+    );
+    expect(backupContent).toBe(corruptedContent);
+
     newLogger.close();
   });
 
@@ -176,6 +187,19 @@ describe('Logger JSONL format', () => {
       ),
     ).toBe(true);
     expect(hasMalformedBackup(dirContents)).toBe(false);
+
+    // Verify the backup contains the original corrupted data.
+    const backupName = dirContents.find(
+      (f) =>
+        f.startsWith(LOG_FILE_NAME + '.partial_corruption') &&
+        f.endsWith('.bak'),
+    );
+    expect(backupName).toBeDefined();
+    const backupContent = await fs.readFile(
+      path.join(TEST_LLXPRT_DIR, backupName!),
+      'utf-8',
+    );
+    expect(backupContent).toBe(corruptedContent);
 
     // The active file should have been rewritten with only valid entries.
     const activeContent = await readLogFile();

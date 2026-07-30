@@ -346,8 +346,15 @@ export class Logger {
     try {
       const content = readFileSync(this.logFilePath, 'utf-8');
       return content.trim().startsWith('[');
-    } catch {
-      return false;
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      // ENOENT means the file doesn't exist yet — genuinely non-legacy.
+      if (nodeError.code === 'ENOENT') {
+        return false;
+      }
+      // Non-ENOENT errors (EACCES, EIO, etc.) are transient/recoverable —
+      // rethrow so the caller does NOT cache the format as migrated.
+      throw error;
     }
   }
 
