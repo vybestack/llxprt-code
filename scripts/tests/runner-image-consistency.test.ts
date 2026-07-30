@@ -68,12 +68,20 @@ function collectRunnerImages() {
 
   const recordShardSelectorImages = (file: string): void => {
     const selector = fs.readFileSync(SHARD_SELECTOR, 'utf8');
-    const osLoop = selector.match(/for \(const os of \[([^\]]+)\]\)/);
-    if (!osLoop) {
-      throw new Error('affected-test-shards.ts must define its runner OS rows');
-    }
-    for (const match of osLoop[1].matchAll(/'([^']+)'/g)) {
+    // The selector emits runner images via its matrix builder (issue #2876
+    // changed from a for-of OS loop to direct ubuntu-only entries). Scan for
+    // all literal runner-image strings so every image the selector can
+    // produce is recorded.
+    const runnerImageRe = /'((?:ubuntu|macos|windows)-latest)'/g;
+    let found = false;
+    for (const match of selector.matchAll(runnerImageRe)) {
       record(match[1], file);
+      found = true;
+    }
+    if (!found) {
+      throw new Error(
+        'affected-test-shards.ts must define at least one runner OS image',
+      );
     }
   };
 

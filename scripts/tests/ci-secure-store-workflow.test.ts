@@ -168,15 +168,16 @@ describe('Issue #2147: SecureStore backend coverage is separated from full CI su
     expect(secureStoreJob?.['timeout-minutes']).toBe(15);
   });
 
-  it('keyring rows select the native-keyring vitest config on both Ubuntu and macOS', () => {
+  it('keyring rows select the native-keyring vitest config on Ubuntu only (issue #2876)', () => {
+    // Issue #2876: macOS keyring coverage moved to the nightly workflow.
+    // The PR secure_store_backend matrix is ubuntu-only.
     const includes = matrixInclude(secureStoreJob);
 
     const keyringRows = includes.filter(
       (row: MatrixRow) => row['secure-store-mode'] === 'keyring',
     );
-    expect(keyringRows.length).toBe(2);
+    expect(keyringRows.length).toBe(1);
     expect(keyringRows.map((r: MatrixRow) => r.os).sort()).toEqual([
-      'macos-latest',
       'ubuntu-latest',
     ]);
 

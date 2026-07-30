@@ -29,7 +29,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -666,5 +666,85 @@ describe('affected-test-shards selector — GitHub output safety', () => {
     expect(records.filter((line) => line.startsWith('has_tests='))).toEqual([
       'has_tests=true',
     ]);
+  });
+});
+
+describe('affected-test-shards selector — ubuntu-only PR matrix (issue #2876)', () => {
+  it('emits ubuntu-only matrix rows for pull_request events', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'affected-shards-matrix-'));
+    try {
+      const files = join(dir, 'files.txt');
+      const output = join(dir, 'output.txt');
+      writeFileSync(files, 'packages/cli/src/index.ts');
+      const run = spawnSync(
+        process.execPath,
+        [
+          SELECTOR_PATH,
+          '--event',
+          PR_EVENT,
+          '--files-from',
+          files,
+          '--output',
+          'github-actions',
+        ],
+        { env: { ...process.env, GITHUB_OUTPUT: output } },
+      );
+      expect(run.stderr?.toString() ?? '').toBe('');
+      expect(run.status).toBe(0);
+      const records = readFileSync(output, 'utf8').split('\n');
+      const matrixRecord = records.find((line) => line.startsWith('matrix='));
+      expect(matrixRecord).toBeDefined();
+      const matrixJson = JSON.parse(
+        matrixRecord!.substring('matrix='.length),
+      ) as ReadonlyArray<{ readonly os: string }>;
+      expect(matrixJson.length).toBeGreaterThan(0);
+      for (const entry of matrixJson) {
+        expect(entry.os).toBe('ubuntu-latest');
+      }
+      expect(
+        matrixJson.some((e: { os: string }) => e.os === 'macos-latest'),
+      ).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not emit any macOS matrix rows for full-run pull_request events', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'affected-shards-no-macos-'));
+    try {
+      const files = join(dir, 'files.txt');
+      const output = join(dir, 'output.txt');
+      // package.json is a shared input, triggering a full-run that selects all
+      // shards. Even the full-run path is ubuntu-only (issue #2876).
+      writeFileSync(files, 'package.json');
+      const run = spawnSync(
+        process.execPath,
+        [
+          SELECTOR_PATH,
+          '--event',
+          PR_EVENT,
+          '--files-from',
+          files,
+          '--output',
+          'github-actions',
+        ],
+        { env: { ...process.env, GITHUB_OUTPUT: output } },
+      );
+      expect(run.stderr?.toString() ?? '').toBe('');
+      expect(run.status).toBe(0);
+      const records = readFileSync(output, 'utf8').split('\n');
+      const matrixRecord = records.find((line) => line.startsWith('matrix='));
+      expect(matrixRecord).toBeDefined();
+      const matrixJson = JSON.parse(
+        matrixRecord!.substring('matrix='.length),
+      ) as ReadonlyArray<{ readonly os: string }>;
+      // Full-run selects all shards, but all on ubuntu-latest.
+      expect(matrixJson.length).toBe(ALL_SHARDS.length);
+      for (const entry of matrixJson) {
+        expect(entry.os).toBe('ubuntu-latest');
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
