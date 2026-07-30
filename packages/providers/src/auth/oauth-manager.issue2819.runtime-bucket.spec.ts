@@ -140,7 +140,7 @@ describe('named OAuth login runtime bucket activation', () => {
       },
     ],
   ])(
-    'reauthenticates an %s named bucket without writing the default bucket',
+    'authenticates an %s named bucket without writing the default bucket',
     async (_caseName, existingToken) => {
       const { manager, tokenStore } = createIssue1468Fixture();
       const replacement = validToken('replacement-token');

@@ -65,6 +65,20 @@ interface OwnerClassification {
   readonly liveness: OwnerLiveness;
 }
 
+type FencedOwnerRead =
+  | { readonly state: 'absent' }
+  | { readonly state: 'changed' }
+  | { readonly state: 'unchanged'; readonly owner: OwnerClassification };
+
+interface SafeRecoveryContext {
+  readonly provider: string;
+  readonly bucket: string;
+  readonly canonicalPath: string;
+  readonly fencePath: string;
+  readonly fingerprint: OwnerFingerprint;
+  readonly owner: LockOwnerMetadata;
+}
+
 type FilesystemLockStatus = Omit<AuthLockStatus, 'tokenVisibility'>;
 
 interface FilesystemLockSnapshot {
@@ -314,28 +328,91 @@ export async function inspectAuthLock(
   return { ...snapshot.status, tokenVisibility };
 }
 
+function alreadyAbsentRecovery(
+  provider: string,
+  bucket: string,
+  canonicalPath: string,
+): AuthLockRecoveryResult {
+  return {
+    provider,
+    bucket,
+    recovered: true,
+    reason: 'Lock was already absent after fenced takeover',
+    canonicalPath,
+  };
+}
+
 async function readUnchangedOwnerUnderFence(
   deps: LockRecoveryDeps,
   lockPath: string,
   fingerprint: OwnerFingerprint,
-): Promise<OwnerClassification | null> {
+): Promise<FencedOwnerRead> {
   let content: string;
   try {
     content = await deps.readRawOwnerContent(lockPath);
   } catch (error) {
     if (isErrnoCode(error, 'ENOENT')) {
-      return null;
+      return { state: 'absent' };
     }
     throw error;
   }
   if (content !== fingerprint.rawContent) {
-    return null;
+    return { state: 'changed' };
   }
   const observed = buildOwnerFingerprint(content);
   if (observed.ownerToken !== fingerprint.ownerToken) {
-    return null;
+    return { state: 'changed' };
   }
-  return classifyOwner(content);
+  return { state: 'unchanged', owner: await classifyOwner(content) };
+}
+
+async function recoverDeadOwnerUnderFence(
+  deps: LockRecoveryDeps,
+  context: SafeRecoveryContext,
+): Promise<AuthLockRecoveryResult> {
+  const fenceResult = await deps.tryWinFence(context.fencePath, context.owner);
+  if (fenceResult === 'lost') {
+    return notRecovered(
+      context.provider,
+      context.bucket,
+      context.canonicalPath,
+      'Another contender holds the recovery fence',
+    );
+  }
+
+  const postFenceOwner = await readUnchangedOwnerUnderFence(
+    deps,
+    context.canonicalPath,
+    context.fingerprint,
+  );
+  if (postFenceOwner.state === 'absent') {
+    return alreadyAbsentRecovery(
+      context.provider,
+      context.bucket,
+      context.canonicalPath,
+    );
+  }
+  if (
+    postFenceOwner.state === 'changed' ||
+    postFenceOwner.owner.classification !== 'versioned' ||
+    postFenceOwner.owner.liveness.status !== 'dead'
+  ) {
+    return notRecovered(
+      context.provider,
+      context.bucket,
+      context.canonicalPath,
+      'Lock owner changed or is no longer provably dead during fenced recovery',
+    );
+  }
+
+  await deps.removeFileIfExists(context.canonicalPath);
+  return {
+    provider: context.provider,
+    bucket: context.bucket,
+    recovered: true,
+    reason: 'Lock recovered via fenced takeover',
+    canonicalPath: context.canonicalPath,
+  };
 }
 
 export async function recoverAuthLock(
@@ -376,49 +453,18 @@ export async function recoverAuthLock(
     );
   }
 
-  const fingerprint = buildOwnerFingerprint(rawContent);
   const owner = await buildCurrentProcessOwnerMetadata(500);
-  const fencePath = `${status.canonicalPath}.fence`;
+  const context: SafeRecoveryContext = {
+    provider,
+    bucket: resolvedBucket,
+    canonicalPath: status.canonicalPath,
+    fencePath: `${status.canonicalPath}.fence`,
+    fingerprint: buildOwnerFingerprint(rawContent),
+    owner,
+  };
   return runWithFenceCleanup(
-    async () => {
-      const fenceResult = await deps.tryWinFence(fencePath, owner);
-      if (fenceResult === 'lost') {
-        return notRecovered(
-          provider,
-          resolvedBucket,
-          status.canonicalPath,
-          'Another contender holds the recovery fence',
-        );
-      }
-
-      const postFenceOwner = await readUnchangedOwnerUnderFence(
-        deps,
-        status.canonicalPath,
-        fingerprint,
-      );
-      if (
-        postFenceOwner === null ||
-        postFenceOwner.classification !== 'versioned' ||
-        postFenceOwner.liveness.status !== 'dead'
-      ) {
-        return notRecovered(
-          provider,
-          resolvedBucket,
-          status.canonicalPath,
-          'Lock owner changed or is no longer provably dead during fenced recovery',
-        );
-      }
-
-      await deps.removeFileIfExists(status.canonicalPath);
-      return {
-        provider,
-        bucket: resolvedBucket,
-        recovered: true,
-        reason: 'Lock recovered via fenced takeover',
-        canonicalPath: status.canonicalPath,
-      };
-    },
-    () => deps.removeOwnedFile(fencePath, owner.ownerToken),
+    () => recoverDeadOwnerUnderFence(deps, context),
+    () => deps.removeOwnedFile(context.fencePath, owner.ownerToken),
   );
 }
 
@@ -538,9 +584,16 @@ export async function forceRecoverAuthLock(
         status.canonicalPath,
         fingerprint,
       );
+      if (postFenceOwner.state === 'absent') {
+        return alreadyAbsentRecovery(
+          provider,
+          resolvedBucket,
+          status.canonicalPath,
+        );
+      }
       const invalidOwner = validateForceRecoveryOwnerUnderFence(
         status,
-        postFenceOwner,
+        postFenceOwner.state === 'unchanged' ? postFenceOwner.owner : null,
         options,
       );
       if (invalidOwner !== null) {

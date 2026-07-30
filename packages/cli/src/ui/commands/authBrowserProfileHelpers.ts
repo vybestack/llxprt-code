@@ -136,7 +136,7 @@ export function handleManageBrowserProfile(
         type: 'message',
         messageType: 'error',
         content:
-          `Invalid profile selector: "${selector}". ` +
+          `Invalid profile selector: "${trimmedSelector}". ` +
           `Use a number from the discovered list or a profile directory name. ` +
           `Path separators, control characters, and traversal sequences (..) are not allowed.`,
       };

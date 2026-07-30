@@ -170,6 +170,42 @@ describe('auth lock recovery successor races', () => {
     ).toStrictEqual(successor);
   });
 
+  it('safe recovery succeeds when the lock disappears after winning the fence', async () => {
+    await writeOwner(deadOwner());
+    const deps = recoveryDeps(async () => {
+      await fs.unlink(lockPath);
+      return 'won';
+    });
+
+    const result = await recoverAuthLock(deps, 'codex', undefined, 'default');
+
+    expect(result).toMatchObject({
+      recovered: true,
+      reason: 'Lock was already absent after fenced takeover',
+    });
+  });
+
+  it('forced recovery succeeds when the lock disappears after winning the fence', async () => {
+    await writeOwner(deadOwner());
+    const deps = recoveryDeps(async () => {
+      await fs.unlink(lockPath);
+      return 'won';
+    });
+
+    const result = await forceRecoverAuthLock(
+      deps,
+      'codex',
+      undefined,
+      'default',
+      { acknowledgeAllStopped: true },
+    );
+
+    expect(result).toMatchObject({
+      recovered: true,
+      reason: 'Lock was already absent after fenced takeover',
+    });
+  });
+
   it('forced recovery leaves dead A untouched after losing the fence', async () => {
     const owner = deadOwner();
     await writeOwner(owner);
