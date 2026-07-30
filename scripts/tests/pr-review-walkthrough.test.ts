@@ -19,6 +19,7 @@ import {
   escapeMarkdownTableCell,
   MAX_DIFF_BYTES,
 } from '../pr-review-walkthrough.ts';
+import { buildArtifactContext } from '../pr-review-artifacts.ts';
 import { asString, parseJsonObject } from './typed-test-helpers.ts';
 
 const BACKSLASH = String.fromCharCode(92);
@@ -630,7 +631,7 @@ function setupReviewWorkspace(): {
       additions: 100,
       deletions: 10,
       changedFiles: 2,
-      commits: 1,
+      commits: [{ oid: 'abc1234', message: 'initial commit' }],
     }),
   );
 
@@ -819,4 +820,57 @@ describe('private optional-stage retry and diagnostics', () => {
     },
     PHASE_TIMEOUT,
   );
+});
+
+describe('buildArtifactContext commits normalization (gh CLI shape)', () => {
+  const basePr = {
+    number: 42,
+    title: 'Test PR',
+    body: 'body',
+    baseRefName: 'main',
+    headRefName: 'feature',
+    additions: 10,
+    deletions: 5,
+    changedFiles: 2,
+  };
+  const issues: Array<Record<string, unknown>> = [];
+  const diffs: Array<Record<string, unknown>> = [];
+  const numstat = [
+    { additions: 5, deletions: 2, filename: 'a.ts' },
+    { additions: 5, deletions: 3, filename: 'b.ts' },
+  ];
+
+  it('normalizes gh CLI commits array to a count', () => {
+    const result = buildArtifactContext(
+      {
+        ...basePr,
+        commits: [
+          { oid: 'abc', authors: [{ login: 'alice' }] },
+          { oid: 'def', authors: [{ login: 'bob' }] },
+        ],
+      },
+      issues,
+      diffs,
+      numstat,
+    );
+    const prContext = result.prContext as Record<string, unknown>;
+    expect(prContext.commits).toBe(2);
+  });
+
+  it('passes through a numeric commits value unchanged', () => {
+    const result = buildArtifactContext(
+      { ...basePr, commits: 7 },
+      issues,
+      diffs,
+      numstat,
+    );
+    const prContext = result.prContext as Record<string, unknown>;
+    expect(prContext.commits).toBe(7);
+  });
+
+  it('sets commits to undefined when missing', () => {
+    const result = buildArtifactContext(basePr, issues, diffs, numstat);
+    const prContext = result.prContext as Record<string, unknown>;
+    expect(prContext.commits).toBeUndefined();
+  });
 });
