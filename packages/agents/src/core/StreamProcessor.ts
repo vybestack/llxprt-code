@@ -530,6 +530,7 @@ export class StreamProcessor {
         durationMs,
         error,
       );
+      this.currentPromptEnvelopeEstimate = null;
       throw error;
     }
   }

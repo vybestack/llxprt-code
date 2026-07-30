@@ -151,6 +151,10 @@ export async function estimatePromptEnvelope(
     'projectionRevision',
   );
 
+  const validatedUnsupportedMedia = validateUnsupportedMedia(
+    projection.unsupportedMedia,
+  );
+
   const estimatedPromptTokens = await projection.countProjectedTokens();
   assertFiniteNonNegativeInt(estimatedPromptTokens, 'estimatedPromptTokens');
 
@@ -160,7 +164,7 @@ export async function estimatePromptEnvelope(
     protocol: projection.protocol,
     method: projection.method,
     projectionRevision: projection.projectionRevision,
-    unsupportedMedia: validateUnsupportedMedia(projection.unsupportedMedia),
+    unsupportedMedia: validatedUnsupportedMedia,
   };
   return Object.freeze(estimate);
 }

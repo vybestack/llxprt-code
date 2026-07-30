@@ -578,6 +578,9 @@ export class TurnProcessor {
       const output = toModelStreamChunk(lastResponse);
       this._applyHookToolFiltering(output, lastResponse, allowedFunctionNames);
       return output;
+    } catch (error) {
+      this.currentPromptEnvelopeEstimate = null;
+      throw error;
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);

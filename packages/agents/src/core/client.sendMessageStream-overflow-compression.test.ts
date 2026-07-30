@@ -743,5 +743,52 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
         }),
       );
     });
+
+    it('should surface the deferred finalized-envelope overflow exactly once with metadata and no preflight duplicate (issue 2755 A3 surfacing)', async () => {
+      // The provider is the authority on overflow. When the finalized provider
+      // envelope overflows, the Turn maps it to a single
+      // ContextWindowWillOverflow event. The client must propagate exactly that
+      // one event (with its metadata) and NOT add its own preflight overflow.
+      const providerEstimatedTokens = 1200;
+      const providerRemainingTokens = 1000;
+      const { request } = buildOverflowScenario(client, {
+        postCompressionBaseline: 950,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        enforcementError: new Error('unrecoverable'),
+      });
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: AgentEventType.ContextWindowWillOverflow,
+            value: {
+              estimatedRequestTokenCount: providerEstimatedTokens,
+              remainingTokenCount: providerRemainingTokens,
+            },
+          };
+        })(),
+      );
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          request,
+          new AbortController().signal,
+          'prompt-id-deferred-overflow-surfaces',
+        ),
+      );
+
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(overflowEvents[0]).toStrictEqual({
+        type: AgentEventType.ContextWindowWillOverflow,
+        value: {
+          estimatedRequestTokenCount: providerEstimatedTokens,
+          remainingTokenCount: providerRemainingTokens,
+        },
+      });
+      // No recovery content was produced once the provider overflowed.
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+    });
   });
 });

@@ -336,7 +336,9 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
 
   it('A8: provider-reported promptTokens remain authoritative after success', async () => {
     const reportedPromptTokens = 9999;
-    const { provider } = createEstimatingProvider({ reportedPromptTokens });
+    const { provider, estimateHistory } = createEstimatingProvider({
+      reportedPromptTokens,
+    });
     const fixture = createTestFixture(provider);
     const chat = buildChatSession(fixture);
 
@@ -345,12 +347,15 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     await fixture.historyService.waitForTokenUpdates();
 
     const actualTokens = fixture.historyService.getTotalTokens();
+    // The provider's reported usage is authoritative for the total — not the
+    // pre-send estimate, and not a derivation of cached tokens.
     expect(actualTokens).toBe(reportedPromptTokens);
-    expect(actualTokens).not.toBe(reportedPromptTokens + 400);
 
     const estimate = chat.getPromptEnvelopeEstimate();
     expect(estimate).not.toBeNull();
-    expect(estimate!.estimatedPromptTokens).not.toBe(reportedPromptTokens);
+    const estimateTokens = estimate!.estimatedPromptTokens;
+    expect(estimateTokens).toBe(estimateHistory[estimateHistory.length - 1]);
+    expect(actualTokens).not.toBe(estimateTokens);
   });
 
   it('A6: system instruction content affects the estimate', async () => {
@@ -376,10 +381,37 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     const chat = buildChatSession(fixture);
 
     await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'prompt-1');
-    const estimate = chat.getPromptEnvelopeEstimate();
-    expect(estimate).not.toBeNull();
-    expect(estimate!.estimatedPromptTokens).toBeGreaterThan(0);
-    expect(estimateHistory.length).toBeGreaterThanOrEqual(1);
+    const withoutToolsEstimate = chat.getPromptEnvelopeEstimate()!;
+
+    const largeToolSet = [
+      {
+        functionDeclarations: Array.from({ length: 8 }, (_, i) => ({
+          name: `tool_${i}`,
+          description: `Tool number ${i} with a lengthy description that adds prompt material so the projected envelope grows. This tool performs an action relevant to the conversation and its schema is non-trivial.`,
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              arg: { type: 'string', description: `argument for tool ${i}` },
+            },
+          },
+        })),
+      },
+    ];
+
+    await chat.sendMessage(
+      { message: [{ text: 'Hello' }], config: { tools: largeToolSet } },
+      'prompt-with-tools',
+    );
+    const withToolsEstimate = chat.getPromptEnvelopeEstimate()!;
+
+    expect(withoutToolsEstimate.estimatedPromptTokens).toBeGreaterThan(0);
+    expect(withToolsEstimate.estimatedPromptTokens).toBeGreaterThan(
+      withoutToolsEstimate.estimatedPromptTokens,
+    );
+    expect(estimateHistory.length).toBeGreaterThanOrEqual(2);
+    expect(estimateHistory[estimateHistory.length - 1]).toBeGreaterThan(
+      estimateHistory[0],
+    );
   });
 
   it('A7: produces a pre-send estimate for streaming sends', async () => {
@@ -548,5 +580,79 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'test-prompt');
 
     expect(chat.getPromptEnvelopeEstimate()).toBeNull();
+  });
+
+  it('clears the failed-request estimate when the provider call throws, preserving the prior authoritative token count (issue #2817)', async () => {
+    const reportedPromptTokens = 1234;
+    let attempt = 0;
+    const failingThenRecoveringProvider: IProvider = {
+      name: 'failing-call-provider',
+      isDefault: true,
+      getDefaultModel: () => 'test-model',
+      getCurrentModel: () => 'test-model',
+      getModels: () => Promise.resolve([]),
+      getServerTools: () => [],
+      invokeServerTool: () => Promise.resolve(undefined),
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        const token = options.promptEnvelopeTransportToken;
+        if (token === undefined) {
+          throw new Error('transport did not receive the prepared envelope');
+        }
+        attempt += 1;
+        if (attempt === 1) {
+          throw new Error('upstream provider exploded after estimation');
+        }
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Recovered response.' }],
+          metadata: {
+            usage: {
+              promptTokens: reportedPromptTokens,
+              completionTokens: 5,
+              totalTokens: reportedPromptTokens + 5,
+            },
+          },
+        };
+      },
+      async projectPromptEnvelope(
+        options: GenerateChatOptions,
+      ): Promise<PromptEnvelopeProjection> {
+        const serialized = JSON.stringify(options.contents);
+        const tokenCount = Math.max(Math.ceil(serialized.length / 4), 1);
+        const transportToken = Object.freeze({});
+        return {
+          model: 'test-model',
+          protocol: 'anthropic-messages',
+          method: 'messages/v1',
+          projectionRevision: 1,
+          unsupportedMedia: [],
+          transportToken,
+          countProjectedTokens: () => Promise.resolve(tokenCount),
+        };
+      },
+    };
+
+    const fixture = createTestFixture(failingThenRecoveringProvider);
+    const chat = buildChatSession(fixture);
+
+    await expect(
+      chat.sendMessage({ message: [{ text: 'Boom' }] }, 'prompt-fails'),
+    ).rejects.toThrow('upstream provider exploded after estimation');
+
+    expect(chat.getPromptEnvelopeEstimate()).toBeNull();
+
+    await chat.sendMessage(
+      { message: [{ text: 'Now succeed' }] },
+      'prompt-succeeds',
+    );
+
+    const estimate = chat.getPromptEnvelopeEstimate();
+    expect(estimate).not.toBeNull();
+    expect(estimate!.estimatedPromptTokens).toBeGreaterThan(0);
+
+    await fixture.historyService.waitForTokenUpdates();
+    expect(fixture.historyService.getTotalTokens()).toBe(reportedPromptTokens);
   });
 });

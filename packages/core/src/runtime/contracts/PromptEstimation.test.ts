@@ -285,6 +285,30 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
     );
   });
 
+  it('fail-fast: validates synchronous projection identity (including unsupportedMedia) before awaiting countProjectedTokens', async () => {
+    // A projection with invalid unsupportedMedia must reject WITHOUT ever
+    // paying for the async token count — proving synchronous fields are
+    // validated up front (fail-fast before async work).
+    let tokenCountCalls = 0;
+    const projection = {
+      model: 'gpt-4o',
+      protocol: 'openai-chat',
+      method: 'chat/completions/v1',
+      projectionRevision: 1,
+      unsupportedMedia: 'not-an-array',
+      transportToken: Object.freeze({}),
+      countProjectedTokens: () => {
+        tokenCountCalls += 1;
+        return Promise.resolve(10);
+      },
+    } as unknown as PromptEnvelopeProjection;
+
+    await expect(estimatePromptEnvelope(projection)).rejects.toThrow(
+      /unsupportedMedia must be an array/i,
+    );
+    expect(tokenCountCalls).toBe(0);
+  });
+
   it('fail-fast: rejects a projection with a negative projection revision', async () => {
     const projection = {
       model: 'gpt-4o',

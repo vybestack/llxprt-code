@@ -432,7 +432,7 @@ describe('AgentClient (client.ts)', () => {
         lastPromptTokenCount,
       );
 
-      const estimateSpy = vi.fn().mockResolvedValue(50);
+      const estimateSpy = vi.fn();
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
@@ -558,8 +558,8 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should avoid obsolete structured fallback when the legacy tokenizer would throw', async () => {
-      // Arrange — the obsolete client tokenizer would throw if invoked.
+    it('should not invoke the legacy client tokenizer during preflight when it would throw (issue 2402)', async () => {
+      // Arrange — the client tokenizer would throw if invoked during preflight.
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       const lastPromptTokenCount = 0;
@@ -602,7 +602,7 @@ describe('AgentClient (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalled();
     });
 
-    it('should ignore inlineData/fileData in the structured fallback to avoid false positives', async () => {
+    it('should not let inlineData/fileData binary payloads inflate the preflight estimate (issue 2402)', async () => {
       // Arrange — large binary payloads must not inflate the fallback estimate.
       const MOCKED_TOKEN_LIMIT = 1000;
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);

@@ -309,8 +309,8 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         timeout: 100,
       });
       await vi.advanceTimersByTimeAsync(timeoutMs + 1);
-      expect(firstTransportSignal?.aborted).toBe(true);
       const firstError = await firstSend;
+      expect(firstTransportSignal?.aborted).toBe(true);
       expect(firstError).toBeInstanceOf(Error);
       expect(firstError).toMatchObject({ name: 'StreamIdleTimeoutError' });
       expect(String(firstError)).toContain('Stream idle timeout');

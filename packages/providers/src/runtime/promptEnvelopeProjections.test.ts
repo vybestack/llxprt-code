@@ -447,17 +447,28 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
 });
 
 describe('projection token count consistency (issue #2817 A10)', () => {
-  it('estimates the same request body consistently across calls', async () => {
-    const requestBody = {
+  it('estimates equal request bodies consistently across calls without relying on input identity or mutation (purity)', async () => {
+    const buildRequestBody = () => ({
       model: 'claude-3-5-sonnet',
       messages: [{ role: 'user', content: 'Consistent test message' }],
-    };
+    });
 
+    // Separate, structurally-equal objects: if the projection mutated its
+    // input or cached by identity, these would diverge.
     const tokens1 =
-      await projectAnthropicPromptEnvelope(requestBody).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(
+        buildRequestBody(),
+      ).countProjectedTokens();
     const tokens2 =
-      await projectAnthropicPromptEnvelope(requestBody).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(
+        buildRequestBody(),
+      ).countProjectedTokens();
+    const tokens3 =
+      await projectAnthropicPromptEnvelope(
+        buildRequestBody(),
+      ).countProjectedTokens();
     expect(tokens1).toBe(tokens2);
+    expect(tokens2).toBe(tokens3);
   });
 
   it('produces a positive token count for any non-empty prompt', async () => {
