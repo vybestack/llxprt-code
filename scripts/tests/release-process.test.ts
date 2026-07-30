@@ -159,7 +159,7 @@ describe('.github/workflows/release.yml', () => {
     const quotaIndex = releaseSteps.indexOf(quota);
     const releaseNotesIndex = releaseSteps.indexOf(releaseNotes);
     expect(asString(quota['if']).replace(/\s+/g, ' ').trim()).toBe(
-      "github.event.inputs.force_skip_tests != 'true' || (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')",
+      "( github.event.inputs.force_skip_tests != 'true' || (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true') ) && steps.duplicate_check.outputs.is_duplicate != 'true'",
     );
     expect(quotaIndex >= 0 && releaseNotesIndex > quotaIndex).toBe(true);
     expect(asString(quota['continue-on-error'])).toBe(
@@ -171,6 +171,42 @@ describe('.github/workflows/release.yml', () => {
     );
     expect(asRecord(quota.env).OPENAI_API_KEY).toBe(
       '${{ secrets[vars.KEY_VAR_NAME] }}',
+    );
+  });
+
+  it('skips the release pipeline for scheduled nightlies when the version is already published', () => {
+    const duplicateCheck = stepById('duplicate_check');
+    expect(asString(duplicateCheck['if'])).toBe(
+      "github.event_name == 'schedule'",
+    );
+    expect(asString(duplicateCheck.run)).toContain('npm view');
+    expect(asString(duplicateCheck.run)).toContain(
+      '@vybestack/llxprt-code-tools@',
+    );
+
+    const guardedSteps = [
+      stepById('quota'),
+      stepByName('Run Preflight Checks'),
+      stepByName('Run Integration Tests'),
+      stepByName('Update package versions'),
+      stepByName('Bind release dependencies'),
+      stepByName('Build and Prepare Packages'),
+      stepByName('Generate Release Notes'),
+      stepByName('Publish @vybestack/llxprt-code-tools'),
+      stepByName('Publish @vybestack/llxprt-code'),
+      stepByName('Prepare sandbox package tarballs'),
+      stepByName('Build and push sandbox image'),
+      stepByName('Create GitHub Release and Tag'),
+    ];
+    for (const step of guardedSteps) {
+      expect(
+        asString(step['if']),
+        `${step.name ?? '<unnamed>'} should respect the duplicate-nightly skip`,
+      ).toContain("steps.duplicate_check.outputs.is_duplicate != 'true'");
+    }
+
+    expect(asString(stepByName('Create Issue on Failure')['if'])).toBe(
+      'failure()',
     );
   });
 
