@@ -18,6 +18,7 @@ interface MarkdownDisplayProps {
   availableTerminalHeight?: number;
   terminalWidth: number;
   renderMarkdown?: boolean;
+  workspaceDirectories?: readonly string[];
 }
 
 // Constants for Markdown parsing and rendering
@@ -33,6 +34,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
   availableTerminalHeight,
   terminalWidth,
   renderMarkdown = true,
+  workspaceDirectories,
 }) => {
   const settings = useSettings();
   const responseColor = theme.text.response;
@@ -71,6 +73,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     availableTerminalHeight,
     terminalWidth,
     responseColor,
+    workspaceDirectories,
   );
 
   if (finalCodeBlockState.inCodeBlock) {
@@ -231,6 +234,7 @@ function processLineEntry(
   tableHeaders: string[],
   tableRows: string[][],
   responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
   addContentBlock: (block: React.ReactNode) => void,
   applyLineResult: (result: LineProcessResult, index: number) => void,
 ): CodeBlockState {
@@ -272,6 +276,7 @@ function processLineEntry(
       tableRows,
       regexes,
       responseColor,
+      workspaceDirectories,
     ),
     index,
   );
@@ -285,6 +290,7 @@ function processLines(
   availableTerminalHeight: number | undefined,
   terminalWidth: number,
   responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
 ): ProcessLinesResult {
   const contentBlocks: React.ReactNode[] = [];
   const renderState = { lastLineEmpty: true };
@@ -343,6 +349,7 @@ function processLines(
       tableHeaders,
       tableRows,
       responseColor,
+      workspaceDirectories,
       addContentBlock,
       applyLineResult,
     );
@@ -369,6 +376,7 @@ interface LineProcessResult {
 function renderHeaderNode(
   headerMatch: RegExpMatchArray,
   responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
 ): React.ReactNode {
   const level = headerMatch[1].length;
   const headerText = headerMatch[2];
@@ -376,11 +384,21 @@ function renderHeaderNode(
     case 1:
     case 2:
       return (
-        <RenderInline text={headerText} defaultColor={theme.text.link} bold />
+        <RenderInline
+          text={headerText}
+          defaultColor={theme.text.link}
+          bold
+          workspaceDirectories={workspaceDirectories}
+        />
       );
     case 3:
       return (
-        <RenderInline text={headerText} defaultColor={responseColor} bold />
+        <RenderInline
+          text={headerText}
+          defaultColor={responseColor}
+          bold
+          workspaceDirectories={workspaceDirectories}
+        />
       );
     case 4:
       return (
@@ -388,10 +406,17 @@ function renderHeaderNode(
           text={headerText}
           defaultColor={theme.text.secondary}
           italic
+          workspaceDirectories={workspaceDirectories}
         />
       );
     default:
-      return <RenderInline text={headerText} defaultColor={responseColor} />;
+      return (
+        <RenderInline
+          text={headerText}
+          defaultColor={responseColor}
+          workspaceDirectories={workspaceDirectories}
+        />
+      );
   }
 }
 
@@ -403,6 +428,7 @@ function processTableLine(
   currentTableHeaders: string[],
   currentTableRows: string[][],
   responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
 ): LineProcessResult {
   const empty: LineProcessResult = {
     block: null,
@@ -448,7 +474,12 @@ function processTableLine(
     const block =
       line.trim().length > 0 ? (
         <Box key={key}>
-          <RenderInline text={line} defaultColor={responseColor} wrap="wrap" />
+          <RenderInline
+            text={line}
+            defaultColor={responseColor}
+            wrap="wrap"
+            workspaceDirectories={workspaceDirectories}
+          />
         </Box>
       ) : null;
     return {
@@ -464,11 +495,71 @@ function processTableLine(
   return empty;
 }
 
+function renderListItemBlock(
+  key: string,
+  itemText: string,
+  type: 'ul' | 'ol',
+  marker: string,
+  leadingWhitespace: string,
+  workspaceDirectories: readonly string[] | undefined,
+): React.ReactNode {
+  return (
+    <RenderListItem
+      key={key}
+      itemText={itemText}
+      type={type}
+      marker={marker}
+      leadingWhitespace={leadingWhitespace}
+      workspaceDirectories={workspaceDirectories}
+    />
+  );
+}
+
+function renderHrBlock(key: string): React.ReactNode {
+  return (
+    <Box key={key}>
+      <Text color={theme.ui.comment}>---</Text>
+    </Box>
+  );
+}
+
+function renderHeaderBlock(
+  key: string,
+  headerMatch: RegExpMatchArray,
+  responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
+): React.ReactNode {
+  return (
+    <Box key={key}>
+      {renderHeaderNode(headerMatch, responseColor, workspaceDirectories)}
+    </Box>
+  );
+}
+
+function renderParagraphBlock(
+  key: string,
+  line: string,
+  responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
+): React.ReactNode {
+  return (
+    <Box key={key}>
+      <RenderInline
+        text={line}
+        defaultColor={responseColor}
+        wrap="wrap"
+        workspaceDirectories={workspaceDirectories}
+      />
+    </Box>
+  );
+}
+
 function processNonTableLine(
   line: string,
   key: string,
   matches: LineMatchResult,
   responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
 ): LineProcessResult {
   const empty: LineProcessResult = {
     block: null,
@@ -480,23 +571,17 @@ function processNonTableLine(
   };
 
   if (matches.hrMatch) {
-    return {
-      ...empty,
-      block: (
-        <Box key={key}>
-          <Text color={theme.ui.comment}>---</Text>
-        </Box>
-      ),
-    };
+    return { ...empty, block: renderHrBlock(key) };
   }
 
   if (matches.headerMatch) {
     return {
       ...empty,
-      block: (
-        <Box key={key}>
-          {renderHeaderNode(matches.headerMatch, responseColor)}
-        </Box>
+      block: renderHeaderBlock(
+        key,
+        matches.headerMatch,
+        responseColor,
+        workspaceDirectories,
       ),
     };
   }
@@ -504,14 +589,13 @@ function processNonTableLine(
   if (matches.ulMatch) {
     return {
       ...empty,
-      block: (
-        <RenderListItem
-          key={key}
-          itemText={matches.ulMatch[3]}
-          type="ul"
-          marker={matches.ulMatch[2]}
-          leadingWhitespace={matches.ulMatch[1]}
-        />
+      block: renderListItemBlock(
+        key,
+        matches.ulMatch[3],
+        'ul',
+        matches.ulMatch[2],
+        matches.ulMatch[1],
+        workspaceDirectories,
       ),
     };
   }
@@ -519,14 +603,13 @@ function processNonTableLine(
   if (matches.olMatch) {
     return {
       ...empty,
-      block: (
-        <RenderListItem
-          key={key}
-          itemText={matches.olMatch[3]}
-          type="ol"
-          marker={matches.olMatch[2]}
-          leadingWhitespace={matches.olMatch[1]}
-        />
+      block: renderListItemBlock(
+        key,
+        matches.olMatch[3],
+        'ol',
+        matches.olMatch[2],
+        matches.olMatch[1],
+        workspaceDirectories,
       ),
     };
   }
@@ -537,11 +620,7 @@ function processNonTableLine(
 
   return {
     ...empty,
-    block: (
-      <Box key={key}>
-        <RenderInline text={line} defaultColor={responseColor} wrap="wrap" />
-      </Box>
-    ),
+    block: renderParagraphBlock(key, line, responseColor, workspaceDirectories),
   };
 }
 
@@ -556,6 +635,7 @@ function processLine(
   currentTableRows: string[][],
   regexes: MarkdownRegexes,
   responseColor: string,
+  workspaceDirectories: readonly string[] | undefined,
 ): LineProcessResult {
   if (matches.tableRowMatch && !currentInTable) {
     if (
@@ -570,12 +650,18 @@ function processLine(
         currentTableHeaders,
         currentTableRows,
         responseColor,
+        workspaceDirectories,
       );
     }
     return {
       block: (
         <Box key={key}>
-          <RenderInline text={line} defaultColor={responseColor} wrap="wrap" />
+          <RenderInline
+            text={line}
+            defaultColor={responseColor}
+            wrap="wrap"
+            workspaceDirectories={workspaceDirectories}
+          />
         </Box>
       ),
       emptyLine: false,
@@ -595,10 +681,17 @@ function processLine(
       currentTableHeaders,
       currentTableRows,
       responseColor,
+      workspaceDirectories,
     );
   }
 
-  return processNonTableLine(line, key, matches, responseColor);
+  return processNonTableLine(
+    line,
+    key,
+    matches,
+    responseColor,
+    workspaceDirectories,
+  );
 }
 
 interface RenderCodeBlockProps {
@@ -684,6 +777,7 @@ interface RenderListItemProps {
   type: 'ul' | 'ol';
   marker: string;
   leadingWhitespace?: string;
+  workspaceDirectories?: readonly string[];
 }
 
 const RenderListItemInternal: React.FC<RenderListItemProps> = ({
@@ -691,6 +785,7 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
   type,
   marker,
   leadingWhitespace = '',
+  workspaceDirectories,
 }) => {
   const prefix = type === 'ol' ? `${marker}. ` : `${marker} `;
   const prefixWidth = prefix.length;
@@ -710,6 +805,7 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
           text={itemText}
           defaultColor={listResponseColor}
           wrap="wrap"
+          workspaceDirectories={workspaceDirectories}
         />
       </Box>
     </Box>
