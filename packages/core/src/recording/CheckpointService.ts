@@ -285,11 +285,9 @@ export class CheckpointService {
       ].sort((left, right) => left.localeCompare(right));
       const locks = await this.acquireSessionLocks(chatsDir, sessionIds);
       try {
-        const refreshed = await SessionDiscovery.listContinueTargets(
-          chatsDir,
-          projectHash,
-        );
-        const refreshedCollisions = refreshed.filter(
+        const refreshedCollisions = (
+          await SessionDiscovery.listContinueTargets(chatsDir, projectHash)
+        ).filter(
           (target) =>
             targetName(target) === trimmed &&
             !isSameReference(target, operation),
