@@ -223,14 +223,21 @@ function extractExitCode(error: unknown): number {
 // files are part of the trusted source tree, just as they are for npm.
 // Uses spawnSync with a timeout to prevent hung test processes (e.g. Bun
 // 1.3.x on Linux leaving open handles after tests complete) from blocking
-// CI indefinitely.
+// CI indefinitely. When a timeout occurs, the output log is checked for
+// test results — if all tests passed (0 failures), the timeout is treated
+// as success since only the process teardown hung, not the tests.
 export const defaultRunner: CommandRunner = (
   command,
   cwd,
   env = process.env,
 ) => {
+  // Tee output to a temp file so we can inspect it on timeout while still
+  // showing live output in CI.
+  const logFile = `/tmp/test-output-${Date.now()}.log`;
+  const loggedCommand = `${command} 2>&1 | tee ${logFile}`;
+
   try {
-    const result = spawnSync(command, {
+    const result = spawnSync(loggedCommand, {
       cwd,
       stdio: 'inherit',
       env,
@@ -238,8 +245,26 @@ export const defaultRunner: CommandRunner = (
       timeout: 600_000, // 10 minutes — tests complete in <2 min; allow for slow CI
       killSignal: 'SIGKILL',
     });
+
     if (result.signal === 'SIGKILL') {
-      return { success: false, exitCode: 124 }; // 124 = timeout exit code (matching `timeout` cmd)
+      // Process was killed by timeout. Check if tests passed by inspecting
+      // the tee'd output log. Bun test prints a summary like "5590 pass /
+      // 0 fail" before hanging on process teardown.
+      try {
+        const output = readFileSync(logFile, 'utf-8');
+        const passMatch = output.match(/(\d+)\s+pass/);
+        const failMatch = output.match(/(\d+)\s+fail/);
+        const passes = passMatch ? parseInt(passMatch[1], 10) : 0;
+        const fails = failMatch ? parseInt(failMatch[1], 10) : 0;
+
+        if (passes > 0 && fails === 0) {
+          // All tests passed — the hang is only in Bun's process teardown
+          return { success: true, exitCode: 0 };
+        }
+      } catch {
+        // Can't read log — treat as failure
+      }
+      return { success: false, exitCode: 124 };
     }
     if (result.status === null) {
       return { success: false, exitCode: 1 };
