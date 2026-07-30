@@ -640,7 +640,7 @@ describe('Config LSP Integration (P33)', () => {
       const config = new Config(params);
 
       // Should not throw
-      await expect(initializeTestConfig(config)).resolves.toBeFalsy();
+      await initializeTestConfig(config);
 
       // Service is created and start was attempted (empty servers is valid)
       const lspClient = config.getLspServiceClient();
@@ -726,6 +726,7 @@ describe('Config LSP Integration (P33)', () => {
 
   describe('Shutdown without initialization', () => {
     it('should handle shutdown gracefully when service was never started', async () => {
+      expect.assertions(0);
       const params = createBaseConfigParams({
         lsp: false,
       });
@@ -733,7 +734,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       // Should not throw even though no service exists
-      await expect(config.shutdownLspService()).resolves.toBeFalsy();
+      await config.shutdownLspService();
     });
   });
 
