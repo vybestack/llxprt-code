@@ -65,6 +65,7 @@ interface ResolutionState {
   contentLabelsForDisplay: string[];
   absoluteToRelativePathMap: Map<string, string>;
   ignoredByReason: IgnoredByReason;
+  selectedSubagents: string[];
 }
 
 interface ResolveCommandsResult extends ResolutionState {
@@ -78,6 +79,7 @@ interface ResolveCommandsParams {
   globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
+  subagentNames: readonly string[];
 }
 
 interface SingleResolveParams extends ResolveCommandsParams {
@@ -143,6 +145,7 @@ function createResolutionState(): ResolutionState {
     contentLabelsForDisplay: [],
     absoluteToRelativePathMap: new Map<string, string>(),
     ignoredByReason: { git: [], llxprt: [], both: [] },
+    selectedSubagents: [],
   };
 }
 
@@ -154,6 +157,7 @@ async function resolveSingleAtCommand({
   globTool,
   signal,
   onDebugMessage,
+  subagentNames,
 }: SingleResolveParams): Promise<string | undefined> {
   if (originalAtPath === '@') {
     onDebugMessage(
@@ -164,6 +168,8 @@ async function resolveSingleAtCommand({
   const pathName = originalAtPath.substring(1);
   if (!pathName)
     return `Error: Invalid @ command '${originalAtPath}'. No path specified.`;
+  if (recordSubagentMatch(subagentNames, state, originalAtPath, pathName))
+    return undefined;
   if (recordResourceMatch(resourceRegistry, state, originalAtPath, pathName))
     return undefined;
   const pathError = validatePathWithinWorkspace(
@@ -183,6 +189,19 @@ async function resolveSingleAtCommand({
     pathName,
   );
   return undefined;
+}
+
+function recordSubagentMatch(
+  subagentNames: readonly string[],
+  state: ResolutionState,
+  originalAtPath: string,
+  pathName: string,
+): boolean {
+  if (!subagentNames.includes(pathName)) return false;
+  state.atPathToResolvedSpecMap.set(originalAtPath, pathName);
+  if (state.selectedSubagents.includes(pathName)) return true;
+  state.selectedSubagents.push(pathName);
+  return true;
 }
 
 function recordResourceMatch(

@@ -17,6 +17,7 @@ import {
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import { useTestHarnessForAtCompletion } from './useAtCompletion-test-helpers.js';
+import { CommandKind } from '../commands/types.js';
 
 describe('useAtCompletion (subagent/filtering/debounce)', () => {
   let testRootDir: string;
@@ -80,6 +81,31 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
           'typescriptexpert',
         ]),
       );
+    });
+
+    it('tags subagent suggestions with kind: CommandKind.SUBAGENT', async () => {
+      testRootDir = await createTmpDir({});
+
+      const subagentConfig = {
+        ...mockConfig,
+        getSubagentManager: () => ({
+          listSubagents: () => Promise.resolve(['typescriptexpert']),
+        }),
+      } as unknown as Config;
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(true, '', subagentConfig, testRootDir),
+      );
+
+      await waitFor(() => {
+        expect(result.current.suggestions.length).toBeGreaterThan(0);
+      });
+
+      const subagentSuggestions = result.current.suggestions.filter(
+        (s) => s.description === 'subagent',
+      );
+      expect(subagentSuggestions.length).toBe(1);
+      expect(subagentSuggestions[0].kind).toBe(CommandKind.SUBAGENT);
     });
 
     it('should filter subagent suggestions by pattern', async () => {

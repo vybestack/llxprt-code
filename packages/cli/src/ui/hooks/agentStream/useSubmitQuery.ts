@@ -40,7 +40,7 @@ import {
   createCliModelIdentityRuntime,
 } from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 
 export type SubmissionDisposition =
   | 'consumed'
@@ -126,6 +126,7 @@ export interface UseSubmitQueryDeps {
   lastModelInfoRef: React.MutableRefObject<string | null>;
   lastModelIdentityRef: React.MutableRefObject<string | null>;
   abortControllerRef: React.MutableRefObject<AbortController | null>;
+  subagentManager?: UiSubagentManager;
   /**
    * Ref to the Agent event-stream runner. Held as a ref to break the circular
    * dependency: runStream comes from useAgentEventStream which needs
@@ -201,6 +202,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     lastProfileNameRef: deps.lastProfileNameRef,
     lastModelInfoRef: deps.lastModelInfoRef,
     lastModelIdentityRef: deps.lastModelIdentityRef,
+    subagentManager: deps.subagentManager,
   });
 
   const processAgentEvent = useProcessAgentEvent(deps, handlers);
