@@ -176,7 +176,32 @@ describe('Logger JSONL format', () => {
       ),
     ).toBe(true);
     expect(hasMalformedBackup(dirContents)).toBe(false);
+
+    // The active file should have been rewritten with only valid entries.
+    const activeContent = await readLogFile();
+    expect(activeContent).toHaveLength(2);
+    expect(activeContent[0].message).toBe('Valid1');
+    expect(activeContent[1].message).toBe('Valid2');
+
+    // Write a new message and verify all entries survive on disk.
+    await newLogger.logMessage(MessageSenderType.USER, 'After recovery');
+    const afterWrite = await readLogFile();
+    expect(afterWrite).toHaveLength(3);
+    expect(afterWrite[0].message).toBe('Valid1');
+    expect(afterWrite[1].message).toBe('Valid2');
+    expect(afterWrite[2].message).toBe('After recovery');
+
+    // Reopen a fresh logger and verify entries persist.
     newLogger.close();
+    const reopened = new Logger(
+      'partial-corruption',
+      new Storage(process.cwd()),
+    );
+    await reopened.initialize();
+    const reopenedLogs = reopened['logs'];
+    expect(reopenedLogs).toHaveLength(3);
+    expect(reopenedLogs[2].message).toBe('After recovery');
+    reopened.close();
   });
 
   it('should migrate a legacy pretty-printed JSON array to JSONL on first write', async () => {
@@ -291,15 +316,16 @@ describe('Logger JSONL format', () => {
 
     const logsFromFile = await readLogFile();
     expect(logsFromFile.length).toBe(4);
-    const messageIdsInFile = logsFromFile
-      .map((log) => log.messageId)
-      .sort((a, b) => a - b);
-    expect(messageIdsInFile).toStrictEqual([0, 1, 2, 3]);
-
-    const messagesInFile = logsFromFile
-      .sort((a, b) => a.messageId - b.messageId)
-      .map((l) => l.message);
-    expect(messagesInFile).toStrictEqual(['L1M1', 'L2M1', 'L1M2', 'L2M2']);
+    // Verify physical on-disk ordering (not sorted) to catch append bugs.
+    expect(logsFromFile.map((log) => log.messageId)).toStrictEqual([
+      0, 1, 2, 3,
+    ]);
+    expect(logsFromFile.map((log) => log.message)).toStrictEqual([
+      'L1M1',
+      'L2M1',
+      'L1M2',
+      'L2M2',
+    ]);
 
     logger1.close();
     logger2.close();
@@ -308,21 +334,28 @@ describe('Logger JSONL format', () => {
   it('should not throw, not increment messageId, and log error if appending to file fails', async () => {
     vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
     const initialMessageId = logger['messageId'];
-    const initialLogCount = logger['logs'].length;
 
+    // Log a setup message so the file exists and the read path succeeds.
     await logger.logMessage(MessageSenderType.USER, 'setup message');
     expect(logger['messageId']).toBe(initialMessageId + 1);
+    const initialLogCount = logger['logs'].length;
 
-    const logFilePath = logger['logFilePath']!;
-    await fs.unlink(logFilePath);
-    await fs.mkdir(logFilePath);
+    // Inject an append failure AFTER the read succeeds by stubbing the
+    // internal append method.
+    const appendSpy = vi
+      .spyOn(logger as never, '_appendJsonlSync')
+      .mockImplementation(() => {
+        throw new Error('Injected append failure');
+      });
 
     try {
       await logger.logMessage(MessageSenderType.USER, 'test fail write');
+      // messageId must NOT advance because the write failed.
       expect(logger['messageId']).toBe(initialMessageId + 1);
-      expect(logger['logs'].length).toBe(initialLogCount + 1);
+      // The in-memory cache must NOT include the failed entry.
+      expect(logger['logs'].length).toBe(initialLogCount);
     } finally {
-      await fs.rm(logFilePath, { recursive: true, force: true });
+      appendSpy.mockRestore();
     }
   });
 });

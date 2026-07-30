@@ -12,6 +12,7 @@ import {
   appendFileSync,
   renameSync,
   unlinkSync,
+  copyFileSync,
   statSync,
   openSync,
   readSync,
@@ -232,9 +233,13 @@ export class Logger {
       const { entries, skipped } = this._parseJsonl(trimmed);
       if (skipped > 0 && this.logFilePath) {
         debugLogger.debug(
-          `Backing up log file with ${skipped} corrupted line(s) before returning valid entries.`,
+          `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
         );
-        this._backupCorruptedLogFileSync('partial_corruption');
+        const backedUp = this._backupCorruptedLogFileSync('partial_corruption');
+        if (backedUp) {
+          // Rewrite the active file so only valid entries remain on disk.
+          this._writeJsonlAtomicSync(entries);
+        }
       }
       return entries;
     } catch (parseError) {
@@ -311,23 +316,25 @@ export class Logger {
     }
   }
 
+  /**
+   * Copy the current log file to a timestamped backup (does NOT remove the
+   * original). Using copy instead of rename ensures the active file survives
+   * backup so callers can safely rewrite it with recovered entries.
+   */
   private _backupCorruptedLogFileSync(reason: string): boolean {
     if (!this.logFilePath) return false;
     const backupPath = `${this.logFilePath}.${reason}.${process.pid}.${Date.now()}.bak`;
     try {
-      renameSync(this.logFilePath, backupPath);
-      debugLogger.debug(`Backed up corrupted log file to ${backupPath}`);
+      copyFileSync(this.logFilePath, backupPath);
+      debugLogger.debug(`Backed up log file to ${backupPath}`);
       return true;
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
-      // ENOENT is benign — file was already gone.
+      // ENOENT means the file was already gone — nothing to back up.
       if (nodeError.code === 'ENOENT') {
         return true;
       }
-      debugLogger.debug(
-        `Failed to back up corrupted log file to ${backupPath}:`,
-        error,
-      );
+      debugLogger.debug(`Failed to back up log file to ${backupPath}:`, error);
       return false;
     }
   }
@@ -348,21 +355,27 @@ export class Logger {
     if (!this.logFilePath) {
       return;
     }
-    // Read the raw file content for potential backup.
-    let rawContent: string | null = null;
+    let rawContent: string;
     try {
       rawContent = readFileSync(this.logFilePath, 'utf-8');
     } catch {
-      // Can't read — nothing to migrate.
       return;
     }
-    const entries = this._parseLogContentSync(rawContent.trim());
-    // If the parsed entries don't match the raw content, preserve the
-    // original as a backup before rewriting.
-    const serialized = this._toJsonl(entries);
-    if (serialized.trim() !== rawContent.trim() && entries.length > 0) {
-      this._backupCorruptedLogFileSync('pre_migration');
+    const trimmed = rawContent.trim();
+    if (trimmed.length === 0 || !trimmed.startsWith('[')) {
+      return;
     }
+    // Always back up the original legacy file before rewriting. Using copy
+    // (not rename) ensures the active file survives even if the JSONL write
+    // fails below — the caller can then retry on the next write.
+    const backedUp = this._backupCorruptedLogFileSync('pre_migration');
+    if (!backedUp) {
+      debugLogger.debug(
+        'Failed to back up legacy file before migration — skipping migration to preserve data.',
+      );
+      return;
+    }
+    const entries = this._parseLegacyJsonArray(trimmed) ?? [];
     this._writeJsonlAtomicSync(entries);
   }
 
@@ -375,6 +388,11 @@ export class Logger {
     if (!this._formatMigrated) {
       if (this._isLegacyFormat()) {
         this._migrateLegacyToJsonl();
+        // If migration still failed (e.g. backup failed), don't cache — let
+        // the next write attempt retry.
+        if (this._isLegacyFormat()) {
+          throw new Error('Legacy migration failed; will retry on next write.');
+        }
       }
       this._formatMigrated = true;
     }
@@ -443,10 +461,7 @@ export class Logger {
       try {
         const { entries, skipped } = this._parseJsonl(trimmed);
         if (skipped > 0) {
-          debugLogger.debug(
-            `Backing up log file with ${skipped} corrupted line(s) before returning valid entries.`,
-          );
-          await this._backupCorruptedLogFile('partial_corruption');
+          await this._recoverPartialCorruption(entries, skipped);
         }
         return entries;
       } catch (parseError) {
@@ -477,19 +492,33 @@ export class Logger {
     if (!this.logFilePath) return false;
     const backupPath = `${this.logFilePath}.${reason}.${process.pid}.${Date.now()}.bak`;
     try {
-      await fs.rename(this.logFilePath, backupPath);
-      debugLogger.debug(`Backed up corrupted log file to ${backupPath}`);
+      await fs.copyFile(this.logFilePath, backupPath);
+      debugLogger.debug(`Backed up log file to ${backupPath}`);
       return true;
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
         return true;
       }
-      debugLogger.debug(
-        `Failed to back up corrupted log file to ${backupPath}:`,
-        error,
-      );
+      debugLogger.debug(`Failed to back up log file to ${backupPath}:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Back up a partially-corrupted JSONL file and rewrite the active file with
+   * only the valid entries, ensuring the next write appends to a clean file.
+   */
+  private async _recoverPartialCorruption(
+    entries: LogEntry[],
+    skipped: number,
+  ): Promise<void> {
+    debugLogger.debug(
+      `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
+    );
+    const backedUp = await this._backupCorruptedLogFile('partial_corruption');
+    if (backedUp && this.logFilePath) {
+      await fs.writeFile(this.logFilePath, this._toJsonl(entries), 'utf-8');
     }
   }
 
