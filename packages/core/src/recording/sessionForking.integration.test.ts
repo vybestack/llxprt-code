@@ -431,8 +431,8 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
     });
   });
 
-  describe('A5: live checkpoints block source deletion', () => {
-    it('deletion fails and lists blocking checkpoint names', async () => {
+  describe('A5: source deletion blocker enumeration', () => {
+    it('lists live checkpoint names as deletion blockers', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
       parent.recordContent(makeContent('A', 'human'));
       parent.recordContent(makeContent('B', 'ai'));
@@ -449,7 +449,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       expect(blockers[0].name).toBe('foo');
     });
 
-    it('deletion succeeds after tombstones', async () => {
+    it('returns no blockers after checkpoint tombstones', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
       parent.recordContent(makeContent('A', 'human'));
       const cp = await parent.createCheckpoint('foo');
