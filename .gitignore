@@ -104,5 +104,5 @@ evals/logs/
 # Git worktrees (ad-hoc local checkouts; keep out of git and test discovery)
 .worktrees/
 
-# ACP test logs (from scripts/test-acp-zed-bugs.mjs)
+# ACP test logs (from scripts/test-acp-zed-bugs.ts)
 .acp-test-logs/

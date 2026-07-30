@@ -118,7 +118,7 @@
     "scripts/build_package.ts",
     "scripts/build_sandbox.ts",
     "scripts/build_vscode_companion.ts",
-    "scripts/bun-build.config.mjs",
+    "scripts/bun-build.config.ts",
     "scripts/test.ts",
     "scripts/test-shards.ts",
     "scripts/check-test-shards.ts",

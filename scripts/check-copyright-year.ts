@@ -27,7 +27,7 @@
  *     `Copyright <YYYY> (Vybestack|Google) LLC`, the `<YYYY>` must equal the
  *     current calendar year.
  *
- * Reuses the git diff plumbing from `scripts/eslint-guard/git.mjs` to obtain
+ * Reuses the git diff plumbing from `scripts/eslint-guard/git.ts` to obtain
  * the diff, then parses it for added files and reads each file's header.
  *
  * Usage:
@@ -43,7 +43,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { diffFromGit } from './eslint-guard/git.mjs';
+import { diffFromGit } from './eslint-guard/git.ts';
 
 const HEADER_SCAN_LINES = 10;
 

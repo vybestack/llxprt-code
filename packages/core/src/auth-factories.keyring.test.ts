@@ -162,13 +162,9 @@ describe('core-factory keyring-primary OAuth (issue2704 #1)', () => {
     expect(parsed.access_token).toBe('no-enc-at');
   });
 
-  it('getToken returns the keyring value even when a conflicting fallback artifact exists (keyring-authoritative read)', async () => {
-    // On Linux, production writes an encrypted fallback backup after a
-    // successful keyring write. To prove getToken reads from the keyring
-    // (not the backup), write via the keyring path, then tamper with the
-    // adapter so the keyring holds a DIFFERENT value than any fallback
-    // artifact. The loaded token must match the keyring value, proving the
-    // keyring read path is exercised and authoritative.
+  it('getToken returns the current keyring value (keyring-authoritative read)', async () => {
+    // Write through the keyring path, then replace the adapter value. The
+    // loaded token must match the current keyring entry.
     const mockKeyring = createMockKeyring();
     const tokenStore = createKeyringTokenStore(async () => mockKeyring);
 
@@ -197,36 +193,46 @@ describe('core-factory keyring-primary OAuth (issue2704 #1)', () => {
     expect(loaded!.access_token).toBe('tampered-keyring-at');
   });
 
-  // On Linux, a successful keyring write also keeps an encrypted backup copy,
-  // so asserting "no .enc fallback artifacts" is only valid on non-Linux.
-  it.skipIf(process.platform === 'linux')(
-    'does NOT write any encrypted .enc fallback artifacts when the keyring is available (non-Linux)',
-    async () => {
-      const mockKeyring = createMockKeyring();
-      const tokenStore = createKeyringTokenStore(async () => mockKeyring);
+  // A verified keyring write creates no encrypted fallback on any platform.
+  // The mock adapter stores the written value and returns it on read-back, so
+  // the verification step in SecureStore.set() succeeds and no fallback .enc
+  // artifact is produced. This confirms the platform-neutral write-verification
+  // contract end-to-end through the factory wiring.
+  it('does NOT write any encrypted .enc fallback artifacts when the keyring is available (all platforms)', async () => {
+    const mockKeyring = createMockKeyring();
+    const tokenStore = createKeyringTokenStore(async () => mockKeyring);
 
-      const token: OAuthToken = {
-        access_token: 'no-enc-at',
-        refresh_token: 'no-enc-rt',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        token_type: 'Bearer',
-        scope: null,
-      };
+    const token: OAuthToken = {
+      access_token: 'no-enc-at',
+      refresh_token: 'no-enc-rt',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'Bearer',
+      scope: null,
+    };
 
-      await tokenStore.saveToken('codex', token);
+    await tokenStore.saveToken('codex', token);
 
-      const fallbackDir = path.join(
-        dataHome,
-        'secure-store',
-        AUTH_SECURE_STORE_SERVICE,
-      );
-      const exists = await fs
-        .stat(fallbackDir)
-        .then(() => true)
-        .catch(() => false);
-      expect(exists).toBe(false);
-    },
-  );
+    // Confirm the mock adapter returns the value it was given — this is the
+    // read-back that makes the keyring write "verified" so no fallback is
+    // needed.
+    const storedKey = `${AUTH_SECURE_STORE_SERVICE}:codex:default`;
+    const readBack = mockKeyring.store.get(storedKey);
+    expect(readBack).toBeDefined();
+    expect(
+      await mockKeyring.getPassword(AUTH_SECURE_STORE_SERVICE, 'codex:default'),
+    ).toBe(readBack);
+
+    const fallbackDir = path.join(
+      dataHome,
+      'secure-store',
+      AUTH_SECURE_STORE_SERVICE,
+    );
+    const exists = await fs
+      .stat(fallbackDir)
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(false);
+  });
 
   it('token data does not leak into the legacy ~/.llxprt tree', async () => {
     const mockKeyring = createMockKeyring();
