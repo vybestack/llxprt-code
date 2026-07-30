@@ -185,20 +185,34 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     // invocation stub. BaseProvider normalizes that shape for
     // generateChatCompletion, so projection must normalize it identically
     // instead of assuming already-normalized options.
-    const normalizedOptions = buildCallOptions(provider, {
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
-      ],
-    });
-    const agentShaped = { ...normalizedOptions, resolved: undefined };
+    const contents = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+    ];
+    const agentShaped = {
+      ...buildCallOptions(provider, { contents }),
+      resolved: undefined,
+    };
     const projection = await provider.projectPromptEnvelope({
       ...agentShaped,
       invocation: { signal: new AbortController().signal },
     });
+    const normalizedProjection = await provider.projectPromptEnvelope(
+      buildCallOptions(provider, {
+        contents,
+        resolved: {
+          model: projection.model,
+          baseURL: 'https://api.anthropic.com',
+          telemetry: { providerName: provider.name },
+        },
+      }),
+    );
 
-    expect(projection).toBeDefined();
-    expect(projection.protocol).toBe('anthropic-messages');
-    expect(await projection.countProjectedTokens()).toBeGreaterThan(0);
+    expect(projection.model).toBe(normalizedProjection.model);
+    expect(projection.protocol).toBe(normalizedProjection.protocol);
+    expect(projection.method).toBe(normalizedProjection.method);
+    expect(await projection.countProjectedTokens()).toBe(
+      await normalizedProjection.countProjectedTokens(),
+    );
   });
 
   it('reports unsupported media explicitly from the finalized request body', async () => {

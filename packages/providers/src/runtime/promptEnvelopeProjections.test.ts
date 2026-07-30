@@ -534,13 +534,19 @@ describe('projection token count consistency (issue #2817 A10)', () => {
     },
   );
 
-  it('produces a positive token count for any non-empty prompt', async () => {
-    const requestBody = {
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: 'x' }],
-    };
-    const tokens =
-      await projectOpenAIChatPromptEnvelope(requestBody).countProjectedTokens();
-    expect(tokens).toBeGreaterThan(0);
-  });
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope, 'messages'],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope, 'messages'],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope, 'input'],
+  ] as const)(
+    'produces a positive %s token count for a non-empty prompt',
+    async (_name, project, promptKey) => {
+      const requestBody = {
+        model: 'test-model',
+        [promptKey]: [{ role: 'user', content: 'x' }],
+      };
+      const tokens = await project(requestBody).countProjectedTokens();
+      expect(tokens).toBeGreaterThan(0);
+    },
+  );
 });

@@ -22,7 +22,7 @@
  *   (HistoryService total is synced to the real value).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -224,6 +224,10 @@ function buildChatSession(fixture: TestFixture): ChatSession {
 describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    providerRuntime.setActiveProviderRuntimeContext(null);
   });
 
   it('A7: produces a pre-send estimate at the final send seam (non-streaming)', async () => {

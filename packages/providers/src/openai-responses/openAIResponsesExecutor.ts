@@ -156,6 +156,7 @@ function resolveInvocationEphemerals(
 export async function buildResponsesRequestContextForProjection(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
+  invocationEphemerals = resolveInvocationEphemerals(options),
 ): Promise<PreparedResponsesRequestContext> {
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
     options.contents,
@@ -163,7 +164,7 @@ export async function buildResponsesRequestContextForProjection(
   return buildRequestContext(
     options,
     patchedContent,
-    resolveInvocationEphemerals(options),
+    invocationEphemerals,
     deps,
   );
 }
@@ -177,7 +178,11 @@ export async function* executeOpenAIResponsesRequest(
   const invocationEphemerals = resolveInvocationEphemerals(options);
   const prepared =
     preparedRequestContext ??
-    (await buildResponsesRequestContextForProjection(options, deps));
+    (await buildResponsesRequestContextForProjection(
+      options,
+      deps,
+      invocationEphemerals,
+    ));
   const requestContext = await resolveResponsesTransportContext(
     options,
     prepared,

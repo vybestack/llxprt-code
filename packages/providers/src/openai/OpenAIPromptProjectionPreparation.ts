@@ -37,7 +37,11 @@ export async function prepareOpenAIChatProjection(
   let preparedOptions = options;
   if (needsClient) {
     const client = await deps.getClient();
-    preparedOptions = await deps.processMedia(options, client, deps.logger);
+    preparedOptions = await deps.processMedia(
+      preparedOptions,
+      client,
+      deps.logger,
+    );
   }
   return {
     options: preparedOptions,
