@@ -85,10 +85,6 @@ function createRateLimitError(retryAfter?: number): Error {
 }
 
 /**
- * Helper to create a 5xx server error
- */
-
-/**
  * Helper to create a 400 bad request error
  */
 
