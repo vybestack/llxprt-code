@@ -6,7 +6,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
-import type { LocalOAuthCallbackOptions } from './local-oauth-callback.js';
+import {
+  startLocalOAuthCallback,
+  type LocalOAuthCallbackOptions,
+} from './local-oauth-callback.js';
 
 vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => ({
   openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
@@ -125,19 +128,38 @@ describe('Codex per-bucket browser profile selection', () => {
       workAuth,
       personalAuth,
     ]);
-    const profiles = vi
+    const browserLaunches = vi
       .mocked(openBrowserSecurely)
-      .mock.calls.map(([, options]) => options?.profileDirectory)
-      .sort();
+      .mock.calls.map(([url, options]) => ({
+        state: new URL(url).searchParams.get('state'),
+        profileDirectory: options?.profileDirectory,
+      }));
+    const stateToBucket = new Map(
+      vi
+        .mocked(startLocalOAuthCallback)
+        .mock.calls.map(([options], index) => [
+          options.state,
+          index === 0 ? 'work' : 'personal',
+        ]),
+    );
+    const bucketProfiles = Object.fromEntries(
+      browserLaunches.map(({ state, profileDirectory }) => [
+        state ? stateToBucket.get(state) : undefined,
+        profileDirectory,
+      ]),
+    );
 
     expect({
-      profiles,
+      bucketProfiles,
       tokensCompleted: [
         workToken.access_token,
         personalToken.access_token,
       ].every((token) => token.startsWith('access-')),
     }).toStrictEqual({
-      profiles: ['/tmp/personal-profile', '/tmp/work-profile'],
+      bucketProfiles: {
+        work: '/tmp/work-profile',
+        personal: '/tmp/personal-profile',
+      },
       tokensCompleted: true,
     });
   });

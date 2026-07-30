@@ -714,7 +714,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Authenticated claudecode, but failed to activate bucket mybucket: session activation failed',
+          'Authenticated claudecode, but failed to activate bucket mybucket: session activation failed. Retry login or run /auth claudecode switch mybucket.',
       });
     });
 

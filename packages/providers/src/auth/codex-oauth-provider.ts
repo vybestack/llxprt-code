@@ -255,7 +255,18 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
 
     try {
-      await this.displayAuthUrlAndOpenBrowser(authUrl, requestBucket, signal);
+      const browserOpened = await this.displayAuthUrlAndOpenBrowser(
+        authUrl,
+        requestBucket,
+        signal,
+      );
+      if (!browserOpened) {
+        await localCallback.shutdown().catch(() => undefined);
+        this.logger.debug(
+          () => '[FLOW] Browser launch failed, falling back to device auth',
+        );
+        return await this.performDeviceAuth(signal);
+      }
       return await this.waitForCallbackAndComplete(
         localCallback,
         redirectUri,
@@ -276,7 +287,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     authUrl: string,
     requestBucket: string,
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     debugLogger.log('\nCodex OAuth Authentication');
     debugLogger.log('─'.repeat(40));
 
@@ -321,18 +332,17 @@ export class CodexOAuthProvider implements OAuthProvider {
     } catch {
       // Association lookup failed — fall back to default browser
     }
+    signal.throwIfAborted();
     try {
       await waitForAbort(openBrowserSecurely(authUrl, browserOpts), signal);
       this.logger.debug(() => '[FLOW] Browser opened');
+      return true;
     } catch (error) {
       if (signal.aborted) {
         throw signal.reason;
       }
-      // Browser launch failed for a non-abort reason (e.g., no browser
-      // available on a headless host). The URL was already displayed and
-      // copied to clipboard, so the user can proceed manually rather than
-      // failing the entire auth flow.
       this.logger.debug(() => `Browser launch error: ${error}`);
+      return false;
     }
   }
 

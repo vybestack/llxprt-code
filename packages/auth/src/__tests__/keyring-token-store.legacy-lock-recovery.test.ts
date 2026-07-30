@@ -78,19 +78,17 @@ describe('Legacy v0.10 lock handling (issue #2819 — unverifiable, no auto-recl
       : path.join(lockDir, `${provider}-${resolved}-auth.lock`);
   }
 
-  it('does NOT auto-reclaim a legacy lock with a non-existent PID because its owner is unverifiable', async () => {
+  it('does NOT auto-reclaim a legacy lock because its owner is unverifiable', async () => {
     const lockFile = refreshLockPath('codex');
     await writeLegacyLock(lockFile, 999999);
 
     const store = createStore();
-    // Legacy records lack hostname/start-time identity, so local ESRCH
-    // cannot prove a remote process dead. Automatic reclaim is stopped.
     const acquired = await store.acquireRefreshLock('codex', { waitMs: 300 });
     expect(acquired).toBe(false);
     await expect(fs.stat(lockFile)).resolves.toBeDefined();
   });
 
-  it('does NOT auto-reclaim a legacy lock when the PID is alive (our own process)', async () => {
+  it('does NOT auto-reclaim a legacy lock regardless of whether its PID is active', async () => {
     const lockFile = authLockPath('codex', 'default');
     await writeLegacyLock(lockFile, process.pid);
 
@@ -100,15 +98,14 @@ describe('Legacy v0.10 lock handling (issue #2819 — unverifiable, no auto-recl
     await expect(fs.stat(lockFile)).resolves.toBeDefined();
   });
 
-  it('does NOT auto-reclaim a legacy lock when the PID is unverifiable (permission denied)', async () => {
+  it('does NOT auto-reclaim another legacy lock regardless of its PID value', async () => {
     const lockFile = refreshLockPath('codex');
-    // PID 1 is always alive but legacy data lacks hostname/start identity
-    // to prove it's the same process — must defer conservatively.
     await writeLegacyLock(lockFile, 1);
 
     const store = createStore();
     const acquired = await store.acquireRefreshLock('codex', { waitMs: 200 });
     expect(acquired).toBe(false);
+    await expect(fs.stat(lockFile)).resolves.toBeDefined();
   });
 
   it('classifies legacy locks as unverifiable in inspectAuthLock', async () => {
@@ -154,5 +151,6 @@ describe('Legacy v0.10 lock handling (issue #2819 — unverifiable, no auto-recl
       waitMs: 200,
     });
     expect(acquired).toBe(false);
+    await expect(fs.stat(lockFile)).resolves.toBeDefined();
   });
 });

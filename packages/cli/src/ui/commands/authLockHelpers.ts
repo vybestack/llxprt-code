@@ -61,12 +61,6 @@ export function buildLockUnlockSchemaEntries(
                 },
               ],
             },
-            {
-              kind: 'literal',
-              value: '--i-have-stopped-all-processes',
-              description:
-                'Acknowledge all LLxprt processes sharing the path are stopped',
-            },
           ],
         },
       ],
@@ -175,7 +169,7 @@ export async function handleLockCommand(
   const positionalArgs = lockParts.filter((part) => !part.startsWith('--'));
   const subAction =
     positionalArgs.length > 0 ? positionalArgs[0].toLowerCase() : undefined;
-  const bucket = positionalArgs[1];
+  const bucket = positionalArgs[1] ?? 'default';
 
   if (subAction !== 'status') {
     return {
@@ -223,7 +217,15 @@ export async function handleUnlockCommand(
   const hasForce = unlockParts.includes('--force');
   const hasAck = unlockParts.includes('--i-have-stopped-all-processes');
   const positionalArgs = unlockParts.filter((p) => !p.startsWith('--'));
-  const bucket = positionalArgs[0];
+  const bucket = positionalArgs[0] ?? 'default';
+
+  if (hasAck && !hasForce) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: '--i-have-stopped-all-processes is valid only with --force',
+    };
+  }
 
   try {
     if (hasForce) {

@@ -115,7 +115,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       performAuthSpy.mockRestore();
     });
 
-    it('rejects at the overall deadline and ignores a late flow completion', async () => {
+    it('rejects at the overall deadline and retains a late token for the next initiation', async () => {
       vi.useFakeTimers();
       const pendingAuth = Promise.withResolvers<{
         access_token: string;
@@ -406,18 +406,18 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       url: string,
       requestBucket: string,
       signal: AbortSignal,
-    ) => Promise<void>) =>
+    ) => Promise<boolean>) =>
       (
         provider as unknown as {
           displayAuthUrlAndOpenBrowser: (
             url: string,
             requestBucket: string,
             signal: AbortSignal,
-          ) => Promise<void>;
+          ) => Promise<boolean>;
         }
       ).displayAuthUrlAndOpenBrowser.bind(provider);
 
-    it('continues the OAuth flow when the browser fails to launch for a non-abort reason', async () => {
+    it('reports a non-abort browser launch failure to the caller', async () => {
       const browserSpy = vi
         .spyOn(secureBrowserLauncher, 'openBrowserSecurely')
         .mockRejectedValue(new Error('No browser available'));
@@ -426,19 +426,19 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
 
       const controller = new AbortController();
 
-      // Should NOT throw despite browser launch failure
       await expect(
         displayMethod(
           'https://auth.openai.com/oauth/authorize',
           'default',
           controller.signal,
         ),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(false);
 
       browserSpy.mockRestore();
     });
 
     it('propagates an already-aborted signal before browser launch', async () => {
+      const browserSpy = vi.spyOn(secureBrowserLauncher, 'openBrowserSecurely');
       const displayMethod = getDisplayMethod();
 
       const controller = new AbortController();
@@ -451,6 +451,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
           controller.signal,
         ),
       ).rejects.toThrow('parent auth aborted');
+      expect(browserSpy).not.toHaveBeenCalled();
     });
   });
 });

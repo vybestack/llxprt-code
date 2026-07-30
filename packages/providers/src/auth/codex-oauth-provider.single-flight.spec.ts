@@ -28,7 +28,10 @@ vi.mock('./local-oauth-callback.js', () => ({
 
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
-import { shouldLaunchBrowser } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import {
+  openBrowserSecurely,
+  shouldLaunchBrowser,
+} from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 
 function createTokenStore(): TokenStore {
   return {
@@ -93,5 +96,42 @@ describe('CodexOAuthProvider public single-flight', () => {
       first: 'shared-access',
       second: 'shared-access',
     });
+  });
+
+  it('shuts down the callback and falls back to device auth when browser launch fails', async () => {
+    const shutdown = vi.fn().mockResolvedValue(undefined);
+    const waitForCallback = vi.fn();
+    vi.mocked(startLocalOAuthCallback).mockResolvedValueOnce({
+      redirectUri: 'http://127.0.0.1:1455/callback',
+      waitForCallback,
+      shutdown,
+    });
+    vi.mocked(openBrowserSecurely).mockRejectedValueOnce(
+      new Error('No browser available'),
+    );
+
+    const provider = new CodexOAuthProvider(createTokenStore());
+    const deviceToken = {
+      access_token: 'device-access',
+      refresh_token: 'device-refresh',
+      token_type: 'Bearer' as const,
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      account_id: 'device-account',
+    };
+    const performDeviceAuth = vi
+      .spyOn(
+        provider as unknown as {
+          performDeviceAuth: (
+            signal?: AbortSignal,
+          ) => Promise<typeof deviceToken>;
+        },
+        'performDeviceAuth',
+      )
+      .mockResolvedValue(deviceToken);
+
+    await expect(provider.initiateAuth()).resolves.toStrictEqual(deviceToken);
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(waitForCallback).not.toHaveBeenCalled();
+    expect(performDeviceAuth).toHaveBeenCalledOnce();
   });
 });

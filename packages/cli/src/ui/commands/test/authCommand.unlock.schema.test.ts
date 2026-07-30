@@ -100,13 +100,23 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
     expect(forceFlag).toBeDefined();
   });
 
-  it('unlock has --i-have-stopped-all-processes in schema', () => {
+  it('nests --i-have-stopped-all-processes beneath --force', () => {
     const flags = getUnlockBucketNode().next ?? [];
-    const ackFlag = flags.find(
+    const standaloneAck = flags.find(
       (flag) =>
         flag.kind === 'literal' &&
         flag.value === '--i-have-stopped-all-processes',
     );
-    expect(ackFlag).toBeDefined();
+    const forceFlag = flags.find(
+      (flag) => flag.kind === 'literal' && flag.value === '--force',
+    );
+    const nestedAck = forceFlag?.next?.find(
+      (flag) =>
+        flag.kind === 'literal' &&
+        flag.value === '--i-have-stopped-all-processes',
+    );
+
+    expect(standaloneAck).toBeUndefined();
+    expect(nestedAck).toBeDefined();
   });
 });

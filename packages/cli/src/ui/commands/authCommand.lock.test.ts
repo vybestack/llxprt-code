@@ -203,7 +203,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       await executor.execute(mockContext, 'codex unlock'),
     );
 
-    expect(manager.recoverAuthLock).toHaveBeenCalledWith('codex', undefined);
+    expect(manager.recoverAuthLock).toHaveBeenCalledWith('codex', 'default');
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('recovered');
   });
@@ -282,7 +282,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     const result = asMessage(
       await executor.execute(
         mockContext,
-        'codex unlock default --force --i-have-stopped-all-processes',
+        'codex unlock --force --i-have-stopped-all-processes',
       ),
     );
 
@@ -293,6 +293,23 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     );
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('succeeded');
+  });
+
+  it('rejects the acknowledgment flag without --force', async () => {
+    const executor = new AuthCommandExecutor(manager);
+    const result = asMessage(
+      await executor.execute(
+        mockContext,
+        'codex unlock --i-have-stopped-all-processes',
+      ),
+    );
+
+    expect(result).toMatchObject({
+      messageType: 'error',
+      content: '--i-have-stopped-all-processes is valid only with --force',
+    });
+    expect(manager.recoverAuthLock).not.toHaveBeenCalled();
+    expect(manager.forceRecoverAuthLock).not.toHaveBeenCalled();
   });
 
   it('lock status ignores flag-like arguments instead of treating them as a bucket', async () => {
@@ -314,7 +331,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     const executor = new AuthCommandExecutor(manager);
     await executor.execute(mockContext, 'codex lock status --verbose');
 
-    expect(manager.inspectAuthLock).toHaveBeenCalledWith('codex', undefined);
+    expect(manager.inspectAuthLock).toHaveBeenCalledWith('codex', 'default');
   });
 
   it('lock status surfaces inspection errors as command output', async () => {

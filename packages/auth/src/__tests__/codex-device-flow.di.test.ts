@@ -309,7 +309,7 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       const elapsed = Date.now() - start;
       await vi.waitFor(() => expect(body.locked).toBe(false));
 
-      expect({ cancelCount, prompt: elapsed < 5_000 }).toStrictEqual({
+      expect({ cancelCount, prompt: elapsed < 500 }).toStrictEqual({
         cancelCount: 1,
         prompt: true,
       });

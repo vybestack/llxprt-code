@@ -229,6 +229,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(result.recovered).toBe(true);
 
     await expect(fs.stat(lockPath)).rejects.toThrow('ENOENT');
+    await expect(fs.stat(`${lockPath}.fence`)).rejects.toThrow('ENOENT');
     const token = await store.getToken('codex', 'default');
     expect(token).not.toBeNull();
     expect(token?.access_token).toBe('test-access-token');

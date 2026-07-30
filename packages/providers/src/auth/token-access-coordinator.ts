@@ -522,7 +522,7 @@ export class TokenAccessCoordinator {
       explicitBucket,
       requestMetadata,
     );
-    const normalizedRequest = explicitBucket ? bucket : effectiveMetadata;
+    const authRequestContext = explicitBucket ? bucket : effectiveMetadata;
     const token = await this.getOAuthTokenForRequest(
       providerName,
       explicitBucket,
@@ -566,7 +566,7 @@ export class TokenAccessCoordinator {
 
     return this.getTokenTriggerAuthIfNeeded(
       providerName,
-      normalizedRequest,
+      authRequestContext,
       explicitBucket,
       effectiveMetadata,
     );

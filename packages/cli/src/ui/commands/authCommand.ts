@@ -540,7 +540,7 @@ export class AuthCommandExecutor {
           return {
             type: 'message',
             messageType: 'error',
-            content: `Authenticated ${provider}, but failed to activate bucket ${bucket}: ${errorMessage}`,
+            content: `Authenticated ${provider}, but failed to activate bucket ${bucket}: ${errorMessage}. Retry login or run /auth ${provider} switch ${bucket}.`,
           };
         }
       }
