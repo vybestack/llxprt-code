@@ -1220,7 +1220,7 @@ jobs:
             const selected = [];
             const seen = new Set();
             for (const rawLine of lines.slice(headingIndex + 1)) {
-              if (/^[A-Za-z][A-Za-z ]*\s*\([^)]*\):\s*$/.test(rawLine)) {
+              if (/^[A-Za-z][A-Za-z ]*\s*\(\d+\):\s*$/.test(rawLine)) {
                 break;
               }
               let path = rawLine.trim()
