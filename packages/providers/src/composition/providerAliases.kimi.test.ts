@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { computeModelDefaults } from '../runtime/providerMutations.js';
 import { loadProviderAliasEntries } from './providerAliases.js';
 
 describe('builtin kimi provider alias', () => {
@@ -142,5 +143,27 @@ describe('builtin kimi provider alias', () => {
     expect(entry?.config.mediaSupport?.inlineImages).toBe(true);
     expect(entry?.config.mediaSupport?.fileUpload).toBe(true);
     expect(entry?.config.mediaSupport?.videoSupport).toBe(true);
+  });
+
+  it('applies family-wide image limits to Kimi vision models', () => {
+    const entry = loadProviderAliasEntries().find(
+      (candidate) => candidate.alias === 'kimi',
+    );
+    const broadRule = entry?.config.modelDefaults?.find(
+      (rule) => rule.pattern === '^kimi|^k3-256k$',
+    );
+
+    const imageLimits = {
+      'image-resize.maxLongEdge': 4096,
+      'image-resize.maxShortEdge': 2160,
+      'image-resize.maxPixels': 8_847_360,
+    };
+    expect(broadRule?.ephemeralSettings).toMatchObject(imageLimits);
+    const rules = entry?.config.modelDefaults ?? [];
+    expect(computeModelDefaults('kimi-k3', rules)).toMatchObject(imageLimits);
+    expect(computeModelDefaults('k3-256k', rules)).toMatchObject(imageLimits);
+    expect(computeModelDefaults('custom-model', rules)).not.toHaveProperty(
+      'image-resize.maxLongEdge',
+    );
   });
 });

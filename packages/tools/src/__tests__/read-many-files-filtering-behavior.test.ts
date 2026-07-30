@@ -8,6 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
+import sharp from 'sharp';
 import { createRealToolHost as createRealHost } from './helpers/create-real-tool-host.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import type { ToolResult } from '../index.js';
@@ -35,6 +37,33 @@ function stringifyLlmContent(result: ToolResult): string {
         .map((part) => (typeof part === 'string' ? part : JSON.stringify(part)))
         .join('\n')
     : String(result.llmContent);
+}
+function findInlineImage(result: ToolResult): Buffer {
+  if (!Array.isArray(result.llmContent)) {
+    throw new Error('Expected multipart read-many-files content');
+  }
+  for (const part of result.llmContent) {
+    if (typeof part !== 'string' && part.inlineData?.data !== undefined) {
+      return Buffer.from(part.inlineData.data, 'base64');
+    }
+  }
+  throw new Error('Expected inline image data');
+}
+function createHostWithSettings(
+  targetDir: string,
+  settings: Readonly<Record<string, unknown>>,
+) {
+  const baseHost = createRealHost(targetDir, {
+    respectGitIgnore: true,
+    respectLlxprtIgnore: true,
+  });
+  return {
+    ...baseHost,
+    getEphemeralSettings: () => ({
+      ...baseHost.getEphemeralSettings(),
+      ...settings,
+    }),
+  };
 }
 
 describe('ReadManyFilesTool real behavioral filtering', () => {
@@ -163,4 +192,136 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     // keeps the focus on keep.txt being restored by the .llxprtignore negation.
     expect(content).not.toContain('secret content');
   });
+
+  it('resizes explicitly requested images through the shared media path', async () => {
+    const filePath = join(tempDir, 'large.png');
+    const original = await sharp({
+      create: {
+        width: 240,
+        height: 120,
+        channels: 3,
+        background: { r: 45, g: 90, b: 135 },
+      },
+    })
+      .png()
+      .toBuffer();
+    writeFileSync(filePath, original);
+    const host = createHostWithSettings(tempDir, {
+      'image-resize.maxLongEdge': 120,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['large.png'],
+    });
+    const metadata = await sharp(findInlineImage(result)).metadata();
+
+    expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
+  });
+
+  it('preserves image bytes when no resize limit is configured', async () => {
+    const filePath = join(tempDir, 'legacy.png');
+    const original = await sharp({
+      create: {
+        width: 240,
+        height: 120,
+        channels: 3,
+        background: { r: 135, g: 90, b: 45 },
+      },
+    })
+      .png()
+      .toBuffer();
+    writeFileSync(filePath, original);
+    const host = createRealHost(tempDir, {
+      respectGitIgnore: true,
+      respectLlxprtIgnore: true,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['legacy.png'],
+    });
+
+    expect(findInlineImage(result)).toEqual(original);
+  });
+
+  it('resizes an explicitly requested noisy image before enforcing returned-byte limits', async () => {
+    const filePath = join(tempDir, 'noisy.png');
+    const original = await sharp(randomBytes(900 * 700 * 3), {
+      raw: { width: 900, height: 700, channels: 3 },
+    })
+      .png({ compressionLevel: 0 })
+      .toBuffer();
+    expect(original.byteLength).toBeGreaterThan(512 * 1024);
+    writeFileSync(filePath, original);
+    const host = createHostWithSettings(tempDir, {
+      'image-resize.maxLongEdge': 64,
+      'tool-output-item-size-limit': 512 * 1024,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['noisy.png'],
+    });
+    const resized = findInlineImage(result);
+
+    expect(result.error).toBeUndefined();
+    expect(resized.byteLength).toBeLessThanOrEqual(512 * 1024);
+    expect((await sharp(resized).metadata()).width).toBeLessThanOrEqual(64);
+  });
+
+  it('returns a clear ToolResult error for malformed resize settings', async () => {
+    const host = createHostWithSettings(tempDir, {
+      'image-resize.maxLongEdge': 0,
+    });
+
+    const result = await new ReadManyFilesTool(host).execute({
+      paths: ['keep.txt'],
+    });
+
+    expect(result.error).toMatchObject({
+      message: expect.stringContaining(
+        'image-resize.maxLongEdge must be a positive integer',
+      ),
+    });
+    expect(result.returnDisplay).toContain('Image Resize Error');
+  });
+
+  it.each([
+    {
+      name: 'corrupt',
+      extension: 'png',
+      create: async () => Buffer.from('corrupt image bytes'),
+    },
+    {
+      name: 'unsupported',
+      extension: 'tiff',
+      create: async () =>
+        sharp({
+          create: {
+            width: 200,
+            height: 100,
+            channels: 3,
+            background: { r: 20, g: 40, b: 60 },
+          },
+        })
+          .tiff()
+          .toBuffer(),
+    },
+  ])(
+    'returns a clear ToolResult error for $name image resizing',
+    async (fixture) => {
+      const fileName = `${fixture.name}.${fixture.extension}`;
+      writeFileSync(join(tempDir, fileName), await fixture.create());
+      const host = createHostWithSettings(tempDir, {
+        'image-resize.maxLongEdge': 50,
+      });
+
+      const result = await new ReadManyFilesTool(host).execute({
+        paths: [fileName],
+      });
+
+      expect(result.error).toMatchObject({
+        message: expect.stringContaining(`Unable to resize image ${fileName}`),
+      });
+      expect(result.returnDisplay).toContain('Image Resize Error');
+    },
+  );
 });

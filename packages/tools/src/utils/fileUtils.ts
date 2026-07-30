@@ -10,10 +10,16 @@ import { type ContentPartUnion } from '../types/wire-types.js';
 import mime from 'mime-types';
 import { ToolErrorType } from '../types/tool-error.js';
 import { debugLogger } from './debugLogger.js';
+import {
+  ImageResizeError,
+  resizeImageIfNeeded,
+  type ImageResizePolicy,
+} from './imageResize.js';
 
 // Constants for text file processing
 export const DEFAULT_MAX_LINES_TEXT_FILE = 2000;
 const MAX_LINE_LENGTH_TEXT_FILE = 2000;
+const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
 // Default values for encoding and separator format
 export const DEFAULT_ENCODING: BufferEncoding = 'utf-8';
@@ -247,7 +253,6 @@ export async function detectFileType(
   if (await isBinaryFile(filePath)) {
     return 'binary';
   }
-
   return 'text';
 }
 
@@ -256,15 +261,122 @@ export interface ProcessedFileReadResult {
   returnDisplay: string;
   error?: string;
   errorType?: ToolErrorType;
+  errorKind?: 'image-resize';
   isTruncated?: boolean;
   originalLineCount?: number;
   linesShown?: [number, number];
+}
+
+export function isAssetExplicitlyRequested(
+  filePath: string,
+  inputPatterns: readonly string[],
+): boolean {
+  const fileExtension = path.extname(filePath).toLowerCase();
+  const fileNameWithoutExtension = path.basename(filePath, fileExtension);
+  return inputPatterns.some(
+    (pattern) =>
+      pattern.toLowerCase().includes(fileExtension) ||
+      pattern.includes(fileNameWithoutExtension),
+  );
+}
+
+export async function shouldResizeExplicitImage(
+  filePath: string,
+  inputPatterns: readonly string[],
+  hasResizePolicy: boolean,
+): Promise<boolean> {
+  return (
+    hasResizePolicy &&
+    isAssetExplicitlyRequested(filePath, inputPatterns) &&
+    (await detectFileType(filePath)) === 'image'
+  );
+}
+
+export function getReturnedByteLength(result: ProcessedFileReadResult): number {
+  if (typeof result.llmContent === 'string') {
+    return Buffer.byteLength(result.llmContent);
+  }
+  const data = result.llmContent.inlineData?.data;
+  return data === undefined ? 0 : Buffer.byteLength(data, 'base64');
+}
+export function createImageResizeToolResult(
+  message: string,
+  type: ToolErrorType | undefined,
+  totalTokens: number,
+): {
+  done: true;
+  totalTokens: number;
+  error: {
+    llmContent: string;
+    returnDisplay: string;
+    error: { message: string; type: ToolErrorType | undefined };
+  };
+} {
+  return {
+    done: true,
+    totalTokens,
+    error: {
+      llmContent: message,
+      returnDisplay: `## Image Resize Error\n\n${message}`,
+      error: { message, type },
+    },
+  };
+}
+
+export function getImageResizeToolResult(
+  result: ProcessedFileReadResult,
+  totalTokens: number,
+): ReturnType<typeof createImageResizeToolResult> | undefined {
+  return result.errorKind === 'image-resize' && result.error !== undefined
+    ? createImageResizeToolResult(result.error, result.errorType, totalTokens)
+    : undefined;
+}
+
+export function getProcessedFileErrorReason(
+  result: ProcessedFileReadResult,
+): string | undefined {
+  return result.error === undefined ? undefined : `Read error: ${result.error}`;
+}
+
+function returnedImageExceedsLimit(
+  result: ProcessedFileReadResult,
+  shouldResize: boolean,
+  outputLimit: number,
+): boolean {
+  return shouldResize && getReturnedByteLength(result) > outputLimit;
+}
+
+export function getReturnedImageLimitReason(
+  result: ProcessedFileReadResult,
+  shouldResize: boolean,
+  outputLimit: number,
+): string | undefined {
+  return returnedImageExceedsLimit(result, shouldResize, outputLimit)
+    ? `returned file size exceeds limit (${Math.round(outputLimit / 1024)}KB)`
+    : undefined;
+}
+
+export function getProcessedFileSkipReason(
+  result: ProcessedFileReadResult,
+  shouldResize: boolean,
+  outputLimit: number,
+): string | undefined {
+  return (
+    getProcessedFileErrorReason(result) ??
+    getReturnedImageLimitReason(result, shouldResize, outputLimit)
+  );
 }
 
 export function countLines(lines: string[]): number {
   return lines.length > 0 && lines[lines.length - 1] === ''
     ? lines.length - 1
     : lines.length;
+}
+export function getImageSourceSizeLimit(
+  shouldResize: boolean,
+  outputLimit: number,
+): number {
+  return shouldResize ? MAX_FILE_SIZE_BYTES : outputLimit;
 }
 
 function validateFileAccess(filePath: string): ProcessedFileReadResult | null {
@@ -301,7 +413,7 @@ function validateFileSize(
   stats: fs.Stats,
 ): ProcessedFileReadResult | null {
   const fileSizeInMB = stats.size / (1024 * 1024);
-  if (fileSizeInMB > 20) {
+  if (stats.size > MAX_FILE_SIZE_BYTES) {
     return {
       llmContent: 'File size exceeds the 20MB limit.',
       returnDisplay: 'File size exceeds the 20MB limit.',
@@ -394,21 +506,31 @@ async function processMediaFile(
   filePath: string,
   relativePathForDisplay: string,
   fileType: 'image' | 'pdf' | 'audio' | 'video',
+  imageResizePolicy: ImageResizePolicy | undefined,
 ): Promise<ProcessedFileReadResult> {
   const contentBuffer = await fs.promises.readFile(filePath);
-  const base64Data = contentBuffer.toString('base64');
   const mimeTypeRaw = mime.lookup(filePath);
   const mimeType =
     typeof mimeTypeRaw === 'string' && mimeTypeRaw !== ''
       ? mimeTypeRaw
       : 'application/octet-stream';
+  const displayName = path.basename(relativePathForDisplay);
+  const outputBuffer =
+    fileType === 'image'
+      ? await resizeImageIfNeeded(
+          contentBuffer,
+          mimeType,
+          displayName,
+          imageResizePolicy,
+        )
+      : contentBuffer;
 
   return {
     llmContent: {
       inlineData: {
-        data: base64Data,
+        data: outputBuffer.toString('base64'),
         mimeType,
-        displayName: path.basename(relativePathForDisplay),
+        displayName,
       },
     },
     returnDisplay: `Read ${fileType} file: ${relativePathForDisplay}`,
@@ -422,6 +544,7 @@ async function processFileByType(
   stats: fs.Stats,
   offset: number | undefined,
   limit: number | undefined,
+  imageResizePolicy: ImageResizePolicy | undefined,
 ): Promise<ProcessedFileReadResult> {
   switch (fileType) {
     case 'binary':
@@ -434,7 +557,12 @@ async function processFileByType(
     case 'pdf':
     case 'audio':
     case 'video':
-      return processMediaFile(filePath, relativePathForDisplay, fileType);
+      return processMediaFile(
+        filePath,
+        relativePathForDisplay,
+        fileType,
+        imageResizePolicy,
+      );
     default:
       return processTextFile(filePath, relativePathForDisplay, offset, limit);
   }
@@ -445,6 +573,7 @@ export async function processSingleFileContent(
   rootDirectory: string,
   offset?: number,
   limit?: number,
+  imageResizePolicy?: ImageResizePolicy,
 ): Promise<ProcessedFileReadResult> {
   try {
     const accessError = validateFileAccess(filePath);
@@ -469,6 +598,7 @@ export async function processSingleFileContent(
       stats,
       offset,
       limit,
+      imageResizePolicy,
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -480,6 +610,7 @@ export async function processSingleFileContent(
       returnDisplay: `Error reading file ${displayPath}: ${errorMessage}`,
       error: `Error reading file ${filePath}: ${errorMessage}`,
       errorType: ToolErrorType.READ_CONTENT_FAILURE,
+      errorKind: error instanceof ImageResizeError ? 'image-resize' : undefined,
     };
   }
 }
