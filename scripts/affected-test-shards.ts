@@ -769,8 +769,10 @@ function main(): void {
 
 /**
  * Writes selection results to GITHUB_OUTPUT and GITHUB_STEP_SUMMARY for use in
- * GitHub Actions CI. Builds a matrix JSON array (shard × os × node-version)
- * that the test_shard job consumes via fromJSON().
+ * GitHub Actions CI. Builds a matrix JSON array (shard × node-version; issue
+ * #2876 removed the per-OS dimension — the PR test matrix is ubuntu-only, and
+ * macOS coverage moved to the nightly workflow) that the test_shard job
+ * consumes via fromJSON().
  *
  * PR-controlled values (event, fullRunReason/path text) are sanitized of CR/LF
  * before being written to prevent GITHUB_OUTPUT injection. Keys/shape preserved.
@@ -787,16 +789,16 @@ function outputGithubActions(result: SelectionResult, event: string): void {
   const ghOutputPath = process.env.GITHUB_OUTPUT;
   const ghSummaryPath = process.env.GITHUB_STEP_SUMMARY;
 
-  // Build the matrix: one entry per selected shard per OS.
+  // Build the matrix: one entry per selected shard (issue #2876).
+  // macOS test coverage moved to the nightly workflow (nightly.yml), so
+  // the PR test matrix is ubuntu-only — macOS is nightly-only like Windows.
   const matrix: Array<{
     readonly shard: string;
     readonly os: string;
     readonly 'node-version': string;
   }> = [];
   for (const shard of result.selectedShards) {
-    for (const os of ['ubuntu-latest', 'macos-latest']) {
-      matrix.push({ shard, os, 'node-version': '24.x' });
-    }
+    matrix.push({ shard, os: 'ubuntu-latest', 'node-version': '24.x' });
   }
 
   const selectedStr = sanitizeGhValue(result.selectedShards.join(','));
