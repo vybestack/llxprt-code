@@ -94,7 +94,7 @@ describe('Logger JSONL format', () => {
   });
 
   afterEach(async () => {
-    logger.close();
+    await logger.close();
     await cleanupLogFiles();
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -138,7 +138,36 @@ describe('Logger JSONL format', () => {
     );
     expect(backupContent).toBe(corruptedContent);
 
-    newLogger.close();
+    await newLogger.close();
+  });
+
+  it('should self-heal a totally-corrupted file when a valid record is appended before the next load', async () => {
+    const nl = String.fromCharCode(10);
+    const corruptedContent = ['totally broken', 'also broken'].join(nl) + nl;
+    await fs.writeFile(TEST_LOG_FILE_PATH, corruptedContent);
+    vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
+
+    // First load: total corruption is backed up and the cache is empty. The
+    // active file is intentionally left in place (backup is a copy).
+    const first = new Logger(testSessionId, new Storage(process.cwd()));
+    await first.initialize();
+    expect(first['logs']).toStrictEqual([]);
+    // A valid record is appended onto the still-corrupted active file.
+    await first.logMessage(MessageSenderType.USER, 'valid-after-corruption');
+    await first.close();
+
+    // Second load: the file now holds corrupted lines plus one valid line,
+    // which is treated as partial corruption — the valid record survives and
+    // the active file is rewritten clean.
+    const second = new Logger(testSessionId, new Storage(process.cwd()));
+    await second.initialize();
+    const healed = second['logs'];
+    expect(healed).toHaveLength(1);
+    expect(healed[0].message).toBe('valid-after-corruption');
+    const onDisk = await readLogFile();
+    expect(onDisk).toHaveLength(1);
+    expect(onDisk[0].message).toBe('valid-after-corruption');
+    await second.close();
   });
 
   it('should preserve valid JSONL entries when some lines are corrupted', async () => {
@@ -216,7 +245,7 @@ describe('Logger JSONL format', () => {
     expect(afterWrite[2].message).toBe('After recovery');
 
     // Reopen a fresh logger and verify entries persist.
-    newLogger.close();
+    await newLogger.close();
     const reopened = new Logger(
       'partial-corruption',
       new Storage(process.cwd()),
@@ -225,10 +254,10 @@ describe('Logger JSONL format', () => {
     const reopenedLogs = reopened['logs'];
     expect(reopenedLogs).toHaveLength(3);
     expect(reopenedLogs[2].message).toBe('After recovery');
-    reopened.close();
+    await reopened.close();
   });
 
-  it('should migrate a legacy pretty-printed JSON array to JSONL on first write', async () => {
+  it('should migrate a legacy pretty-printed JSON array to JSONL during initialization', async () => {
     const currentSessionId = 'session-legacy';
     const existingLogs: LogEntry[] = [
       {
@@ -273,10 +302,10 @@ describe('Logger JSONL format', () => {
     const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
     expect(hasMalformedBackup(dirContents)).toBe(false);
 
-    newLogger.close();
+    await newLogger.close();
   });
 
-  it('should migrate the legacy empty array "[]" to JSONL on first write', async () => {
+  it('should migrate the legacy empty array "[]" to JSONL during initialization', async () => {
     await fs.writeFile(TEST_LOG_FILE_PATH, '[]', 'utf-8');
 
     const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
@@ -294,7 +323,7 @@ describe('Logger JSONL format', () => {
     const rawContent = await fs.readFile(TEST_LOG_FILE_PATH, 'utf-8');
     expect(rawContent.trim().startsWith('[')).toBe(false);
 
-    newLogger.close();
+    await newLogger.close();
   });
 
   it('should prepend a newline when appending to a file without trailing LF', async () => {
@@ -314,7 +343,7 @@ describe('Logger JSONL format', () => {
     const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
     await newLogger.initialize();
     await newLogger.logMessage(MessageSenderType.USER, 'After append');
-    newLogger.close();
+    await newLogger.close();
 
     const logsFromFile = await readLogFile();
     expect(logsFromFile.length).toBe(2);
@@ -322,7 +351,7 @@ describe('Logger JSONL format', () => {
     expect(logsFromFile[1].message).toBe('After append');
   });
 
-  it('should correctly order sequential writes from different logger instances to the same file', async () => {
+  it('keeps independent messageId counters per logger instance and appends sequentially to the same file', async () => {
     const concurrentSessionId = 'concurrent-session';
     const logger1 = new Logger(concurrentSessionId, new Storage(process.cwd()));
     await logger1.initialize();
@@ -340,46 +369,92 @@ describe('Logger JSONL format', () => {
 
     const logsFromFile = await readLogFile();
     expect(logsFromFile.length).toBe(4);
-    // Verify physical on-disk ordering (not sorted) to catch append bugs.
-    expect(logsFromFile.map((log) => log.messageId)).toStrictEqual([
-      0, 1, 2, 3,
-    ]);
+    // Appends are physically serialized in call order — no interleaving or
+    // corruption. messageIds come from each instance's in-memory counter
+    // (the O(1) write path does not re-read the file), so each instance
+    // numbers its own messages 0,1 independently rather than coordinating.
     expect(logsFromFile.map((log) => log.message)).toStrictEqual([
       'L1M1',
       'L2M1',
       'L1M2',
       'L2M2',
     ]);
+    expect(logsFromFile.map((log) => log.messageId)).toStrictEqual([
+      0, 0, 1, 1,
+    ]);
 
-    logger1.close();
-    logger2.close();
+    await logger1.close();
+    await logger2.close();
   });
 
+  it('should serialize concurrent same-instance writes so each gets a unique messageId', async () => {
+    const messages = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'];
+    await Promise.all(
+      messages.map((m) => logger.logMessage(MessageSenderType.USER, m)),
+    );
+
+    const logsFromFile = await readLogFile();
+    expect(logsFromFile).toHaveLength(8);
+    // Each concurrent write gets a unique, sequential messageId (writes are
+    // serialized per instance), and records are appended in invocation order.
+    expect(logsFromFile.map((log) => log.messageId)).toStrictEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(logsFromFile.map((log) => log.message)).toStrictEqual(messages);
+    expect(logger['messageId']).toBe(8);
+  });
+
+  it('close() drains in-flight writes so a concurrent logMessage still reaches disk', async () => {
+    // Race a write against close(). Because close() awaits the write queue,
+    // the in-flight append must complete and persist before the instance is
+    // torn down. With a non-draining (synchronous) close(), the resumed
+    // _appendEntry would see a cleared logFilePath and the write would be lost.
+    await Promise.all([
+      logger.logMessage(MessageSenderType.USER, 'raced write'),
+      logger.close(),
+    ]);
+    const onDisk = await readLogFile();
+    expect(onDisk).toHaveLength(1);
+    expect(onDisk[0].message).toBe('raced write');
+  });
+  // The append-failure path is exercised by stubbing fs.appendFile (an
+  // infrastructure mock), which is portable across platforms — unlike chmod,
+  // which is ineffective as root and advisory on Windows.
   it('should not throw, not increment messageId, and log error if appending to file fails', async () => {
-    vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
-    const initialMessageId = logger['messageId'];
+    const debugSpy = vi
+      .spyOn(debugLogger, 'debug')
+      .mockImplementation(() => {});
 
-    // Log a setup message so the file exists and the read path succeeds.
+    // Log a setup message so the file exists and the steady state is entered.
     await logger.logMessage(MessageSenderType.USER, 'setup message');
-    expect(logger['messageId']).toBe(initialMessageId + 1);
-    const initialLogCount = logger['logs'].length;
+    const setupMessageId = logger['messageId'];
+    const setupLogCount = logger['logs'].length;
 
-    // Inject an append failure AFTER the read succeeds by stubbing the
-    // internal append method.
+    // Inject a deterministic append failure by stubbing the async fs append.
+    // The setup write above is required — it sets _needsNewlineCheck to false
+    // so _ensureTrailingNewline is skipped, ensuring only the entry append is
+    // stubbed and the failure path is unambiguous.
     const appendSpy = vi
-      .spyOn(logger as never, '_appendJsonlSync')
-      .mockImplementation(() => {
-        throw new Error('Injected append failure');
-      });
+      .spyOn(fs, 'appendFile')
+      .mockRejectedValue(new Error('Injected append failure'));
 
-    try {
-      await logger.logMessage(MessageSenderType.USER, 'test fail write');
-      // messageId must NOT advance because the write failed.
-      expect(logger['messageId']).toBe(initialMessageId + 1);
-      // The in-memory cache must NOT include the failed entry.
-      expect(logger['logs'].length).toBe(initialLogCount);
-    } finally {
-      appendSpy.mockRestore();
-    }
+    // The failing write must not throw out of logMessage.
+    await logger.logMessage(MessageSenderType.USER, 'test fail write');
+
+    appendSpy.mockRestore();
+
+    // messageId must NOT advance because the write failed.
+    expect(logger['messageId']).toBe(setupMessageId);
+    // The in-memory cache must NOT include the failed entry.
+    expect(logger['logs'].length).toBe(setupLogCount);
+    // The failed message must not be persisted.
+    const persisted = await readLogFile();
+    expect(persisted.some((e) => e.message === 'test fail write')).toBe(false);
+    // The persistence error must be logged rather than silently swallowed.
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Error appending to log file:',
+      expect.any(Error),
+    );
+    debugSpy.mockRestore();
   });
 });

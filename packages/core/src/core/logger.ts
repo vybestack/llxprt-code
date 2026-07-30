@@ -5,19 +5,7 @@
  */
 
 import path from 'node:path';
-import {
-  promises as fs,
-  readFileSync,
-  writeFileSync,
-  appendFileSync,
-  renameSync,
-  unlinkSync,
-  copyFileSync,
-  statSync,
-  openSync,
-  readSync,
-  closeSync,
-} from 'node:fs';
+import { promises as fs } from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -114,7 +102,12 @@ export class Logger {
   private initialized = false;
   private logs: LogEntry[] = []; // In-memory cache, ideally reflects the last known state of the file
   private _formatMigrated = false; // True once legacy format check/migration has run
+  private _diskIsLegacy = false; // True when the on-disk file is still legacy JSON-array at load
   private _needsNewlineCheck = true; // Set false after any successful JSONL write
+  // Serializes append operations per instance so concurrent logMessage calls
+  // cannot interleave at an await and reuse the same messageId (the old sync
+  // write path was implicitly serialized because it never yielded).
+  private _writeQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
     sessionId: string,
@@ -194,44 +187,53 @@ export class Logger {
     return entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
   }
 
-  private _readLogFileSync(): LogEntry[] {
+  /**
+   * Load the log file once during initialization. Returns the parsed entries
+   * and whether the on-disk file was in the legacy JSON-array format. This is
+   * the ONLY read on the steady-state path: initialization, legacy migration,
+   * and corruption recovery all flow through here. The per-message write path
+   * never re-reads the file.
+   */
+  private async _loadFromDisk(): Promise<{
+    entries: LogEntry[];
+    legacy: boolean;
+  }> {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during read attempt.');
     }
+    let fileContent: string;
     try {
-      const fileContent = readFileSync(this.logFilePath, 'utf-8');
-      return this._parseLogContentSync(fileContent.trim());
+      fileContent = await fs.readFile(this.logFilePath, 'utf-8');
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
-        return [];
+        return { entries: [], legacy: false };
       }
-      debugLogger.debug(
-        `Failed to read or parse log file ${this.logFilePath}:`,
-        error,
-      );
+      debugLogger.debug(`Failed to read log file ${this.logFilePath}:`, error);
       throw error;
     }
-  }
-
-  /**
-   * Shared post-read parsing logic used by both the sync and async read
-   * paths. Handles the legacy JSON-array format, JSONL, and corruption
-   * recovery. On total corruption (all lines fail to parse) it backs up the
-   * file via the provided function and returns an empty array.
-   */
-  private _parseLogContentSync(trimmed: string): LogEntry[] {
+    const trimmed = fileContent.trim();
     if (trimmed.length === 0) {
-      return [];
+      return { entries: [], legacy: false };
     }
     const legacy = this._parseLegacyJsonArray(trimmed);
     if (legacy !== null) {
-      return legacy;
+      return { entries: legacy, legacy: true };
     }
+    const entries = await this._parseAndRecoverJsonl(trimmed);
+    return { entries, legacy: false };
+  }
+
+  /**
+   * Parse JSONL content with corruption recovery — the single shared
+   * implementation (no sync/async duplicate). Backs up and starts fresh on
+   * total corruption; backs up and rewrites on partial corruption.
+   */
+  private async _parseAndRecoverJsonl(trimmed: string): Promise<LogEntry[]> {
     try {
       const { entries, skipped } = this._parseJsonl(trimmed);
       if (skipped > 0) {
-        this._recoverPartialCorruptionSync(entries, skipped);
+        await this._recoverPartialCorruption(entries, skipped);
       }
       return entries;
     } catch (parseError) {
@@ -240,10 +242,14 @@ export class Logger {
           `Invalid JSON line in log file ${this.logFilePath}. Backing up and starting fresh.`,
           parseError,
         );
-        const backedUp = this._backupCorruptedLogFileSync('malformed_line');
+        const backedUp = await this._backupCorruptedLogFile('malformed_line');
         if (!backedUp) {
+          // Total corruption has no entries to recover, so returning empty is
+          // acceptable; but a failed backup leaves the corrupt file in place,
+          // and subsequent appends write onto it until the next full load
+          // recovers via partial-corruption handling. Surface that here.
           debugLogger.debug(
-            'Backup of corrupted log file failed — preserving original file on disk and returning empty cache.',
+            `Backup failed for corrupted log file ${this.logFilePath}; active file left unchanged.`,
           );
         }
         return [];
@@ -252,38 +258,49 @@ export class Logger {
     }
   }
 
-  private _recoverPartialCorruptionSync(
-    entries: LogEntry[],
-    skipped: number,
-  ): void {
-    if (!this.logFilePath) return;
-    debugLogger.debug(
-      `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
-    );
-    const backedUp = this._backupCorruptedLogFileSync('partial_corruption');
-    if (!backedUp) return;
-    try {
-      this._writeJsonlAtomicSync(entries);
-    } catch (writeError) {
-      debugLogger.debug(
-        'Failed atomic rewrite during partial corruption recovery:',
-        writeError,
-      );
+  /**
+   * Migrate a legacy on-disk file to JSONL the first time it is encountered.
+   * No file read happens here: the entries were already parsed during
+   * `_loadFromDisk`, so migration only backs up and rewrites. Sets
+   * `_formatMigrated` so subsequent writes skip this entirely.
+   */
+  private async _ensureJsonlFormat(): Promise<void> {
+    if (this._formatMigrated) {
+      return;
     }
+    if (this._diskIsLegacy) {
+      const backedUp = await this._backupCorruptedLogFile('pre_migration');
+      if (!backedUp) {
+        // Fail fast: never append JSONL onto a still-legacy file, which would
+        // produce a hybrid file and lose the legacy entries on the next load.
+        // Initialization catches this for a non-fatal retry; the write path
+        // propagates it so the message is not persisted to a corrupt file.
+        throw new Error(
+          'Legacy migration backup failed; will retry on next write.',
+        );
+      }
+      await this._writeJsonlAtomic(this.logs);
+      this._diskIsLegacy = false;
+    }
+    this._formatMigrated = true;
   }
 
-  private _writeJsonlAtomicSync(entries: LogEntry[]): void {
+  /**
+   * Atomically (temp-file + rename) write the full set of entries as JSONL.
+   * Used by legacy migration and corruption recovery.
+   */
+  private async _writeJsonlAtomic(entries: LogEntry[]): Promise<void> {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during write attempt.');
     }
     const tmpPath = `${this.logFilePath}.migration.${process.pid}.${Date.now()}.tmp`;
     try {
-      writeFileSync(tmpPath, this._toJsonl(entries), 'utf-8');
-      renameSync(tmpPath, this.logFilePath);
+      await fs.writeFile(tmpPath, this._toJsonl(entries), 'utf-8');
+      await fs.rename(tmpPath, this.logFilePath);
     } catch (error) {
       // Clean up the orphaned temp file so it doesn't accumulate on disk.
       try {
-        unlinkSync(tmpPath);
+        await fs.unlink(tmpPath);
       } catch {
         // Ignore cleanup failure.
       }
@@ -291,12 +308,16 @@ export class Logger {
     }
   }
 
-  private _appendJsonlSync(entry: LogEntry): void {
+  private async _appendJsonl(entry: LogEntry): Promise<void> {
     if (!this.logFilePath) {
       throw new Error('Log file path not set during append attempt.');
     }
-    this._ensureTrailingNewline();
-    appendFileSync(this.logFilePath, JSON.stringify(entry) + '\n', 'utf-8');
+    await this._ensureTrailingNewline();
+    await fs.appendFile(
+      this.logFilePath,
+      JSON.stringify(entry) + '\n',
+      'utf-8',
+    );
     this._needsNewlineCheck = false;
   }
 
@@ -307,24 +328,24 @@ export class Logger {
    * Skipped in the steady state (after a successful JSONL write) since
    * every write always terminates with a newline.
    */
-  private _ensureTrailingNewline(): void {
+  private async _ensureTrailingNewline(): Promise<void> {
     if (!this.logFilePath || !this._needsNewlineCheck) return;
     try {
-      const stat = statSync(this.logFilePath);
+      const stat = await fs.stat(this.logFilePath);
       if (stat.size === 0) {
         this._needsNewlineCheck = false;
         return;
       }
-      const fd = openSync(this.logFilePath, 'r');
+      const handle = await fs.open(this.logFilePath, 'r');
       try {
         const buf = Buffer.alloc(1);
-        readSync(fd, buf, 0, 1, stat.size - 1);
+        await handle.read(buf, 0, 1, stat.size - 1);
         if (buf[0] !== 0x0a) {
-          appendFileSync(this.logFilePath, '\n', 'utf-8');
+          await fs.appendFile(this.logFilePath, '\n', 'utf-8');
         }
         this._needsNewlineCheck = false;
       } finally {
-        closeSync(fd);
+        await handle.close();
       }
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
@@ -340,11 +361,11 @@ export class Logger {
    * original). Using copy instead of rename ensures the active file survives
    * backup so callers can safely rewrite it with recovered entries.
    */
-  private _backupCorruptedLogFileSync(reason: string): boolean {
+  private async _backupCorruptedLogFile(reason: string): Promise<boolean> {
     if (!this.logFilePath) return false;
     const backupPath = `${this.logFilePath}.${reason}.${process.pid}.${Date.now()}.bak`;
     try {
-      copyFileSync(this.logFilePath, backupPath);
+      await fs.copyFile(this.logFilePath, backupPath);
       debugLogger.debug(`Backed up log file to ${backupPath}`);
       return true;
     } catch (error) {
@@ -358,94 +379,68 @@ export class Logger {
     }
   }
 
-  private _isLegacyFormat(): boolean {
-    if (!this.logFilePath) {
-      return false;
-    }
-    try {
-      const content = readFileSync(this.logFilePath, 'utf-8');
-      return content.trim().startsWith('[');
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      // ENOENT means the file doesn't exist yet — genuinely non-legacy.
-      if (nodeError.code === 'ENOENT') {
-        return false;
+  /**
+   * Back up a partially-corrupted JSONL file and rewrite the active file with
+   * only the valid entries, ensuring the next write appends to a clean file.
+   * Uses temp-file + rename for atomicity.
+   */
+  private async _recoverPartialCorruption(
+    entries: LogEntry[],
+    skipped: number,
+  ): Promise<void> {
+    debugLogger.debug(
+      `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
+    );
+    const backedUp = await this._backupCorruptedLogFile('partial_corruption');
+    if (backedUp) {
+      try {
+        await this._writeJsonlAtomic(entries);
+      } catch (error) {
+        debugLogger.debug(
+          'Failed atomic rewrite during partial corruption recovery:',
+          error,
+        );
       }
-      // Non-ENOENT errors (EACCES, EIO, etc.) are transient/recoverable —
-      // rethrow so the caller does NOT cache the format as migrated.
-      throw error;
     }
   }
 
-  private _migrateLegacyToJsonl(): void {
-    if (!this.logFilePath) {
-      return;
-    }
-    let rawContent: string;
-    try {
-      rawContent = readFileSync(this.logFilePath, 'utf-8');
-    } catch (error) {
-      debugLogger.debug('Failed to read legacy log file for migration:', error);
-      return;
-    }
-    const trimmed = rawContent.trim();
-    if (trimmed.length === 0 || !trimmed.startsWith('[')) {
-      return;
-    }
-    // Always back up the original legacy file before rewriting. Using copy
-    // (not rename) ensures the active file survives even if the JSONL write
-    // fails below — the caller can then retry on the next write.
-    const backedUp = this._backupCorruptedLogFileSync('pre_migration');
-    if (!backedUp) {
-      debugLogger.debug(
-        'Failed to back up legacy file before migration — skipping migration to preserve data.',
-      );
-      return;
-    }
-    const entries = this._parseLegacyJsonArray(trimmed);
-    if (entries === null) {
-      // Content starts with '[' but is not a valid JSON array — corrupted.
-      // The backup was already created above; rewrite as empty JSONL.
-      debugLogger.debug(
-        'Legacy file starts with [ but is not a valid JSON array — treating as corrupted.',
-      );
-      this._writeJsonlAtomicSync([]);
-      return;
-    }
-    this._writeJsonlAtomicSync(entries);
+  /**
+   * Append a single entry using the in-memory cache for duplicate detection
+   * and messageId assignment — no full-file read on the steady-state path
+   * (O(1) filesystem append: no full-file read; duplicate detection scans the
+   * in-memory cache). Legacy migration runs at most once (lazily on the first
+   * write if initialization could not migrate eagerly).
+   *
+   * Serialized per instance via `_writeQueue` so concurrent logMessage calls
+   * cannot interleave at an await and reuse the same messageId.
+   */
+  private _updateLogFile(entryToAppend: LogEntry): Promise<LogEntry | null> {
+    // Chain each append after the previous one settles (success or failure).
+    const result = this._writeQueue.then(
+      () => this._appendEntry(entryToAppend),
+      () => this._appendEntry(entryToAppend),
+    );
+    // Keep the chain alive regardless of rejection so one failed write cannot
+    // permanently break subsequent writes. `result` retains the real outcome.
+    this._writeQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
-  private _updateLogFileSync(entryToAppend: LogEntry): LogEntry | null {
+  private async _appendEntry(
+    entryToAppend: LogEntry,
+  ): Promise<LogEntry | null> {
     if (!this.logFilePath) {
-      debugLogger.debug('Log file path not set. Cannot persist log entry.');
       throw new Error('Log file path not set during update attempt.');
     }
 
-    if (!this._formatMigrated) {
-      if (this._isLegacyFormat()) {
-        this._migrateLegacyToJsonl();
-        // If migration still failed (e.g. backup failed), don't cache — let
-        // the next write attempt retry.
-        if (this._isLegacyFormat()) {
-          throw new Error('Legacy migration failed; will retry on next write.');
-        }
-      }
-      this._formatMigrated = true;
-    }
+    await this._ensureJsonlFormat();
 
-    const currentLogsOnDisk = this._readLogFileSync();
+    entryToAppend.messageId = this.messageId;
 
-    const sessionLogsOnDisk = currentLogsOnDisk.filter(
-      (e) => e.sessionId === entryToAppend.sessionId,
-    );
-    const nextMessageIdForSession =
-      sessionLogsOnDisk.length > 0
-        ? Math.max(...sessionLogsOnDisk.map((e) => e.messageId)) + 1
-        : 0;
-
-    entryToAppend.messageId = nextMessageIdForSession;
-
-    const entryExists = currentLogsOnDisk.some(
+    const entryExists = this.logs.some(
       (e) =>
         e.sessionId === entryToAppend.sessionId &&
         e.messageId === entryToAppend.messageId &&
@@ -457,120 +452,12 @@ export class Logger {
       debugLogger.debug(
         `Duplicate log entry detected and skipped: session ${entryToAppend.sessionId}, messageId ${entryToAppend.messageId}`,
       );
-      this.logs = currentLogsOnDisk;
       return null;
     }
 
-    this._appendJsonlSync(entryToAppend);
-    currentLogsOnDisk.push(entryToAppend);
-    this.logs = currentLogsOnDisk;
+    await this._appendJsonl(entryToAppend);
+    this.logs.push(entryToAppend);
     return entryToAppend;
-  }
-
-  private _updateLogFile(entryToAppend: LogEntry): Promise<LogEntry | null> {
-    try {
-      return Promise.resolve(this._updateLogFileSync(entryToAppend));
-    } catch (error) {
-      debugLogger.debug('Error appending to log file:', error);
-      return Promise.reject(error as Error);
-    }
-  }
-
-  private async _readLogFile(): Promise<LogEntry[]> {
-    if (!this.logFilePath) {
-      throw new Error('Log file path not set during read attempt.');
-    }
-    try {
-      const fileContent = await fs.readFile(this.logFilePath, 'utf-8');
-      const trimmed = fileContent.trim();
-      if (trimmed.length === 0) {
-        return [];
-      }
-      // Legacy format: a single pretty-printed JSON array (pre-JSONL).
-      // Read-only tolerance so existing on-disk files keep working; new
-      // writes always append JSONL lines.
-      const legacy = this._parseLegacyJsonArray(trimmed);
-      if (legacy !== null) {
-        return legacy;
-      }
-      // JSONL format: one JSON object per line.
-      try {
-        const { entries, skipped } = this._parseJsonl(trimmed);
-        if (skipped > 0) {
-          await this._recoverPartialCorruption(entries, skipped);
-        }
-        return entries;
-      } catch (parseError) {
-        if (parseError instanceof SyntaxError) {
-          debugLogger.debug(
-            `Invalid JSON line in log file ${this.logFilePath}. Backing up and starting fresh.`,
-            parseError,
-          );
-          await this._backupCorruptedLogFile('malformed_line');
-          return [];
-        }
-        throw parseError;
-      }
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code === 'ENOENT') {
-        return [];
-      }
-      debugLogger.debug(
-        `Failed to read or parse log file ${this.logFilePath}:`,
-        error,
-      );
-      throw error;
-    }
-  }
-
-  private async _backupCorruptedLogFile(reason: string): Promise<boolean> {
-    if (!this.logFilePath) return false;
-    const backupPath = `${this.logFilePath}.${reason}.${process.pid}.${Date.now()}.bak`;
-    try {
-      await fs.copyFile(this.logFilePath, backupPath);
-      debugLogger.debug(`Backed up log file to ${backupPath}`);
-      return true;
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code === 'ENOENT') {
-        return true;
-      }
-      debugLogger.debug(`Failed to back up log file to ${backupPath}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Back up a partially-corrupted JSONL file and rewrite the active file with
-   * only the valid entries, ensuring the next write appends to a clean file.
-   * Uses temp-file + rename for atomicity, matching the sync path.
-   */
-  private async _recoverPartialCorruption(
-    entries: LogEntry[],
-    skipped: number,
-  ): Promise<void> {
-    debugLogger.debug(
-      `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
-    );
-    const backedUp = await this._backupCorruptedLogFile('partial_corruption');
-    if (backedUp && this.logFilePath) {
-      const tmpPath = `${this.logFilePath}.recovery.${process.pid}.${Date.now()}.tmp`;
-      try {
-        await fs.writeFile(tmpPath, this._toJsonl(entries), 'utf-8');
-        await fs.rename(tmpPath, this.logFilePath);
-      } catch (error) {
-        debugLogger.debug(
-          'Failed atomic rewrite during partial corruption recovery:',
-          error,
-        );
-        try {
-          await fs.unlink(tmpPath);
-        } catch {
-          // Ignore — temp file pruning handles stale files.
-        }
-      }
-    }
   }
 
   private async _pruneOldBackups(): Promise<void> {
@@ -633,7 +520,19 @@ export class Logger {
     await this._pruneOldBackups();
 
     try {
-      this.logs = await this._readLogFile();
+      const { entries, legacy } = await this._loadFromDisk();
+      this.logs = entries;
+      this._diskIsLegacy = legacy;
+      // Eagerly migrate a legacy file to JSONL so the write path stays O(1)
+      // (no read). Migration failure here is non-fatal: writes will retry.
+      try {
+        await this._ensureJsonlFormat();
+      } catch (err) {
+        debugLogger.debug(
+          'Non-fatal legacy migration failure during init:',
+          err,
+        );
+      }
       const sessionLogs = this.logs.filter(
         (entry) => entry.sessionId === this.sessionId,
       );
@@ -671,11 +570,11 @@ export class Logger {
       return;
     }
 
-    // The messageId used here is the instance's idea of the next ID.
-    // _updateLogFile will verify and potentially recalculate based on the file's actual state.
+    // messageId is assigned from the in-memory counter inside _updateLogFile;
+    // the write path appends directly without re-reading the file.
     const newEntryObject: LogEntry = {
       sessionId: this.sessionId,
-      messageId: this.messageId, // This will be recalculated in _updateLogFile
+      messageId: this.messageId,
       type,
       message,
       timestamp: new Date().toISOString(),
@@ -684,12 +583,12 @@ export class Logger {
     try {
       const writtenEntry = await this._updateLogFile(newEntryObject);
       if (writtenEntry) {
-        // If an entry was actually written (not a duplicate skip),
-        // then this instance can increment its idea of the next messageId for this session.
+        // Only advance the next-id counter when an entry was actually
+        // written (a duplicate skip or a write failure must not advance it).
         this.messageId = writtenEntry.messageId + 1;
       }
-    } catch {
-      // Error already logged by _updateLogFile or _readLogFile.
+    } catch (error) {
+      debugLogger.debug('Error appending to log file:', error);
     }
   }
 
@@ -891,13 +790,21 @@ export class Logger {
     }
   }
 
-  close(): void {
+  async close(): Promise<void> {
+    // Wait for any in-flight write to settle before clearing state. Without
+    // this, a resumed _appendEntry (suspended at an `await`) would push into
+    // the already-cleared this.logs or operate on an undefined logFilePath.
+    await this._writeQueue.catch(() => {});
     this.initialized = false;
+    this.llxprtDir = undefined;
     this.logFilePath = undefined;
     this.logs = [];
     this.sessionId = undefined;
     this.messageId = 0;
     this._formatMigrated = false;
+    this._diskIsLegacy = false;
+    this._needsNewlineCheck = true;
+    this._writeQueue = Promise.resolve();
   }
 }
 
