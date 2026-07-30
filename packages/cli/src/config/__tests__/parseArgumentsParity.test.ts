@@ -28,6 +28,17 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
+function expectParseExit(): {
+  mockExit: ReturnType<typeof vi.spyOn>;
+  mockErr: ReturnType<typeof vi.spyOn>;
+} {
+  const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+    throw new Error('process.exit called');
+  });
+  const mockErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+  return { mockExit, mockErr };
+}
+
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('parseArgumentsParity: positional mapping', () => {
@@ -35,6 +46,7 @@ describe('parseArgumentsParity: positional mapping', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
+    vi.restoreAllMocks();
   });
 
   it('no positional → query is undefined', async () => {
@@ -87,6 +99,35 @@ describe('parseArgumentsParity: positional mapping', () => {
     );
     mockExit.mockRestore();
     mockErr.mockRestore();
+  });
+
+  it('repeated --prompt → clean parse error (no array, no later crash)', async () => {
+    process.argv = [
+      'node',
+      'script.js',
+      '--prompt',
+      'first',
+      '--prompt',
+      'second',
+    ];
+    const { mockErr } = expectParseExit();
+    await expect(parseArguments({} as Settings)).rejects.toThrow(
+      'process.exit called',
+    );
+    expect(mockErr).toHaveBeenCalledWith(
+      expect.stringContaining('--prompt (-p) can only be specified once'),
+    );
+  });
+
+  it('repeated -p alias → clean parse error', async () => {
+    process.argv = ['node', 'script.js', '-p', 'first', '-p', 'second'];
+    const { mockErr } = expectParseExit();
+    await expect(parseArguments({} as Settings)).rejects.toThrow(
+      'process.exit called',
+    );
+    expect(mockErr).toHaveBeenCalledWith(
+      expect.stringContaining('--prompt (-p) can only be specified once'),
+    );
   });
 
   it('@path prefix → mapped to prompt (one-shot)', async () => {
@@ -383,6 +424,7 @@ describe('parseArgumentsParity: --prompt-interactive / -i alias', () => {
 
   afterEach(() => {
     process.argv = originalArgv;
+    vi.restoreAllMocks();
   });
 
   it('--prompt-interactive sets promptInteractive', async () => {
@@ -396,5 +438,38 @@ describe('parseArgumentsParity: --prompt-interactive / -i alias', () => {
     process.argv = ['node', 'script.js', '-i', 'hi'];
     const argv = await parseArguments({} as Settings);
     expect(argv.promptInteractive).toBe('hi');
+  });
+
+  it('repeated --prompt-interactive → clean parse error (no array, no later crash)', async () => {
+    process.argv = [
+      'node',
+      'script.js',
+      '--prompt-interactive',
+      'first',
+      '--prompt-interactive',
+      'second',
+    ];
+    const { mockErr } = expectParseExit();
+    await expect(parseArguments({} as Settings)).rejects.toThrow(
+      'process.exit called',
+    );
+    expect(mockErr).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '--prompt-interactive (-i) can only be specified once',
+      ),
+    );
+  });
+
+  it('repeated -i alias → clean parse error', async () => {
+    process.argv = ['node', 'script.js', '-i', 'first', '-i', 'second'];
+    const { mockErr } = expectParseExit();
+    await expect(parseArguments({} as Settings)).rejects.toThrow(
+      'process.exit called',
+    );
+    expect(mockErr).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '--prompt-interactive (-i) can only be specified once',
+      ),
+    );
   });
 });
