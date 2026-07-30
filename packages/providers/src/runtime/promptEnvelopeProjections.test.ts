@@ -202,6 +202,26 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(inflatedTokens).toBe(baselineTokens);
   });
 
+  it('scrubs all data URIs when a single string field contains multiple data URLs', async () => {
+    const build = (bytes: number) => ({
+      model: 'claude-3-5-sonnet',
+      messages: [
+        {
+          role: 'user',
+          content: `Look at these two images: data:image/png;base64,${'A'.repeat(bytes)} and data:image/jpeg;base64,${'B'.repeat(bytes)}`,
+        },
+      ],
+    });
+    const small = await projectAnthropicPromptEnvelope(
+      build(1_000),
+    ).countProjectedTokens();
+    const large = await projectAnthropicPromptEnvelope(
+      build(100_000),
+    ).countProjectedTokens();
+    expect(small).toBeGreaterThan(0);
+    expect(large).toBe(small);
+  });
+
   it('surfaces unsupported media explicitly when passed from preparation', () => {
     const requestBody = {
       model: 'claude-3-5-sonnet',

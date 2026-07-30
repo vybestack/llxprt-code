@@ -226,4 +226,26 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
     const controlledTokens = await withEphemeralControls.countProjectedTokens();
     expect(controlledTokens).toBe(baselineTokens);
   });
+
+  it('fails fast when transport receives an unknown Chat prepared token', async () => {
+    const provider = new TestOpenAIProvider();
+    const options = buildCallOptions(provider, {
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+      ],
+    });
+
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of provider.generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: Object.freeze({}),
+      })) {
+        // drain
+      }
+    };
+
+    await expect(drain()).rejects.toThrow(
+      'Unknown OpenAI Chat prompt-envelope transport token',
+    );
+  });
 });

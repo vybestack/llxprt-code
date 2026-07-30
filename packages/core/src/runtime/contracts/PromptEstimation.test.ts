@@ -324,6 +324,49 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       /revision/i,
     );
   });
+
+  it('does not mutate the input projection unsupportedMedia array or entries', async () => {
+    const originalEntry = {
+      kind: 'unsupported' as const,
+      reason: 'audio not supported',
+      mediaType: 'audio',
+    };
+    const projection: PromptEnvelopeProjection = {
+      model: 'gpt-4o',
+      protocol: 'openai-chat',
+      method: 'chat/completions/v1',
+      projectionRevision: 1,
+      unsupportedMedia: [originalEntry],
+      transportToken: Object.freeze({}),
+      countProjectedTokens: () => Promise.resolve(10),
+    };
+
+    await estimatePromptEnvelope(projection);
+
+    expect(originalEntry).toStrictEqual({
+      kind: 'unsupported',
+      reason: 'audio not supported',
+      mediaType: 'audio',
+    });
+    expect(Object.isFrozen(originalEntry)).toBe(false);
+  });
+
+  it('propagates rejection from countProjectedTokens without masking', async () => {
+    const projectionError = new Error('provider tokenizer unavailable');
+    const projection: PromptEnvelopeProjection = {
+      model: 'gpt-4o',
+      protocol: 'openai-chat',
+      method: 'chat/completions/v1',
+      projectionRevision: 1,
+      unsupportedMedia: [],
+      transportToken: Object.freeze({}),
+      countProjectedTokens: () => Promise.reject(projectionError),
+    };
+
+    await expect(estimatePromptEnvelope(projection)).rejects.toBe(
+      projectionError,
+    );
+  });
 });
 
 describe('UnsupportedMediaEntry contract (issue #2817)', () => {

@@ -623,6 +623,30 @@ export class AnthropicProvider extends BaseProvider {
     );
   }
 
+  /**
+   * Resolve the credential the projection must classify, using the SAME
+   * precedence `buildProviderClient` applies at transport: an explicitly
+   * resolved runtime token first, then the ambient prompt credential. The
+   * agent send seam does not populate `resolved.authToken`, so inferring the
+   * OAuth flavor from provider configuration would prepare a body transport
+   * contradicts.
+   */
+  private async resolveProjectionAuthToken(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<string> {
+    const runtimeAuthToken: unknown = options.resolved.authToken;
+    if (typeof runtimeAuthToken === 'string' && runtimeAuthToken !== '') {
+      return runtimeAuthToken;
+    }
+    if (isRuntimeAuthTokenProvider(runtimeAuthToken)) {
+      const freshToken = await runtimeAuthToken.provide();
+      if (typeof freshToken === 'string' && freshToken !== '') {
+        return freshToken;
+      }
+    }
+    return this.getAuthTokenForPrompt();
+  }
+
   private async prepareRequestContext(
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
@@ -657,12 +681,9 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const resolvedToken = normalized.resolved.authToken;
-    const isOAuth =
-      typeof resolvedToken === 'string' && resolvedToken !== ''
-        ? this.classifyOAuthToken(resolvedToken)
-        : this.baseProviderConfig.oauthProvider === 'claudecode' &&
-          isAnthropicOAuthBaseURL(normalized.resolved.baseURL);
+    const isOAuth = this.classifyOAuthToken(
+      await this.resolveProjectionAuthToken(normalized),
+    );
     const requestContext = await this.prepareRequestContext(
       normalized,
       isOAuth,

@@ -78,13 +78,11 @@ export function recordFinalizedPromptEnvelopeEstimate(
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
   try {
-    usageLogger.recordEstimate(promptId, {
+    usageLogger.refineEstimate(promptId, {
       provider: providerName,
       model: estimate.model,
       estimatedTokens: estimate.estimatedPromptTokens,
       estimator: resolveEstimatorType(providerName),
-      tiktokenTokens: null,
-      tiktokenEstimationFailed: false,
     });
   } catch (error) {
     logger.error(

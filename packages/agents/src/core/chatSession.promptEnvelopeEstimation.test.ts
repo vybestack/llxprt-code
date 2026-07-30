@@ -362,20 +362,31 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     expect(actualTokens).not.toBe(estimateTokens);
   });
 
-  it('A6: system instruction content affects the estimate', async () => {
+  it('A6: system instruction forwarded via ChatSession affects the estimate', async () => {
     const longSystemPrompt =
       'You are a detailed assistant with extensive instructions about how to behave in every situation including safety, formatting, tone, and content guidelines that span multiple paragraphs.';
-    const { provider, estimateHistory } = createEstimatingProvider({
-      systemPrompt: longSystemPrompt,
-    });
+
+    const baselineProvider = createEstimatingProvider();
+    const baselineFixture = createTestFixture(baselineProvider.provider);
+    const baselineChat = buildChatSession(baselineFixture);
+    await baselineChat.sendMessage(
+      { message: [{ text: 'Hello' }] },
+      'prompt-baseline',
+    );
+    const baselineEstimate = baselineChat.getPromptEnvelopeEstimate()!;
+
+    const { provider, estimateHistory } = createEstimatingProvider();
     const fixture = createTestFixture(provider);
     const chat = buildChatSession(fixture);
+    chat.setSystemInstruction(longSystemPrompt);
 
     await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'prompt-1');
 
     const estimate = chat.getPromptEnvelopeEstimate();
     expect(estimate).not.toBeNull();
-    expect(estimate!.estimatedPromptTokens).toBeGreaterThan(0);
+    expect(estimate!.estimatedPromptTokens).toBeGreaterThan(
+      baselineEstimate.estimatedPromptTokens,
+    );
     expect(estimateHistory.length).toBeGreaterThanOrEqual(1);
   });
 

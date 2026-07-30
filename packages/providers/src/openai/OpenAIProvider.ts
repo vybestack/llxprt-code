@@ -835,7 +835,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): Promise<PromptEnvelopeProjection> {
     const resolvedModel =
       options.resolved?.model === undefined || options.resolved.model === ''
-        ? this.getModel()
+        ? this.getModel() || this.getDefaultModel()
         : options.resolved.model;
     const optionsWithModel =
       resolvedModel === options.resolved?.model

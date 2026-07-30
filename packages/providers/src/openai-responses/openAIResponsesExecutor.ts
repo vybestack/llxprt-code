@@ -381,10 +381,25 @@ export function isResponsesPdfEnabled(
   const setting =
     (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
     options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'media.pdf.enabled',
-    );
+    readOptionalSetting(options, 'media.pdf.enabled');
   return setting !== false;
+}
+
+/**
+ * Read a setting through the structurally optional `SettingsService.get`
+ * seam. `get` is declared optional on the contract, so a settings object that
+ * omits it must fall through to the caller's default rather than throwing.
+ */
+function readOptionalSetting(
+  options: NormalizedGenerateChatOptions,
+  key: string,
+): unknown {
+  const get = (
+    options as { settings?: { get?: (settingKey: string) => unknown } }
+  ).settings?.get;
+  return typeof get === 'function'
+    ? get.call(options.settings, key)
+    : undefined;
 }
 
 function buildInput(

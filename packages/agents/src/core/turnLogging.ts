@@ -13,6 +13,7 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { nextStreamEventWithIdleTimeout } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { safeJsonStringify } from './turnJsonUtils.js';
 
 /**
@@ -131,5 +132,90 @@ export function logApiError(
     sessionId: runtimeState.sessionId,
     runtimeId: runtimeState.runtimeId,
     provider: runtimeState.provider,
+  });
+}
+
+/**
+ * Timing for the provider send/retry loop only.
+ *
+ * The `durationMs` on provider telemetry must measure provider latency, not
+ * local enforcement/compression time, so the clock starts when the prepared
+ * request is actually handed to the provider. Before the first send it falls
+ * back to the overall start so failures during preparation still report a
+ * duration.
+ */
+export interface ProviderSendTiming {
+  measure<T>(send: () => Promise<T>): Promise<T>;
+  elapsedSinceSend(): number;
+}
+
+export function createProviderSendTiming(
+  overallStartTime: number,
+): ProviderSendTiming {
+  let sendStartTime: number | undefined;
+  return {
+    measure(send) {
+      sendStartTime = Date.now();
+      return send();
+    },
+    elapsedSinceSend() {
+      return Date.now() - (sendStartTime ?? overallStartTime);
+    },
+  };
+}
+
+/**
+ * Log the active provider snapshot and reject providers that cannot serve the
+ * IContent send path.
+ */
+export function validateProviderForSend(
+  provider: {
+    readonly name: string;
+    getDefaultModel?: () => string;
+    generateChatCompletion?: unknown;
+  },
+  logger: { debug: (fn: () => string, data?: unknown) => void },
+  configModel: string,
+  resolveBaseUrl: () => string | undefined,
+): void {
+  logger.debug(() => '[TurnProcessor] Active provider snapshot before send', {
+    providerName: provider.name,
+    providerDefaultModel: provider.getDefaultModel?.(),
+    configModel,
+    baseUrl: resolveBaseUrl(),
+  });
+  if (typeof provider.generateChatCompletion !== 'function') {
+    throw new Error(
+      `Provider ${provider.name} does not support IContent interface`,
+    );
+  }
+}
+
+/**
+ * Read the next provider stream event, enforcing the idle timeout.
+ *
+ * The timeout surfaces as `StreamIdleTimeoutError` so it stays distinguishable
+ * from a user-initiated abort; `shouldRetryStreamAttempt` already declines to
+ * retry it, and `turn.ts` maps it to the dedicated StreamIdleTimeout event.
+ */
+export function readProviderStreamResponse(
+  iterator: AsyncIterator<IContent, unknown>,
+  timeoutController: AbortController,
+  upstreamAbortSignal: AbortSignal | undefined,
+  effectiveTimeoutMs: number,
+): Promise<IteratorResult<IContent, unknown>> {
+  if (effectiveTimeoutMs <= 0) {
+    return iterator.next();
+  }
+  return nextStreamEventWithIdleTimeout({
+    iterator,
+    timeoutMs: effectiveTimeoutMs,
+    signal: timeoutController.signal,
+    onTimeout: () => {
+      if (upstreamAbortSignal?.aborted === true) {
+        return;
+      }
+      timeoutController.abort();
+    },
   });
 }

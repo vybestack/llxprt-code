@@ -58,6 +58,7 @@ import { recordActualTokenUsage } from './tokenUsageActualLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
   buildRequestContentsResult,
+  contentForTelemetry,
   selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
@@ -676,28 +677,31 @@ export class StreamProcessor {
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
 
-    for await (const iContent of streamResponse) {
-      this._trackPromptTokens(iContent);
-
-      const chunk = toModelStreamChunk(iContent);
-
-      // Stamp hook restrictions onto the chunk so downstream consumers
-      // (Turn) can filter blocks without object-identity WeakMap lookups.
-      if (hookRestrictedAllowedTools !== undefined) {
-        chunk.hookRestrictions = {
-          allowedToolNames: [...hookRestrictedAllowedTools],
-        };
+    // The caller iterates this generator after _sendProviderRequest returned,
+    // so a mid-stream failure never re-enters its try/catch; clear the failed
+    // attempt's estimate here so only a successful one stays observable.
+    try {
+      for await (const iContent of streamResponse) {
+        this._trackPromptTokens(iContent);
+        const chunk = toModelStreamChunk(iContent);
+        if (hookRestrictedAllowedTools !== undefined) {
+          chunk.hookRestrictions = {
+            allowedToolNames: [...hookRestrictedAllowedTools],
+          };
+        }
+        const yieldedChunk =
+          (await this._processAfterModelHook(
+            iContent,
+            llmRequest,
+            chunk,
+            hookRestrictedAllowedTools,
+          )) ?? chunk;
+        lastIContent = contentForTelemetry(yieldedChunk);
+        yield yieldedChunk;
       }
-
-      const modifiedChunk = await this._processAfterModelHook(
-        iContent,
-        llmRequest,
-        chunk,
-        hookRestrictedAllowedTools,
-      );
-      const yieldedChunk = modifiedChunk ?? chunk;
-      lastIContent = this._contentForTelemetry(yieldedChunk);
-      yield yieldedChunk;
+    } catch (error) {
+      this.currentPromptEnvelopeEstimate = null;
+      throw error;
     }
 
     await this._logTelemetry(telemetryContext, lastIContent);
@@ -796,19 +800,6 @@ export class StreamProcessor {
     }
 
     return undefined;
-  }
-
-  private _contentForTelemetry(chunk: ModelStreamChunk): IContent {
-    if (chunk.usage === undefined) {
-      return chunk.content;
-    }
-    return {
-      ...chunk.content,
-      metadata: {
-        ...(chunk.content.metadata ?? {}),
-        usage: chunk.usage,
-      },
-    };
   }
 
   private async _logTelemetry(

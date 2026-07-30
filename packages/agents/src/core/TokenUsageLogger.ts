@@ -61,6 +61,28 @@ export class TokenUsageLogger {
     return this.enabled;
   }
 
+  /**
+   * Update the estimate for a prompt that already has a pending record,
+   * preserving the tiktoken comparison measured earlier in the turn. Used when
+   * a later stage (the finalized prompt envelope) produces a better token
+   * count but cannot re-measure tiktoken.
+   */
+  refineEstimate(
+    promptId: string,
+    data: Omit<
+      PendingTokenEstimate,
+      'ts' | 'promptId' | 'tiktokenTokens' | 'tiktokenEstimationFailed'
+    >,
+  ): void {
+    if (!this.enabled) return;
+    const existing = this.pending.get(promptId);
+    this.recordEstimate(promptId, {
+      ...data,
+      tiktokenTokens: existing?.tiktokenTokens ?? null,
+      tiktokenEstimationFailed: existing?.tiktokenEstimationFailed ?? false,
+    });
+  }
+
   recordEstimate(
     promptId: string,
     data: Omit<PendingTokenEstimate, 'ts' | 'promptId'>,

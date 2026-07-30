@@ -12,6 +12,10 @@ import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimi
 
 const PROJECTION_REVISION = 2;
 const BINARY_PAYLOAD_PLACEHOLDER = '[binary media bytes omitted]';
+const EMPTY_TRANSPORT_TOKEN: object = Object.freeze({});
+const EMPTY_UNSUPPORTED_MEDIA: readonly UnsupportedMediaEntry[] = Object.freeze(
+  [],
+);
 const PROMPT_KEYS = {
   'anthropic-messages': ['system', 'messages', 'tools'],
   'openai-chat': ['messages', 'tools'],
@@ -36,15 +40,23 @@ function buildProjection(
 ): PromptEnvelopeProjection {
   const promptText = serializePromptBearingStructure(requestBody, promptKeys);
   const tokens = countPromptTokens(promptText);
+  const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
   return {
     model: extractModel(requestBody),
     protocol: identity.protocol,
     method: identity.method,
     projectionRevision: identity.projectionRevision,
-    unsupportedMedia: options?.unsupportedMedia ?? [],
-    transportToken: options?.transportToken ?? Object.freeze({}),
+    unsupportedMedia,
+    transportToken: options?.transportToken ?? EMPTY_TRANSPORT_TOKEN,
     countProjectedTokens: () => Promise.resolve(tokens),
   };
+}
+
+function freezeUnsupportedMedia(
+  value: readonly UnsupportedMediaEntry[] | undefined,
+): readonly UnsupportedMediaEntry[] {
+  if (value === undefined) return EMPTY_UNSUPPORTED_MEDIA;
+  return Object.freeze(value.map((entry) => Object.freeze({ ...entry })));
 }
 
 function extractModel(requestBody: unknown): string {
@@ -102,12 +114,17 @@ function isAnthropicBase64Data(
 }
 
 function canonicalizePromptString(value: string): string {
-  const base64Marker = ';base64,';
-  const markerIndex = value.toLowerCase().indexOf(base64Marker);
-  if (value.toLowerCase().startsWith('data:') && markerIndex >= 4) {
-    return `${value.slice(0, markerIndex + base64Marker.length)}${BINARY_PAYLOAD_PLACEHOLDER}`;
-  }
-  return value;
+  if (!value.toLowerCase().includes(';base64,')) return value;
+  return replaceAllBase64DataUris(value);
+}
+
+function replaceAllBase64DataUris(value: string): string {
+  return value.replace(
+    /data:[^;]*;base64,[A-Za-z0-9+/=]+/gi,
+    (match) =>
+      match.slice(0, match.toLowerCase().indexOf(';base64,') + 8) +
+      BINARY_PAYLOAD_PLACEHOLDER,
+  );
 }
 
 function countPromptTokens(promptText: string): number {

@@ -196,11 +196,14 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
       ...agentShaped,
       invocation: { signal: new AbortController().signal },
     });
+
+    expect(projection.model).toBe(provider.getDefaultModel());
+
     const normalizedProjection = await provider.projectPromptEnvelope(
       buildCallOptions(provider, {
         contents,
         resolved: {
-          model: projection.model,
+          model: provider.getDefaultModel(),
           baseURL: 'https://api.anthropic.com',
           telemetry: { providerName: provider.name },
         },
@@ -287,5 +290,27 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     const withoutTokens = await withoutInstruction.countProjectedTokens();
     const withTokens = await withLongInstruction.countProjectedTokens();
     expect(withTokens).toBeGreaterThan(withoutTokens);
+  });
+
+  it('fails fast when transport receives an unknown prepared token', async () => {
+    const provider = new TestAnthropicProvider();
+    const options = buildCallOptions(provider, {
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+      ],
+    });
+
+    const drain = async (): Promise<void> => {
+      for await (const _chunk of provider.generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: Object.freeze({}),
+      })) {
+        // drain
+      }
+    };
+
+    await expect(drain()).rejects.toThrow(
+      'Unknown Anthropic prompt-envelope transport token',
+    );
   });
 });
