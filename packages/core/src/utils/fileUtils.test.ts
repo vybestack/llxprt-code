@@ -402,6 +402,17 @@ describe('fileUtils', () => {
         mime: 'video/webm',
         content: Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01]),
       },
+      {
+        label: 'mpegts',
+        file: 'movie.m2ts',
+        mime: 'video/mp2t',
+        content: (() => {
+          const buf = Buffer.alloc(189, 0x10);
+          buf[0] = 0x47;
+          buf[188] = 0x47;
+          return buf;
+        })(),
+      },
     ])(
       'should classify real $label video as video when signature verifies (#2723)',
       async ({ file, mime: mimeType, content }) => {

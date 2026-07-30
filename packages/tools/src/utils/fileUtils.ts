@@ -281,6 +281,10 @@ const VIDEO_SIGNATURES: readonly MediaSignature[] = [
     { offset: 8, bytes: [0x41, 0x56, 0x49, 0x20] },
   ],
   [{ offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3] }],
+  [
+    { offset: 0, bytes: [0x47] },
+    { offset: 188, bytes: [0x47] },
+  ],
 ];
 
 const PDF_SIGNATURES: readonly MediaSignature[] = [
@@ -327,8 +331,8 @@ async function verifyMediaSignature(
   let fh: fs.promises.FileHandle | null = null;
   try {
     fh = await fs.promises.open(filePath, 'r');
-    const buf = Buffer.alloc(32);
-    const { bytesRead } = await fh.read(buf, 0, 32, 0);
+    const buf = Buffer.alloc(512);
+    const { bytesRead } = await fh.read(buf, 0, 512, 0);
     const header = buf.subarray(0, bytesRead);
     if (header.length === 0) return false;
     return headerMatches(header, signatures);
