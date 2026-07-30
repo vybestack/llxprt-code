@@ -23,9 +23,11 @@ import {
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { buildSplitContent, buildFullSplitItem } from './streamUtils.js';
+import type { PendingTextAccumulator } from './pendingTextAccumulator.js';
 
 export interface ContentEventDeps {
   addItem: UseHistoryManagerReturn['addItem'];
+  pendingTextAccumulator: PendingTextAccumulator;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -120,29 +122,13 @@ function getPendingAiType(
   return item?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
 }
 
-export function processContentEvent(
-  eventValue: ContentEvent['value'],
+function handleSanitizeFeedback(
+  feedback: string | undefined,
+  blocked: boolean,
   currentAiMessageBuffer: string,
   userMessageTimestamp: number,
   deps: ContentEventDeps,
-): string {
-  if (deps.turnCancelledRef.current) {
-    return '';
-  }
-
-  // Normalize empty/whitespace to null so downstream `!= null` checks treat
-  // it as absent — consistent with resolveContentPrefixIdentity's cleaned()
-  // behavior (issue #2263).
-  const rawIdentity = deps.getContentPrefixIdentity();
-  const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
-  const pendingType = getPendingAiType(deps.pendingHistoryItemRef.current);
-  const combined = currentAiMessageBuffer + eventValue;
-  const {
-    text: sanitizedCombined,
-    feedback,
-    blocked,
-  } = deps.sanitizeContent(combined);
-
+): string | null {
   if (blocked) {
     const buffer = processBlockedContent(
       currentAiMessageBuffer,
@@ -161,6 +147,43 @@ export function processContentEvent(
       { type: MessageType.INFO, text: feedback },
       userMessageTimestamp,
     );
+  return null;
+}
+
+export function processContentEvent(
+  eventValue: ContentEvent['value'],
+  currentAiMessageBuffer: string,
+  userMessageTimestamp: number,
+  deps: ContentEventDeps,
+): string {
+  if (deps.turnCancelledRef.current) {
+    return '';
+  }
+
+  // Normalize empty/whitespace to null so downstream `!= null` checks treat
+  // it as absent — consistent with resolveContentPrefixIdentity's cleaned()
+  // behavior (issue #2263).
+  const rawIdentity = deps.getContentPrefixIdentity();
+  const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
+  const pendingType = getPendingAiType(deps.pendingHistoryItemRef.current);
+  const combined = eventValue;
+  const {
+    text: sanitizedCombined,
+    feedback,
+    blocked,
+  } = deps.sanitizeContent(combined);
+
+  const blockedResult = handleSanitizeFeedback(
+    feedback,
+    blocked,
+    currentAiMessageBuffer,
+    userMessageTimestamp,
+    deps,
+  );
+  if (blockedResult !== null) {
+    deps.pendingTextAccumulator.clear();
+    return blockedResult;
+  }
 
   ensureAiPendingItem(
     deps.pendingHistoryItemRef,
@@ -194,10 +217,11 @@ export function processContentEvent(
         deps.thinkingBlocksRef.current,
       ),
     );
+    deps.pendingTextAccumulator.replace(sanitizedCombined);
     return sanitizedCombined;
   }
 
-  return applySplitResult(
+  const remaining = applySplitResult(
     beforeText,
     pendingType,
     liveProfileIdentity,
@@ -207,4 +231,6 @@ export function processContentEvent(
     afterItem,
     userMessageTimestamp,
   );
+  deps.pendingTextAccumulator.replace(remaining);
+  return remaining;
 }

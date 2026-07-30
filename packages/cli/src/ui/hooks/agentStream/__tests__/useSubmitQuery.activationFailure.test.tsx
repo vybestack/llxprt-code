@@ -34,6 +34,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { PendingTextAccumulator } from '../pendingTextAccumulator.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -151,6 +152,7 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
     onAuthError: deps.onAuthError,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
+    pendingTextAccumulator: new PendingTextAccumulator(32),
     pendingHistoryItemRef: {
       current: null,
     } as React.MutableRefObject<HistoryItemWithoutId | null>,

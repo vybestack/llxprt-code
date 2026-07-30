@@ -42,20 +42,63 @@ function preserveLiveOutput(existing: unknown): string | AnsiOutput {
  * includes `FileDiff` / `FileRead`). The returned type is the narrow
  * `string | AnsiOutput` union the live-output channel actually produces.
  */
+const MAX_LIVE_OUTPUT_BYTES = 1024 * 1024;
+const RETAINED_LIVE_OUTPUT_SIDE_BYTES = 64 * 1024;
+const LIVE_OUTPUT_TRUNCATION_MARKER = '\n[... live output truncated ...]\n';
+
+function takeUtf8(text: string, maxBytes: number, fromEnd: boolean): string {
+  const bytes = Buffer.from(text, 'utf8');
+  if (bytes.length <= maxBytes) {
+    return text;
+  }
+  if (!fromEnd) {
+    let end = maxBytes;
+    while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
+      end -= 1;
+    }
+    return bytes.subarray(0, end).toString('utf8');
+  }
+  let start = bytes.length - maxBytes;
+  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) {
+    start += 1;
+  }
+  return bytes.subarray(start).toString('utf8');
+}
+
+function appendBoundedLiveOutput(existing: string, update: string): string {
+  const markerIndex = existing.indexOf(LIVE_OUTPUT_TRUNCATION_MARKER);
+  if (markerIndex >= 0) {
+    const suffixStart = markerIndex + LIVE_OUTPUT_TRUNCATION_MARKER.length;
+    return `${existing.slice(0, markerIndex)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(
+      existing.slice(suffixStart) + update,
+      RETAINED_LIVE_OUTPUT_SIDE_BYTES,
+      true,
+    )}`;
+  }
+  const combined = existing + update;
+  if (Buffer.byteLength(combined, 'utf8') <= MAX_LIVE_OUTPUT_BYTES) {
+    return combined;
+  }
+  return `${takeUtf8(combined, RETAINED_LIVE_OUTPUT_SIDE_BYTES, false)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(
+    combined,
+    RETAINED_LIVE_OUTPUT_SIDE_BYTES,
+    true,
+  )}`;
+}
+
 export function accumulateLiveOutput(
   existing: unknown,
   update: LiveOutputUpdate,
 ): string | AnsiOutput {
   switch (update.mode) {
     case 'append':
-      return typeof existing === 'string'
-        ? existing + update.data
-        : update.data;
+      return appendBoundedLiveOutput(
+        typeof existing === 'string' ? existing : '',
+        update.data,
+      );
     case 'replace':
       return update.data;
     case 'status':
-      // Liveness snapshots carry no content; keep the existing accumulator
-      // value verbatim without inventing new output.
       return preserveLiveOutput(existing);
     default: {
       const _exhaustive: never = update;

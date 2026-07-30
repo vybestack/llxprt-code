@@ -56,6 +56,29 @@ describe('Compression locking', () => {
     expect(allHistory[1].blocks[0].type).toBe('tool_call');
   });
 
+  it('fails fast when stalled compression would retain unbounded additions', () => {
+    historyService.startCompression();
+
+    expect(() => {
+      for (let index = 0; index <= 4096; index += 1) {
+        historyService.add({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: `queued-${index}` }],
+        });
+      }
+    }).toThrow('compression queue limit');
+
+    // After overflow, isCompressing remains true — the orchestrator must call
+    // endCompression to reset state and drain the cleared queue.
+    historyService.endCompression();
+
+    historyService.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'accepted after fail-fast reset' }],
+    });
+    expect(historyService.getAll()).toHaveLength(1);
+  });
+
   it('should prevent duplicate IDs during compression rebuild', async () => {
     // Add content with tool calls
     const toolCallId = 'hist_tool_abc123';

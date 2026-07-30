@@ -62,6 +62,22 @@ describe('accumulateLiveOutput', () => {
     });
   });
 
+  it('retains a bounded prefix and suffix for oversized append output', () => {
+    let acc: string | AnsiOutput | undefined;
+    for (let index = 0; index < 2_000; index += 1) {
+      acc = accumulateLiveOutput(acc, {
+        mode: 'append',
+        data: `${index.toString().padStart(4, '0')}:${'x'.repeat(1024)}`,
+      });
+    }
+
+    expect(
+      typeof acc === 'string' && Buffer.byteLength(acc, 'utf8'),
+    ).toBeLessThanOrEqual(1024 * 1024);
+    expect(acc).toContain('[... live output truncated ...]');
+    expect(acc).toContain('1999:');
+  });
+
   describe('replace mode', () => {
     it('replaces with the latest AnsiOutput snapshot', () => {
       const first: AnsiOutput = [[makeToken('snap-1')]];

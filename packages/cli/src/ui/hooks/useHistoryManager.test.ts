@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useHistory } from './useHistoryManager.js';
-import type { HistoryItem } from '../types.js';
+import { ToolCallStatus, type HistoryItem } from '../types.js';
 
 describe('useHistoryManager', () => {
   it('should initialize with an empty history', () => {
@@ -240,5 +240,49 @@ describe('useHistoryManager', () => {
 
     expect(result.current.history).toHaveLength(1);
     expect(result.current.history[0].text).toBe('small');
+  });
+
+  it('hard-bounds an oversized newest item with a UTF-8-safe preview', () => {
+    const { result } = renderHook(() =>
+      useHistory({ maxItems: 10, maxBytes: 200 }),
+    );
+
+    act(() => {
+      result.current.addItem({ type: 'info', text: '\u{1F642}'.repeat(500) });
+    });
+
+    const serialized = JSON.stringify(result.current.history[0]);
+    expect(Buffer.byteLength(serialized, 'utf8')).toBeLessThanOrEqual(200);
+    expect(result.current.history[0].text).toContain('truncated');
+  });
+
+  it('hard-bounds oversized raw tool output retained by UI history', () => {
+    const { result } = renderHook(() =>
+      useHistory({ maxItems: 10, maxBytes: 500 }),
+    );
+
+    act(() => {
+      const toolGroup: Omit<
+        Extract<HistoryItem, { type: 'tool_group' }>,
+        'id'
+      > = {
+        type: 'tool_group',
+        tools: [
+          {
+            callId: 'large-tool',
+            name: 'shell',
+            description: 'large output',
+            resultDisplay: 'z'.repeat(20_000),
+            status: ToolCallStatus.Success,
+            confirmationDetails: undefined,
+          },
+        ],
+      };
+      result.current.addItem(toolGroup);
+    });
+
+    expect(
+      Buffer.byteLength(JSON.stringify(result.current.history), 'utf8'),
+    ).toBeLessThanOrEqual(500);
   });
 });

@@ -94,7 +94,7 @@ export class HistoryService
    */
   private tokenizerFactory?: RuntimeTokenizerFactory;
 
-  // Compression state and queue
+  private static readonly MAX_PENDING_COMPRESSION_OPERATIONS = 4096;
   private isCompressing: boolean = false;
   private pendingOperations: Array<() => void> = [];
 
@@ -283,11 +283,9 @@ export class HistoryService
    * error 1213). All other content with a valid speaker is accepted.
    */
   add(content: IContent, modelName?: string): void {
-    // If compression is active, queue this operation
     if (this.isCompressing) {
       logQueuedDuringCompression(this.logger, content);
-
-      this.pendingOperations.push(() => {
+      this.queueCompressionOperation(() => {
         this.addInternal(content, modelName);
       });
       return;
@@ -295,6 +293,21 @@ export class HistoryService
 
     // Otherwise, add immediately
     this.addInternal(content, modelName);
+  }
+
+  private queueCompressionOperation(operation: () => void): void {
+    if (
+      this.pendingOperations.length >=
+      HistoryService.MAX_PENDING_COMPRESSION_OPERATIONS
+    ) {
+      this.logger.error(
+        'History compression queue limit exceeded, draining queue',
+        { pendingCount: this.pendingOperations.length },
+      );
+      this.pendingOperations = [];
+      throw new Error('History compression queue limit exceeded');
+    }
+    this.pendingOperations.push(operation);
   }
 
   private addInternal(content: IContent, modelName?: string): void {
@@ -608,7 +621,7 @@ export class HistoryService
     // If compression is active, queue this operation
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
-      this.pendingOperations.push(() => {
+      this.queueCompressionOperation(() => {
         this.clearInternal();
       });
       return;

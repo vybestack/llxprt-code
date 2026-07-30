@@ -70,6 +70,7 @@ import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
+import type { PendingTextAccumulator } from './pendingTextAccumulator.js';
 import {
   prepareQueryForAgent as prepareQueryImpl,
   type PrepareQueryDeps,
@@ -138,6 +139,7 @@ interface StreamEventHandlerDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
+  pendingTextAccumulator: PendingTextAccumulator;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
@@ -199,20 +201,26 @@ export function useStreamEventHandlers(
 }
 
 function useContentEventHandler(deps: StreamEventHandlerDeps) {
-  const contentEventDeps = useContentEventDeps(deps);
+  const pendingTextAccumulator = deps.pendingTextAccumulator;
+  const contentEventDeps = useContentEventDeps(deps, pendingTextAccumulator);
   return useCallback(
     (
       eventValue: ServerContentEvent['value'],
       currentAgentMessageBuffer: string,
       userMessageTimestamp: number,
-    ): string =>
-      processContentEvent(
-        eventValue,
+    ): string => {
+      const appended = pendingTextAccumulator.append(eventValue);
+      if (!appended.publish) {
+        return currentAgentMessageBuffer;
+      }
+      return processContentEvent(
+        appended.text,
         currentAgentMessageBuffer,
         userMessageTimestamp,
         contentEventDeps,
-      ),
-    [contentEventDeps],
+      );
+    },
+    [contentEventDeps, pendingTextAccumulator],
   );
 }
 
@@ -470,10 +478,14 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
   );
 }
 
-function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
+function useContentEventDeps(
+  deps: StreamEventHandlerDeps,
+  pendingTextAccumulator: PendingTextAccumulator,
+): ContentEventDeps {
   return useMemo(
     () => ({
       addItem: deps.addItem,
+      pendingTextAccumulator,
       sanitizeContent: deps.sanitizeContent,
       flushPendingHistoryItem: deps.flushPendingHistoryItem,
       pendingHistoryItemRef: deps.pendingHistoryItemRef,
@@ -484,6 +496,7 @@ function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
     }),
     [
       deps.addItem,
+      pendingTextAccumulator,
       deps.sanitizeContent,
       deps.flushPendingHistoryItem,
       deps.pendingHistoryItemRef,

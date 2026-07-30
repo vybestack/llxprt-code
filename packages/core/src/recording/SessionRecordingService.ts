@@ -43,6 +43,8 @@ import {
 } from './types.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
+const MAX_PENDING_RECORDS = 4096;
+const MAX_PENDING_BYTES = 8 * 1024 * 1024;
 
 /**
  * Core service for recording session events to a JSONL file.
@@ -54,6 +56,7 @@ export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
   private queue: SessionRecordLine[] = [];
+  private queueBytes: number = 0;
   private seq: number = 0;
   private filePath: string | null = null;
   private materialized: boolean = false;
@@ -63,6 +66,7 @@ export class SessionRecordingService {
   private readonly sessionId: string;
   private readonly chatsDir: string;
   private preContentBuffer: SessionRecordLine[] = [];
+  private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
 
@@ -103,7 +107,16 @@ export class SessionRecordingService {
       type,
       payload,
     };
+    const lineBytes = estimateRecordBytes(line);
+    if (
+      this.preContentBuffer.length + 1 > MAX_PENDING_RECORDS ||
+      this.preContentBytes + lineBytes > MAX_PENDING_BYTES
+    ) {
+      this.stopRecording();
+      return;
+    }
     this.preContentBuffer.push(line);
+    this.preContentBytes += lineBytes;
   }
 
   /**
@@ -122,10 +135,10 @@ export class SessionRecordingService {
       !this.materialized
     ) {
       this.materialize();
-      for (const buffered of this.preContentBuffer) {
-        this.queue.push(buffered);
-      }
+      this.queue = [...this.queue, ...this.preContentBuffer];
+      this.queueBytes += this.preContentBytes;
       this.preContentBuffer = [];
+      this.preContentBytes = 0;
       this.materialized = true;
     }
 
@@ -142,7 +155,16 @@ export class SessionRecordingService {
       type,
       payload,
     };
+    const lineBytes = estimateRecordBytes(line);
+    if (
+      this.queue.length + 1 > MAX_PENDING_RECORDS ||
+      this.queueBytes + lineBytes > MAX_PENDING_BYTES
+    ) {
+      this.stopRecording();
+      return;
+    }
     this.queue.push(line);
+    this.queueBytes += lineBytes;
     this.scheduleDrain();
   }
 
@@ -200,6 +222,7 @@ export class SessionRecordingService {
         );
       }
       this.queue = [];
+      this.queueBytes = 0;
       this.chatsDirWatcher?.close();
       this.chatsDirWatcher = null;
       this.active = false;
@@ -218,6 +241,7 @@ export class SessionRecordingService {
       while (this.queue.length > 0) {
         const batch = [...this.queue];
         this.queue = [];
+        this.queueBytes = 0;
         const lines =
           batch.map((event) => JSON.stringify(event)).join('\n') + '\n';
         const shouldContinue = await this.writeBatchToFile(lines);
@@ -241,6 +265,7 @@ export class SessionRecordingService {
     } catch (error: unknown) {
       if (this.isDiskSpaceError(error)) {
         this.queue = [];
+        this.queueBytes = 0;
         this.chatsDirWatcher?.close();
         this.chatsDirWatcher = null;
         this.active = false;
@@ -330,6 +355,7 @@ export class SessionRecordingService {
     this.seq = lastSeq;
     this.materialized = true;
     this.preContentBuffer = [];
+    this.preContentBytes = 0;
     this.sessionTitle = title;
     this.startChatsDirWatcher();
   }
@@ -347,7 +373,9 @@ export class SessionRecordingService {
     }
     this.active = false;
     this.queue = [];
+    this.queueBytes = 0;
     this.preContentBuffer = [];
+    this.preContentBytes = 0;
     if (this.chatsDirWatcher) {
       this.chatsDirWatcher.close();
       this.chatsDirWatcher = null;
@@ -530,4 +558,17 @@ export class SessionRecordingService {
   getSessionMetadataTitle(): string | null | undefined {
     return this.sessionTitle;
   }
+
+  private stopRecording(): void {
+    this.scheduleDrain();
+    this.active = false;
+    this.preContentBuffer = [];
+    this.preContentBytes = 0;
+    this.chatsDirWatcher?.close();
+    this.chatsDirWatcher = null;
+  }
+}
+
+function estimateRecordBytes(line: SessionRecordLine): number {
+  return Buffer.byteLength(JSON.stringify(line), 'utf8') + 1;
 }

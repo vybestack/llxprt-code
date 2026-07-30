@@ -29,6 +29,7 @@ import { type QueuedSubmission } from './types.js';
 import { useQueuedSubmissions } from './useQueuedSubmissions.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 import type { SubmissionExecutor } from './useSubmitQuery.js';
+import { PendingTextAccumulator } from './pendingTextAccumulator.js';
 
 export interface UseStreamStateReturn {
   initError: string | null;
@@ -59,6 +60,7 @@ export interface UseStreamStateReturn {
   tryReserveDrain: () => boolean;
   releaseDrain: () => void;
   submitQueryRef: React.MutableRefObject<SubmissionExecutor | null>;
+  pendingTextAccumulator: PendingTextAccumulator;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -118,6 +120,7 @@ function useSanitizeContent(emojiFilter: EmojiFilter | undefined) {
 function useFlushPendingHistoryItem(
   addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>,
+  pendingTextAccumulator: PendingTextAccumulator,
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -132,15 +135,20 @@ function useFlushPendingHistoryItem(
     (timestamp: number) => {
       const pending = pendingHistoryItemRef.current;
       if (!pending) {
+        pendingTextAccumulator.clear();
         return;
       }
 
       if (pending.type === 'gemini' || pending.type === 'gemini_content') {
+        const exactPending = {
+          ...pending,
+          text: pendingTextAccumulator.materialize(),
+        };
         const {
           text: sanitized,
           feedback,
           blocked,
-        } = sanitizeContent(pending.text);
+        } = sanitizeContent(exactPending.text);
 
         if (blocked) {
           addItem(
@@ -156,11 +164,13 @@ function useFlushPendingHistoryItem(
           }
 
           setPendingHistoryItem(null);
+          pendingTextAccumulator.clear();
+          thinkingBlocksRef.current = [];
           return;
         }
 
         const itemWithThinking = {
-          ...pending,
+          ...exactPending,
           text: sanitized,
           ...(thinkingBlocksRef.current.length > 0
             ? { thinkingBlocks: [...thinkingBlocksRef.current] }
@@ -178,10 +188,12 @@ function useFlushPendingHistoryItem(
       }
 
       setPendingHistoryItem(null);
+      pendingTextAccumulator.clear();
     },
     [
       addItem,
       pendingHistoryItemRef,
+      pendingTextAccumulator,
       sanitizeContent,
       setPendingHistoryItem,
       thinkingBlocksRef,
@@ -215,6 +227,10 @@ function useBasicStreamState() {
     releaseDrain,
   } = useQueuedSubmissions();
   const submitQueryRef = useRef<SubmissionExecutor | null>(null);
+  const pendingTextAccumulator = useMemo(
+    () => new PendingTextAccumulator(32),
+    [],
+  );
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
   return {
@@ -244,6 +260,7 @@ function useBasicStreamState() {
     tryReserveDrain,
     releaseDrain,
     submitQueryRef,
+    pendingTextAccumulator,
     thinkingBlocksRef,
   };
 }
@@ -260,6 +277,7 @@ export function useStreamState(
   const flushPendingHistoryItem = useFlushPendingHistoryItem(
     addItem,
     basic.pendingHistoryItemRef,
+    basic.pendingTextAccumulator,
     sanitizeContent,
     basic.setPendingHistoryItem,
     basic.thinkingBlocksRef,
