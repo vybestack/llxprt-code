@@ -67,7 +67,15 @@
     "lsp": [],
     "mcp": ["core", "settings", "storage", "tools"],
     "policy": [],
-    "providers": ["auth", "core", "settings", "storage", "telemetry", "tools"],
+    "providers": [
+      "auth",
+      "core",
+      "settings",
+      "storage",
+      "telemetry",
+      "test-utils",
+      "tools"
+    ],
     "settings": ["storage"],
     "storage": [],
     "telemetry": ["storage"],
