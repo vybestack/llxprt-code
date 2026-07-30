@@ -38,7 +38,7 @@
  *   bun run test:bun
  */
 
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -221,18 +221,30 @@ function extractExitCode(error: unknown): number {
 // Mirrors `npm run` semantics: commands from package.json scripts are
 // executed through a shell. This relies on repository trust — package.json
 // files are part of the trusted source tree, just as they are for npm.
+// Uses spawnSync with a timeout to prevent hung test processes (e.g. Bun
+// 1.3.x on Linux leaving open handles after tests complete) from blocking
+// CI indefinitely.
 export const defaultRunner: CommandRunner = (
   command,
   cwd,
   env = process.env,
 ) => {
   try {
-    execSync(command, {
+    const result = spawnSync(command, {
       cwd,
       stdio: 'inherit',
       env,
+      shell: true,
+      timeout: 600_000, // 10 minutes — tests complete in <2 min; allow for slow CI
+      killSignal: 'SIGKILL',
     });
-    return { success: true, exitCode: 0 };
+    if (result.signal === 'SIGKILL') {
+      return { success: false, exitCode: 124 }; // 124 = timeout exit code (matching `timeout` cmd)
+    }
+    if (result.status === null) {
+      return { success: false, exitCode: 1 };
+    }
+    return { success: result.status === 0, exitCode: result.status };
   } catch (error) {
     return { success: false, exitCode: extractExitCode(error) };
   }
