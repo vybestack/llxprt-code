@@ -21,6 +21,7 @@ export interface FailoverState {
   consecutive429s: number;
   consecutiveNetworkErrors: number;
   consecutiveAuthErrors: number;
+  consecutiveServerErrors: number;
   attempt: number;
   currentDelay: number;
 }
@@ -35,6 +36,7 @@ export function shouldAttemptFailover(
   is402: boolean,
   isAuthError: boolean,
   isNetworkError: boolean,
+  is5xxServerError: boolean,
   state: FailoverState,
   failoverThreshold: number,
 ): boolean {
@@ -50,7 +52,10 @@ export function shouldAttemptFailover(
   if (isAuthError && state.consecutiveAuthErrors > 1) {
     return true;
   }
-  return isNetworkError && state.consecutiveNetworkErrors > failoverThreshold;
+  if (isNetworkError && state.consecutiveNetworkErrors > failoverThreshold) {
+    return true;
+  }
+  return is5xxServerError && state.consecutiveServerErrors > failoverThreshold;
 }
 
 /**
@@ -61,6 +66,7 @@ export async function attemptBucketFailover(
   errorStatus: number | undefined,
   is429: boolean,
   isNetworkError: boolean,
+  is5xxServerError: boolean,
   state: FailoverState,
   bucketFailoverHandler: BucketFailoverHandler,
   authRetryTimeoutMs: number,
@@ -70,8 +76,10 @@ export async function attemptBucketFailover(
   const failoverReason = resolveFailoverReason(
     is429,
     isNetworkError,
+    is5xxServerError,
     state.consecutive429s,
     state.consecutiveNetworkErrors,
+    state.consecutiveServerErrors,
     errorStatus,
   );
   logger.debug(() => `Attempting bucket failover after ${failoverReason}`);

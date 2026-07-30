@@ -412,6 +412,7 @@ export class RetryOrchestrator implements IProvider {
       consecutive429s: number;
       consecutiveAuthErrors: number;
       consecutiveNetworkErrors: number;
+      consecutiveServerErrors: number;
     },
     bucketFailoverHandler: BucketFailoverHandler | undefined,
     budget: { used: number; limit: number },
@@ -521,6 +522,7 @@ export class RetryOrchestrator implements IProvider {
       consecutive429s: number;
       consecutiveAuthErrors: number;
       consecutiveNetworkErrors: number;
+      consecutiveServerErrors: number;
     },
     maxAttempts: number,
     initialDelayMs: number,
@@ -534,41 +536,35 @@ export class RetryOrchestrator implements IProvider {
     if (isTerminalRetryError(error)) return { type: 'throw', error };
 
     const classification = classifyRetryError(error);
-    const {
-      status: errorStatus,
-      category,
-      is429,
-      is402,
-      isAuthError,
-      isNetworkError,
-    } = classification;
+    const { status: errorStatus, category, ...f } = classification;
     this.observeProviderError(options, error, errorStatus, category);
-
     this.logger.debug(
       () =>
-        `[attempt ${state.attempt}/${maxAttempts}] Error: status=${errorStatus}, is429=${is429}, is402=${is402}, isAuth=${isAuthError}, isNetwork=${isNetworkError}`,
+        `[attempt ${state.attempt}/${maxAttempts}] Error: status=${errorStatus}, is429=${f.is429}, is402=${f.is402}, isAuth=${f.isAuthError}, isNetwork=${f.isNetworkError}, is5xx=${f.is5xxServerError}`,
     );
-
     updateRetryErrorCounters(state, classification);
 
-    const shouldAttemptRefreshRetry =
-      isAuthError &&
-      state.consecutiveAuthErrors === 1 &&
-      state.attempt < maxAttempts;
-
-    if (shouldAttemptRefreshRetry) {
-      await this.invokeAuthErrorHandler(error, options, errorStatus, signal);
-    }
+    const shouldAttemptRefreshRetry = await this.maybeRefreshAuth(
+      f.isAuthError,
+      state.consecutiveAuthErrors,
+      state.attempt,
+      maxAttempts,
+      error,
+      options,
+      errorStatus,
+      signal,
+    );
 
     const shouldAttemptFailover =
       state.attempt < maxAttempts &&
       permitsBucketFailover(error) &&
       this.shouldAttemptFailover(
         bucketFailoverHandler,
-        is429,
-        is402,
-        isAuthError,
-        isNetworkError,
+        f.is429,
+        f.is402,
+        f.isAuthError,
+        f.isNetworkError,
+        f.is5xxServerError,
         state,
         failoverThreshold,
       );
@@ -576,8 +572,9 @@ export class RetryOrchestrator implements IProvider {
     if (shouldAttemptFailover && bucketFailoverHandler) {
       return this.handleFailoverDecision(
         errorStatus,
-        is429,
-        isNetworkError,
+        f.is429,
+        f.isNetworkError,
+        f.is5xxServerError,
         state,
         initialDelayMs,
         bucketFailoverHandler,
@@ -605,10 +602,12 @@ export class RetryOrchestrator implements IProvider {
     is402: boolean,
     isAuthError: boolean,
     isNetworkError: boolean,
+    is5xxServerError: boolean,
     state: {
       consecutive429s: number;
       consecutiveAuthErrors: number;
       consecutiveNetworkErrors: number;
+      consecutiveServerErrors: number;
     },
     failoverThreshold: number,
   ): boolean {
@@ -624,17 +623,24 @@ export class RetryOrchestrator implements IProvider {
     if (isAuthError && state.consecutiveAuthErrors > 1) {
       return true;
     }
-    return isNetworkError && state.consecutiveNetworkErrors > failoverThreshold;
+    if (isNetworkError && state.consecutiveNetworkErrors > failoverThreshold) {
+      return true;
+    }
+    return (
+      is5xxServerError && state.consecutiveServerErrors > failoverThreshold
+    );
   }
 
   private async handleFailoverDecision(
     errorStatus: number | undefined,
     is429: boolean,
     isNetworkError: boolean,
+    is5xxServerError: boolean,
     state: {
       consecutive429s: number;
       consecutiveNetworkErrors: number;
       consecutiveAuthErrors: number;
+      consecutiveServerErrors: number;
       attempt: number;
       currentDelay: number;
     },
@@ -648,6 +654,7 @@ export class RetryOrchestrator implements IProvider {
       errorStatus,
       is429,
       isNetworkError,
+      is5xxServerError,
       state,
       bucketFailoverHandler,
       authRetryTimeoutMs,
@@ -717,6 +724,26 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
+   * Invoke the auth error handler on the first consecutive auth failure (if
+   * retries remain), returning whether a refresh attempt was made.
+   */
+  private async maybeRefreshAuth(
+    isAuthError: boolean,
+    consecutiveAuthErrors: number,
+    attempt: number,
+    maxAttempts: number,
+    error: unknown,
+    options: GenerateChatOptions,
+    errorStatus: number | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<boolean> {
+    if (!(isAuthError && consecutiveAuthErrors === 1 && attempt < maxAttempts))
+      return false;
+    await this.invokeAuthErrorHandler(error, options, errorStatus, signal);
+    return true;
+  }
+
+  /**
    * Invoke the auth error handler to allow cache invalidation and force-refresh.
    */
   private async invokeAuthErrorHandler(
@@ -762,11 +789,13 @@ export class RetryOrchestrator implements IProvider {
     errorStatus: number | undefined,
     is429: boolean,
     isNetworkError: boolean,
+    is5xxServerError: boolean,
     state: {
       attempt: number;
       consecutive429s: number;
       consecutiveNetworkErrors: number;
       consecutiveAuthErrors: number;
+      consecutiveServerErrors: number;
     },
     bucketFailoverHandler: BucketFailoverHandler,
     authRetryTimeoutMs: number,
@@ -775,8 +804,10 @@ export class RetryOrchestrator implements IProvider {
     const failoverReason = resolveFailoverReason(
       is429,
       isNetworkError,
+      is5xxServerError,
       state.consecutive429s,
       state.consecutiveNetworkErrors,
+      state.consecutiveServerErrors,
       errorStatus,
     );
     this.logger.debug(

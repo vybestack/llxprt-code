@@ -98,8 +98,10 @@ export function hasRetryAfterHeader(error: unknown): boolean {
 export function resolveFailoverReason(
   is429: boolean,
   isNetworkError: boolean,
+  is5xxServerError: boolean,
   consecutive429s: number,
   consecutiveNetworkErrors: number,
+  consecutiveServerErrors: number,
   errorStatus: number | undefined,
 ): string {
   if (is429) {
@@ -107,6 +109,9 @@ export function resolveFailoverReason(
   }
   if (isNetworkError) {
     return `${consecutiveNetworkErrors} consecutive network errors`;
+  }
+  if (is5xxServerError) {
+    return `${consecutiveServerErrors} consecutive server errors`;
   }
   return `status ${errorStatus}`;
 }
