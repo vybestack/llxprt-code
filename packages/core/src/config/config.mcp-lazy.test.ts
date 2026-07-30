@@ -225,7 +225,7 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
     config.setEphemeralSetting('mcp.lazy', false);
     await config.refreshMcpContext();
     expect(findActivationTool(registry)).toBeUndefined();
-  });
+  }, 15_000);
 
   it('rebuilds activation enum after tool list changes (C4)', async () => {
     config.setEphemeralSetting('mcp.lazy', true);

@@ -8,25 +8,33 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SkillManager } from './skillManager.js';
+import { type SkillDefinition } from './skillLoader.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { type LlxprtExtension } from '../config/config.js';
-import {
-  loadSkillsFromDir,
-  getBuiltinSkillsDir,
-  type SkillDefinition,
-} from './skillLoader.js';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
-vi.mock('./skillLoader.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./skillLoader.js')>();
+// Capture the real implementations once so they can be re-established after
+// vi.clearAllMocks() (which strips mockImplementation set in the factory).
+let realLoadSkillsFromDir: typeof import('./skillLoader.js').loadSkillsFromDir;
+let realGetBuiltinSkillsDir: typeof import('./skillLoader.js').getBuiltinSkillsDir;
+
+const mockLoadSkillsFromDir = vi.hoisted(() => vi.fn());
+const mockGetBuiltinSkillsDir = vi.hoisted(() => vi.fn());
+
+vi.mock('./skillLoader.js', (importOriginal) => {
+  const actual = importOriginal() as typeof import('./skillLoader.js');
+  realLoadSkillsFromDir = actual.loadSkillsFromDir;
+  realGetBuiltinSkillsDir = actual.getBuiltinSkillsDir;
+  mockLoadSkillsFromDir.mockImplementation(actual.loadSkillsFromDir);
+  mockGetBuiltinSkillsDir.mockImplementation(actual.getBuiltinSkillsDir);
   return {
     ...actual,
-    loadSkillsFromDir: vi.fn(actual.loadSkillsFromDir),
-    getBuiltinSkillsDir: vi.fn(actual.getBuiltinSkillsDir),
+    loadSkillsFromDir: mockLoadSkillsFromDir,
+    getBuiltinSkillsDir: mockGetBuiltinSkillsDir,
   };
 });
+
+const { SkillManager } = await import('./skillManager.js');
 
 describe('SkillManager', () => {
   let testRootDir: string;
@@ -35,11 +43,14 @@ describe('SkillManager', () => {
     testRootDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'skill-manager-test-'),
     );
+    // Re-establish implementations that vi.clearAllMocks() strips each cycle
+    mockLoadSkillsFromDir.mockImplementation(realLoadSkillsFromDir);
+    mockGetBuiltinSkillsDir.mockImplementation(realGetBuiltinSkillsDir);
   });
 
   afterEach(async () => {
     await fs.rm(testRootDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should discover skills from built-in, extensions, user, and workspace with precedence', async () => {
@@ -85,7 +96,7 @@ description: project-desc
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue(projectDir);
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const service = new SkillManager();
     await service.discoverSkills(storage, [mockExtension]);
@@ -142,7 +153,7 @@ description: project-desc
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue(projectDir);
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const service = new SkillManager();
     await service.discoverSkills(storage, [mockExtension]);
@@ -169,7 +180,7 @@ description: project-desc
       source: 'builtin',
     };
 
-    vi.mocked(loadSkillsFromDir).mockImplementation(async (dir, source) => {
+    mockLoadSkillsFromDir.mockImplementation(async (dir, source) => {
       if (source === 'builtin') {
         return [{ ...mockBuiltinSkill }];
       }
@@ -204,7 +215,7 @@ description: desc1
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue(testRootDir);
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue('/non-existent');
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const service = new SkillManager();
     await service.discoverSkills(storage);
@@ -439,7 +450,7 @@ description: user-desc
       vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
       const storage = new Storage('/dummy');
       vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
-      vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+      mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
       const service = new SkillManager();
       vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
@@ -485,7 +496,7 @@ description: user-desc
       vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
       const storage = new Storage('/dummy');
       vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
-      vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+      mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
       const service = new SkillManager();
       vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);

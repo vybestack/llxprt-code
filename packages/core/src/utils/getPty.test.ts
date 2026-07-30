@@ -21,7 +21,6 @@ describe('getPty unavailable backend handling', () => {
   afterEach(() => {
     vi.doUnmock('@lydell/node-pty');
     vi.doUnmock('node-pty');
-    vi.resetModules();
   });
 
   it.skipIf(isBunPosix())(

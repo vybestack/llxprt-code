@@ -6,8 +6,7 @@
  * fail via VALUE MISMATCH against the P03 stubs (which return empty values).
  * P05 implements the real logic that makes them green.
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import {
   iContentFromAgentMessageInput,
@@ -103,8 +102,8 @@ describe('iContentFromAgentMessageInput', () => {
   it('result has NO role/parts/candidates keys (neutral shape only)', () => {
     const result = iContentFromAgentMessageInput('test');
     expect(Array.isArray(result)).toBe(true);
-    if (Array.isArray(result)) {
-      result.forEach((item) => {
+    {
+      (result as unknown[]).forEach((item) => {
         expect(hasNoGoogleKeys(item)).toBe(true);
       });
     }
@@ -194,27 +193,27 @@ describe('iContentFromAgentMessageInput', () => {
 // ---------------------------------------------------------------------------
 
 describe('iContentFromAgentMessageInput property-based', () => {
-  it.prop([fc.string({ minLength: 1, maxLength: 100 })])(
-    'for ANY non-empty string, exactly one human IContent with one TextBlock whose text === input',
-    (text) => {
-      const result = iContentFromAgentMessageInput(text);
-      if (!Array.isArray(result) || result.length !== 1) return false;
-      const item = result[0];
-      if (item.speaker !== 'human') return false;
-      if (item.blocks.length !== 1) return false;
-      const block = item.blocks[0];
-      return block.type === 'text' && block.text === text;
-    },
-  );
+  it('for ANY non-empty string, exactly one human IContent with one TextBlock whose text === input', () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1, maxLength: 100 }), (text) => {
+        const result = iContentFromAgentMessageInput(text);
+        if (!Array.isArray(result) || result.length !== 1) return false;
+        const item = result[0];
+        if (item.speaker !== 'human') return false;
+        if (item.blocks.length !== 1) return false;
+        const block = item.blocks[0];
+        return block.type === 'text' && block.text === text;
+      }),
+    ));
 
-  it.prop([fc.string({ minLength: 1, maxLength: 50 })])(
-    'result content has no Google-shaped keys for any string input',
-    (text) => {
-      const result = iContentFromAgentMessageInput(text);
-      if (!Array.isArray(result)) return false;
-      return result.every((item) => hasNoGoogleKeys(item));
-    },
-  );
+  it('result content has no Google-shaped keys for any string input', () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1, maxLength: 50 }), (text) => {
+        const result = iContentFromAgentMessageInput(text);
+        if (!Array.isArray(result)) return false;
+        return result.every((item) => hasNoGoogleKeys(item));
+      }),
+    ));
 });
 
 // ---------------------------------------------------------------------------
@@ -225,8 +224,9 @@ describe('iContentFromLegacyInput', () => {
   it('legacy {text} part → TextBlock', () => {
     const result = iContentFromLegacyInput({ text: 'hello' });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       const blocks = items.flatMap((i) => i.blocks);
       expect(blocks).toContainEqual(textBlock('hello'));
     }
@@ -238,8 +238,9 @@ describe('iContentFromLegacyInput', () => {
       thoughtSignature: 'sig-abc-123',
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       const blocks = items.flatMap((i) => i.blocks);
       const thinking = blocks.find(
         (b): b is ThinkingBlock => b.type === 'thinking',
@@ -257,8 +258,9 @@ describe('iContentFromLegacyInput', () => {
       thoughtSignature: 'sig-xyz',
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       const blocks = items.flatMap((i) => i.blocks);
       const thinking = blocks.find(
         (b): b is ThinkingBlock => b.type === 'thinking',
@@ -279,8 +281,9 @@ describe('iContentFromLegacyInput', () => {
       text: 'just thinking',
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const blocks = result.value.flatMap((i) => i.blocks);
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const blocks = okResult.value.flatMap((i) => i.blocks);
       const thinking = blocks.find(
         (b): b is ThinkingBlock => b.type === 'thinking',
       );
@@ -301,8 +304,9 @@ describe('iContentFromLegacyInput', () => {
       },
     ]);
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const blocks = result.value.flatMap((i) => i.blocks);
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const blocks = okResult.value.flatMap((i) => i.blocks);
       const thinking = blocks.find(
         (b): b is ThinkingBlock => b.type === 'thinking',
       );
@@ -311,9 +315,9 @@ describe('iContentFromLegacyInput', () => {
       expect(thinking?.thought).toBe('reasoning here');
       expect(thinking?.signature).toBe('s1');
       expect(text).toBeDefined();
-      if (text?.type === 'text') {
-        expect(text.text).toBe('visible answer');
-      }
+      const textBlock = text as { type: string; text?: string } | undefined;
+      expect(textBlock?.type === 'text').toBe(true);
+      expect(textBlock?.text).toBe('visible answer');
     }
   });
 
@@ -322,8 +326,9 @@ describe('iContentFromLegacyInput', () => {
       inlineData: { mimeType: 'image/png', data: 'base64data==' },
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       const blocks = items.flatMap((i) => i.blocks);
       const media = blocks.find((b): b is MediaBlock => b.type === 'media');
       expect(media).toBeDefined();
@@ -342,8 +347,9 @@ describe('iContentFromLegacyInput', () => {
       },
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       const blocks = items.flatMap((i) => i.blocks);
       const tc = blocks.find((b): b is ToolCallBlock => b.type === 'tool_call');
       expect(tc).toBeDefined();
@@ -362,8 +368,9 @@ describe('iContentFromLegacyInput', () => {
       },
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       const blocks = items.flatMap((i) => i.blocks);
       const tr = blocks.find(
         (b): b is ToolResponseBlock => b.type === 'tool_response',
@@ -385,8 +392,9 @@ describe('iContentFromLegacyInput', () => {
   it('string legacy input → human TextBlock', () => {
     const result = iContentFromLegacyInput('just text');
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const items = result.value;
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const items = okResult.value;
       expect(items[0].speaker).toBe('human');
       expect(items[0].blocks[0].type).toBe('text');
     }
@@ -398,48 +406,51 @@ describe('iContentFromLegacyInput', () => {
 // ---------------------------------------------------------------------------
 
 describe('iContentFromLegacyInput property-based', () => {
-  it.prop([
-    fc.array(
-      fc.record({
-        text: fc.string({ minLength: 1, maxLength: 50 }),
-      }),
-      { minLength: 1, maxLength: 10 },
-    ),
-  ])(
-    'for ANY array of {text} parts, blocks length === parts length and texts preserved in order',
-    (parts) => {
-      const result = iContentFromLegacyInput(parts);
-      if (!result.ok) return false;
-      const items = result.value;
-      const blocks = items.flatMap((i) => i.blocks);
-      if (blocks.length !== parts.length) return false;
-      return blocks.every(
-        (b, i) => b.type === 'text' && b.text === parts[i].text,
-      );
-    },
-  );
+  it('for ANY array of {text} parts, blocks length === parts length and texts preserved in order', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            text: fc.string({ minLength: 1, maxLength: 50 }),
+          }),
+          { minLength: 1, maxLength: 10 },
+        ),
+        (parts) => {
+          const result = iContentFromLegacyInput(parts);
+          if (!result.ok) return false;
+          const items = result.value;
+          const blocks = items.flatMap((i) => i.blocks);
+          if (blocks.length !== parts.length) return false;
+          return blocks.every(
+            (b, i) => b.type === 'text' && b.text === parts[i].text,
+          );
+        },
+      ),
+    ));
 
-  it.prop([
-    fc.record({
-      thought: fc.string({ minLength: 1, maxLength: 80 }),
-      thoughtSignature: fc.string({ minLength: 1, maxLength: 40 }),
-    }),
-  ])(
-    '{thought, thoughtSignature} ALWAYS yields a ThinkingBlock whose signature === input (BR-5)',
-    ({ thought, thoughtSignature }) => {
-      const result = iContentFromLegacyInput({ thought, thoughtSignature });
-      if (!result.ok) return false;
-      const items = result.value;
-      const blocks = items.flatMap((i) => i.blocks);
-      const thinking = blocks.find(
-        (b): b is ThinkingBlock => b.type === 'thinking',
-      );
-      if (!thinking) return false;
-      return (
-        thinking.thought === thought && thinking.signature === thoughtSignature
-      );
-    },
-  );
+  it('{thought, thoughtSignature} ALWAYS yields a ThinkingBlock whose signature === input (BR-5)', () =>
+    fc.assert(
+      fc.property(
+        fc.record({
+          thought: fc.string({ minLength: 1, maxLength: 80 }),
+          thoughtSignature: fc.string({ minLength: 1, maxLength: 40 }),
+        }),
+        ({ thought, thoughtSignature }) => {
+          const result = iContentFromLegacyInput({ thought, thoughtSignature });
+          if (!result.ok) return false;
+          const items = result.value;
+          const blocks = items.flatMap((i) => i.blocks);
+          const thinking = blocks.find(
+            (b): b is ThinkingBlock => b.type === 'thinking',
+          );
+          if (!thinking) return false;
+          return (
+            thinking.thought === thought &&
+            thinking.signature === thoughtSignature
+          );
+        },
+      ),
+    ));
 });
 
 // ---------------------------------------------------------------------------
@@ -504,31 +515,32 @@ describe('iContentFromBlocks', () => {
 // ---------------------------------------------------------------------------
 
 describe('iContentFromBlocks property-based', () => {
-  it.prop([
-    fc.array(
-      fc.record({
-        type: fc.constant('text' as const),
-        text: fc.string({ minLength: 0, maxLength: 50 }),
-      }),
-      { minLength: 0, maxLength: 8 },
-    ),
-  ])(
-    'for ANY ContentBlock[], iContentFromBlocks(blocks).blocks deep-equals input and only top-level keys are speaker/blocks',
-    (blocks) => {
-      const result = iContentFromBlocks(blocks);
-      const keys = Object.keys(result).sort();
-      if (keys.join(',') !== 'blocks,speaker') return false;
-      return JSON.stringify(result.blocks) === JSON.stringify(blocks);
-    },
-  );
+  it('for ANY ContentBlock[], iContentFromBlocks(blocks).blocks deep-equals input and only top-level keys are speaker/blocks', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            type: fc.constant('text' as const),
+            text: fc.string({ minLength: 0, maxLength: 50 }),
+          }),
+          { minLength: 0, maxLength: 8 },
+        ),
+        (blocks) => {
+          const result = iContentFromBlocks(blocks);
+          const keys = Object.keys(result).sort();
+          if (keys.join(',') !== 'blocks,speaker') return false;
+          return JSON.stringify(result.blocks) === JSON.stringify(blocks);
+        },
+      ),
+    ));
 
-  it.prop([fc.constantFrom('human', 'ai', 'tool')])(
-    'explicit speaker is always honored',
-    (speaker) => {
-      const result = iContentFromBlocks([textBlock('x')], speaker);
-      return result.speaker === speaker;
-    },
-  );
+  it('explicit speaker is always honored', () =>
+    fc.assert(
+      fc.property(fc.constantFrom('human', 'ai', 'tool'), (speaker) => {
+        const result = iContentFromBlocks([textBlock('x')], speaker);
+        return result.speaker === speaker;
+      }),
+    ));
 });
 
 // ---------------------------------------------------------------------------
@@ -594,35 +606,42 @@ describe('sendParamsToRequest', () => {
 // ---------------------------------------------------------------------------
 
 describe('sendParamsToRequest property-based', () => {
-  it.prop([fc.string({ minLength: 1, maxLength: 50 })])(
-    'for ANY string message, sendParamsToRequest(msg).contents === iContentFromAgentMessageInput(msg)',
-    (msg) => {
-      const result = sendParamsToRequest(msg);
-      const expected = iContentFromAgentMessageInput(msg);
-      return JSON.stringify(result.contents) === JSON.stringify(expected);
-    },
-  );
+  it('for ANY string message, sendParamsToRequest(msg).contents === iContentFromAgentMessageInput(msg)', () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1, maxLength: 50 }), (msg) => {
+        const result = sendParamsToRequest(msg);
+        const expected = iContentFromAgentMessageInput(msg);
+        return JSON.stringify(result.contents) === JSON.stringify(expected);
+      }),
+    ));
 
-  it.prop([
-    fc.oneof(
-      fc.string({ minLength: 1, maxLength: 30 }),
-      fc.array(
-        fc.record({
-          type: fc.constant('text' as const),
-          text: fc.string({ minLength: 1, maxLength: 20 }),
-        }),
-        { minLength: 1, maxLength: 5 },
+  it('for ANY AgentMessageInput, request has no Google-shaped keys', () =>
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.string({ minLength: 1, maxLength: 30 }),
+          fc.array(
+            fc.record({
+              type: fc.constant('text' as const),
+              text: fc.string({ minLength: 1, maxLength: 20 }),
+            }),
+            { minLength: 1, maxLength: 5 },
+          ),
+        ),
+        (input: AgentMessageInput) => {
+          const result = sendParamsToRequest(input);
+          const requestKeys = Object.keys(result);
+          const googleKeys = [
+            'message',
+            'config',
+            'role',
+            'parts',
+            'candidates',
+          ];
+          return requestKeys.every((k) => !googleKeys.includes(k));
+        },
       ),
-    ),
-  ])(
-    'for ANY AgentMessageInput, request has no Google-shaped keys',
-    (input: AgentMessageInput) => {
-      const result = sendParamsToRequest(input);
-      const requestKeys = Object.keys(result);
-      const googleKeys = ['message', 'config', 'role', 'parts', 'candidates'];
-      return requestKeys.every((k) => !googleKeys.includes(k));
-    },
-  );
+    ));
 });
 
 // ---------------------------------------------------------------------------
@@ -638,8 +657,9 @@ describe('iContentFromLegacyInput — boolean thought:true text requirement', ()
       text: 'my reasoning',
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const blocks = result.value.flatMap((i) => i.blocks);
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const blocks = okResult.value.flatMap((i) => i.blocks);
       const thinking = blocks.find(
         (b): b is ThinkingBlock => b.type === 'thinking',
       );
@@ -676,8 +696,9 @@ describe('iContentFromLegacyInput — boolean thought:true text requirement', ()
       thought: 'some reasoning text',
     });
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      const blocks = result.value.flatMap((i) => i.blocks);
+    const okResult = result as Extract<typeof result, { ok: true }>;
+    {
+      const blocks = okResult.value.flatMap((i) => i.blocks);
       const thinking = blocks.find(
         (b): b is ThinkingBlock => b.type === 'thinking',
       );

@@ -10,9 +10,9 @@ Bun execution command (or explains why it still requires Vitest).
 | ----------------------------- | ---------------- | ------------- | ----------------- | ------------------------- |
 | packages/a2a-server           | 15               | 15            | 0                 | 0                         |
 | packages/agents               | 348              | 0             | 0                 | 348                       |
-| packages/auth                 | 37               | 0             | 0                 | 37                        |
+| packages/auth                 | 37               | 37            | 0                 | 0                         |
 | packages/cli                  | 650              | 2             | 0                 | 648                       |
-| packages/core                 | 322              | 1             | 0                 | 321                       |
+| packages/core                 | 322              | 322           | 0                 | 0                         |
 | packages/ide-integration      | 10               | 0             | 0                 | 10                        |
 | packages/lsp                  | 0                | all           | 0                 | 0                         |
 | packages/mcp                  | 46               | 0             | 0                 | 46                        |
@@ -38,6 +38,48 @@ These workspaces run `bun test` directly as their `test`/`test:ci` scripts.
 
 All 15 test files are Bun-native. Uses a storage-isolation preload that calls
 `isolateStorageRoots()` before any test module imports Storage.
+
+### packages/core
+
+**Command:** `bun test --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml`
+
+All 322 core test files are Bun-native (310 original files + 1 new split file
+`SessionLockManager.property.test.ts`). The workspace `test`/`test:ci` scripts
+use `bun test` directly. A `bunfig.toml` preloads the `augment-bun-vi.ts` compat
+shim and a workspace-specific `bun-preload.ts` that replicates the vitest
+setupFiles (storage isolation, provider runtime bootstrap).
+
+Migration changes:
+- 5 files refactored to remove `vi.resetModules()` (Bun does not support module
+  resetting; refactored to test-reset exports or module-level imports)
+- 8 files refactored to remove `resolves.not.toThrow()` (broken in Bun —
+  rewritten to direct `await` calls)
+- 27 files migrated from `@fast-check/vitest` to bare `fast-check` with
+  `fc.assert(fc.property(...))` pattern
+- Config test files refactored to use sync mock factories (Bun's `mock.module`
+  does not drain microtasks in async factories)
+- `configTestHarness.ts` updated to use real classes instead of `vi.fn().prototype`
+  (Bun's `vi.fn()` has no `.prototype` property)
+- 1 file split (`SessionLockManager.test.ts` → `.test.ts` + `.property.test.ts`)
+  to satisfy `max-lines` lint rule
+- 1 file (`workspaceContext.ts`) patched with `resolveSymlinksInPath()` for
+  Bun `realpathSync` compatibility (production code)
+
+### packages/auth
+
+**Command:** `bun test --path-ignore-patterns dist --reporter=junit --reporter-outfile=junit.xml`
+
+All 37 auth test files are Bun-native. The workspace `test`/`test:ci` scripts
+use `bun test` directly. A `bunfig.toml` preloads the compat shim and a
+workspace-specific `bun-preload.ts` for storage isolation.
+
+Migration changes:
+- 1 file refactored to remove `resolves.not.toThrow()`
+- `proxy-socket-client.test.ts` refactored: removed `if (server)` conditionals
+  (lint), added socket tracking for cleanup, replaced fake-timer-dependent
+  idle timeout test with direct `gracefulClose()` call
+- `oauth-errors.spec.ts` un-skipped 2 tests (removed `vi.useFakeTimers`,
+  replaced with zero-delay async waits)
 
 ### packages/lsp
 
@@ -88,9 +130,7 @@ primary `test` script still uses Vitest for the bulk of files.
 - `src/__tests__/cliSessionDispatch.characterization.test.tsx`
 - `test-utils/augment-bun-vi-cleanup.bun.ts`
 
-### packages/core (1 file)
-
-- `src/utils/errors.test.ts`
+### packages/core — fully migrated (see above)
 
 ### packages/providers (1 file)
 
@@ -135,16 +175,14 @@ will be migrated in a bounded vertical slice:
 3. **packages/ide-integration** (10 files) — Slice 4
 4. **packages/storage** (24 files) — Slice 5
 5. **packages/vscode-ide-companion** (6 files) — Slice 6
-6. **packages/auth** (37 files) — Slice 7
-7. **packages/mcp** (46 files) — Slice 7
-8. **packages/tools** (62 files) — Slice 8
-9. **packages/core** (321 files) — Slice 9
-10. **packages/providers** (477 files) — Slice 10
-11. **packages/agents** (348 files) — Slice 11
-12. **packages/cli** (648 files) — Slice 12
-13. **scripts/tests** (97 files) — Slice 13
-14. **evals** (2 files) — Slice 14
-15. **integration-tests** (26 files) — Slice 15
+6. **packages/mcp** (46 files) — Slice 7
+7. **packages/tools** (62 files) — Slice 8
+8. **packages/providers** (477 files) — Slice 10
+9. **packages/agents** (348 files) — Slice 11
+10. **packages/cli** (648 files) — Slice 12
+11. **scripts/tests** (97 files) — Slice 13
+12. **evals** (2 files) — Slice 14
+13. **integration-tests** (26 files) — Slice 15
 
 ## Enumerated Vitest retention (acceptance criterion #8)
 

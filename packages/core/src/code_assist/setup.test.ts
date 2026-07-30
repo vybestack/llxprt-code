@@ -11,7 +11,13 @@ import type { OAuth2Client } from 'google-auth-library';
 import type { GeminiUserTier } from './types.js';
 import { UserTierId } from './types.js';
 
-vi.mock('../code_assist/server.js');
+vi.mock('../code_assist/server.js', (importOriginal) => {
+  const actual = importOriginal() as typeof import('../code_assist/server.js');
+  return {
+    ...actual,
+    CodeAssistServer: vi.fn(),
+  };
+});
 
 const mockPaidTier: GeminiUserTier = {
   id: UserTierId.STANDARD,

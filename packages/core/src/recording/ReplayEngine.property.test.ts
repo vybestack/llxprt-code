@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -48,249 +47,260 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002
      */
-    it.prop([
-      fc.array(
-        fc.record({
-          text: fc.string({ minLength: 1, maxLength: 100 }),
-          speaker: fc.constantFrom('human' as const, 'ai' as const),
-        }),
-        { minLength: 1, maxLength: 20 },
-      ),
-    ])(
-      'any sequence of content events produces history of same length @requirement:REQ-RPL-002',
-      async (contents) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-replay-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('any sequence of content events produces history of same length @requirement:REQ-RPL-002', () =>
+      fc.assert(
+        fc.property(
+          fc.array(
+            fc.record({
+              text: fc.string({ minLength: 1, maxLength: 100 }),
+              speaker: fc.constantFrom('human' as const, 'ai' as const),
+            }),
+            { minLength: 1, maxLength: 20 },
+          ),
+          async (contents) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-replay-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            for (const c of contents) {
-              svc.recordContent(makeContent(c.text, c.speaker));
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                for (const c of contents) {
+                  svc.recordContent(makeContent(c.text, c.speaker));
+                }
+              });
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+              expect(result.history).toHaveLength(contents.length);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-          });
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-          expect(result.history).toHaveLength(contents.length);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      ));
 
     /**
      * Test 44: Compression always resets to exactly 1+post items.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-003
      */
-    it.prop([fc.integer({ min: 1, max: 10 }), fc.integer({ min: 0, max: 10 })])(
-      'compression always resets to exactly 1+post items @requirement:REQ-RPL-003',
-      async (preCount, postCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-comp-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('compression always resets to exactly 1+post items @requirement:REQ-RPL-003', () =>
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 1, max: 10 }),
+          fc.integer({ min: 0, max: 10 }),
+          async (preCount, postCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-comp-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            for (let i = 0; i < preCount; i++) {
-              svc.recordContent(makeContent(`pre ${i}`, 'human'));
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                for (let i = 0; i < preCount; i++) {
+                  svc.recordContent(makeContent(`pre ${i}`, 'human'));
+                }
+                svc.recordCompressed(makeContent('Summary', 'ai'), preCount);
+                for (let i = 0; i < postCount; i++) {
+                  svc.recordContent(makeContent(`post ${i}`, 'human'));
+                }
+              });
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+              // summary (1) + postCount
+              expect(result.history).toHaveLength(1 + postCount);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-            svc.recordCompressed(makeContent('Summary', 'ai'), preCount);
-            for (let i = 0; i < postCount; i++) {
-              svc.recordContent(makeContent(`post ${i}`, 'human'));
-            }
-          });
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-          // summary (1) + postCount
-          expect(result.history).toHaveLength(1 + postCount);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      ));
 
     /**
      * Test 45: Rewind(N) on history of size M produces max(0, M-N) items.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-002d
      */
-    it.prop([fc.integer({ min: 1, max: 15 }), fc.integer({ min: 0, max: 20 })])(
-      'rewind(N) on history of size M produces max(0, M-N) items @requirement:REQ-RPL-002d',
-      async (historySize, rewindCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-rewind-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('rewind(N) on history of size M produces max(0, M-N) items @requirement:REQ-RPL-002d', () =>
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 1, max: 15 }),
+          fc.integer({ min: 0, max: 20 }),
+          async (historySize, rewindCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-rewind-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            for (let i = 0; i < historySize; i++) {
-              svc.recordContent(makeContent(`msg ${i}`, 'human'));
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                for (let i = 0; i < historySize; i++) {
+                  svc.recordContent(makeContent(`msg ${i}`, 'human'));
+                }
+                svc.recordRewind(rewindCount);
+              });
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+              expect(result.history).toHaveLength(
+                Math.max(0, historySize - rewindCount),
+              );
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-            svc.recordRewind(rewindCount);
-          });
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-          expect(result.history).toHaveLength(
-            Math.max(0, historySize - rewindCount),
-          );
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      ));
 
     /**
      * Test 46: Multiple write-then-replay cycles are idempotent.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([
-      fc.array(
-        fc.record({
-          text: fc.string({ minLength: 1, maxLength: 50 }),
-          speaker: fc.constantFrom('human' as const, 'ai' as const),
-        }),
-        { minLength: 1, maxLength: 10 },
-      ),
-    ])(
-      'replaying the same file twice produces identical results @requirement:REQ-RPL-001',
-      async (contents) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-idem-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('replaying the same file twice produces identical results @requirement:REQ-RPL-001', () =>
+      fc.assert(
+        fc.property(
+          fc.array(
+            fc.record({
+              text: fc.string({ minLength: 1, maxLength: 50 }),
+              speaker: fc.constantFrom('human' as const, 'ai' as const),
+            }),
+            { minLength: 1, maxLength: 10 },
+          ),
+          async (contents) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-idem-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            for (const c of contents) {
-              svc.recordContent(makeContent(c.text, c.speaker));
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                for (const c of contents) {
+                  svc.recordContent(makeContent(c.text, c.speaker));
+                }
+              });
+
+              const result1 = await replaySession(filePath, PROJECT_HASH);
+              const result2 = await replaySession(filePath, PROJECT_HASH);
+
+              expect(result1.ok).toBe(true);
+              expect(result2.ok).toBe(true);
+              if (!result1.ok || !result2.ok) return;
+
+              expect(result1.history).toStrictEqual(result2.history);
+              expect(result1.lastSeq).toBe(result2.lastSeq);
+              expect(result1.eventCount).toBe(result2.eventCount);
+              expect(result1.warnings).toStrictEqual(result2.warnings);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-          });
-
-          const result1 = await replaySession(filePath, PROJECT_HASH);
-          const result2 = await replaySession(filePath, PROJECT_HASH);
-
-          expect(result1.ok).toBe(true);
-          expect(result2.ok).toBe(true);
-          if (!result1.ok || !result2.ok) return;
-
-          expect(result1.history).toStrictEqual(result2.history);
-          expect(result1.lastSeq).toBe(result2.lastSeq);
-          expect(result1.eventCount).toBe(result2.eventCount);
-          expect(result1.warnings).toStrictEqual(result2.warnings);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      ));
 
     /**
      * Test 47: Session metadata survives any event sequence.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-007
      */
-    it.prop([
-      fc.array(
-        fc.constantFrom(
-          'content' as const,
-          'provider_switch' as const,
-          'session_event' as const,
-          'directories_changed' as const,
-        ),
-        { minLength: 1, maxLength: 10 },
-      ),
-    ])(
-      'session metadata always present after replay @requirement:REQ-RPL-007',
-      async (eventTypes) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-meta-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('session metadata always present after replay @requirement:REQ-RPL-007', () =>
+      fc.assert(
+        fc.property(
+          fc.array(
+            fc.constantFrom(
+              'content' as const,
+              'provider_switch' as const,
+              'session_event' as const,
+              'directories_changed' as const,
+            ),
+            { minLength: 1, maxLength: 10 },
+          ),
+          async (eventTypes) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-meta-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            // Ensure at least one content event for materialization
-            svc.recordContent(makeContent('trigger', 'human'));
-            for (const eventType of eventTypes) {
-              switch (eventType) {
-                case 'content':
-                  svc.recordContent(makeContent('test', 'ai'));
-                  break;
-                case 'provider_switch':
-                  svc.recordProviderSwitch('test-provider', 'test-model');
-                  break;
-                case 'session_event':
-                  svc.recordSessionEvent('info', 'test event');
-                  break;
-                case 'directories_changed':
-                  svc.recordDirectoriesChanged(['/test']);
-                  break;
-                default:
-                  break;
-              }
+            try {
+              const filePath = await createValidFile(localChatsDir, (svc) => {
+                // Ensure at least one content event for materialization
+                svc.recordContent(makeContent('trigger', 'human'));
+                for (const eventType of eventTypes) {
+                  switch (eventType) {
+                    case 'content':
+                      svc.recordContent(makeContent('test', 'ai'));
+                      break;
+                    case 'provider_switch':
+                      svc.recordProviderSwitch('test-provider', 'test-model');
+                      break;
+                    case 'session_event':
+                      svc.recordSessionEvent('info', 'test event');
+                      break;
+                    case 'directories_changed':
+                      svc.recordDirectoriesChanged(['/test']);
+                      break;
+                    default:
+                      break;
+                  }
+                }
+              });
+
+              const result = await replaySession(filePath, PROJECT_HASH);
+
+              assertReplayOk(result);
+              expect(result.metadata).toBeDefined();
+              expect(result.metadata.sessionId).toBeTruthy();
+              expect(result.metadata.projectHash).toBe(PROJECT_HASH);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
             }
-          });
-
-          const result = await replaySession(filePath, PROJECT_HASH);
-
-          assertReplayOk(result);
-          expect(result.metadata).toBeDefined();
-          expect(result.metadata.sessionId).toBeTruthy();
-          expect(result.metadata.projectHash).toBe(PROJECT_HASH);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          },
+        ),
+      ));
 
     /**
      * Test 48: lastSeq always equals the final event's seq.
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it.prop([fc.integer({ min: 1, max: 30 })])(
-      'lastSeq always equals the final event seq regardless of event count @requirement:REQ-RPL-001',
-      async (eventCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-lastseq-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('lastSeq always equals the final event seq regardless of event count @requirement:REQ-RPL-001', () =>
+      fc.assert(
+        fc.property(fc.integer({ min: 1, max: 30 }), async (eventCount) => {
+          const localTempDir = await fs.mkdtemp(
+            path.join(os.tmpdir(), 'prop-lastseq-'),
+          );
+          const localChatsDir = path.join(localTempDir, 'chats');
+          await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const filePath = await createValidFile(localChatsDir, (svc) => {
-            for (let i = 0; i < eventCount; i++) {
-              svc.recordContent(
-                makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
-              );
-            }
-          });
+          try {
+            const filePath = await createValidFile(localChatsDir, (svc) => {
+              for (let i = 0; i < eventCount; i++) {
+                svc.recordContent(
+                  makeContent(`msg ${i}`, i % 2 === 0 ? 'human' : 'ai'),
+                );
+              }
+            });
 
-          const result = await replaySession(filePath, PROJECT_HASH);
+            const result = await replaySession(filePath, PROJECT_HASH);
 
-          assertReplayOk(result);
-          // session_start (seq=1) + eventCount content events
-          expect(result.lastSeq).toBe(eventCount + 1);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+            assertReplayOk(result);
+            // session_start (seq=1) + eventCount content events
+            expect(result.lastSeq).toBe(eventCount + 1);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
+        }),
+      ));
 
     /**
      * Test 49: eventCount always matches total events regardless of corruption.

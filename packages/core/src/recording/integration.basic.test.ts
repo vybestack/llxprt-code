@@ -510,7 +510,7 @@ describe('integration: full session recording lifecycle', () => {
     });
 
     // Verify file exists
-    await expect(fs.access(filePath)).resolves.toBeUndefined();
+    await expect(fs.access(filePath)).resolves.toBeFalsy();
 
     const deleteResult = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
     expect(deleteResult.ok).toBe(true);

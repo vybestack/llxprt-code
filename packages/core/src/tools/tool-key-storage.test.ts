@@ -305,7 +305,7 @@ describe('ToolKeyStorage', () => {
         keyringLoader: async () => mockKeyring,
       });
 
-      await expect(storage.deleteKey('exa')).resolves.not.toThrow();
+      await expect(storage.deleteKey('exa')).resolves.toBeUndefined();
     });
 
     /**

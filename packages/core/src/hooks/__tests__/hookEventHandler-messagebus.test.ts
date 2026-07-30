@@ -13,7 +13,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { test } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import { EventEmitter } from 'events';
 import { HookEventHandler } from '../hookEventHandler.js';
@@ -152,6 +151,21 @@ function makeAggregator(): HookAggregator {
 
 async function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Waits for a condition to become true, polling at increasing intervals.
+ * Under Bun, async microtask scheduling can differ from Node, so a fixed
+ * delay may be insufficient for event-driven code to settle.
+ */
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs = 200,
+): Promise<void> {
+  const start = Date.now();
+  while (!condition() && Date.now() - start < timeoutMs) {
+    await waitMs(10);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,39 +350,48 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HEVT-002
    */
-  test.prop([
-    fc
-      .string({ minLength: 1, maxLength: 128 })
-      .filter((s) => s.trim().length > 0),
-  ])(
+  it(
     'METAMORPHIC: correlationId echoed verbatim in response @plan:PLAN-20250218-HOOKSYSTEM.P07',
-    async (correlationId) => {
-      const localBus = new FakeMessageBus();
-      const localHandler = new HookEventHandler(
-        makeConfig(),
-        makeRegistry(),
-        makePlanner(),
-        makeRunner(),
-        makeAggregator(),
-        localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
-        DebugLogger.getLogger('test'),
-      );
+    () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 128 })
+            .filter((s) => s.trim().length > 0),
+          async (correlationId) => {
+            const localBus = new FakeMessageBus();
+            const localHandler = new HookEventHandler(
+              makeConfig(),
+              makeRegistry(),
+              makePlanner(),
+              makeRunner(),
+              makeAggregator(),
+              localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
+              DebugLogger.getLogger('test'),
+            );
 
-      const request: HookExecutionRequest = {
-        eventName: HookEventName.BeforeTool,
-        input: { tool_name: 'test_tool', tool_input: {} },
-        correlationId,
-      };
+            const request: HookExecutionRequest = {
+              eventName: HookEventName.BeforeTool,
+              input: { tool_name: 'test_tool', tool_input: {} },
+              correlationId,
+            };
 
-      localBus.publish({ type: HOOK_EXECUTION_REQUEST, payload: request });
-      await waitMs(50);
+            localBus.publish({
+              type: HOOK_EXECUTION_REQUEST,
+              payload: request,
+            });
+            await waitForCondition(
+              () => localBus.getPublishedResponses().length > 0,
+            );
 
-      const responses = localBus.getPublishedResponses();
-      expect(responses.length).toBeGreaterThan(0);
-      expect(responses[0].correlationId).toBe(correlationId);
+            const responses = localBus.getPublishedResponses();
+            expect(responses.length).toBeGreaterThan(0);
+            expect(responses[0].correlationId).toBe(correlationId);
 
-      localHandler.dispose();
-    },
+            localHandler.dispose();
+          },
+        ),
+      ),
     15000,
   );
 });
@@ -450,43 +473,52 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HEVT-003
    */
-  test.prop([
-    fc
-      .string({ minLength: 1, maxLength: 64 })
-      .filter(
-        (s) => !Object.values(HookEventName).includes(s as HookEventName),
-      ),
-    fc.string({ minLength: 1, maxLength: 64 }),
-  ])(
+  it(
     'METAMORPHIC: invalid event name always produces success=false @plan:PLAN-20250218-HOOKSYSTEM.P07',
-    async (invalidEventName, correlationId) => {
-      const localBus = new FakeMessageBus();
-      const localHandler = new HookEventHandler(
-        makeConfig(),
-        makeRegistry(),
-        makePlanner(),
-        makeRunner(),
-        makeAggregator(),
-        localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
-        DebugLogger.getLogger('test'),
-      );
+    () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc
+            .string({ minLength: 1, maxLength: 64 })
+            .filter(
+              (s) => !Object.values(HookEventName).includes(s as HookEventName),
+            ),
+          fc.string({ minLength: 1, maxLength: 64 }),
+          async (invalidEventName, correlationId) => {
+            const localBus = new FakeMessageBus();
+            const localHandler = new HookEventHandler(
+              makeConfig(),
+              makeRegistry(),
+              makePlanner(),
+              makeRunner(),
+              makeAggregator(),
+              localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
+              DebugLogger.getLogger('test'),
+            );
 
-      const request = {
-        eventName: invalidEventName as unknown as HookEventName,
-        input: {},
-        correlationId,
-      };
+            const request = {
+              eventName: invalidEventName as unknown as HookEventName,
+              input: {},
+              correlationId,
+            };
 
-      localBus.publish({ type: HOOK_EXECUTION_REQUEST, payload: request });
-      await waitMs(50);
+            localBus.publish({
+              type: HOOK_EXECUTION_REQUEST,
+              payload: request,
+            });
+            await waitForCondition(
+              () => localBus.getPublishedResponses().length > 0,
+            );
 
-      const responses = localBus.getPublishedResponses();
-      expect(responses.length).toBeGreaterThan(0);
-      expect(responses[0].success).toBe(false);
-      expect(responses[0].correlationId).toBe(correlationId);
+            const responses = localBus.getPublishedResponses();
+            expect(responses.length).toBeGreaterThan(0);
+            expect(responses[0].success).toBe(false);
+            expect(responses[0].correlationId).toBe(correlationId);
 
-      localHandler.dispose();
-    },
+            localHandler.dispose();
+          },
+        ),
+      ),
     15000,
   );
 });
@@ -621,36 +653,47 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HBUS-003
    */
-  test.prop([fc.constantFrom(...Object.values(HookEventName))])(
+  it(
     'METAMORPHIC: response always has non-empty correlationId @plan:PLAN-20250218-HOOKSYSTEM.P07',
-    async (eventName) => {
-      const localBus = new FakeMessageBus();
-      const localHandler = new HookEventHandler(
-        makeConfig(),
-        makeRegistry(),
-        makePlanner(),
-        makeRunner(),
-        makeAggregator(),
-        localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
-        DebugLogger.getLogger('test'),
-      );
+    () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.constantFrom(...Object.values(HookEventName)),
+          async (eventName) => {
+            const localBus = new FakeMessageBus();
+            const localHandler = new HookEventHandler(
+              makeConfig(),
+              makeRegistry(),
+              makePlanner(),
+              makeRunner(),
+              makeAggregator(),
+              localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
+              DebugLogger.getLogger('test'),
+            );
 
-      const request = {
-        eventName,
-        input: {},
-        // no correlationId
-      };
+            const request = {
+              eventName,
+              input: {},
+              // no correlationId
+            };
 
-      localBus.publish({ type: HOOK_EXECUTION_REQUEST, payload: request });
-      await waitMs(50);
+            localBus.publish({
+              type: HOOK_EXECUTION_REQUEST,
+              payload: request,
+            });
+            await waitForCondition(
+              () => localBus.getPublishedResponses().length > 0,
+            );
 
-      const responses = localBus.getPublishedResponses();
-      expect(responses.length).toBeGreaterThan(0);
-      expect(responses[0].correlationId).toBeDefined();
-      expect(responses[0].correlationId.length).toBeGreaterThan(0);
+            const responses = localBus.getPublishedResponses();
+            expect(responses.length).toBeGreaterThan(0);
+            expect(responses[0].correlationId).toBeDefined();
+            expect(responses[0].correlationId.length).toBeGreaterThan(0);
 
-      localHandler.dispose();
-    },
+            localHandler.dispose();
+          },
+        ),
+      ),
     15000,
   );
 });
@@ -716,37 +759,46 @@ describe('Model translation (DELTA-HPAY-003)', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P07
    * @requirement DELTA-HEVT-002
    */
-  test.prop([
-    fc.constantFrom(...Object.values(HookEventName)),
-    fc.string({ minLength: 1, maxLength: 64 }),
-  ])(
+  it(
     'METAMORPHIC: exactly one response per request @plan:PLAN-20250218-HOOKSYSTEM.P07',
-    async (eventName, correlationId) => {
-      const localBus = new FakeMessageBus();
-      const localHandler = new HookEventHandler(
-        makeConfig(),
-        makeRegistry(),
-        makePlanner(),
-        makeRunner(),
-        makeAggregator(),
-        localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
-        DebugLogger.getLogger('test'),
-      );
+    () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.constantFrom(...Object.values(HookEventName)),
+          fc.string({ minLength: 1, maxLength: 64 }),
+          async (eventName, correlationId) => {
+            const localBus = new FakeMessageBus();
+            const localHandler = new HookEventHandler(
+              makeConfig(),
+              makeRegistry(),
+              makePlanner(),
+              makeRunner(),
+              makeAggregator(),
+              localBus as unknown as import('../../confirmation-bus/message-bus.js').MessageBus,
+              DebugLogger.getLogger('test'),
+            );
 
-      const request = {
-        eventName,
-        input: {},
-        correlationId,
-      };
+            const request = {
+              eventName,
+              input: {},
+              correlationId,
+            };
 
-      localBus.publish({ type: HOOK_EXECUTION_REQUEST, payload: request });
-      await waitMs(50);
+            localBus.publish({
+              type: HOOK_EXECUTION_REQUEST,
+              payload: request,
+            });
+            await waitForCondition(
+              () => localBus.getPublishedResponses().length > 0,
+            );
 
-      const responses = localBus.getPublishedResponses();
-      expect(responses).toHaveLength(1);
+            const responses = localBus.getPublishedResponses();
+            expect(responses).toHaveLength(1);
 
-      localHandler.dispose();
-    },
+            localHandler.dispose();
+          },
+        ),
+      ),
     15000,
   );
 });

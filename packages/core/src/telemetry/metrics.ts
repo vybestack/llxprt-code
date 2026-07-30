@@ -13,4 +13,5 @@ export {
   recordFileOperationMetric,
   recordModelRoutingMetrics,
   getMeter,
+  resetMetricsForTesting,
 } from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';

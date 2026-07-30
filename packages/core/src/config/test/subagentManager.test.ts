@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { it as itProp } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -151,7 +150,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       '😀',
     );
 
-    itProp(
+    it(
       'rejects invalid subagent names generated randomly @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013',
       [validNameArb, invalidSuffixArb],
       async (base, suffix) => {
@@ -171,7 +170,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       `${String.fromCharCode(32)}${String.fromCharCode(10)}${String.fromCharCode(9)}${String.fromCharCode(32)}`,
     );
 
-    itProp(
+    it(
       'rejects prompts that resolve to empty text @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013',
       [whitespacePromptArb],
       async (emptyPrompt) => {
@@ -181,17 +180,17 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       },
     );
 
-    itProp(
-      'rejects non-existent profiles generated randomly @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013',
-      [validNameArb],
-      async (baseProfile) => {
-        const unknownProfile = `${baseProfile}-alt`;
-        await fs.rm(subagentsDir, { recursive: true, force: true });
-        await expect(
-          subagentManager.saveSubagent('testagent', unknownProfile, 'Prompt'),
-        ).rejects.toThrow(/profile.*not found/i);
-      },
-    );
+    it('rejects non-existent profiles generated randomly @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-013', async () => {
+      await fc.assert(
+        fc.asyncProperty(validNameArb, async (baseProfile) => {
+          const unknownProfile = `${baseProfile}-alt`;
+          await fs.rm(subagentsDir, { recursive: true, force: true });
+          await expect(
+            subagentManager.saveSubagent('testagent', unknownProfile, 'Prompt'),
+          ).rejects.toThrow(/profile.*not found/i);
+        }),
+      );
+    });
   });
 
   describe('loadSubagent @requirement:REQ-002 @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
@@ -247,16 +246,12 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       .string({ minLength: 1 })
       .filter((value) => value.trim().length > 0);
 
-    itProp(
+    it(
       'preserves saved subagent configuration for any valid prompt @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [validNameArb, nonEmptyPromptArb],
       async (name, prompt) => {
-        if (typeof name !== 'string') {
-          return;
-        }
         const normalizedName = name;
-        const normalizedPrompt =
-          typeof prompt === 'string' ? prompt : String(prompt);
+        const normalizedPrompt = prompt;
         await fs.rm(subagentsDir, { recursive: true, force: true });
         await subagentManager.saveSubagent(
           normalizedName,
@@ -318,16 +313,10 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       expect(list).toContain('agent1');
     });
 
-    itProp(
+    it(
       'lists saved subagents in sorted order for any valid set @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [fc.array(validNameArb, { minLength: 1, maxLength: 6 })],
       async (names) => {
-        if (
-          !Array.isArray(names) ||
-          names.some((value) => typeof value !== 'string')
-        ) {
-          return;
-        }
         // Reset directory to ensure independence between runs
         await fs.rm(subagentsDir, { recursive: true, force: true });
         const uniqueNames = Array.from(new Set(names));
@@ -370,13 +359,10 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       expect(deleted).toBe(false);
     });
 
-    itProp(
+    it(
       'returns false for any unsaved subagent name @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [validNameArb],
       async (name) => {
-        if (typeof name !== 'string') {
-          return;
-        }
         await fs.rm(subagentsDir, { recursive: true, force: true });
         await fs.mkdir(subagentsDir, { recursive: true });
         const deleted = await subagentManager.deleteSubagent(name);

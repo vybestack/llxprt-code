@@ -15,7 +15,8 @@
  * - SessionDiscovery.readSessionMetadataTitle extracts the tri-state title.
  */
 
-import { assert, describe, it, expect, afterEach } from 'vitest';
+import { strict as assert } from 'node:assert';
+import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';

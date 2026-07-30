@@ -210,7 +210,7 @@ function createLockDirTracker(): LockDirTracker {
 // `describe.sequential` is the minimal, explicit enforcement that keeps the
 // tracker pattern safe while preserving observable cleanup failures.
 
-describe.sequential('KeyringTokenStore DI behavioral tests', () => {
+describe('KeyringTokenStore DI behavioral tests', () => {
   // Per-suite ownership: this describe owns its own tracker so concurrent
   // test files / sibling suites do not share mutable lock-dir state.
   // Sequential execution (describe.sequential) keeps the tracker's mutable
@@ -554,7 +554,7 @@ describe.sequential('KeyringTokenStore DI behavioral tests', () => {
   });
 });
 
-describe.sequential('KeyringTokenStore lockDir contract (P8)', () => {
+describe('KeyringTokenStore lockDir contract (P8)', () => {
   // Per-suite ownership: this sibling describe owns its own tracker so it does
   // not rely on (or mutate) the first suite's mutable state, and its
   // afterEach cleanup is wired directly here (sibling scopes do not inherit
@@ -645,7 +645,7 @@ const DUAL_MODES: readonly SecureStoreMode[] = [
   },
 ];
 
-describe.sequential.each(DUAL_MODES)(
+describe.each(DUAL_MODES)(
   'KeyringTokenStore ISecureStore backend conformance [$mode]',
   ({ makeStore }) => {
     // This suite owns its own temp-dir tracker so file-backed stores get
@@ -771,31 +771,28 @@ describe.sequential.each(DUAL_MODES)(
 // the in-memory Map double (simulating the keyring path). It lives outside the
 // shared describe.each because it is only meaningful for the file-backed store.
 
-describe.sequential(
-  'KeyringTokenStore file-backed cross-instance persistence',
-  () => {
-    const locks = createLockDirTracker();
-    afterEach(() => locks.cleanupLockDirs());
+describe('KeyringTokenStore file-backed cross-instance persistence', () => {
+  const locks = createLockDirTracker();
+  afterEach(() => locks.cleanupLockDirs());
 
-    it('a token saved by one KeyringTokenStore is visible to a second instance backed by the same dir', async () => {
-      const dir = locks.freshLockDir();
-      const writerStore = createFileBackedSecureStore(dir);
-      const writer = new KeyringTokenStore({
-        secureStore: writerStore,
-        lockDir: locks.freshLockDir(),
-        logger: createNoOpLogger(),
-      });
-      await writer.saveToken('persistent', VALID_TOKEN);
-
-      const readerStore = createFileBackedSecureStore(dir);
-      const reader = new KeyringTokenStore({
-        secureStore: readerStore,
-        lockDir: locks.freshLockDir(),
-        logger: createNoOpLogger(),
-      });
-      const loaded = await reader.getToken('persistent');
-      expect(loaded).not.toBeNull();
-      expect(loaded!.access_token).toBe('test-access-token');
+  it('a token saved by one KeyringTokenStore is visible to a second instance backed by the same dir', async () => {
+    const dir = locks.freshLockDir();
+    const writerStore = createFileBackedSecureStore(dir);
+    const writer = new KeyringTokenStore({
+      secureStore: writerStore,
+      lockDir: locks.freshLockDir(),
+      logger: createNoOpLogger(),
     });
-  },
-);
+    await writer.saveToken('persistent', VALID_TOKEN);
+
+    const readerStore = createFileBackedSecureStore(dir);
+    const reader = new KeyringTokenStore({
+      secureStore: readerStore,
+      lockDir: locks.freshLockDir(),
+      logger: createNoOpLogger(),
+    });
+    const loaded = await reader.getToken('persistent');
+    expect(loaded).not.toBeNull();
+    expect(loaded!.access_token).toBe('test-access-token');
+  });
+});

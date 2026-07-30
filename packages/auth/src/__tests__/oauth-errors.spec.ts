@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   OAuthError,
   OAuthErrorFactory,
@@ -313,16 +313,11 @@ describe('RetryHandler', () => {
   beforeEach(() => {
     retryHandler = new RetryHandler({
       maxAttempts: 3,
-      baseDelayMs: 100,
-      backoffMultiplier: 2,
-      maxDelayMs: 1000,
+      baseDelayMs: 0,
+      backoffMultiplier: 1,
+      maxDelayMs: 0,
       jitter: false, // Disable jitter for predictable tests
     });
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('should succeed on first attempt', async () => {
@@ -337,7 +332,7 @@ describe('RetryHandler', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('should retry transient errors with exponential backoff', async () => {
+  it('should retry transient errors with exponential backoff', async () => {
     // Use a retry handler with no delay to avoid timing issues
     const testRetryHandler = new RetryHandler({
       maxAttempts: 3,
@@ -388,21 +383,18 @@ describe('RetryHandler', () => {
       return 'success';
     });
 
-    const executePromise = retryHandler.executeWithRetry(
+    // retryAfterMs from the error is capped by maxDelayMs: 0, so this completes
+    // without real delay.
+    const result = await retryHandler.executeWithRetry(
       operation,
       'test-provider',
     );
-
-    // Fast-forward through the specific delay
-    await vi.advanceTimersByTimeAsync(2000);
-
-    const result = await executePromise;
 
     expect(result).toBe('success');
     expect(operation).toHaveBeenCalledTimes(2);
   });
 
-  it.skip('should fail after max attempts', async () => {
+  it('should fail after max attempts', async () => {
     // Use a retry handler with no delay to avoid timing issues
     const testRetryHandler = new RetryHandler({
       maxAttempts: 3,
@@ -430,9 +422,11 @@ describe('RetryHandler', () => {
     ).rejects.toBeInstanceOf(OAuthError);
   });
 
-  it('should apply jitter when enabled', () => {
+  it('should apply jitter when enabled', async () => {
     const retryHandlerWithJitter = new RetryHandler({
       ...DEFAULT_RETRY_CONFIG,
+      baseDelayMs: 0,
+      maxDelayMs: 0,
       jitter: true,
     });
 
@@ -440,12 +434,11 @@ describe('RetryHandler', () => {
       .fn()
       .mockRejectedValue(OAuthErrorFactory.networkError('test-provider'));
 
-    // We can't easily test the exact jitter values, but we can verify it doesn't crash
-    expect(() => {
-      retryHandlerWithJitter
-        .executeWithRetry(operation, 'test-provider')
-        .catch(() => {});
-    }).not.toThrow();
+    // We can't easily test the exact jitter values, but we can verify it
+    // eventually rejects after retries without crashing.
+    await expect(
+      retryHandlerWithJitter.executeWithRetry(operation, 'test-provider'),
+    ).rejects.toBeInstanceOf(OAuthError);
   });
 });
 
@@ -628,7 +621,15 @@ describe('GracefulErrorHandler', () => {
 
 describe('Integration Tests', () => {
   it('should handle complex error scenarios gracefully', async () => {
-    const gracefulHandler = new GracefulErrorHandler();
+    const gracefulHandler = new GracefulErrorHandler(
+      new RetryHandler({
+        maxAttempts: 3,
+        baseDelayMs: 0,
+        backoffMultiplier: 1,
+        maxDelayMs: 0,
+        jitter: false,
+      }),
+    );
     let attempts = 0;
 
     const simulateComplexOperation = async (): Promise<string> => {
@@ -646,25 +647,15 @@ describe('Integration Tests', () => {
       }
     };
 
-    vi.useFakeTimers();
-
-    const resultPromise = gracefulHandler.handleGracefully(
+    const result = await gracefulHandler.handleGracefully(
       simulateComplexOperation,
       'fallback',
       'test-provider',
       'complexOperation',
     );
 
-    // Advance through the retry delays
-    await vi.advanceTimersByTimeAsync(1000); // Network error retry
-    await vi.advanceTimersByTimeAsync(1000); // Rate limit delay
-
-    const result = await resultPromise;
-
     expect(result).toBe('success');
     expect(attempts).toBe(3);
-
-    vi.useRealTimers();
   });
 
   it('should provide comprehensive error information for debugging', () => {

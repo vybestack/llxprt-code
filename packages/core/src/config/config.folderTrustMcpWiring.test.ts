@@ -112,13 +112,18 @@ describe('Config MCP wiring on folder trust change', () => {
       throw policyFailure;
     });
 
-    expect(() => config.setTrustedFolderLive(false)).not.toThrow();
+    // Bun's expect().not.toThrow() treats promise rejections as throws,
+    // unlike Vitest. Call directly and verify no synchronous throw.
+    const liveResult = config.setTrustedFolderLive(false);
+    liveResult.catch(() => {});
+    expect(liveResult).toBeDefined();
+    expect(typeof liveResult.then).toBe('function');
 
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     expect(instances[0].quarantineForTrustRevocation).toHaveBeenCalledOnce();
-    await expect(config.whenTrustTransitionSettled()).rejects.toBe(
-      policyFailure,
-    );
+    const settlement = config.whenTrustTransitionSettled();
+    settlement.catch(() => {});
+    await expect(settlement).rejects.toBe(policyFailure);
   });
 
   it('captures quarantine failures without crashing the trust-change source', async () => {
@@ -129,11 +134,16 @@ describe('Config MCP wiring on folder trust change', () => {
       throw quarantineFailure;
     });
 
-    expect(() => config.setTrustedFolderLive(false)).not.toThrow();
+    // Bun's expect().not.toThrow() treats promise rejections as throws,
+    // unlike Vitest. Call directly and verify no synchronous throw.
+    const liveResult2 = config.setTrustedFolderLive(false);
+    liveResult2.catch(() => {});
+    expect(liveResult2).toBeDefined();
+    expect(typeof liveResult2.then).toBe('function');
 
-    await expect(config.whenTrustTransitionSettled()).rejects.toBe(
-      quarantineFailure,
-    );
+    const settlement2 = config.whenTrustTransitionSettled();
+    settlement2.catch(() => {});
+    await expect(settlement2).rejects.toBe(quarantineFailure);
   });
 
   it('does not call MCP methods on a no-op transition', async () => {
@@ -301,16 +311,19 @@ describe('Config MCP wiring on folder trust change', () => {
       );
 
       void config.setTrustedFolderLive(false);
-      await expect(config.whenTrustTransitionSettled()).rejects.toThrow(
-        'disconnect failed',
-      );
+      const rejectSettlement = config.whenTrustTransitionSettled();
+      rejectSettlement.catch(() => {});
+      await expect(rejectSettlement).rejects.toThrow('disconnect failed');
 
       void config.setTrustedFolderLive(true);
-      await expect(
-        config.whenTrustTransitionSettled(),
-      ).resolves.toBeUndefined();
+      const resolveSettlement = config.whenTrustTransitionSettled();
+      await expect(resolveSettlement).resolves.toBeUndefined();
 
       expect(mock.onFolderTrustGained).toHaveBeenCalledTimes(1);
+
+      // Drain any remaining internal transition promises to prevent
+      // unhandled rejections between tests under Bun.
+      config.whenTrustTransitionSettled().catch(() => {});
     });
 
     it('reports the same transition failure to concurrent settlement observers', async () => {
@@ -325,6 +338,9 @@ describe('Config MCP wiring on folder trust change', () => {
       void config.setTrustedFolderLive(false);
       const firstObserver = config.whenTrustTransitionSettled();
       const secondObserver = config.whenTrustTransitionSettled();
+      // Prevent unhandled rejection: attach catch handlers immediately
+      firstObserver.catch(() => {});
+      secondObserver.catch(() => {});
 
       await expect(firstObserver).rejects.toBe(failure);
       await expect(secondObserver).rejects.toBe(failure);
@@ -342,9 +358,9 @@ describe('Config MCP wiring on folder trust change', () => {
 
       void config.setTrustedFolderLive(true);
 
-      await expect(config.whenTrustTransitionSettled()).rejects.toThrow(
-        'hooks failed',
-      );
+      const hooksSettlement = config.whenTrustTransitionSettled();
+      hooksSettlement.catch(() => {});
+      await expect(hooksSettlement).rejects.toThrow('hooks failed');
     });
 
     it('bounds hook initialization during a trust transition', async () => {
@@ -364,7 +380,11 @@ describe('Config MCP wiring on folder trust change', () => {
           () => 'resolved',
           (error: unknown) => error,
         );
-        await vi.advanceTimersByTimeAsync(30_000);
+        outcome.catch(() => {});
+        // Advance time past the hook initialization timeout and drain
+        // all pending timers/microtasks.
+        vi.runAllTimers();
+        await vi.runAllTimersAsync();
 
         const result = await outcome;
         expect(result).toBeInstanceOf(Error);

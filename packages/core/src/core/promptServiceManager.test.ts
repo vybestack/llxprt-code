@@ -54,7 +54,7 @@ describe('PromptServiceManager', () => {
     expect(manager.isInitialized()).toBe(true);
 
     // A second initialize() must not throw and must remain initialized.
-    await expect(manager.initialize()).resolves.not.toThrow();
+    await manager.initialize();
     expect(manager.isInitialized()).toBe(true);
   });
 

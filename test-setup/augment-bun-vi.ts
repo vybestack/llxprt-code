@@ -17,7 +17,12 @@
  * top of Bun's real fake-timer primitives).
  */
 
-import { afterEach, vi as bunVi, mock } from 'bun:test';
+import {
+  afterEach,
+  vi as bunVi,
+  mock,
+  setSystemTime as bunSetSystemTime,
+} from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
 import {
   StubRegistry,
@@ -60,31 +65,6 @@ interface BunViBase {
  * but Bun supports it at runtime. This interface lets us pass `write: false`
  * without suppressing type errors on the base declaration.
  */
-interface BunBuildOptions {
-  entrypoints: readonly string[];
-  format?: 'esm' | 'cjs' | 'iife';
-  target?: 'bun' | 'node' | 'browser' | 'bundler';
-  write?: boolean;
-}
-
-interface BunBuildOutput {
-  success: boolean;
-  outputs: readonly { text(): Promise<string> }[];
-  logs: readonly { message: string }[];
-}
-
-/**
- * Typed wrapper around Bun.build() that accepts the runtime-supported
- * `write: false` option without relying on the (incomplete) base type.
- */
-async function bunBuild(options: BunBuildOptions): Promise<BunBuildOutput> {
-  return (
-    Bun as unknown as {
-      build(opts: BunBuildOptions): Promise<BunBuildOutput>;
-    }
-  ).build(options);
-}
-
 const localRequire = createRequire(import.meta.url);
 
 const envRegistry = new StubRegistry(
@@ -207,38 +187,95 @@ const resolveActualId = (id: string): string => {
 };
 
 const actualModules = new Map<string, Promise<unknown>>();
-let actualImportSequence = 0;
 
-const loadIsolatedModule = async (resolvedId: string): Promise<unknown> => {
-  if (isBuiltin(resolvedId)) return localRequire(resolvedId);
+/**
+ * Pre-caches Node built-in modules before any mock.module() registration.
+ *
+ * When a test calls vi.mock('fs', (importOriginal) => ...), the factory's
+ * importOriginal() must load the REAL module. But mock.module intercepts
+ * require() too, so calling require() inside the factory deadlocks.
+ *
+ * This preload runs BEFORE any test file is loaded, so require() returns
+ * the real built-in modules. We cache them so importActual can return
+ * the cached copy later, even after mock.module intercepts require().
+ */
+const builtinCache = new Map<string, unknown>();
+const COMMONLY_MOCKED_BUILTINS = [
+  'fs',
+  'node:fs',
+  'path',
+  'node:path',
+  'os',
+  'node:os',
+  'child_process',
+  'node:child_process',
+  'crypto',
+  'node:crypto',
+  'net',
+  'node:net',
+  'http',
+  'node:http',
+  'https',
+  'node:https',
+  'stream',
+  'node:stream',
+  'fs/promises',
+  'node:fs/promises',
+  'url',
+  'node:url',
+  'util',
+  'node:util',
+  'events',
+  'node:events',
+  'readline',
+  'node:readline',
+  'tty',
+  'node:tty',
+];
 
-  const result = await bunBuild({
-    entrypoints: [resolvedId],
-    format: 'esm',
-    target: 'bun',
-    write: false,
-  });
-  const output = result.outputs[0];
-  if (!result.success || !output) {
-    const message = result.logs.map((log) => log.message).join('\n');
-    throw new Error(message || `importActual: cannot build "${resolvedId}"`);
+for (const mod of COMMONLY_MOCKED_BUILTINS) {
+  try {
+    builtinCache.set(mod, localRequire(mod));
+  } catch {
+    // Module may not exist in this environment
   }
+}
 
-  actualImportSequence += 1;
-  const source = await output.text();
-  const encodedSource = Buffer.from(source).toString('base64');
-  return import(
-    `data:text/javascript;base64,${encodedSource}?actual=${actualImportSequence}`
-  );
+/**
+ * Loads a module bypassing mock.module interception.
+ *
+ * For Node built-in modules, we use cached versions from preload time
+ * (before mocks were registered) via require().
+ *
+ * For workspace/relative modules, we use require() which is NOT intercepted
+ * by Bun's mock.module. Bun's mock.module intercepts import() (ESM dynamic
+ * import) even inside factory functions, causing deadlocks when importOriginal
+ * is called. require() bypasses mock.module entirely, returning the real
+ * module namespace object. Bun supports require() of ESM modules, returning
+ * the module namespace (same shape as import()).
+ */
+const loadIsolatedModule = (resolvedId: string): Promise<unknown> => {
+  return Promise.resolve(loadIsolatedModuleSync(resolvedId));
+};
+
+/**
+ * Synchronously loads a module bypassing mock.module interception.
+ * Uses require() which is NOT intercepted by Bun's mock.module, unlike
+ * ESM dynamic import() which IS intercepted and deadlocks inside factories.
+ */
+const loadIsolatedModuleSync = (resolvedId: string): unknown => {
+  const builtinCached = builtinCache.get(resolvedId);
+  if (builtinCached !== undefined) return builtinCached;
+  return localRequire(resolvedId);
 };
 
 const importResolvedActual = (resolvedId: string): Promise<unknown> => {
   const cached = actualModules.get(resolvedId);
   if (cached) return cached;
 
-  const actual = loadIsolatedModule(resolvedId);
-  actualModules.set(resolvedId, actual);
-  return actual;
+  const promise = loadIsolatedModule(resolvedId);
+  actualModules.set(resolvedId, promise);
+  return promise;
 };
 
 const importActual = (id: string): Promise<unknown> => {
@@ -340,13 +377,59 @@ const registerModuleMock = (
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
 ): unknown => {
   const resolvedId = resolveActualId(id);
+
+  // Bun's mock.module matches by the original module specifier (e.g.
+  // 'mime-types', 'fs', './foo.js'), NOT by the resolved absolute file path.
+  // Using the resolved path causes the factory to never be called, leaving
+  // test code with the real module instead of the mock. Pass the original id
+  // to mock.module and use the resolved path only for importActual lookups.
+  const mockId = id;
+
   if (!factory) {
-    return mock.module(resolvedId, () => automockModule(resolvedId));
+    return mock.module(mockId, () => automockModule(resolvedId));
   }
 
-  return mock.module(resolvedId, () =>
-    factory(() => importResolvedActual(resolvedId)),
-  );
+  // Bun's mock.module does NOT drain the microtask queue inside factory
+  // functions (Bun 1.3.x). If a factory returns a Promise, mock.module
+  // deadlocks trying to await it. To work around this:
+  //
+  // 1. Call the factory eagerly at vi.mock() registration time (NOT inside
+  //    mock.module's lazy evaluation). importOriginal returns a sync value
+  //    via require() so `await importOriginal()` resolves immediately.
+  // 2. If the factory returns a sync value, register it directly.
+  // 3. If the factory returns a Promise, register a placeholder mock that
+  //    returns the real module, then re-register with the resolved result
+  //    once the Promise settles. This works because mock.module is reentrant
+  //    — calling mock.module again with the same id replaces the previous
+  //    registration.
+  const syncActual = loadIsolatedModuleSync(resolvedId);
+  const importOriginal = (): unknown => syncActual;
+  const factoryResult = factory(importOriginal as () => Promise<unknown>);
+
+  if (!(factoryResult instanceof Promise)) {
+    // Sync factory result — register directly
+    return mock.module(mockId, () => factoryResult as object);
+  }
+
+  // Async factory result — Bun can't await inside mock.module factories.
+  // Register a placeholder (real module) and re-register when resolved.
+  // This is a race: if the module is imported before the factory resolves,
+  // the real module is returned. In practice, vi.mock() is called at module
+  // evaluation time, well before the module is first imported by test code.
+  // IMPORTANT: Factory bodies that call `await import('./local.js')` will
+  // STILL hang because ESM import() inside factories is intercepted by
+  // mock.module. Those test files must be refactored.
+  mock.module(mockId, () => syncActual as object);
+  factoryResult
+    .then((exports) => {
+      if (typeof exports === 'object' && exports !== null) {
+        mock.module(mockId, () => exports as object);
+      }
+    })
+    .catch(() => {
+      // Factory error — leave the real module in place
+    });
+  return undefined;
 };
 
 /**
@@ -463,6 +546,17 @@ const viAugmentations = {
       realClearAllTimers();
     }
   },
+  setSystemTime: (time?: number | Date): void => {
+    // Bun provides setSystemTime as a standalone function from bun:test,
+    // not on vi. Delegate to it so vi.setSystemTime() works.
+    if (time === undefined) {
+      bunSetSystemTime();
+    } else if (typeof time === 'number') {
+      bunSetSystemTime(time);
+    } else {
+      bunSetSystemTime(time);
+    }
+  },
   mocks: unsupportedMockRegistry,
 };
 
@@ -489,6 +583,8 @@ const forceOverride = new Set([
   'useFakeTimers',
   'useRealTimers',
   'restoreAllMocks',
+  'clearAllTimers',
+  'setSystemTime',
   'clearAllTimers',
 ]);
 

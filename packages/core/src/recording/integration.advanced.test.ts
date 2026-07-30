@@ -24,8 +24,7 @@
  * Property-based tests use @fast-check/vitest (≥30% of total).
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'vitest';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -47,6 +46,54 @@ import {
   type SessionRecordLine,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
+
+// Polyfill it.prop for Bun compatibility
+type ItPropOverload = {
+  <T extends Array<fc.IReadOnlyArbitrary<unknown>>>(
+    arbitraries: T,
+    options?: { numRuns?: number },
+  ): (
+    name: string,
+    callback: (
+      ...args: {
+        [K in keyof T]: T[K] extends fc.IReadOnlyArbitrary<infer U> ? U : never;
+      }
+    ) => Promise<void> | void,
+  ) => void;
+  <T extends Array<fc.IReadOnlyArbitrary<unknown>>>(
+    arbitraries: T,
+  ): (
+    name: string,
+    callback: (
+      ...args: {
+        [K in keyof T]: T[K] extends fc.IReadOnlyArbitrary<infer U> ? U : never;
+      }
+    ) => Promise<void> | void,
+  ) => void;
+};
+
+const itProp: ItPropOverload =
+  (
+    arbitraries: Array<fc.IReadOnlyArbitrary<unknown>>,
+    options?: { numRuns?: number },
+  ) =>
+  (
+    name: string,
+    callback: (...args: unknown[]) => Promise<void> | void,
+  ): void => {
+    const testFn = it;
+    testFn(name, async () => {
+      await fc.assert(
+        fc.asyncProperty(...arbitraries, async (...args: unknown[]) => {
+          await callback(...args);
+        }),
+        options,
+      );
+    });
+  };
+
+// Override it.prop on the it function
+(it as unknown as { prop: ItPropOverload }).prop = itProp;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -516,7 +563,7 @@ describe('integration: full session recording lifecycle', () => {
             contents,
           },
         );
-        await expect(fs.access(filePath)).resolves.toBeUndefined();
+        await expect(fs.access(filePath)).resolves.toBeFalsy();
 
         const result = await deleteSession(sessionId, localChats, PROJECT_HASH);
         expect(result.ok).toBe(true);

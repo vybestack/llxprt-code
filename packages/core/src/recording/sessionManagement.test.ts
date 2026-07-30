@@ -26,8 +26,7 @@
  * Property-based tests use @fast-check/vitest (≥30% of total tests).
  */
 
-import { describe, expect, beforeEach, afterEach } from 'vitest';
-import { it as itProp } from '@fast-check/vitest';
+import { describe, expect, beforeEach, afterEach, it } from 'vitest';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -168,7 +167,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp('returns session data for all matching sessions', async () => {
+    it('returns session data for all matching sessions', async () => {
       await createTestSession(chatsDir);
       await delay(50);
       await createTestSession(chatsDir);
@@ -191,7 +190,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp('returns sessions sorted newest-first by mtime', async () => {
+    it('returns sessions sorted newest-first by mtime', async () => {
       await createTestSession(chatsDir, { sessionId: 'oldest-session' });
       await delay(100);
       await createTestSession(chatsDir, { sessionId: 'middle-session' });
@@ -214,7 +213,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp('returns sessions with correct metadata fields', async () => {
+    it('returns sessions with correct metadata fields', async () => {
       const sessionId = 'metadata-test-session';
       await createTestSession(chatsDir, {
         sessionId,
@@ -245,7 +244,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp('returns empty sessions array when no sessions exist', async () => {
+    it('returns empty sessions array when no sessions exist', async () => {
       const result = await listSessions(chatsDir, PROJECT_HASH);
       expect(result.sessions).toStrictEqual([]);
     });
@@ -259,21 +258,18 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp(
-      'wraps discovery result in ListSessionsResult with sessions property',
-      async () => {
-        await createTestSession(chatsDir);
-        await createTestSession(chatsDir, {
-          projectHash: 'other-project',
-        });
+    it('wraps discovery result in ListSessionsResult with sessions property', async () => {
+      await createTestSession(chatsDir);
+      await createTestSession(chatsDir, {
+        projectHash: 'other-project',
+      });
 
-        const result = await listSessions(chatsDir, PROJECT_HASH);
-        expect(result).toHaveProperty('sessions');
-        expect(Array.isArray(result.sessions)).toBe(true);
-        // Only the matching-project session
-        expect(result.sessions).toHaveLength(1);
-      },
-    );
+      const result = await listSessions(chatsDir, PROJECT_HASH);
+      expect(result).toHaveProperty('sessions');
+      expect(Array.isArray(result.sessions)).toBe(true);
+      // Only the matching-project session
+      expect(result.sessions).toHaveLength(1);
+    });
   });
 
   // =========================================================================
@@ -290,22 +286,20 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp(
-      'deletes session by exact ID and removes file from disk',
-      async () => {
-        const sessionId = 'a1b2c3d4-test-session';
-        const { filePath } = await createTestSession(chatsDir, { sessionId });
-        expect(await fileExists(filePath)).toBe(true);
+    it('deletes session by exact ID and removes file from disk', async () => {
+      const sessionId = 'a1b2c3d4-test-session';
+      const { filePath } = await createTestSession(chatsDir, { sessionId });
+      expect(await fileExists(filePath)).toBe(true);
 
-        const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+      const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.deletedSessionId).toBe(sessionId);
-        }
-        expect(await fileExists(filePath)).toBe(false);
-      },
-    );
+      expect(result.ok).toBe(true);
+      const okResult = result as Extract<typeof result, { ok: true }>;
+      {
+        expect(okResult.deletedSessionId).toBe(sessionId);
+      }
+      expect(await fileExists(filePath)).toBe(false);
+    });
 
     /**
      * Test 7: deleteSession by prefix
@@ -316,7 +310,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp('deletes session by unique prefix', async () => {
+    it('deletes session by unique prefix', async () => {
       const sessionId = 'abcdef12-3456-7890-unique';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
       // Create another with different prefix so there's no ambiguity
@@ -327,8 +321,9 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
       const result = await deleteSession('abcdef12', chatsDir, PROJECT_HASH);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.deletedSessionId).toBe(sessionId);
+      const okResult = result as Extract<typeof result, { ok: true }>;
+      {
+        expect(okResult.deletedSessionId).toBe(sessionId);
       }
       expect(await fileExists(filePath)).toBe(false);
     });
@@ -342,7 +337,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp('deletes session by numeric index (1 = newest)', async () => {
+    it('deletes session by numeric index (1 = newest)', async () => {
       await createTestSession(chatsDir, { sessionId: 'oldest-del' });
       await delay(100);
       await createTestSession(chatsDir, { sessionId: 'middle-del' });
@@ -354,8 +349,9 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
       const result = await deleteSession('1', chatsDir, PROJECT_HASH);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.deletedSessionId).toBe('newest-del');
+      const okResult = result as Extract<typeof result, { ok: true }>;
+      {
+        expect(okResult.deletedSessionId).toBe('newest-del');
       }
       expect(await fileExists(newestPath)).toBe(false);
     });
@@ -369,7 +365,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp('removes lock sidecar file alongside session file', async () => {
+    it('removes lock sidecar file alongside session file', async () => {
       const sessionId = 'sidecar-lock-test';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
 
@@ -394,46 +390,44 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp('returns the deleted session ID in the result', async () => {
+    it('returns the deleted session ID in the result', async () => {
       const sessionId = 'confirmation-id-test';
       await createTestSession(chatsDir, { sessionId });
 
       const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.deletedSessionId).toBe(sessionId);
+      const okResult = result as Extract<typeof result, { ok: true }>;
+      {
+        expect(okResult.deletedSessionId).toBe(sessionId);
       }
     });
   });
 
   describe('deleteSessionById', () => {
-    itProp(
-      'deletes only an exact session ID and never resolves a prefix',
-      async () => {
-        const sessionId = 'exact-session-identifier';
-        const { filePath } = await createTestSession(chatsDir, { sessionId });
+    it('deletes only an exact session ID and never resolves a prefix', async () => {
+      const sessionId = 'exact-session-identifier';
+      const { filePath } = await createTestSession(chatsDir, { sessionId });
 
-        const prefixResult = await deleteSessionById(
-          'exact-session',
-          chatsDir,
-          PROJECT_HASH,
-        );
-        expect(prefixResult.ok).toBe(false);
-        expect(await fileExists(filePath)).toBe(true);
+      const prefixResult = await deleteSessionById(
+        'exact-session',
+        chatsDir,
+        PROJECT_HASH,
+      );
+      expect(prefixResult.ok).toBe(false);
+      expect(await fileExists(filePath)).toBe(true);
 
-        const exactResult = await deleteSessionById(
-          sessionId,
-          chatsDir,
-          PROJECT_HASH,
-        );
-        expect(exactResult).toStrictEqual({
-          ok: true,
-          deletedSessionId: sessionId,
-        });
-        expect(await fileExists(filePath)).toBe(false);
-      },
-    );
+      const exactResult = await deleteSessionById(
+        sessionId,
+        chatsDir,
+        PROJECT_HASH,
+      );
+      expect(exactResult).toStrictEqual({
+        ok: true,
+        deletedSessionId: sessionId,
+      });
+      expect(await fileExists(filePath)).toBe(false);
+    });
   });
 
   // =========================================================================
@@ -450,7 +444,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-003
      */
-    itProp('refuses to delete a session locked by a live process', async () => {
+    it('refuses to delete a session locked by a live process', async () => {
       const sessionId = 'locked-session-test';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
 
@@ -461,8 +455,9 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
         const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 
         expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error).toContain('in use');
+        const errResult = result as Extract<typeof result, { ok: false }>;
+        {
+          expect(errResult.error).toContain('in use');
         }
         // File should still exist
         expect(await fileExists(filePath)).toBe(true);
@@ -480,7 +475,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-004
      */
-    itProp('deletes a session with a stale lock (dead PID)', async () => {
+    it('deletes a session with a stale lock (dead PID)', async () => {
       const sessionId = 'stale-lock-test';
       const { filePath } = await createTestSession(chatsDir, { sessionId });
 
@@ -492,8 +487,9 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
       const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.deletedSessionId).toBe(sessionId);
+      const okResult = result as Extract<typeof result, { ok: true }>;
+      {
+        expect(okResult.deletedSessionId).toBe(sessionId);
       }
       expect(await fileExists(filePath)).toBe(false);
       expect(await fileExists(lockPath)).toBe(false);
@@ -508,7 +504,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp('returns error when session ID does not exist', async () => {
+    it('returns error when session ID does not exist', async () => {
       // Create a session so the directory isn't empty
       await createTestSession(chatsDir);
 
@@ -519,8 +515,9 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
       );
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('not found');
+      const errResult = result as Extract<typeof result, { ok: false }>;
+      {
+        expect(errResult.error).toContain('not found');
       }
     });
 
@@ -533,12 +530,13 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp('returns error when no sessions exist for the project', async () => {
+    it('returns error when no sessions exist for the project', async () => {
       const result = await deleteSession('any-ref', chatsDir, PROJECT_HASH);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toContain('No sessions found');
+      const errResult = result as Extract<typeof result, { ok: false }>;
+      {
+        expect(errResult.error).toContain('No sessions found');
       }
     });
   });
@@ -555,29 +553,33 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp.prop([fc.integer({ min: 0, max: 8 })])(
-      'listSessions returns correct session count for any N @requirement:REQ-MGT-001',
-      async (sessionCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-count-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('listSessions returns correct session count for any N @requirement:REQ-MGT-001', async () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 0, max: 8 }),
+          async (sessionCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-mgmt-count-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const hash = crypto.randomUUID();
-          for (let i = 0; i < sessionCount; i++) {
-            await createTestSession(localChatsDir, { projectHash: hash });
-            if (i < sessionCount - 1) await delay(20);
-          }
+            try {
+              const hash = crypto.randomUUID();
+              for (let i = 0; i < sessionCount; i++) {
+                await createTestSession(localChatsDir, { projectHash: hash });
+                if (i < sessionCount - 1) await delay(20);
+              }
 
-          const result = await listSessions(localChatsDir, hash);
-          expect(result.sessions).toHaveLength(sessionCount);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              const result = await listSessions(localChatsDir, hash);
+              expect(result.sessions).toHaveLength(sessionCount);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+        { numRuns: 20 },
+      ));
 
     /**
      * Test 16: Delete always removes both .jsonl and .lock
@@ -586,45 +588,45 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp.prop([fc.boolean()])(
-      'delete always removes session file and any lock sidecar @requirement:REQ-MGT-002',
-      async (hasLock) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-delete-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
-
-        try {
-          const sessionId = crypto.randomUUID();
-          const { filePath } = await createTestSession(localChatsDir, {
-            sessionId,
-            projectHash: PROJECT_HASH,
-          });
-
-          const lockPath = SessionLockManager.getLockPath(
-            localChatsDir,
-            sessionId,
+    it('delete always removes session file and any lock sidecar @requirement:REQ-MGT-002', () =>
+      fc.assert(
+        fc.asyncProperty(fc.boolean(), async (hasLock) => {
+          const localTempDir = await fs.mkdtemp(
+            path.join(os.tmpdir(), 'prop-mgmt-delete-'),
           );
-          if (hasLock) {
-            // Stale lock so deletion proceeds
-            await writeFakeLock(lockPath, DEAD_PID, sessionId);
+          const localChatsDir = path.join(localTempDir, 'chats');
+          await fs.mkdir(localChatsDir, { recursive: true });
+
+          try {
+            const sessionId = crypto.randomUUID();
+            const { filePath } = await createTestSession(localChatsDir, {
+              sessionId,
+              projectHash: PROJECT_HASH,
+            });
+
+            const lockPath = SessionLockManager.getLockPath(
+              localChatsDir,
+              sessionId,
+            );
+            if (hasLock) {
+              // Stale lock so deletion proceeds
+              await writeFakeLock(lockPath, DEAD_PID, sessionId);
+            }
+
+            const result = await deleteSession(
+              sessionId,
+              localChatsDir,
+              PROJECT_HASH,
+            );
+
+            expect(result.ok).toBe(true);
+            expect(await fileExists(filePath)).toBe(false);
+            expect(await fileExists(lockPath)).toBe(false);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
           }
-
-          const result = await deleteSession(
-            sessionId,
-            localChatsDir,
-            PROJECT_HASH,
-          );
-
-          expect(result.ok).toBe(true);
-          expect(await fileExists(filePath)).toBe(false);
-          expect(await fileExists(lockPath)).toBe(false);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+        }),
+      ));
 
     /**
      * Test 17: List always returns sessions sorted by mtime (newest first)
@@ -633,35 +635,39 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp.prop([fc.integer({ min: 2, max: 6 })])(
-      'listSessions always returns sessions sorted newest-first @requirement:REQ-MGT-001',
-      async (sessionCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-sort-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('listSessions always returns sessions sorted newest-first @requirement:REQ-MGT-001', async () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 2, max: 6 }),
+          async (sessionCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-mgmt-sort-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          for (let i = 0; i < sessionCount; i++) {
-            await createTestSession(localChatsDir);
-            if (i < sessionCount - 1) await delay(50);
-          }
+            try {
+              for (let i = 0; i < sessionCount; i++) {
+                await createTestSession(localChatsDir);
+                if (i < sessionCount - 1) await delay(50);
+              }
 
-          const result = await listSessions(localChatsDir, PROJECT_HASH);
-          expect(result.sessions).toHaveLength(sessionCount);
+              const result = await listSessions(localChatsDir, PROJECT_HASH);
+              expect(result.sessions).toHaveLength(sessionCount);
 
-          // Verify descending mtime order
-          for (let i = 1; i < result.sessions.length; i++) {
-            const prev = result.sessions[i - 1].lastModified.getTime();
-            const curr = result.sessions[i].lastModified.getTime();
-            expect(prev).toBeGreaterThanOrEqual(curr);
-          }
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              // Verify descending mtime order
+              for (let i = 1; i < result.sessions.length; i++) {
+                const prev = result.sessions[i - 1].lastModified.getTime();
+                const curr = result.sessions[i].lastModified.getTime();
+                expect(prev).toBeGreaterThanOrEqual(curr);
+              }
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+        { numRuns: 20 },
+      ));
 
     /**
      * Test 18: resolveSessionRef via any valid index always works
@@ -670,50 +676,55 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp.prop([fc.integer({ min: 1, max: 5 })])(
-      'deleteSession by any valid numeric index removes correct session @requirement:REQ-MGT-002',
-      async (sessionCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-index-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('deleteSession by any valid numeric index removes correct session @requirement:REQ-MGT-002', async () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 5 }),
+          async (sessionCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-mgmt-index-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          const createdSessions: Array<{
-            sessionId: string;
-            filePath: string;
-          }> = [];
-          for (let i = 0; i < sessionCount; i++) {
-            const session = await createTestSession(localChatsDir);
-            createdSessions.push(session);
-            if (i < sessionCount - 1) await delay(50);
-          }
+            try {
+              const createdSessions: Array<{
+                sessionId: string;
+                filePath: string;
+              }> = [];
+              for (let i = 0; i < sessionCount; i++) {
+                const session = await createTestSession(localChatsDir);
+                createdSessions.push(session);
+                if (i < sessionCount - 1) await delay(50);
+              }
 
-          // List to get sorted order
-          const listed = await listSessions(localChatsDir, PROJECT_HASH);
-          expect(listed.sessions).toHaveLength(sessionCount);
+              // List to get sorted order
+              const listed = await listSessions(localChatsDir, PROJECT_HASH);
+              expect(listed.sessions).toHaveLength(sessionCount);
 
-          // Pick a random valid index (1-based)
-          const targetIndex = ((sessionCount - 1) % sessionCount) + 1;
-          const targetSession = listed.sessions[targetIndex - 1];
+              // Pick a random valid index (1-based)
+              const targetIndex = ((sessionCount - 1) % sessionCount) + 1;
+              const targetSession = listed.sessions[targetIndex - 1];
 
-          const result = await deleteSession(
-            String(targetIndex),
-            localChatsDir,
-            PROJECT_HASH,
-          );
+              const result = await deleteSession(
+                String(targetIndex),
+                localChatsDir,
+                PROJECT_HASH,
+              );
 
-          expect(result.ok).toBe(true);
-          if (result.ok) {
-            expect(result.deletedSessionId).toBe(targetSession.sessionId);
-          }
-          expect(await fileExists(targetSession.filePath)).toBe(false);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              expect(result.ok).toBe(true);
+              const okResult = result as Extract<typeof result, { ok: true }>;
+              {
+                expect(okResult.deletedSessionId).toBe(targetSession.sessionId);
+              }
+              expect(await fileExists(targetSession.filePath)).toBe(false);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+        { numRuns: 20 },
+      ));
 
     /**
      * Test 19: Any valid session can be listed then deleted
@@ -722,42 +733,42 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001, REQ-MGT-002
      */
-    itProp.prop([fc.uuid()])(
-      'any session created with a UUID can be listed then deleted @requirement:REQ-MGT-002',
-      async (sessionId) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-lifecycle-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
-
-        try {
-          const { filePath } = await createTestSession(localChatsDir, {
-            sessionId,
-          });
-
-          // Verify listed
-          const listed = await listSessions(localChatsDir, PROJECT_HASH);
-          expect(listed.sessions).toHaveLength(1);
-          expect(listed.sessions[0].sessionId).toBe(sessionId);
-
-          // Verify deleted
-          const result = await deleteSession(
-            sessionId,
-            localChatsDir,
-            PROJECT_HASH,
+    it('any session created with a UUID can be listed then deleted @requirement:REQ-MGT-002', () =>
+      fc.assert(
+        fc.asyncProperty(fc.uuid(), async (sessionId) => {
+          const localTempDir = await fs.mkdtemp(
+            path.join(os.tmpdir(), 'prop-mgmt-lifecycle-'),
           );
-          expect(result.ok).toBe(true);
-          expect(await fileExists(filePath)).toBe(false);
+          const localChatsDir = path.join(localTempDir, 'chats');
+          await fs.mkdir(localChatsDir, { recursive: true });
 
-          // Verify no longer listed
-          const afterDelete = await listSessions(localChatsDir, PROJECT_HASH);
-          expect(afterDelete.sessions).toHaveLength(0);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+          try {
+            const { filePath } = await createTestSession(localChatsDir, {
+              sessionId,
+            });
+
+            // Verify listed
+            const listed = await listSessions(localChatsDir, PROJECT_HASH);
+            expect(listed.sessions).toHaveLength(1);
+            expect(listed.sessions[0].sessionId).toBe(sessionId);
+
+            // Verify deleted
+            const result = await deleteSession(
+              sessionId,
+              localChatsDir,
+              PROJECT_HASH,
+            );
+            expect(result.ok).toBe(true);
+            expect(await fileExists(filePath)).toBe(false);
+
+            // Verify no longer listed
+            const afterDelete = await listSessions(localChatsDir, PROJECT_HASH);
+            expect(afterDelete.sessions).toHaveLength(0);
+          } finally {
+            await fs.rm(localTempDir, { recursive: true, force: true });
+          }
+        }),
+      ));
 
     /**
      * Test 20: listSessions returns fileSize > 0 for any session
@@ -766,32 +777,36 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-001
      */
-    itProp.prop([fc.integer({ min: 1, max: 5 })])(
-      'every listed session has a positive file size @requirement:REQ-MGT-001',
-      async (sessionCount) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-size-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('every listed session has a positive file size @requirement:REQ-MGT-001', () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 1, max: 5 }),
+          async (sessionCount) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-mgmt-size-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          for (let i = 0; i < sessionCount; i++) {
-            await createTestSession(localChatsDir);
-            if (i < sessionCount - 1) await delay(20);
-          }
+            try {
+              for (let i = 0; i < sessionCount; i++) {
+                await createTestSession(localChatsDir);
+                if (i < sessionCount - 1) await delay(20);
+              }
 
-          const result = await listSessions(localChatsDir, PROJECT_HASH);
-          expect(result.sessions).toHaveLength(sessionCount);
+              const result = await listSessions(localChatsDir, PROJECT_HASH);
+              expect(result.sessions).toHaveLength(sessionCount);
 
-          for (const session of result.sessions) {
-            expect(session.fileSize).toBeGreaterThan(0);
-          }
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              for (const session of result.sessions) {
+                expect(session.fileSize).toBeGreaterThan(0);
+              }
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+        { numRuns: 20 },
+      ));
 
     /**
      * Test 21: Delete non-existent session always fails for any invalid ref
@@ -800,34 +815,35 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P22
      * @requirement REQ-MGT-002
      */
-    itProp.prop([
-      fc.stringMatching(/^[a-z]{5,20}$/).filter((s) => !/^\d+$/.test(s)),
-    ])(
-      'delete always returns error for any non-matching ref @requirement:REQ-MGT-002',
-      async (badRef) => {
-        const localTempDir = await fs.mkdtemp(
-          path.join(os.tmpdir(), 'prop-mgmt-notfound-'),
-        );
-        const localChatsDir = path.join(localTempDir, 'chats');
-        await fs.mkdir(localChatsDir, { recursive: true });
+    it('delete always returns error for any non-matching ref @requirement:REQ-MGT-002', () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.stringMatching(/^[a-z]{5,20}$/).filter((s) => !/^\d+$/.test(s)),
+          async (badRef) => {
+            const localTempDir = await fs.mkdtemp(
+              path.join(os.tmpdir(), 'prop-mgmt-notfound-'),
+            );
+            const localChatsDir = path.join(localTempDir, 'chats');
+            await fs.mkdir(localChatsDir, { recursive: true });
 
-        try {
-          // Create one session so dir isn't empty
-          await createTestSession(localChatsDir, {
-            sessionId: 'real-session-zzz999',
-          });
+            try {
+              // Create one session so dir isn't empty
+              await createTestSession(localChatsDir, {
+                sessionId: 'real-session-zzz999',
+              });
 
-          const result = await deleteSession(
-            badRef,
-            localChatsDir,
-            PROJECT_HASH,
-          );
+              const result = await deleteSession(
+                badRef,
+                localChatsDir,
+                PROJECT_HASH,
+              );
 
-          expect(result.ok).toBe(false);
-        } finally {
-          await fs.rm(localTempDir, { recursive: true, force: true });
-        }
-      },
-    );
+              expect(result.ok).toBe(false);
+            } finally {
+              await fs.rm(localTempDir, { recursive: true, force: true });
+            }
+          },
+        ),
+      ));
   });
 });

@@ -384,9 +384,7 @@ describe('Logger', () => {
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
-      await expect(
-        uninitializedLogger.saveCheckpoint(conversation, 'tag'),
-      ).resolves.not.toThrow();
+      await uninitializedLogger.saveCheckpoint(conversation, 'tag');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Logger not initialized or checkpoint file path not set. Cannot save a checkpoint.',
       );
