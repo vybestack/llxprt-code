@@ -195,4 +195,34 @@ describe('genai-enclave discovery — deleted file exclusion', () => {
       'packages/cli/src/unstaged-delete.ts',
     ]);
   });
+
+  it('parses a git rename record without mistreating the new path as a separate entry', () => {
+    // git status -z represents a rename as two NUL-delimited tokens:
+    // "R  oldpath\0newpath\0". The new-path token has no status prefix and
+    // must NOT be misparsed as a standalone status entry. A renamed file is
+    // still scanned under its new tracked path, so it must be discovered.
+    const repo = createTempGitRepo();
+    repo.write('packages/cli/src/old-name.ts', 'export const x = 1;\n');
+    repo.write('packages/cli/src/keep.ts', 'export const y = 2;\n');
+    repo.git(['add', '.']);
+    repo.git(['commit', '-m', 'initial']);
+
+    // Rename the tracked file (git mv produces an R status with -z output).
+    repo.git([
+      'mv',
+      'packages/cli/src/old-name.ts',
+      'packages/cli/src/new-name.ts',
+    ]);
+
+    const result = discoverScannableFiles(repo.root);
+
+    expect(result.errors).toEqual([]);
+    const discoveredRelPaths = result.files.map((f) => rel(repo.root, f));
+    // The renamed file's new path must be discovered (tracked under new name).
+    expect(discoveredRelPaths).toContain('packages/cli/src/new-name.ts');
+    // The old path must NOT appear (it no longer exists).
+    expect(discoveredRelPaths).not.toContain('packages/cli/src/old-name.ts');
+    // The sibling file must still be discovered.
+    expect(discoveredRelPaths).toContain('packages/cli/src/keep.ts');
+  });
 });

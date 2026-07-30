@@ -105,7 +105,7 @@ function readEnvMs(name, defaultMs) {
   const raw = process.env[name];
   if (!raw) return defaultMs;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return defaultMs;
+  if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) return defaultMs;
   return n;
 }
 
@@ -139,6 +139,7 @@ module.exports = {
   LAUNCH_ERROR_EXIT,
   EXPECTED_BUN_VERSION,
   resolveExpectedBunVersion,
+  readEnvMs,
   INSTALL_TIMEOUT_MS,
   NPM_EXEC_TIMEOUT_MS,
   PROBE_TIMEOUT_MS,

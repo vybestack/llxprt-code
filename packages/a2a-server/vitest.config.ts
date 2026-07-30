@@ -112,8 +112,8 @@ export default defineConfig({
     // `vi.mock` factory that captured a top-level `const`, causing a TDZ
     // ReferenceError under Vitest. They now use production dependency
     // injection (`homeDir` option) instead of `node:os` mocking, making them
-    // compatible with BOTH Bun and Vitest. No test files are excluded.
-    exclude: ['**/node_modules/**', '**/dist/**'],
+    // compatible with BOTH Bun and Vitest. No test files are excluded beyond
+    // Vitest defaults.
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',

@@ -12,7 +12,11 @@ import {
   type LiveOutputUpdate,
 } from './tools.js';
 import { type Todo, TodoArraySchema } from '../types/todo-schemas.js';
-import { DEFAULT_AGENT_ID } from './todo-store.js';
+import {
+  DEFAULT_AGENT_ID,
+  resolveTodoRead,
+  resolveTodoWrite,
+} from './todo-store.js';
 import { TodoReminderService } from '../utils/todoReminderService.js';
 import { todoEvents, type TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../utils/todoContextTracker.js';
@@ -165,8 +169,19 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const agentId = this.context?.agentId;
     const serviceStore = this.todoService.getTodoStore(this.context);
 
-    const oldTodos = await this.readOldTodos(serviceStore, sessionId, agentId);
-    await this.persistTodos(todos, serviceStore, sessionId, agentId);
+    const oldTodos = await resolveTodoRead(
+      serviceStore,
+      sessionId,
+      agentId,
+      'TodoWrite',
+    );
+    await resolveTodoWrite(
+      todos,
+      serviceStore,
+      sessionId,
+      agentId,
+      'TodoWrite',
+    );
 
     const { stateChange, shouldGenerateReminder, reminder } =
       this.computeStateChange(oldTodos, todos);
@@ -216,54 +231,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       };
     }
     return { todos: revalidation.data, emojiResult };
-  }
-
-  private async readOldTodos(
-    serviceStore: {
-      readTodos?: () => Promise<Todo[]>;
-      getTodos?: () => Todo[];
-    },
-    sessionId: string,
-    agentId: string | undefined,
-  ): Promise<Todo[]> {
-    if (serviceStore.readTodos) {
-      return serviceStore.readTodos();
-    }
-    if (serviceStore.getTodos) {
-      return serviceStore.getTodos();
-    }
-    // No fallback: TodoStore now requires an explicit canonical data dir
-    // injected by the composition root. Reaching here means the tool was
-    // constructed without a wired ITodoService — fail loudly instead of
-    // silently using a parallel default.
-    throw new Error(
-      `TodoWrite cannot read todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
-        'no ITodoService store was injected. Construct the tool via the tool registry so ' +
-        'the composition root can wire Storage.getGlobalDataDir().',
-    );
-  }
-
-  private async persistTodos(
-    todos: Todo[],
-    serviceStore: {
-      writeTodos?: (todos: Todo[]) => Promise<void>;
-      setTodos?: (todos: Todo[]) => void;
-    },
-    sessionId: string,
-    agentId: string | undefined,
-  ): Promise<void> {
-    if (serviceStore.writeTodos) {
-      await serviceStore.writeTodos(todos);
-    } else if (serviceStore.setTodos) {
-      serviceStore.setTodos(todos);
-    } else {
-      // No fallback: see readOldTodos above.
-      throw new Error(
-        `TodoWrite cannot persist todos for session ${sessionId} (agent ${agentId ?? 'primary'}): ` +
-          'no ITodoService store was injected. Construct the tool via the tool registry so ' +
-          'the composition root can wire Storage.getGlobalDataDir().',
-      );
-    }
   }
 
   private computeStateChange(

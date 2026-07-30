@@ -4,8 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import {
   RenderInlineInternal,
   getPlainTextLength,
@@ -68,6 +71,8 @@ function collectElementProps(node: React.ReactNode): ElementProps[] {
   return [];
 }
 
+const OSC8_PREFIX = '\x1b]8;;';
+
 describe('RenderInline', () => {
   it('forwards presentation props to its top-level Text node', () => {
     const node = renderInlineNode({
@@ -121,6 +126,111 @@ describe('RenderInline', () => {
     expect(
       flattenText(renderInlineNode({ text: 'keep compile_time unchanged' })),
     ).toBe('keep compile_time unchanged');
+  });
+});
+
+describe('RenderInline file path links', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inline-fp-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { force: true, recursive: true });
+  });
+
+  function createTempFile(relativePath: string): string {
+    const fullPath = path.join(tempDir, relativePath);
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, 'content');
+    return fullPath;
+  }
+
+  it('renders a relative file path as an OSC 8 link when it exists in a workspace directory', () => {
+    createTempFile('src/utils.ts');
+    const node = renderInlineNode({
+      text: 'Edit src/utils.ts to fix the bug.',
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(flat).toContain('src/utils.ts');
+  });
+
+  it('does not link path-like tokens when workspaceDirectories is not provided', () => {
+    createTempFile('src/utils.ts');
+    const node = renderInlineNode({
+      text: 'Edit src/utils.ts to fix the bug.',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('src/utils.ts');
+  });
+
+  it('does not link a file path inside inline code (backticks)', () => {
+    createTempFile('src/utils.ts');
+    const node = renderInlineNode({
+      text: 'Edit `src/utils.ts` to fix the bug.',
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('src/utils.ts');
+  });
+
+  it('renders an absolute path that exists as a link', () => {
+    const abs = createTempFile('config.json');
+    const node = renderInlineNode({
+      text: `See ${abs} for settings.`,
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(flat).toContain(abs);
+  });
+
+  it('renders an absolute path that does not exist as plain text', () => {
+    const node = renderInlineNode({
+      text: 'See /nonexistent/absolute/12345-file.txt for nothing.',
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('/nonexistent/absolute/12345-file.txt');
+  });
+
+  it('renders an absolute path that exists as a link even without workspaceDirectories', () => {
+    const abs = createTempFile('config.json');
+    const node = renderInlineNode({
+      text: `See ${abs} for settings.`,
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(flat).toContain(abs);
+  });
+
+  it('links a relative path with trailing punctuation when the file exists', () => {
+    createTempFile('src/utils.ts');
+    const node = renderInlineNode({
+      text: 'Edit src/utils.ts. to fix the bug.',
+      workspaceDirectories: [tempDir],
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    // The trailing period must be stripped from the resolved path used in the
+    // OSC 8 link URI. Assert the link region ends with the file and NOT the
+    // trailing period.
+    const linkUri = flat.slice(flat.indexOf(OSC8_PREFIX));
+    expect(linkUri).toContain('src/utils.ts');
+    expect(linkUri).not.toContain('src/utils.ts.');
   });
 });
 
