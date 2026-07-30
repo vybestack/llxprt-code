@@ -231,15 +231,8 @@ export class Logger {
     }
     try {
       const { entries, skipped } = this._parseJsonl(trimmed);
-      if (skipped > 0 && this.logFilePath) {
-        debugLogger.debug(
-          `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
-        );
-        const backedUp = this._backupCorruptedLogFileSync('partial_corruption');
-        if (backedUp) {
-          // Rewrite the active file so only valid entries remain on disk.
-          this._writeJsonlAtomicSync(entries);
-        }
+      if (skipped > 0) {
+        this._recoverPartialCorruptionSync(entries, skipped);
       }
       return entries;
     } catch (parseError) {
@@ -257,6 +250,26 @@ export class Logger {
         return [];
       }
       throw parseError;
+    }
+  }
+
+  private _recoverPartialCorruptionSync(
+    entries: LogEntry[],
+    skipped: number,
+  ): void {
+    if (!this.logFilePath) return;
+    debugLogger.debug(
+      `Backing up log file with ${skipped} corrupted line(s), then rewriting with valid entries.`,
+    );
+    const backedUp = this._backupCorruptedLogFileSync('partial_corruption');
+    if (!backedUp) return;
+    try {
+      this._writeJsonlAtomicSync(entries);
+    } catch (writeError) {
+      debugLogger.debug(
+        'Failed atomic rewrite during partial corruption recovery:',
+        writeError,
+      );
     }
   }
 
@@ -365,7 +378,8 @@ export class Logger {
     let rawContent: string;
     try {
       rawContent = readFileSync(this.logFilePath, 'utf-8');
-    } catch {
+    } catch (error) {
+      debugLogger.debug('Failed to read legacy log file for migration:', error);
       return;
     }
     const trimmed = rawContent.trim();
@@ -539,8 +553,11 @@ export class Logger {
       try {
         await fs.writeFile(tmpPath, this._toJsonl(entries), 'utf-8');
         await fs.rename(tmpPath, this.logFilePath);
-      } catch {
-        // Best-effort cleanup of the temp file if rename failed.
+      } catch (error) {
+        debugLogger.debug(
+          'Failed atomic rewrite during partial corruption recovery:',
+          error,
+        );
         try {
           await fs.unlink(tmpPath);
         } catch {
