@@ -547,8 +547,9 @@ export class LspClient {
     const processClose = this.processClose ?? observeProcessClose(proc);
     this.shuttingDown = true;
     let primaryError: Error | null = null;
-    try {
-      if (this.initialized && this.isAlive()) {
+
+    if (this.initialized && this.isAlive()) {
+      try {
         await this.sendRequest(
           'shutdown',
           {},
@@ -556,13 +557,21 @@ export class LspClient {
             timeoutMs: SHUTDOWN_PROTOCOL_TIMEOUT_MS,
           },
         );
-        await this.writeMessage({
-          jsonrpc: '2.0',
-          method: 'exit',
-        });
+      } catch (error: unknown) {
+        primaryError =
+          error instanceof Error ? error : new Error(String(error));
       }
-    } catch (error: unknown) {
-      primaryError = error instanceof Error ? error : new Error(String(error));
+
+      // Per LSP spec, once shutdown is acknowledged the exit notification is
+      // fire-and-forget: the server is expected to terminate, which closes the
+      // pipe. A write failure here (pipe race) is the natural consequence of
+      // successful termination, not a shutdown failure — only surface it when
+      // the shutdown request itself was not acknowledged.
+      if (primaryError === null) {
+        await this.writeMessage({ jsonrpc: '2.0', method: 'exit' }).catch(
+          () => {},
+        );
+      }
     }
 
     for (const { cleanup, reject } of this.pending.values()) {

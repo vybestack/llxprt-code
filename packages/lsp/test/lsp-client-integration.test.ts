@@ -285,6 +285,35 @@ describe('LspClient integration with fake LSP server', () => {
 
   /**
    * @plan:PLAN-20250212-LSP.P10
+   * @requirement:REQ-LIFE-010
+   * @scenario:Exit-notification pipe race after acknowledged shutdown resolves
+   * @given:A server that acknowledges `shutdown` and immediately exits, closing
+   *        the pipe before the client's `exit` notification write completes
+   * @when:shutdown is invoked
+   * @then:shutdown resolves (the pipe race is a natural consequence of
+   *        successful termination, not a shutdown failure), the client reports
+   *        not alive, and the child process is externally gone
+   */
+  it('resolves when server exits promptly after acknowledged shutdown', async () => {
+    const pidFile = createPidFile();
+    const client = createLspClient(
+      createConfig(['--exit-on-shutdown', '--write-pid', pidFile]),
+      WORKSPACE_ROOT,
+    );
+    createdClients.push(client);
+
+    await client.initialize();
+
+    const pid = readPid(pidFile);
+    expect(isPidAlive(pid)).toBe(true);
+
+    await expect(client.shutdown()).resolves.toBeUndefined();
+    expect(client.isAlive()).toBe(false);
+    expect(isPidAlive(pid)).toBe(false);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P10
    * @requirement:REQ-TIME-050
    * @scenario:waitForDiagnostics timeout returns empty list
    * @given:An initialized client and no diagnostic notification for file

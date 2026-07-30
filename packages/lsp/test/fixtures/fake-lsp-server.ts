@@ -37,6 +37,7 @@ type FakeServerMode = {
   emitActiveTouchCount?: boolean;
   ignoreExitNotification?: boolean;
   ignoreShutdown?: boolean;
+  exitOnShutdown?: boolean;
   pidFilePath?: string;
 };
 
@@ -126,6 +127,11 @@ function parseMode(args: string[]): FakeServerMode {
 
     if (arg === '--ignore-shutdown') {
       parsed.ignoreShutdown = true;
+      continue;
+    }
+
+    if (arg === '--exit-on-shutdown') {
+      parsed.exitOnShutdown = true;
       continue;
     }
 
@@ -269,6 +275,9 @@ async function handleRequest(message: JsonRpcRequest): Promise<void> {
       id: message.id,
       result: null,
     });
+    if (mode.exitOnShutdown) {
+      process.exit(0);
+    }
     return;
   }
 
