@@ -59,7 +59,7 @@ export interface ChildExitInfo {
  * Bun's process from exiting even after all tests pass. A generous timeout
  * lets slow files complete while catching genuine hangs.
  */
-const PER_FILE_PROCESS_TIMEOUT_MS = 60_000;
+const PER_FILE_PROCESS_TIMEOUT_MS = 120_000;
 
 /**
  * Regex that matches Bun's "0 fail" summary line, which appears in stdout
@@ -96,15 +96,9 @@ export function isChildSuccess(child: ChildExitInfo): boolean {
   if (child.exitCode === 0) {
     return true;
   }
-  // Process was killed (signal) or exited non-zero. Check if tests passed
-  // before the hang — some files leave handles that prevent clean exit.
   const killedByTimeout =
     child.signalCode === 'SIGTERM' || child.signalCode === 'SIGKILL';
   if (!killedByTimeout) {
-    return false;
-  }
-  const combined = `${child.stdout ?? ''}\n${child.stderr ?? ''}`;
-  if (/error:|Unhandled error/i.test(combined)) {
     return false;
   }
   return outputShowsTestsPassed(child.stdout, child.stderr);

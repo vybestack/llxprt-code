@@ -78,6 +78,9 @@ const globalRegistry = new StubRegistry(globalThis);
 const realAdvanceTimersByTime = (bunVi as BunViBase).advanceTimersByTime.bind(
   bunVi,
 );
+const realAdvanceTimersToNextTimer = (
+  bunVi as BunViBase
+).advanceTimersToNextTimer.bind(bunVi);
 const realUseFakeTimers = (bunVi as BunViBase).useFakeTimers.bind(bunVi);
 const realUseRealTimers = (bunVi as BunViBase).useRealTimers.bind(bunVi);
 const realRunAllTimers = (bunVi as BunViBase).runAllTimers.bind(bunVi);
@@ -106,14 +109,12 @@ const realSetImmediate: (callback: () => void) => NodeJS.Immediate =
  * microtask work.
  */
 const flushPendingTasks = async (): Promise<void> => {
-  for (let i = 0; i < 100; i++) {
-    let hadMicrotask = false;
-    Promise.resolve().then(() => {
-      hadMicrotask = true;
-    });
-    await new Promise<void>((resolve) => realSetImmediate(resolve));
-    if (!hadMicrotask) break;
-  }
+  // Drain pending microtasks by yielding to the real event loop. A single
+  // realSetImmediate boundary is sufficient for most timer callbacks and
+  // async continuations. The original multi-round version had a bug where
+  // the microtask sentinel always ran before the macrotask, causing 100
+  // iterations per call and extreme slowness in timer-advance loops.
+  await new Promise<void>((resolve) => realSetImmediate(resolve));
 };
 
 const MAX_TIMER_ADVANCE = 4_294_967_295;
@@ -124,10 +125,6 @@ let pendingTimerFraction = 0;
 async function advanceTimerChunk(ms: number): Promise<void> {
   const target = Date.now() + ms;
 
-  // Drain any pending microtasks first — async operations (e.g. consumer
-  // coroutines started just before advanceTimersByTimeAsync) may need a
-  // microtask turn to create their timers. Without this, we'd advance time
-  // before the timer exists.
   await flushPendingTasks();
 
   while (Date.now() < target) {
@@ -139,20 +136,20 @@ async function advanceTimerChunk(ms: number): Promise<void> {
       continue;
     }
 
-    // Advance by exactly `remaining` ms, firing all timers due within that
-    // window. This avoids overshooting — realAdvanceTimersToNextTimer() would
-    // jump past the target and fire timers that should not fire yet.
+    let reachedTarget = false;
+    const targetTimer = setTimeout(() => {
+      reachedTarget = true;
+    }, remaining);
     const before = Date.now();
-    realAdvanceTimersByTime(remaining);
+
+    realAdvanceTimersToNextTimer();
+    clearTimeout(targetTimer);
     await flushPendingTasks();
 
+    if (reachedTarget) return;
     if (Date.now() <= before) {
-      // No clock progress — timers may exist but are all beyond target.
-      // Advance the clock to target without firing any timers.
-      if (Date.now() < target) {
-        realAdvanceTimersByTime(target - Date.now());
-      }
-      break;
+      realAdvanceTimersByTime(Math.min(remaining, 1));
+      await flushPendingTasks();
     }
   }
 }
@@ -210,15 +207,13 @@ const resolveActualId = (id: string): string => {
 };
 
 const actualModules = new Map<string, unknown>();
+const actualAsyncModules = new Map<string, Promise<unknown>>();
 const bareSpecResolvedPaths = new Set<string>();
+let actualImportSequence = 0;
 
 /**
  * Synchronously loads the actual (un-mocked) module for a resolved ID.
- *
- * Uses localRequire (createRequire) which bypasses Bun's mock.module system
- * entirely — essential because `mock.module` factories must not contain any
- * `await` (Bun deadlocks the event loop while waiting for a factory Promise,
- * so even `await Promise.resolve()` inside a factory hangs forever).
+ * Used by importActualSync (sync factories that were pre-loaded).
  */
 const loadActualSync = (resolvedId: string): unknown => {
   const cached = actualModules.get(resolvedId);
@@ -229,8 +224,55 @@ const loadActualSync = (resolvedId: string): unknown => {
   return actual;
 };
 
+/**
+ * Asynchronously loads an isolated copy of the actual module via Bun.build,
+ * bypassing mock.module interception entirely. Used by importOriginal (async
+ * factories that were NOT pre-loaded — localRequire would return the mock
+ * for these).
+ */
+const loadIsolatedModule = async (resolvedId: string): Promise<unknown> => {
+  if (isBuiltin(resolvedId)) return localRequire(resolvedId);
+
+  const result = await (
+    Bun as unknown as {
+      build(opts: {
+        entrypoints: readonly string[];
+        format?: string;
+        target?: string;
+        write?: boolean;
+      }): Promise<{
+        success: boolean;
+        outputs: readonly { text(): Promise<string> }[];
+        logs: readonly { message: string }[];
+      }>;
+    }
+  ).build({
+    entrypoints: [resolvedId],
+    format: 'esm',
+    target: 'bun',
+    write: false,
+  });
+  const output = result.outputs[0];
+  if (!result.success || !output) {
+    const message = result.logs.map((log) => log.message).join('\n');
+    throw new Error(message || `importActual: cannot build "${resolvedId}"`);
+  }
+
+  actualImportSequence += 1;
+  const source = await output.text();
+  const encodedSource = Buffer.from(source).toString('base64');
+  return import(
+    `data:text/javascript;base64,${encodedSource}?actual=${actualImportSequence}`
+  );
+};
+
 const importResolvedActual = (resolvedId: string): Promise<unknown> => {
-  return Promise.resolve(loadActualSync(resolvedId));
+  const cached = actualAsyncModules.get(resolvedId);
+  if (cached) return cached;
+
+  const actual = loadIsolatedModule(resolvedId);
+  actualAsyncModules.set(resolvedId, actual);
+  return actual;
 };
 
 const importActual = (id: string): Promise<unknown> => {
@@ -355,16 +397,21 @@ const registerModuleMock = (
 
   // Pre-load the actual module before registering the mock. This ensures
   // that importActualSync() inside the factory returns the REAL module,
-  // not the mock's incomplete evaluation state. vi.mock callers default to
-  // preloading; vi.doMock (isolation tests) disables it to prevent loading
-  // the real module entirely.
+  // not the mock's incomplete evaluation state. Only safe for SYNCHRONOUS
+  // factories — pre-loading an async factory causes mock.module to evaluate
+  // it eagerly, which deadlocks the event loop.
   if (preloadActual) {
-    const resolvedId = resolveActualId(id);
-    try {
-      loadActualSync(resolvedId);
-    } catch {
-      // Module may fail to load (e.g. native bindings). The factory's
-      // importActual call will handle the error at evaluation time.
+    const isAsyncFactory =
+      factory.constructor.name === 'AsyncFunction' ||
+      async function () {}?.constructor?.name === factory.constructor.name;
+    if (!isAsyncFactory) {
+      const resolvedId = resolveActualId(id);
+      try {
+        loadActualSync(resolvedId);
+      } catch {
+        // Module may fail to load (e.g. native bindings). The factory's
+        // importActual call will handle the error at evaluation time.
+      }
     }
   }
 
