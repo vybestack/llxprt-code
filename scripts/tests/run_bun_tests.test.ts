@@ -45,14 +45,32 @@ describe('isChildSuccess', () => {
     expect(isChildSuccess(child)).toBe(false);
   });
 
-  it('returns false when signalCode is SIGTERM', () => {
+  it('returns true when signalCode is SIGTERM but exitCode is 0', () => {
     const child: ChildExitInfo = { exitCode: 0, signalCode: 'SIGTERM' };
+    expect(isChildSuccess(child)).toBe(true);
+  });
+
+  it('returns false when exitCode is null (killed by signal, no output)', () => {
+    const child: ChildExitInfo = { exitCode: null, signalCode: 'SIGTERM' };
     expect(isChildSuccess(child)).toBe(false);
   });
 
-  it('returns false when exitCode is null (killed by signal)', () => {
-    const child: ChildExitInfo = { exitCode: null, signalCode: 'SIGTERM' };
-    expect(isChildSuccess(child)).toBe(false);
+  it('returns true when killed by SIGTERM but output shows 0 fail', () => {
+    const child: ChildExitInfo = {
+      exitCode: null,
+      signalCode: 'SIGTERM',
+      stdout: '5 pass 0 fail ',
+    };
+    expect(isChildSuccess(child)).toBe(true);
+  });
+
+  it('returns true when killed by SIGTERM but output shows (pass) without (fail)', () => {
+    const child: ChildExitInfo = {
+      exitCode: null,
+      signalCode: 'SIGTERM',
+      stderr: '(pass) test name ',
+    };
+    expect(isChildSuccess(child)).toBe(true);
   });
 
   it('returns false when exitCode is null and signalCode is null', () => {
@@ -229,8 +247,9 @@ describe('runBunTests', () => {
           cwd: entry.cwd,
           env: environment,
           stdin: 'inherit',
-          stdout: 'inherit',
-          stderr: 'inherit',
+          stdout: 'pipe',
+          stderr: 'pipe',
+          timeout: 120_000,
         },
       })),
     );
