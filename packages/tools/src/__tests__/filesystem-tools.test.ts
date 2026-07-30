@@ -364,7 +364,13 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
 
     it('returns a clear error for corrupt images under automatic resizing', async () => {
       const filePath = join(tempDir, 'corrupt.png');
-      writeFileSync(filePath, Buffer.from('corrupt image bytes'));
+      writeFileSync(
+        filePath,
+        Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02,
+          0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        ]),
+      );
       const tool = new ReadFileTool(
         _createFakeFileHost(tempDir, {
           'image-resize.maxLongEdge': 120,
