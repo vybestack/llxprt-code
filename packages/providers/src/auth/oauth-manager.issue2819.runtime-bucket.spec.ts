@@ -60,6 +60,12 @@ describe('named OAuth login runtime bucket activation', () => {
 
     mockGetCurrentProfileName.mockReturnValue('other-profile');
     expect(await manager.getOAuthToken('codex')).toBeNull();
+    expect(
+      manager.getSessionBucket('codex', {
+        providerId: 'codex',
+        profileId: 'other-profile',
+      }),
+    ).toBeUndefined();
   });
 
   it('preserves explicit auth bucket policy and its first-bucket precedence', async () => {

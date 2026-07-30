@@ -157,24 +157,16 @@ export async function resolveCurrentProfileOAuthContext(
     return undefined;
   }
 
-  try {
-    const profileManager = await createProfileManager();
-    const profile = await profileManager.loadProfile(metadata.profileId);
-    const profileProvider =
-      'provider' in profile && typeof profile.provider === 'string'
-        ? profile.provider
-        : null;
-    const providerMatches = profileProvider === providerName;
-    const hasExplicitBucketPolicy = hasNonEmptyOAuthBuckets(profile);
+  const profileManager = await createProfileManager();
+  const profile = await profileManager.loadProfile(metadata.profileId);
+  const profileProvider =
+    'provider' in profile && typeof profile.provider === 'string'
+      ? profile.provider
+      : null;
+  const providerMatches = profileProvider === providerName;
+  const hasExplicitBucketPolicy = hasNonEmptyOAuthBuckets(profile);
 
-    return { metadata, providerMatches, hasExplicitBucketPolicy };
-  } catch (error) {
-    logger.debug(
-      `Could not load current profile OAuth context for ${providerName}:`,
-      error,
-    );
-    return undefined;
-  }
+  return { metadata, providerMatches, hasExplicitBucketPolicy };
 }
 
 function hasNonEmptyOAuthBuckets(profile: object): boolean {

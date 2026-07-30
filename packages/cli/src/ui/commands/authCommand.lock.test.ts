@@ -163,7 +163,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     expect(result.content).toContain('unknown (keychain is locked)');
   });
 
-  it('lock status reports a verified-live owner and refuses', async () => {
+  it('lock status reports a verified-live owner without recovery guidance', async () => {
     manager.inspectAuthLock.mockResolvedValue({
       provider: 'codex',
       bucket: 'default',
@@ -187,6 +187,8 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('live');
     expect(result.content).toContain('12345');
+    expect(result.content).not.toContain('Recover with');
+    expect(result.content).not.toContain('Force-remove with');
   });
 
   it('unlock recovers a proven-dead lock', async () => {

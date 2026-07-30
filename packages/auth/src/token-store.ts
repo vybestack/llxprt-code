@@ -163,9 +163,9 @@ export interface TokenStore {
   releaseAuthLock(provider: string, bucket?: string): Promise<void>;
 
   /**
-   * Inspect the auth lock status for a provider+bucket without modifying it.
-   * Never exposes owner tokens or credentials.
-   * Only KeyringTokenStore implements this; other stores return absent status.
+   * Optionally inspect the auth lock status for a provider+bucket without
+   * modifying it. Never exposes owner tokens or credentials. Callers must
+   * check that this method exists before invoking it.
    */
   inspectAuthLock?(provider: string, bucket?: string): Promise<AuthLockStatus>;
 

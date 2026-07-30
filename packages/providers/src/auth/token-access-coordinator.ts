@@ -196,13 +196,12 @@ export class TokenAccessCoordinator {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    const metadata = await this.getCurrentProfileSessionMetadata(providerName);
+    const bucket = await this.getCurrentProfileSessionBucket(
+      providerName,
+      metadata,
+    );
     try {
-      const metadata =
-        await this.getCurrentProfileSessionMetadata(providerName);
-      const bucket = await this.getCurrentProfileSessionBucket(
-        providerName,
-        metadata,
-      );
       return await this.tokenStore.getToken(providerName, bucket);
     } catch (error) {
       logger.debug(`Failed to load stored token for ${providerName}:`, error);
