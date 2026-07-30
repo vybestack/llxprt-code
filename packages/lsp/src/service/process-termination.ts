@@ -9,6 +9,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 const FORCE_KILL_CLOSE_TIMEOUT_MS = 1_500;
+const WINDOWS_PROCESS_NOT_FOUND_EXIT_CODE = 128;
 
 export function observeProcessClose(
   proc: ChildProcessWithoutNullStreams,
@@ -74,23 +75,12 @@ async function awaitForcedTermination(
   if (closed) {
     return;
   }
-  // The `close` event was not emitted within the timeout. On Windows,
-  // Bun's ChildProcess may not emit `close` for a process terminated
-  // externally via taskkill, even though the OS-level termination
-  // succeeded. Confirm the requested outcome via externally observable
-  // process state rather than surfacing an implementation-detail error.
-  if (await isProcessAliveAsync(proc)) {
+  if (isProcessAlive(proc)) {
     throw new Error('Child process did not close after forced termination');
   }
 }
 
-/**
- * Async liveness check that delegates to the OS-native query on Windows.
- * On POSIX, falls back to the synchronous signal-0 probe.
- */
-async function isProcessAliveAsync(
-  proc: ChildProcessWithoutNullStreams,
-): Promise<boolean> {
+function isProcessAlive(proc: ChildProcessWithoutNullStreams): boolean {
   if (proc.exitCode !== null || proc.signalCode !== null) {
     return false;
   }
@@ -98,17 +88,6 @@ async function isProcessAliveAsync(
   if (pid === undefined) {
     return true;
   }
-  if (process.platform === 'win32') {
-    return await isWindowsPidAlive(pid);
-  }
-  return isPosixPidAlive(pid);
-}
-
-/**
- * Sync POSIX liveness probe via signal-0. Used for the direct-kill fallback
- * path where a synchronous check is sufficient.
- */
-function isPosixPidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -154,31 +133,14 @@ async function forceKillWindows(
   pid: number,
 ): Promise<void> {
   if (isProcessTerminated(proc)) {
-    await awaitForcedTermination(proc, closePromise);
-    return;
-  }
-
-  // Check whether the process is already gone before issuing taskkill. When
-  // the server self-exits (e.g. after an acknowledged shutdown), Bun's
-  // ChildProcess bookkeeping may be stale, but the OS-level PID is gone.
-  // Since tasklist confirms external termination, there is no need to wait
-  // for a close event that may never be emitted by Bun's stale wrapper.
-  if (!(await isWindowsPidAlive(pid))) {
     return;
   }
 
   try {
     await runTaskkill(pid);
+    return;
   } catch (taskkillError: unknown) {
     if (isProcessTerminated(proc)) {
-      await awaitForcedTermination(proc, closePromise);
-      return;
-    }
-    // taskkill may report the PID as already absent when the process exited
-    // between our pre-check and the kill attempt. Use the OS-native tasklist
-    // query to confirm whether the process is genuinely gone; a confirmed
-    // absent PID is successful cleanup.
-    if (!(await isWindowsPidAlive(pid))) {
       return;
     }
     const signalError = !proc.kill('SIGKILL')
@@ -200,10 +162,7 @@ async function forceKillWindows(
         `Failed to force-terminate child process ${pid}`,
       );
     }
-    return;
   }
-
-  await awaitForcedTermination(proc, closePromise);
 }
 
 function runTaskkill(pid: number): Promise<void> {
@@ -214,112 +173,11 @@ function runTaskkill(pid: number): Promise<void> {
     });
     killer.once('error', reject);
     killer.once('close', (code) => {
-      if (code === 0) {
+      if (code === 0 || code === WINDOWS_PROCESS_NOT_FOUND_EXIT_CODE) {
         resolve();
       } else {
         reject(new Error(`taskkill exited with code ${String(code)}`));
       }
     });
   });
-}
-
-/**
- * Queries the Windows OS directly for whether a PID is still running, using
- * `tasklist /FI "PID eq <pid>" /FO CSV /NH`. This is an externally observable
- * process-state query that is independent of Bun's ChildProcess bookkeeping
- * (which can be stale for a `bun run` wrapper after the child self-exits).
- *
- * Uses exact PID parsing from CSV output — does not rely on localized error
- * strings. Returns true when the PID is confirmed alive; returns false when
- * tasklist confirms the PID is absent. A tasklist invocation error surfaces
- * as true (fail-safe: a query error must not be treated as success).
- */
-function isWindowsPidAlive(pid: number): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const query = spawn(
-      'tasklist',
-      ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
-      {
-        windowsHide: true,
-      },
-    );
-    let stdout = '';
-    let settled = false;
-    const finish = (alive: boolean): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      resolve(alive);
-    };
-    const timer = setTimeout(() => {
-      query.kill();
-      finish(true);
-    }, FORCE_KILL_CLOSE_TIMEOUT_MS);
-
-    query.stdout.setEncoding('utf8');
-    query.stdout.on('data', (chunk: string) => {
-      stdout += chunk;
-    });
-    query.once('error', () => finish(true));
-    query.once('close', (code) => {
-      // Query failures are conservatively treated as alive so cleanup cannot
-      // silently succeed without confirmation from the operating system.
-      finish(code === 0 ? parseTasklistCsvForPid(stdout, pid) : true);
-    });
-  });
-}
-
-/**
- * Parses tasklist CSV output for an exact PID match. The `/NH` flag suppresses
- * the header row, so a present process yields one line like:
- *   "bun.exe","12345","Console","1","5,120 K"
- * An absent process yields an informational line (not CSV), which will not
- * contain the PID as a quoted CSV field.
- */
-function parseTasklistCsvForPid(csvOutput: string, pid: number): boolean {
-  const pidString = String(pid);
-  for (const line of csvOutput.split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (trimmed === '') {
-      continue;
-    }
-    const fields = parseCsvLine(trimmed);
-    if (fields.length >= 2 && fields[1] === pidString) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Minimal CSV line parser for tasklist output: splits on commas outside
- * quotes and strips surrounding quotes.
- */
-function parseCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === undefined) {
-      continue;
-    }
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      fields.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  fields.push(current);
-  return fields;
 }
