@@ -322,7 +322,7 @@ describe('Logger JSONL format', () => {
     expect(logsFromFile[1].message).toBe('After append');
   });
 
-  it('should simulate concurrent writes from different logger instances to the same file', async () => {
+  it('should correctly order sequential writes from different logger instances to the same file', async () => {
     const concurrentSessionId = 'concurrent-session';
     const logger1 = new Logger(concurrentSessionId, new Storage(process.cwd()));
     await logger1.initialize();

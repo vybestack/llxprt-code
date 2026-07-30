@@ -114,6 +114,7 @@ export class Logger {
   private initialized = false;
   private logs: LogEntry[] = []; // In-memory cache, ideally reflects the last known state of the file
   private _formatMigrated = false; // True once legacy format check/migration has run
+  private _needsNewlineCheck = true; // Set false after any successful JSONL write
 
   constructor(
     sessionId: string,
@@ -149,15 +150,13 @@ export class Logger {
     entries: LogEntry[];
     skipped: number;
   } {
-    const lines = trimmed
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    const allLines = trimmed.split('\n').map((line) => line.trim());
     const entries: LogEntry[] = [];
     let skipped = 0;
     let firstSkippedLine = -1;
-    for (let i = 0; i < lines.length; i++) {
-      const result = this._tryParseJsonlLine(lines[i]);
+    for (let i = 0; i < allLines.length; i++) {
+      if (allLines[i].length === 0) continue;
+      const result = this._tryParseJsonlLine(allLines[i]);
       if (result.valid) {
         entries.push(result.entry);
       } else {
@@ -171,7 +170,7 @@ export class Logger {
           (firstSkippedLine > -1 ? ` (first at line ${firstSkippedLine})` : ''),
       );
     }
-    if (entries.length === 0 && lines.length > 0) {
+    if (entries.length === 0 && allLines.some((l) => l.length > 0)) {
       throw new SyntaxError('All JSONL lines failed to parse');
     }
     return { entries, skipped };
@@ -298,18 +297,24 @@ export class Logger {
     }
     this._ensureTrailingNewline();
     appendFileSync(this.logFilePath, JSON.stringify(entry) + '\n', 'utf-8');
+    this._needsNewlineCheck = false;
   }
 
   /**
    * Ensure the file ends with a newline before appending. Without this,
    * appending to a file whose last line lacks a trailing LF (common after
    * crashes or manual edits) would concatenate two records onto one line.
+   * Skipped in the steady state (after a successful JSONL write) since
+   * every write always terminates with a newline.
    */
   private _ensureTrailingNewline(): void {
-    if (!this.logFilePath) return;
+    if (!this.logFilePath || !this._needsNewlineCheck) return;
     try {
       const stat = statSync(this.logFilePath);
-      if (stat.size === 0) return;
+      if (stat.size === 0) {
+        this._needsNewlineCheck = false;
+        return;
+      }
       const fd = openSync(this.logFilePath, 'r');
       try {
         const buf = Buffer.alloc(1);
@@ -317,6 +322,7 @@ export class Logger {
         if (buf[0] !== 0x0a) {
           appendFileSync(this.logFilePath, '\n', 'utf-8');
         }
+        this._needsNewlineCheck = false;
       } finally {
         closeSync(fd);
       }
