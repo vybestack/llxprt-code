@@ -35,6 +35,7 @@ import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { type TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type IModel } from '../IModel.js';
+import { getOpenAIFallbackModels } from './openAIFallbackModels.js';
 import { type IProvider, type GenerateChatOptions } from '../IProvider.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
@@ -314,58 +315,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   private getFallbackModels(): IModel[] {
-    // Return commonly available OpenAI models as fallback
-    // Use this.name so it works for providers that extend OpenAIProvider (e.g., Chutes.ai)
-    return [
-      {
-        id: 'gpt-5.6',
-        name: 'GPT-5.6',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-5.6-sol',
-        name: 'GPT-5.6 Sol',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-5.6-terra',
-        name: 'GPT-5.6 Terra',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-5.6-luna',
-        name: 'GPT-5.6 Luna',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-5.5',
-        name: 'GPT-5.5',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-5.4',
-        name: 'GPT-5.4',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-4.2-turbo-preview',
-        name: 'GPT-4.2 Turbo Preview',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-4.2-turbo',
-        name: 'GPT-4.2 Turbo',
-        provider: this.name,
-        supportedToolFormats: ['openai'],
-      },
-    ];
+    return getOpenAIFallbackModels(this.name);
   }
 
   override getDefaultModel(): string {
