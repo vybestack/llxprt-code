@@ -29,6 +29,17 @@ const PRELOAD = './bun-preload.ts';
 const CONCURRENCY = Math.min(8, availableParallelism());
 const PER_FILE_TIMEOUT_MS = 60_000;
 
+// Test files excluded from Bun native execution because they depend on
+// vitest-only APIs (@fast-check/vitest's it.prop/itProp, process.platform
+// assertions). They run under vitest via `npm run test:vitest` instead.
+const EXCLUDE: ReadonlySet<string> = new Set([
+  'src/recording/SessionRecordingService.test.ts',
+  'src/recording/resumeSession.test.ts',
+  'src/recording/sessionCleanupUtils.test.ts',
+  'src/recording/sessionManagement.test.ts',
+  'src/hooks/hookRunner.consoleIsolation.test.ts',
+]);
+
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -41,7 +52,8 @@ function findTestFiles(dir: string): string[] {
       results.push(...findTestFiles(fullPath));
     } else if (
       (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) &&
-      !entry.endsWith('.d.ts')
+      !entry.endsWith('.d.ts') &&
+      !EXCLUDE.has(fullPath)
     ) {
       results.push(fullPath);
     }
