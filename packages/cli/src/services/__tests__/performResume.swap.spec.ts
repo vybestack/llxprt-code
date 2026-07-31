@@ -374,9 +374,14 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
           ok: false,
           error: 'Failed to commit session transition: commit failed',
         });
-        expect(historyService.getAll()).toStrictEqual([
-          makeContent('previous history'),
-        ]);
+        // Compare the conversation payload only: every history item also
+        // carries a client-side chronology marker (#1721) that this rollback
+        // assertion is not about.
+        expect(
+          historyService
+            .getAll()
+            .map(({ speaker, blocks }) => ({ speaker, blocks })),
+        ).toStrictEqual([makeContent('previous history')]);
         expect(disposeSpy).toHaveBeenCalled();
         expect(adoptSessionId).toHaveBeenCalledTimes(2);
         expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(
@@ -415,9 +420,14 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
         error:
           'Failed to commit session transition: commit failed; failed to restore prior history: rollback restore failed',
       });
-      expect(historyService.getAll()).toStrictEqual([
-        makeContent('replacement history'),
-      ]);
+      // Compare the conversation payload only: every history item also
+      // carries a client-side chronology marker (#1721) that this assertion
+      // is not about.
+      expect(
+        historyService
+          .getAll()
+          .map(({ speaker, blocks }) => ({ speaker, blocks })),
+      ).toStrictEqual([makeContent('replacement history')]);
       expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
     });
   });
