@@ -15,8 +15,6 @@ import * as path from 'path';
 import * as os from 'os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-vi.unmock('./providerAliases.js');
-
 import {
   computeUnallowedParameters,
   loadProviderAliasEntries,

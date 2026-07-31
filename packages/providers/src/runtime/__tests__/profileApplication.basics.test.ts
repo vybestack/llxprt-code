@@ -33,9 +33,11 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 import type { ProfileApplicationResult } from './profileApplicationTestSetup.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+vi.mock('node:fs/promises', () => {
+  const actual =
+    importActualSync<typeof import('node:fs/promises')>('node:fs/promises');
   return {
     ...actual,
     readFile: vi.fn(),

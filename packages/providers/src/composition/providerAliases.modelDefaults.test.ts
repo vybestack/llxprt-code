@@ -14,7 +14,6 @@ import * as os from 'os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 // This test needs real config files plus temp dirs, not the global mock
-vi.unmock('./providerAliases.js');
 
 import {
   loadProviderAliasEntries,

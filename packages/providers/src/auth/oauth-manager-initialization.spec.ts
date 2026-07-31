@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OAuthManager } from './oauth-manager.js';
 import { KeyringTokenStore } from './types.js';
 import type { ISecureStore } from '@vybestack/llxprt-code-auth';
@@ -31,8 +32,8 @@ function createStubSecureStore(): ISecureStore {
 }
 
 // Mock the file system to simulate missing OAuth credentials
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+vi.mock('node:fs', () => {
+  const actual = importActualSync<typeof import('node:fs')>('node:fs');
   return {
     ...actual,
     promises: {

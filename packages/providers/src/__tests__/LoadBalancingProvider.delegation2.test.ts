@@ -242,11 +242,13 @@ describe('LoadBalancingProvider', () => {
         });
 
         // Should throw error when trying to delegate
-        await expect(async () => {
-          for await (const _chunk of iterator) {
-            // Should not get here
-          }
-        }).rejects.toThrow(/Provider.*not found/);
+        await expect(
+          (async () => {
+            for await (const _chunk of iterator) {
+              // Should not get here
+            }
+          })(),
+        ).rejects.toThrow(/Provider.*not found/);
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }
@@ -278,20 +280,24 @@ describe('LoadBalancingProvider', () => {
         });
 
         // Should throw error with detailed message
-        await expect(async () => {
-          for await (const _chunk of iterator) {
-            // Should not get here
-          }
-        }).rejects.toThrow(/my-sub-profile/);
+        await expect(
+          (async () => {
+            for await (const _chunk of iterator) {
+              // Should not get here
+            }
+          })(),
+        ).rejects.toThrow(/my-sub-profile/);
 
-        await expect(async () => {
-          const iterator2 = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
-          });
-          for await (const _chunk of iterator2) {
-            // Should not get here
-          }
-        }).rejects.toThrow(/missing-provider/);
+        await expect(
+          (async () => {
+            const iterator2 = provider.generateChatCompletion({
+              contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            });
+            for await (const _chunk of iterator2) {
+              // Should not get here
+            }
+          })(),
+        ).rejects.toThrow(/missing-provider/);
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }
@@ -356,11 +362,13 @@ describe('LoadBalancingProvider', () => {
         const iterator2 = provider.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
         });
-        await expect(async () => {
-          for await (const _chunk of iterator2) {
-            // Should not get here
-          }
-        }).rejects.toThrow(/Provider.*not found/);
+        await expect(
+          (async () => {
+            for await (const _chunk of iterator2) {
+              // Should not get here
+            }
+          })(),
+        ).rejects.toThrow(/Provider.*not found/);
 
         // Third call - should succeed (sub-3) - counter should have advanced despite error
         const iterator3 = provider.generateChatCompletion({
