@@ -644,12 +644,11 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
     itProp(
       'removeStaleLock does not throw when no lock file exists',
       async () => {
-        // Should not throw
-        await SessionLockManager.removeStaleLock(
-          chatsDir,
-          'nonexistent-session',
-        );
-        expect(true).toBe(true);
+        // Verify removeStaleLock completes without throwing when the lock
+        // file does not exist (idempotent cleanup).
+        await expect(
+          SessionLockManager.removeStaleLock(chatsDir, 'nonexistent-session'),
+        ).resolves.toBeUndefined();
       },
     );
   });
