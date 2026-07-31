@@ -194,7 +194,7 @@ function readPostGcHeapBytes(path: string): number[] {
 function captureOsCheckpoint(
   pid: number,
   index: number,
-  _name: string,
+  name: string,
   outputDir: string,
 ): OsCheckpoint {
   const filePrefix = `checkpoint-${index}`;
@@ -210,7 +210,7 @@ function captureOsCheckpoint(
   writeFileSync(resolve(outputDir, `${filePrefix}.vmmap.txt`), vmmap);
   writeFileSync(resolve(outputDir, `${filePrefix}.footprint.txt`), footprint);
   return {
-    name: _name,
+    name,
     rssBytes: parsePsRssBytes(ps, pid),
     vmmap: parseVmmapSummary(vmmap),
     footprintBytes: parseFootprintBytes(footprint),

@@ -42,6 +42,10 @@ if (
 if (mode !== 'text' && mode !== 'media') {
   throw new Error(`Mode must be 'text' or 'media', got: ${mode}`);
 }
+const port = process.env['LLXPRT_MEMORY_PORT'];
+if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65_535) {
+  throw new Error(`LLXPRT_MEMORY_PORT must be a TCP port, got: ${port}`);
+}
 const turns = Number.parseInt(turnArg, 10);
 if (!Number.isInteger(turns) || turns < 1) {
   throw new Error(`Turns must be a positive integer, got: ${turnArg}`);
@@ -56,10 +60,10 @@ const CHECKPOINT_TIMEOUT_MS = 120_000;
 async function awaitSample(name: string): Promise<void> {
   // Without a timeout a runner that dies mid-capture would leave the target
   // hanging forever, holding its measured memory.
-  const response = await fetch(
-    `http://127.0.0.1:${process.env['LLXPRT_MEMORY_PORT']}/checkpoint/${name}`,
-    { method: 'POST', signal: AbortSignal.timeout(CHECKPOINT_TIMEOUT_MS) },
-  );
+  const response = await fetch(`http://127.0.0.1:${port}/checkpoint/${name}`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(CHECKPOINT_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`Checkpoint ${name} failed: ${response.status}`);
   }
@@ -145,20 +149,19 @@ function runMediaTurn(): number {
 }
 
 const deltas = toDeltas(buildResponse());
-let sink = 0;
 
 checkpoint('baseline');
 await awaitSample('baseline');
 
 for (let turn = 1; turn <= turns; turn += 1) {
-  sink += mode === 'media' ? runMediaTurn() : runTurn(deltas);
+  if (mode === 'media') {
+    runMediaTurn();
+  } else {
+    runTurn(deltas);
+  }
   checkpoint(`turn-${turn}-pre-gc`);
   await awaitSample(`turn-${turn}-pre-gc`);
   Bun.gc(true);
   checkpoint(`turn-${turn}-post-gc`);
   await awaitSample(`turn-${turn}-post-gc`);
-}
-
-if (sink < 0) {
-  throw new Error('unreachable: workload sink');
 }

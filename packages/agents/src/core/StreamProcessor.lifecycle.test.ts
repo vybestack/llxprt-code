@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
+import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -90,7 +91,7 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       createUserInput(),
     );
     await iterator.next();
-    await iterator.return(undefined as never);
+    await iterator.return(undefined);
 
     async function* nextStream(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('fresh-');
@@ -169,6 +170,23 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       'stalled-one',
       'stalled-two',
     ]);
+  });
+
+  it('appends blocks in place instead of copying them per chunk', () => {
+    // The envelope is folded with an empty block list, so the fold is constant
+    // work per chunk and every block lands in one array. Array identity is a
+    // deterministic witness for that, unlike an elapsed-time threshold.
+    const accumulator = new StreamOutputAccumulator();
+    for (let index = 0; index < 5_000; index += 1) {
+      accumulator.add(makeChunk(`chunk-${index}`));
+    }
+
+    const first = accumulator.materialize();
+    const second = accumulator.materialize();
+    expect({
+      sameBlockArray: first.content.blocks === second.content.blocks,
+      blockCount: first.content.blocks.length,
+    }).toStrictEqual({ sameBlockArray: true, blockCount: 5_000 });
   });
 
   it('keeps concurrent streams from sharing accumulated blocks', async () => {
