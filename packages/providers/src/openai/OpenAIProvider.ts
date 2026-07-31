@@ -35,7 +35,7 @@ import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { type TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type IModel } from '../IModel.js';
-import { type IProvider } from '../IProvider.js';
+import { type IProvider, type GenerateChatOptions } from '../IProvider.js';
 import { isNetworkTransientError } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 
@@ -51,12 +51,25 @@ import { createBoundedCache } from '../kimi/kimiFileUpload.js';
 import {
   resolveOpenAITransport,
   resolveExplicitTransportModeFromSources,
-  OPENAI_TRANSPORT_SELECTOR_KEYS,
+  extractOpenAIModelParams,
 } from './openaiModelPolicy.js';
 import {
   executeOpenAIResponsesRequest,
+  buildResponsesRequestContextForProjection,
+  isResponsesPdfEnabled,
   type ResponsesExecutorDeps,
 } from '../openai-responses/openAIResponsesExecutor.js';
+import type { prepareRequest } from './OpenAIRequestPreparation.js';
+import {
+  OpenAIPromptEnvelopeStore,
+  prepareOpenAIPromptProjection,
+} from './OpenAIPromptEnvelopeStore.js';
+import {
+  prepareOpenAIChatProjection,
+  withProjectionModel,
+} from './OpenAIPromptProjectionPreparation.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
 import { extractSanitizedChunkText } from './OpenAIStreamChunkText.js';
@@ -93,6 +106,7 @@ interface DispatchResponseOptions {
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
+  private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
 
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
@@ -142,7 +156,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return {
       providerName: this.name,
       logger: new DebugLogger('llxprt:provider:openai'),
-      getProviderBaseURL: () => this.getBaseURL(),
+      getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
       getCustomHeaders: (options) => this.getCustomHeaders(options),
       isCodexBaseURL: () => false,
       getCodexAccountId: async () => {
@@ -159,8 +173,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
   }
 
-  private resolveOpenAIResponsesEnabled(): boolean | undefined {
-    const settingsService = this.resolveSettingsService();
+  private resolveOpenAIResponsesEnabled(
+    settingsService = this.resolveSettingsService(),
+  ): boolean | undefined {
     const providerValue = settingsService.getProviderSettings(this.name)[
       'openaiResponsesEnabled'
     ];
@@ -179,8 +194,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private resolveTransport(
     model: string,
     baseURL: string | undefined,
+    settingsService = this.resolveSettingsService(),
   ): { useResponses: boolean } {
-    const settingsService = this.resolveSettingsService();
     const providerSettings = settingsService.getProviderSettings(this.name);
     const explicitMode = resolveExplicitTransportModeFromSources(
       providerSettings,
@@ -190,7 +205,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       baseURL,
       explicitMode,
-      openaiResponsesEnabled: this.resolveOpenAIResponsesEnabled(),
+      openaiResponsesEnabled:
+        this.resolveOpenAIResponsesEnabled(settingsService),
     });
   }
 
@@ -455,12 +471,36 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
 
     const decision = this.resolveTransport(model, baseURL);
+    const prepared = this.preparedPromptEnvelopes.get(
+      options.promptEnvelopeTransportToken,
+    );
+    if (
+      options.promptEnvelopeTransportToken !== undefined &&
+      prepared === undefined
+    ) {
+      throw new Error(
+        decision.useResponses
+          ? 'Unknown OpenAI Responses prompt-envelope transport token'
+          : 'Unknown OpenAI Chat prompt-envelope transport token',
+      );
+    }
     if (decision.useResponses) {
+      if (prepared?.protocol === 'openai-chat') {
+        throw new Error(
+          'Prepared OpenAI Chat envelope cannot be sent through Responses transport',
+        );
+      }
       yield* executeOpenAIResponsesRequest(
         options,
         this.buildResponsesExecutorDeps(),
+        prepared?.requestContext,
       );
       return;
+    }
+    if (prepared?.protocol === 'openai-responses') {
+      throw new Error(
+        'Prepared OpenAI Responses envelope cannot be sent through Chat transport',
+      );
     }
 
     const callFormatter = this.createToolFormatter();
@@ -491,6 +531,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       callFormatter,
       client,
       logger,
+      prepared?.requestContext,
     );
 
     for await (const item of generator) {
@@ -508,34 +549,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
 
-      const reservedKeys = new Set([
-        'enabled',
-        'auth-key',
-        'apiKey',
-        'api-key',
-        'auth-keyfile',
-        'apiKeyfile',
-        'api-keyfile',
-        'base-url',
-        'model',
-        'toolFormat',
-        'tool-format',
-        'toolFormatOverride',
-        'tool-format-override',
-        'defaultModel',
-        // Transport selectors are control-plane settings, not model params
-        ...OPENAI_TRANSPORT_SELECTOR_KEYS,
-      ]);
-
-      const params: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(providerSettings)) {
-        if (reservedKeys.has(key) || value === undefined || value === null) {
-          continue;
-        }
-        params[key] = value;
-      }
-
-      return Object.keys(params).length > 0 ? params : undefined;
+      return extractOpenAIModelParams(providerSettings);
     } catch (error) {
       this.getLogger().debug(
         () =>
@@ -751,6 +765,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     toolFormatter: ToolFormatter,
     client: OpenAI,
     logger: DebugLogger,
+    preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
   ): AsyncGenerator<IContent, void, unknown> {
     const { metadata } = options;
     const abortSignal = metadata.abortSignal as AbortSignal | undefined;
@@ -765,19 +780,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Kimi media pre-pass: upload PDFs via the Files API and replace them
     // with file-id references so large documents stay out of the token budget.
     // Only activates for Kimi aliases with mediaSupport.fileUpload enabled.
-    const effectiveOptions = await this.maybeProcessKimiMedia(
-      options,
-      client,
-      logger,
-    );
+    const effectiveOptions =
+      preparedRequestContext === undefined
+        ? await this.maybeProcessKimiMedia(options, client, logger)
+        : options;
 
-    const requestContext = await prepareRequest(
-      effectiveOptions,
-      this.getDefaultModel(),
-      effectiveOptions.config,
-      logger,
-      this.name,
-    );
+    const requestContext =
+      preparedRequestContext ??
+      (await prepareRequest(
+        effectiveOptions,
+        this.getDefaultModel(),
+        effectiveOptions.config,
+        logger,
+        this.name,
+      ));
 
     const {
       model,
@@ -829,12 +845,47 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
   }
 
-  /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement:REQ-SP4-003
-   * Returns the detected tool format for the current model,
-   * honoring explicit provider toolFormat overrides from SettingsService.
-   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
+    const normalized = await this.normalizeOptionsForProjection(
+      withProjectionModel(
+        options,
+        () => this.getModel() || this.getDefaultModel(),
+      ),
+    );
+    const useResponses = this.resolveTransport(
+      normalized.resolved.model,
+      normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
+      normalized.settings,
+    ).useResponses;
+    return prepareOpenAIPromptProjection({
+      normalized,
+      useResponses,
+      store: this.preparedPromptEnvelopes,
+      responsesPdfEnabled: isResponsesPdfEnabled(normalized),
+      prepareResponses: () =>
+        buildResponsesRequestContextForProjection(
+          normalized,
+          this.buildResponsesExecutorDeps(),
+        ),
+      prepareChat: () =>
+        prepareOpenAIChatProjection(normalized, {
+          readMediaSupport: () => this.readMediaSupport(),
+          getClient: (clientOptions) => this.getClient(clientOptions),
+          resolveAuthToken: (authOptions) =>
+            this.resolveProjectionAuthToken(authOptions),
+          processMedia: (preparedOptions, client, logger) =>
+            this.maybeProcessKimiMedia(preparedOptions, client, logger),
+          logger: this.getLogger(),
+          defaultModel: this.getDefaultModel(),
+          providerName: this.name,
+        }),
+      collectUnsupported: (preparedOptions, supports) =>
+        collectUnsupportedMedia(preparedOptions.contents, supports),
+    });
+  }
+
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
     const settings = this.resolveSettingsService();
@@ -853,11 +904,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return format;
   }
 
-  /**
-   * Parse tool response from API (placeholder for future response parsing)
-   * @param response The raw API response
-   * @returns Parsed tool response
-   */
   parseToolResponse(response: unknown): unknown {
     // Follow-up (#1569): Implement response parsing based on detected format
     // For now, return the response as-is

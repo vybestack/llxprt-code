@@ -33,12 +33,7 @@ import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
 import type { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import {
-  extractPromptText,
-  estimateRequestTokensStructured,
-} from './clientHelpers.js';
-import { recordTokenEstimate } from './tokenUsageEstimateLogger.js';
-import { resolvePreflightOverflow } from './preflightRecovery.js';
+import { extractPromptText } from './clientHelpers.js';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
@@ -115,10 +110,6 @@ function normalizeTodoSnapshotEntry(todo: Todo): Todo {
   } as Todo;
 }
 
-function estimateStructuredTokens(request: AgentMessageInput): number {
-  return Math.max(1, estimateRequestTokensStructured(request));
-}
-
 export const MAX_TURNS = 100;
 const MAX_RETRIES = 3;
 
@@ -177,8 +168,7 @@ export class MessageStreamOrchestrator {
     const request = yield* this._preflight(narrowedRequest, ctx);
     if (request instanceof Turn) return request;
 
-    // Include BeforeAgent hook context because it is part of the provider payload.
-    const earlyTurn = yield* this._checkSessionLimits(request, ctx);
+    const earlyTurn = yield* this._checkSessionLimits(ctx);
     if (earlyTurn) return earlyTurn;
 
     await this._injectIdeContext();
@@ -279,11 +269,9 @@ export class MessageStreamOrchestrator {
   }
 
   private async *_checkSessionLimits(
-    initialRequest: AgentMessageInput,
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn | undefined> {
-    const { config, getChat, getSessionTurnCount, getEffectiveModelIdentity } =
-      this.deps;
+    const { config, getSessionTurnCount } = this.deps;
 
     if (
       config.getMaxSessionTurns() > 0 &&
@@ -294,60 +282,11 @@ export class MessageStreamOrchestrator {
       return this._createTurn(ctx.prompt_id);
     }
 
-    const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
-    if (boundedTurns === 0) {
+    if (Math.min(ctx.turns, MAX_TURNS) === 0) {
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._createTurn(ctx.prompt_id);
     }
-
-    const chat = getChat();
-    const effectiveIdentity = getEffectiveModelIdentity();
-    const configuredContextLimit = chat.getContextLimit();
-    const remainingTokenCount =
-      configuredContextLimit - chat.getProjectedPromptBaseline();
-
-    const fallback = estimateStructuredTokens(initialRequest);
-    const recordEstimate = (estimatedTokens: number): void => {
-      recordTokenEstimate(
-        chat,
-        ctx.prompt_id,
-        initialRequest,
-        estimatedTokens,
-        effectiveIdentity.providerName,
-        effectiveIdentity.model,
-      );
-    };
-
-    if (remainingTokenCount <= 0) {
-      recordEstimate(fallback);
-      return undefined;
-    }
-
-    let estimatedRequestTokenCount = fallback;
-    if (typeof chat.estimatePendingTokens === 'function') {
-      try {
-        const contents = iContentFromAgentMessageInput(initialRequest);
-        estimatedRequestTokenCount = await chat.estimatePendingTokens(contents);
-      } catch {
-        estimatedRequestTokenCount = fallback;
-      }
-    }
-
-    recordEstimate(estimatedRequestTokenCount);
-
-    const proceed = await resolvePreflightOverflow(this.deps, {
-      promptId: ctx.prompt_id,
-      estimatedRequestTokenCount,
-      remainingTokenCount,
-      configuredContextLimit,
-    });
-    if (proceed) return undefined;
-    yield {
-      type: AgentEventType.ContextWindowWillOverflow,
-      value: { estimatedRequestTokenCount, remainingTokenCount },
-    };
-    yield* this._fireAfterHookAndEmitClearContext(ctx);
-    return this._createTurn(ctx.prompt_id);
+    return undefined;
   }
 
   /**

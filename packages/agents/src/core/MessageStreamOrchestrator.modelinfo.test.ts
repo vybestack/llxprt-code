@@ -389,7 +389,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(deps.startChat).toHaveBeenCalledWith(previousHistory);
   });
 
-  it('uses the configured context-limit for preflight overflow checks', async () => {
+  it('does not make a generic first-turn context decision before provider finalization', async () => {
     const { orchestrator, mockChat } = buildOrchestrator({
       model: 'claude-opus-4-8',
       providerName: 'anthropic',
@@ -399,10 +399,7 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     await collectModelInfos(orchestrator, 'prompt-context-limit');
 
-    expect(mockChat.getContextLimit).toHaveBeenCalled();
-    expect(
-      mockChat.getContextLimit.mock.results.some((r) => r.value === 200_000),
-    ).toBe(true);
+    expect(mockChat.getContextLimit).not.toHaveBeenCalled();
   });
 
   it('B1: load-balancer profile reports the active sub-profile model, not the config default', async () => {
@@ -466,30 +463,18 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
   });
 
-  it('records token estimates with the identity routed at the start of the turn', async () => {
-    let identity: EffectiveModelIdentity = {
+  it('does not log a generic pending estimate before the provider envelope exists', async () => {
+    const estimatePendingTokens = vi.fn(async () => 42);
+    const { orchestrator, tokenUsageLogger } = buildOrchestrator({
       providerName: 'codex',
       model: 'gpt-5.6-sol',
-    };
-    const { orchestrator, tokenUsageLogger } = buildOrchestrator({
-      identityProvider: () => identity,
-      estimatePendingTokens: async () => {
-        identity = {
-          providerName: 'gemini',
-          model: 'gemini-2.5-pro',
-        };
-        return 42;
-      },
+      estimatePendingTokens,
     });
 
     await collectModelInfos(orchestrator, 'prompt-token-identity');
 
-    expect(tokenUsageLogger.estimates[0]).toMatchObject({
-      promptId: 'prompt-token-identity',
-      provider: 'codex',
-      model: 'gpt-5.6-sol',
-      estimatedTokens: 42,
-    });
+    expect(estimatePendingTokens).not.toHaveBeenCalled();
+    expect(tokenUsageLogger.estimates).toStrictEqual([]);
   });
 });
 

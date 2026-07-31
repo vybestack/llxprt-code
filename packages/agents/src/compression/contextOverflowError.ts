@@ -4,6 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export class ContextOverflowError extends Error {
+  constructor(
+    message: string,
+    readonly estimatedRequestTokenCount: number,
+    readonly remainingTokenCount: number,
+  ) {
+    super(message);
+    this.name = 'ContextOverflowError';
+  }
+}
+
 export interface ContextOverflowErrorParams {
   limit: number;
   initialProjected: number;
@@ -26,7 +37,7 @@ export function buildContextOverflowError({
   compressionFailure,
   toolResponseTruncationAttempted,
   toolResponsesTruncated,
-}: ContextOverflowErrorParams): Error {
+}: ContextOverflowErrorParams): ContextOverflowError {
   const totalReduction = Math.max(0, initialProjected - finalProjected);
   const tokensStillNeeded = finalProjected - marginAdjustedLimit;
   const parts: string[] = [
@@ -54,5 +65,9 @@ export function buildContextOverflowError({
       `Last-resort tool-response truncation replaced ${toolResponsesTruncated ?? 0} response(s) but could not recover the remaining context budget.`,
     );
   }
-  return new Error(parts.join(' '));
+  return new ContextOverflowError(
+    parts.join(' '),
+    Math.max(0, finalProjected - completionBudget),
+    Math.max(0, marginAdjustedLimit - completionBudget),
+  );
 }
