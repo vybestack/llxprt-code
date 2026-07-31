@@ -67,6 +67,29 @@ import {
   mergeInvocationHeaders,
 } from './OpenAIClientFactory.js';
 
+/**
+ * Typed options object for {@link OpenAIProvider.dispatchResponse}.
+ *
+ * @issue #2524 — Replaces the 12-positional-parameter list for clarity and
+ *   safety.
+ */
+export interface DispatchResponseOptions {
+  response:
+    | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
+    | OpenAI.Chat.Completions.ChatCompletion;
+  model: string;
+  detectedFormat: string;
+  streamingEnabled: boolean;
+  abortSignal: AbortSignal | undefined;
+  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
+  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  client: OpenAI;
+  mergedHeaders: Record<string, string> | undefined;
+  baseURL: string | undefined;
+  logger: DebugLogger;
+  reasoningFieldName: string | undefined;
+}
+
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
@@ -574,20 +597,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   private async *dispatchResponse(
-    response:
-      | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
-      | OpenAI.Chat.Completions.ChatCompletion,
-    model: string,
-    detectedFormat: string,
-    streamingEnabled: boolean,
-    abortSignal: AbortSignal | undefined,
-    requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    client: OpenAI,
-    mergedHeaders: Record<string, string> | undefined,
-    baseURL: string | undefined,
-    logger: DebugLogger,
-    reasoningFieldName: string | undefined,
+    options: DispatchResponseOptions,
   ): AsyncGenerator<IContent, void, unknown> {
     const { processStreamingResponse } = await import(
       './OpenAIStreamProcessor.js'
@@ -595,24 +605,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const { handleNonStreamingResponse } = await import(
       './OpenAINonStreamHandler.js'
     );
-    if (streamingEnabled) {
+    if (options.streamingEnabled) {
       const deps = {
         toolCallPipeline: this.toolCallPipeline,
         textToolParser: this.textToolParser,
-        logger,
+        logger: options.logger,
         getBaseURL: () => this.getBaseURL(),
-        reasoningFieldName,
+        reasoningFieldName: options.reasoningFieldName,
       };
       yield* processStreamingResponse(
-        response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
-        model,
-        detectedFormat,
-        abortSignal,
-        requestBody,
-        messagesWithSystem,
-        client,
-        mergedHeaders,
-        baseURL,
+        options.response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+        options.model,
+        options.detectedFormat,
+        options.abortSignal,
+        options.requestBody,
+        options.messagesWithSystem,
+        options.client,
+        options.mergedHeaders,
+        options.baseURL,
         deps,
         this.requestContinuationAfterToolCalls.bind(this),
       );
@@ -620,12 +630,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const deps = {
         toolCallPipeline: this.toolCallPipeline,
         textToolParser: this.textToolParser,
-        logger,
+        logger: options.logger,
       };
       yield* handleNonStreamingResponse(
-        response as OpenAI.Chat.Completions.ChatCompletion,
-        model,
-        detectedFormat,
+        options.response as OpenAI.Chat.Completions.ChatCompletion,
+        options.model,
+        options.detectedFormat,
         deps,
       );
     }
@@ -803,7 +813,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       | string
       | undefined;
 
-    yield* this.dispatchResponse(
+    yield* this.dispatchResponse({
       response,
       model,
       detectedFormat,
@@ -816,7 +826,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       baseURL,
       logger,
       reasoningFieldName,
-    );
+    });
   }
 
   /**
