@@ -37,7 +37,6 @@ export class PendingTextAccumulator {
 
   replace(text: string): void {
     this.text = text;
-    this.deltaCount = 0;
   }
 
   materialize(): string {
