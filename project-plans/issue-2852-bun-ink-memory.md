@@ -166,6 +166,32 @@ and add the repeated-turn post-GC plateau assertion.
 `npm run test`, `lint`, `typecheck`, `format`, `build`, the profile smoke test,
 and the tmux TUI harness, plus Open Code Review before push.
 
+## Measured results
+
+`bun scripts/issue-2852-memory-runner.ts <dir> text 4` on macOS/Bun, driving the
+real `PendingResponseBuffer` over a 40-paragraph response ending in a 4,000-line
+unterminated code fence, four equivalent turns:
+
+| Checkpoint | JSC heap | `ps` RSS | Physical footprint | MALLOC empty dirty | IOAccelerator |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | 1.2 MB | 45 MB | 20 MB | 0.1 MB | 4.0 MB |
+| turn 1 post-GC | 3.0 MB | 188 MB | 29 MB | 0.1 MB | 3.7 MB |
+| turn 2 post-GC | 3.0 MB | 188 MB | 29 MB | 0.1 MB | 3.7 MB |
+| turn 3 post-GC | 3.0 MB | 189 MB | 24 MB | 0.1 MB | 3.7 MB |
+| turn 4 post-GC | 2.5 MB | 190 MB | 24 MB | 0.1 MB | 3.7 MB |
+
+Post-GC JSC heap growth across the settled turns is 0.03%, so repeated
+equivalent turns reach a stable plateau. The run also reproduces the reported
+shape in miniature: RSS sits at ~190 MB while the physical footprint settles at
+~24 MB, confirming that RSS alone is not a valid leak criterion on Bun/JSC.
+
+The media dimension (`media 4`) shows IOAccelerator oscillating between 3.7 MB
+and 6.5 MB and returning to baseline after a full GC — bounded, with no growth
+across turns. **The base64/data-URI JavaScript path therefore does not on its
+own reproduce the reported IOAccelerator growth.** That component is not
+attributed by this work; reproducing it requires the native image decode path
+under Instruments, and it should not be claimed as fixed.
+
 ## Explicitly rejected approaches
 
 - Coalescing UI publication by delta count or on newline as the mechanism for

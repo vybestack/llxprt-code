@@ -56,10 +56,63 @@ export function parseFootprintBytes(output: string): number {
 }
 
 export function validateCheckpointOrder(names: readonly string[]): boolean {
-  if (names.join(',') !== 'baseline,pre-gc,post-gc') {
+  const expected = expectedCheckpointNames(countTurns(names));
+  if (names.join(',') !== expected.join(',')) {
     throw new Error('Invalid checkpoint order');
   }
   return true;
+}
+
+function countTurns(names: readonly string[]): number {
+  return names.filter((name) => name.endsWith('-post-gc')).length;
+}
+
+export function expectedCheckpointNames(turns: number): string[] {
+  const names = ['baseline'];
+  for (let turn = 1; turn <= turns; turn += 1) {
+    names.push(`turn-${turn}-pre-gc`, `turn-${turn}-post-gc`);
+  }
+  return names;
+}
+
+/**
+ * Post-GC heap readings for equivalent repeated turns, oldest first.
+ *
+ * Issue #2852 requires that repeated equivalent turns reach a stable post-GC
+ * plateau. Growth is measured against the first settled turn rather than the
+ * very first, because the first turn also warms caches that legitimately
+ * persist (tokenizers, regex compilation, module state).
+ */
+export interface PlateauResult {
+  readonly settledBaselineBytes: number;
+  readonly maxBytes: number;
+  readonly growthRatio: number;
+  readonly withinTolerance: boolean;
+}
+
+export function evaluatePostGcPlateau(
+  postGcHeapBytes: readonly number[],
+  tolerance: number,
+): PlateauResult {
+  if (postGcHeapBytes.length < 3) {
+    throw new Error('Plateau needs at least three post-GC turns');
+  }
+  if (!(tolerance > 0)) {
+    throw new Error('Tolerance must be positive');
+  }
+  const settled = postGcHeapBytes.slice(1);
+  const settledBaselineBytes = settled[0];
+  if (settledBaselineBytes <= 0) {
+    throw new Error('Post-GC heap readings must be positive');
+  }
+  const maxBytes = Math.max(...settled);
+  const growthRatio = maxBytes / settledBaselineBytes - 1;
+  return {
+    settledBaselineBytes,
+    maxBytes,
+    growthRatio,
+    withinTolerance: growthRatio <= tolerance,
+  };
 }
 
 function requireMetric(output: string, pattern: RegExp, name: string): number {

@@ -9,7 +9,9 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import {
+  evaluatePostGcPlateau,
   parseFootprintBytes,
   parsePsRssBytes,
   parseVmmapSummary,
@@ -24,6 +26,15 @@ const mode = process.argv[3] ?? 'text';
 if (mode !== 'text' && mode !== 'media') {
   throw new Error('Mode must be text or media');
 }
+const turns = Number.parseInt(process.argv[4] ?? '4', 10);
+if (!Number.isInteger(turns) || turns < 3) {
+  throw new Error('Turns must be an integer of at least 3 to judge a plateau');
+}
+/**
+ * Post-GC heap growth tolerated across equivalent turns once the first
+ * warm-up turn has settled caches that legitimately persist.
+ */
+const PLATEAU_TOLERANCE = 0.1;
 mkdirSync(artifactDir, { recursive: true });
 
 interface OsCheckpoint {
@@ -67,7 +78,7 @@ if (address === null || typeof address === 'string') {
 const targetOutput = resolve(artifactDir, 'target.jsonl');
 const child = spawn(
   process.execPath,
-  ['scripts/issue-2852-memory-target.ts', targetOutput, mode],
+  ['scripts/issue-2852-memory-target.ts', targetOutput, mode, String(turns)],
   {
     cwd: resolve('.'),
     env: { ...process.env, LLXPRT_MEMORY_PORT: String(address.port) },
@@ -119,21 +130,34 @@ if (exitCode !== 0) {
 }
 
 validateCheckpointOrder(checkpoints.map((checkpoint) => checkpoint.name));
+const plateau = evaluatePostGcPlateau(
+  readPostGcHeapBytes(targetOutput),
+  PLATEAU_TOLERANCE,
+);
 writeFileSync(resolve(artifactDir, 'target.stdout'), Buffer.concat(stdout));
 writeFileSync(resolve(artifactDir, 'target.stderr'), Buffer.concat(stderr));
 writeFileSync(
   resolve(artifactDir, 'os-checkpoints.json'),
-  `${JSON.stringify({ targetPid: target.pid, mode, checkpoints }, null, 2)}\n`,
+  `${JSON.stringify({ targetPid: target.pid, mode, turns, plateau, checkpoints }, null, 2)}\n`,
 );
 process.stdout.write(`${artifactDir}\n`);
+if (!plateau.withinTolerance) {
+  throw new Error(
+    `Post-GC JSC heap grew ${(plateau.growthRatio * 100).toFixed(1)}% across equivalent turns`,
+  );
+}
 
-const CHECKPOINT_FILES = [
-  'checkpoint-0',
-  'checkpoint-1',
-  'checkpoint-2',
-  'checkpoint-3',
-  'checkpoint-4',
-] as const;
+/** Post-GC JSC heap size for each turn, oldest first. */
+function readPostGcHeapBytes(path: string): number[] {
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map(
+      (line) => JSON.parse(line) as { name: string; jsc: { heapSize: number } },
+    )
+    .filter((record) => record.name.endsWith('-post-gc'))
+    .map((record) => record.jsc.heapSize);
+}
 
 function captureOsCheckpoint(
   pid: number,
@@ -141,7 +165,7 @@ function captureOsCheckpoint(
   _name: string,
   outputDir: string,
 ): OsCheckpoint {
-  const filePrefix = CHECKPOINT_FILES[index] ?? `checkpoint-${index}`;
+  const filePrefix = `checkpoint-${index}`;
   const ps = run('/bin/ps', ['-p', String(pid), '-o', 'pid=,rss=,command=']);
   const vmmap = run('/usr/bin/vmmap', ['-summary', String(pid)]);
   const footprint = run('/usr/bin/footprint', [
