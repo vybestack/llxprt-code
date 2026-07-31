@@ -26,7 +26,8 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach, vi, it } from 'vitest';
+import { describe, expect, beforeEach, afterEach, vi } from 'vitest';
+import { it } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -800,50 +801,49 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-003.3
      */
-    it('any valid IContent round-trips through JSONL faithfully @requirement:REQ-REC-003.3 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.record({
-            speaker: fc.constantFrom('human' as const, 'ai' as const),
-            text: fc.string({ minLength: 1, maxLength: 200 }),
-          }),
-          async ({ speaker, text }) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-roundtrip-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([
+      fc.record({
+        speaker: fc.constantFrom('human' as const, 'ai' as const),
+        text: fc.string({ minLength: 1, maxLength: 200 }),
+      }),
+    ])(
+      'any valid IContent round-trips through JSONL faithfully @requirement:REQ-REC-003.3 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async ({ speaker, text }) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-roundtrip-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
 
-              const content: IContent = {
-                speaker,
-                blocks: [{ type: 'text', text }],
-              };
+          const content: IContent = {
+            speaker,
+            blocks: [{ type: 'text', text }],
+          };
 
-              svc.recordContent(content);
-              await svc.flush();
+          svc.recordContent(content);
+          await svc.flush();
 
-              const events = await readJsonlFile(svc.getFilePath()!);
-              const contentEvent = events.find((e) => e.type === 'content');
-              expect(contentEvent).toBeDefined();
+          const events = await readJsonlFile(svc.getFilePath()!);
+          const contentEvent = events.find((e) => e.type === 'content');
+          expect(contentEvent).toBeDefined();
 
-              const payload = contentEvent!.payload as { content: IContent };
-              expect(payload.content.speaker).toBe(speaker);
-              expect(payload.content.blocks[0]).toStrictEqual({
-                type: 'text',
-                text,
-              });
+          const payload = contentEvent!.payload as { content: IContent };
+          expect(payload.content.speaker).toBe(speaker);
+          expect(payload.content.blocks[0]).toStrictEqual({
+            type: 'text',
+            text,
+          });
 
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
-        ),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 17: Sequence numbers are always monotonic regardless of enqueue pattern.
@@ -851,70 +851,69 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001.2
      */
-    it('sequence numbers are always strictly monotonic @requirement:REQ-REC-001.2 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.array(
-            fc.constantFrom(
-              'content' as const,
-              'session_event' as const,
-              'provider_switch' as const,
-              'directories_changed' as const,
-              'rewind' as const,
-            ),
-            { minLength: 1, maxLength: 15 },
-          ),
-          async (eventTypes) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-seq-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
-
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
-
-              // Ensure first event is content to trigger materialization
-              svc.recordContent(makeContent('trigger'));
-
-              for (const eventType of eventTypes) {
-                switch (eventType) {
-                  case 'content':
-                    svc.recordContent(makeContent('test'));
-                    break;
-                  case 'session_event':
-                    svc.recordSessionEvent('info', 'test event');
-                    break;
-                  case 'provider_switch':
-                    svc.recordProviderSwitch('test-provider', 'test-model');
-                    break;
-                  case 'directories_changed':
-                    svc.recordDirectoriesChanged(['/test']);
-                    break;
-                  case 'rewind':
-                    svc.recordRewind(1);
-                    break;
-                  default:
-                    break;
-                }
-              }
-
-              await svc.flush();
-              const events = await readJsonlFile(svc.getFilePath()!);
-
-              // Verify strict monotonicity
-              for (let i = 1; i < events.length; i++) {
-                expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
-              }
-
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
+    it.prop([
+      fc.array(
+        fc.constantFrom(
+          'content' as const,
+          'session_event' as const,
+          'provider_switch' as const,
+          'directories_changed' as const,
+          'rewind' as const,
         ),
-      ));
+        { minLength: 1, maxLength: 15 },
+      ),
+    ])(
+      'sequence numbers are always strictly monotonic @requirement:REQ-REC-001.2 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (eventTypes) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-seq-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
+
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
+
+          // Ensure first event is content to trigger materialization
+          svc.recordContent(makeContent('trigger'));
+
+          for (const eventType of eventTypes) {
+            switch (eventType) {
+              case 'content':
+                svc.recordContent(makeContent('test'));
+                break;
+              case 'session_event':
+                svc.recordSessionEvent('info', 'test event');
+                break;
+              case 'provider_switch':
+                svc.recordProviderSwitch('test-provider', 'test-model');
+                break;
+              case 'directories_changed':
+                svc.recordDirectoriesChanged(['/test']);
+                break;
+              case 'rewind':
+                svc.recordRewind(1);
+                break;
+              default:
+                break;
+            }
+          }
+
+          await svc.flush();
+          const events = await readJsonlFile(svc.getFilePath()!);
+
+          // Verify strict monotonicity
+          for (let i = 1; i < events.length; i++) {
+            expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
+          }
+
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 18: Multiple flush calls are idempotent.
@@ -922,42 +921,38 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-005
      */
-    it('multiple flush calls produce same file content @requirement:REQ-REC-005 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 5 }),
-          fc.integer({ min: 1, max: 10 }),
-          async (flushCount, eventCount) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-flush-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([fc.integer({ min: 1, max: 5 }), fc.integer({ min: 1, max: 10 })])(
+      'multiple flush calls produce same file content @requirement:REQ-REC-005 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (flushCount, eventCount) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-flush-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
 
-              for (let i = 0; i < eventCount; i++) {
-                svc.recordContent(makeContent(`msg ${i}`));
-              }
+          for (let i = 0; i < eventCount; i++) {
+            svc.recordContent(makeContent(`msg ${i}`));
+          }
 
-              // Flush multiple times
-              for (let i = 0; i < flushCount; i++) {
-                await svc.flush();
-              }
+          // Flush multiple times
+          for (let i = 0; i < flushCount; i++) {
+            await svc.flush();
+          }
 
-              const events = await readJsonlFile(svc.getFilePath()!);
-              // session_start + eventCount content events
-              expect(events).toHaveLength(eventCount + 1);
+          const events = await readJsonlFile(svc.getFilePath()!);
+          // session_start + eventCount content events
+          expect(events).toHaveLength(eventCount + 1);
 
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
-        ),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 19: Session ID is always present in session_start payload.
@@ -965,34 +960,34 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001
      */
-    it('session_start payload always contains matching sessionId @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(fc.uuid(), async (sessionId) => {
-          const localTempDir = await fs.mkdtemp(
-            path.join(os.tmpdir(), 'prop-sid-'),
-          );
-          const localChatsDir = path.join(localTempDir, 'chats');
-          await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([fc.uuid()])(
+      'session_start payload always contains matching sessionId @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (sessionId) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-sid-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-          try {
-            const config = makeConfig({ chatsDir: localChatsDir, sessionId });
-            const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir, sessionId });
+          const svc = new SessionRecordingService(config);
 
-            svc.recordContent(makeContent('trigger'));
-            await svc.flush();
+          svc.recordContent(makeContent('trigger'));
+          await svc.flush();
 
-            const events = await readJsonlFile(svc.getFilePath()!);
-            expect(events[0].type).toBe('session_start');
+          const events = await readJsonlFile(svc.getFilePath()!);
+          expect(events[0].type).toBe('session_start');
 
-            const startPayload = events[0].payload as { sessionId: string };
-            expect(startPayload.sessionId).toBe(sessionId);
+          const startPayload = events[0].payload as { sessionId: string };
+          expect(startPayload.sessionId).toBe(sessionId);
 
-            await svc.dispose();
-          } finally {
-            await fs.rm(localTempDir, { recursive: true, force: true });
-          }
-        }),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 20: Any number of enqueued events produces correct line count.
@@ -1000,36 +995,33 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-003.2
      */
-    it('N content events produce exactly N+1 lines (session_start + N) @requirement:REQ-REC-003.2 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 30 }),
-          async (eventCount) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-count-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([fc.integer({ min: 1, max: 30 })])(
+      'N content events produce exactly N+1 lines (session_start + N) @requirement:REQ-REC-003.2 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (eventCount) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-count-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
 
-              for (let i = 0; i < eventCount; i++) {
-                svc.recordContent(makeContent(`msg ${i}`));
-              }
-              await svc.flush();
+          for (let i = 0; i < eventCount; i++) {
+            svc.recordContent(makeContent(`msg ${i}`));
+          }
+          await svc.flush();
 
-              const events = await readJsonlFile(svc.getFilePath()!);
-              expect(events).toHaveLength(eventCount + 1);
+          const events = await readJsonlFile(svc.getFilePath()!);
+          expect(events).toHaveLength(eventCount + 1);
 
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
-        ),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 21: Timestamps are always valid ISO-8601 in any number of events.
@@ -1037,38 +1029,35 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001.3
      */
-    it('all events have valid ISO-8601 timestamps @requirement:REQ-REC-001.3 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.integer({ min: 1, max: 15 }),
-          async (eventCount) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-ts-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([fc.integer({ min: 1, max: 15 })])(
+      'all events have valid ISO-8601 timestamps @requirement:REQ-REC-001.3 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (eventCount) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-ts-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
 
-              for (let i = 0; i < eventCount; i++) {
-                svc.recordContent(makeContent(`msg ${i}`));
-              }
-              await svc.flush();
+          for (let i = 0; i < eventCount; i++) {
+            svc.recordContent(makeContent(`msg ${i}`));
+          }
+          await svc.flush();
 
-              const events = await readJsonlFile(svc.getFilePath()!);
-              for (const event of events) {
-                expect(isValidIso8601(event.ts)).toBe(true);
-              }
+          const events = await readJsonlFile(svc.getFilePath()!);
+          for (const event of events) {
+            expect(isValidIso8601(event.ts)).toBe(true);
+          }
 
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
-        ),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 22: Envelope structure is consistent regardless of event type.
@@ -1076,81 +1065,77 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001
      */
-    it('every event has consistent envelope {v, seq, ts, type, payload} @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.constantFrom(
-            'content' as const,
-            'compressed' as const,
-            'rewind' as const,
-            'provider_switch' as const,
-            'session_event' as const,
-            'directories_changed' as const,
-          ),
-          async (eventType) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-envelope-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([
+      fc.constantFrom(
+        'content' as const,
+        'compressed' as const,
+        'rewind' as const,
+        'provider_switch' as const,
+        'session_event' as const,
+        'directories_changed' as const,
+      ),
+    ])(
+      'every event has consistent envelope {v, seq, ts, type, payload} @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (eventType) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-envelope-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
 
-              // First enqueue content to materialize
-              svc.recordContent(makeContent('trigger'));
+          // First enqueue content to materialize
+          svc.recordContent(makeContent('trigger'));
 
-              // Then enqueue the specific event type
-              switch (eventType) {
-                case 'content':
-                  svc.recordContent(makeContent('test'));
-                  break;
-                case 'compressed':
-                  svc.recordCompressed(
-                    {
-                      speaker: 'ai',
-                      blocks: [{ type: 'text', text: 'summary' }],
-                    },
-                    5,
-                  );
-                  break;
-                case 'rewind':
-                  svc.recordRewind(2);
-                  break;
-                case 'provider_switch':
-                  svc.recordProviderSwitch('test', 'model');
-                  break;
-                case 'session_event':
-                  svc.recordSessionEvent('info', 'test');
-                  break;
-                case 'directories_changed':
-                  svc.recordDirectoriesChanged(['/dir']);
-                  break;
-                default:
-                  break;
-              }
+          // Then enqueue the specific event type
+          switch (eventType) {
+            case 'content':
+              svc.recordContent(makeContent('test'));
+              break;
+            case 'compressed':
+              svc.recordCompressed(
+                { speaker: 'ai', blocks: [{ type: 'text', text: 'summary' }] },
+                5,
+              );
+              break;
+            case 'rewind':
+              svc.recordRewind(2);
+              break;
+            case 'provider_switch':
+              svc.recordProviderSwitch('test', 'model');
+              break;
+            case 'session_event':
+              svc.recordSessionEvent('info', 'test');
+              break;
+            case 'directories_changed':
+              svc.recordDirectoriesChanged(['/dir']);
+              break;
+            default:
+              break;
+          }
 
-              await svc.flush();
-              const events = await readJsonlFile(svc.getFilePath()!);
+          await svc.flush();
+          const events = await readJsonlFile(svc.getFilePath()!);
 
-              for (const event of events) {
-                expect(typeof event.v).toBe('number');
-                expect(event.v).toBe(1);
-                expect(typeof event.seq).toBe('number');
-                expect(typeof event.ts).toBe('string');
-                expect(typeof event.type).toBe('string');
-                expect(event.payload).toBeDefined();
-                expect(event.payload).not.toBeNull();
-              }
+          for (const event of events) {
+            expect(typeof event.v).toBe('number');
+            expect(event.v).toBe(1);
+            expect(typeof event.seq).toBe('number');
+            expect(typeof event.ts).toBe('string');
+            expect(typeof event.type).toBe('string');
+            expect(event.payload).toBeDefined();
+            expect(event.payload).not.toBeNull();
+          }
 
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
-        ),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test 24: Any number of metadata events before first content preserves
@@ -1159,78 +1144,77 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-004, REQ-REC-001.2
      */
-    it('any metadata events before first content are written in exact enqueue order @requirement:REQ-REC-004, REQ-REC-001.2 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.array(
-            fc.constantFrom(
-              'provider_switch' as const,
-              'directories_changed' as const,
-              'session_event' as const,
-            ),
-            { minLength: 0, maxLength: 10 },
-          ),
-          async (metadataTypes) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-order-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
-
-            try {
-              const config = makeConfig({ chatsDir: localChatsDir });
-              const svc = new SessionRecordingService(config);
-
-              // Enqueue metadata events before any content
-              for (const eventType of metadataTypes) {
-                switch (eventType) {
-                  case 'provider_switch':
-                    svc.recordProviderSwitch('test', 'model');
-                    break;
-                  case 'directories_changed':
-                    svc.recordDirectoriesChanged(['/dir']);
-                    break;
-                  case 'session_event':
-                    svc.recordSessionEvent('info', 'event');
-                    break;
-                  default:
-                    break;
-                }
-              }
-
-              // Content triggers materialization
-              svc.recordContent(makeContent('first content'));
-              await svc.flush();
-
-              const events = await readJsonlFile(svc.getFilePath()!);
-
-              // Expected: session_start + metadata events + content
-              const expectedLength = 1 + metadataTypes.length + 1;
-              expect(events).toHaveLength(expectedLength);
-
-              // Line 1 is always session_start
-              expect(events[0].type).toBe('session_start');
-
-              // Middle lines are metadata in exact enqueue order
-              for (let i = 0; i < metadataTypes.length; i++) {
-                expect(events[i + 1].type).toBe(metadataTypes[i]);
-              }
-
-              // Last line is content
-              expect(events[events.length - 1].type).toBe('content');
-
-              // All seq values are strictly monotonically increasing (1, 2, ..., N+2)
-              for (let i = 0; i < events.length; i++) {
-                expect(events[i].seq).toBe(i + 1);
-              }
-
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
+    it.prop([
+      fc.array(
+        fc.constantFrom(
+          'provider_switch' as const,
+          'directories_changed' as const,
+          'session_event' as const,
         ),
-      ));
+        { minLength: 0, maxLength: 10 },
+      ),
+    ])(
+      'any metadata events before first content are written in exact enqueue order @requirement:REQ-REC-004, REQ-REC-001.2 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async (metadataTypes) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-order-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
+
+        try {
+          const config = makeConfig({ chatsDir: localChatsDir });
+          const svc = new SessionRecordingService(config);
+
+          // Enqueue metadata events before any content
+          for (const eventType of metadataTypes) {
+            switch (eventType) {
+              case 'provider_switch':
+                svc.recordProviderSwitch('test', 'model');
+                break;
+              case 'directories_changed':
+                svc.recordDirectoriesChanged(['/dir']);
+                break;
+              case 'session_event':
+                svc.recordSessionEvent('info', 'event');
+                break;
+              default:
+                break;
+            }
+          }
+
+          // Content triggers materialization
+          svc.recordContent(makeContent('first content'));
+          await svc.flush();
+
+          const events = await readJsonlFile(svc.getFilePath()!);
+
+          // Expected: session_start + metadata events + content
+          const expectedLength = 1 + metadataTypes.length + 1;
+          expect(events).toHaveLength(expectedLength);
+
+          // Line 1 is always session_start
+          expect(events[0].type).toBe('session_start');
+
+          // Middle lines are metadata in exact enqueue order
+          for (let i = 0; i < metadataTypes.length; i++) {
+            expect(events[i + 1].type).toBe(metadataTypes[i]);
+          }
+
+          // Last line is content
+          expect(events[events.length - 1].type).toBe('content');
+
+          // All seq values are strictly monotonically increasing (1, 2, ..., N+2)
+          for (let i = 0; i < events.length; i++) {
+            expect(events[i].seq).toBe(i + 1);
+          }
+
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     /**
      * Property test (bonus): Session start payload always contains all required fields.
@@ -1238,55 +1222,52 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
      * @plan PLAN-20260211-SESSIONRECORDING.P04
      * @requirement REQ-REC-001
      */
-    it('session_start payload has all required fields @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04', () =>
-      fc.assert(
-        fc.asyncProperty(
-          fc.record({
-            sessionId: fc.uuid(),
-            provider: fc.constantFrom('anthropic', 'openai', 'google'),
-            model: fc.string({ minLength: 1, maxLength: 30 }),
-          }),
-          async ({ sessionId, provider, model }) => {
-            const localTempDir = await fs.mkdtemp(
-              path.join(os.tmpdir(), 'prop-start-'),
-            );
-            const localChatsDir = path.join(localTempDir, 'chats');
-            await fs.mkdir(localChatsDir, { recursive: true });
+    it.prop([
+      fc.record({
+        sessionId: fc.uuid(),
+        provider: fc.constantFrom('anthropic', 'openai', 'google'),
+        model: fc.string({ minLength: 1, maxLength: 30 }),
+      }),
+    ])(
+      'session_start payload has all required fields @requirement:REQ-REC-001 @plan:PLAN-20260211-SESSIONRECORDING.P04',
+      async ({ sessionId, provider, model }) => {
+        const localTempDir = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'prop-start-'),
+        );
+        const localChatsDir = path.join(localTempDir, 'chats');
+        await fs.mkdir(localChatsDir, { recursive: true });
 
-            try {
-              const config = makeConfig({
-                chatsDir: localChatsDir,
-                sessionId,
-                provider,
-                model,
-              });
-              const svc = new SessionRecordingService(config);
+        try {
+          const config = makeConfig({
+            chatsDir: localChatsDir,
+            sessionId,
+            provider,
+            model,
+          });
+          const svc = new SessionRecordingService(config);
 
-              svc.recordContent(makeContent('trigger'));
-              await svc.flush();
+          svc.recordContent(makeContent('trigger'));
+          await svc.flush();
 
-              const events = await readJsonlFile(svc.getFilePath()!);
-              const startPayload = events[0].payload as Record<string, unknown>;
+          const events = await readJsonlFile(svc.getFilePath()!);
+          const startPayload = events[0].payload as Record<string, unknown>;
 
-              expect(startPayload.sessionId).toBe(sessionId);
-              expect(startPayload.projectHash).toBe(config.projectHash);
-              expect(startPayload.provider).toBe(provider);
-              expect(startPayload.model).toBe(model);
-              expect(startPayload.workspaceDirs).toStrictEqual(
-                config.workspaceDirs,
-              );
-              expect(startPayload.cwd).toBe(config.cwd);
-              expect(typeof startPayload.startTime).toBe('string');
-              expect(isValidIso8601(startPayload.startTime as string)).toBe(
-                true,
-              );
+          expect(startPayload.sessionId).toBe(sessionId);
+          expect(startPayload.projectHash).toBe(config.projectHash);
+          expect(startPayload.provider).toBe(provider);
+          expect(startPayload.model).toBe(model);
+          expect(startPayload.workspaceDirs).toStrictEqual(
+            config.workspaceDirs,
+          );
+          expect(startPayload.cwd).toBe(config.cwd);
+          expect(typeof startPayload.startTime).toBe('string');
+          expect(isValidIso8601(startPayload.startTime as string)).toBe(true);
 
-              await svc.dispose();
-            } finally {
-              await fs.rm(localTempDir, { recursive: true, force: true });
-            }
-          },
-        ),
-      ));
+          await svc.dispose();
+        } finally {
+          await fs.rm(localTempDir, { recursive: true, force: true });
+        }
+      },
+    );
   });
 });

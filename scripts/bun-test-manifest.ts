@@ -222,7 +222,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       // Excluded: Bun fake-timer incompatibility on Linux CI.
       // 'src/auth/__tests__/behavioral/single-bucket.behavioral.spec.ts',
       'src/auth/__tests__/behavioral/subagent-isolation.behavioral.spec.ts',
-      'src/auth/__tests__/behavioral/user-entry-points.behavioral.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/__tests__/behavioral/user-entry-points.behavioral.spec.ts',
       'src/auth/__tests__/browser-profile-association-store.spec.ts',
       'src/auth/__tests__/BucketFailoverHandlerImpl.invalidateAuthCache.test.ts',
       'src/auth/__tests__/codex-oauth-provider.fallback.spec.ts',
