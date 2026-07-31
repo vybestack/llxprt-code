@@ -22,6 +22,7 @@ import type {
   RuntimeGenerateChatOptions,
   RuntimeProviderToolset,
 } from './RuntimeProviderChat.js';
+import type { PromptEnvelopeProjection } from './PromptEstimation.js';
 
 /**
  * Minimal set of tool declaration shapes that core runtime passes through.
@@ -82,4 +83,23 @@ export interface RuntimeProvider {
     tools?: RuntimeProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
+
+  /**
+   * Project the finalized prompt envelope for token estimation (issue #2817).
+   *
+   * The provider builds its real request representation using the same
+   * preparation path transport consumes, then returns a pure projection of the
+   * prompt-bearing fields. The agent layer derives an estimate without ever
+   * reconstructing the provider payload.
+   *
+   * Providers may resolve to `undefined` only when this capability is genuinely
+   * unavailable for the selected protocol. Once projection is attempted,
+   * preparation and estimate contract failures propagate so hard-limit
+   * decisions never rely on an untrustworthy fallback.
+   *
+   * @requirement:REQ-PE-001 (issue #2817 acceptance A3, A4, A5)
+   */
+  projectPromptEnvelope?(
+    options: RuntimeGenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection | undefined>;
 }

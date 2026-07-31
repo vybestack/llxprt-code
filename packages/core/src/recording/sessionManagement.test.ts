@@ -95,7 +95,7 @@ async function createTestSession(
   svc.recordContent(makeContent('hello'));
   await svc.flush();
   const filePath = svc.getFilePath()!;
-  void svc.dispose();
+  await svc.dispose();
   return { filePath, sessionId };
 }
 
@@ -402,6 +402,36 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
         expect(okResult.deletedSessionId).toBe(sessionId);
       }
     });
+
+    itProp(
+      'lists live checkpoint blockers instead of deleting their source',
+      async () => {
+        const sessionId = 'checkpoint-source-session';
+        const recording = new SessionRecordingService(
+          makeConfig(chatsDir, { sessionId }),
+        );
+        recording.recordContent(makeContent('checkpointed history'));
+        await recording.flush();
+        const first = await recording.createCheckpoint('before-refactor');
+        const second = await recording.createCheckpoint('before-release');
+        const filePath = recording.getFilePath();
+        await recording.dispose();
+
+        const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+
+        expect(result).toStrictEqual({
+          ok: false,
+          error:
+            `Cannot delete session: live checkpoints block deletion: ` +
+            `before-refactor (${first.checkpointId}), ` +
+            `before-release (${second.checkpointId})`,
+        });
+        expect(filePath).not.toBeNull();
+        if (filePath !== null) {
+          expect(await fileExists(filePath)).toBe(true);
+        }
+      },
+    );
   });
 
   describe('deleteSessionById', () => {
@@ -544,6 +574,42 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
   // =========================================================================
   // Property-Based Tests (≥30% of total — 7 property tests)
   // =========================================================================
+
+  describe('deletion replay safety', () => {
+    itProp('fails closed when the session file is corrupt', async () => {
+      const sessionId = 'corrupt-blocker-session';
+      const { filePath } = await createTestSession(chatsDir, { sessionId });
+      const lines = (await fs.readFile(filePath, 'utf-8')).trim().split('\n');
+      const header = JSON.parse(lines[0]) as {
+        payload: { provider: string };
+      };
+      header.payload.provider = '';
+      await fs.writeFile(
+        filePath,
+        `${JSON.stringify(header)}\n${lines.slice(1).join('\n')}\n`,
+        'utf-8',
+      );
+
+      const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+
+      expect(result.ok).toBe(false);
+      expect(await fileExists(filePath)).toBe(true);
+    });
+
+    itProp(
+      'fails closed when the session file contains invalid JSON',
+      async () => {
+        const sessionId = 'invalid-json-blocker-session';
+        const { filePath } = await createTestSession(chatsDir, { sessionId });
+        await fs.writeFile(filePath, '{"v":1,"seq":1', 'utf-8');
+
+        const result = await deleteSession(sessionId, chatsDir, PROJECT_HASH);
+
+        expect(result.ok).toBe(false);
+        expect(await fileExists(filePath)).toBe(true);
+      },
+    );
+  });
 
   describe('Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
     /**

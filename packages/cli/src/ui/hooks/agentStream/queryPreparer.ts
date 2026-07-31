@@ -25,7 +25,7 @@ import {
   buildAtCommandRuntimeFromStream,
   handleAtCommand,
 } from '../atCommandProcessor.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 
 export interface PrepareQueryDeps {
@@ -34,6 +34,13 @@ export interface PrepareQueryDeps {
   // surface for @file processing, replacing direct
   // getToolRegistry().getTool access.
   getToolHandle: (name: string) => AgentToolHandle | undefined;
+  /**
+   * Subagent manager for @subagent mention resolution. StreamRuntime does not
+   * yet expose getSubagentManager, so this is threaded separately and may be
+   * undefined; when absent, @subagent mentions fall through to file resolution
+   * (graceful degradation).
+   */
+  subagentManager?: UiSubagentManager;
   /**
    * Logs a user-prompt telemetry event. Provided by the caller (which has
    * access to the full telemetry-config boundary) so this module depends only
@@ -118,6 +125,7 @@ async function processStringQuery(
     handleShellCommand,
     addItem,
     onDebugMessage,
+    subagentManager,
   } = deps;
 
   logUserPrompt(
@@ -156,6 +164,7 @@ async function processStringQuery(
       onDebugMessage,
       messageId: userMessageTimestamp,
       signal: abortSignal,
+      subagentManager,
     });
     if (atCommandResult.error) {
       onDebugMessage(atCommandResult.error);

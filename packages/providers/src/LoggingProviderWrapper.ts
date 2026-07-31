@@ -11,6 +11,7 @@ import {
   type GenerateChatOptions,
   type ProviderToolset,
 } from './IProvider.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
@@ -563,6 +564,34 @@ export class LoggingProviderWrapper implements IProvider {
 
   getContextLimit?(): number | undefined {
     return this.wrapped.getContextLimit?.();
+  }
+
+  /**
+   * Delegate projectPromptEnvelope to the wrapped provider so the
+   * prompt-envelope estimation capability is visible through the wrapper chain
+   * (issue #2817, finding #1). Without this delegation, ProviderManager
+   * returns a wrapped provider that hides the capability from the agent layer.
+   *
+   * The projection MUST see the same normalized options transport sees:
+   * ProviderManager installs the runtime-context resolver and options
+   * normalizer on this wrapper, so forwarding raw options would let the
+   * estimated envelope be prepared against different runtime state than the
+   * request that is actually sent.
+   *
+   * Resolves to `undefined` when the wrapped provider does not implement the
+   * seam — absence of the capability is a normal state for out-of-scope
+   * protocols, not an error.
+   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection | undefined> {
+    if (this.wrapped.projectPromptEnvelope === undefined) return undefined;
+    const normalizedOptions = this.normalizeChatCompletionOptions(
+      options,
+      options.tools,
+    );
+    this.ensureRuntimeContext(normalizedOptions);
+    return this.wrapped.projectPromptEnvelope(normalizedOptions);
   }
 
   /**

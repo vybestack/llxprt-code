@@ -15,6 +15,7 @@
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { SendMessageParams } from './chatSession.js';
 import { logApiRequest } from './turnLogging.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -352,4 +353,20 @@ function describeUnrecognizedPart(part: unknown): string {
     return `object(keys=${Object.keys(part).join(',')})`;
   }
   return typeof part;
+}
+
+/**
+ * Merge chunk-level usage into the content recorded for telemetry.
+ */
+export function contentForTelemetry(chunk: ModelStreamChunk): IContent {
+  if (chunk.usage === undefined) {
+    return chunk.content;
+  }
+  return {
+    ...chunk.content,
+    metadata: {
+      ...(chunk.content.metadata ?? {}),
+      usage: chunk.usage,
+    },
+  };
 }

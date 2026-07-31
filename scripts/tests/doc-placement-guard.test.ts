@@ -55,6 +55,30 @@ describe.skipIf(!isCiEnvironment() && !bunAvailable())(
         expect(stdout).toContain('merge-notes');
       });
 
+      it('fails when dev-docs/plans/ exists', async () => {
+        mkdirSync(join(fx.root(), 'dev-docs', 'plans'), { recursive: true });
+        fx.write('dev-docs/plans/2026-07-28-issue-1234-thing.md', '# Thing\n');
+        const { code, stdout } = await runDocPlacementGuard(fx.root(), 1);
+        expect(code).toBe(1);
+        expect(stdout).toContain('dev-docs/plans/');
+      });
+
+      it('names project-plans/ as the destination for plan documents', async () => {
+        mkdirSync(join(fx.root(), 'dev-docs', 'plans'), { recursive: true });
+        fx.write('dev-docs/plans/x.md', '# X\n');
+        const { stdout } = await runDocPlacementGuard(fx.root(), 1);
+        expect(stdout).toContain('project-plans/');
+      });
+
+      it('still permits other dev-docs/ subdirectories', async () => {
+        mkdirSync(join(fx.root(), 'dev-docs', 'architecture'), {
+          recursive: true,
+        });
+        fx.write('dev-docs/architecture/x.md', '# X\n');
+        const { code } = await runDocPlacementGuard(fx.root(), 0);
+        expect(code).toBe(0);
+      });
+
       it('passes when those directories are absent', async () => {
         fx.write('docs/page.md', '# Page\n');
         const { code } = await runDocPlacementGuard(fx.root(), 0);

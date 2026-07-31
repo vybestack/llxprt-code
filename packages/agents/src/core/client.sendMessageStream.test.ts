@@ -655,6 +655,7 @@ describe('Agent Client (client.ts)', () => {
       vi.spyOn(client['config'], 'getMaxSessionTurns').mockReturnValue(
         MAX_SESSION_TURNS,
       );
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };

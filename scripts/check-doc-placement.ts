@@ -8,11 +8,19 @@
 /**
  * check-doc-placement.ts (issue #2654)
  *
- * Fails if docs/ contains an internal-only directory (architecture/,
- * plans/, merge-notes/), or if any docs/ page carries plan/requirement
- * bookkeeping markers (@plan:, @requirement:, PLAN-, REQ-) OUTSIDE
- * fenced code blocks. Same markers are permitted under dev-docs/ and
- * inside fences.
+ * Enforces where internal documents live:
+ *
+ * - docs/ must not contain an internal-only directory (architecture/,
+ *   plans/, merge-notes/).
+ * - dev-docs/ must not contain plans/. Per-issue plan documents belong
+ *   under project-plans/. dev-docs/plans/ was originally created as a
+ *   side effect of relocating one archived page out of docs/, and since
+ *   later work copies whatever layout already exists, it kept attracting
+ *   new plan files. Banning it stops it re-forming.
+ * - No docs/ page may carry plan/requirement bookkeeping markers
+ *   (@plan:, @requirement:, PLAN-, REQ-) OUTSIDE fenced code blocks.
+ *   Those markers are permitted under project-plans/ and dev-docs/, and
+ *   inside fences.
  *
  * Usage: scripts/check-doc-placement.ts
  * Test override: set DOC_GUARD_ROOT=<dir> to scan a temp tree instead.
@@ -32,6 +40,9 @@ const EXIT_PASS = 0;
 const EXIT_FAIL = 1;
 
 const FORBIDDEN_DIRS = ['architecture', 'plans', 'merge-notes'];
+// Directories banned under dev-docs/. Per-issue plan documents belong under
+// project-plans/; dev-docs/ is for durable engineering reference material.
+const FORBIDDEN_DEV_DOCS_DIRS = ['plans'];
 // Marker patterns for plan/requirement bookkeeping metadata.
 // @plan: / @requirement: are matched case-insensitively (catches @Plan:, @PLAN:).
 // PLAN- / PLAN_ / REQ- / REQ_ are matched case-sensitively as prefixes
@@ -124,6 +135,15 @@ function checkDirectory(root: string): readonly Violation[] {
       });
     }
   }
+  const devDocsDir = join(root, 'dev-docs');
+  for (const dir of FORBIDDEN_DEV_DOCS_DIRS) {
+    if (dirExists(join(devDocsDir, dir))) {
+      violations.push({
+        file: `dev-docs/${dir}/`,
+        reason: `directory '${dir}' must not exist under dev-docs/; per-issue plan documents belong under project-plans/`,
+      });
+    }
+  }
   return violations;
 }
 
@@ -150,7 +170,7 @@ function checkMarkers(root: string): readonly Violation[] {
     for (const { marker } of markers) {
       violations.push({
         file: relPath(root, file),
-        reason: `bookkeeping marker '${marker}' is not allowed in docs/ (move to dev-docs/ or put inside a code fence)`,
+        reason: `bookkeeping marker '${marker}' is not allowed in docs/ (move plan documents to project-plans/, durable engineering reference to dev-docs/, or put inside a code fence)`,
       });
     }
   }

@@ -15,6 +15,7 @@ import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js
 import type { ChatSession } from './chatSession.js';
 import { InvalidStreamError, StreamEventType } from './chatSession.js';
 import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
+import { ContextOverflowError } from '../compression/contextOverflowError.js';
 
 const { mockSendMessageStream, mockGetHistory } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -239,6 +240,34 @@ describe('Turn', () => {
 
       expect(events).toStrictEqual([{ type: AgentEventType.InvalidStream }]);
       expect(turn.getDebugResponses().length).toBe(0);
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    it('maps authoritative finalized-envelope overflow to one context-window event', async () => {
+      const error = new ContextOverflowError(
+        'Finalized provider envelope exceeds the context window',
+        1200,
+        1000,
+      );
+      mockSendMessageStream.mockRejectedValue(error);
+
+      const events = [];
+      for await (const event of turn.run(
+        [{ text: 'Trigger overflow' }],
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(events).toStrictEqual([
+        {
+          type: AgentEventType.ContextWindowWillOverflow,
+          value: {
+            estimatedRequestTokenCount: 1200,
+            remainingTokenCount: 1000,
+          },
+        },
+      ]);
       expect(reportError).not.toHaveBeenCalled();
     });
 

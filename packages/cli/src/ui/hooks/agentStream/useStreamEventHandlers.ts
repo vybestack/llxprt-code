@@ -75,7 +75,7 @@ import {
   type PrepareQueryDeps,
 } from './queryPreparer.js';
 import { getTokenLimitForConfiguredContext } from './contextLimit.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 interface StreamEventHandlersResult {
   handleContentEvent: (
     eventValue: ServerContentEvent['value'],
@@ -166,6 +166,10 @@ interface StreamEventHandlerDeps {
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
   lastModelInfoRef: React.MutableRefObject<string | null>;
   lastModelIdentityRef: React.MutableRefObject<string | null>;
+  // Optional: sourced from the app runtime when available. StreamRuntime does
+  // not yet expose getSubagentManager, so this is undefined in the streaming
+  // path until a runtime slice is added; @subagent mentions degrade gracefully.
+  subagentManager?: UiSubagentManager;
 }
 
 export function useStreamEventHandlers(
@@ -515,6 +519,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
       logger: deps.logger,
       shellModeActive: deps.shellModeActive,
       scheduleToolCalls: deps.scheduleToolCalls,
+      subagentManager: deps.subagentManager,
     }),
     [
       deps.runtime,
@@ -526,6 +531,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
       deps.logger,
       deps.shellModeActive,
       deps.scheduleToolCalls,
+      deps.subagentManager,
     ],
   );
 }

@@ -39,6 +39,7 @@ import {
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import {
   parseThought,
   type ThoughtSummary,
@@ -565,6 +566,17 @@ export class Turn {
 
     if (e instanceof InvalidStreamError) {
       yield { type: AgentEventType.InvalidStream };
+      return;
+    }
+
+    if (e instanceof ContextOverflowError) {
+      yield {
+        type: AgentEventType.ContextWindowWillOverflow,
+        value: {
+          estimatedRequestTokenCount: e.estimatedRequestTokenCount,
+          remainingTokenCount: e.remainingTokenCount,
+        },
+      };
       return;
     }
 
