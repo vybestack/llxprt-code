@@ -785,6 +785,7 @@ export class TurnProcessor {
   ): Promise<void> {
     try {
       const currentModel = this.runtimeContext.state.model;
+      const currentBaseURL = this.runtimeContext.state.baseUrl;
       const afcHistory = response.afcHistory;
 
       const filteredAfcHistory =
@@ -792,12 +793,21 @@ export class TurnProcessor {
           ? afcHistory.filter((content: IContent) => content.blocks.length > 0)
           : undefined;
       if (filteredAfcHistory && filteredAfcHistory.length > 0) {
-        this._recordAfcHistory(filteredAfcHistory, currentModel);
+        this._recordAfcHistory(
+          filteredAfcHistory,
+          currentModel,
+          currentBaseURL,
+        );
       } else {
         this._recordUserContents(userContents, currentModel);
       }
 
-      this._recordOutputContent(response, currentModel, filteredAfcHistory);
+      this._recordOutputContent(
+        response,
+        currentModel,
+        currentBaseURL,
+        filteredAfcHistory,
+      );
 
       await this._syncTokenCounts(response, _prompt_id);
     } finally {
@@ -808,6 +818,7 @@ export class TurnProcessor {
   private _recordAfcHistory(
     afcHistory: IContent[],
     currentModel: string | undefined,
+    currentBaseURL: string | undefined,
   ): void {
     const curatedHistory = this.historyService.getCurated();
     const index = curatedHistory.length;
@@ -816,7 +827,7 @@ export class TurnProcessor {
       // AFC history is mixed user/model; stampAiTurnModel no-ops on non-ai
       // entries, so only freshly generated model turns get the origin stamp.
       this.historyService.add(
-        stampAiTurnModel(content, currentModel),
+        stampAiTurnModel(content, currentModel, currentBaseURL),
         currentModel,
       );
     }
@@ -834,6 +845,7 @@ export class TurnProcessor {
   private _recordOutputContent(
     response: ModelOutput,
     currentModel: string | undefined,
+    currentBaseURL: string | undefined,
     afcHistory: IContent[] | undefined,
   ): void {
     const outputContent = response.content;
@@ -854,13 +866,18 @@ export class TurnProcessor {
           stampAiTurnModel(
             iContentFromBlocks(contentForHistory, 'ai'),
             currentModel,
+            currentBaseURL,
           ),
           currentModel,
         );
       }
     } else if (!afcHistory || afcHistory.length === 0) {
       this.historyService.add(
-        stampAiTurnModel(iContentFromBlocks([], 'ai'), currentModel),
+        stampAiTurnModel(
+          iContentFromBlocks([], 'ai'),
+          currentModel,
+          currentBaseURL,
+        ),
         currentModel,
       );
     }

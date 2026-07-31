@@ -181,3 +181,125 @@ describe('stampAiTurnModel pure helper (issue #2335)', () => {
     expect(aiContent.metadata).toBeUndefined();
   });
 });
+
+describe('stampAiTurnModel baseURL stamping (issue #1469)', () => {
+  it('stamps metadata.providerBaseURL when baseURL is provided', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+    };
+
+    const stamped = stampAiTurnModel(
+      aiContent,
+      'claude-sonnet-4-5-20250929',
+      'https://api.z.ai/api/anthropic',
+    );
+
+    expect(stamped.metadata?.providerBaseURL).toBe(
+      'https://api.z.ai/api/anthropic',
+    );
+    expect(stamped.metadata?.model).toBe('claude-sonnet-4-5-20250929');
+  });
+
+  it('stamps baseURL even when model is undefined', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+    };
+
+    const stamped = stampAiTurnModel(
+      aiContent,
+      undefined,
+      'https://api.anthropic.com',
+    );
+
+    expect(stamped.metadata?.providerBaseURL).toBe('https://api.anthropic.com');
+    expect(stamped.metadata?.model).toBeUndefined();
+  });
+
+  it('stamps model even when baseURL is undefined', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+    };
+
+    const stamped = stampAiTurnModel(aiContent, 'glm-5.2');
+
+    expect(stamped.metadata?.model).toBe('glm-5.2');
+    expect(stamped.metadata?.providerBaseURL).toBeUndefined();
+  });
+
+  it('does NOT overwrite an existing metadata.providerBaseURL', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+      metadata: {
+        model: 'glm-5.2',
+        providerBaseURL: 'https://api.z.ai/api/anthropic',
+      },
+    };
+
+    const stamped = stampAiTurnModel(
+      aiContent,
+      'glm-5.2',
+      'https://api.anthropic.com',
+    );
+
+    expect(stamped.metadata?.providerBaseURL).toBe(
+      'https://api.z.ai/api/anthropic',
+    );
+  });
+
+  it('preserves existing metadata fields when stamping baseURL', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+      metadata: {
+        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        turnId: 'turn-42',
+      },
+    };
+
+    const stamped = stampAiTurnModel(
+      aiContent,
+      'claude-opus-4-8',
+      'https://api.anthropic.com',
+    );
+
+    expect(stamped.metadata?.model).toBe('claude-opus-4-8');
+    expect(stamped.metadata?.providerBaseURL).toBe('https://api.anthropic.com');
+    expect(stamped.metadata?.turnId).toBe('turn-42');
+    expect(stamped.metadata?.usage).toStrictEqual({
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
+  });
+
+  it('returns content unchanged when model and baseURL are both undefined', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+    };
+
+    const stamped = stampAiTurnModel(aiContent, undefined, undefined);
+
+    expect(stamped).toBe(aiContent);
+  });
+
+  it('returns content unchanged for non-ai speakers even with baseURL', () => {
+    const humanContent: IContent = {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Hi' }],
+    };
+
+    const stamped = stampAiTurnModel(
+      humanContent,
+      'claude-opus-4-8',
+      'https://api.anthropic.com',
+    );
+
+    expect(stamped.metadata?.providerBaseURL).toBeUndefined();
+    expect(stamped).toBe(humanContent);
+  });
+});

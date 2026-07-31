@@ -551,6 +551,7 @@ function convertMessagesAndTools(params: {
   reasoningSettings: ReasoningSettings;
   config: Config | undefined;
   currentModel: string;
+  currentBaseURL: string | undefined;
   unprefixToolName: (name: string, isOAuth: boolean) => string;
   logger: DebugLogger;
 }): {
@@ -567,6 +568,7 @@ function convertMessagesAndTools(params: {
     reasoningSettings,
     config,
     currentModel,
+    currentBaseURL,
     unprefixToolName,
     logger,
   } = params;
@@ -579,6 +581,7 @@ function convertMessagesAndTools(params: {
     reasoningEnabled: reasoningSettings.reasoningEnabled as boolean,
     config,
     currentModel,
+    currentBaseURL,
     unprefixToolName,
     logger,
   });
@@ -802,6 +805,7 @@ export async function prepareAnthropicRequest(
       reasoningSettings,
       config: configForMessages,
       currentModel: params.options.resolved.model,
+      currentBaseURL: params.options.resolved.baseURL,
       unprefixToolName: params.unprefixToolName,
       logger: params.logger,
     });

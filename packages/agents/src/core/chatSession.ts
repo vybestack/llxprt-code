@@ -247,6 +247,7 @@ export class ChatSession {
       this.historyService,
       view,
       model,
+      this.runtimeState.baseUrl,
     );
 
     this.conversationManager.importInitialHistory(initialHistory, model);
