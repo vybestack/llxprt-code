@@ -182,7 +182,7 @@ describe('KeyringTokenStore dead-owner lock recovery (issue #2819)', () => {
     });
   });
 
-  describe.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+  describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'recycled-PID recovery',
     () => {
       it('recovers when a dead predecessor shared our PID but had a different start time', async () => {
