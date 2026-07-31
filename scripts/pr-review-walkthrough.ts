@@ -620,6 +620,7 @@ async function runSynthesisPhases(
       },
     );
     return await buildSynthesisTail(
+      reviewDir,
       prompts,
       themes,
       artifacts,
@@ -646,6 +647,7 @@ interface SynthesisPrompts {
 }
 
 async function buildSynthesisTail(
+  reviewDir: string,
   prompts: SynthesisPrompts,
   themes: unknown[],
   artifacts: ArtifactsData,
@@ -657,9 +659,9 @@ async function buildSynthesisTail(
     artifacts.changedFilePaths,
   );
   const sequenceDiagram = shouldDiagram
-    ? await runOptionalStage(prompts.sequenceDiagram, 'diagram')
+    ? await runOptionalStage(reviewDir, prompts.sequenceDiagram, 'diagram')
     : '';
-  const related = await runOptionalStage(prompts.related, 'related');
+  const related = await runOptionalStage(reviewDir, prompts.related, 'related');
   return {
     walkthrough: String(walkthroughParsed.walkthrough ?? ''),
     releaseNotes: String(walkthroughParsed.release_notes ?? ''),
@@ -677,10 +679,26 @@ function buildMinimalWalkthrough(
   return `This PR changes ${summaries.length} file(s).\n\n${fileList}`;
 }
 
-async function runOptionalStage(prompt: string, key: string): Promise<string> {
+async function runOptionalStage(
+  reviewDir: string,
+  prompt: string,
+  key: string,
+): Promise<string> {
   try {
-    const raw = await runLlxprtPrompt(prompt, { model: STRONG_MODEL });
-    const parsed = extractJsonObject(raw);
+    const parsed = await runLlxprtPromptWithParse(
+      () => runLlxprtPrompt(prompt, { model: STRONG_MODEL }),
+      extractJsonObject,
+      {
+        phase: key,
+        saveParseFailure: (
+          failPhase: string,
+          raw: string,
+          promptLength: number,
+        ) =>
+          saveParseFailureArtifact(reviewDir, failPhase, raw, { promptLength }),
+        promptLength: prompt.length,
+      },
+    );
     const value = parsed[key];
     return typeof value === 'string' ? value : '';
   } catch (error) {
