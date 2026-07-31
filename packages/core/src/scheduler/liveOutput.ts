@@ -73,8 +73,15 @@ function appendBoundedLiveOutput(existing: string, update: string): string {
       return prefix + takeUtf8(update, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true);
     }
     const suffixStart = markerIndex + LIVE_OUTPUT_TRUNCATION_MARKER.length;
-    const suffix = existing.slice(suffixStart) + update;
-    return prefix + takeUtf8(suffix, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true);
+    const oldSuffix = existing.slice(suffixStart);
+    const oldSuffixBytes = Buffer.byteLength(oldSuffix, 'utf8');
+    const updateBytes = Buffer.byteLength(update, 'utf8');
+    if (oldSuffixBytes + updateBytes <= RETAINED_LIVE_OUTPUT_SIDE_BYTES) {
+      return prefix + oldSuffix + update;
+    }
+    // Avoid materializing the full combined suffix; take from each side.
+    const halfBudget = RETAINED_LIVE_OUTPUT_SIDE_BYTES / 2;
+    return `${prefix}${takeUtf8(oldSuffix, halfBudget, false)}${takeUtf8(update, halfBudget, true)}`;
   }
   const existingBytes = Buffer.byteLength(existing, 'utf8');
   const updateBytes = Buffer.byteLength(update, 'utf8');

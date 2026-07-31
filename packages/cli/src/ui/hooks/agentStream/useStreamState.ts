@@ -140,9 +140,11 @@ function useFlushPendingHistoryItem(
       }
 
       if (pending.type === 'gemini' || pending.type === 'gemini_content') {
+        const accumulatedText = pendingTextAccumulator.materialize();
+        const text = accumulatedText || pending.text;
         const exactPending = {
           ...pending,
-          text: pendingTextAccumulator.materialize(),
+          text,
         };
         const {
           text: sanitized,

@@ -13,7 +13,7 @@ export interface VmmapSummary {
   readonly physicalFootprintBytes: number;
   readonly mallocEmptyDirtyBytes: number;
   readonly webkitMallocDirtyBytes: number;
-  readonly ioAcceleratorDirtyBytes: number;
+  readonly ioGraphicsDirtyBytes: number;
 }
 
 export function validateExactPid(pid: number, psOutput: string): ExactProcess {
@@ -41,7 +41,7 @@ export function parseVmmapSummary(output: string): VmmapSummary {
     ),
     mallocEmptyDirtyBytes: parseRegionDirty(output, 'MALLOC_SMALL (empty)'),
     webkitMallocDirtyBytes: parseRegionDirty(output, 'WebKit Malloc'),
-    ioAcceleratorDirtyBytes:
+    ioGraphicsDirtyBytes:
       parseRegionDirty(output, 'IOAccelerator') +
       parseRegionDirty(output, 'IOSurface'),
   };

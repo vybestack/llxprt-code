@@ -5,6 +5,7 @@
  */
 
 import { appendFileSync, mkdirSync, rmSync } from 'node:fs';
+import { dirname } from 'node:path';
 import process from 'node:process';
 import { heapStats } from 'bun:jsc';
 
@@ -21,7 +22,7 @@ if (mode !== 'text' && mode !== 'media') {
   throw new Error(`Mode must be 'text' or 'media', got: ${mode}`);
 }
 
-mkdirSync(new URL('.', `file://${outputPath}`).pathname, { recursive: true });
+mkdirSync(dirname(outputPath), { recursive: true });
 rmSync(outputPath, { force: true });
 const retained: Array<string | Uint8Array> = [];
 

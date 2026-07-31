@@ -34,7 +34,7 @@ describe('issue 2852 memory benchmark parsing', () => {
       physicalFootprintBytes: 1_610_612_736,
       mallocEmptyDirtyBytes: 1_073_741_824,
       webkitMallocDirtyBytes: 629_145_600,
-      ioAcceleratorDirtyBytes: 272_629_760,
+      ioGraphicsDirtyBytes: 272_629_760,
     });
     expect(parseFootprintBytes('phys_footprint: 512 MB')).toBe(536_870_912);
   });
