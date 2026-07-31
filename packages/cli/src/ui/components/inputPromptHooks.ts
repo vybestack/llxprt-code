@@ -204,6 +204,9 @@ type InputPromptState = Pick<
   | 'setQueueErrorMessage'
   | 'streamingState'
   | 'focus'
+  | 'queuedSubmissionCount'
+  | 'sendAllQueuedSubmissions'
+  | 'clearQueuedSubmissions'
 > & {
   pendingLargePastesRef: React.MutableRefObject<Map<string, string>>;
   nextPlaceholderIdRef: React.MutableRefObject<number>;
@@ -411,6 +414,9 @@ const buildInputHandlerDeps = (
   cursorPosition: reverseSearchState.cursorPosition,
   nextPlaceholderIdRef: state.nextPlaceholderIdRef,
   pendingLargePastesRef: state.pendingLargePastesRef,
+  queuedSubmissionCount: state.queuedSubmissionCount,
+  sendAllQueuedSubmissions: state.sendAllQueuedSubmissions,
+  clearQueuedSubmissions: state.clearQueuedSubmissions,
 });
 
 const useInputHandler = (

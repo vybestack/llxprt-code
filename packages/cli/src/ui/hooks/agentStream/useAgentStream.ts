@@ -122,6 +122,7 @@ function useAgentStreamReturn(
     lastOutputTime: getLastOutputTime(orchestration),
     queuedSubmissions: orchestration.queuedSubmissions,
     clearQueuedSubmissions: orchestration.st.clearSubmissions,
+    sendAllQueuedSubmissions: orchestration.sendAllQueuedSubmissions,
   };
 }
 

@@ -42,6 +42,9 @@ export interface InputPromptProps {
   setQueueErrorMessage?: (message: string | null) => void;
   streamingState?: StreamingState;
   queueErrorMessage?: string | null;
+  queuedSubmissionCount?: number;
+  sendAllQueuedSubmissions?: () => void;
+  clearQueuedSubmissions?: () => void;
 }
 
 export type InputPromptRuntimeProps = Omit<

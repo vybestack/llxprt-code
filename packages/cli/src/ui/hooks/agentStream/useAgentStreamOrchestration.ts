@@ -70,6 +70,7 @@ export interface AgentStreamOrchestrationResult {
   lastShellOutputTime: number;
   interactiveRuntimeReady: boolean;
   cancelOngoingRequest: () => void;
+  sendAllQueuedSubmissions: () => void;
   activeShellPtyId: number | null;
   queuedSubmissions: readonly QueuedSubmission[];
 }
@@ -127,6 +128,7 @@ export function useAgentStreamOrchestration(
     args.onCancelSubmit,
     st.setIsResponding,
     args.setShellInputFocused,
+    st.drainSuppressedRef,
     cancelRunningAsyncTasks,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
@@ -152,6 +154,15 @@ export function useAgentStreamOrchestration(
     runStreamRef,
   );
   const submitQuery = submitQueryResult.submitQuery;
+  const scheduleNextQueuedSubmission =
+    submitQueryResult.scheduleNextQueuedSubmission;
+  // Clears drain suppression (set by cancel) and immediately drains all
+  // queued messages sequentially. Used by the "send all queued" action
+  // (Enter on empty input when the drawer has items) — issue #2882.
+  const sendAllQueuedSubmissions = useCallback(() => {
+    st.drainSuppressedRef.current = false;
+    scheduleNextQueuedSubmission();
+  }, [st.drainSuppressedRef, scheduleNextQueuedSubmission]);
   // Populate the ref synchronously so the first render already has the real
   // function available for any synchronous consumer.
   processAgentEventRef.current = submitQueryResult.processAgentEvent;
@@ -173,6 +184,7 @@ export function useAgentStreamOrchestration(
     shell,
     pendingToolCallGroupDisplay,
     cancelOngoingRequest,
+    sendAllQueuedSubmissions,
   );
 }
 
@@ -294,6 +306,7 @@ function buildResult(
   shell: ReturnType<typeof useShell>,
   pendingToolCallGroupDisplay: HistoryItemWithoutId | undefined,
   cancelOngoingRequest: () => void,
+  sendAllQueuedSubmissions: () => void,
 ): AgentStreamOrchestrationResult {
   return {
     st,
@@ -305,6 +318,7 @@ function buildResult(
     lastShellOutputTime: shell.lastShellOutputTime,
     interactiveRuntimeReady: scheduler.interactiveRuntimeReady,
     cancelOngoingRequest,
+    sendAllQueuedSubmissions,
     activeShellPtyId: shell.activeShellPtyId,
     queuedSubmissions: st.queuedSubmissions,
   };
@@ -344,6 +358,7 @@ function buildSubmitQueryDeps({
     thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,
     setTurnCancelled: st.setTurnCancelled,
+    drainSuppressedRef: st.drainSuppressedRef,
     queuedSubmissionsRef: st.queuedSubmissionsRef,
     enqueueSubmission: st.enqueueSubmission,
     requeueSubmission: st.requeueSubmission,

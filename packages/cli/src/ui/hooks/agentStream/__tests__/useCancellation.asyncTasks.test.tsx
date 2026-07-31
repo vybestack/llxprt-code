@@ -68,6 +68,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
           () => {}, // onCancelSubmit
           () => {}, // setIsResponding
           () => {}, // setShellInputFocused
+          { current: false }, // drainSuppressedRef
           cancelRunningAsyncTasks, // cancelRunningAsyncTasks
         ),
       { wrapper },
@@ -149,6 +150,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
           () => {}, // onCancelSubmit
           () => {}, // setIsResponding
           () => {}, // setShellInputFocused
+          { current: false }, // drainSuppressedRef
           cancelRunningAsyncTasks, // cancelRunningAsyncTasks
         ),
       { wrapper },

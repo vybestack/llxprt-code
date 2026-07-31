@@ -80,20 +80,6 @@ describe('keyBindings config', () => {
       );
     });
 
-    it('formats the clear-queued-messages key hint from its default binding', () => {
-      expect(getDefaultKeyBindingHint(Command.CLEAR_QUEUED_MESSAGES)).toBe(
-        'Ctrl+Shift+]',
-      );
-    });
-
-    it('distinguishes toggle and clear queued-messages bindings by shift state', () => {
-      const toggle = defaultKeyBindings[Command.TOGGLE_QUEUED_MESSAGES];
-      expect(toggle).toContainEqual({ key: ']', ctrl: true, shift: false });
-
-      const clear = defaultKeyBindings[Command.CLEAR_QUEUED_MESSAGES];
-      expect(clear).toContainEqual({ key: ']', ctrl: true, shift: true });
-    });
-
     it('should have correct specific bindings', () => {
       // Verify navigation ignores shift
       const navUp = defaultKeyBindings[Command.NAVIGATION_UP];

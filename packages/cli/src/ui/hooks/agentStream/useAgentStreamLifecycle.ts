@@ -230,6 +230,7 @@ export function useCancellation(
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>,
   setShellInputFocused: (value: boolean) => void,
+  drainSuppressedRef: React.MutableRefObject<boolean>,
   cancelRunningAsyncTasks: () => void = () => {},
 ) {
   const cancelOngoingRequest = useCallback(() => {
@@ -241,6 +242,11 @@ export function useCancellation(
     }
     if (turnCancelledRef.current) return;
     setTurnCancelled(true);
+    // Suppress automatic queue draining so queued messages stay in the drawer
+    // after cancel. The user can explicitly send them (Enter on empty input)
+    // or clear them (Backspace on empty input). Submitting a new message
+    // resumes normal drain (issue #2882).
+    drainSuppressedRef.current = true;
     abortControllerRef.current?.abort();
     cancelAllToolCalls();
     cancelRunningAsyncTasks();
@@ -254,6 +260,7 @@ export function useCancellation(
     streamingState,
     turnCancelledRef,
     setTurnCancelled,
+    drainSuppressedRef,
     abortControllerRef,
     cancelAllToolCalls,
     cancelRunningAsyncTasks,

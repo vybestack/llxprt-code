@@ -183,6 +183,18 @@ export interface UIActionsParams {
 
   // Queue error message
   setQueueErrorMessage: (message: string | null) => void;
+
+  // Queued messages actions (issue #2882)
+  sendAllQueuedSubmissions?: () => void;
+  clearQueuedSubmissions?: () => void;
+}
+
+function queueActions(p: UIActionsParams) {
+  return {
+    setQueueErrorMessage: p.setQueueErrorMessage,
+    sendAllQueuedSubmissions: p.sendAllQueuedSubmissions,
+    clearQueuedSubmissions: p.clearQueuedSubmissions,
+  };
 }
 
 /**
@@ -331,7 +343,6 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     // Cancel ongoing request
     cancelOngoingRequest: params.cancelOngoingRequest,
 
-    // Queue error message
-    setQueueErrorMessage: params.setQueueErrorMessage,
+    ...queueActions(params),
   };
 }

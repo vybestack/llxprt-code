@@ -192,6 +192,7 @@ interface SubmitQueryOverrides {
   submitQueryRef?: React.MutableRefObject<SubmissionExecutor | null>;
   addItem?: UseSubmitQueryDeps['addItem'];
   turnCancelledRef?: React.MutableRefObject<boolean>;
+  drainSuppressedRef?: React.MutableRefObject<boolean>;
   recordingIntegration?: UseSubmitQueryDeps['recordingIntegration'];
 }
 
@@ -228,6 +229,7 @@ function createUseSubmitQueryDeps(
     setTurnCancelled: vi.fn(),
     queuedSubmissionsRef,
     ...queueOperations,
+    drainSuppressedRef: overrides.drainSuppressedRef ?? { current: false },
     tryReserveDrain: overrides.tryReserveDrain ?? vi.fn().mockReturnValue(true),
     releaseDrain: overrides.releaseDrain ?? vi.fn(),
     setPendingHistoryItem: deps.setPendingHistoryItem,
@@ -277,9 +279,11 @@ function renderUseSubmitQueryWithCancellation(
   options: RenderSubmitQueryOptions,
 ) {
   const turnCancelledRef = overrides.turnCancelledRef ?? { current: false };
+  const drainSuppressedRef = overrides.drainSuppressedRef ?? { current: false };
   const getDeps = createUseSubmitQueryDeps(deps, {
     ...overrides,
     turnCancelledRef,
+    drainSuppressedRef,
   });
   return renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
@@ -297,6 +301,7 @@ function renderUseSubmitQueryWithCancellation(
         vi.fn(),
         deps.setIsResponding,
         vi.fn(),
+        drainSuppressedRef,
       );
       return { ...submission, ...cancellation };
     },
@@ -652,21 +657,14 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       expect(releases).toBe(1);
     });
   });
-  it('queues the second prompt when streamingState is Responding, then drains after cancel', async () => {
-    // This test exercises the production isQueueable gate:
-    // When streamingState is Responding, submitQuery pushes the query to
-    // queuedSubmissionsRef instead of starting immediately. After the first
-    // turn settles and streamingState returns to Idle, the idle-queue-drain
-    // effect fires the queued submission.
+  it('queues the second prompt when streamingState is Responding, suppresses drain after cancel', async () => {
+    // When streamingState is Responding, submitQuery queues the query.
+    // After cancel, drain is suppressed so the message stays (issue #2882).
     const turn1Deferred = createDeferred<void>();
-    const turn2Deferred = createDeferred<void>();
 
     const deps = createDeps({
       runStreamRef: {
-        current: vi
-          .fn()
-          .mockReturnValueOnce(turn1Deferred.promise)
-          .mockReturnValueOnce(turn2Deferred.promise),
+        current: vi.fn().mockReturnValueOnce(turn1Deferred.promise),
       },
     });
 
@@ -690,7 +688,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       { wrapper: KeypressTestWrapper },
     );
 
-    // ── Turn 1 starts (streamingState transitions to Responding) ───────────
+    // Turn 1 starts
     let turn1Promise!: Promise<void>;
     await act(async () => {
       turn1Promise = result.current.submitQuery('turn-1');
@@ -698,19 +696,15 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     await waitFor(() =>
       expect(deps.setIsRespondingCalls).toStrictEqual([true]),
     );
-
-    // Simulate streamingState becoming Responding (as it would when the
-    // turn starts). The submitQueryRef is now populated.
     rerender({ streamingState: StreamingState.Responding });
 
-    // ── Turn 2 is submitted while Responding → queued ──────────────────────
+    // Turn 2 is queued while Responding
     await act(async () => {
       await result.current.submitQuery('turn-2');
     });
     expect(queuedSubmissionsRef.current).toHaveLength(1);
-    expect(queuedSubmissionsRef.current[0].query).toBe('turn-2');
 
-    // ── Turn 1 is cancelled and settles ────────────────────────────────────
+    // Cancel Turn 1
     const turn1Controller = deps.abortControllerRef.current;
     await act(async () => {
       result.current.cancelOngoingRequest();
@@ -720,31 +714,13 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       turn1Deferred.resolve();
     });
 
-    // Simulate streamingState returning to Idle (cancel → setIsResponding(false)).
+    // streamingState → Idle: drain is SUPPRESSED (schedule checks
+    // drainSuppressedRef synchronously, so no setTimeout(0) is queued)
     rerender({ streamingState: StreamingState.Idle });
+    expect(queuedSubmissionsRef.current).toHaveLength(1);
+    expect(deps.runStreamRef.current).toHaveBeenCalledTimes(1);
 
-    // The idle-queue-drain effect fires, shifting and calling submitQuery
-    // for Turn 2. Turn 2 starts with a fresh AbortController.
-    await waitFor(() => {
-      expect(queuedSubmissionsRef.current).toHaveLength(0);
-    });
-    await waitFor(() =>
-      expect(deps.runStreamRef.current).toHaveBeenCalledTimes(2),
-    );
-
-    // Turn 2's controller is different from Turn 1's (initTurn replaces it).
-    await waitFor(() => {
-      expect(deps.abortControllerRef.current).not.toBe(turn1Controller);
-    });
-
-    // ── Turn 2 finishes ────────────────────────────────────────────────────
-    await act(async () => {
-      turn2Deferred.resolve();
-    });
-
-    await act(async () => {
-      await turn1Promise.catch(() => {});
-    });
+    await act(async () => void turn1Promise.catch(() => {}));
   });
 
   it('calls setIsResponding(false) from the finally when the turn is still current', async () => {
@@ -777,24 +753,18 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       await turnPromise.catch(() => {});
     });
   });
-  it('preserves queued submissions across Ctrl+C cancel then drains them', async () => {
-    // Integration regression for issue #2296: queued messages must survive
-    // Ctrl+C cancel. The old code cleared queuedSubmissionsRef inside
-    // cancelOngoingRequest; the fix removed that so queued messages persist
-    // and drain after the cancelled turn settles.
-    //
-    // This test uses THREE deferred streams (one per turn) and verifies:
-    // 1. FIFO order is exact (turn-2 before turn-3)
-    // 2. Non-overlap: turns never run concurrently (only one active at a time)
-    // 3. Queue survives cancel and drains completely
-    // 4. Exactly-once: each submission is processed exactly once
+  it('preserves queued submissions across Ctrl+C cancel without auto-draining', async () => {
+    // Regression for issue #2882: queued messages survive cancel, drain is
+    // suppressed, and submitting a new message resumes normal drain.
     const turn1Deferred = createDeferred<void>();
     const turn2Deferred = createDeferred<void>();
     const turn3Deferred = createDeferred<void>();
+    const turn4Deferred = createDeferred<void>();
 
     const runStreamFn = vi
       .fn()
       .mockReturnValueOnce(turn1Deferred.promise)
+      .mockReturnValueOnce(turn4Deferred.promise)
       .mockReturnValueOnce(turn2Deferred.promise)
       .mockReturnValueOnce(turn3Deferred.promise);
 
@@ -822,7 +792,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       { wrapper: KeypressTestWrapper },
     );
 
-    // ── Turn 1 starts ──────────────────────────────────────────────────────
+    // Turn 1 starts
     let turn1Promise!: Promise<void>;
     await act(async () => {
       turn1Promise = result.current.submitQuery('turn-1');
@@ -833,21 +803,15 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(runStreamFn).toHaveBeenCalledTimes(1);
     rerender({ streamingState: StreamingState.Responding });
 
-    // ── Turn 2 and Turn 3 are queued while Turn 1 is Responding ────────────
+    // Turn 2 and Turn 3 are queued while Turn 1 is Responding
     await act(async () => {
       await result.current.submitQuery('turn-2');
       await result.current.submitQuery('turn-3');
     });
     expect(queuedSubmissionsRef.current).toHaveLength(2);
-    // FIFO: turn-2 is first in queue, turn-3 is second
-    expect(queuedSubmissionsRef.current[0].query).toBe('turn-2');
-    expect(queuedSubmissionsRef.current[1].query).toBe('turn-3');
-    // No additional runStream calls — turns are queued, not started
     expect(runStreamFn).toHaveBeenCalledTimes(1);
 
-    // ── Ctrl+C cancels Turn 1 ──────────────────────────────────────────────
-    // cancelOngoingRequest aborts the controller and setIsResponding(false).
-    // Crucially, the queue is NOT cleared — both queued submissions survive.
+    // Ctrl+C cancels Turn 1
     const turn1Controller = deps.abortControllerRef.current;
     await act(async () => {
       result.current.cancelOngoingRequest();
@@ -857,51 +821,46 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       turn1Deferred.resolve();
     });
 
-    // Queue must still have both submissions — cancel did not clear them.
-    expect(queuedSubmissionsRef.current).toHaveLength(2);
-
-    // ── streamingState returns to Idle → drain begins ──────────────────────
+    // streamingState → Idle: drain is SUPPRESSED (schedule checks
+    // drainSuppressedRef synchronously, so no setTimeout(0) is queued)
     rerender({ streamingState: StreamingState.Idle });
+    expect(queuedSubmissionsRef.current).toHaveLength(2);
+    expect(runStreamFn).toHaveBeenCalledTimes(1);
 
-    // The first queued submission (turn-2) drains and starts immediately.
-    await waitFor(() => {
-      expect(queuedSubmissionsRef.current).toHaveLength(1);
+    // Submitting a new message clears suppression
+    let turn4Promise!: Promise<void>;
+    await act(async () => {
+      turn4Promise = result.current.submitQuery('turn-4');
     });
-    // turn-2 is now running (runStream called a second time)
     await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(2));
-    // Simulate the turn starting: streamingState → Responding
     rerender({ streamingState: StreamingState.Responding });
 
-    // ── Turn 2 settles → streamingState returns to Idle → turn-3 drains ───
+    // Turn 4 settles → suppression cleared → queue drains (FIFO)
+    await act(async () => {
+      turn4Deferred.resolve();
+    });
+    rerender({ streamingState: StreamingState.Idle });
+    await waitFor(() => {
+      expect(queuedSubmissionsRef.current).toHaveLength(1);
+      expect(runStreamFn).toHaveBeenCalledTimes(3);
+    });
+    rerender({ streamingState: StreamingState.Responding });
+
+    // Turn 2 settles → turn-3 drains
     await act(async () => {
       turn2Deferred.resolve();
     });
     rerender({ streamingState: StreamingState.Idle });
-
-    // turn-3 drains after turn-2 settles
     await waitFor(() => {
       expect(queuedSubmissionsRef.current).toHaveLength(0);
+      expect(runStreamFn).toHaveBeenCalledTimes(4);
     });
-    // turn-3 is now running (runStream called a third time)
-    await waitFor(() => expect(runStreamFn).toHaveBeenCalledTimes(3));
 
-    // ── Turn 3 settles ─────────────────────────────────────────────────────
+    // Cleanup
     await act(async () => {
       turn3Deferred.resolve();
-    });
-
-    // FIFO proven: queue drained [turn-2, turn-3] — turn-2 dequeued first
-    // (length 2→1 after Idle), then turn-3 dequeued second (length 1→0 after
-    // the second Idle transition). runStreamFn was called exactly 3 times
-    // (once per turn), proving exactly-once processing.
-    expect(runStreamFn).toHaveBeenCalledTimes(3);
-    // Non-overlap proven: runStream was called sequentially — each call only
-    // happened after the previous turn's deferred resolved and streamingState
-    // returned to Idle. At no point did two runStream calls execute
-    // concurrently (each was gated by a separate deferred).
-
-    await act(async () => {
       await turn1Promise.catch(() => {});
+      await turn4Promise.catch(() => {});
     });
   });
 

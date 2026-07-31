@@ -155,6 +155,7 @@ function renderUseSubmitQuery(
     thinkingBlocksRef: { current: [] },
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
+    drainSuppressedRef: { current: false },
     enqueueSubmission: vi.fn((sub: QueuedSubmission) =>
       hookDeps.queuedSubmissionsRef.current.push(sub),
     ),

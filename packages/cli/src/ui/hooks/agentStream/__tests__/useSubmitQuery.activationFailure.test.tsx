@@ -158,6 +158,7 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
     thinkingBlocksRef: { current: [] },
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
+    drainSuppressedRef: { current: false },
     enqueueSubmission: vi.fn(),
     requeueSubmission: vi.fn(),
     dequeueSubmission: vi.fn(),

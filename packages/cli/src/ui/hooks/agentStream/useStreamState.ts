@@ -38,6 +38,7 @@ export interface UseStreamStateReturn {
   turnCancelledRef: React.MutableRefObject<boolean>;
   turnCancelled: boolean;
   setTurnCancelled: (value: boolean) => void;
+  drainSuppressedRef: React.MutableRefObject<boolean>;
   isResponding: boolean;
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>;
   lastProfileNameRef: React.MutableRefObject<string | undefined>;
@@ -203,6 +204,7 @@ function useBasicStreamState() {
     turnCancelledRef.current = value;
     setTurnCancelledState(value);
   }, []);
+  const drainSuppressedRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const lastProfileNameRef = useRef<string | undefined>(undefined);
   const lastModelInfoRef = useRef<string | null>(null);
@@ -232,6 +234,7 @@ function useBasicStreamState() {
     turnCancelledRef,
     turnCancelled,
     setTurnCancelled,
+    drainSuppressedRef,
     isResponding,
     setIsResponding,
     lastProfileNameRef,

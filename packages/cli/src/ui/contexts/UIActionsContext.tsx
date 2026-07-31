@@ -201,6 +201,10 @@ export interface UIActions {
 
   // Queue error message
   setQueueErrorMessage: (message: string | null) => void;
+
+  // Queued messages actions (issue #2882)
+  sendAllQueuedSubmissions?: () => void;
+  clearQueuedSubmissions?: () => void;
 }
 
 const UIActionsContext = createContext<UIActions | undefined>(undefined);

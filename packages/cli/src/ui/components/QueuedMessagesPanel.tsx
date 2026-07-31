@@ -313,7 +313,7 @@ function CollapsedQueuedMessagesPanel({
         )}
         <Text color={SemanticColors.text.secondary}>
           {' '}
-          • {QUEUED_MESSAGES_KEY_HINT} to expand
+          • Enter to send • Bksp to clear • {QUEUED_MESSAGES_KEY_HINT} to expand
         </Text>
       </Box>
     </QueuedMessagesPanelShell>
@@ -333,7 +333,8 @@ function ExpandedQueuedMessagesPanel({
         </Text>
         <Text color={SemanticColors.text.secondary}>
           {' '}
-          • {QUEUED_MESSAGES_KEY_HINT} to minimize
+          • Enter to send • Bksp to clear • {QUEUED_MESSAGES_KEY_HINT} to
+          minimize
         </Text>
       </Box>
       {view.messages.map((message) => (
