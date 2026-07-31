@@ -79,8 +79,17 @@ import type { DumpMode } from '../utils/dumpContext.js';
 export interface ResponsesExecutorDeps {
   readonly providerName: string;
   readonly logger: DebugLogger;
-  /** Return the configured base URL for the provider instance. */
-  readonly getProviderBaseURL: () => string | undefined;
+  /**
+   * Return the effective base URL for THIS call.
+   *
+   * The per-call options are passed explicitly because projection runs outside
+   * the provider's active-call context; resolving from ambient state there
+   * would prepare an envelope for a different endpoint than transport uses
+   * (issue #2817).
+   */
+  readonly getProviderBaseURL: (
+    options?: NormalizedGenerateChatOptions,
+  ) => string | undefined;
   /** Return provider-config custom headers. */
   readonly getCustomHeaders: (
     options?: NormalizedGenerateChatOptions,
@@ -117,13 +126,17 @@ export interface ResponsesExecutorDeps {
   readonly onWebSocketFallback?: () => void;
 }
 
-interface RequestContext {
-  apiKey: string;
-  baseURL: string;
-  isCodex: boolean;
-  includeThinkingInResponse: boolean;
-  responsesStored: boolean;
-  request: OpenAIResponsesRequest;
+export interface PreparedResponsesRequestContext {
+  readonly rawBaseURL: string;
+  readonly isCodex: boolean;
+  readonly includeThinkingInResponse: boolean;
+  readonly responsesStored: boolean;
+  readonly request: OpenAIResponsesRequest;
+}
+
+interface RequestContext extends PreparedResponsesRequestContext {
+  readonly apiKey: string;
+  readonly baseURL: string;
 }
 
 interface ReasoningOptions {
@@ -133,24 +146,55 @@ interface ReasoningOptions {
   includeThinkingInResponse: boolean;
 }
 
-export async function* executeOpenAIResponsesRequest(
+function resolveInvocationEphemerals(
   options: NormalizedGenerateChatOptions,
-  deps: ResponsesExecutorDeps,
-): AsyncIterableIterator<IContent> {
-  // Prefer the normalized invocation.signal while preserving the legacy
-  // metadata.abortSignal fallback.
-  const abortSignal = getRequestSignal(options);
-  const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
-    options.contents,
-  );
+): Record<string, unknown> {
   const invocation = options.invocation as {
     ephemerals?: Record<string, unknown>;
   };
-  const invocationEphemerals = invocation.ephemerals ?? {};
-  const requestContext = await buildRequestContext(
+  return invocation.ephemerals ?? {};
+}
+
+/**
+ * Build the finalized Responses request context exactly the way transport
+ * does — including the synthetic tool-response patching that precedes it.
+ *
+ * Shared by transport and by prompt-envelope projection (issue #2817) so the
+ * estimate can never drift from what is actually sent.
+ */
+export async function buildResponsesRequestContextForProjection(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals = resolveInvocationEphemerals(options),
+): Promise<PreparedResponsesRequestContext> {
+  const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
+    options.contents,
+  );
+  return buildRequestContext(
     options,
     patchedContent,
     invocationEphemerals,
+    deps,
+  );
+}
+
+export async function* executeOpenAIResponsesRequest(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  preparedRequestContext?: PreparedResponsesRequestContext,
+): AsyncIterableIterator<IContent> {
+  const abortSignal = getRequestSignal(options);
+  const invocationEphemerals = resolveInvocationEphemerals(options);
+  const prepared =
+    preparedRequestContext ??
+    (await buildResponsesRequestContextForProjection(
+      options,
+      deps,
+      invocationEphemerals,
+    ));
+  const requestContext = await resolveResponsesTransportContext(
+    options,
+    prepared,
     deps,
   );
 
@@ -170,18 +214,13 @@ export async function* executeOpenAIResponsesRequest(
   );
 }
 
-async function buildRequestContext(
+export async function buildRequestContext(
   options: NormalizedGenerateChatOptions,
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-): Promise<RequestContext> {
-  const rawBaseURL =
-    options.resolved.baseURL ??
-    deps.getProviderBaseURL() ??
-    'https://api.openai.com/v1';
-  const apiKey = await resolveApiKey(options, rawBaseURL, deps);
-  const baseURL = normalizeBaseURL(rawBaseURL);
+): Promise<PreparedResponsesRequestContext> {
+  const rawBaseURL = resolveResponsesBaseURL(options, deps);
   const isCodex = deps.isCodexBaseURL(rawBaseURL);
   const userMemory = await resolveUserMemory(
     options.userMemory,
@@ -234,12 +273,29 @@ async function buildRequestContext(
     deps.logger,
   );
   return {
-    apiKey,
-    baseURL,
+    rawBaseURL,
     isCodex,
     request,
     includeThinkingInResponse: reasoning.includeThinkingInResponse,
     responsesStored: request.store === true,
+  };
+}
+
+async function resolveResponsesTransportContext(
+  options: NormalizedGenerateChatOptions,
+  prepared: PreparedResponsesRequestContext,
+  deps: ResponsesExecutorDeps,
+): Promise<RequestContext> {
+  const rawBaseURL = resolveResponsesBaseURL(options, deps);
+  if (rawBaseURL !== prepared.rawBaseURL) {
+    throw new Error(
+      `Projection/transport endpoint mismatch: the OpenAI Responses prompt envelope was prepared for "${prepared.rawBaseURL}" but transport resolved "${rawBaseURL}". A prepared envelope must be sent to the same endpoint it was estimated for (issue #2817 invariant: projection == transport).`,
+    );
+  }
+  return {
+    ...prepared,
+    apiKey: await resolveApiKey(options, prepared.rawBaseURL, deps),
+    baseURL: normalizeBaseURL(prepared.rawBaseURL),
   };
 }
 
@@ -327,6 +383,34 @@ function getToolNamesForPrompt(
   );
 }
 
+export function isResponsesPdfEnabled(
+  options: NormalizedGenerateChatOptions,
+): boolean {
+  const invocationEphemerals = resolveInvocationEphemerals(options);
+  const setting =
+    (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
+    options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
+    readOptionalSetting(options, 'media.pdf.enabled');
+  return setting !== false;
+}
+
+/**
+ * Read a setting through the structurally optional `SettingsService.get`
+ * seam. `get` is declared optional on the contract, so a settings object that
+ * omits it must fall through to the caller's default rather than throwing.
+ */
+function readOptionalSetting(
+  options: NormalizedGenerateChatOptions,
+  key: string,
+): unknown {
+  const get = (
+    options as { settings?: { get?: (settingKey: string) => unknown } }
+  ).settings?.get;
+  return typeof get === 'function'
+    ? get.call(options.settings, key)
+    : undefined;
+}
+
 function buildInput(
   options: NormalizedGenerateChatOptions,
   patchedContent: IContent[],
@@ -341,15 +425,7 @@ function buildInput(
     options.invocation.getModelBehavior<boolean>(
       'reasoning.includeInContext',
     ) ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'reasoning.includeInContext',
-    );
-  const mediaPdfEnabledSetting =
-    (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
-    options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'media.pdf.enabled',
-    );
+    readOptionalSetting(options, 'reasoning.includeInContext');
   const outputLimiterConfig =
     options.config ??
     options.runtime?.config ??
@@ -362,7 +438,7 @@ function buildInput(
     outputLimiterConfig,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
     serverSideParentActive,
-    mediaPdfEnabled: mediaPdfEnabledSetting !== false,
+    mediaPdfEnabled: isResponsesPdfEnabled(options),
   });
 }
 
@@ -442,6 +518,17 @@ function translateRequestOverrides(
     }
   }
   return requestOverrides;
+}
+
+function resolveResponsesBaseURL(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+): string {
+  return (
+    options.resolved.baseURL ??
+    deps.getProviderBaseURL(options) ??
+    'https://api.openai.com/v1'
+  );
 }
 
 function normalizeBaseURL(baseURLCandidate: string): string {

@@ -389,3 +389,84 @@ describe('TokenUsageLogger', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('refineEstimate (finding #8)', () => {
+  let logFile: string;
+
+  beforeEach(() => {
+    logFile = makeTempLogPath();
+  });
+
+  afterEach(() => {
+    const dir = path.dirname(logFile);
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+  });
+
+  it('updates the estimate for an existing record, preserving the tiktoken baseline', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+    logger.recordEstimate('prompt-refine', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 100,
+      estimator: 'openai-tiktoken',
+      tiktokenTokens: 95,
+    });
+    logger.refineEstimate('prompt-refine', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 150,
+      estimator: 'openai-tiktoken',
+    });
+    await logger.recordActual('prompt-refine', {
+      actualPromptTokens: 160,
+      cachedTokens: 0,
+    });
+
+    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    expect(records).toHaveLength(1);
+    expect(records[0].estimated_tokens).toBe(150);
+    expect(records[0].tiktoken_tokens).toBe(95);
+  });
+
+  it('records the estimate with a null tiktoken baseline when no earlier record exists', async () => {
+    const logger = new TokenUsageLogger(true, logFile);
+
+    // The finalized envelope is the authoritative estimate for the send, so it
+    // is still recorded when no earlier tiktoken measurement was taken. The
+    // null baseline states that no comparison was measured for this prompt.
+    logger.refineEstimate('prompt-missing', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 150,
+      estimator: 'openai-tiktoken',
+    });
+
+    await logger.recordActual('prompt-missing', {
+      actualPromptTokens: 160,
+      cachedTokens: 0,
+    });
+
+    const records = readJsonl(logFile) as Array<Record<string, unknown>>;
+    expect(records).toHaveLength(1);
+    expect(records[0].estimated_tokens).toBe(150);
+    expect(records[0].tiktoken_tokens).toBeNull();
+    expect(records[0].tiktoken_estimation_failed).toBe(false);
+  });
+
+  it('is a no-op when disabled', async () => {
+    const logger = new TokenUsageLogger(false, logFile);
+
+    logger.refineEstimate('prompt-disabled', {
+      provider: 'openai',
+      model: 'gpt-4',
+      estimatedTokens: 150,
+      estimator: 'openai-tiktoken',
+    });
+
+    expect(fs.existsSync(logFile)).toBe(false);
+  });
+});

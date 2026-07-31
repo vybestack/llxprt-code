@@ -415,6 +415,10 @@
       "bun": "./src/runtime/contracts/RuntimeProviderChat.ts",
       "import": "./dist/src/runtime/contracts/RuntimeProviderChat.js"
     },
+    "./runtime/contracts/PromptEstimation.js": {
+      "bun": "./src/runtime/contracts/PromptEstimation.ts",
+      "import": "./dist/src/runtime/contracts/PromptEstimation.js"
+    },
     "./runtime/runtimeStateFactory.js": {
       "bun": "./src/runtime/runtimeStateFactory.ts",
       "import": "./dist/src/runtime/runtimeStateFactory.js"

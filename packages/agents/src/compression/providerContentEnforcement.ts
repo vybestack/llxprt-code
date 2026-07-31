@@ -45,6 +45,7 @@ export interface ProviderContentEnforcementDeps {
     promptId: string,
     applyResult: (newHistory: IContent[]) => void,
   ) => Promise<boolean>;
+  estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>;
 }
 
 interface ContextLimits {
@@ -705,11 +706,12 @@ export class ProviderContentEnforcer {
     stage: string = 'initial',
   ): Promise<number> {
     try {
-      const requestTokens =
-        await this.deps.historyService.estimateTokensForContents(
-          contents,
-          model,
-        );
+      const requestTokens = this.deps.estimateFinalizedPromptTokens
+        ? await this.deps.estimateFinalizedPromptTokens(contents)
+        : await this.deps.historyService.estimateTokensForContents(
+            contents,
+            model,
+          );
       return requestTokens + completionBudget;
     } catch (error) {
       const projectionError = this.normalizeError(error);
