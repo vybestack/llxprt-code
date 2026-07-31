@@ -111,12 +111,23 @@ const realSetImmediate: (callback: () => void) => NodeJS.Immediate =
   setImmediate;
 
 /**
- * Drains recursively queued microtasks by yielding to the real event loop.
- * A single `Promise.resolve()` only flushes one round of microtasks; nested
- * `.then()` chains (e.g. `Promise.resolve().then(() => Promise.resolve())`)
- * require a real macrotask boundary to settle completely.
+ * Drains recursively queued microtasks from async timer callbacks.
+ *
+ * On macOS, `setImmediate` fires promptly even under Bun's fake timers, so a
+ * single macrotask boundary suffices. On Linux CI, `setImmediate` may not
+ * fire under fake timers, causing tests that rely on async timer advancement
+ * (e.g. proactive-renewal) to hang indefinitely.
+ *
+ * The portable approach drains microtasks via chained `Promise.resolve()`
+ * calls first (each yielding one microtask round), then yields to a real
+ * macrotask via `setImmediate` as a final settling boundary. This works on
+ * both platforms without depending on `setImmediate` firing under fake timers.
  */
+const MICROTASK_DRAIN_ROUNDS = 20;
 const flushPendingTasks = async (): Promise<void> => {
+  for (let i = 0; i < MICROTASK_DRAIN_ROUNDS; i++) {
+    await Promise.resolve();
+  }
   await new Promise<void>((resolve) => realSetImmediate(resolve));
 };
 
