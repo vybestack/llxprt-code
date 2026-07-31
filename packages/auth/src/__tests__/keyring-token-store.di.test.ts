@@ -195,25 +195,20 @@ function createLockDirTracker(): LockDirTracker {
 
 // ─── Sequential execution rationale ─────────────────────────────────────────
 //
-// Both suites below use `describe.sequential` rather than `describe`. The
-// per-suite `LockDirTracker.dirs` array is mutated by freshLockDir (push) and
-// cleanupLockDirs (splice). Under vitest's default concurrent test execution
-// these mutations would race (lost pushes, splice-on-stale-length, torn
-// cleanup), orphaning temp dirs or corrupting the tracker. Sequential
-// execution guarantees:
-//   - only one test mutates `dirs` at a time,
-//   - afterEach cleanup sees a stable snapshot of created dirs.
+// Both suites below use plain `describe`. The per-suite `LockDirTracker.dirs`
+// array is mutated by freshLockDir (push) and cleanupLockDirs (splice).
+// Bun's test runner executes tests sequentially within a file by default, so
+// these mutations are race-free without describe.sequential (which Bun does
+// not support — it only exists in Vitest).
 //
 // The alternative (truly per-test ownership) would require each test to own
 // and clean up its own dir directly rather than via a shared tracker; that is
 // more verbose and loses the shared cleanup-error-observability guarantee.
-// `describe.sequential` is the minimal, explicit enforcement that keeps the
-// tracker pattern safe while preserving observable cleanup failures.
 
-describe.sequential('KeyringTokenStore DI behavioral tests', () => {
+describe('KeyringTokenStore DI behavioral tests', () => {
   // Per-suite ownership: this describe owns its own tracker so concurrent
   // test files / sibling suites do not share mutable lock-dir state.
-  // Sequential execution (describe.sequential) keeps the tracker's mutable
+  // Sequential execution keeps the tracker's mutable
   // `dirs` array race-free within this suite — see the rationale above.
   const locks = createLockDirTracker();
   afterEach(() => locks.cleanupLockDirs());
@@ -554,13 +549,12 @@ describe.sequential('KeyringTokenStore DI behavioral tests', () => {
   });
 });
 
-describe.sequential('KeyringTokenStore lockDir contract (P8)', () => {
+describe('KeyringTokenStore lockDir contract (P8)', () => {
   // Per-suite ownership: this sibling describe owns its own tracker so it does
   // not rely on (or mutate) the first suite's mutable state, and its
   // afterEach cleanup is wired directly here (sibling scopes do not inherit
-  // the parent's afterEach). Sequential execution (describe.sequential) keeps
-  // the tracker's mutable `dirs` array race-free within this suite — see the
-  // rationale above.
+  // the parent's afterEach). Bun executes tests sequentially within a file
+  // by default, keeping the tracker's mutable `dirs` array race-free.
   const locks = createLockDirTracker();
   afterEach(() => locks.cleanupLockDirs());
 
