@@ -306,8 +306,10 @@ describe('permissionsCommand', () => {
 
       const result = await permissionsCommand.action?.(mockContext, args);
 
+      // path.resolve, not path.join: on Windows the production helper resolves
+      // against the current drive, which path.join would not reproduce.
       expect(mockSetValue).toHaveBeenCalledWith(
-        path.join('/mock/home/user', 'projects', 'x'),
+        path.resolve('/mock/home/user', 'projects', 'x'),
         'TRUST_FOLDER',
       );
       expect(result).toStrictEqual({

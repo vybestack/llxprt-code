@@ -184,13 +184,20 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     const config = createRuntime({ workingDir: WORKSPACE_ROOT });
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
+    // Move off the working directory first, otherwise "ignored" and "reset to
+    // the working directory" are indistinguishable.
+    act(() => {
+      result.current.setTargetPath(WORKSPACE_FIRST);
+    });
+    expect(result.current.targetPath).toBe(WORKSPACE_FIRST);
+
     act(() => {
       result.current.setTargetPath('   ');
     });
 
-    // Empty input must not silently retarget anything — in particular it must
-    // not resolve to the working directory by way of an empty path segment.
-    expect(result.current.targetPath).toBe(WORKSPACE_ROOT);
+    // Empty input must leave the active target alone — it must neither resolve
+    // to the working directory by way of an empty path segment nor reset it.
+    expect(result.current.targetPath).toBe(WORKSPACE_FIRST);
   });
 
   it('B2: setTargetPath expands a tilde-prefixed input to the home directory', () => {
@@ -201,7 +208,9 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       result.current.setTargetPath(path.join('~', 'projects'));
     });
 
-    expect(result.current.targetPath).toBe(path.join(MOCK_HOME, 'projects'));
+    // path.resolve, not path.join: the helper resolves, which on Windows adds
+    // the current drive letter that path.join would omit.
+    expect(result.current.targetPath).toBe(path.resolve(MOCK_HOME, 'projects'));
   });
 
   it('B3: effectiveLocalTrustLevel, isParentTrusted and parentFolderName derive from the current targetPath', () => {
@@ -495,6 +504,10 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       phase: 'persistence',
     });
     expect(result.current.committedTrustLevel).toBeUndefined();
+    // A failed persistence must leave no trace of the attempted rule, so the
+    // store cannot be left partially updated.
+    expect(mockedUserConfig.value[OTHER_FOLDER]).toBeUndefined();
+    expect(result.current.trustRules).toStrictEqual([]);
   });
 
   it('B8: preserves live rollback when setTrustedFolderLive throws for an ancestor commit', async () => {
