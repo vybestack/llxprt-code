@@ -649,3 +649,25 @@ describe('projection fail-fast: model must be non-empty string (finding #4)', ()
     ).toThrow(/openai-responses.*responses\/v1/i);
   });
 });
+
+describe('projection immutability (issue #2817)', () => {
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope],
+  ] as const)('%s returns a frozen projection', (_name, project) => {
+    const projection = project({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Hello' }],
+    });
+
+    // The contract declares every member readonly; a projection cached or
+    // replayed across retries must not be mutable out from under a later
+    // estimate.
+    expect(Object.isFrozen(projection)).toBe(true);
+    expect(() => {
+      (projection as { model: string }).model = 'tampered';
+    }).toThrow(TypeError);
+    expect(projection.model).toBe('gpt-4o');
+  });
+});

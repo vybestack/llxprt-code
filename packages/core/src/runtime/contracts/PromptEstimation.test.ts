@@ -110,15 +110,21 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
     expect(estimate.unsupportedMedia).toHaveLength(1);
   });
 
-  it('does NOT carry any raw prompt payload (no requestBody, messages, or system text)', () => {
-    const estimate: PromptEnvelopeEstimate = {
-      estimatedPromptTokens: 100,
+  it('does NOT carry any raw prompt payload (no requestBody, messages, or system text)', async () => {
+    // Derive the estimate through the real seam rather than asserting on a
+    // hand-built object: an implementation that copied raw prompt fields onto
+    // the result must fail this test.
+    const estimate = await estimatePromptEnvelope({
       model: 'gpt-4o',
       protocol: 'openai-chat',
       method: 'chat/completions/v1',
       projectionRevision: 1,
       unsupportedMedia: [],
-    };
+      transportToken: Object.freeze({}),
+      countProjectedTokens: () => Promise.resolve(100),
+    });
+
+    expect(estimate.estimatedPromptTokens).toBe(100);
 
     const keys = Object.keys(estimate) as Array<keyof PromptEnvelopeEstimate>;
     const forbidden = [

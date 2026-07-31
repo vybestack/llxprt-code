@@ -41,7 +41,10 @@ function buildProjection(
   const promptText = serializePromptBearingStructure(requestBody, promptKeys);
   const tokens = countPromptTokens(promptText);
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
-  return {
+  // PromptEnvelopeProjection declares every member readonly. Freezing enforces
+  // that at runtime too, so a projection cached or replayed across retries
+  // cannot be mutated out from under a later estimate (issue #2817).
+  return Object.freeze({
     model: extractModelOrThrow(requestBody, identity),
     protocol: identity.protocol,
     method: identity.method,
@@ -49,7 +52,7 @@ function buildProjection(
     unsupportedMedia,
     transportToken: options?.transportToken ?? EMPTY_TRANSPORT_TOKEN,
     countProjectedTokens: () => Promise.resolve(tokens),
-  };
+  });
 }
 
 function freezeUnsupportedMedia(

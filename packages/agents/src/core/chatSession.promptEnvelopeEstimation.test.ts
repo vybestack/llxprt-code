@@ -22,7 +22,15 @@
  *   (HistoryService total is synced to the real value).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+} from 'vitest';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -453,6 +461,11 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
 
   it('A7: re-estimates each attempt so a materially changed retry gets a fresh estimate', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+    // Restore real timers even if an assertion below throws, so fake timers
+    // cannot leak into subsequent tests.
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const estimateHistory: number[] = [];
     const transportedBodies: string[] = [];
     const preparedBodies = new WeakMap<object, string>();
@@ -542,8 +555,6 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     expect(chat.getPromptEnvelopeEstimate()?.estimatedPromptTokens).toBe(
       estimateHistory.at(-1),
     );
-
-    vi.useRealTimers();
   });
 
   it('fails fast before transport when finalized projection preparation fails', async () => {
