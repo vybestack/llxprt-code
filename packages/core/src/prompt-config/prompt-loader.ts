@@ -433,6 +433,15 @@ export class PromptLoader {
     let stopped = false;
     let scanInProgress = false;
 
+    // Gate every emission here so an in-flight scan that resumes after stop()
+    // (its await straddled teardown) cannot schedule a debounce timer whose
+    // callback would fire past the watcher's lifetime.
+    const emit = (eventType: string, filePath: string): void => {
+      if (!stopped) {
+        handleChange(eventType, filePath);
+      }
+    };
+
     const scan = async (): Promise<void> => {
       if (stopped || scanInProgress) {
         return;
@@ -443,14 +452,14 @@ export class PromptLoader {
         for (const [filePath, mtimeMs] of currentFiles) {
           const previousMtime = knownFiles.get(filePath);
           if (previousMtime === undefined) {
-            handleChange('add', filePath);
+            emit('add', filePath);
           } else if (previousMtime !== mtimeMs) {
-            handleChange('change', filePath);
+            emit('change', filePath);
           }
         }
         for (const filePath of knownFiles.keys()) {
           if (!currentFiles.has(filePath)) {
-            handleChange('unlink', filePath);
+            emit('unlink', filePath);
           }
         }
         knownFiles = currentFiles;

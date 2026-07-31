@@ -20,6 +20,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
@@ -112,9 +113,10 @@ function createMockFacade() {
 // Register runtime accessors via the bridge (no mock theater)
 
 // Mock @vybestack/llxprt-code-core ProfileManager
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = importActualSync<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-core');
   return {
     ...actual,
     ProfileManager: class MockProfileManager {

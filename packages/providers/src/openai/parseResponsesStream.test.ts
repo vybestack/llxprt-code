@@ -305,11 +305,13 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     const stream = createSSEStream(chunks);
     const iterator = parseResponsesStream(stream);
 
-    await expect(async () => {
-      for await (const _message of iterator) {
-        // drain
-      }
-    }).rejects.toThrow('Internal server error');
+    await expect(
+      (async () => {
+        for await (const _message of iterator) {
+          // drain
+        }
+      })(),
+    ).rejects.toThrow('Internal server error');
   });
 
   /**
@@ -324,11 +326,13 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     const stream = createSSEStream(chunks);
     const iterator = parseResponsesStream(stream);
 
-    await expect(async () => {
-      for await (const _message of iterator) {
-        // drain
-      }
-    }).rejects.toThrow('rate limit exceeded');
+    await expect(
+      (async () => {
+        for await (const _message of iterator) {
+          // drain
+        }
+      })(),
+    ).rejects.toThrow('rate limit exceeded');
   });
 
   /**
@@ -344,11 +348,13 @@ describe('parseResponsesStream terminal events (issue #2333)', () => {
     const stream = createSSEStream(chunks);
     const iterator = parseResponsesStream(stream);
 
-    await expect(async () => {
-      for await (const _message of iterator) {
-        // drain
-      }
-    }).rejects.toThrow('OpenAI Responses API stream failed');
+    await expect(
+      (async () => {
+        for await (const _message of iterator) {
+          // drain
+        }
+      })(),
+    ).rejects.toThrow('OpenAI Responses API stream failed');
   });
 
   /**

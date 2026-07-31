@@ -92,8 +92,9 @@ vi.mock('../../hooks/useSessionBrowser.js', () => ({
 function createMockSession(
   overrides: Partial<EnrichedSessionSummary> = {},
 ): EnrichedSessionSummary {
-  const defaults: EnrichedSessionSummary = {
-    sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
+  const sessionId = `session-${Math.random().toString(36).slice(2, 10)}`;
+  const baseSummary = {
+    sessionId,
     filePath: '/test/chats/test-session.jsonl',
     projectHash: 'test-project-hash',
     startTime: '2025-02-14T10:00:00Z',
@@ -101,11 +102,17 @@ function createMockSession(
     fileSize: 1024,
     provider: 'anthropic',
     model: 'claude-opus-4-5-20251101',
+    ...overrides,
+  };
+  return {
+    ...baseSummary,
+    target: { kind: 'session', session: baseSummary },
+    targetKey: `session:${baseSummary.sessionId}`,
     previewState: 'loaded' as PreviewState,
     firstUserMessage: 'Write me a haiku about coding',
     isLocked: false,
+    ...overrides,
   };
-  return { ...defaults, ...overrides };
 }
 
 // Track active render instances for cleanup
@@ -145,8 +152,9 @@ describe('SessionBrowserDialog', () => {
     vi.clearAllMocks();
     // Reset mock state
     mockIsNarrow.value = false;
-    mockHookState.sessions = [];
-    mockHookState.filteredSessions = [];
+    const session = createMockSession();
+    mockHookState.sessions = [session];
+    mockHookState.filteredSessions = [session];
     mockHookState.searchTerm = '';
     mockHookState.sortOrder = 'newest';
     mockHookState.selectedIndex = 0;
@@ -159,8 +167,8 @@ describe('SessionBrowserDialog', () => {
     mockHookState.error = null;
     mockHookState.skippedCount = 0;
     mockHookState.totalPages = 1;
-    mockHookState.pageItems = [];
-    mockHookState.selectedSession = null;
+    mockHookState.pageItems = [session];
+    mockHookState.selectedSession = session;
     mockHookState.handleKeypress = vi.fn();
   });
 
@@ -241,6 +249,7 @@ describe('SessionBrowserDialog', () => {
         provider: 'anthropic',
         model: 'claude-opus-4-5-20251101',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -258,6 +267,7 @@ describe('SessionBrowserDialog', () => {
         firstUserMessage: 'Hello world from preview',
         previewState: 'loaded',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -272,6 +282,7 @@ describe('SessionBrowserDialog', () => {
     it('should display 1-based index in wide mode', () => {
       mockIsNarrow.value = false;
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -288,6 +299,7 @@ describe('SessionBrowserDialog', () => {
       const session = createMockSession({
         lastModified: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -303,6 +315,7 @@ describe('SessionBrowserDialog', () => {
     it('should show file size in wide mode', () => {
       mockIsNarrow.value = false;
       const session = createMockSession({ fileSize: 2048 });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -321,6 +334,7 @@ describe('SessionBrowserDialog', () => {
         previewState: 'loading',
         firstUserMessage: undefined,
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -337,6 +351,7 @@ describe('SessionBrowserDialog', () => {
         previewState: 'none',
         firstUserMessage: undefined,
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -353,6 +368,7 @@ describe('SessionBrowserDialog', () => {
         previewState: 'error',
         firstUserMessage: undefined,
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -425,6 +441,7 @@ describe('SessionBrowserDialog', () => {
     it('should call handleKeypress when Up arrow is pressed', async () => {
       const session1 = createMockSession({ sessionId: 'session-1' });
       const session2 = createMockSession({ sessionId: 'session-2' });
+      mockHookState.sessions = [session1, session2];
       mockHookState.pageItems = [session1, session2];
       mockHookState.filteredSessions = [session1, session2];
       mockHookState.selectedIndex = 1;
@@ -443,6 +460,7 @@ describe('SessionBrowserDialog', () => {
     it('should call handleKeypress when Down arrow is pressed', async () => {
       const session1 = createMockSession({ sessionId: 'session-1' });
       const session2 = createMockSession({ sessionId: 'session-2' });
+      mockHookState.sessions = [session1, session2];
       mockHookState.pageItems = [session1, session2];
       mockHookState.filteredSessions = [session1, session2];
       mockHookState.selectedIndex = 0;
@@ -460,6 +478,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should call handleKeypress when Enter is pressed to trigger onSelect', async () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -492,6 +511,7 @@ describe('SessionBrowserDialog', () => {
       const session = createMockSession({
         firstUserMessage: 'Session to delete',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -507,6 +527,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should show Y/N options in delete confirmation', () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -522,6 +543,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should call handleKeypress when Y is pressed during delete confirmation', async () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -539,6 +561,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should call handleKeypress when N is pressed during delete confirmation', async () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -557,6 +580,7 @@ describe('SessionBrowserDialog', () => {
   describe('Locked Session Display', () => {
     it('should show "(in use)" indicator for locked sessions', () => {
       const session = createMockSession({ isLocked: true });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -573,6 +597,7 @@ describe('SessionBrowserDialog', () => {
         isLocked: true,
         firstUserMessage: 'Locked session preview',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -585,17 +610,29 @@ describe('SessionBrowserDialog', () => {
     });
   });
   describe('Error Display', () => {
-    it('should show error message when error state is set', () => {
+    it('should show a dedicated error state when loading yields no sessions', () => {
+      mockHookState.sessions = [];
+      mockHookState.filteredSessions = [];
+      mockHookState.pageItems = [];
+      mockHookState.selectedSession = null;
       mockHookState.error = 'Failed to load sessions: Permission denied';
       mockHookState.isLoading = false;
 
       const { lastFrame } = renderWithProviders();
       const output = lastFrame();
 
+      expect(output).toContain('Session Browser');
       expect(output).toContain('Permission denied');
+      expect(output).toContain('Esc');
+      expect(output).not.toContain('No sessions');
     });
 
-    it('should display error inline above controls', () => {
+    it('should display error inline above controls when sessions remain', () => {
+      const session = createMockSession();
+      mockHookState.sessions = [session];
+      mockHookState.filteredSessions = [session];
+      mockHookState.pageItems = [session];
+      mockHookState.selectedSession = session;
       mockHookState.error = 'Session is in use by another process';
       mockHookState.isLoading = false;
 
@@ -603,6 +640,7 @@ describe('SessionBrowserDialog', () => {
       const output = lastFrame();
 
       expect(output).toContain('Session is in use');
+      expect(output).toContain('Write me a haiku');
     });
   });
   describe('Skipped Sessions Notice', () => {
@@ -660,6 +698,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should display full controls bar in wide mode', () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -679,6 +718,7 @@ describe('SessionBrowserDialog', () => {
         provider: 'anthropic',
         model: 'claude-opus-4-5-20251101',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -717,6 +757,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should show abbreviated controls bar', () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -733,6 +774,7 @@ describe('SessionBrowserDialog', () => {
       const session = createMockSession({
         sessionId: 'abc123def456ghij',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -750,6 +792,7 @@ describe('SessionBrowserDialog', () => {
       const session = createMockSession({
         sessionId: 'abc12345def67890',
       });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -764,6 +807,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should hide file size column', () => {
       const session = createMockSession({ fileSize: 999999 });
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;
@@ -778,6 +822,7 @@ describe('SessionBrowserDialog', () => {
 
     it('should hide 1-based index in narrow mode', () => {
       const session = createMockSession();
+      mockHookState.sessions = [session];
       mockHookState.pageItems = [session];
       mockHookState.filteredSessions = [session];
       mockHookState.selectedSession = session;

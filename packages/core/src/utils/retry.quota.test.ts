@@ -107,6 +107,11 @@ describe('isRetryableError', () => {
     );
     expect(isRetryableError(error)).toBe(true);
   });
+
+  it('should retry Windows DOMException TimeoutError (issue #2557)', () => {
+    const error = new DOMException('The operation timed out.', 'TimeoutError');
+    expect(isRetryableError(error)).toBe(true);
+  });
 });
 
 describe('isNetworkTransientError', () => {
@@ -125,6 +130,26 @@ describe('isNetworkTransientError', () => {
 
   it('returns false for a non-transient error', () => {
     const error = new Error('some random error');
+    expect(isNetworkTransientError(error)).toBe(false);
+  });
+
+  it('returns true for DOMException TimeoutError "The operation timed out." (Windows API timeout, issue #2557)', () => {
+    const error = new DOMException('The operation timed out.', 'TimeoutError');
+    expect(isNetworkTransientError(error)).toBe(true);
+  });
+
+  it('returns true for a bare Error with the exact Windows timeout message (issue #2557)', () => {
+    const error = new Error('The operation timed out.');
+    expect(isNetworkTransientError(error)).toBe(true);
+  });
+
+  it('returns true for case-insensitive "OPERATION TIMED OUT" message', () => {
+    const error = new Error('OPERATION TIMED OUT');
+    expect(isNetworkTransientError(error)).toBe(true);
+  });
+
+  it('returns false for a non-timeout DOMException (issue #2557 regression guard)', () => {
+    const error = new DOMException('invalid syntax', 'SyntaxError');
     expect(isNetworkTransientError(error)).toBe(false);
   });
 });
@@ -410,5 +435,60 @@ describe('RetryableQuotaError with exponential backoff', () => {
       }
     }
     expect(foundConsoleWarnRetryMessage).toBe(false);
+  });
+});
+
+describe('retryWithBackoff Windows timeout retry (issue #2557)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    setSimulate429(false);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('retries a DOMException TimeoutError and succeeds when a later attempt succeeds', async () => {
+    let attemptCount = 0;
+    const mockFn = vi.fn(async () => {
+      attemptCount++;
+      if (attemptCount <= 2) {
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      }
+      return 'success';
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 3,
+      initialDelayMs: 10,
+    });
+
+    await Promise.all([
+      expect(promise).resolves.toBe('success'),
+      vi.runAllTimersAsync(),
+    ]);
+
+    expect(mockFn).toHaveBeenCalledTimes(3);
+  });
+
+  it('throws the original DOMException when the retry budget is exhausted (issue #2557)', async () => {
+    const mockFn = vi.fn(async () => {
+      throw new DOMException('The operation timed out.', 'TimeoutError');
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 2,
+      initialDelayMs: 10,
+    }).catch((error) => error);
+
+    await vi.runAllTimersAsync();
+    const error = await promise;
+
+    expect(mockFn).toHaveBeenCalledTimes(2);
+    expect(error).toBeInstanceOf(DOMException);
+    expect((error as DOMException).name).toBe('TimeoutError');
+    expect((error as Error).message).toContain('The operation timed out');
   });
 });

@@ -37,6 +37,38 @@ export const OPENAI_TRANSPORT_SELECTOR_KEYS: ReadonlySet<string> = new Set([
   'openaiResponsesEnabled',
 ]);
 
+const OPENAI_PROVIDER_RESERVED_KEYS: ReadonlySet<string> = new Set([
+  'enabled',
+  'auth-key',
+  'apiKey',
+  'api-key',
+  'auth-keyfile',
+  'apiKeyfile',
+  'api-keyfile',
+  'base-url',
+  'model',
+  'toolFormat',
+  'tool-format',
+  'toolFormatOverride',
+  'tool-format-override',
+  'defaultModel',
+  ...OPENAI_TRANSPORT_SELECTOR_KEYS,
+]);
+
+export function extractOpenAIModelParams(
+  providerSettings: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const params = Object.fromEntries(
+    Object.entries(providerSettings).filter(
+      ([key, value]) =>
+        !OPENAI_PROVIDER_RESERVED_KEYS.has(key) &&
+        value !== undefined &&
+        value !== null,
+    ),
+  );
+  return Object.keys(params).length > 0 ? params : undefined;
+}
+
 /**
  * Pre-5.6 models that are known to work on the Responses API but do not
  * *require* it. They remain on Chat Completions unless the user explicitly

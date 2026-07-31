@@ -584,9 +584,7 @@ describe('AuthFlowOrchestrator', () => {
 
       const orchestrator = createOrchestrator(tokenStore, registry);
       // Should NOT throw
-      await expect(
-        orchestrator.authenticate('anthropic', 'default'),
-      ).resolves.not.toThrow();
+      await orchestrator.authenticate('anthropic', 'default');
 
       expect(provider.initiateAuth).not.toHaveBeenCalled();
     });

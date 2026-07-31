@@ -212,6 +212,13 @@ export function buildArtifactContext(
     prAuthor.success && typeof prAuthor.data.login === 'string'
       ? prAuthor.data.login
       : undefined;
+  const rawCommits = pr.commits;
+  let commitCount: number | undefined;
+  if (Array.isArray(rawCommits)) {
+    commitCount = rawCommits.length;
+  } else if (typeof rawCommits === 'number') {
+    commitCount = rawCommits;
+  }
   return {
     prContext: {
       number: pr.number,
@@ -223,7 +230,7 @@ export function buildArtifactContext(
       additions: Number(pr.additions ?? totalAdditions),
       deletions: Number(pr.deletions ?? totalDeletions),
       changedFiles,
-      commits: pr.commits,
+      commits: commitCount,
     },
     issues,
     diffs,

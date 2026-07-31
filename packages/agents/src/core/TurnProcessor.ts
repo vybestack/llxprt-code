@@ -6,25 +6,23 @@
 
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { SendMessageParams } from './chatSession.js';
-import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
-import {
-  createAbortError,
-  delay,
-} from '@vybestack/llxprt-code-core/utils/delay.js';
-import {
-  nextStreamEventWithIdleTimeout,
-  resolveStreamIdleTimeoutMs,
-} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { stampAiTurnModel } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type {
-  RuntimeGenerateChatOptions as GenerateChatOptions,
-  RuntimeProviderToolset as ProviderToolset,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { recordFinalizedPromptEnvelopeEstimate } from './tokenUsageEstimateLogger.js';
+import {
+  bindPreparedTransportSignal,
+  buildProviderChatOptions,
+  enforceAndSendWithPromptEnvelopeRetries,
+  prepareAtSendSeam,
+} from './promptEnvelopeSendSeam.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -41,13 +39,20 @@ import {
 } from './hookToolRestrictions.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { shouldRetryStreamAttempt } from './turnAbortHelpers.js';
-import { extractSystemInstructionText } from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
-import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
+import {
+  createProviderSendTiming,
+  logApiRequest,
+  logModelOutputResponse,
+  readProviderStreamResponse,
+  validateProviderForSend,
+  type ProviderSendTiming,
+} from './turnLogging.js';
+import { throwTurnSendError } from './turnSendError.js';
 
 import type {
   ModelStreamChunk,
@@ -63,7 +68,6 @@ import {
   recordActualTokenUsage,
   type ActualTokenUsageInput,
 } from './tokenUsageActualLogger.js';
-import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{ name: string }>;
@@ -88,19 +92,6 @@ function wrapChunk(chunk: ModelStreamChunk): StreamEvent {
 }
 
 /**
- * Reads user memory from the runtime config. Config is typed with a required
- * getUserMemory(), but runtime payloads (including test doubles) may omit it,
- * so existence is validated at this boundary.
- */
-function resolveUserMemory(config: Config | undefined): string {
-  if (!config) {
-    return '';
-  }
-  const getter = (config as unknown as Record<string, unknown>).getUserMemory;
-  return typeof getter === 'function' ? config.getUserMemory() : '';
-}
-
-/**
  * Handles turn-level operations: sendMessage, sendMessageStream, waitForIdle.
  * Orchestrates non-streaming sends and delegates streaming to StreamProcessor.
  */
@@ -109,6 +100,11 @@ export class TurnProcessor {
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
+  private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
+
+  getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
+    return this.currentPromptEnvelopeEstimate;
+  }
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
@@ -137,6 +133,7 @@ export class TurnProcessor {
     await this.sendPromise;
 
     this.lastPromptTokenCount = null;
+    this.currentPromptEnvelopeEstimate = null;
 
     const prepared = this._prepareSendMessage(params);
 
@@ -179,6 +176,7 @@ export class TurnProcessor {
   ): Promise<AsyncGenerator<StreamEvent>> {
     await this.sendPromise;
     this.lastPromptTokenCount = null;
+    this.currentPromptEnvelopeEstimate = null;
 
     const userContents = this._normalizeUserContent(params);
 
@@ -408,64 +406,35 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     const requestParams = this._withProviderRequestContext(params);
     this._validateProvider(provider);
-    let providerStartTime = 0;
-    let providerRequestStarted = false;
-    const overallStartTime = Date.now();
+    const timing = createProviderSendTiming();
 
     try {
-      const iContents = await this._enforceAndLogProviderContents(
-        userIContents,
-        provider,
-        prompt_id,
-      );
-
       const providerBaseUrl = this.resolveProviderBaseUrl(provider);
-      providerRequestStarted = true;
-      providerStartTime = Date.now();
-      const response = await retryWithBackoff(
-        () =>
-          this._executeProviderCall(
-            provider,
-            requestParams,
-            iContents,
-            providerBaseUrl,
-          ),
-        {
-          shouldRetryOnError: shouldRetryDirectProviderError,
-          signal: params.config?.abortSignal,
-        },
-      );
-
-      const durationMs = Date.now() - providerStartTime;
-      logApiResponse(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        this.runtimeContext.state.model,
+      const response = await this._enforceAndSendProviderRequest(
+        provider,
+        requestParams,
+        userIContents,
         prompt_id,
-        durationMs,
-        response.usage,
-        JSON.stringify(response),
+        providerBaseUrl,
+        timing,
+      );
+      logModelOutputResponse(
+        this.runtimeContext,
+        prompt_id,
+        timing.elapsedSinceSend(),
+        response,
       );
       return response;
     } catch (error) {
-      const durationMs = providerRequestStarted
-        ? Date.now() - providerStartTime
-        : Date.now() - overallStartTime;
-      logApiError(
+      this.sendPromise = Promise.resolve();
+      return throwTurnSendError(
+        error,
         this.runtimeContext,
-        this.runtimeContext.state,
-        this.runtimeContext.state.model,
         prompt_id,
-        durationMs,
-        error,
-      );
-      enrichSchemaDepthError(
-        error,
-        this._selectRequestTools(params),
+        timing.elapsedSinceSend(),
+        this._normalizeRequestTools(params),
         this.logger,
       );
-      this.sendPromise = Promise.resolve();
-      throw error;
     } finally {
       this.compressionHandler.clearProviderCompressionCallback(provider);
     }
@@ -475,6 +444,7 @@ export class TurnProcessor {
     userIContents: IContent[],
     provider: IProvider,
     prompt_id: string,
+    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
   ): Promise<IContent[]> {
     const iContents = await this.compressionHandler.enforceProviderContents(
       {
@@ -483,6 +453,7 @@ export class TurnProcessor {
       },
       prompt_id,
       provider,
+      estimateFinalizedPromptTokens,
     );
     logApiRequest(
       this.runtimeContext,
@@ -495,20 +466,72 @@ export class TurnProcessor {
   }
 
   private _validateProvider(provider: IProvider): void {
-    this.logger.debug(
-      () => '[TurnProcessor] Active provider snapshot before send',
-      {
-        providerName: provider.name,
-        providerDefaultModel: provider.getDefaultModel?.(),
-        configModel: this.runtimeContext.state.model,
-        baseUrl: this.resolveProviderBaseUrl(provider),
-      },
+    validateProviderForSend(
+      provider,
+      this.logger,
+      this.runtimeContext.state.model,
+      () => this.resolveProviderBaseUrl(provider),
     );
-    if (typeof provider.generateChatCompletion !== 'function') {
-      throw new Error(
-        `Provider ${provider.name} does not support IContent interface`,
-      );
-    }
+  }
+
+  /**
+   * Runs provider-content enforcement and the prompt-envelope send/retry loop.
+   * `timing` starts measuring only when a prepared request is handed to the
+   * provider, so telemetry reports provider latency rather than local
+   * enforcement time.
+   */
+  private async _enforceAndSendProviderRequest(
+    provider: IProvider,
+    requestParams: SendMessageParams,
+    userIContents: IContent[],
+    prompt_id: string,
+    providerBaseUrl: string | undefined,
+    timing: ProviderSendTiming,
+  ): Promise<ModelOutput> {
+    const toolSelection = await this._applyToolSelectionHook(
+      this.runtimeContext.providerRuntime.config,
+      this._selectRequestTools(requestParams),
+    );
+    const runtimeContext = this.providerRuntimeBuilder(
+      'TurnProcessor.executeProviderCall',
+      { toolCount: toolSelection.tools?.length ?? 0 },
+    );
+    return enforceAndSendWithPromptEnvelopeRetries({
+      provider,
+      contents: userIContents,
+      buildOptions: (contents) =>
+        this._buildProviderChatOptions(
+          contents,
+          toolSelection.tools,
+          runtimeContext,
+          requestParams.config?.abortSignal ?? new AbortController().signal,
+          requestParams.config?.providerRequestContext,
+        ),
+      enforce: (contents, estimate) =>
+        this._enforceAndLogProviderContents(
+          contents,
+          provider,
+          prompt_id,
+          estimate,
+        ),
+      fallbackEstimate: (contents) =>
+        this.compressionHandler.estimatePendingTokens(contents),
+      send: (contents, prepared) =>
+        timing.measure(() =>
+          this._executeProviderCall(
+            provider,
+            requestParams,
+            prompt_id,
+            contents,
+            providerBaseUrl,
+            toolSelection,
+            runtimeContext,
+            prepared,
+          ),
+        ),
+      shouldRetryOnError: shouldRetryDirectProviderError,
+      signal: requestParams.config?.abortSignal,
+    });
   }
 
   /**
@@ -517,23 +540,16 @@ export class TurnProcessor {
   private async _executeProviderCall(
     provider: IProvider,
     params: SendMessageParams,
+    promptId: string,
     requestContents: IContent[],
     providerBaseUrl: string | undefined,
+    toolSelection: ToolSelectionHookResult,
+    runtimeContext: ProviderRuntimeContext,
+    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
   ): Promise<ModelOutput> {
-    const configForHooks = this.runtimeContext.providerRuntime.config;
-    const requestTools = this._selectRequestTools(params);
-    const toolSelection = await this._applyToolSelectionHook(
-      configForHooks,
-      requestTools,
-    );
     const tools = toolSelection.tools;
     const allowedFunctionNames = toolSelection.allowedFunctionNames;
     this._logToolDiagnostics(provider, tools, providerBaseUrl);
-
-    const runtimeContext = this.providerRuntimeBuilder(
-      'TurnProcessor.executeProviderCall',
-      { toolCount: tools?.length ?? 0 },
-    );
     const timeoutController = new AbortController();
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
@@ -543,13 +559,32 @@ export class TurnProcessor {
     }
 
     try {
-      const streamResponse = this._createProviderStream(
-        provider,
-        requestContents,
-        tools,
-        runtimeContext,
+      const prepared =
+        preparedAtEnforcement ??
+        (await prepareAtSendSeam(
+          provider,
+          this._buildProviderChatOptions(
+            requestContents,
+            tools,
+            runtimeContext,
+            timeoutController.signal,
+            params.config?.providerRequestContext,
+          ),
+        ));
+      this.currentPromptEnvelopeEstimate = prepared.estimate;
+      recordFinalizedPromptEnvelopeEstimate(
+        this.compressionHandler.tokenUsageLogger,
+        promptId,
+        prepared.estimate,
+        provider.name,
+      );
+      const transportPrepared = bindPreparedTransportSignal(
+        prepared,
         timeoutController.signal,
-        params.config?.providerRequestContext,
+      );
+
+      const streamResponse = provider.generateChatCompletion(
+        transportPrepared.options,
       );
       const lastResponse = await this._consumeProviderStream(
         streamResponse,
@@ -560,6 +595,9 @@ export class TurnProcessor {
       const output = toModelStreamChunk(lastResponse);
       this._applyHookToolFiltering(output, lastResponse, allowedFunctionNames);
       return output;
+    } catch (error) {
+      this.currentPromptEnvelopeEstimate = null;
+      throw error;
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);
@@ -590,33 +628,23 @@ export class TurnProcessor {
     }
   }
 
-  private _createProviderStream(
-    provider: IProvider,
+  private _buildProviderChatOptions(
     requestContents: IContent[],
     tools: ToolGroupArray | undefined,
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
-  ): AsyncIterable<IContent> {
-    return provider.generateChatCompletion({
-      contents: requestContents,
-      tools: tools as ProviderToolset | undefined,
-      config: runtimeContext.config,
-      runtime: runtimeContext,
-      invocation: {
+  ): GenerateChatOptions {
+    return buildProviderChatOptions(
+      requestContents,
+      tools,
+      runtimeContext,
+      {
         signal: timeoutSignal,
-      } as unknown as GenerateChatOptions['invocation'],
-      settings:
-        runtimeContext.settingsService as GenerateChatOptions['settings'],
-      metadata: {
-        ...runtimeContext.metadata,
-        _retryRequestContext: requestContext,
-      },
-      userMemory: resolveUserMemory(runtimeContext.config),
-      systemInstruction: extractSystemInstructionText(
-        this.generationConfig.systemInstruction,
-      ),
-    });
+      } as GenerateChatOptions['invocation'],
+      requestContext,
+      this.generationConfig.systemInstruction,
+    );
   }
 
   private async _consumeProviderStream(
@@ -632,7 +660,7 @@ export class TurnProcessor {
       runtimeContext.config,
     );
 
-    let nextResponse = await this._readProviderStreamResponse(
+    let nextResponse = await readProviderStreamResponse(
       iterator,
       timeoutController,
       upstreamAbortSignal,
@@ -643,7 +671,7 @@ export class TurnProcessor {
       this._trackProviderPromptTokens(iContent);
       blocks.push(...iContent.blocks);
       lastResponse = iContent;
-      nextResponse = await this._readProviderStreamResponse(
+      nextResponse = await readProviderStreamResponse(
         iterator,
         timeoutController,
         upstreamAbortSignal,
@@ -653,30 +681,6 @@ export class TurnProcessor {
 
     if (!lastResponse) throw new Error('No response from provider');
     return { ...lastResponse, blocks };
-  }
-
-  private _readProviderStreamResponse(
-    iterator: AsyncIterator<IContent, unknown>,
-    timeoutController: AbortController,
-    upstreamAbortSignal: AbortSignal | undefined,
-    effectiveTimeoutMs: number,
-  ): Promise<IteratorResult<IContent, unknown>> {
-    if (effectiveTimeoutMs <= 0) {
-      return iterator.next();
-    }
-
-    return nextStreamEventWithIdleTimeout({
-      iterator,
-      timeoutMs: effectiveTimeoutMs,
-      signal: timeoutController.signal,
-      onTimeout: () => {
-        if (upstreamAbortSignal?.aborted === true) {
-          return;
-        }
-        timeoutController.abort();
-      },
-      createTimeoutError: () => createAbortError(),
-    });
   }
 
   private _trackProviderPromptTokens(iContent: IContent): void {
@@ -692,6 +696,13 @@ export class TurnProcessor {
     params: SendMessageParams,
   ): AgentClientGenerateConfig['tools'] {
     return params.config?.tools ?? this.generationConfig.tools;
+  }
+
+  private _normalizeRequestTools(
+    params: SendMessageParams,
+  ): ToolGroupArray | undefined {
+    const tools = this._selectRequestTools(params);
+    return Array.isArray(tools) ? (tools as ToolGroupArray) : undefined;
   }
 
   private async _applyToolSelectionHook(

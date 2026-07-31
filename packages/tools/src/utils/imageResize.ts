@@ -35,7 +35,12 @@ const MIME_FORMATS: ReadonlyMap<string, string> = new Map([
 function getDimensions(metadata: Metadata): ImageDimensions {
   const width = metadata.width;
   const height = metadata.pageHeight ?? metadata.height;
-  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+  if (
+    typeof width !== 'number' ||
+    typeof height !== 'number' ||
+    !Number.isInteger(width) ||
+    !Number.isInteger(height)
+  ) {
     throw new Error('image metadata is missing width or height');
   }
   const frames = metadata.pages ?? 1;

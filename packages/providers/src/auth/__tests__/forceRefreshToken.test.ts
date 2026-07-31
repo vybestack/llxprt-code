@@ -17,6 +17,7 @@ import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // --------------------------------------------------------------------------
 // Test helpers
@@ -182,9 +183,10 @@ function makeCoordinator(opts?: {
 // Register runtime accessors via the bridge
 
 // Mock @vybestack/llxprt-code-core ProfileManager
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = importActualSync<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-core');
   return {
     ...actual,
     ProfileManager: class MockProfileManager {

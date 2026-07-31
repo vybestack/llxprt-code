@@ -155,8 +155,8 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
   ),
   runtime(
     '/chat resume',
-    'agent.session.resume',
-    'Resuming a session feeds the live conversation context',
+    'agent.session.resumeSession',
+    'Resuming a checkpoint or session uses the unified transition path',
   ),
   runtime(
     '/chat clear',
@@ -311,8 +311,8 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
   ),
   runtime(
     '/continue',
-    'agent.session.resume',
-    'Resume feeds the live conversation context from a checkpoint',
+    'agent.session.resumeSession',
+    'Resume selects a living session or forks a recording-native checkpoint',
   ),
   runtime(
     '/set',
@@ -498,20 +498,25 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'agent.session.createCheckpoint',
     'Tagging a checkpoint is tied to the live agent snapshot',
   ),
-  cliLocal(
-    '/chat delete',
-    'chat delete (UI)',
-    'Checkpoint deletion is CLI-local; no Agent deleteCheckpoint surface yet',
+  runtime(
+    '/chat name',
+    'agent.session.nameCurrentSession',
+    'Naming the active session appends recording-native metadata',
   ),
-  cliLocal(
+  runtime(
+    '/chat delete',
+    'agent.session.deleteCheckpoint',
+    'Checkpoint deletion appends a recording-native tombstone',
+  ),
+  runtime(
     '/chat rename',
-    'chat rename (UI)',
-    'Checkpoint rename is CLI-local; no Agent renameCheckpoint surface yet',
+    'agent.session.renameCheckpoint',
+    'Checkpoint rename appends recording-native lifecycle metadata',
   ),
   runtime(
     '/chat restore',
-    'agent.restoreHistory',
-    'Restoring a checkpoint feeds the live conversation context',
+    'agent.session.resumeSession',
+    'Restoring a checkpoint uses the unified fork transition',
   ),
   cliLocal(
     '/chat debug',

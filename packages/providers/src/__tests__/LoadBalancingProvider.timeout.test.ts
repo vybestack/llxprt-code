@@ -490,16 +490,18 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       providerManager,
     );
 
-    await expect(async () => {
-      for await (const _chunk of lb.generateChatCompletion({
-        contents: [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-        ],
-        metadata: { abortSignal: parent.signal },
-      })) {
-        // consume
-      }
-    }).rejects.toThrow('synchronous construction failure');
+    await expect(
+      (async () => {
+        for await (const _chunk of lb.generateChatCompletion({
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+          metadata: { abortSignal: parent.signal },
+        })) {
+          // consume
+        }
+      })(),
+    ).rejects.toThrow('synchronous construction failure');
     expect(add).toHaveBeenCalledTimes(1);
     expect(remove).toHaveBeenCalledTimes(1);
     expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);

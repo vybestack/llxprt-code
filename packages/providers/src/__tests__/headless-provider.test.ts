@@ -21,10 +21,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // Mock os so Storage.getGlobalSettingsPath() resolves under a fake homedir.
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('os')>();
+vi.mock('os', () => {
+  const actual = importActualSync<typeof import('os')>('os');
   return {
     ...actual,
     homedir: vi.fn(() => '/home/headless-user'),

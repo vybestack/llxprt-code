@@ -40,7 +40,11 @@ import {
   type SessionRecordingServiceConfig,
   type SessionEventType,
   type SessionRecordLine,
+  type RecordingCheckpointInfo,
+  type SessionForkedPayload,
 } from './types.js';
+import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
+import { replaySession } from './ReplayEngine.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
@@ -58,13 +62,14 @@ const QUEUE_HIGH_WATER_RECORDS = 4096;
  * write (issue #2852).
  */
 interface PendingRecord {
+  readonly line: SessionRecordLine;
   readonly json: string;
   readonly bytes: number;
 }
 
 function toPendingRecord(line: SessionRecordLine): PendingRecord {
   const json = JSON.stringify(line);
-  return { json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
+  return { line, json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
 }
 
 /**
@@ -86,11 +91,37 @@ export class SessionRecordingService {
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
   private readonly sessionId: string;
+  private readonly projectHash: string;
   private readonly chatsDir: string;
   private preContentBuffer: PendingRecord[] = [];
   private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
+  private lockHandle: LockHandle | null = null;
+
+  static async createLocked(
+    config: SessionRecordingServiceConfig,
+  ): Promise<SessionRecordingService> {
+    const lockHandle = await SessionLockManager.acquire(
+      config.chatsDir,
+      config.sessionId,
+    );
+    try {
+      const recording = new SessionRecordingService(config);
+      recording.adoptLock(lockHandle);
+      return recording;
+    } catch (error: unknown) {
+      await lockHandle.release();
+      throw error;
+    }
+  }
+
+  adoptLock(lockHandle: LockHandle): void {
+    if (this.lockHandle !== null) {
+      throw new Error('Session recording already owns a lock');
+    }
+    this.lockHandle = lockHandle;
+  }
 
   /**
    * @plan PLAN-20260211-SESSIONRECORDING.P05
@@ -99,6 +130,7 @@ export class SessionRecordingService {
    */
   constructor(config: SessionRecordingServiceConfig) {
     this.sessionId = config.sessionId;
+    this.projectHash = config.projectHash;
     this.chatsDir = config.chatsDir;
 
     const startPayload = {
@@ -143,11 +175,13 @@ export class SessionRecordingService {
    * @requirement REQ-REC-003, REQ-REC-004
    * @pseudocode session-recording-service.md lines 81-110
    */
-  enqueue(type: SessionEventType, payload: unknown): void {
-    if (!this.active) return;
+  enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
+    if (!this.active) return null;
 
     if (
-      (type === 'content' || type === 'session_metadata') &&
+      (type === 'content' ||
+        type === 'session_metadata' ||
+        type === 'session_named') &&
       !this.materialized
     ) {
       this.materialize();
@@ -162,7 +196,9 @@ export class SessionRecordingService {
 
     if (!this.materialized && type !== 'content') {
       this.bufferPreContent(type, payload);
-      return;
+      return (
+        this.preContentBuffer[this.preContentBuffer.length - 1]?.line ?? null
+      );
     }
 
     this.seq++;
@@ -178,6 +214,7 @@ export class SessionRecordingService {
     this.queueBytes += record.bytes;
     this.reportHighWater();
     this.scheduleDrain();
+    return line;
   }
 
   /**
@@ -381,6 +418,24 @@ export class SessionRecordingService {
     return this.sessionId;
   }
 
+  ownsLockFor(sessionId: string): boolean {
+    return (
+      this.active && this.sessionId === sessionId && this.lockHandle !== null
+    );
+  }
+
+  getChatsDir(): string {
+    return this.chatsDir;
+  }
+
+  getProjectHash(): string {
+    return this.projectHash;
+  }
+
+  getOwnedLockHandle(): LockHandle | null {
+    return this.active ? this.lockHandle : null;
+  }
+
   /**
    * Initialize for resuming an existing session file.
    * Sets the file path and sequence counter so new events append correctly.
@@ -411,8 +466,13 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 181-185
    */
   async dispose(): Promise<void> {
+    const failures: unknown[] = [];
     if (this.active) {
-      await this.flush();
+      try {
+        await this.flush();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
     }
     this.active = false;
     this.queue = [];
@@ -420,8 +480,26 @@ export class SessionRecordingService {
     this.preContentBuffer = [];
     this.preContentBytes = 0;
     if (this.chatsDirWatcher) {
-      this.chatsDirWatcher.close();
+      try {
+        this.chatsDirWatcher.close();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
       this.chatsDirWatcher = null;
+    }
+    const lockHandle = this.lockHandle;
+    try {
+      await lockHandle?.release();
+    } catch (error: unknown) {
+      failures.push(error);
+    } finally {
+      if (this.lockHandle === lockHandle) {
+        this.lockHandle = null;
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Failed to dispose recording service');
     }
   }
 
@@ -600,5 +678,138 @@ export class SessionRecordingService {
 
   getSessionMetadataTitle(): string | null | undefined {
     return this.sessionTitle;
+  }
+
+  // -------------------------------------------------------------------------
+  // Durable checkpoint / session-name / fork lifecycle operations.
+  //
+  // These operations flush to disk before resolving and reject on
+  // inactive/failed recorders rather than silently succeeding.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Create an immutable checkpoint at the current recording sequence.
+   * The checkpoint is flushed before the promise resolves.
+   * Rejects if the conversation is empty/unmaterialized or the recorder is inactive.
+   */
+  async createCheckpoint(name: string): Promise<RecordingCheckpointInfo> {
+    if (!this.active) {
+      throw new Error('Cannot create checkpoint: recording is not active');
+    }
+    if (!this.materialized) {
+      throw new Error(
+        'Cannot create checkpoint: conversation has no content yet',
+      );
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Cannot create checkpoint: name must not be empty');
+    }
+
+    await this.flushAndRequireActive('create checkpoint');
+    const filePath = this.filePath;
+    if (filePath === null) {
+      throw new Error(
+        'Cannot create checkpoint: conversation has no content yet',
+      );
+    }
+    const replay = await replaySession(filePath, this.projectHash);
+    if (!replay.ok) {
+      throw new Error(`Cannot create checkpoint: ${replay.error}`);
+    }
+    if (replay.sequenceCorrupt) {
+      throw new Error(
+        'Cannot create checkpoint: recording has non-monotonic sequences',
+      );
+    }
+    if (replay.history.length === 0) {
+      throw new Error(
+        'Cannot create checkpoint: conversation has no content yet',
+      );
+    }
+
+    const checkpointId = crypto.randomUUID();
+    const event = this.enqueue('checkpoint_created', {
+      checkpointId,
+      name: trimmed,
+    });
+    if (event === null) {
+      throw new Error('Cannot create checkpoint: recording is not active');
+    }
+    await this.flushAndRequireActive('create checkpoint');
+
+    return { checkpointId, name: trimmed, sequence: event.seq };
+  }
+
+  /**
+   * Delete (tombstone) a checkpoint by stable ID.
+   * The lifecycle event is flushed before the promise resolves.
+   */
+  async deleteCheckpoint(checkpointId: string): Promise<void> {
+    if (!this.active) {
+      throw new Error('Cannot delete checkpoint: recording is not active');
+    }
+    if (!this.materialized) {
+      throw new Error(
+        'Cannot delete checkpoint: recording is not materialized',
+      );
+    }
+    this.enqueue('checkpoint_deleted', { checkpointId });
+    await this.flushAndRequireActive('delete checkpoint');
+  }
+
+  /**
+   * Rename a checkpoint by stable ID.
+   * Only display metadata changes; the watermark and ID are unaffected.
+   */
+  async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
+    if (!this.active) {
+      throw new Error('Cannot rename checkpoint: recording is not active');
+    }
+    if (!this.materialized) {
+      throw new Error(
+        'Cannot rename checkpoint: recording is not materialized',
+      );
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Cannot rename checkpoint: name must not be empty');
+    }
+    this.enqueue('checkpoint_renamed', { checkpointId, name: trimmed });
+    await this.flushAndRequireActive('rename checkpoint');
+  }
+
+  /**
+   * Assign or clear the mutable session name.
+   * Pass `null` to clear the name.
+   */
+  async setSessionName(name: string | null): Promise<void> {
+    if (!this.active) {
+      throw new Error('Cannot set session name: recording is not active');
+    }
+    const resolved = name === null ? null : name.trim();
+    if (resolved !== null && resolved.length === 0) {
+      throw new Error('Cannot set session name: name must not be empty');
+    }
+    this.enqueue('session_named', { name: resolved });
+    await this.flushAndRequireActive('set session name');
+  }
+
+  private async flushAndRequireActive(operation: string): Promise<void> {
+    await this.flush();
+    if (!this.isActive()) {
+      throw new Error(`Cannot ${operation}: recording failed during flush`);
+    }
+  }
+
+  /**
+   * Record ancestry metadata when seeding a forked child session.
+   * The child recording is self-contained after this.
+   */
+  recordSessionFork(payload: SessionForkedPayload): void {
+    if (!this.active) {
+      throw new Error('Cannot record session fork: recording is inactive');
+    }
+    this.enqueue('session_forked', payload);
   }
 }

@@ -35,7 +35,7 @@ import {
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
 import type { QueuedSubmission } from './types.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 
 export interface AgentStreamOrchestrationDeps {
   agent: Agent;
@@ -58,6 +58,7 @@ export interface AgentStreamOrchestrationDeps {
   onEditorOpen: () => void;
   recordingIntegration?: RecordingIntegration;
   runtimeMessageBus?: MessageBus;
+  subagentManager?: UiSubagentManager;
 }
 
 export interface AgentStreamOrchestrationResult {
@@ -372,5 +373,6 @@ function buildSubmitQueryDeps({
     isResponding: st.isResponding,
     streamingState,
     runStreamRef,
+    subagentManager: args.subagentManager,
   };
 }

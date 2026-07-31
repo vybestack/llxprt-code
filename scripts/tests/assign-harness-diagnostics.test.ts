@@ -25,13 +25,23 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import {
   createFakeRepo,
   defaultState,
   makeIssue,
   makeAssignedEvent,
   daysAgo,
+  EMPTY_FAKE_STATE,
+  readFakeState,
 } from './assign-helpers.ts';
+import {
+  CANDIDATE_DISCOVERY_FAILED,
+  READ_ISSUE_STATE_PREFIX,
+  RETRY_FAILED_SUFFIX,
+} from './assign-script-contract.ts';
 
 /**
  * A repo with one issue that is unambiguously stale, so cleanup has real work
@@ -71,7 +81,8 @@ describe('assign harness diagnosability (#2688)', () => {
     expect(result.status).not.toBe(0);
     // ...and it must say WHY, not merely that it happened. Without this the
     // only signal is a downstream "expected 1 to be +0" state assertion.
-    expect(result.stderr).toMatch(/Candidate discovery failed/i);
+    // The pinned marker is the script→harness contract (assign-script-contract.ts).
+    expect(result.stderr).toMatch(new RegExp(CANDIDATE_DISCOVERY_FAILED, 'i'));
   });
 
   it('reports the retry trail leading up to a cleanup failure', () => {
@@ -86,7 +97,9 @@ describe('assign harness diagnosability (#2688)', () => {
     const result = repo.runCleanup();
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toMatch(/Attempt \d+ failed, retrying/i);
+    expect(result.stderr).toMatch(
+      new RegExp(`Attempt \\d+ ${RETRY_FAILED_SUFFIX}`, 'i'),
+    );
     // The failing endpoint must be identifiable from the output alone.
     expect(result.stderr).toContain('issues/42/timeline');
   });
@@ -113,7 +126,9 @@ describe('assign harness diagnosability (#2688)', () => {
     const result = repo.runCleanup();
 
     expect(result.status).toBe(0);
-    expect(result.stderr).toMatch(/Attempt \d+ failed, retrying/i);
+    expect(result.stderr).toMatch(
+      new RegExp(`Attempt \\d+ ${RETRY_FAILED_SUFFIX}`, 'i'),
+    );
   });
 
   it('echoes script stderr to the console under CI so job logs are self-diagnosing', () => {
@@ -140,7 +155,7 @@ describe('assign harness diagnosability (#2688)', () => {
       errorSpy.mockRestore();
     }
 
-    expect(printed).toMatch(/Candidate discovery failed/i);
+    expect(printed).toMatch(new RegExp(CANDIDATE_DISCOVERY_FAILED, 'i'));
     // The failing script must be identifiable, not just the message.
     expect(printed).toContain('unassign-stale-issues.sh');
   });
@@ -153,17 +168,19 @@ describe('assign harness diagnosability (#2688)', () => {
     });
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const originalCi = process.env['CI'];
-    delete process.env['CI'];
+    // Stubbing to undefined removes the var (vitest deletes it), matching the
+    // "no CI" environment. Cleanup uses vi.unstubAllEnvs() for parity with the
+    // CI-presence test above — the only stubbed var here is CI, so the restore
+    // is effectively targeted. (vi.unstubEnv, a per-key reset, does not exist
+    // in vitest 3.2.x; unstubAllEnvs is the available restore.)
+    vi.stubEnv('CI', undefined);
     let callCount;
     try {
       repo.runCleanup();
       // Captured before mockRestore() resets the recorded calls.
       callCount = errorSpy.mock.calls.length;
     } finally {
-      if (originalCi !== undefined) {
-        process.env['CI'] = originalCi;
-      }
+      vi.unstubAllEnvs();
       errorSpy.mockRestore();
     }
 
@@ -189,6 +206,54 @@ describe('assign harness diagnosability (#2688)', () => {
     // emit some non-empty text. A length check would pass on unrelated noise
     // or a bare stack trace, which is the very ambiguity this issue is about.
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toMatch(/Failed to read issue state for #7/i);
+    expect(result.stderr).toMatch(
+      new RegExp(`${READ_ISSUE_STATE_PREFIX}7`, 'i'),
+    );
+  });
+});
+
+describe('state-file diagnosability (#2698)', () => {
+  // The fake-gh state file is read back after every script run so tests can
+  // assert on resulting state. Previously a corrupt/partially-written file
+  // was silently swapped for an empty default, turning a parse failure into a
+  // confusing "expected 1 but got 0" — the same hidden-diagnostic class that
+  // made #2688 expensive to trace. runRecordHistory delegates state reading
+  // to readFakeState and threads any parseError into its returned stderr, so
+  // these tests on the helper prove the surfaced-diagnostic contract.
+
+  it('surfaces the parse error when the state file is corrupt', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'corrupt-state-'));
+    try {
+      const corruptFile = path.join(dir, 'state.json');
+      // Partially-written / truncated JSON, as a real crash mid-write could
+      // leave behind.
+      writeFileSync(corruptFile, '{ "issues": { "42": { partially');
+
+      const { state, parseError } = readFakeState(corruptFile);
+
+      // The corrupt file must NOT silently look like a clean empty run.
+      expect(parseError).toMatch(/unparseable/i);
+      // ...and it must still hand back a usable empty default so callers do
+      // not throw on the state itself.
+      expect(state).toEqual(EMPTY_FAKE_STATE);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an empty default with no error when no state file exists', () => {
+    // A script that aborts before writing any state is a legitimate empty
+    // result, not corruption. It must not produce a noisy diagnostic.
+    const dir = mkdtempSync(path.join(tmpdir(), 'no-state-'));
+    try {
+      const missing = path.join(dir, 'absent.json');
+
+      const { state, parseError } = readFakeState(missing);
+
+      expect(parseError).toBe('');
+      expect(state).toEqual(EMPTY_FAKE_STATE);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

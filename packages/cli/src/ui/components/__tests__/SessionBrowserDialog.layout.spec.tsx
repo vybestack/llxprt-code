@@ -92,20 +92,28 @@ vi.mock('../../hooks/useSessionBrowser.js', () => ({
 function createMockSession(
   overrides: Partial<EnrichedSessionSummary> = {},
 ): EnrichedSessionSummary {
-  const defaults: EnrichedSessionSummary = {
-    sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
-    filePath: '/test/chats/test-session.jsonl',
+  const sessionId = `session-${Math.random().toString(36).slice(2, 10)}`;
+  const filePath = '/test/chats/test-session.jsonl';
+  const summary = {
+    sessionId,
+    filePath,
     projectHash: 'test-project-hash',
     startTime: '2025-02-14T10:00:00Z',
     lastModified: new Date('2025-02-14T12:00:00Z'),
     fileSize: 1024,
     provider: 'anthropic',
     model: 'claude-opus-4-5-20251101',
+    ...overrides,
+  };
+  return {
+    ...summary,
+    target: { kind: 'session', session: summary },
+    targetKey: `session:${summary.sessionId}`,
     previewState: 'loaded' as PreviewState,
     firstUserMessage: 'Write me a haiku about coding',
     isLocked: false,
+    ...overrides,
   };
-  return { ...defaults, ...overrides };
 }
 
 // Track active render instances for cleanup
@@ -241,6 +249,11 @@ describe('SessionBrowserDialog', () => {
     });
 
     it('should show PgUp/PgDn hint for multi-page lists', () => {
+      const session = createMockSession();
+      mockHookState.sessions = [session];
+      mockHookState.filteredSessions = [session];
+      mockHookState.pageItems = [session];
+      mockHookState.selectedSession = session;
       mockHookState.totalPages = 2;
       mockHookState.isLoading = false;
 
@@ -317,6 +330,11 @@ describe('SessionBrowserDialog', () => {
     });
 
     it('should show Y/N options in conversation confirmation', () => {
+      const session = createMockSession();
+      mockHookState.sessions = [session];
+      mockHookState.filteredSessions = [session];
+      mockHookState.pageItems = [session];
+      mockHookState.selectedSession = session;
       mockHookState.conversationConfirmActive = true;
       mockHookState.isLoading = false;
 
@@ -327,14 +345,20 @@ describe('SessionBrowserDialog', () => {
       expect(output).toContain('N');
     });
   });
-  describe('Escape Key Precedence', () => {
-    it('should call handleKeypress when Escape is pressed', async () => {
+  describe('Keyboard Dispatch', () => {
+    it('should call handleKeypress for navigation input', async () => {
+      const session = createMockSession();
+      mockHookState.sessions = [session];
+      mockHookState.filteredSessions = [session];
+      mockHookState.pageItems = [session];
+      mockHookState.selectedSession = session;
+      mockHookState.isSearching = false;
       mockHookState.isLoading = false;
 
       const { stdin } = renderWithProviders();
 
       act(() => {
-        stdin.write(TerminalKeys.ESCAPE);
+        stdin.write('x');
       });
 
       expect(mockHookState.handleKeypress).toHaveBeenCalled();

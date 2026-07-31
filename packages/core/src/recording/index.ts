@@ -25,7 +25,12 @@ export {
   SessionRecordingService,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from './SessionRecordingService.js';
-export { replaySession, readSessionHeader } from './ReplayEngine.js';
+export {
+  replaySession,
+  readSessionHeader,
+  replaySessionThroughSequence,
+  foldCheckpointMetadata,
+} from './ReplayEngine.js';
 export {
   SessionLockManager,
   SessionLockedError,
@@ -67,3 +72,14 @@ export {
   type DeleteSessionResult,
   type DeleteSessionError,
 } from './sessionManagement.js';
+export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
+export {
+  SessionTransitionService,
+  type ForkResult,
+  type ForkError,
+} from './SessionTransitionService.js';
+export {
+  HistoryMutationService,
+  type HistoryMutationResult,
+  type HistoryMutationError,
+} from './HistoryMutationService.js';

@@ -63,6 +63,12 @@ export function isRetryableLlxprtError(error: unknown): boolean {
  * failure (as opposed to a network/spawn error). Parse errors should trigger
  * a fresh LLM call — the model may return valid JSON on retry.
  */
+const NON_OBJECT_PARSE_PREFIXES = [
+  'Direct parse: expected JSON object but got ',
+  'Fenced JSON parse: expected JSON object but got ',
+  'Balanced-object parse: expected JSON object but got ',
+];
+
 export function isParseError(error: unknown): boolean {
   if (!error) {
     return false;
@@ -72,7 +78,7 @@ export function isParseError(error: unknown): boolean {
     message === 'Cannot parse JSON from response' ||
     message === 'Empty response: cannot parse JSON' ||
     /^Invalid (map|group) response:/.test(message) ||
-    /^[A-Z][a-z]+: expected JSON object but got/.test(message)
+    NON_OBJECT_PARSE_PREFIXES.some((prefix) => message.startsWith(prefix))
   );
 }
 

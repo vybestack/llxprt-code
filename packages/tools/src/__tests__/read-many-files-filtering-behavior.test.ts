@@ -288,7 +288,11 @@ describe('ReadManyFilesTool real behavioral filtering', () => {
     {
       name: 'corrupt',
       extension: 'png',
-      create: async () => Buffer.from('corrupt image bytes'),
+      create: async () =>
+        Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02,
+          0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        ]),
     },
     {
       name: 'unsupported',

@@ -31,6 +31,7 @@ import {
   type LockHandle,
 } from './SessionLockManager.js';
 import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
+import { CheckpointService } from './CheckpointService.js';
 
 /**
  * Result of listing sessions for a project.
@@ -90,7 +91,7 @@ export async function deleteSession(
     return { ok: false, error: resolved.error };
   }
 
-  return deleteResolvedSession(resolved.session, chatsDir);
+  return deleteResolvedSession(resolved.session, chatsDir, projectHash);
 }
 
 export const SESSION_NOT_FOUND_PREFIX = 'Session not found:';
@@ -110,12 +111,13 @@ export async function deleteSessionById(
     };
   }
 
-  return deleteResolvedSession(target, chatsDir);
+  return deleteResolvedSession(target, chatsDir, projectHash);
 }
 
 async function deleteResolvedSession(
   target: SessionSummary,
   chatsDir: string,
+  projectHash: string,
 ): Promise<DeleteSessionResult | DeleteSessionError> {
   let lock: LockHandle;
   try {
@@ -137,6 +139,19 @@ async function deleteResolvedSession(
   const { unlink } = await import('node:fs/promises');
   let result: DeleteSessionResult | DeleteSessionError;
   try {
+    const blockers = await new CheckpointService().getDeletionBlockers(
+      target.filePath,
+      projectHash,
+    );
+    if (blockers.length > 0) {
+      const details = blockers
+        .map((checkpoint) => `${checkpoint.name} (${checkpoint.checkpointId})`)
+        .join(', ');
+      return {
+        ok: false,
+        error: `Cannot delete session: live checkpoints block deletion: ${details}`,
+      };
+    }
     await unlink(target.filePath);
     result = { ok: true, deletedSessionId: target.sessionId };
   } catch (error: unknown) {

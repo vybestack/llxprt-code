@@ -611,6 +611,21 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
 
       expect(service.isActive()).toBe(false);
     });
+
+    it('recordSessionFork rejects an inactive recording', async () => {
+      const config = makeConfig({ chatsDir });
+      service = new SessionRecordingService(config);
+      await service.dispose();
+
+      expect(() =>
+        service.recordSessionFork({
+          parentSessionId: 'parent',
+          parentSequence: 2,
+          checkpointId: 'checkpoint',
+          checkpointName: 'milestone',
+        }),
+      ).toThrow('Cannot record session fork: recording is inactive');
+    });
   });
 
   // -------------------------------------------------------------------------

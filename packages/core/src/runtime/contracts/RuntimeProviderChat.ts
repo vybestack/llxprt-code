@@ -74,6 +74,7 @@ export interface RuntimeGenerateChatOptions {
    */
   onStreamLiveness?: StreamLivenessListener;
   metadata?: Record<string, unknown>;
+  promptEnvelopeTransportToken?: object;
   resolved?: {
     model?: string;
     baseURL?: string;

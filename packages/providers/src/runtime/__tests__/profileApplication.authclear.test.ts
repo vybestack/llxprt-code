@@ -8,6 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -30,8 +31,9 @@ import {
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+vi.mock('node:fs/promises', () => {
+  const actual =
+    importActualSync<typeof import('node:fs/promises')>('node:fs/promises');
   return {
     ...actual,
     readFile: vi.fn(),

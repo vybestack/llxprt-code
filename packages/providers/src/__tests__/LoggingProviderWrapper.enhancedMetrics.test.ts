@@ -378,11 +378,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         }),
       );
 
-      await expect(async () => {
-        for await (const _chunk of iterator) {
-          // Consume until stream throws
-        }
-      }).rejects.toThrow('Stream interrupted after partial output');
+      await expect(
+        (async () => {
+          for await (const _chunk of iterator) {
+            // Consume until stream throws
+          }
+        })(),
+      ).rejects.toThrow('Stream interrupted after partial output');
 
       const metrics = wrapper.getPerformanceMetrics();
       expect(metrics.timeToFirstToken).not.toBeNull();
@@ -599,11 +601,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         }),
       );
 
-      await expect(async () => {
-        for await (const _chunk of iterator) {
-          // consume chunks until the stream fails
-        }
-      }).rejects.toThrow('stream failed after usage metadata');
+      await expect(
+        (async () => {
+          for await (const _chunk of iterator) {
+            // consume chunks until the stream fails
+          }
+        })(),
+      ).rejects.toThrow('stream failed after usage metadata');
 
       const metrics = wrapper.getPerformanceMetrics();
       expect(metrics.totalRequests).toBe(0);
