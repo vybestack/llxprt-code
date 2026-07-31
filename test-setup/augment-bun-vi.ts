@@ -550,7 +550,25 @@ const viAugmentations = {
     loadIsolatedModuleSync(resolveActualId(id)),
   resetModules: unsupportedModuleIsolation,
   mock: registerModuleMock,
-  doMock: registerModuleMock,
+  doMock: (
+    id: string,
+    factory?: (importOriginal: () => Promise<unknown>) => unknown,
+  ): unknown => {
+    // vi.doMock must NOT call the factory eagerly. Unlike vi.mock (which is
+    // hoisted and needs eager evaluation to work around Bun's mock.module
+    // async deadlock), vi.doMock is called at runtime and the factory should
+    // only run when the module is actually imported.
+    const mockId = resolveModuleSpecifier(id);
+    if (!factory) {
+      const resolvedId = resolveActualId(id);
+      const realModule = loadIsolatedModuleSync(resolvedId);
+      return mock.module(mockId, () => automockValue(realModule, new Map()));
+    }
+    return mock.module(mockId, () => {
+      const result = factory(() => importResolvedActual(resolveActualId(id)));
+      return result as object;
+    });
+  },
   doUnmock: unsupportedModuleIsolation,
   unmock: unsupportedModuleIsolation,
   isMockFunction,
