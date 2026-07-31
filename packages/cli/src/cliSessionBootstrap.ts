@@ -30,10 +30,14 @@ import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import { registerCleanup } from './utils/cleanup.js';
 import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { promises as fsPromises } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import { resolveForegroundRuntimeId } from './config/profileBootstrap.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
+import {
+  initializeObservationProducer,
+  stopObservationProducer,
+} from './observation/jspWiring.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
 export function formatSessionSummaryLine(
@@ -200,6 +204,35 @@ async function releaseResumedResources(
  * service (new or resumed), restore history when resuming, and register the
  * recording cleanup hook.
  */
+function setupObservation(config: Config): void {
+  const projectRoot = config.getProjectRoot();
+  initializeObservationProducer(
+    {
+      repository: basename(projectRoot),
+      path: projectRoot,
+      agentKind: 'llxprt',
+      displayName: basename(projectRoot),
+    },
+    config.getSessionId(),
+  );
+}
+
+function registerRecordingCleanup(
+  recordingIntegration: RecordingIntegration,
+  recordingService: SessionRecordingService,
+  lockHandle: LockHandle | null,
+): void {
+  registerCleanup(async () => {
+    await stopObservationProducer();
+    recordingIntegration.dispose();
+    try {
+      await recordingService.dispose();
+    } finally {
+      await lockHandle?.release();
+    }
+  });
+}
+
 export async function setupSessionRecording(
   config: Config,
   argv: ParsedCliArgs,
@@ -282,15 +315,13 @@ export async function setupSessionRecording(
   }
 
   const recordingIntegration = new RecordingIntegration(activeRecordingService);
+  setupObservation(config);
 
-  registerCleanup(async () => {
-    recordingIntegration.dispose();
-    try {
-      await activeRecordingService.dispose();
-    } finally {
-      await activeLockHandle?.release();
-    }
-  });
+  registerRecordingCleanup(
+    recordingIntegration,
+    activeRecordingService,
+    activeLockHandle,
+  );
 
   return {
     recordingService: activeRecordingService,

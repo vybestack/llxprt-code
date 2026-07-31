@@ -41,6 +41,11 @@ import {
 } from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import {
+  observeAgentEvent,
+  observeAssistantMessageCommitted,
+  observeTurnStarted,
+} from '../../../observation/jspWiring.js';
 
 export type SubmissionDisposition =
   | 'consumed'
@@ -264,6 +269,7 @@ function useProcessAgentEvent(
   const latestHandlers = useRef(handlers);
   latestHandlers.current = handlers;
   return useCallback<AgentEventRouter>((event, userMessageTimestamp) => {
+    observeAgentEvent(event);
     const result = dispatchAgentEvent(
       event,
       {
@@ -635,6 +641,7 @@ async function runSubmitQueryCore(
   );
   cbd.setIsResponding(true);
   cbd.setInitError(null);
+  observeTurnStarted();
 
   try {
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
@@ -736,7 +743,14 @@ async function executeStream(
     return;
   }
 
-  if (deps.pendingHistoryItemRef.current) {
+  const pending = deps.pendingHistoryItemRef.current;
+  if (pending) {
+    if (pending.type === 'gemini' || pending.type === 'gemini_content') {
+      const sanitized = deps.sanitizeContent(pending.text);
+      if (!sanitized.blocked) {
+        observeAssistantMessageCommitted(sanitized.text, Date.now());
+      }
+    }
     deps.flushPendingHistoryItem(turn.userMessageTimestamp);
     deps.setPendingHistoryItem(null);
   }
