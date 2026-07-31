@@ -346,7 +346,7 @@ jobs:
             "- **Title**: " + pr.title,
             "- **Author**: " + ((pr.author && pr.author.login) || "unknown"),
             "- **Branch**: " + pr.baseRefName + " ← " + pr.headRefName,
-            "- **Changes**: +" + pr.additions + " -" + pr.deletions + " across " + pr.changedFiles + " files (" + pr.commits + " commits)",
+            "- **Changes**: +" + pr.additions + " -" + pr.deletions + " across " + pr.changedFiles + " files (" + (Array.isArray(pr.commits) ? pr.commits.length : pr.commits) + " commits)",
             "- **CI Status**: " + (process.env.CI_STATUS || "unknown") + " / " + (process.env.CI_CONCLUSION || "unknown"),
             "- **CI Run**: " + (process.env.CI_RUN_URL || "N/A"),
             "- **Documentation-only**: " + (process.env.DOCS_ONLY || "unknown"),
