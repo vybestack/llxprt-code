@@ -589,3 +589,63 @@ describe('projection token count consistency (issue #2817 A10)', () => {
     },
   );
 });
+
+describe('projection fail-fast: model must be non-empty string (finding #4)', () => {
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope],
+  ] as const)('%s throws when model is absent', (_name, project) => {
+    expect(() =>
+      project({ messages: [{ role: 'user', content: 'Hello' }] }),
+    ).toThrow(/model/i);
+  });
+
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope],
+  ] as const)('%s throws when model is an empty string', (_name, project) => {
+    expect(() =>
+      project({
+        model: '',
+        messages: [{ role: 'user', content: 'Hello' }],
+      }),
+    ).toThrow(/model/i);
+  });
+
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope],
+  ] as const)('%s throws when model is whitespace-only', (_name, project) => {
+    expect(() =>
+      project({
+        model: '   ',
+        messages: [{ role: 'user', content: 'Hello' }],
+      }),
+    ).toThrow(/model/i);
+  });
+
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope],
+  ] as const)('%s throws when model is a non-string type', (_name, project) => {
+    expect(() =>
+      project({
+        model: 42,
+        messages: [{ role: 'user', content: 'Hello' }],
+      }),
+    ).toThrow(/model/i);
+  });
+
+  it('includes the protocol and method in the error message for diagnosis', () => {
+    expect(() =>
+      projectOpenAIResponsesPromptEnvelope({
+        model: '',
+        input: [{ role: 'user', content: 'Hello' }],
+      }),
+    ).toThrow(/openai-responses.*responses\/v1/i);
+  });
+});

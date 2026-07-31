@@ -406,7 +406,7 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     const requestParams = this._withProviderRequestContext(params);
     this._validateProvider(provider);
-    const timing = createProviderSendTiming(Date.now());
+    const timing = createProviderSendTiming();
 
     try {
       const providerBaseUrl = this.resolveProviderBaseUrl(provider);

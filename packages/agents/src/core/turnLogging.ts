@@ -141,25 +141,27 @@ export function logApiError(
  * The `durationMs` on provider telemetry must measure provider latency, not
  * local enforcement/compression time, so the clock starts when the prepared
  * request is actually handed to the provider. Before the first send it falls
- * back to the overall start so failures during preparation still report a
- * duration.
+ * back to when this timing was created so failures during preparation still
+ * report a duration.
+ *
+ * Duration is measured with `performance.now()` (monotonic) so wall-clock
+ * adjustments (NTP) cannot produce negative or inflated elapsed values.
  */
 export interface ProviderSendTiming {
   measure<T>(send: () => Promise<T>): Promise<T>;
   elapsedSinceSend(): number;
 }
 
-export function createProviderSendTiming(
-  overallStartTime: number,
-): ProviderSendTiming {
-  let sendStartTime: number | undefined;
+export function createProviderSendTiming(): ProviderSendTiming {
+  const createdAt = performance.now();
+  let sendStartedAt: number | undefined;
   return {
     measure(send) {
-      sendStartTime = Date.now();
+      sendStartedAt = performance.now();
       return send();
     },
     elapsedSinceSend() {
-      return Date.now() - (sendStartTime ?? overallStartTime);
+      return Math.round(performance.now() - (sendStartedAt ?? createdAt));
     },
   };
 }

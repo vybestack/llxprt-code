@@ -42,6 +42,89 @@ describe('recordFinalizedPromptEnvelopeEstimate', () => {
     });
   });
 
+  it('is a no-op when usageLogger is undefined', () => {
+    const refineEstimate = vi.fn();
+
+    expect(() =>
+      recordFinalizedPromptEnvelopeEstimate(
+        undefined,
+        'prompt-undefined-logger',
+        {
+          estimatedPromptTokens: 12,
+          model: 'gpt-4o',
+          protocol: 'openai-chat',
+          method: 'chat/completions/v1',
+          projectionRevision: 2,
+          unsupportedMedia: [],
+        },
+        'openai',
+      ),
+    ).not.toThrow();
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when usageLogger is null', () => {
+    const refineEstimate = vi.fn();
+
+    expect(() =>
+      recordFinalizedPromptEnvelopeEstimate(
+        null,
+        'prompt-null-logger',
+        {
+          estimatedPromptTokens: 12,
+          model: 'gpt-4o',
+          protocol: 'openai-chat',
+          method: 'chat/completions/v1',
+          projectionRevision: 2,
+          unsupportedMedia: [],
+        },
+        'openai',
+      ),
+    ).not.toThrow();
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when usageLogger.isEnabled() returns false', () => {
+    const refineEstimate = vi.fn();
+    const usageLogger = {
+      isEnabled: () => false,
+      refineEstimate,
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger,
+      'prompt-disabled',
+      {
+        estimatedPromptTokens: 12,
+        model: 'gpt-4o',
+        protocol: 'openai-chat',
+        method: 'chat/completions/v1',
+        projectionRevision: 2,
+        unsupportedMedia: [],
+      },
+      'openai',
+    );
+
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when estimate is null', () => {
+    const refineEstimate = vi.fn();
+    const usageLogger = {
+      isEnabled: () => true,
+      refineEstimate,
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger,
+      'prompt-null-estimate',
+      null,
+      'openai',
+    );
+
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
   it('keeps synchronous logger failures from disrupting a valid send', () => {
     let refineCalls = 0;
     const usageLogger = {

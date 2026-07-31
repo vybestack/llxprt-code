@@ -28,7 +28,9 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
+import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 
 vi.mock('openai', () => {
   class FakeOpenAI {
@@ -50,12 +52,22 @@ const MEDIA_CAPABLE_CONFIG: IProviderConfig = {
   },
 } as IProviderConfig;
 
+const PROMPT_CREDENTIAL = 'ambient-prompt-token';
+const TRANSPORT_CREDENTIAL = 'ambient-transport-token';
+
 /**
  * A provider whose ambient prompt credential is available (as it is in
  * production once OAuth or an API key is configured) while the per-call
  * options carry no resolved token.
+ *
+ * `getAuthTokenForPrompt` and `getAuthToken` return DISTINCT values, and every
+ * credential projection hands to `getClient` is recorded, so a regression that
+ * resolves the transport credential during projection is observable rather
+ * than merely "a token exists".
  */
 class AmbientCredentialProvider extends OpenAIProvider {
+  readonly clientCredentials: Array<string | undefined> = [];
+
   constructor() {
     super(undefined, 'https://api.moonshot.cn/v1', MEDIA_CAPABLE_CONFIG);
   }
@@ -69,11 +81,20 @@ class AmbientCredentialProvider extends OpenAIProvider {
   }
 
   protected override async getAuthToken(): Promise<string> {
-    return 'ambient-token';
+    return TRANSPORT_CREDENTIAL;
   }
 
   protected override async getAuthTokenForPrompt(): Promise<string> {
-    return 'ambient-token';
+    return PROMPT_CREDENTIAL;
+  }
+
+  protected override async getClient(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<OpenAI> {
+    this.clientCredentials.push(
+      options.resolved.authToken as string | undefined,
+    );
+    return super.getClient(options);
   }
 }
 
@@ -115,5 +136,12 @@ describe('OpenAI Chat projection credential parity (issue #2817)', () => {
     expect(projection.protocol).toBe('openai-chat');
     expect(await projection.countProjectedTokens()).toBeGreaterThan(0);
     expect(projection.transportToken).toBeDefined();
+
+    // Projection needed a client (media-capable endpoint) and must have built
+    // it from the PROMPT credential. Asserting the exact value means a
+    // regression to `getAuthToken`, or to an empty/unresolved token, fails
+    // here instead of silently passing a "token is defined" check.
+    expect(provider.clientCredentials).toStrictEqual([PROMPT_CREDENTIAL]);
+    expect(provider.clientCredentials).not.toContain(TRANSPORT_CREDENTIAL);
   });
 });

@@ -452,9 +452,7 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
   });
 
   it('A7: re-estimates each attempt so a materially changed retry gets a fresh estimate', async () => {
-    // The first attempt fails with a retryable error; the retry carries the
-    // same finalized options. Each attempt must produce its OWN estimate
-    // rather than reusing a stale one from before the failure.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
     const estimateHistory: number[] = [];
     const transportedBodies: string[] = [];
     const preparedBodies = new WeakMap<object, string>();
@@ -526,7 +524,15 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     const fixture = createTestFixture(retryingProvider);
     const chat = buildChatSession(fixture);
 
-    await chat.sendMessage({ message: [{ text: 'Retry me.' }] }, 'retry-1');
+    const sendPromise = chat.sendMessage(
+      { message: [{ text: 'Retry me.' }] },
+      'retry-1',
+    );
+
+    // Advance past the default 5s retry backoff delay so no real wall-clock
+    // time is consumed by the test.
+    await vi.advanceTimersByTimeAsync(10_000);
+    await sendPromise;
 
     expect(attempt).toBeGreaterThanOrEqual(2);
     expect(estimateHistory.length).toBe(attempt);
@@ -536,7 +542,9 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     expect(chat.getPromptEnvelopeEstimate()?.estimatedPromptTokens).toBe(
       estimateHistory.at(-1),
     );
-  }, 10000);
+
+    vi.useRealTimers();
+  });
 
   it('fails fast before transport when finalized projection preparation fails', async () => {
     const failingProjectionProvider: IProvider = {

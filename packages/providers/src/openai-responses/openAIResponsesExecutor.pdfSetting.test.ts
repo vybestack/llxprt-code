@@ -71,4 +71,23 @@ describe('isResponsesPdfEnabled optional settings seam (issue #2817)', () => {
       false,
     );
   });
+
+  it('prefers invocation ephemerals over model behavior when BOTH are set', () => {
+    // Precedence: ephemerals > modelBehavior > settings
+    const settings = { get: () => true };
+
+    // ephemerals=false wins over modelBehavior=true
+    expect(
+      isResponsesPdfEnabled(
+        buildOptions(settings, { 'media.pdf.enabled': false }, true),
+      ),
+    ).toBe(false);
+
+    // ephemerals=true wins over modelBehavior=false
+    expect(
+      isResponsesPdfEnabled(
+        buildOptions(settings, { 'media.pdf.enabled': true }, false),
+      ),
+    ).toBe(true);
+  });
 });

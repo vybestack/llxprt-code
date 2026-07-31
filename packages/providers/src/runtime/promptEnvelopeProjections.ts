@@ -42,7 +42,7 @@ function buildProjection(
   const tokens = countPromptTokens(promptText);
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
   return {
-    model: extractModel(requestBody),
+    model: extractModelOrThrow(requestBody, identity),
     protocol: identity.protocol,
     method: identity.method,
     projectionRevision: identity.projectionRevision,
@@ -59,16 +59,42 @@ function freezeUnsupportedMedia(
   return Object.freeze(value.map((entry) => Object.freeze({ ...entry })));
 }
 
-function extractModel(requestBody: unknown): string {
-  if (
-    typeof requestBody === 'object' &&
-    requestBody !== null &&
-    'model' in requestBody &&
-    typeof requestBody.model === 'string'
-  ) {
-    return requestBody.model;
+function readModel(requestBody: unknown): string | undefined {
+  if (typeof requestBody !== 'object' || requestBody === null) {
+    return undefined;
   }
-  return '';
+  const model = (requestBody as Record<string, unknown>).model;
+  return typeof model === 'string' ? model : undefined;
+}
+
+function describeInvalidModel(requestBody: unknown): string {
+  if (requestBody === null || requestBody === undefined) {
+    return String(requestBody);
+  }
+  if (typeof requestBody === 'object') {
+    const model = (requestBody as Record<string, unknown>).model;
+    return `model=${JSON.stringify(model)}`;
+  }
+  return typeof requestBody;
+}
+
+/**
+ * Fail fast at the projection boundary: `PromptEnvelopeProjection.model` is a
+ * required non-empty string, and downstream estimate validation rejects empty
+ * values. Returning a placeholder here would defer the failure to estimate
+ * time, obscuring which request produced it (issue #2817).
+ */
+function extractModelOrThrow(
+  requestBody: unknown,
+  identity: ProjectionIdentity,
+): string {
+  const model = readModel(requestBody);
+  if (model !== undefined && model.trim() !== '') {
+    return model;
+  }
+  throw new Error(
+    `PromptEnvelopeProjection (${identity.protocol}/${identity.method}): request body must carry a non-empty string "model" field, got ${describeInvalidModel(requestBody)}`,
+  );
 }
 
 function serializePromptBearingStructure(

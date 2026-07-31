@@ -331,23 +331,31 @@ describe('PromptEnvelopeEstimate result contract (issue #2817)', () => {
       reason: 'audio not supported',
       mediaType: 'audio',
     };
+    const inputUnsupportedMedia = [originalEntry];
     const projection: PromptEnvelopeProjection = {
       model: 'gpt-4o',
       protocol: 'openai-chat',
       method: 'chat/completions/v1',
       projectionRevision: 1,
-      unsupportedMedia: [originalEntry],
+      unsupportedMedia: inputUnsupportedMedia,
       transportToken: Object.freeze({}),
       countProjectedTokens: () => Promise.resolve(10),
     };
 
-    await estimatePromptEnvelope(projection);
+    const estimate = await estimatePromptEnvelope(projection);
 
-    expect(originalEntry).toStrictEqual({
+    // The estimate's frozen copy is correct.
+    expect(estimate.unsupportedMedia).toHaveLength(1);
+    expect(estimate.unsupportedMedia[0]).toStrictEqual(originalEntry);
+
+    // The INPUT array itself must be unmutated.
+    expect(inputUnsupportedMedia).toHaveLength(1);
+    expect(inputUnsupportedMedia[0]).toStrictEqual({
       kind: 'unsupported',
       reason: 'audio not supported',
       mediaType: 'audio',
     });
+    expect(Object.isFrozen(inputUnsupportedMedia)).toBe(false);
     expect(Object.isFrozen(originalEntry)).toBe(false);
   });
 

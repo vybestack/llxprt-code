@@ -289,7 +289,7 @@ async function resolveResponsesTransportContext(
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
   if (rawBaseURL !== prepared.rawBaseURL) {
     throw new Error(
-      'OpenAI Responses transport endpoint does not match the prepared prompt envelope',
+      `Projection/transport endpoint mismatch: the OpenAI Responses prompt envelope was prepared for "${prepared.rawBaseURL}" but transport resolved "${rawBaseURL}". A prepared envelope must be sent to the same endpoint it was estimated for (issue #2817 invariant: projection == transport).`,
     );
   }
   return {

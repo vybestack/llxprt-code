@@ -177,6 +177,28 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
 
     expect(base.projectionInput).toBeDefined();
     expect(base.transportInput).toBeDefined();
+
+    // Assert against KNOWN EXPECTED values so a normalization-absent seam
+    // fails the test on its own, not just by comparison to the other seam.
+    // (Comparing the seams to each other alone passes vacuously when both are
+    // undefined, which would hide normalization being skipped on both.)
+    expect(base.projectionInput?.runtimeId).toBe('managed-runtime');
+    expect(base.projectionInput?.settingsPresent).toBe(true);
+    expect(base.projectionInput?.configPresent).toBe(true);
+    expect(base.projectionInput?.metadataSource).toBe(
+      'LoggingProviderWrapper.generateChatCompletion',
+    );
+    expect(base.projectionInput?.normalizerApplied).toBe(true);
+
+    expect(base.transportInput?.runtimeId).toBe('managed-runtime');
+    expect(base.transportInput?.settingsPresent).toBe(true);
+    expect(base.transportInput?.configPresent).toBe(true);
+    expect(base.transportInput?.metadataSource).toBe(
+      'LoggingProviderWrapper.generateChatCompletion',
+    );
+    expect(base.transportInput?.normalizerApplied).toBe(true);
+
+    // Also verify parity between the two seams.
     expect(base.projectionInput?.runtimeId).toBe(
       base.transportInput?.runtimeId,
     );

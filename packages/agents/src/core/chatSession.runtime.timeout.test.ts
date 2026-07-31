@@ -340,6 +340,113 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const result = resolveStreamIdleTimeoutMs(localConfig);
       expect(result).toBe(envTimeoutMs); // Env wins
     });
+
+    it('concurrent: two simultaneous sends timeout independently without signal leakage', async () => {
+      vi.useFakeTimers();
+      const timeoutMs = 30_000;
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
+      localProviderRuntime = createProviderRuntimeContext({
+        settingsService: localSettingsService,
+        config: localConfig,
+        runtimeId: 'test.runtime.concurrent',
+        metadata: { source: 'concurrent-test' },
+      });
+      localManager = new TestRuntimeProviderManager(localProviderRuntime);
+      localManager.setConfig(localConfig);
+      localConfig.setProviderManager(localManager);
+
+      const capturedSignals: AbortSignal[] = [];
+      const pendingReadsBySession: Record<string, number> = {};
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: vi.fn(
+          (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
+            capturedSignals.push(options.invocation?.signal as AbortSignal);
+            return createNoncooperativeStream(() => {
+              const rid = options.runtime?.runtimeId ?? 'unknown';
+              pendingReadsBySession[rid] =
+                (pendingReadsBySession[rid] ?? 0) + 1;
+            });
+          },
+        ),
+        projectPromptEnvelope: async () => {
+          const transportToken = Object.freeze({});
+          return {
+            model: 'stub-model',
+            protocol: 'openai-chat',
+            method: 'chat/completions/v1',
+            projectionRevision: 2,
+            unsupportedMedia: [],
+            transportToken,
+            countProjectedTokens: () => Promise.resolve(10),
+          };
+        },
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+      };
+      localManager.registerProvider(provider);
+      localManager.setActiveProvider('stub');
+
+      const chat = new ChatSession(
+        createAgentRuntimeContext({
+          state: createAgentRuntimeState({
+            runtimeId: 'test.runtime.concurrent',
+            provider: 'stub',
+            model: 'stub-model',
+            sessionId: localConfig.getSessionId(),
+          }),
+          history: new HistoryService(),
+          settings: { compressionThreshold: 0.8 },
+          provider: createProviderAdapterFromManager(localManager),
+          telemetry: createTelemetryAdapterFromConfig(localConfig),
+          tools: createToolRegistryViewFromRegistry(
+            localConfig.getToolRegistry(),
+          ),
+          providerRuntime: localProviderRuntime,
+        }),
+        createContentGeneratorStub(),
+        {},
+        [],
+      );
+
+      // Launch both sends concurrently.
+      const sendA = chat
+        .sendMessage({ message: [{ text: 'A' }] }, 'prompt-a')
+        .catch((error: unknown) => error);
+      const sendB = chat
+        .sendMessage({ message: [{ text: 'B' }] }, 'prompt-b')
+        .catch((error: unknown) => error);
+
+      // Wait for both sends to reach the blocked read.
+      await vi.waitFor(
+        () => {
+          expect(capturedSignals.length).toBeGreaterThanOrEqual(2);
+        },
+        { interval: 1, timeout: 100 },
+      );
+
+      // Advance past timeout for BOTH concurrent streams.
+      await vi.advanceTimersByTimeAsync(timeoutMs + 1);
+
+      const [resultA, resultB] = await Promise.all([sendA, sendB]);
+
+      // Both must timeout — no sibling cancellation or signal leakage.
+      expect(resultA).toBeInstanceOf(Error);
+      expect(resultA).toMatchObject({ name: 'StreamIdleTimeoutError' });
+      expect(resultB).toBeInstanceOf(Error);
+      expect(resultB).toMatchObject({ name: 'StreamIdleTimeoutError' });
+
+      // Each stream's signal must be independently aborted.
+      expect(capturedSignals.length).toBeGreaterThanOrEqual(2);
+      for (const signal of capturedSignals) {
+        expect(signal.aborted).toBe(true);
+      }
+    });
   });
 
   describe('DirectMessageProcessor (via generateDirectMessage)', () => {

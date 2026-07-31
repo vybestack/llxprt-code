@@ -244,8 +244,6 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       }
     };
 
-    await expect(drain()).rejects.toThrow(
-      'Unknown OpenAI Chat prompt-envelope transport token',
-    );
+    await expect(drain()).rejects.toThrow(/Unknown.*Chat.*transport token/i);
   });
 });

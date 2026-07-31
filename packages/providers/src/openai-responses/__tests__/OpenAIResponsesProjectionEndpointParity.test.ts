@@ -49,11 +49,6 @@ vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 const AMBIENT_BASE_URL = 'https://ambient.example/v1';
 const PER_CALL_BASE_URL = 'https://per-call.example/v1';
-const CANONICAL_BASE_URL = 'https://api.openai.com/v1';
-
-interface PreparedResponsesEnvelope {
-  readonly rawBaseURL: string;
-}
 
 class TestOpenAIProvider extends OpenAIProvider {
   constructor() {
@@ -69,19 +64,6 @@ class TestOpenAIProvider extends OpenAIProvider {
   protected override async getAuthTokenForPrompt(): Promise<string> {
     return 'token-test';
   }
-
-  readPreparedRawBaseURL(transportToken: object): string | undefined {
-    const prepared = (
-      this as unknown as {
-        preparedPromptEnvelopes: {
-          get(
-            token: object,
-          ): { requestContext?: PreparedResponsesEnvelope } | undefined;
-        };
-      }
-    ).preparedPromptEnvelopes.get(transportToken);
-    return prepared?.requestContext?.rawBaseURL;
-  }
 }
 
 class TestResponsesProvider extends OpenAIResponsesProvider {
@@ -95,14 +77,6 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
 
   protected override async getAuthTokenForPrompt(): Promise<string> {
     return 'token-test';
-  }
-
-  readPreparedRawBaseURL(transportToken: object): string | undefined {
-    return (
-      this as unknown as {
-        preparedPromptEnvelopes: WeakMap<object, PreparedResponsesEnvelope>;
-      }
-    ).preparedPromptEnvelopes.get(transportToken)?.rawBaseURL;
   }
 }
 
@@ -208,9 +182,16 @@ describe('Responses projection endpoint parity (issue #2817)', () => {
       const projection = await provider.projectPromptEnvelope(options);
 
       expect(projection.protocol).toBe('openai-responses');
-      expect(provider.readPreparedRawBaseURL(projection.transportToken)).toBe(
-        CANONICAL_BASE_URL,
+
+      // Verify the OBSERVABLE transport URL — the prepared envelope must
+      // be sent to the canonical endpoint, not the ambient one.
+      const requestedUrls = await sendPreparedEnvelope(
+        provider,
+        options,
+        projection.transportToken,
       );
+      expect(requestedUrls).toHaveLength(1);
+      expect(requestedUrls[0]).toContain('api.openai.com');
     });
 
     it('selects projection transport from per-call settings', async () => {
@@ -268,10 +249,9 @@ describe('Responses projection endpoint parity (issue #2817)', () => {
       );
 
       const projection = await provider.projectPromptEnvelope(options);
-      expect(provider.readPreparedRawBaseURL(projection.transportToken)).toBe(
-        PER_CALL_BASE_URL,
-      );
 
+      // Verify the OBSERVABLE transport URL rather than reaching into the
+      // private preparedPromptEnvelopes WeakMap (finding #24).
       const requestedUrls = await sendPreparedEnvelope(
         provider,
         options,
