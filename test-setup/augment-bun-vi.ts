@@ -23,6 +23,7 @@ import {
   mock,
   setSystemTime as bunSetSystemTime,
   describe as bunDescribe,
+  expect,
 } from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
 import {
@@ -545,6 +546,8 @@ const viAugmentations = {
   },
   waitFor,
   importActual,
+  importActualSync: (id: string): unknown =>
+    loadIsolatedModuleSync(resolveActualId(id)),
   resetModules: unsupportedModuleIsolation,
   mock: registerModuleMock,
   doMock: registerModuleMock,
@@ -661,6 +664,44 @@ if (!describeRecord.sequential) {
     }
   }
 }
+
+// Vitest-compatible custom matcher: toHaveBeenCalledExactlyOnceWith.
+// Bun's expect does not provide this matcher, so we add it via expect.extend.
+// Uses expect(...).toEqual(...) internally so that asymmetric matchers like
+// expect.objectContaining / expect.any are handled correctly.
+type MockLike = {
+  mock?: { calls: unknown[][] };
+};
+
+expect.extend({
+  toHaveBeenCalledExactlyOnceWith(
+    received: unknown,
+    ...expected: unknown[]
+  ): { pass: boolean; message: () => string } {
+    const mockObj = received as MockLike;
+    const calls = mockObj?.mock?.calls;
+    if (!calls || calls.length !== 1) {
+      return {
+        pass: false,
+        message: () =>
+          `Expected mock to be called exactly once, but it was called ${calls?.length ?? 0} times`,
+      };
+    }
+    let pass = true;
+    try {
+      expect(calls[0]).toEqual(expected);
+    } catch {
+      pass = false;
+    }
+    return {
+      pass,
+      message: () =>
+        pass
+          ? 'Expected mock not to have been called exactly once with the given arguments'
+          : `Expected mock to have been called exactly once with [${expected.map((a) => JSON.stringify(a)).join(', ')}], but was called with [${calls[0].map((a) => JSON.stringify(a)).join(', ')}]`,
+    };
+  },
+});
 
 // Also register mock.module('vitest') as a fallback for environments where
 // the built-in handler does NOT intercept (e.g., non-test contexts).
