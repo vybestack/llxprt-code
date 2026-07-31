@@ -579,14 +579,24 @@ IDE integration: `current()`, `detected()`, `trust(name)`, `status()`,
 
 #### `agent.session` — `AgentSessionControl`
 
-Session lifecycle: `resume(target, options?)`, `createCheckpoint(label?)`,
-`restoreCheckpoint(id)`, `listCheckpoints()`, `setRecording(state)`,
-`getRecording()`.
+Session lifecycle: `resume(target, options?)`, `resumeSession(ref)`,
+`listSessions()`, `nameCurrentSession(name)`, `deleteSession(ref)`,
+`createCheckpoint(name)`, `forkFromCheckpoint(ref)`, `listCheckpoints()`,
+`renameCheckpoint(ref, name)`, `deleteCheckpoint(ref)`, `setRecording(state)`,
+and `getRecording()`.
 
-`resume()` returns the reconstructed history
-(`Promise<readonly AgentHistoryItem[]>`) so callers can replay the restored
-conversation without a lossy `getHistory()` round-trip (previously
-`Promise<void>`; callers that ignore the return value are source-compatible).
+`resume()` remains the history-returning API
+(`Promise<readonly AgentHistoryItem[]>`) for callers that replay restored
+conversation items. `resumeSession()` returns truthful `SessionInfo`; a living
+session reference resumes that recording, while a checkpoint name or stable ID
+creates and installs a new self-contained child. `CheckpointInfo` exposes the
+stable checkpoint ID, name, source session ID, inclusive sequence watermark,
+and creation timestamp. `SessionInfo` exposes identity, name/title, timestamps,
+and optional fork ancestry.
+
+Checkpoints and session names are project-scoped recording metadata. The old
+`checkpoint-*.json` files and in-place `restoreCheckpoint()` API are not read or
+migrated. Recover any conversation needed from those files before upgrading.
 `setRecording({ enabled: true })` records continuously: it snapshots the
 current history and appends every subsequent turn to the session JSONL file.
 

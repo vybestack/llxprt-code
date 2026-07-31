@@ -8,6 +8,7 @@
 
 ### Changed
 
+- **Recording-native checkpoints and branching (#2625):** `/chat save`, `/continue`, `/chat resume`, and the Agent session API now use append-only JSONL checkpoint metadata. Continuing a checkpoint creates a new locked, self-contained child session; living-session continuation remains append-in-place. Session/checkpoint names share a project namespace, history clear/restore is persisted as rewind events, and sessions with live checkpoints cannot be deleted.
 - Removed dead remote telemetry scaffolding: destination CLI flags and settings now fail fast as unknown, OTLP/sdk-node dependencies and collector helpers are gone, and local file/console telemetry uses direct OpenTelemetry providers (#2692).
 
 - **Installed command launches Bun directly (issue #2603):** The `llxprt` bin entry is now `packages/cli/bin/llxprt`, a POSIX sh launcher with a valid `#!/bin/sh` shebang (directly execve-compatible). On Windows, the CLI workspace `postinstall` (`packages/cli/scripts/install-native-launchers.cjs`) replaces npm's cmd-shim with native `.cmd` and `.ps1` launchers. No Node process is started on the installed command path. The old Node launcher (`packages/cli/bin/llxprt.cjs`) has been removed. The POSIX launcher validates the Bun executable's native binary magic (ELF/Mach-O) before exec, producing an actionable exit 43 for a corrupt or unusable binary without double-starting Bun. The Windows cmd launcher preserves the child exit code exactly (no errorlevel remapping); the PowerShell launcher wraps the invocation in try/catch to surface launch failures as exit 43 while propagating normal nonzero exits via `$LASTEXITCODE`.
@@ -27,6 +28,7 @@
 
 ### Removed
 
+- Removed legacy conversation `checkpoint-*.json` persistence and the Agent `restoreCheckpoint()` API. Legacy checkpoint files are intentionally ignored and are not migrated; recover any needed conversation content before upgrading. Unrelated Git file-edit checkpointing remains supported.
 - Removed the discontinued Qwen OAuth provider. Qwen discontinued its OAuth free tier on 2026-04-15; the OAuth flow, device-flow implementation, and all OAuth wiring have been removed. Qwen models remain reachable via **API key** through Alibaba Cloud DashScope (OpenAI-compatible endpoint `https://dashscope.aliyuncs.com/compatible-mode/v1`, environment variable `DASHSCOPE_API_KEY`). The `qwen` and `qwenvercel` aliases are now API-key-only. Users should obtain a DashScope API key (or use an OpenRouter API key) instead of `/auth qwen enable`. OAuth providers are now three: Gemini, Anthropic, and Codex.
 
 ### Added

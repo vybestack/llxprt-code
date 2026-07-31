@@ -10,8 +10,8 @@ import { useCallback, useMemo } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type {
+  ContinueTarget,
   HydratedModel,
-  SessionSummary,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
@@ -90,7 +90,7 @@ function useSessionBrowserHandler(
   uiActions: ReturnType<typeof useUIActions>,
 ) {
   return useCallback(
-    async (session: SessionSummary): Promise<PerformResumeResult> => {
+    async (target: ContinueTarget): Promise<PerformResumeResult> => {
       const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
       if (recordingSwapCallbacks == null) {
         dialogManagerLogger.warn(
@@ -117,12 +117,15 @@ function useSessionBrowserHandler(
         recordingCallbacks: recordingSwapCallbacks as NonNullable<
           ResumeContext['recordingCallbacks']
         >,
+        historyService: config.getAgentClient().getHistoryService(),
+        adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
         logger: dialogManagerLogger,
       };
-      const resumeResult = await performResume(
-        session.sessionId,
-        resumeContext,
-      );
+      const ref =
+        target.kind === 'session'
+          ? target.session.sessionId
+          : target.checkpointId;
+      const resumeResult = await performResume(ref, resumeContext);
       if (!resumeResult.ok) {
         addItem({ type: 'error', text: resumeResult.error });
         return resumeResult;
@@ -130,7 +133,6 @@ function useSessionBrowserHandler(
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });
       }
-      await config.getAgentClient().restoreHistory(resumeResult.history);
       const uiHistory = iContentToHistoryItems(resumeResult.history);
       commandContext.ui.clear();
       uiHistory.forEach((item, index) => {
@@ -504,9 +506,12 @@ function renderSessionBrowserDialog(
   uiState: ReturnType<typeof useUIState>,
   uiActions: ReturnType<typeof useUIActions>,
   config: CliUiRuntime,
-  commandContext: { ui: { pendingItem: unknown } },
+  commandContext: {
+    ui: { pendingItem: unknown };
+    recordingSwapCallbacks?: ResumeContext['recordingCallbacks'];
+  },
   handleSessionBrowserSelect: (
-    session: SessionSummary,
+    target: ContinueTarget,
   ) => Promise<PerformResumeResult>,
 ) {
   const chatsDir = join(config.getProjectTempDir(), 'chats');
@@ -520,6 +525,9 @@ function renderSessionBrowserDialog(
         projectHash={projectHash}
         currentSessionId={currentSessionId}
         hasActiveConversation={hasActiveConversation}
+        activeRecording={
+          commandContext.recordingSwapCallbacks?.getCurrentRecording() ?? null
+        }
         onSelect={handleSessionBrowserSelect}
         onClose={uiActions.closeSessionBrowserDialog}
       />

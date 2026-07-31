@@ -146,6 +146,7 @@ export interface AgentClientSource {
  */
 export interface SessionIdentity {
   getSessionId(): string;
+  adoptSessionId(sessionId: string): void;
   getTargetDir(): string;
   getProjectRoot(): string;
   getWorkingDir(): string;
@@ -499,6 +500,7 @@ export interface UiRuntimeBareSource
 function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
   return {
     getSessionId: () => source.getSessionId(),
+    adoptSessionId: (sessionId) => source.adoptSessionId(sessionId),
     getTargetDir: () => source.getTargetDir(),
     getProjectRoot: () => source.getProjectRoot(),
     getWorkingDir: () => source.getWorkingDir(),

@@ -7,29 +7,11 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { ensureDir } from '../utils/paths.js';
-import type { EmojiFilter } from '../filters/EmojiFilter.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const LOG_FILE_NAME = 'logs.json';
 const BACKUP_RETENTION_DAYS = 30;
-
-/**
- * Structural shapes for checkpoint (de)serialization. Checkpoints are stored
- * as JSON and round-tripped through ContentConverters at the provider
- * boundary, so these intentionally operate on the legacy Google-shaped
- * `Content`/`Part` wire structure without importing @google/genai.
- */
-interface CheckpointPart {
-  text?: string;
-  [key: string]: unknown;
-}
-
-export interface CheckpointContent {
-  role?: string;
-  parts?: CheckpointPart[];
-  [key: string]: unknown;
-}
 
 export enum MessageSenderType {
   USER = 'user',
@@ -58,44 +40,7 @@ function isValidLogEntry(entry: unknown): entry is LogEntry {
   return typeof e.type === 'string' && typeof e.message === 'string';
 }
 
-// This regex matches any character that is NOT a letter (a-z, A-Z),
-// a number (0-9), a hyphen (-), an underscore (_), or a dot (.).
-
-/**
- * Encodes a string to be safe for use as a filename.
- *
- * It replaces any characters that are not alphanumeric or one of `_`, `-`, `.`
- * with a URL-like percent-encoding (`%` followed by the 2-digit hex code).
- *
- * @param str The input string to encode.
- * @returns The encoded, filename-safe string.
- */
-export function encodeTagName(str: string): string {
-  return encodeURIComponent(str);
-}
-
-/**
- * Decodes a string that was encoded with the `encode` function.
- *
- * It finds any percent-encoded characters and converts them back to their
- * original representation.
- *
- * @param str The encoded string to decode.
- * @returns The decoded, original string.
- */
-export function decodeTagName(str: string): string {
-  try {
-    return decodeURIComponent(str);
-  } catch {
-    // Malformed encoding; use fallback decoder.
-    return str.replace(/%([0-9A-F]{2})/g, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16)),
-    );
-  }
-}
-
 export class Logger {
-  private llxprtDir: string | undefined;
   private logFilePath: string | undefined;
   private sessionId: string | undefined;
   private messageId = 0; // Instance-specific counter for the next messageId
@@ -504,7 +449,6 @@ export class Logger {
 
     ensureDir(Storage.getGlobalLogDir());
     const llxprtDir = this.storage.getProjectTempDir();
-    this.llxprtDir = llxprtDir;
     this.logFilePath = path.join(llxprtDir, LOG_FILE_NAME);
 
     try {
@@ -592,204 +536,6 @@ export class Logger {
     }
   }
 
-  private _checkpointPath(tag: string): string {
-    if (tag.length === 0) {
-      throw new Error('No checkpoint tag specified.');
-    }
-    if (!this.llxprtDir) {
-      throw new Error('Checkpoint file path not set.');
-    }
-    // Encode the tag to handle all special characters safely.
-    const encodedTag = encodeTagName(tag);
-    return path.join(this.llxprtDir, `checkpoint-${encodedTag}.json`);
-  }
-
-  private async _getCheckpointPath(tag: string): Promise<string> {
-    // 1. Check for the new encoded path first.
-    const newPath = this._checkpointPath(tag);
-    try {
-      await fs.access(newPath);
-      return newPath; // Found it, use the new path.
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'ENOENT') {
-        throw error; // A real error occurred, rethrow it.
-      }
-      // It was not found, so we'll check the old path next.
-    }
-
-    // 2. Fallback for backward compatibility: check for the old raw path.
-    const oldPath = path.join(this.llxprtDir!, `checkpoint-${tag}.json`);
-    try {
-      await fs.access(oldPath);
-      return oldPath; // Found it, use the old path.
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'ENOENT') {
-        throw error; // A real error occurred, rethrow it.
-      }
-    }
-
-    // 3. If neither path exists, return the new encoded path as the canonical one.
-    return newPath;
-  }
-
-  async saveCheckpoint(
-    conversation: CheckpointContent[],
-    tag: string,
-    context?: object,
-  ): Promise<void> {
-    if (!this.initialized) {
-      debugLogger.error(
-        'Logger not initialized or checkpoint file path not set. Cannot save a checkpoint.',
-      );
-      return;
-    }
-    // Always save with the new encoded path.
-    const path = this._checkpointPath(tag);
-    try {
-      const data = JSON.stringify({ history: conversation, context }, null, 2);
-      await fs.writeFile(path, data, 'utf-8');
-    } catch (error) {
-      debugLogger.error('Error writing to checkpoint file:', error);
-    }
-  }
-
-  async loadCheckpoint(
-    tag: string,
-    emojiFilter?: EmojiFilter,
-  ): Promise<{
-    history: CheckpointContent[];
-    context?: object;
-  }> {
-    if (!this.initialized) {
-      debugLogger.error(
-        'Logger not initialized or checkpoint file path not set. Cannot load checkpoint.',
-      );
-      return { history: [] };
-    }
-
-    const path = await this._getCheckpointPath(tag);
-    try {
-      const fileContent = await fs.readFile(path, 'utf-8');
-      let parsedContent = JSON.parse(fileContent);
-      if (Array.isArray(parsedContent)) {
-        // Backwards compatibility for old format
-        parsedContent = { history: parsedContent as CheckpointContent[] };
-      }
-
-      // Apply emoji filtering if provided
-      if (emojiFilter) {
-        const filteredHistory = parsedContent.history.map(
-          (item: CheckpointContent) => {
-            const filteredItem = { ...item };
-            if (Array.isArray(filteredItem.parts)) {
-              filteredItem.parts = filteredItem.parts.map(
-                (part: CheckpointPart) => filterPartText(part, emojiFilter),
-              );
-            }
-            return filteredItem;
-          },
-        );
-        parsedContent.history = filteredHistory;
-      }
-
-      return parsedContent as {
-        history: CheckpointContent[];
-        context?: object;
-      };
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code === 'ENOENT') {
-        // This is okay, it just means the checkpoint doesn't exist in either format.
-        return { history: [] };
-      }
-      debugLogger.error(
-        `Failed to read or parse checkpoint file ${path}:`,
-        error,
-      );
-      return { history: [] };
-    }
-  }
-
-  async deleteCheckpoint(tag: string): Promise<boolean> {
-    if (!this.initialized || !this.llxprtDir) {
-      debugLogger.error(
-        'Logger not initialized or checkpoint file path not set. Cannot delete checkpoint.',
-      );
-      return false;
-    }
-
-    let deletedSomething = false;
-
-    // 1. Attempt to delete the new encoded path.
-    const newPath = this._checkpointPath(tag);
-    try {
-      await fs.unlink(newPath);
-      deletedSomething = true;
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'ENOENT') {
-        debugLogger.error(
-          `Failed to delete checkpoint file ${newPath}:`,
-          error,
-        );
-        throw error; // Rethrow unexpected errors
-      }
-      // It's okay if it doesn't exist.
-    }
-
-    // 2. Attempt to delete the old raw path for backward compatibility.
-    const oldPath = path.join(this.llxprtDir, `checkpoint-${tag}.json`);
-    if (newPath !== oldPath) {
-      try {
-        await fs.unlink(oldPath);
-        deletedSomething = true;
-      } catch (error) {
-        const nodeError = error as NodeJS.ErrnoException;
-        if (nodeError.code !== 'ENOENT') {
-          debugLogger.error(
-            `Failed to delete checkpoint file ${oldPath}:`,
-            error,
-          );
-          throw error; // Rethrow unexpected errors
-        }
-        // It's okay if it doesn't exist.
-      }
-    }
-
-    return deletedSomething;
-  }
-
-  async checkpointExists(tag: string): Promise<boolean> {
-    if (!this.initialized) {
-      throw new Error(
-        'Logger not initialized. Cannot check for checkpoint existence.',
-      );
-    }
-    let filePath: string | undefined;
-    try {
-      filePath = await this._getCheckpointPath(tag);
-      // We need to check for existence again, because _getCheckpointPath
-      // returns a canonical path even if it doesn't exist yet.
-      await fs.access(filePath);
-      return true;
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code === 'ENOENT') {
-        return false; // It truly doesn't exist in either format.
-      }
-      // A different error occurred.
-      debugLogger.error(
-        `Failed to check checkpoint existence for ${
-          filePath ?? `path for tag "${tag}"`
-        }:`,
-        error,
-      );
-      throw error;
-    }
-  }
-
   async close(): Promise<void> {
     // Drain pending writes until the queue reference stops changing. A single
     // `await this._writeQueue` would miss a write chained onto a newer queue
@@ -808,7 +554,6 @@ export class Logger {
       }
     }
     this.initialized = false;
-    this.llxprtDir = undefined;
     this.logFilePath = undefined;
     this.logs = [];
     this.sessionId = undefined;
@@ -818,18 +563,4 @@ export class Logger {
     this._needsNewlineCheck = true;
     this._writeQueue = Promise.resolve();
   }
-}
-
-function filterPartText(
-  part: CheckpointPart,
-  emojiFilter: EmojiFilter,
-): CheckpointPart {
-  if (!part.text) {
-    return part;
-  }
-  const filterResult = emojiFilter.filterText(part.text);
-  if (typeof filterResult.filtered !== 'string') {
-    return part;
-  }
-  return { ...part, text: filterResult.filtered };
 }
