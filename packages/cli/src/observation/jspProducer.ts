@@ -35,6 +35,8 @@ import { JspBoundedQueue, type JspQueueSink } from './jspQueue.js';
 const DEFAULT_AGENT_SCOPE = 'primary';
 const DEFAULT_QUEUE_CAPACITY = 512;
 const DEFAULT_HEARTBEAT_MS = 15_000;
+const REGISTRATION_RETRY_BACKOFF_MS = 5_000;
+const MAX_REGISTRATION_ATTEMPTS = 10;
 
 interface NativeTodoLike {
   readonly content: string;
@@ -76,6 +78,8 @@ export class JspProducer {
   private started = false;
   private registered = false;
   private registrationTask: Promise<void> | null = null;
+  private registrationAttempts = 0;
+  private lastRegistrationMs = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -138,6 +142,22 @@ export class JspProducer {
     if (!this.started || this.registered || this.registrationTask !== null) {
       return;
     }
+    // Registration is attempted from the foreground event path, so an
+    // unreachable broker must not produce one request per observed event.
+    // Back off between attempts and stop retrying once the cap is reached;
+    // telemetry stays disabled rather than pressuring the transport.
+    if (this.registrationAttempts >= MAX_REGISTRATION_ATTEMPTS) {
+      return;
+    }
+    const now = this.hooks.now();
+    if (
+      this.registrationAttempts > 0 &&
+      now - this.lastRegistrationMs < REGISTRATION_RETRY_BACKOFF_MS
+    ) {
+      return;
+    }
+    this.registrationAttempts += 1;
+    this.lastRegistrationMs = now;
     const initial = this.snapshot();
     this.registrationTask = this.hooks
       .register(initial)

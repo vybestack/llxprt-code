@@ -243,9 +243,13 @@ export function buildSnapshot(
     state.currentTurn === null
       ? null
       : { elapsed_ms: Math.max(0, now() - state.currentTurn.startedAtMs) };
+  // Until a todo list has actually been observed the revision is unknown, not
+  // revision 1 with no items. Claiming revision 1 here lets a real first list
+  // arrive carrying the same revision, which a consumer deduplicating on
+  // revision would then discard.
   const todosField: JspFieldState<JspTodoList> =
     state.todos === null
-      ? knownField({ revision: 1, items: [] })
+      ? unknownField<JspTodoList>('authoritative')
       : knownField(state.todos);
   return {
     schema: 1,

@@ -34,7 +34,19 @@ export function truncateToByteBound(input: string, maxBytes: number): string {
       upper = mid - 1;
     }
   }
-  return input.slice(0, lower);
+  // The search works in UTF-16 code units, so the boundary can land between a
+  // surrogate pair. A lone high surrogate encodes as 3 replacement bytes and
+  // can therefore fit the budget the full 4-byte character exceeded, which
+  // would publish an unpaired surrogate. Drop it.
+  const end =
+    lower > 0 && isHighSurrogate(input.charCodeAt(lower - 1))
+      ? lower - 1
+      : lower;
+  return input.slice(0, end);
+}
+
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff;
 }
 
 interface TodoBounds {

@@ -35,6 +35,19 @@ describe('redactAssistantContent', () => {
     expect(result.endsWith('a')).toBe(true);
   });
 
+  it('never emits an unpaired surrogate at the truncation boundary', () => {
+    // 'aaa' is 3 bytes and the astral character is 4, so a 6-byte budget can
+    // hold a lone high surrogate's 3-byte replacement encoding but not the
+    // real character. The boundary must fall before the pair, not inside it.
+    const result = redactAssistantContent('aaa' + '𝕏', 6);
+    expect(result).toBe('aaa');
+    expect(Buffer.byteLength(result, 'utf8')).toBeLessThanOrEqual(6);
+    expect([...result].every((ch) => ch.codePointAt(0) !== undefined)).toBe(
+      true,
+    );
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(result)).toBe(false);
+  });
+
   it('returns NO_CONTENT when noContent mode is set', () => {
     expect(redactAssistantContent('Hello world', 16 * 1024, true)).toBe(
       NO_CONTENT,

@@ -647,14 +647,16 @@ async function runSubmitQueryCore(
   try {
     await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
   } catch (error: unknown) {
-    // executeStream threw before the agent emitted 'done', so the tap never
-    // saw a turn end. Close the observed turn here or the producer reports an
-    // active turn for the rest of the session.
-    observeTurnFailed();
     // Only surface errors for the active turn. A superseded turn's stale
     // errors (e.g. AbortError or auth failures from a cancelled request)
     // must not leak into the newer turn (issue #2259).
     if (isCurrentTurn(cbd, turn)) {
+      // executeStream threw before the agent emitted 'done', so the tap never
+      // saw a turn end. Close the observed turn here or the producer reports
+      // an active turn for the rest of the session. Scoped to the current
+      // turn for the same reason the error handling below is: a superseded
+      // turn must not end the turn that replaced it.
+      observeTurnFailed();
       handleSubmissionError(
         error,
         cbd.addItem,

@@ -201,9 +201,14 @@ function challengeFacts(
   documents: readonly JspBoundDocument[],
 ): unknown[] {
   const facts: unknown[] = [];
-  for (let index = 0; index < documents.length; index += 1) {
-    facts.push({ fact: 'clock_set', now_ms: challenge.clock_sequence[index] });
-    facts.push({ fact: 'document', document: documents[index] });
+  // Pair each document with the clock it actually carries. Indexing
+  // `clock_sequence` by position assumes one published document per clock
+  // step, which the producer does not guarantee: a transition can yield no
+  // document, and the queue can insert an extra recovery snapshot. Either
+  // case would misalign every later pair or run past the sequence entirely.
+  for (const document of documents) {
+    facts.push({ fact: 'clock_set', now_ms: document.bridge_observed_ms });
+    facts.push({ fact: 'document', document });
   }
   // Both sides of the boundary derive from the same constant so the bound
   // under test cannot drift away from the bound the producer enforces.

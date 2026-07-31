@@ -116,10 +116,15 @@ export function initializeObservationProducer(
 ): void {
   unsubscribeTodos?.();
   unsubscribeTodos = null;
+  // Clear module state before building the replacement. Loading the bootstrap
+  // or constructing the producer can throw, and on this re-initialization path
+  // that would otherwise leave `tap` dispatching into an already-stopped
+  // producer.
   producer?.stop();
+  producer = null;
+  tap = createObservationTap(null);
   producer = createObservationProducer(loadBootstrapFromEnv(), context);
   if (producer === null) {
-    tap = createObservationTap(null);
     return;
   }
   producer.setSession(sessionId, undefined);
