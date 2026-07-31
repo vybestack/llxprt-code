@@ -19,7 +19,11 @@ import type {
   AtCommandPart,
   AtCommandProcessResult,
 } from './atCommandProcessorHelpers.js';
-import type { McpState, StreamRuntime } from '../cliUiRuntime.js';
+import type {
+  McpState,
+  StreamRuntime,
+  UiSubagentManager,
+} from '../cliUiRuntime.js';
 
 export type AtCommandRuntime = AtCommandHelperRuntime &
   Pick<McpState, 'getMcpClientManager' | 'getResourceRegistry'>;
@@ -63,6 +67,7 @@ interface HandleAtCommandParams {
   onDebugMessage: (message: string) => void;
   messageId: number;
   signal: AbortSignal;
+  subagentManager?: UiSubagentManager;
 }
 
 type HandleAtCommandResult = AtCommandProcessResult;
@@ -175,6 +180,7 @@ export async function handleAtCommand({
   onDebugMessage,
   messageId: userMessageTimestamp,
   signal,
+  subagentManager,
 }: HandleAtCommandParams): Promise<HandleAtCommandResult> {
   showPowerShellTip(query, onDebugMessage);
 
@@ -190,14 +196,19 @@ export async function handleAtCommand({
     return handleMissingReadManyFilesTool(addItem, userMessageTimestamp);
   }
 
-  const resolution = await resolveAtPathCommands({
+  const subagentNames = await resolveSubagentNames(
+    subagentManager,
+    onDebugMessage,
+  );
+
+  const resolution = await resolveAtPaths(
     atPathCommandParts,
     config,
-    resourceRegistry: config.getResourceRegistry(),
-    globTool: getToolHandle('glob'),
+    getToolHandle,
     signal,
     onDebugMessage,
-  });
+    subagentNames,
+  );
   if (resolution.error) {
     addItem({ type: 'error', text: resolution.error }, userMessageTimestamp);
     return { processedQuery: null, error: resolution.error };
@@ -212,12 +223,18 @@ export async function handleAtCommand({
     resolution.pathSpecsToRead.length === 0 &&
     resolution.resourceAttachments.length === 0
   ) {
-    return handleNoValidPaths(query, initialQueryText, onDebugMessage);
+    return handleNoValidPaths(
+      query,
+      initialQueryText,
+      onDebugMessage,
+      resolution.selectedSubagents,
+    );
   }
 
-  const processedQueryParts: ContentBlock[] = [
-    { type: 'text', text: initialQueryText },
-  ];
+  const processedQueryParts = buildProcessedQueryParts(
+    initialQueryText,
+    resolution.selectedSubagents,
+  );
   const resourceResult = await processResourceAttachments({
     resourceAttachments: resolution.resourceAttachments,
     processedQueryParts,
@@ -241,6 +258,49 @@ export async function handleAtCommand({
     userMessageTimestamp,
     signal,
   });
+}
+
+async function resolveAtPaths(
+  atPathCommandParts: AtCommandPart[],
+  config: AtCommandRuntime,
+  getToolHandle: (name: string) => AgentToolHandle | undefined,
+  signal: AbortSignal,
+  onDebugMessage: (message: string) => void,
+  subagentNames: readonly string[],
+) {
+  return resolveAtPathCommands({
+    atPathCommandParts,
+    config,
+    resourceRegistry: config.getResourceRegistry(),
+    globTool: getToolHandle('glob'),
+    signal,
+    onDebugMessage,
+    subagentNames,
+  });
+}
+
+async function resolveSubagentNames(
+  subagentManager: UiSubagentManager | undefined,
+  onDebugMessage: (message: string) => void,
+): Promise<readonly string[]> {
+  if (!subagentManager) return [];
+  try {
+    return await subagentManager.listSubagents();
+  } catch (error) {
+    onDebugMessage(
+      `Warning: failed to list subagents: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return [];
+  }
+}
+
+function sanitizeSubagentName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim();
+}
+
+function buildSubagentNudge(names: readonly string[]): string {
+  const safe = names.map(sanitizeSubagentName);
+  return `The user has explicitly selected the following subagent(s): ${safe.join(', ')}. Please use the 'task' tool to delegate to the selected subagent(s).`;
 }
 
 function showPowerShellTip(
@@ -272,15 +332,40 @@ function handleNoValidPaths(
   query: string,
   initialQueryText: string,
   onDebugMessage: (message: string) => void,
+  selectedSubagents: readonly string[],
 ): HandleAtCommandResult {
   onDebugMessage('No valid file paths found in @ commands to read.');
   if (
     (initialQueryText === '@' && query.trim() === '@') ||
     (!initialQueryText && query)
   ) {
-    return { processedQuery: [{ type: 'text', text: query }] };
+    const baseParts: ContentBlock[] = [{ type: 'text', text: query }];
+    return { processedQuery: withSubagentNudge(baseParts, selectedSubagents) };
   }
+  const baseParts: ContentBlock[] = [
+    { type: 'text', text: initialQueryText || query },
+  ];
   return {
-    processedQuery: [{ type: 'text', text: initialQueryText || query }],
+    processedQuery: withSubagentNudge(baseParts, selectedSubagents),
   };
+}
+
+function withSubagentNudge(
+  parts: ContentBlock[],
+  selectedSubagents: readonly string[],
+): ContentBlock[] {
+  if (selectedSubagents.length === 0) return parts;
+  const nudge: ContentBlock = {
+    type: 'text',
+    text: buildSubagentNudge(selectedSubagents),
+  };
+  return [nudge, ...parts];
+}
+
+function buildProcessedQueryParts(
+  initialQueryText: string,
+  selectedSubagents: readonly string[],
+): ContentBlock[] {
+  const parts: ContentBlock[] = [{ type: 'text', text: initialQueryText }];
+  return withSubagentNudge(parts, selectedSubagents);
 }

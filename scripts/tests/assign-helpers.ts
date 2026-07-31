@@ -296,6 +296,60 @@ export function createFakeRepo(
   };
 }
 
+/**
+ * Empty-but-typed fake state. Returned when a script run leaves no usable
+ * state (it aborted before writing, or the written file was unparseable).
+ */
+export const EMPTY_FAKE_STATE: FakeState = {
+  issues: {},
+  prs: {},
+  comments: [],
+  labels: {},
+  events: {},
+  timeline: {},
+  fail_config: {},
+};
+
+/**
+ * Read and parse the fake-gh state file, distinguishing a legitimately absent
+ * file from a corrupt one (#2698 item 1).
+ *
+ * A missing file (ENOENT) means the script aborted before writing any state —
+ * return a usable empty default with no error. A file that EXISTS but cannot
+ * be parsed indicates corruption; surfacing the parse error (via `parseError`)
+ * prevents a confusing downstream "expected 1 but got 0" state assertion,
+ * which is the same hidden-diagnostic class that made #2688 costly to trace.
+ */
+export function readFakeState(stateFile: string): {
+  state: FakeState;
+  parseError: string;
+} {
+  try {
+    return {
+      state: JSON.parse(readFileSync(stateFile, 'utf8')),
+      parseError: '',
+    };
+  } catch (err) {
+    const isMissing =
+      err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT';
+    if (isMissing) {
+      return { state: EMPTY_FAKE_STATE, parseError: '' };
+    }
+    // A filesystem error (EACCES, EISDIR, …) is distinct from a JSON parse
+    // error (SyntaxError has no `code`); label each accurately so the
+    // diagnostic points at the right root cause.
+    const isFsError =
+      err instanceof Error &&
+      typeof (err as NodeJS.ErrnoException).code === 'string';
+    const label = isFsError ? 'unreadable' : 'unparseable';
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      state: EMPTY_FAKE_STATE,
+      parseError: `[assign-helpers] State file was ${label}: ${message}`,
+    };
+  }
+}
+
 export function runRecordHistory({
   state,
   assigneeLogin,
@@ -343,21 +397,15 @@ exec python3 "${FAKE_GH}" "$@"
       '.github/scripts/record-assignment-history.sh',
       env,
     );
-    let finalState: FakeState;
-    try {
-      finalState = JSON.parse(readFileSync(stateFile, 'utf8'));
-    } catch {
-      finalState = {
-        issues: {},
-        labels: {},
-        comments: [],
-        prs: {},
-        events: {},
-        timeline: {},
-        fail_config: {},
-      };
-    }
-    return { ...result, state: finalState };
+    const { state: finalState, parseError } = readFakeState(stateFile);
+    return {
+      ...result,
+      stderr: parseError
+        ? `${result.stderr}
+${parseError}`
+        : result.stderr,
+      state: finalState,
+    };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

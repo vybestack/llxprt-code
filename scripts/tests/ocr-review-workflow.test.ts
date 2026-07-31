@@ -137,7 +137,7 @@ describe('.github/workflows/ocr-review.yml', () => {
     );
 
     expect(concurrency?.['cancel-in-progress']).toBe(true);
-    expect(codeReviewJob?.['timeout-minutes']).toBe(60);
+    expect(codeReviewJob?.['timeout-minutes']).toBe(120);
     const outputs = asOptionalRecord(codeReviewJob?.outputs);
     expect(outputs?.infrastructure_failure).toBe(
       '${{ steps.ocr-final-classification.outputs.infrastructure_failure }}',

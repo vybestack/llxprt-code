@@ -30,10 +30,12 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import {
   SESSION_TITLE_MAX_LENGTH,
+  type ContinueResolution,
+  type ContinueTarget,
   type SessionSummary,
   type SessionStartPayload,
 } from './types.js';
-import { readSessionHeader } from './ReplayEngine.js';
+import { readSessionHeader, replaySession } from './ReplayEngine.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
@@ -147,6 +149,143 @@ export class SessionDiscovery {
     });
 
     return summaries;
+  }
+
+  static async listContinueTargets(
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<ContinueTarget[]> {
+    return (await this.listContinueTargetsDetailed(chatsDir, projectHash))
+      .targets;
+  }
+
+  static async listContinueTargetsDetailed(
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<{ targets: ContinueTarget[]; skippedCount: number }> {
+    const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
+    const sessionTargets: Array<ContinueTarget | null> = Array.from(
+      { length: detailed.sessions.length },
+      () => null,
+    );
+    const checkpointTargets: ContinueTarget[][] = Array.from(
+      { length: detailed.sessions.length },
+      () => [],
+    );
+    let nextIndex = 0;
+    let skippedCount = detailed.skippedCount;
+    const worker = async (): Promise<void> => {
+      while (nextIndex < detailed.sessions.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const summary = detailed.sessions[index];
+        const replay = await replaySession(summary.filePath, projectHash);
+        if (!replay.ok || replay.sequenceCorrupt) {
+          const detail = replay.ok ? 'non-monotonic sequences' : replay.error;
+          debugLogger.debug(
+            `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
+          );
+          skippedCount += 1;
+          continue;
+        }
+        const namedSummary = { ...summary, name: replay.sessionName };
+        sessionTargets[index] = { kind: 'session', session: namedSummary };
+        checkpointTargets[index] = (replay.checkpoints ?? [])
+          .filter((checkpoint) => !checkpoint.deleted)
+          .map((checkpoint) => ({
+            kind: 'checkpoint',
+            source: namedSummary,
+            checkpointId: checkpoint.checkpointId,
+            checkpointName: checkpoint.name,
+            sequence: checkpoint.sequence,
+          }));
+      }
+    };
+    const workerCount = Math.min(8, detailed.sessions.length);
+    await Promise.all(Array.from({ length: workerCount }, worker));
+    return {
+      targets: [
+        ...sessionTargets.filter(
+          (target): target is ContinueTarget => target !== null,
+        ),
+        ...checkpointTargets.flat(),
+      ],
+      skippedCount,
+    };
+  }
+
+  static resolveContinueRef(
+    ref: string,
+    targets: readonly ContinueTarget[],
+  ): ContinueResolution | SessionResolutionError {
+    const checkpointIdMatches = targets.filter(
+      (target) => target.kind === 'checkpoint' && target.checkpointId === ref,
+    );
+    if (checkpointIdMatches.length === 1) {
+      return { target: checkpointIdMatches[0] };
+    }
+    if (checkpointIdMatches.length > 1) {
+      return { error: `Ambiguous checkpoint ID '${ref}'` };
+    }
+
+    const namedMatches = targets.filter((target) =>
+      target.kind === 'session'
+        ? target.session.name === ref || target.session.sessionId === ref
+        : target.checkpointName === ref,
+    );
+    if (namedMatches.length === 1) {
+      return { target: namedMatches[0] };
+    }
+    if (namedMatches.length > 1) {
+      return { error: `Ambiguous continue target name '${ref}'` };
+    }
+
+    const sessions = targets
+      .filter(
+        (target): target is Extract<ContinueTarget, { kind: 'session' }> =>
+          target.kind === 'session',
+      )
+      .map((target) => target.session);
+    if (ref === 'latest' && sessions.length > 0) {
+      return { target: { kind: 'session', session: sessions[0] } };
+    }
+    const resolved = this.resolveSessionRef(ref, sessions);
+    return 'session' in resolved
+      ? { target: { kind: 'session', session: resolved.session } }
+      : resolved;
+  }
+
+  static validateName(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Name must not be empty');
+    }
+    if (trimmed === 'latest' || /^\d+$/.test(trimmed)) {
+      throw new Error(`Name '${trimmed}' is reserved`);
+    }
+    return trimmed;
+  }
+
+  static async validateAvailableName(
+    name: string,
+    chatsDir: string,
+    projectHash: string,
+  ): Promise<string> {
+    const trimmed = this.validateName(name);
+    const targets = await this.listContinueTargets(chatsDir, projectHash);
+    const conflict = targets.find((target) =>
+      target.kind === 'session'
+        ? target.session.name === trimmed ||
+          target.session.sessionId === trimmed
+        : target.checkpointName === trimmed,
+    );
+    if (conflict) {
+      const kind = conflict.kind === 'session' ? 'session' : 'checkpoint';
+      throw new Error(
+        `Name '${trimmed}' already exists (conflicts with a ${kind})`,
+      );
+    }
+    return trimmed;
   }
 
   /**

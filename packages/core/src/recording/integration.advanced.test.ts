@@ -767,13 +767,8 @@ describe('integration: full session recording lifecycle', () => {
       contents: [makeContent('locked-data', 'human')],
     });
 
-    // Extract lock ID from file path
-    const basename = path.basename(filePath);
-    const match = basename.match(/^session-(.+)\.jsonl$/);
-    const lockId = match![1];
-
-    // Process A acquires lock
-    const lockHandle = await SessionLockManager.acquire(chatsDir, lockId);
+    // Process A acquires the full header-session-ID lock.
+    const lockHandle = await SessionLockManager.acquire(chatsDir, sessionId);
 
     // Process B tries to resume the same session
     const result = await resumeSession(makeResumeRequest(chatsDir, sessionId));

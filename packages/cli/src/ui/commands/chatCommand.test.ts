@@ -4,630 +4,338 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Mocked } from 'vitest';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-
-import type { CommandContext, SlashCommand } from './types.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  SessionRecordingService,
+  replaySession,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { IContent } from '@vybestack/llxprt-code-core';
-
-import * as fsPromises from 'fs/promises';
-import { chatCommand } from './chatCommand.js';
-import type { Stats } from 'fs';
-import { createCompletionHandler } from './schema/index.js';
 import { assertDefined } from '../../test-utils/assertions.js';
+import { chatCommand } from './chatCommand.js';
+import { createCompletionHandler } from './schema/index.js';
+import type { CommandContext, SlashCommand } from './types.js';
+import { MessageType } from '../types.js';
 
-vi.mock('fs/promises', () => ({
-  default: {
-    stat: vi.fn(),
-    readdir: vi.fn().mockResolvedValue(['file1.txt', 'file2.txt'] as string[]),
-    writeFile: vi.fn().mockResolvedValue(undefined),
-  },
-  stat: vi.fn(),
-  readdir: vi.fn().mockResolvedValue(['file1.txt', 'file2.txt'] as string[]),
-  writeFile: vi.fn().mockResolvedValue(undefined),
-}));
+const PROJECT_HASH = 'chat-command-checkpoints';
 
-describe('chatCommand', () => {
-  const mockFs = fsPromises as Mocked<typeof fsPromises>;
+function content(speaker: 'human' | 'ai', text: string): IContent {
+  return { speaker, blocks: [{ type: 'text', text }] };
+}
 
-  let mockContext: CommandContext;
-  let mockGetChat: ReturnType<typeof vi.fn>;
-  let mockSaveCheckpoint: ReturnType<typeof vi.fn>;
-  let mockLoadCheckpoint: ReturnType<typeof vi.fn>;
-  let mockDeleteCheckpoint: ReturnType<typeof vi.fn>;
-  let mockGetHistory: ReturnType<typeof vi.fn>;
+describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625', () => {
+  let root: string;
+  let chatsDir: string;
+  let recording: SessionRecordingService;
+  let context: CommandContext;
 
-  const getSubCommand = (
-    name:
-      | 'list'
-      | 'save'
-      | 'resume'
-      | 'delete'
-      | 'rename'
-      | 'clear'
-      | 'restore'
-      | 'debug',
-  ): SlashCommand => {
-    const subCommand = chatCommand.subCommands?.find(
-      (cmd) => cmd.name === name,
-    );
-    assertDefined(subCommand);
-    return subCommand;
+  const command = (name: string): SlashCommand => {
+    const result = chatCommand.subCommands?.find((item) => item.name === name);
+    assertDefined(result);
+    return result;
   };
 
-  beforeEach(() => {
-    mockGetHistory = vi.fn().mockReturnValue([]);
-    mockGetChat = vi.fn().mockReturnValue({
-      getHistory: mockGetHistory,
-      clearHistory: vi.fn(),
-      addHistory: vi.fn(),
-    });
-    mockSaveCheckpoint = vi.fn().mockResolvedValue(undefined);
-    mockLoadCheckpoint = vi.fn().mockResolvedValue({ history: [] });
-    mockDeleteCheckpoint = vi.fn().mockResolvedValue(true);
+  const completionValues = async (
+    commandName: string,
+    partial: string,
+  ): Promise<string[]> => {
+    const schema = command(commandName).schema;
+    assertDefined(schema);
+    const handler = createCompletionHandler(schema);
+    const result = await handler(
+      context,
+      {
+        args: partial,
+        completedArgs: [],
+        partialArg: partial,
+        commandPathLength: 2,
+      },
+      `/chat ${commandName} ${partial}`,
+    );
+    return result.suggestions.map((option) => option.value);
+  };
 
-    mockContext = createMockCommandContext({
-      services: {
-        config: {
-          getProjectRoot: () => '/project/root',
-          getAgentClient: () =>
-            ({
-              getChat: mockGetChat,
-              hasChatInitialized: vi.fn().mockReturnValue(true),
-              getHistory: vi.fn().mockResolvedValue([]),
-            }) as unknown as AgentClient,
-          storage: {
-            getProjectTempDir: () => '/project/root/.gemini/tmp/mockhash',
-          },
-        },
-        logger: {
-          saveCheckpoint: mockSaveCheckpoint,
-          loadCheckpoint: mockLoadCheckpoint,
-          deleteCheckpoint: mockDeleteCheckpoint,
-          initialize: vi.fn().mockResolvedValue(undefined),
-        },
-        settings: {
-          merged: {
-            // Disable fuzzy filtering for tests expecting prefix matching
-            enableFuzzyFiltering: false,
-          },
-        },
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'chat-command-'));
+    chatsDir = join(root, 'chats');
+    recording = await SessionRecordingService.createLocked({
+      sessionId: crypto.randomUUID(),
+      projectHash: PROJECT_HASH,
+      chatsDir,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
+    });
+    recording.recordContent(content('human', 'A'));
+    recording.recordContent(content('ai', 'B'));
+    await recording.flush();
+    context = createMockCommandContext({
+      recordingSwapCallbacks: {
+        getCurrentRecording: () => recording,
       },
     });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('should have the correct main command definition', () => {
-    expect(chatCommand.name).toBe('chat');
-    expect(chatCommand.description).toBe('Manage conversation checkpoints');
-    expect(chatCommand.subCommands).toHaveLength(8);
-  });
-
-  describe('list subcommand', () => {
-    let listCommand: SlashCommand;
-
-    beforeEach(() => {
-      listCommand = getSubCommand('list');
-    });
-
-    it('should add a chat_list item to the UI', async () => {
-      const fakeFiles = ['checkpoint-test1.json', 'checkpoint-test2.json'];
-      const date1 = new Date();
-      const date2 = new Date(date1.getTime() + 1000);
-
-      mockFs.readdir.mockResolvedValue(fakeFiles);
-      mockFs.stat.mockImplementation(async (path: string): Promise<Stats> => {
-        if (path.endsWith('test1.json')) {
-          return { mtime: date1 } as Stats;
-        }
-        return { mtime: date2 } as Stats;
-      });
-
-      await listCommand.action?.(mockContext, '');
-
-      expect(mockContext.ui.addItem).toHaveBeenCalledWith({
-        type: 'chat_list',
-        chats: [
-          {
-            name: 'test1',
-            mtime: date1.toISOString(),
-          },
-          {
-            name: 'test2',
-            mtime: date2.toISOString(),
-          },
-        ],
-      });
-    });
-  });
-  describe('save subcommand', () => {
-    let saveCommand: SlashCommand;
-    const tag = 'my-tag';
-    let mockCheckpointExists: ReturnType<typeof vi.fn>;
-
-    beforeEach(() => {
-      saveCommand = getSubCommand('save');
-      mockCheckpointExists = vi.fn().mockResolvedValue(false);
-      mockContext.services.logger.checkpointExists = mockCheckpointExists;
-    });
-
-    it('should return an error if tag is missing', async () => {
-      const result = await saveCommand.action?.(mockContext, '  ');
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing tag. Usage: /chat save <tag>',
-      });
-    });
-
-    it('should inform if conversation history is empty or only contains system context', async () => {
-      mockGetHistory.mockReturnValue([]);
-      let result = await saveCommand.action?.(mockContext, tag);
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: 'No conversation found to save.',
-      });
-
-      mockGetHistory.mockReturnValue([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'context for our chat' }],
-        },
-      ]);
-      result = await saveCommand.action?.(mockContext, tag);
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: 'No conversation found to save.',
-      });
-
-      mockGetHistory.mockReturnValue([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'context for our chat' }],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello, how are you?' }],
-        },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'I am doing well!' }] },
-      ]);
-      result = await saveCommand.action?.(mockContext, tag);
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: `Conversation checkpoint saved with tag: ${tag}.`,
-      });
-    });
-
-    it('should return confirm_action if checkpoint already exists', async () => {
-      mockCheckpointExists.mockResolvedValue(true);
-      mockContext.invocation = {
-        raw: `/chat save ${tag}`,
-        name: 'save',
-        args: tag,
-      };
-
-      const result = await saveCommand.action?.(mockContext, tag);
-
-      expect(mockCheckpointExists).toHaveBeenCalledWith(tag);
-      expect(mockSaveCheckpoint).not.toHaveBeenCalled();
-      expect(result).toMatchObject({
-        type: 'confirm_action',
-        originalInvocation: { raw: `/chat save ${tag}` },
-      });
-      // Check that prompt is a React element
-      expect(result).toHaveProperty('prompt');
-    });
-
-    it('should save the conversation if overwrite is confirmed', async () => {
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'context for our chat' }],
-        },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
-      ];
-      mockGetHistory.mockReturnValue(history);
-      mockContext.overwriteConfirmed = true;
-
-      const result = await saveCommand.action?.(mockContext, tag);
-
-      expect(mockCheckpointExists).not.toHaveBeenCalled(); // Should skip existence check
-      // saveCheckpoint receives CheckpointContent[] with neutral ContentBlock parts + speaker
-      expect(mockSaveCheckpoint).toHaveBeenCalledWith(
-        [
-          {
-            role: 'user',
-            parts: [{ type: 'text', text: 'context for our chat' }],
-            speaker: 'human',
-          },
-          {
-            role: 'user',
-            parts: [{ type: 'text', text: 'hello' }],
-            speaker: 'human',
-          },
-          {
-            role: 'model',
-            parts: [{ type: 'text', text: 'Hi there!' }],
-            speaker: 'ai',
-          },
-        ],
-        tag,
-      );
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: `Conversation checkpoint saved with tag: ${tag}.`,
-      });
-    });
-  });
-  describe('history boundary detection with INITIAL_HISTORY_LENGTH', () => {
-    let saveCommand: SlashCommand;
-    let clearCommand: SlashCommand;
-    const tag = 'test-tag';
-
-    beforeEach(() => {
-      saveCommand = getSubCommand('save');
-      clearCommand = getSubCommand('clear');
-      mockContext.services.logger.checkpointExists = vi
-        .fn()
-        .mockResolvedValue(false);
-    });
-
-    it('should not save when only initial setup exists (1 message)', async () => {
-      mockGetHistory.mockReturnValue([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'system setup' }] },
-      ]);
-      const result = await saveCommand.action?.(mockContext, tag);
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('No conversation found'),
-      });
-    });
-
-    it('should save when conversation beyond initial setup exists (>1 message)', async () => {
-      mockGetHistory.mockReturnValue([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'system setup' }] },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
-      ]);
-      mockContext.services.logger.checkpointExists = vi
-        .fn()
-        .mockResolvedValue(false);
-      const result = await saveCommand.action?.(mockContext, tag);
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('saved with tag'),
-      });
-    });
-
-    it('should not clear when only initial setup exists (1 message)', async () => {
-      mockGetHistory.mockReturnValue([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'system setup' }] },
-      ]);
-      const result = await clearCommand.action?.(mockContext, '');
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('No conversation to clear'),
-      });
-    });
-
-    it('should clear when conversation beyond initial setup exists (>1 message)', async () => {
-      const mockClearHistory = vi.fn();
-      const mockClear = vi.fn();
-      const mockUpdateHistoryTokenCount = vi.fn();
-      mockGetChat.mockReturnValue({
-        getHistory: mockGetHistory,
-        clearHistory: mockClearHistory,
-      });
-      mockContext.ui = {
-        ...mockContext.ui,
-        clear: mockClear,
-        updateHistoryTokenCount: mockUpdateHistoryTokenCount,
-      };
-      mockGetHistory.mockReturnValue([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'system setup' }] },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
-      ]);
-      await clearCommand.action?.(mockContext, '');
-      expect(mockClearHistory).toHaveBeenCalled();
-      expect(mockClear).toHaveBeenCalled();
+    assertDefined(context.services.config);
+    Object.assign(context.services.config, {
+      getProjectRoot: () => root,
     });
   });
 
-  describe('resume subcommand', () => {
-    const goodTag = 'good-tag';
-    const badTag = 'bad-tag';
+  afterEach(async () => {
+    try {
+      if (typeof recording !== 'undefined') await recording.dispose();
+    } finally {
+      if (typeof root !== 'undefined') {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  });
 
-    let resumeCommand: SlashCommand;
-    beforeEach(() => {
-      resumeCommand = getSubCommand('resume');
+  it('creates, lists, renames, and tombstones checkpoints in the active JSONL recording', async () => {
+    expect(await command('save').action?.(context, 'milestone')).toMatchObject({
+      type: 'message',
+      messageType: 'info',
     });
 
-    it('should return an error if tag is missing', async () => {
-      const result = await resumeCommand.action?.(mockContext, '');
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing tag. Usage: /chat resume <tag>',
-      });
+    await command('list').action?.(context, '');
+    expect(context.ui.addItem).toHaveBeenCalledWith({
+      type: 'chat_list',
+      chats: [expect.objectContaining({ name: 'milestone' })],
     });
 
-    it('should inform if checkpoint is not found', async () => {
-      mockLoadCheckpoint.mockResolvedValue({ history: [] });
-
-      const result = await resumeCommand.action?.(mockContext, badTag);
-
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: `No saved checkpoint found with tag: ${badTag}.`,
-      });
+    expect(
+      await command('rename').action?.(context, 'milestone renamed'),
+    ).toMatchObject({ type: 'message', messageType: 'info' });
+    context.overwriteConfirmed = true;
+    expect(await command('delete').action?.(context, 'renamed')).toMatchObject({
+      type: 'message',
+      messageType: 'info',
     });
 
-    it('should resume a conversation', async () => {
-      // Checkpoint files store CheckpointContent with neutral ContentBlock
-      // parts + speaker; resume converts them to neutral IContent.
-      const checkpointHistory = [
-        {
-          role: 'user',
-          parts: [{ type: 'text', text: 'hello gemini' }],
-          speaker: 'human',
-        },
-        {
-          role: 'model',
-          parts: [{ type: 'text', text: 'hello world' }],
-          speaker: 'ai',
-        },
-      ];
-      mockLoadCheckpoint.mockResolvedValue({ history: checkpointHistory });
-
-      const result = await resumeCommand.action?.(mockContext, goodTag);
-
-      // Now returns LoadHistoryActionReturn to properly sync UI and client history
-      expect(result).toStrictEqual({
-        type: 'load_history',
-        history: [
-          { type: 'user', text: 'hello gemini' },
-          { type: 'gemini', text: 'hello world' },
-        ],
-        clientHistory: [
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'hello gemini' }],
-          },
-          { speaker: 'ai', blocks: [{ type: 'text', text: 'hello world' }] },
-        ],
-      });
-    });
-
-    describe('schema completion', () => {
-      const runCompletion = async (partial: string): Promise<string[]> => {
-        const handler = createCompletionHandler(resumeCommand.schema!);
-        const result = await handler(
-          mockContext,
-          {
-            args: partial,
-            completedArgs: [],
-            partialArg: partial,
-            commandPathLength: 2,
-          },
-          `/chat resume ${partial}`,
-        );
-        return result.suggestions.map((option) => option.value);
-      };
-
-      it('should provide completion suggestions', async () => {
-        const fakeFiles = ['checkpoint-alpha.json', 'checkpoint-beta.json'];
-        mockFs.readdir.mockImplementation(
-          (async (_: string): Promise<string[]> =>
-            fakeFiles) as unknown as typeof fsPromises.readdir,
-        );
-
-        mockFs.stat.mockImplementation(
-          (async (_: string): Promise<Stats> =>
-            ({
-              mtime: new Date(),
-            }) as Stats) as unknown as typeof fsPromises.stat,
-        );
-
-        expect(await runCompletion('a')).toStrictEqual(['alpha']);
-      });
-
-      it('should suggest filenames sorted by modified time (newest first)', async () => {
-        const fakeFiles = ['checkpoint-test1.json', 'checkpoint-test2.json'];
-        const date = new Date();
-        mockFs.readdir.mockImplementation(
-          (async (_: string): Promise<string[]> =>
-            fakeFiles) as unknown as typeof fsPromises.readdir,
-        );
-        mockFs.stat.mockImplementation((async (
-          path: string,
-        ): Promise<Stats> => {
-          if (path.endsWith('test1.json')) {
-            return { mtime: date } as Stats;
-          }
-          return { mtime: new Date(date.getTime() + 1000) } as Stats;
-        }) as unknown as typeof fsPromises.stat);
-
-        expect(await runCompletion('')).toStrictEqual(['test2', 'test1']);
-      });
+    const replay = await replaySession(
+      recording.getFilePath() ?? '',
+      PROJECT_HASH,
+    );
+    expect(replay).toMatchObject({
+      ok: true,
+      checkpoints: [
+        expect.objectContaining({ name: 'renamed', deleted: true }),
+      ],
     });
   });
 
-  describe('delete subcommand', () => {
-    let deleteCommand: SlashCommand;
-    const tag = 'my-tag';
-    beforeEach(() => {
-      deleteCommand = getSubCommand('delete');
-    });
-
-    it('should return an error if tag is missing', async () => {
-      const result = await deleteCommand.action?.(mockContext, '  ');
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'error',
-        content: 'Missing tag. Usage: /chat delete <tag>',
-      });
-    });
-
-    it('should return confirmation prompt for checkpoint deletion', async () => {
-      mockContext.invocation = {
-        raw: `/chat delete ${tag}`,
-        name: 'delete',
-        args: tag,
-      };
-      const result = await deleteCommand.action?.(mockContext, tag);
-      expect(result).toMatchObject({
-        type: 'confirm_action',
-        originalInvocation: { raw: `/chat delete ${tag}` },
-      });
-      // Check that prompt is a React element
-      expect(result).toHaveProperty('prompt');
-    });
-
-    it('should delete the conversation when confirmed', async () => {
-      mockContext.overwriteConfirmed = true;
-      const mockCheckpointExists = vi.fn().mockResolvedValue(true);
-      mockContext.services.logger.checkpointExists = mockCheckpointExists;
-
-      const result = await deleteCommand.action?.(mockContext, tag);
-
-      expect(mockDeleteCheckpoint).toHaveBeenCalledWith(tag);
-      expect(result).toStrictEqual({
-        type: 'message',
-        messageType: 'info',
-        content: `Deleted checkpoint: ${tag}`,
-      });
-    });
-
-    describe('schema completion', () => {
-      it('should provide completion suggestions', async () => {
-        const fakeFiles = ['checkpoint-alpha.json', 'checkpoint-beta.json'];
-        mockFs.readdir.mockImplementation(
-          (async (_: string): Promise<string[]> =>
-            fakeFiles) as unknown as typeof fsPromises.readdir,
-        );
-
-        mockFs.stat.mockImplementation(
-          (async (_: string): Promise<Stats> =>
-            ({
-              mtime: new Date(),
-            }) as Stats) as unknown as typeof fsPromises.stat,
-        );
-
-        const handler = createCompletionHandler(deleteCommand.schema!);
-        const result = await handler(
-          mockContext,
-          {
-            args: 'a',
-            completedArgs: [],
-            partialArg: 'a',
-            commandPathLength: 2,
-          },
-          '/chat delete a',
-        );
-
-        expect(result.suggestions.map((option) => option.value)).toStrictEqual([
-          'alpha',
-        ]);
-      });
+  it('/chat resume emits the canonical continuation transition action', async () => {
+    expect(
+      await command('resume').action?.(context, 'milestone'),
+    ).toStrictEqual({
+      type: 'perform_resume',
+      sessionRef: 'milestone',
     });
   });
 
-  describe('debug subcommand', () => {
-    let debugCommand: SlashCommand;
-
-    beforeEach(() => {
-      debugCommand = getSubCommand('debug');
+  it('names the active session without changing its title', async () => {
+    expect(
+      await command('name').action?.(context, 'living-branch'),
+    ).toMatchObject({
+      type: 'message',
+      messageType: 'info',
     });
+    const replay = await replaySession(
+      recording.getFilePath() ?? '',
+      PROJECT_HASH,
+    );
+    expect(replay.ok).toBe(true);
+    expect(replay.sessionName).toBe('living-branch');
+    expect(replay.metadata).toStrictEqual(
+      expect.not.objectContaining({ title: expect.anything() }),
+    );
+  });
 
-    it('should show chat initialized and history when chat is active', async () => {
-      const mockHistory = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'setup' }] },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
-      ];
-      mockGetHistory.mockReturnValue(mockHistory);
+  it('exposes all recording-native subcommands', () => {
+    expect(chatCommand.subCommands?.map((item) => item.name)).toStrictEqual([
+      'list',
+      'save',
+      'resume',
+      'delete',
+      'rename',
+      'clear',
+      'restore',
+      'name',
+      'debug',
+    ]);
+  });
 
-      const result = await debugCommand.action?.(mockContext, '');
+  it('rejects /chat save without a tag', async () => {
+    expect(await command('save').action?.(context, '')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Missing tag. Usage: /chat save <tag>',
+    });
+  });
 
-      expect(result).toMatchObject({
+  it('rejects /chat resume without a tag', async () => {
+    expect(await command('resume').action?.(context, '   ')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Missing tag. Usage: /chat resume <tag>',
+    });
+  });
+
+  it('rejects /chat delete without a tag', async () => {
+    expect(await command('delete').action?.(context, '')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Missing tag. Usage: /chat delete <tag>',
+    });
+  });
+
+  it('prompts for confirmation before deleting a checkpoint', async () => {
+    expect(
+      await command('delete').action?.(context, 'milestone'),
+    ).toMatchObject({
+      type: 'confirm_action',
+    });
+  });
+
+  it('requests overwrite confirmation when saving a duplicate checkpoint name', async () => {
+    await command('save').action?.(context, 'dupe');
+
+    const result = await command('save').action?.(context, 'dupe');
+
+    expect(result).toMatchObject({ type: 'confirm_action' });
+  });
+
+  it('replaces a duplicate checkpoint after overwrite confirmation', async () => {
+    await command('save').action?.(context, 'dupe');
+    context.overwriteConfirmed = true;
+
+    const result = await command('save').action?.(context, 'dupe');
+    const replay = await replaySession(
+      recording.getFilePath() ?? '',
+      PROJECT_HASH,
+    );
+
+    expect({
+      result,
+      checkpoints: replay.checkpoints?.filter(
+        (checkpoint) => checkpoint.deleted !== true,
+      ),
+    }).toStrictEqual({
+      result: {
         type: 'message',
         messageType: 'info',
-      });
-      expect(result?.content).toContain('Chat initialized: true');
-      expect(result?.content).toContain('History entries: 3');
-      expect(result?.content).toContain('Current model:');
-      expect(result?.content).toContain('Checkpoint directory:');
+        content: 'Checkpoint saved: dupe.',
+      },
+      checkpoints: [expect.objectContaining({ name: 'dupe', deleted: false })],
+    });
+  });
+
+  it('reports an error when saving an empty recording', async () => {
+    await recording.dispose();
+    recording = await SessionRecordingService.createLocked({
+      sessionId: crypto.randomUUID(),
+      projectHash: PROJECT_HASH,
+      chatsDir,
+      workspaceDirs: [root],
+      cwd: root,
+      provider: 'fake',
+      model: 'fake-model',
     });
 
-    it('should show chat not initialized when no chat exists', async () => {
-      const mockContextNoChat = createMockCommandContext({
-        services: {
-          config: {
-            getProjectRoot: () => '/project/root',
-            getAgentClient: () =>
-              ({
-                hasChatInitialized: vi.fn().mockReturnValue(false),
-              }) as unknown as AgentClient,
-            getModel: () => 'test-model',
-            storage: {
-              getProjectTempDir: () => '/project/root/.gemini/tmp/mockhash',
-            },
-          },
-          logger: {
-            initialize: vi.fn().mockResolvedValue(undefined),
-          },
-        },
-      });
+    expect(await command('save').action?.(context, 'empty')).toStrictEqual({
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Failed to save checkpoint: Cannot create checkpoint: conversation has no content yet',
+    });
+  });
 
-      const result = await debugCommand.action?.(mockContextNoChat, '');
-
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-      });
-      expect(result?.content).toContain('Chat initialized: false');
-      expect(result?.content).toContain(
-        'History entries: 0 (chat not initialized)',
-      );
+  it('treats an initialized empty history as having nothing to clear', async () => {
+    Object.assign(context.services.config, {
+      getAgentClient: () => ({
+        hasChatInitialized: () => true,
+        getChat: () => ({
+          getHistory: () => [],
+          setHistory: () => undefined,
+        }),
+      }),
     });
 
-    it('should handle missing config gracefully', async () => {
-      const mockContextNoConfig = createMockCommandContext({
-        services: {
-          config: null,
-          logger: {
-            initialize: vi.fn().mockResolvedValue(undefined),
-          },
-        },
-      });
+    expect(await command('clear').action?.(context, '')).toStrictEqual({
+      type: 'message',
+      messageType: 'info',
+      content: 'No conversation to clear.',
+    });
+  });
 
-      const result = await debugCommand.action?.(mockContextNoConfig, '');
+  it('restores the requested human turn and persists its rewind', async () => {
+    const history = [
+      content('human', 'A'),
+      content('ai', 'B'),
+      content('human', 'C'),
+      content('ai', 'D'),
+    ];
+    Object.assign(context.services.config, {
+      getAgentClient: () => ({
+        hasChatInitialized: () => true,
+        getChat: () => ({
+          getHistory: () => history,
+        }),
+      }),
+    });
+    recording.recordContent(content('human', 'C'));
+    recording.recordContent(content('ai', 'D'));
+    await recording.flush();
 
-      expect(result).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-      });
-      expect(result?.content).toContain('Chat initialized: false');
-      expect(result?.content).toContain(
-        'Current model: unavailable (config not initialized)',
-      );
-      expect(result?.content).toContain('Checkpoint directory: unavailable');
+    const result = await command('restore').action?.(context, '1');
+
+    expect(result).toStrictEqual({
+      type: 'load_history',
+      history: [
+        { type: MessageType.USER, text: 'A' },
+        { type: MessageType.AI, text: 'B' },
+      ],
+      clientHistory: history.slice(0, 2),
+    });
+    const replay = await replaySession(
+      recording.getFilePath() ?? '',
+      PROJECT_HASH,
+    );
+    expect(replay).toMatchObject({
+      ok: true,
+      history: [content('human', 'A'), content('ai', 'B')],
+    });
+  });
+
+  it('completes checkpoint names for /chat resume', async () => {
+    await command('save').action?.(context, 'alpha');
+    await command('save').action?.(context, 'beta');
+
+    expect(await completionValues('resume', 'alph')).toStrictEqual(['alpha']);
+  });
+
+  it('completes checkpoint names for /chat delete', async () => {
+    await command('save').action?.(context, 'alpha');
+    await command('save').action?.(context, 'beta');
+
+    expect(await completionValues('delete', 'b')).toStrictEqual(['beta']);
+  });
+
+  it('reports recording-native debug information', async () => {
+    const result = await command('debug').action?.(context, '');
+
+    expect(result).toStrictEqual({
+      type: 'message',
+      messageType: 'info',
+      content: `Chat Debug Information:
+• Chat initialized: false
+• History entries: 0 (chat not initialized)
+• Current model: unavailable
+• Recording file: ${recording.getFilePath()}
+• Session ID: ${recording.getSessionId()}`,
     });
   });
 });

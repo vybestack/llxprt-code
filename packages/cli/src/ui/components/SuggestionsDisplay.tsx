@@ -8,11 +8,13 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { PrepareLabel } from './PrepareLabel.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
+import { CommandKind } from '../commands/types.js';
 export interface Suggestion {
   label: string;
   value: string;
   description?: string;
   matchedIndex?: number;
+  kind?: CommandKind;
 }
 interface SuggestionsDisplayProps {
   suggestions: Suggestion[];
@@ -56,6 +58,10 @@ function SuggestionRow({
       textColor={textColor}
     />
   );
+  const subagentBadge =
+    suggestion.kind === CommandKind.SUBAGENT ? (
+      <Text color={Colors.AccentPurple}>[Subagent]</Text>
+    ) : null;
 
   return (
     <Box key={`${suggestion.value}-${originalIndex}`}>
@@ -75,6 +81,7 @@ function SuggestionRow({
           </>
         ) : (
           <>
+            {subagentBadge}
             {labelElement}
             {suggestion.description && (
               <Box flexGrow={1} marginLeft={1}>
