@@ -874,11 +874,7 @@ export class TurnProcessor {
       }
     } else if (!afcHistory || afcHistory.length === 0) {
       this.historyService.add(
-        stampAiTurnModel(
-          iContentFromBlocks([], 'ai'),
-          currentModel,
-          baseURL,
-        ),
+        stampAiTurnModel(iContentFromBlocks([], 'ai'), currentModel, baseURL),
         currentModel,
       );
     }
