@@ -52,7 +52,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
       },
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
-      deleteRuleByKey: vi.fn(),
+      removeRule: vi.fn(),
       getValue: mockedGetValue,
       snapshotValue: mockedSnapshotValue,
       restoreSnapshot: mockedRestoreSnapshot,

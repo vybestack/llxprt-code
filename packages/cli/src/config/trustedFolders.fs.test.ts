@@ -257,7 +257,7 @@ describe('saveTrustedFolders filesystem permissions', () => {
  * canonicalizes through realpath first, so it can never remove a rule whose
  * folder has since been deleted; these tests pin the stale-rule case.
  */
-describe('LoadedTrustedFolders.deleteRuleByKey', () => {
+describe('LoadedTrustedFolders.removeRule', () => {
   let tempDir: string;
   let trustedFoldersPath: string;
   let userConfig: Record<string, TrustLevel>;
@@ -289,7 +289,7 @@ describe('LoadedTrustedFolders.deleteRuleByKey', () => {
     fs.mkdirSync(folder);
     userConfig[folder] = TrustLevel.TRUST_FOLDER;
 
-    load().deleteRuleByKey(folder);
+    load().removeRule(folder);
 
     expect(userConfig[folder]).toBeUndefined();
     expect(readPersisted()[folder]).toBeUndefined();
@@ -299,7 +299,7 @@ describe('LoadedTrustedFolders.deleteRuleByKey', () => {
     const staleFolder = path.join(tempDir, 'deleted-folder');
     userConfig[staleFolder] = TrustLevel.TRUST_FOLDER;
 
-    load().deleteRuleByKey(staleFolder);
+    load().removeRule(staleFolder);
 
     expect(userConfig[staleFolder]).toBeUndefined();
     expect(readPersisted()[staleFolder]).toBeUndefined();
@@ -312,30 +312,76 @@ describe('LoadedTrustedFolders.deleteRuleByKey', () => {
     userConfig[kept] = TrustLevel.TRUST_FOLDER;
     userConfig[removed] = TrustLevel.DO_NOT_TRUST;
 
-    load().deleteRuleByKey(removed);
+    load().removeRule(removed);
 
     expect(userConfig).toStrictEqual({ [kept]: TrustLevel.TRUST_FOLDER });
     expect(readPersisted()).toStrictEqual({ [kept]: TrustLevel.TRUST_FOLDER });
   });
 
-  it('restores the in-memory rule when persistence fails', () => {
-    const removed = path.join(tempDir, 'removed');
-    userConfig[removed] = TrustLevel.TRUST_FOLDER;
-    // A directory at the destination makes the atomic rename commit fail.
-    fs.mkdirSync(trustedFoldersPath, { recursive: true });
+  // Skipped on Windows with the rest of this file's filesystem-semantics tests:
+  // renaming onto an existing directory fails with a different, version-dependent
+  // error there, so the failure this test depends on is not reproducible.
+  it.skipIf(process.platform === 'win32')(
+    'restores the in-memory rule when persistence fails',
+    () => {
+      const removed = path.join(tempDir, 'removed');
+      userConfig[removed] = TrustLevel.TRUST_FOLDER;
+      // A directory at the destination makes the atomic rename commit fail.
+      fs.mkdirSync(trustedFoldersPath, { recursive: true });
 
-    expect(() => load().deleteRuleByKey(removed)).toThrow(Error);
+      expect(() => load().removeRule(removed)).toThrow(Error);
 
-    expect(userConfig[removed]).toBe(TrustLevel.TRUST_FOLDER);
-  });
+      expect(userConfig[removed]).toBe(TrustLevel.TRUST_FOLDER);
+    },
+  );
 
   it('does not write anything when the key is absent', () => {
     const existing = path.join(tempDir, 'existing');
     userConfig[existing] = TrustLevel.TRUST_FOLDER;
 
-    load().deleteRuleByKey(path.join(tempDir, 'never-existed'));
+    load().removeRule(path.join(tempDir, 'never-existed'));
 
     expect(userConfig).toStrictEqual({ [existing]: TrustLevel.TRUST_FOLDER });
     expect(fs.existsSync(trustedFoldersPath)).toBe(false);
   });
+});
+
+describe('LoadedTrustedFolders rule removal via a symlinked spelling', () => {
+  const temporaryDirectories: string[] = [];
+
+  afterEach(() => {
+    for (const directory of temporaryDirectories.splice(0)) {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'removes the canonical rule when asked with a symlinked path spelling',
+    () => {
+      const directory = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-trust-alias-')),
+      );
+      temporaryDirectories.push(directory);
+      const target = path.join(directory, 'target');
+      const link = path.join(directory, 'link');
+      fs.mkdirSync(target);
+      fs.symlinkSync(target, link, 'dir');
+      const filePath = path.join(directory, 'trustedFolders.json');
+      const folders = new LoadedTrustedFolders(
+        { path: filePath, config: {} },
+        [],
+      );
+      folders.setValue(target, TrustLevel.TRUST_FOLDER);
+      expect(folders.user.config[fs.realpathSync(target)]).toBe(
+        TrustLevel.TRUST_FOLDER,
+      );
+
+      // The dialog resolves but does not realpath the active target path, so a
+      // symlinked spelling must still remove the canonically-stored rule.
+      folders.removeRule(link);
+
+      expect(folders.user.config).toStrictEqual({});
+      expect(JSON.parse(fs.readFileSync(filePath, 'utf8'))).toStrictEqual({});
+    },
+  );
 });

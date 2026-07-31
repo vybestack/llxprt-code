@@ -270,7 +270,12 @@ function useCommitCallback(
 }
 
 /**
- * Builds the rule-removal callback (literal-key deletion so stale paths work).
+ * Builds the rule-removal callback.
+ *
+ * After a removal the direct level for the active target is re-read rather than
+ * compared against the removed key: stored keys are canonical (realpath) while
+ * the target path is only lexically resolved, so a string comparison would miss
+ * a symlinked spelling of the same folder and leave a deleted rule on screen.
  */
 function useRemoveCallback(
   trustedFolders: LoadedTrustedFolders,
@@ -286,12 +291,12 @@ function useRemoveCallback(
       ruleKey: string,
     ): Promise<{ success: true } | { success: false; error: unknown }> => {
       try {
-        trustedFolders.deleteRuleByKey(ruleKey);
+        trustedFolders.removeRule(ruleKey);
         if (mountedRef.current) {
           refreshRules();
-          if (ruleKey === currentTargetPathRef.current) {
-            setPendingTrustLevel(trustedFolders.getValue(ruleKey));
-          }
+          setPendingTrustLevel(
+            trustedFolders.getValue(currentTargetPathRef.current),
+          );
         }
         return { success: true };
       } catch (error) {

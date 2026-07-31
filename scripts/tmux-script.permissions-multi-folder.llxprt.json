@@ -23,7 +23,11 @@
     },
     { "type": "expect", "scope": "screen", "contains": "Trust folder" },
     { "type": "expect", "scope": "screen", "contains": "Add another folder" },
-    { "type": "expect", "scope": "screen", "contains": "Manage existing rules" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Manage existing rules"
+    },
     { "type": "capture", "label": "01-trust-form" },
 
     { "type": "keys", "keys": ["Down", "Down", "Down"] },
@@ -46,7 +50,12 @@
     },
     { "type": "capture", "label": "03-empty-path-error" },
 
-    { "type": "line", "text": "/definitely/not/a/real/folder", "submitKeys": ["Enter"], "postTypeMs": 600 },
+    {
+      "type": "line",
+      "text": "/definitely/not/a/real/folder",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 600
+    },
     {
       "type": "waitFor",
       "scope": "screen",
@@ -93,7 +102,14 @@
     },
     { "type": "capture", "label": "08-dialog-closed" },
 
-    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
-    { "type": "waitForExit", "timeoutMs": 15000 }
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Escape"],
+      "postTypeMs": 1500
+    },
+    { "type": "wait", "ms": 1200 },
+    { "type": "key", "key": "Enter" },
+    { "type": "waitForExit", "timeoutMs": 20000 }
   ]
 }

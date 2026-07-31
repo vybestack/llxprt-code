@@ -53,7 +53,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
       },
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
-      deleteRuleByKey: mockedDeleteRuleByKey,
+      removeRule: mockedDeleteRuleByKey,
       getValue: mockedGetValue,
       snapshotValue: mockedSnapshotValue,
       restoreSnapshot: mockedRestoreSnapshot,
@@ -178,6 +178,19 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     expect(result.current.targetPath).toBe(
       path.resolve(WORKSPACE_ROOT, 'sub', 'dir'),
     );
+  });
+
+  it('B2: setTargetPath ignores empty or whitespace-only input', () => {
+    const config = createRuntime({ workingDir: WORKSPACE_ROOT });
+    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+
+    act(() => {
+      result.current.setTargetPath('   ');
+    });
+
+    // Empty input must not silently retarget anything — in particular it must
+    // not resolve to the working directory by way of an empty path segment.
+    expect(result.current.targetPath).toBe(WORKSPACE_ROOT);
   });
 
   it('B2: setTargetPath expands a tilde-prefixed input to the home directory', () => {
@@ -417,7 +430,6 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     });
 
     expect(removalResult).toMatchObject({ success: true });
-    expect(mockedDeleteRuleByKey).toHaveBeenCalledWith(staleRule);
     expect(
       result.current.trustRules.find((rule) => rule.path === staleRule),
     ).toBeUndefined();

@@ -429,6 +429,9 @@ export function usePermissionsTrustDialogFlow(
 
   const selectChoice = useCallback(
     async (choice: TrustFormChoice): Promise<void> => {
+      // A write is in flight; ignore further selections so a late-resolving
+      // commit cannot overwrite a view the user navigated to in the meantime.
+      if (committingRef.current) return;
       if (!isTrustFormAction(choice)) {
         if (isTrustLevel(choice)) await commitLevel(choice);
         return;
@@ -440,10 +443,27 @@ export function usePermissionsTrustDialogFlow(
       } else if (choice === TrustFormAction.MANAGE_RULES) {
         setView('rules');
       } else {
-        await removeRule();
+        // Removal is a write too, so it takes the same in-flight lock as a
+        // commit: the form stays disabled and Escape is ignored until it lands.
+        committingRef.current = true;
+        setIsCommitting(true);
+        try {
+          await removeRule();
+        } finally {
+          committingRef.current = false;
+          if (mountedRef.current) setIsCommitting(false);
+        }
       }
     },
-    [commitLevel, removeRule, setPathDraft, setPathError, setView],
+    [
+      commitLevel,
+      removeRule,
+      setPathDraft,
+      setPathError,
+      setView,
+      committingRef,
+      mountedRef,
+    ],
   );
 
   const display = useTrustFormDisplay(trust);

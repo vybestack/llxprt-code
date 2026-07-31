@@ -39,7 +39,7 @@ vi.mock('../../config/trustedFolders.js', async () => {
       },
       setValue: mockedSetValue,
       deleteValue: vi.fn(),
-      deleteRuleByKey: mockedDeleteRuleByKey,
+      removeRule: mockedDeleteRuleByKey,
       getValue: (folderPath: string) => mockedTrustedConfig.value[folderPath],
       snapshotValue: mockedSnapshotValue,
       restoreSnapshot: mockedRestoreSnapshot,
@@ -304,6 +304,57 @@ describe('permissions dialog multi-folder flow', () => {
     expect(mockedDeleteRuleByKey).toHaveBeenCalledWith(otherFolder);
     expect(result.current.view).toBe('rules');
     expect(result.current.trustRules).toStrictEqual([]);
+  });
+
+  it('C8: removing the working directory rule clears the removal option from the form', async () => {
+    mockedTrustedConfig.value = { [cwd]: TrustLevel.TRUST_FOLDER };
+    const { result } = renderFlow();
+
+    expect(
+      result.current.options.some(
+        (option) => option.value === TrustFormAction.REMOVE_RULE,
+      ),
+    ).toBe(true);
+
+    await act(async () => {
+      await result.current.selectChoice(TrustFormAction.REMOVE_RULE);
+    });
+    act(() => result.current.handleEscape());
+
+    // The rule is gone, so the form must no longer offer to remove it.
+    expect(
+      result.current.options.some(
+        (option) => option.value === TrustFormAction.REMOVE_RULE,
+      ),
+    ).toBe(false);
+  });
+
+  it('C13: a navigation action is ignored while a commit is still in flight', async () => {
+    let releaseCommit: (() => void) | undefined;
+    setTrustedFolderLive.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseCommit = () => resolve();
+        }),
+    );
+    const { result } = renderFlow();
+
+    let commit: Promise<void> | undefined;
+    act(() => {
+      commit = result.current.selectChoice(TrustLevel.TRUST_FOLDER);
+    });
+
+    await act(async () => {
+      await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
+    });
+    expect(result.current.view).toBe('form');
+
+    await act(async () => {
+      releaseCommit?.();
+      await commit;
+    });
+
+    expect(result.current.view).toBe('updated');
   });
 
   it('C9: committing a non-cwd change returns to the rules list for further edits', async () => {
