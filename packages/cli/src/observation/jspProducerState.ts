@@ -197,7 +197,13 @@ export function applyTransition(
       });
     }
     case 'session.ended': {
-      return next({ ...state });
+      // Record the terminal state. While the session is live, a known-null
+      // terminal state is a truthful authoritative claim, but once it ends the
+      // snapshot must stop reporting that the source has not terminated.
+      return next({
+        ...state,
+        terminalState: { summary: 'session ended', code: 'SESSION_ENDED' },
+      });
     }
     default:
       return state;
@@ -243,7 +249,7 @@ export function buildSnapshot(
     state.currentTurn === null
       ? null
       : { elapsed_ms: Math.max(0, now() - state.currentTurn.startedAtMs) };
-  // Until a todo list has actually been observed the revision is unknown, not
+  // Until a task list has actually been observed the revision is unknown, not
   // revision 1 with no items. Claiming revision 1 here lets a real first list
   // arrive carrying the same revision, which a consumer deduplicating on
   // revision would then discard.

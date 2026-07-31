@@ -99,6 +99,34 @@ function event(
   };
 }
 
+/**
+ * The fixed transition sequence the producer compliance profile replays.
+ *
+ * `nowRef` is read lazily so each transition observes the clock value the
+ * caller has advanced to for that step.
+ */
+function complianceTransitions(
+  producer: JspProducer,
+  nowRef: () => number,
+): Array<() => void> {
+  return [
+    () => producer.observeActivityChanged('thinking'),
+    () => producer.observeWaitOpened('question'),
+    () => producer.observeWaitResolved(),
+    () => producer.observeTurnStarted(),
+    () => producer.observeTurnEnded('completed'),
+    () =>
+      producer.observeTodosReplaced('compliance', undefined, [
+        { content: 'ship', status: 'in_progress' },
+      ]),
+    () => producer.observeToolCreated('search', 'proposed'),
+    () => producer.observeToolPhaseChanged('search', 'executing'),
+    () => producer.observeAssistantMessageDisplayed('Done.', nowRef()),
+    () => producer.observeSourceError('failed', 'E'),
+    () => producer.observeSessionEnded(),
+  ];
+}
+
 async function captureDocuments(
   challenge: Challenge,
 ): Promise<JspBoundDocument[]> {
@@ -144,38 +172,28 @@ async function captureDocuments(
     },
   );
   producer.start();
-  await producer.flush();
-  const transitions = [
-    () => producer.observeActivityChanged('thinking'),
-    () => producer.observeWaitOpened('question'),
-    () => producer.observeWaitResolved(),
-    () => producer.observeTurnStarted(),
-    () => producer.observeTurnEnded('completed'),
-    () =>
-      producer.observeTodosReplaced('compliance', undefined, [
-        { content: 'ship', status: 'in_progress' },
-      ]),
-    () => producer.observeToolCreated('search', 'proposed'),
-    () => producer.observeToolPhaseChanged('search', 'executing'),
-    () => producer.observeAssistantMessageDisplayed('Done.', now),
-    () => producer.observeSourceError('failed', 'E'),
-    () => producer.observeSessionEnded(),
-  ];
-  for (let index = 0; index < transitions.length; index += 1) {
-    now = challenge.clock_sequence[index + 1];
-    transitions[index]();
+  // Guarantee teardown: a throw anywhere below would otherwise leave the
+  // producer's heartbeat interval running and keep the process alive.
+  try {
+    await producer.flush();
+    const transitions = complianceTransitions(producer, () => now);
+    for (let index = 0; index < transitions.length; index += 1) {
+      now = challenge.clock_sequence[index + 1];
+      transitions[index]();
+    }
+    await producer.flush();
+    now = challenge.clock_sequence[12];
+    captured.push({
+      schema: 1,
+      kind: 'heartbeat',
+      agent_id: identity.agent_id,
+      lifecycle_generation: identity.lifecycle_generation,
+      source_epoch: identity.source_epoch,
+      bridge_observed_ms: now,
+    });
+  } finally {
+    producer.stop();
   }
-  await producer.flush();
-  now = challenge.clock_sequence[12];
-  captured.push({
-    schema: 1,
-    kind: 'heartbeat',
-    agent_id: identity.agent_id,
-    lifecycle_generation: identity.lifecycle_generation,
-    source_epoch: identity.source_epoch,
-    bridge_observed_ms: now,
-  });
-  producer.stop();
   return captured;
 }
 

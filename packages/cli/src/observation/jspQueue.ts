@@ -27,7 +27,13 @@ export class JspBoundedQueue {
 
   constructor(sink: JspQueueSink, options?: Partial<JspQueueOptions>) {
     this.sink = sink;
-    this.capacity = options?.capacity ?? DEFAULT_CAPACITY;
+    const requested = options?.capacity ?? DEFAULT_CAPACITY;
+    // A non-positive capacity would reject every document and latch permanent
+    // overflow, silently disabling telemetry. Treat it as a caller error.
+    if (!Number.isInteger(requested) || requested <= 0) {
+      throw new RangeError('JSP queue capacity must be a positive integer');
+    }
+    this.capacity = requested;
   }
 
   enqueue(document: JspBoundDocument): boolean {

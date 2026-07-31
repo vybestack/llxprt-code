@@ -17,6 +17,9 @@ export interface JspPublisher {
   heartbeat(document: JspHeartbeatDocument): Promise<boolean>;
 }
 
+/** Bound each publish so a stalled broker cannot wedge the queue. */
+const REQUEST_TIMEOUT_MS = 5_000;
+
 export class JspHttpPublisher implements JspPublisher {
   private readonly baseEndpoint: string;
   private readonly authHeader: string;
@@ -44,6 +47,11 @@ export class JspHttpPublisher implements JspPublisher {
   }
 
   private async post(path: string, body: unknown): Promise<boolean> {
+    // A broker that accepts the connection but never responds would otherwise
+    // hang this request forever. The queue drains sequentially, so one hung
+    // request stalls every later document and blocks shutdown. Bound it.
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(`${this.baseEndpoint}${path}`, {
         method: 'POST',
@@ -53,10 +61,13 @@ export class JspHttpPublisher implements JspPublisher {
           'jsp-registration-id': this.registrationId,
         },
         body: JSON.stringify(body),
+        signal: abort.signal,
       });
       return response.ok;
     } catch {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
