@@ -525,18 +525,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
 
-    // Pass tools directly in Gemini format - they'll be converted per call
-    const generator = this.generateChatCompletionImpl(
+    // Delegate streaming to the pipeline implementation (yield* forwards
+    // each chunk identically to an explicit for-await loop).
+    yield* this.generateChatCompletionImpl(
       options,
       callFormatter,
       client,
       logger,
       prepared?.requestContext,
     );
-
-    for await (const item of generator) {
-      yield item;
-    }
   }
 
   /**

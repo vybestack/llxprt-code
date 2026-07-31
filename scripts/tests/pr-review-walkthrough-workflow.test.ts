@@ -48,10 +48,6 @@ function requireStepById(job: WorkflowJob, id: string): WorkflowStep {
   return step;
 }
 
-function stepUses(step: WorkflowStep | undefined): string {
-  return asString(step?.['uses'] ?? '');
-}
-
 function stepRunText(job: WorkflowJob | undefined, name: string): string {
   const step = findStepByName(job, name);
   if (!step) return '';
@@ -290,25 +286,23 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   });
 
   describe('comment tag (changed to llxprt-walkthrough)', () => {
-    it('uses llxprt-walkthrough as the comment-tag in the post step', () => {
+    it('targets the llxprt-walkthrough marker in the post step', () => {
       const steps = jobSteps(reviewJob);
-      const postStep = steps.find((step) =>
-        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
+      const postStep = steps.find(
+        (step) => step.name === 'Post walkthrough comment',
       );
       expect(postStep, 'should have a comment-post step').toBeTruthy();
-      expect(asOptionalRecord(postStep?.with)?.['comment-tag']).toBe(
-        'llxprt-walkthrough',
+      expect(asOptionalRecord(postStep?.['env'])?.['COMMENT_MARKER']).toBe(
+        '<!-- llxprt-walkthrough -->',
       );
     });
 
-    it('does not use the old llxprt-pr-review comment tag in the post step', () => {
+    it('the post step no longer uses the thollander comment-tag input', () => {
       const steps = jobSteps(reviewJob);
-      const postStep = steps.find((step) =>
-        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
+      const postStep = steps.find(
+        (step) => step.name === 'Post walkthrough comment',
       );
-      expect(asOptionalRecord(postStep?.with)?.['comment-tag']).not.toBe(
-        'llxprt-pr-review',
-      );
+      expect(asOptionalRecord(postStep?.with)?.['comment-tag']).toBeUndefined();
     });
 
     it('the issue_gate blocked comment uses the new tag', () => {
@@ -424,14 +418,15 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   });
 
   describe('idempotent comment posting', () => {
-    it('uses the thollander comment action with edit-in-place tag', () => {
-      const postStep = jobSteps(reviewJob).find((step: WorkflowStep) =>
-        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
+    it('uses github-script to find-or-update the comment in place', () => {
+      const postStep = jobSteps(reviewJob).find(
+        (step: WorkflowStep) => step.name === 'Post walkthrough comment',
       );
-      expect(
-        postStep?.['uses'],
-        'should use the pinned comment action',
-      ).toContain('thollander/actions-comment-pull-request');
+      expect(postStep?.['uses'], 'should use github-script').toContain(
+        'actions/github-script',
+      );
+      const script = String(asOptionalRecord(postStep?.with)?.['script'] ?? '');
+      expect(script).toContain('updateComment');
     });
   });
 
@@ -512,8 +507,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       const fallbackIdx = steps.findIndex(
         (s: WorkflowStep) => s.name === 'Ensure fallback comment',
       );
-      const postIdx = steps.findIndex((s: WorkflowStep) =>
-        asOptionalString(s['uses'])?.includes('actions-comment-pull-request'),
+      const postIdx = steps.findIndex(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(fallbackIdx).toBeGreaterThanOrEqual(0);
       expect(postIdx).toBeGreaterThan(fallbackIdx);
@@ -535,8 +530,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
 
   describe('post-comment step always runs', () => {
     it('the post-comment step uses if: always()', () => {
-      const postStep = jobSteps(reviewJob).find((step: WorkflowStep) =>
-        String(step['uses'] ?? '').includes('actions-comment-pull-request'),
+      const postStep = jobSteps(reviewJob).find(
+        (step: WorkflowStep) => step.name === 'Post walkthrough comment',
       );
       expect(postStep?.if).toBe('always()');
     });
@@ -586,8 +581,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     });
 
     it('Post walkthrough comment has continue-on-error', () => {
-      const step = jobSteps(reviewJob).find((s: WorkflowStep) =>
-        stepUses(s).includes('actions-comment-pull-request'),
+      const step = jobSteps(reviewJob).find(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(continueOnError(step)).toBe(true);
     });
@@ -668,8 +663,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     });
 
     it('Post walkthrough comment runs under always()', () => {
-      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
-        stepUses(s).includes('actions-comment-pull-request'),
+      const post = jobSteps(reviewJob).find(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(
         evalStepIf(post?.if, { outcomes: { walkthrough: 'failure' } }),
@@ -737,8 +732,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
         },
       };
       const fallback = stepByName('Ensure fallback comment');
-      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
-        stepUses(s).includes('actions-comment-pull-request'),
+      const post = jobSteps(reviewJob).find(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
       expect(evalStepIf(post?.if, scenarios)).toBe(true);
@@ -756,8 +751,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
         },
       };
       const fallback = stepByName('Ensure fallback comment');
-      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
-        stepUses(s).includes('actions-comment-pull-request'),
+      const post = jobSteps(reviewJob).find(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
       expect(evalStepIf(post?.if, scenarios)).toBe(true);
@@ -776,8 +771,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       };
       const upload = stepByName('Upload walkthrough diagnostics');
       const fallback = stepByName('Ensure fallback comment');
-      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
-        stepUses(s).includes('actions-comment-pull-request'),
+      const post = jobSteps(reviewJob).find(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(evalStepIf(upload?.if, scenarios)).toBe(true);
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
@@ -806,8 +801,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     });
 
     it('comment-posting failure is non-blocking (continue-on-error on post)', () => {
-      const post = jobSteps(reviewJob).find((s: WorkflowStep) =>
-        stepUses(s).includes('actions-comment-pull-request'),
+      const post = jobSteps(reviewJob).find(
+        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
       );
       expect(continueOnError(post)).toBe(true);
     });

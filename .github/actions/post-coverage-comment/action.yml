@@ -23,6 +23,10 @@ inputs:
   github_token:
     description: 'GitHub token for posting comments'
     required: true
+  comment-marker:
+    description: 'HTML marker that lets the comment be found/updated and captured by PR review'
+    required: false
+    default: '<!-- code-coverage-summary -->'
 
 runs:
   using: 'composite'
@@ -65,8 +69,10 @@ runs:
           echo "Core coverage-summary.json not found at: $CORE_JSON_FILE" >&2 # Error to stderr
         fi
 
-        echo "## Code Coverage Summary" > "$COMMENT_FILE"
+        # Marker so the comment can be found/updated and captured by PR review.
+        echo '${{ inputs.comment-marker }}' > "$COMMENT_FILE"
         echo "" >> "$COMMENT_FILE"
+        echo "## Code Coverage Summary" >> "$COMMENT_FILE"
         echo "| Package | Lines | Statements | Functions | Branches |" >> "$COMMENT_FILE"
         echo "|---|---|---|---|---|" >> "$COMMENT_FILE"
         echo "| CLI | ${cli_lines_pct}% | ${cli_statements_pct}% | ${cli_functions_pct}% | ${cli_branches_pct}% |" >> "$COMMENT_FILE"
@@ -104,9 +110,58 @@ runs:
         echo "_For detailed HTML reports, please see the 'coverage-reports-$NODE_VERSION-$OS' artifact from the main CI run._" >> "$COMMENT_FILE"
 
     - name: Post Coverage Comment
-      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      # Find-or-update the coverage comment by its HTML marker so re-runs edit
+      # the existing comment. Replaces the abandoned node20 thollander action
+      # (issue #2648).
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
       if: always()
+      env:
+        COMMENT_FILE: coverage-comment.md
+        COMMENT_MARKER: '${{ inputs.comment-marker }}'
       with:
-        file-path: coverage-comment.md # Use the generated file directly
-        comment-tag: code-coverage-summary
         github-token: ${{ inputs.github_token }}
+        script: |
+          const fs = require('fs');
+          const commentFile = process.env.COMMENT_FILE;
+          if (!fs.existsSync(commentFile)) {
+            core.info(`${commentFile} not found; skipping comment post.`);
+            return;
+          }
+          const body = fs.readFileSync(commentFile, 'utf8');
+          const marker = process.env.COMMENT_MARKER;
+          if (!marker) {
+            core.info('No comment marker set; skipping comment post.');
+            return;
+          }
+          const number = context.issue.number;
+          if (!number) {
+            core.info('No issue/PR number in context; skipping comment post.');
+            return;
+          }
+          const comments = await github.paginate(
+            github.rest.issues.listComments,
+            {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              per_page: 100,
+            },
+          );
+          const existing = comments.find((c) => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+            core.info(`Updated comment ${existing.id}.`);
+          } else {
+            const { data: created } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: number,
+              body,
+            });
+            core.info(`Created comment ${created.id}.`);
+          }
