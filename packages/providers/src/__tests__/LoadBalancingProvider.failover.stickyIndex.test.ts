@@ -205,11 +205,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     phase = 'second';
     callLog.length = 0;
 
-    await expect(async () => {
-      for await (const _chunk of provider.generateChatCompletion(options)) {
-        // consume
-      }
-    }).rejects.toThrow(LoadBalancerFailoverError);
+    await expect(
+      (async () => {
+        for await (const _chunk of provider.generateChatCompletion(options)) {
+          // consume
+        }
+      })(),
+    ).rejects.toThrow(LoadBalancerFailoverError);
 
     expect(provider.getCurrentFailoverIndex()).toBe(0);
     expect(callLog).toStrictEqual(['model-c', 'model-a', 'model-b']);
@@ -273,11 +275,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     expect(provider.getCurrentFailoverIndex()).toBe(0);
 
-    await expect(async () => {
-      for await (const _chunk of provider.generateChatCompletion(options)) {
-        // consume
-      }
-    }).rejects.toThrow(LoadBalancerFailoverError);
+    await expect(
+      (async () => {
+        for await (const _chunk of provider.generateChatCompletion(options)) {
+          // consume
+        }
+      })(),
+    ).rejects.toThrow(LoadBalancerFailoverError);
 
     expect(callLog).toStrictEqual(['model-a', 'model-b', 'model-c']);
     expect(provider.getCurrentFailoverIndex()).toBe(0);

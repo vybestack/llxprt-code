@@ -275,6 +275,13 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(env.DEBUG_OUTPUT).toBeTruthy();
     });
 
+    it('keeps the repository override ahead of the 256000 context fallback', () => {
+      const env = asOptionalRecord(reviewJob?.env) ?? {};
+      expect(asString(env.LLXPRT_CONTEXT_LIMIT ?? '')).toBe(
+        "${{ vars.LLXPRT_CONTEXT_LIMIT || '256000' }}",
+      );
+    });
+
     it('wires the strong model tier from repository variables', () => {
       const env = asOptionalRecord(reviewJob?.env) ?? {};
       expect(env.LLXPRT_STRONG_MODEL).toContain('vars.LLXPRT_STRONG_MODEL');

@@ -21,6 +21,7 @@ import type {
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
+import { resolveReasoningField } from '../utils/reasoningField.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import { normalizeToHistoryToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { processToolParameters } from '@vybestack/llxprt-code-tools/doubleEscapeUtils.js';
@@ -36,55 +37,14 @@ type DeltaWithReasoning =
     reasoning?: unknown;
   };
 
-/**
- * Selects the reasoning value and provenance field name. Returns undefined
- * when no usable reasoning is available. When fieldName is unset (undefined)
- * and the primary value is not a usable non-empty string, falls back to the
- * Ollama delta.reasoning field (issue #2488 / #2505).
- */
-function resolveReasoningValue(
-  primaryValue: unknown,
-  explicitField: string,
-  ollamaReasoning: unknown,
-  fieldName: string | undefined,
-): { value: string; actualFieldName: string } | undefined {
-  if (hasUsableReasoning(primaryValue)) {
-    return { value: primaryValue, actualFieldName: explicitField };
-  }
-  if (fieldName === undefined && hasUsableReasoning(ollamaReasoning)) {
-    return { value: ollamaReasoning, actualFieldName: 'reasoning' };
-  }
-  return undefined;
-}
-
-function hasUsableReasoning(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
 function readReasoningFromDelta(
   delta: DeltaWithReasoning,
   fieldName: string | undefined,
 ): { content: string; actualFieldName: string } | undefined {
-  // Treat empty/whitespace-only field names as unset so auto-fallback still
-  // applies (issue #2505: guards against reasoning.fieldName='' misconfig).
-  // Trim a non-empty field name before using it as a delta property key.
-  const trimmed = fieldName?.trim();
-  const normalizedFieldName =
-    trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
-  const deltaRecord = delta as Record<string, unknown>;
-  const explicitField = normalizedFieldName ?? 'reasoning_content';
-  const primaryValue =
-    normalizedFieldName === undefined
-      ? delta.reasoning_content
-      : deltaRecord[explicitField];
-
-  const resolved = resolveReasoningValue(
-    primaryValue,
-    explicitField,
-    delta.reasoning,
-    normalizedFieldName,
-  );
-
+  const resolved = resolveReasoningField({
+    fieldName,
+    delta: delta as Record<string, unknown>,
+  });
   if (resolved === undefined) {
     return undefined;
   }

@@ -20,6 +20,7 @@
  */
 
 import { vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import type * as Core from '@vybestack/llxprt-code-core';
 import type * as SettingsPackage from '@vybestack/llxprt-code-settings';
 import type * as Providers from '@vybestack/llxprt-code-providers';
@@ -32,8 +33,8 @@ const { mockLoadProfile, mockFetchAnthropicUsage } = vi.hoisted(() => ({
 
 export { mockFetchAnthropicUsage, mockLoadProfile };
 
-vi.mock('@vybestack/llxprt-code-providers', async () => {
-  const actual = await vi.importActual<typeof Providers>(
+vi.mock('@vybestack/llxprt-code-providers', () => {
+  const actual = importActualSync<typeof Providers>(
     '@vybestack/llxprt-code-providers',
   );
   return {
@@ -42,17 +43,15 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<typeof Core>(
-    '@vybestack/llxprt-code-core',
-  );
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = importActualSync<typeof Core>('@vybestack/llxprt-code-core');
   return {
     ...actual,
   };
 });
 
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const actual = await vi.importActual<typeof SettingsPackage>(
+vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = importActualSync<typeof SettingsPackage>(
     '@vybestack/llxprt-code-settings',
   );
   return {

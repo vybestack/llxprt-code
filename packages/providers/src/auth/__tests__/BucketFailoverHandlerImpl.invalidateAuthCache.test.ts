@@ -5,10 +5,12 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
-vi.mock('@vybestack/llxprt-code-auth', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-auth')>();
+vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
+    '@vybestack/llxprt-code-auth',
+  );
   return {
     ...actual,
     flushRuntimeAuthScope: vi.fn(),

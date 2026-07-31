@@ -557,6 +557,10 @@ export class HookRunner {
         cwd: input.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: false, // CRITICAL: must be false to prevent injection
+        // Prevents child from inheriting parent's console screen buffer on
+        // Windows (sets CREATE_NO_WINDOW). PowerShell Console API writes
+        // would otherwise bypass the pipes and corrupt the terminal UI. Issue #2548
+        windowsHide: process.platform === 'win32' ? true : undefined,
       },
     );
   }

@@ -921,12 +921,17 @@ export class AgentImpl implements Agent {
   }
 
   /**
-   * Resets the chat: clears the live conversation history so the next turn runs
-   * with no prior context. Delegates to the client's resetChat contract.
+   * Resets the chat through the durable history-clear path while recording is
+   * active, preserving its initial history prefix. Without recording, delegates
+   * to the client's full reset contract.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
   async resetChat(): Promise<void> {
+    if (this.session.getRecording().enabled) {
+      await this.session.clearHistory();
+      return;
+    }
     const client = this.deps.resolveClient();
     await client.resetChat();
   }

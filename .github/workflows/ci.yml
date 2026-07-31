@@ -829,7 +829,7 @@ jobs:
   bun_native_test_parity:
     name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 15
+    timeout-minutes: 30
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -863,7 +863,7 @@ jobs:
           bun scripts/run_bun_tests.ts --timeout 30000
 
   #
-  # Test: Node (Linux and macOS - always run)
+  # Test: Node (Linux only — issue #2876)
   #
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
   # deterministically materializes incomplete copies of third-party packages
@@ -880,8 +880,9 @@ jobs:
   # critical path is max(shard) rather than sum(all workspaces). The shard map
   # lives in scripts/test-shards.ts and is enforced by
   # scripts/check-test-shards.ts (run below and via `lint:test-shards`). Each
-  # shard is a matrix leg over `os`; the `scripts` shard runs the root script
-  # harness instead of workspace tests.
+  # shard is a matrix leg; the `scripts` shard runs the root script harness
+  # instead of workspace tests. The selector emits ubuntu-only rows (issue
+  # #2876); macOS coverage moved to the nightly workflow.
   #
   # Issue #2709: the matrix is now dynamic — shard_selector outputs a JSON
   # matrix of only the shards that can observe the PR's changed files. When
@@ -910,8 +911,8 @@ jobs:
     strategy:
       fail-fast: false # So we can see all test failures
       # Dynamic matrix from shard_selector (issue #2709): only shards that can
-      # observe the changed files. The selector guarantees Linux+macOS for
-      # every selected shard, preserving cross-platform coverage. An empty
+      # observe the changed files. The selector emits ubuntu-only rows (issue
+      # #2876); macOS test coverage moved to the nightly workflow. An empty
       # matrix (no tests selected) combined with the has_tests gate above
       # skips all legs without making the required `Test` check red.
       matrix:
@@ -1168,12 +1169,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Issue #2876: macOS keyring coverage moved to the nightly workflow.
+        # The PR matrix is ubuntu-only to reduce macOS runner contention.
         include:
           - os: 'ubuntu-latest'
-            node-version: '24.x'
-            secure-store-mode: 'keyring'
-            test-config: 'vitest.config.native-keyring.ts'
-          - os: 'macos-latest'
             node-version: '24.x'
             secure-store-mode: 'keyring'
             test-config: 'vitest.config.native-keyring.ts'

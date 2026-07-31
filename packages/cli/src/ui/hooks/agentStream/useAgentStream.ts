@@ -32,7 +32,7 @@ import { useCheckpointPersistence } from './checkpointPersistence.js';
 import type { useStreamState } from './useStreamState.js';
 import type { AgentStreamOrchestrationDeps } from './useAgentStreamOrchestration.js';
 import { useAgentStreamOrchestration } from './useAgentStreamOrchestration.js';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
+import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 
 export const useAgentStream = (
   agent: Agent,
@@ -56,6 +56,7 @@ export const useAgentStream = (
   onEditorOpen: () => void = () => {},
   recordingIntegration?: RecordingIntegration,
   runtimeMessageBus?: MessageBus,
+  subagentManager?: UiSubagentManager,
 ) => {
   const orchestration = useAgentStreamOrchestration({
     agent,
@@ -76,6 +77,7 @@ export const useAgentStream = (
     onEditorOpen,
     recordingIntegration,
     runtimeMessageBus,
+    subagentManager,
   } satisfies AgentStreamOrchestrationDeps);
 
   return useAgentStreamReturn(

@@ -186,6 +186,10 @@ Before ANY implementation starts, verify:
 
 ## Plan Structure
 
+Plans are written to `project-plans/`, never to `dev-docs/`. This document and
+`PLAN-TEMPLATE.md` live under `dev-docs/` because they are the methodology you
+follow; they are not the directory you write output into.
+
 ```
 project-plans/<feature-slug>/
   specification.md           ← Architect-written specification

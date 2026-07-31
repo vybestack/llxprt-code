@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
@@ -24,10 +25,10 @@ const parseResponsesStreamMock = vi.hoisted(() =>
 
 const fetchMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
     '@vybestack/llxprt-code-settings',
-  )),
+  ),
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));
@@ -122,11 +123,13 @@ describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
       }),
     );
 
-    await expect(async () => {
-      for await (const _chunk of generator) {
-        // drain
-      }
-    }).rejects.toThrow('aborted');
+    await expect(
+      (async () => {
+        for await (const _chunk of generator) {
+          // drain
+        }
+      })(),
+    ).rejects.toThrow('aborted');
 
     expect(fetchMock.mock.calls.length).toBe(1);
   });

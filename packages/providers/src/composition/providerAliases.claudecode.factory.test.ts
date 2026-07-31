@@ -16,8 +16,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.unmock('./providerAliases.js');
-
 // Stub the Anthropic SDK at the HTTP boundary so the real alias factory +
 // AnthropicProvider can exercise the dynamic /models listing path without a
 // network call. We capture the constructor args to prove API-key wiring.

@@ -36,6 +36,9 @@ import {
   type ContentPayload,
   type RewindPayload,
   type ProviderSwitchPayload,
+  type CheckpointMetadataView,
+  type SessionForkedPayload,
+  type SessionRecordLine,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 
@@ -48,6 +51,7 @@ interface ReplayAccumulators {
   history: IContent[];
   metadata: SessionMetadata | null;
   lastSeq: number;
+  sequenceCorrupt: boolean;
   eventCount: number;
   warnings: string[];
   sessionEvents: SessionEventPayload[];
@@ -56,6 +60,8 @@ interface ReplayAccumulators {
   malformedCount: number;
   _unknownEventCount: number;
   unparseableLineCount: number;
+  /** Raw metadata event lines for post-replay folding. */
+  rawMetadataEvents: SessionRecordLine[];
 }
 
 // @pseudocode line 11-17: Initialize accumulators
@@ -64,6 +70,7 @@ function createAccumulators(): ReplayAccumulators {
     history: [],
     metadata: null,
     lastSeq: 0,
+    sequenceCorrupt: false,
     eventCount: 0,
     warnings: [],
     sessionEvents: [],
@@ -72,6 +79,7 @@ function createAccumulators(): ReplayAccumulators {
     malformedCount: 0,
     _unknownEventCount: 0,
     unparseableLineCount: 0,
+    rawMetadataEvents: [],
   };
 }
 
@@ -114,7 +122,7 @@ function trackSequence(
         `Line ${lineNumber}: non-monotonic seq ${seq} (expected > ${lastSeq})`,
       );
     }
-    return seq;
+    return Math.max(lastSeq, seq);
   }
   return lastSeq;
 }
@@ -352,6 +360,10 @@ function handleDirectoriesChanged(
   }
 }
 
+function isValidSequence(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 function applyParsedEvent(
   parsed: Record<string, unknown> | null,
   acc: ReplayAccumulators,
@@ -359,6 +371,17 @@ function applyParsedEvent(
 ): ReplayResult | undefined {
   if (parsed === null) {
     return undefined;
+  }
+  if (!isValidSequence(parsed.seq)) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${acc.lineNumber}: malformed sequence number, skipping`,
+    );
+    return undefined;
+  }
+  const eventSequence = parsed.seq;
+  if (eventSequence <= acc.lastSeq && acc.eventCount > 0) {
+    acc.sequenceCorrupt = true;
   }
   // @pseudocode line 44-48: Track sequence numbers
   acc.lastSeq = trackSequence(
@@ -391,10 +414,59 @@ function applyParsedEvent(
   return dispatchEvent(
     eventType,
     payload,
+    typeof parsed.ts === 'string' ? parsed.ts : '',
+    eventSequence,
     acc,
     acc.lineNumber,
     expectedProjectHash,
   );
+}
+
+/**
+ * Collect a checkpoint/session-name/fork metadata event for post-replay folding.
+ * These events never modify history.
+ */
+function collectMetadataEvent(
+  acc: ReplayAccumulators,
+  seq: number,
+  timestamp: string,
+  type: string,
+  payload: Record<string, unknown>,
+  lineNumber: number,
+): void {
+  // session_named events apply to the session itself, not a checkpoint,
+  // so they intentionally omit checkpointId.
+  if (!('checkpointId' in payload) && type !== 'session_named') {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed ${type} event (missing checkpointId), skipping`,
+    );
+    return;
+  }
+  if (
+    (type === 'checkpoint_created' || type === 'checkpoint_renamed') &&
+    (typeof payload.name !== 'string' || payload.name.trim() === '')
+  ) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed ${type} event (missing name), skipping`,
+    );
+    return;
+  }
+  if (type === 'session_forked' && !isSessionForkedPayload(payload)) {
+    acc.malformedCount++;
+    acc.warnings.push(
+      `Line ${lineNumber}: malformed session_forked event, skipping`,
+    );
+    return;
+  }
+  acc.rawMetadataEvents.push({
+    v: 1,
+    seq,
+    ts: timestamp,
+    type: type as SessionRecordLine['type'],
+    payload,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +477,8 @@ function applyParsedEvent(
 function dispatchEvent(
   eventType: string,
   payload: Record<string, unknown>,
+  timestamp: string,
+  eventSequence: number,
   acc: ReplayAccumulators,
   lineNumber: number,
   expectedProjectHash: string,
@@ -432,6 +506,21 @@ function dispatchEvent(
       break;
     case 'directories_changed':
       handleDirectoriesChanged(payload, acc, lineNumber);
+      break;
+    case 'checkpoint_created':
+    case 'checkpoint_renamed':
+    case 'checkpoint_deleted':
+    case 'session_forked':
+    case 'session_named':
+      // Metadata events never affect history; collected for post-replay folding.
+      collectMetadataEvent(
+        acc,
+        eventSequence,
+        timestamp,
+        eventType,
+        payload,
+        lineNumber,
+      );
       break;
     default: {
       acc._unknownEventCount++;
@@ -486,15 +575,169 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
   }
 
   // @pseudocode line 161-169: Return success result
+  appendCheckpointMetadataWarnings(acc.rawMetadataEvents, acc.warnings);
+  const folded = foldCheckpointMetadata(acc.rawMetadataEvents);
+  const sessionName = deriveSessionName(acc.rawMetadataEvents);
+  const ancestry = deriveAncestry(acc.rawMetadataEvents);
   return {
     ok: true,
     history: acc.history,
     metadata: acc.metadata,
     lastSeq: acc.lastSeq,
+    sequenceCorrupt: acc.sequenceCorrupt,
     eventCount: acc.eventCount,
     warnings: acc.warnings,
     sessionEvents: acc.sessionEvents,
+    checkpoints: folded,
+    sessionName,
+    ancestry,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Metadata folding helpers (checkpoint lifecycle + session name)
+// ---------------------------------------------------------------------------
+
+function appendCheckpointMetadataWarnings(
+  events: readonly SessionRecordLine[],
+  warnings: string[],
+): void {
+  const knownIds = new Set<string>();
+  const deletedIds = new Set<string>();
+  for (const line of events) {
+    const checkpointId = extractCheckpointId(line);
+    if (checkpointId === null) continue;
+    if (line.type === 'checkpoint_created') {
+      if (knownIds.has(checkpointId)) {
+        warnings.push(
+          `Sequence ${line.seq}: checkpoint_created duplicates checkpoint ${checkpointId}`,
+        );
+      } else {
+        knownIds.add(checkpointId);
+      }
+    } else if (
+      line.type === 'checkpoint_renamed' ||
+      line.type === 'checkpoint_deleted'
+    ) {
+      if (!knownIds.has(checkpointId)) {
+        warnings.push(
+          `Sequence ${line.seq}: ${line.type} references unknown checkpoint ${checkpointId}`,
+        );
+      } else if (deletedIds.has(checkpointId)) {
+        warnings.push(
+          `Sequence ${line.seq}: ${line.type} references deleted checkpoint ${checkpointId}`,
+        );
+      }
+      if (line.type === 'checkpoint_deleted') deletedIds.add(checkpointId);
+    }
+  }
+}
+
+function extractCheckpointId(line: SessionRecordLine): string | null {
+  if (typeof line.payload !== 'object' || line.payload === null) return null;
+  const checkpointId =
+    'checkpointId' in line.payload ? line.payload.checkpointId : undefined;
+  return typeof checkpointId === 'string' ? checkpointId : null;
+}
+
+/**
+ * Fold checkpoint lifecycle events into a stable view ordered by sequence.
+ * Each checkpoint is tracked by stable `checkpointId`. Created events set
+ * the name, watermark, and createdAt; renamed events update the name;
+ * deleted events set `deleted: true`.
+ */
+export function foldCheckpointMetadata(
+  events: readonly SessionRecordLine[],
+): CheckpointMetadataView[] {
+  const byId = new Map<string, CheckpointMetadataView>();
+
+  for (const line of events) {
+    foldCheckpointLine(line, byId);
+  }
+
+  return Array.from(byId.values()).sort((a, b) => a.sequence - b.sequence);
+}
+
+function foldCheckpointLine(
+  line: SessionRecordLine,
+  byId: Map<string, CheckpointMetadataView>,
+): void {
+  if (typeof line.payload !== 'object' || line.payload === null) return;
+  const payload = line.payload;
+  const checkpointId =
+    'checkpointId' in payload ? payload.checkpointId : undefined;
+  if (typeof checkpointId !== 'string' || checkpointId.length === 0) return;
+  const existing = byId.get(checkpointId);
+  const name = 'name' in payload ? payload.name : undefined;
+  if (
+    line.type === 'checkpoint_created' &&
+    typeof name === 'string' &&
+    existing === undefined
+  ) {
+    byId.set(checkpointId, {
+      checkpointId,
+      name,
+      sequence: line.seq,
+      deleted: false,
+      createdAt: line.ts,
+    });
+  } else if (
+    line.type === 'checkpoint_renamed' &&
+    typeof name === 'string' &&
+    existing !== undefined
+  ) {
+    byId.set(checkpointId, { ...existing, name });
+  } else if (line.type === 'checkpoint_deleted' && existing !== undefined) {
+    byId.set(checkpointId, { ...existing, deleted: true });
+  }
+}
+
+function isSessionForkedPayload(value: unknown): value is SessionForkedPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('parentSessionId' in value) || !('parentSequence' in value)) {
+    return false;
+  }
+  if (!('checkpointId' in value) || !('checkpointName' in value)) return false;
+  return (
+    typeof value.parentSessionId === 'string' &&
+    isValidSequence(value.parentSequence) &&
+    typeof value.checkpointId === 'string' &&
+    typeof value.checkpointName === 'string'
+  );
+}
+
+function deriveAncestry(
+  events: readonly SessionRecordLine[],
+): SessionForkedPayload | undefined {
+  for (const line of events) {
+    if (
+      line.type === 'session_forked' &&
+      isSessionForkedPayload(line.payload)
+    ) {
+      return line.payload;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Derive the most recent mutable session name from `session_named` events.
+ * Returns `null` if the last event clears the name, or `undefined` if no
+ * `session_named` event exists.
+ */
+function deriveSessionName(
+  events: readonly SessionRecordLine[],
+): string | null | undefined {
+  let result: string | null | undefined = undefined;
+  for (const line of events) {
+    if (line.type !== 'session_named') continue;
+    const payload = line.payload as Record<string, unknown>;
+    const name = payload.name;
+    if (name === null || typeof name === 'string') {
+      result = name;
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -513,41 +756,33 @@ function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
  * @param expectedProjectHash - Must match the file's projectHash
  * @returns ReplayResult discriminated union — ok: true with data, or ok: false with error
  */
-export async function replaySession(
+type LineProcessorResult = ReplayResult | 'complete' | undefined;
+
+async function readSessionStream(
   filePath: string,
   expectedProjectHash: string,
+  processLine: (
+    rawLine: string,
+    acc: ReplayAccumulators,
+  ) => LineProcessorResult,
 ): Promise<ReplayResult> {
   const acc = createAccumulators();
-
-  // @pseudocode line 20-21: Open file as line-by-line stream
+  let stream: fs.ReadStream | undefined;
+  let reader: readline.Interface | undefined;
   try {
-    const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-    const reader = readline.createInterface({ input: stream });
-
-    // @pseudocode line 24: Process each line
+    stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+    reader = readline.createInterface({ input: stream });
     for await (let rawLine of reader) {
-      // @pseudocode line 25-26
       acc.lineNumber++;
       acc.totalLines = acc.lineNumber;
-
-      // @pseudocode line 28b-28e: Strip UTF-8 BOM on first line
       if (acc.lineNumber === 1 && rawLine.startsWith('\uFEFF')) {
         rawLine = rawLine.slice(1);
       }
-
-      // @pseudocode line 28: Skip empty lines and unparseable lines
-      const trimmed = rawLine.trim();
-      const parsed =
-        trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
-      const earlyReturn = applyParsedEvent(parsed, acc, expectedProjectHash);
-      if (earlyReturn !== undefined) {
-        reader.close();
-        stream.destroy();
-        return earlyReturn;
-      }
+      const outcome = processLine(rawLine, acc);
+      if (outcome === 'complete') return finalizeReplay(acc);
+      if (outcome !== undefined) return outcome;
     }
   } catch (streamError: unknown) {
-    // @pseudocode line 141-142
     const message =
       streamError instanceof Error ? streamError.message : String(streamError);
     return {
@@ -555,9 +790,65 @@ export async function replaySession(
       error: `Failed to read file: ${message}`,
       warnings: acc.warnings,
     };
+  } finally {
+    try {
+      reader?.close();
+    } finally {
+      stream?.destroy();
+    }
   }
-
   return finalizeReplay(acc);
+}
+
+/**
+ * @plan PLAN-20260211-SESSIONRECORDING.P08
+ * @requirement REQ-RPL-002, REQ-RPL-003, REQ-RPL-005, REQ-RPL-006, REQ-RPL-007, REQ-RPL-008
+ * @pseudocode replay-engine.md lines 10-169
+ *
+ * @param filePath - Path to the .jsonl session file
+ * @param expectedProjectHash - Must match the file's projectHash
+ * @returns ReplayResult discriminated union — ok: true with data, or ok: false with error
+ */
+export async function replaySession(
+  filePath: string,
+  expectedProjectHash: string,
+): Promise<ReplayResult> {
+  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) => {
+    const trimmed = rawLine.trim();
+    const parsed =
+      trimmed !== '' ? parseLine(rawLine, acc.lineNumber, acc) : null;
+    return applyParsedEvent(parsed, acc, expectedProjectHash);
+  });
+}
+
+function applyBoundedReplayLine(
+  rawLine: string,
+  maxSequence: number,
+  expectedProjectHash: string,
+  acc: ReplayAccumulators,
+): ReplayResult | 'complete' | undefined {
+  if (rawLine.trim() === '') return undefined;
+  const parsed = parseLine(rawLine, acc.lineNumber, acc);
+  if (parsed === null) return undefined;
+  if (isValidSequence(parsed.seq) && parsed.seq > maxSequence) {
+    return 'complete';
+  }
+  return applyParsedEvent(parsed, acc, expectedProjectHash);
+}
+
+/**
+ * Replay a session through an inclusive maximum sequence number.
+ * Processing stops at the first valid event whose `seq` exceeds maxSequence.
+ * Used for checkpoint fork creation: replay through the checkpoint watermark.
+ */
+export async function replaySessionThroughSequence(
+  filePath: string,
+  expectedProjectHash: string,
+  maxSequence: number,
+): Promise<ReplayResult> {
+  return readSessionStream(filePath, expectedProjectHash, (rawLine, acc) =>
+    applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
+  );
 }
 
 /**

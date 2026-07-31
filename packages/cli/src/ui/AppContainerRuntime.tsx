@@ -83,6 +83,7 @@ function buildInputParams(
     agent: bootstrap.agent,
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
+    subagentManager: bootstrap.uiRuntime.app.getSubagentManager(),
     history: bootstrap.history,
     addItem: bootstrap.addItem,
     clearItems: bootstrap.clearItems,

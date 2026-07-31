@@ -15,6 +15,7 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { resolveReasoningField } from '../utils/reasoningField.js';
 
 /**
  * Buffer that accumulates reasoning chunks captured from the
@@ -67,26 +68,16 @@ function captureReasoningFromJson(
   const delta = parsed.choices[0]?.delta;
   if (delta === undefined) return;
 
-  const fieldName = captureBuffer.fieldName ?? 'reasoning_content';
-  let actualFieldName = fieldName;
-  let reasoningContent: unknown = delta[fieldName];
-
-  // Auto-fallback: when fieldName was not explicitly set (undefined), also
-  // check 'reasoning' for Ollama compatibility (issue #2488)
-  if (
-    (reasoningContent === undefined || reasoningContent === null) &&
-    captureBuffer.fieldName === undefined
-  ) {
-    reasoningContent = delta['reasoning'];
-    actualFieldName = 'reasoning';
-  }
-
-  if (typeof reasoningContent === 'string' && reasoningContent !== '') {
-    captureBuffer.reasoningChunks.push(reasoningContent);
-    captureBuffer.actualFieldName = actualFieldName;
+  const resolved = resolveReasoningField({
+    fieldName: captureBuffer.fieldName,
+    delta,
+  });
+  if (resolved !== undefined) {
+    captureBuffer.reasoningChunks.push(resolved.value);
+    captureBuffer.actualFieldName = resolved.actualFieldName;
     logger.debug(
       () =>
-        `[ReasoningCaptureFetch] Captured ${actualFieldName} chunk: ${reasoningContent.length} chars`,
+        `[ReasoningCaptureFetch] Captured ${resolved.actualFieldName} chunk: ${resolved.value.length} chars`,
     );
   }
 }

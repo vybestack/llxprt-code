@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { spawnSync } from 'node:child_process';
+import * as nodeFs from 'node:fs';
+import * as nodeOs from 'node:os';
+import * as nodePath from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   parseMapResponse,
@@ -15,6 +19,8 @@ import {
   escapeMarkdownTableCell,
   MAX_DIFF_BYTES,
 } from '../pr-review-walkthrough.ts';
+import { buildArtifactContext } from '../pr-review-artifacts.ts';
+import { asString, parseJsonObject } from './typed-test-helpers.ts';
 
 const BACKSLASH = String.fromCharCode(92);
 describe('parseMapResponse', () => {
@@ -550,5 +556,321 @@ describe('mapWithConcurrency', () => {
     await expect(
       mapWithConcurrency(['a', 'b'], Number.NaN, async (item) => item),
     ).rejects.toThrow(RangeError);
+  });
+});
+
+const WALKTHROUGH_SCRIPT = nodePath.resolve(
+  import.meta.dirname,
+  '..',
+  'pr-review-walkthrough.ts',
+);
+
+const PHASE_TIMEOUT = 60000;
+
+function makeFakeLlxprtScript(counterDir: string): string {
+  return [
+    '#!/usr/bin/env node',
+    'const fs = require("fs");',
+    'const path = require("path");',
+    'const args = process.argv.slice(2);',
+    'const promptIndex = args.indexOf("--prompt");',
+    'const prompt = promptIndex >= 0 ? args[promptIndex + 1] : "";',
+    'let phase = "unknown";',
+    'let response = "{}";',
+    'if (prompt.includes("analyzing a single changed file")) {',
+    '  phase = "map";',
+    '  response = JSON.stringify({summary:"changed file",signature:"foo()",triage:"fix"});',
+    '} else if (prompt.includes("grouping changed files")) {',
+    '  phase = "group";',
+    '  response = JSON.stringify({themes:[{layer:"core",files:["packages/a/src/index.ts","packages/b/src/index.ts"],summary:"cross-package change"}]});',
+    '} else if (prompt.includes("writing a walkthrough")) {',
+    '  phase = "synthesis";',
+    '  response = JSON.stringify({walkthrough:"before after",release_notes:"## Release Notes\\n- change"});',
+    '} else if (prompt.includes("drawing a runtime sequence diagram")) {',
+    '  phase = "diagram";',
+    '  response = "[\\"non-object\\"]";',
+    '} else if (prompt.includes("finding issues and PRs semantically related")) {',
+    '  phase = "related";',
+    '  response = "[\\"non-object\\"]";',
+    '} else if (prompt.includes("evaluating a PR against pre-merge")) {',
+    '  phase = "pre-merge";',
+    '  response = JSON.stringify({title:{ok:true,note:"clear"},description:{ok:true,note:"ok"},linked_issues:{ok:true,note:"ok"},out_of_scope:{note:"none"}});',
+    '}',
+    'fs.writeFileSync(path.join(' +
+      JSON.stringify(counterDir) +
+      ', phase + "-" + process.pid), "1");',
+    'process.stdout.write(response);',
+  ].join('\n');
+}
+
+function setupReviewWorkspace(): {
+  workspace: string;
+  reviewDir: string;
+  binDir: string;
+  counterDir: string;
+  pathWithFake: string;
+} {
+  const workspace = nodeFs.mkdtempSync(
+    nodePath.join(nodeOs.tmpdir(), 'walkthrough-2777-'),
+  );
+  const reviewDir = nodePath.join(workspace, 'review');
+  const binDir = nodePath.join(workspace, 'bin');
+  const counterDir = nodePath.join(workspace, 'counts');
+  nodeFs.mkdirSync(reviewDir, { recursive: true });
+  nodeFs.mkdirSync(binDir, { recursive: true });
+  nodeFs.mkdirSync(counterDir, { recursive: true });
+
+  nodeFs.writeFileSync(
+    nodePath.join(reviewDir, 'pr.json'),
+    JSON.stringify({
+      number: 2777,
+      title: 'Parse reliability for walkthrough',
+      body: 'test body',
+      baseRefName: 'main',
+      headRefName: 'issue2777',
+      additions: 100,
+      deletions: 10,
+      changedFiles: 2,
+      commits: [{ oid: 'abc1234', message: 'initial commit' }],
+    }),
+  );
+
+  const issuesDir = nodePath.join(reviewDir, 'issues');
+  nodeFs.mkdirSync(issuesDir, { recursive: true });
+  nodeFs.writeFileSync(
+    nodePath.join(issuesDir, '2777.json'),
+    JSON.stringify({
+      number: 2777,
+      title: 'Parse reliability',
+      body: '## Acceptance Criteria\n- [ ] item 1\n- [ ] item 2',
+    }),
+  );
+
+  const diffsDir = nodePath.join(reviewDir, 'diffs');
+  nodeFs.mkdirSync(diffsDir, { recursive: true });
+  const diffA = 'packages__a__src__index.ts.diff';
+  const diffB = 'packages__b__src__index.ts.diff';
+  nodeFs.writeFileSync(
+    nodePath.join(diffsDir, diffA),
+    'diff --git a/packages/a/src/index.ts b/packages/a/src/index.ts\n+added',
+  );
+  nodeFs.writeFileSync(
+    nodePath.join(diffsDir, diffB),
+    'diff --git a/packages/b/src/index.ts b/packages/b/src/index.ts\n+added',
+  );
+
+  nodeFs.writeFileSync(
+    nodePath.join(reviewDir, 'diff-manifest.txt'),
+    `${diffA}\tpackages/a/src/index.ts\n${diffB}\tpackages/b/src/index.ts\n`,
+  );
+
+  nodeFs.writeFileSync(
+    nodePath.join(reviewDir, 'numstat.txt'),
+    '50\t5\tpackages/a/src/index.ts\n50\t5\tpackages/b/src/index.ts\n',
+  );
+
+  const isWindows = process.platform === 'win32';
+  const fakeName = isWindows ? 'llxprt.cmd' : 'llxprt';
+  const fakePath = nodePath.join(binDir, fakeName);
+  if (isWindows) {
+    nodeFs.writeFileSync(
+      fakePath,
+      `@echo off\r\nnode "${nodePath.join(binDir, 'llxprt-fake.js')}" %*\r\n`,
+    );
+  } else {
+    nodeFs.writeFileSync(fakePath, makeFakeLlxprtScript(counterDir), {
+      mode: 0o755,
+    });
+  }
+  if (isWindows) {
+    nodeFs.writeFileSync(
+      nodePath.join(binDir, 'llxprt-fake.js'),
+      makeFakeLlxprtScript(counterDir).replace('#!/usr/bin/env node\n', ''),
+    );
+  }
+
+  const pathWithFake = process.env.PATH
+    ? `${binDir}${nodePath.delimiter}${process.env.PATH}`
+    : binDir;
+  return { workspace, reviewDir, binDir, counterDir, pathWithFake };
+}
+
+function countPhaseCalls(counterDir: string, phase: string): number {
+  return nodeFs
+    .readdirSync(counterDir)
+    .filter((file) => file.startsWith(`${phase}-`)).length;
+}
+
+describe('private optional-stage retry and diagnostics', () => {
+  it(
+    'exhausts optional stages without failing or rendering their content',
+    () => {
+      const { workspace, reviewDir, counterDir, pathWithFake } =
+        setupReviewWorkspace();
+      try {
+        const result = spawnSync('bun', [WALKTHROUGH_SCRIPT], {
+          cwd: workspace,
+          encoding: 'utf8',
+          timeout: PHASE_TIMEOUT,
+          env: {
+            ...process.env,
+            PATH: pathWithFake,
+            LLXPRT_DEFAULT_PROVIDER: 'fake',
+            OPENAI_API_KEY: 'test-key',
+            OPENAI_BASE_URL: 'http://localhost',
+            LLXPRT_DEFAULT_MODEL: 'test-model',
+            LLXPRT_STRONG_MODEL: 'test-strong',
+          },
+        });
+        if (result.error) {
+          throw new Error(
+            `Failed to spawn walkthrough script: ${result.error.message}`,
+          );
+        }
+        const comment = nodeFs.readFileSync(
+          nodePath.join(reviewDir, 'comment.md'),
+          'utf8',
+        );
+        const walkthrough = nodeFs.readFileSync(
+          nodePath.join(reviewDir, 'walkthrough.md'),
+          'utf8',
+        );
+        const files = nodeFs.readdirSync(reviewDir);
+        const diagramRaw = files.find((file) =>
+          file.startsWith('parse-failure-raw-diagram-'),
+        );
+        const relatedRaw = files.find((file) =>
+          file.startsWith('parse-failure-raw-related-'),
+        );
+        const infoFiles = files.filter((file) =>
+          file.startsWith('parse-failure-info-'),
+        );
+        if (!diagramRaw || !relatedRaw || infoFiles.length !== 2) {
+          throw new Error('Expected distinct diagram and related diagnostics');
+        }
+        const metadata = infoFiles
+          .map((file) =>
+            parseJsonObject(
+              nodeFs.readFileSync(nodePath.join(reviewDir, file), 'utf8'),
+            ),
+          )
+          .sort((left, right) =>
+            asString(left.phase).localeCompare(asString(right.phase)),
+          );
+        expect({
+          status: result.status,
+          outputMatches: walkthrough === comment,
+          hasMarker: comment.includes('<!-- llxprt-walkthrough -->'),
+          hasDiagram: comment.includes('## Sequence Diagram'),
+          hasRelated: comment.includes('## Related'),
+          hasEmptyRelated: comment.includes('No related items found.'),
+          calls: {
+            map: countPhaseCalls(counterDir, 'map'),
+            group: countPhaseCalls(counterDir, 'group'),
+            synthesis: countPhaseCalls(counterDir, 'synthesis'),
+            diagram: countPhaseCalls(counterDir, 'diagram'),
+            related: countPhaseCalls(counterDir, 'related'),
+            preMerge: countPhaseCalls(counterDir, 'pre-merge'),
+            unknown: countPhaseCalls(counterDir, 'unknown'),
+          },
+          raw: [diagramRaw, relatedRaw]
+            .map((file) =>
+              nodeFs.readFileSync(nodePath.join(reviewDir, file), 'utf8'),
+            )
+            .sort(),
+          metadata: metadata.map((info) => ({
+            phase: info.phase,
+            hasPromptLength:
+              typeof info.promptLength === 'number' && info.promptLength > 0,
+            rawLength: info.rawLength,
+          })),
+        }).toEqual({
+          status: 0,
+          outputMatches: true,
+          hasMarker: true,
+          hasDiagram: false,
+          hasRelated: true,
+          hasEmptyRelated: true,
+          calls: {
+            map: 2,
+            group: 1,
+            synthesis: 1,
+            diagram: 3,
+            related: 3,
+            preMerge: 1,
+            unknown: 0,
+          },
+          raw: ['["non-object"]', '["non-object"]'],
+          metadata: [
+            {
+              phase: 'diagram',
+              hasPromptLength: true,
+              rawLength: '["non-object"]'.length,
+            },
+            {
+              phase: 'related',
+              hasPromptLength: true,
+              rawLength: '["non-object"]'.length,
+            },
+          ],
+        });
+      } finally {
+        nodeFs.rmSync(workspace, { recursive: true, force: true });
+      }
+    },
+    PHASE_TIMEOUT,
+  );
+});
+
+describe('buildArtifactContext commits normalization (gh CLI shape)', () => {
+  const basePr = {
+    number: 42,
+    title: 'Test PR',
+    body: 'body',
+    baseRefName: 'main',
+    headRefName: 'feature',
+    additions: 10,
+    deletions: 5,
+    changedFiles: 2,
+  };
+  const issues: Array<Record<string, unknown>> = [];
+  const diffs: Array<Record<string, unknown>> = [];
+  const numstat = [
+    { additions: 5, deletions: 2, filename: 'a.ts' },
+    { additions: 5, deletions: 3, filename: 'b.ts' },
+  ];
+
+  it('normalizes gh CLI commits array to a count', () => {
+    const result = buildArtifactContext(
+      {
+        ...basePr,
+        commits: [
+          { oid: 'abc', authors: [{ login: 'alice' }] },
+          { oid: 'def', authors: [{ login: 'bob' }] },
+        ],
+      },
+      issues,
+      diffs,
+      numstat,
+    );
+    const prContext = result.prContext as Record<string, unknown>;
+    expect(prContext.commits).toBe(2);
+  });
+
+  it('passes through a numeric commits value unchanged', () => {
+    const result = buildArtifactContext(
+      { ...basePr, commits: 7 },
+      issues,
+      diffs,
+      numstat,
+    );
+    const prContext = result.prContext as Record<string, unknown>;
+    expect(prContext.commits).toBe(7);
+  });
+
+  it('sets commits to undefined when missing', () => {
+    const result = buildArtifactContext(basePr, issues, diffs, numstat);
+    const prContext = result.prContext as Record<string, unknown>;
+    expect(prContext.commits).toBeUndefined();
   });
 });

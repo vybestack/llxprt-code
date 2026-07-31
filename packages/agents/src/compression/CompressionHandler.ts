@@ -497,7 +497,9 @@ export class CompressionHandler {
     }
   }
 
-  private createProviderContentEnforcer(): ProviderContentEnforcer {
+  private createProviderContentEnforcer(
+    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
+  ): ProviderContentEnforcer {
     return new ProviderContentEnforcer({
       historyService: this.historyService,
       runtimeContext: this.runtimeContext,
@@ -507,6 +509,7 @@ export class CompressionHandler {
       ensureDensityOptimized: () => this.ensureDensityOptimized(),
       performCompression: (promptId, options) =>
         this.performCompression(promptId, options),
+      estimateFinalizedPromptTokens,
       performFallbackCompression: async (promptId, applyResult) => {
         this.pushSuppressDensityDirty();
         try {
@@ -542,8 +545,11 @@ export class CompressionHandler {
     envelope: ProviderContentEnvelope,
     promptId: string,
     provider?: IProvider,
+    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
   ): Promise<IContent[]> {
-    const enforcer = this.createProviderContentEnforcer();
+    const enforcer = this.createProviderContentEnforcer(
+      estimateFinalizedPromptTokens,
+    );
     try {
       this.attachCompressionCallback(
         provider,

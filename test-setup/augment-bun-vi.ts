@@ -17,8 +17,10 @@
  * top of Bun's real fake-timer primitives).
  */
 
-import { afterEach, vi as bunVi, mock } from 'bun:test';
+import { afterEach, vi as bunVi, mock, expect } from 'bun:test';
 import { createRequire, isBuiltin } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
 import {
   StubRegistry,
   waitFor,
@@ -53,36 +55,6 @@ interface BunViBase {
   getTimerCount: () => number;
   clearAllTimers: () => void;
   isFakeTimers: () => boolean;
-}
-
-/**
- * Models the result of Bun.build() — the @types/bun BuildConfig omits `write`,
- * but Bun supports it at runtime. This interface lets us pass `write: false`
- * without suppressing type errors on the base declaration.
- */
-interface BunBuildOptions {
-  entrypoints: readonly string[];
-  format?: 'esm' | 'cjs' | 'iife';
-  target?: 'bun' | 'node' | 'browser' | 'bundler';
-  write?: boolean;
-}
-
-interface BunBuildOutput {
-  success: boolean;
-  outputs: readonly { text(): Promise<string> }[];
-  logs: readonly { message: string }[];
-}
-
-/**
- * Typed wrapper around Bun.build() that accepts the runtime-supported
- * `write: false` option without relying on the (incomplete) base type.
- */
-async function bunBuild(options: BunBuildOptions): Promise<BunBuildOutput> {
-  return (
-    Bun as unknown as {
-      build(opts: BunBuildOptions): Promise<BunBuildOutput>;
-    }
-  ).build(options);
 }
 
 const localRequire = createRequire(import.meta.url);
@@ -120,22 +92,18 @@ const realClearAllTimers = (bunVi as BunViBase).clearAllTimers.bind(bunVi);
 const realIsFakeTimers = (bunVi as BunViBase).isFakeTimers.bind(bunVi);
 
 /**
- * Captured before any fake-timer activation so async timer helpers can await
- * a real event-loop turn to drain recursively queued microtasks. Under Bun's
- * fake timers, `setImmediate` itself is faked and will not advance the real
- * event loop, so the captured reference is used instead.
+ * Drains recursively queued microtasks from async timer callbacks. Each
+ * `await Promise.resolve()` yields one microtask round, draining one level
+ * of async nesting (e.g. `await lockAcquire()` → `await getToken()` → …).
+ * We chain enough rounds to settle typical multi-level async callback trees
+ * without depending on `setImmediate`, which may not fire promptly under
+ * Bun's fake timers on some platforms.
  */
-const realSetImmediate: (callback: () => void) => NodeJS.Immediate =
-  setImmediate;
-
-/**
- * Drains recursively queued microtasks by yielding to the real event loop.
- * A single `Promise.resolve()` only flushes one round of microtasks; nested
- * `.then()` chains (e.g. `Promise.resolve().then(() => Promise.resolve())`)
- * require a real macrotask boundary to settle completely.
- */
+const MICROTASK_DRAIN_ROUNDS = 20;
 const flushPendingTasks = async (): Promise<void> => {
-  await new Promise<void>((resolve) => realSetImmediate(resolve));
+  for (let i = 0; i < MICROTASK_DRAIN_ROUNDS; i++) {
+    await Promise.resolve();
+  }
 };
 
 const MAX_TIMER_ADVANCE = 4_294_967_295;
@@ -146,8 +114,11 @@ let pendingTimerFraction = 0;
 async function advanceTimerChunk(ms: number): Promise<void> {
   const target = Date.now() + ms;
 
+  await flushPendingTasks();
+
   while (Date.now() < target) {
     const remaining = target - Date.now();
+
     if (realGetTimerCount() === 0) {
       realAdvanceTimersByTime(remaining);
       await flushPendingTasks();
@@ -203,16 +174,68 @@ setWaitForScheduler(bunWaitForScheduler);
 
 const resolveActualId = (id: string): string => {
   const resolvedId = resolveModuleSpecifier(id);
-  return isBuiltin(resolvedId) ? resolvedId : localRequire.resolve(resolvedId);
+  if (isBuiltin(resolvedId)) return resolvedId;
+  // For relative specifiers, resolveModuleSpecifier already returned the
+  // absolute path.
+  if (resolvedId.startsWith('/')) return resolvedId;
+  // For bare specifiers, try Node's require.resolve first (works for most
+  // npm packages). Fall back to Bun.resolveSync for workspace packages
+  // whose package.json exports only define a "bun" condition.
+  try {
+    const path = localRequire.resolve(resolvedId);
+    bareSpecResolvedPaths.add(path);
+    return path;
+  } catch {
+    const path = Bun.resolveSync(
+      resolvedId,
+      dirname(fileURLToPath(import.meta.url)),
+    );
+    bareSpecResolvedPaths.add(path);
+    return path;
+  }
 };
 
-const actualModules = new Map<string, Promise<unknown>>();
+const actualModules = new Map<string, unknown>();
+const actualAsyncModules = new Map<string, Promise<unknown>>();
+const bareSpecResolvedPaths = new Set<string>();
 let actualImportSequence = 0;
 
+/**
+ * Synchronously loads the actual (un-mocked) module for a resolved ID.
+ * Used by importActualSync (sync factories that were pre-loaded).
+ */
+const loadActualSync = (resolvedId: string): unknown => {
+  const cached = actualModules.get(resolvedId);
+  if (cached !== undefined) return cached;
+
+  const actual = localRequire(resolvedId);
+  actualModules.set(resolvedId, actual);
+  return actual;
+};
+
+/**
+ * Asynchronously loads an isolated copy of the actual module via Bun.build,
+ * bypassing mock.module interception entirely. Used by importOriginal (async
+ * factories that were NOT pre-loaded — localRequire would return the mock
+ * for these).
+ */
 const loadIsolatedModule = async (resolvedId: string): Promise<unknown> => {
   if (isBuiltin(resolvedId)) return localRequire(resolvedId);
 
-  const result = await bunBuild({
+  const result = await (
+    Bun as unknown as {
+      build(opts: {
+        entrypoints: readonly string[];
+        format?: string;
+        target?: string;
+        write?: boolean;
+      }): Promise<{
+        success: boolean;
+        outputs: readonly { text(): Promise<string> }[];
+        logs: readonly { message: string }[];
+      }>;
+    }
+  ).build({
     entrypoints: [resolvedId],
     format: 'esm',
     target: 'bun',
@@ -233,11 +256,11 @@ const loadIsolatedModule = async (resolvedId: string): Promise<unknown> => {
 };
 
 const importResolvedActual = (resolvedId: string): Promise<unknown> => {
-  const cached = actualModules.get(resolvedId);
+  const cached = actualAsyncModules.get(resolvedId);
   if (cached) return cached;
 
   const actual = loadIsolatedModule(resolvedId);
-  actualModules.set(resolvedId, actual);
+  actualAsyncModules.set(resolvedId, actual);
   return actual;
 };
 
@@ -251,6 +274,19 @@ const importActual = (id: string): Promise<unknown> => {
         : new Error(`importActual: cannot resolve "${id}"`),
     );
   }
+};
+
+/**
+ * Synchronously returns the actual (un-mocked) module for a specifier.
+ *
+ * Bun's mock.module evaluates factories eagerly for already-loaded modules
+ * and deadlocks if the factory contains any `await` (the event loop is
+ * blocked, so microtasks queued by `await` never drain). This sync variant
+ * lets mock factories stay synchronous — avoiding the deadlock — while still
+ * loading the real module via localRequire (which bypasses mock interception).
+ */
+const importActualSync = (id: string): unknown => {
+  return loadActualSync(resolveActualId(id));
 };
 
 function isClassFunction(value: unknown): boolean {
@@ -323,8 +359,8 @@ function automockValue(
   return mockedObject;
 }
 
-const automockModule = async (resolvedId: string): Promise<object> => {
-  const actual = await importResolvedActual(resolvedId);
+const automockModule = (resolvedId: string): object => {
+  const actual = loadActualSync(resolvedId);
   if ((typeof actual !== 'object' && typeof actual !== 'function') || !actual) {
     throw new TypeError(`Cannot automock non-object module "${resolvedId}"`);
   }
@@ -338,14 +374,38 @@ const automockModule = async (resolvedId: string): Promise<object> => {
 const registerModuleMock = (
   id: string,
   factory?: (importOriginal: () => Promise<unknown>) => unknown,
+  preloadActual = true,
 ): unknown => {
-  const resolvedId = resolveActualId(id);
+  const mockId = resolveModuleSpecifier(id);
+
   if (!factory) {
-    return mock.module(resolvedId, () => automockModule(resolvedId));
+    const resolvedId = resolveActualId(id);
+    const automocked = automockModule(resolvedId);
+    return mock.module(mockId, () => automocked);
   }
 
-  return mock.module(resolvedId, () =>
-    factory(() => importResolvedActual(resolvedId)),
+  // Pre-load the actual module before registering the mock. This ensures
+  // that importActualSync() inside the factory returns the REAL module,
+  // not the mock's incomplete evaluation state. Only safe for SYNCHRONOUS
+  // factories — pre-loading an async factory causes mock.module to evaluate
+  // it eagerly, which deadlocks the event loop.
+  if (preloadActual) {
+    const isAsyncFactory =
+      factory.constructor.name === 'AsyncFunction' ||
+      async function () {}?.constructor?.name === factory.constructor.name;
+    if (!isAsyncFactory) {
+      const resolvedId = resolveActualId(id);
+      try {
+        loadActualSync(resolvedId);
+      } catch {
+        // Module may fail to load (e.g. native bindings). The factory's
+        // importActual call will handle the error at evaluation time.
+      }
+    }
+  }
+
+  return mock.module(mockId, () =>
+    factory(() => importResolvedActual(resolveActualId(id))),
   );
 };
 
@@ -430,9 +490,13 @@ const viAugmentations = {
   },
   waitFor,
   importActual,
+  importActualSync,
   resetModules: unsupportedModuleIsolation,
   mock: registerModuleMock,
-  doMock: registerModuleMock,
+  doMock: (
+    id: string,
+    factory?: (importOriginal: () => Promise<unknown>) => unknown,
+  ) => registerModuleMock(id, factory, false),
   doUnmock: unsupportedModuleIsolation,
   unmock: unsupportedModuleIsolation,
   isMockFunction,
@@ -514,4 +578,42 @@ for (const [key, value] of Object.entries(viAugmentations)) {
 
 // Also register mock.module('vitest') as a fallback for environments where
 // the built-in handler does NOT intercept (e.g., non-test contexts).
+
+// Vitest-compatible custom matcher: toHaveBeenCalledExactlyOnceWith.
+// Bun's expect does not provide this matcher, so we add it via expect.extend.
+// Uses expect(...).toEqual(...) internally so that asymmetric matchers like
+// expect.objectContaining / expect.any are handled correctly.
+type MockLike = {
+  mock?: { calls: unknown[][] };
+};
+
+expect.extend({
+  toHaveBeenCalledExactlyOnceWith(
+    received: unknown,
+    ...expected: unknown[]
+  ): { pass: boolean; message: () => string } {
+    const mockObj = received as MockLike;
+    const calls = mockObj?.mock?.calls;
+    if (!calls || calls.length !== 1) {
+      return {
+        pass: false,
+        message: () =>
+          `Expected mock to be called exactly once, but it was called ${calls?.length ?? 0} times`,
+      };
+    }
+    let pass = true;
+    try {
+      expect(calls[0]).toEqual(expected);
+    } catch {
+      pass = false;
+    }
+    return {
+      pass,
+      message: () =>
+        pass
+          ? 'Expected mock not to have been called exactly once with the given arguments'
+          : `Expected mock to have been called exactly once with [${expected.map((a) => JSON.stringify(a)).join(', ')}], but was called with [${calls[0].map((a) => JSON.stringify(a)).join(', ')}]`,
+    };
+  },
+});
 export { viAugmentations };

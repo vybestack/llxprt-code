@@ -354,6 +354,33 @@ describe('Anthropic provider stateless contract tests', () => {
     expect(getEphemerals).not.toHaveBeenCalled();
   });
 
+  it('reuses the projected runtime token for the prepared transport attempt', async () => {
+    const provider = new TestAnthropicProvider();
+    const provide = vi
+      .fn<() => Promise<string | undefined>>()
+      .mockResolvedValueOnce('projected-token')
+      .mockResolvedValueOnce('rotated-token');
+    const options = buildCallOptions(provider, {
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+      ],
+      resolved: { authToken: { provide } },
+    });
+    const projection = await provider.projectPromptEnvelope(options);
+
+    await provider
+      .generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      })
+      .next();
+
+    expect(provide).toHaveBeenCalledTimes(1);
+    expect(FakeAnthropicClass.created.at(-1)?.options.apiKey).toBe(
+      'projected-token',
+    );
+  });
+
   it('uses OAuth token from getAuthTokenForPrompt in fallback path when no resolved token is provided', async () => {
     const provider = new TestAnthropicProviderOAuth();
     const baselineInstances = FakeAnthropicClass.created.length;

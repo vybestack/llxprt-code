@@ -145,6 +145,10 @@ export class RecordingIntegration {
     await this.recording.flush();
   }
 
+  getRecordingService(): SessionRecordingService {
+    return this.recording;
+  }
+
   /**
    * @plan PLAN-20260211-SESSIONRECORDING.P14
    * @requirement REQ-INT-006

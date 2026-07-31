@@ -5,6 +5,7 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   flushMockRef: {
@@ -20,10 +21,10 @@ const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-auth', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-auth')
-  >('@vybestack/llxprt-code-auth');
+vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
+    '@vybestack/llxprt-code-auth',
+  );
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],
