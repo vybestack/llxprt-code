@@ -127,6 +127,36 @@ describe('handleAtCommand (subagent @mentions)', () => {
     );
   });
 
+  it('does not crash or nudge when listSubagents() rejects', async () => {
+    const subagentManager = {
+      listSubagents: vi.fn().mockRejectedValue(new Error('disk read failed')),
+    };
+
+    const result = await handleAtCommand({
+      query: '@typescriptexpert please review',
+      config: mockConfig,
+      addItem: mockAddItem,
+      onDebugMessage: mockOnDebugMessage,
+      messageId: 2007,
+      signal: abortController.signal,
+      getToolHandle,
+      subagentManager,
+    });
+
+    expect(result.processedQuery).not.toBeNull();
+    const parts = result.processedQuery as Array<{
+      type: string;
+      text: string;
+    }>;
+    const firstPart = parts[0];
+    expect(firstPart.text).not.toContain(
+      'explicitly selected the following subagent',
+    );
+    expect(mockOnDebugMessage).toHaveBeenCalledWith(
+      expect.stringContaining('failed to list subagents'),
+    );
+  });
+
   it('lists multiple matched subagents comma-separated in the nudge', async () => {
     const subagentManager = {
       listSubagents: vi.fn().mockResolvedValue(['a', 'b', 'c']),

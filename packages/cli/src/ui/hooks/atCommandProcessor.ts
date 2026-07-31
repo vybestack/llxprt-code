@@ -196,17 +196,19 @@ export async function handleAtCommand({
     return handleMissingReadManyFilesTool(addItem, userMessageTimestamp);
   }
 
-  const subagentNames = await resolveSubagentNames(subagentManager);
+  const subagentNames = await resolveSubagentNames(
+    subagentManager,
+    onDebugMessage,
+  );
 
-  const resolution = await resolveAtPathCommands({
+  const resolution = await resolveAtPaths(
     atPathCommandParts,
     config,
-    resourceRegistry: config.getResourceRegistry(),
-    globTool: getToolHandle('glob'),
+    getToolHandle,
     signal,
     onDebugMessage,
     subagentNames,
-  });
+  );
   if (resolution.error) {
     addItem({ type: 'error', text: resolution.error }, userMessageTimestamp);
     return { processedQuery: null, error: resolution.error };
@@ -258,19 +260,47 @@ export async function handleAtCommand({
   });
 }
 
+async function resolveAtPaths(
+  atPathCommandParts: AtCommandPart[],
+  config: AtCommandRuntime,
+  getToolHandle: (name: string) => AgentToolHandle | undefined,
+  signal: AbortSignal,
+  onDebugMessage: (message: string) => void,
+  subagentNames: readonly string[],
+) {
+  return resolveAtPathCommands({
+    atPathCommandParts,
+    config,
+    resourceRegistry: config.getResourceRegistry(),
+    globTool: getToolHandle('glob'),
+    signal,
+    onDebugMessage,
+    subagentNames,
+  });
+}
+
 async function resolveSubagentNames(
   subagentManager: UiSubagentManager | undefined,
+  onDebugMessage: (message: string) => void,
 ): Promise<readonly string[]> {
   if (!subagentManager) return [];
   try {
     return await subagentManager.listSubagents();
-  } catch {
+  } catch (error) {
+    onDebugMessage(
+      `Warning: failed to list subagents: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return [];
   }
 }
 
+function sanitizeSubagentName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim();
+}
+
 function buildSubagentNudge(names: readonly string[]): string {
-  return `The user has explicitly selected the following subagent(s): ${names.join(', ')}. Please use the 'task' tool to delegate to the selected subagent(s).`;
+  const safe = names.map(sanitizeSubagentName);
+  return `The user has explicitly selected the following subagent(s): ${safe.join(', ')}. Please use the 'task' tool to delegate to the selected subagent(s).`;
 }
 
 function showPowerShellTip(
