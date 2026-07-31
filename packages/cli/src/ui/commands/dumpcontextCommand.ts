@@ -92,7 +92,7 @@ function getProviderDumpMetadata(
     | ProviderManagerWithActive
     | undefined;
   if (!providerManager) {
-    return { providerName: 'backend', activeModel: undefined };
+    return { providerName: 'backend', activeModel: undefined, activeBaseURL: undefined };
   }
   const activeProvider = providerManager.getActiveProvider?.();
   return {
