@@ -26,15 +26,19 @@ import { TiktokenRuntime } from './tiktokenRuntime.js';
  *   - tokenizer.json model.vocab → converted to tiktoken BPE format
  *   - pre_tokenizer Split regex → pat_str (o200k_base pattern)
  *
- * The MiniMax M3 tokenizer uses byte-level BPE with the o200k_base
- * pre-tokenizer regex. The HF BPE vocabulary was converted to tiktoken
- * format via the standard GPT-2 byte-to-unicode inverse mapping.
+ * The MiniMax M3 tokenizer uses byte-level BPE with a MiniMax-specific
+ * pre-tokenizer regex (extracted from tokenizer.json). This differs from
+ * o200k_base by including `/` in the punctuation-trailing character class
+ * ([\r\n/]* instead of [\r\n]*). The HF BPE vocabulary was converted to
+ * tiktoken format via the standard GPT-2 byte-to-unicode inverse mapping.
+ * NFC normalization is applied before tokenization, matching the upstream
+ * normalizer.
  */
 const MINIMAX_PAT_STR =
   String.raw`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|` +
   String.raw`[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|` +
   String.raw`\p{N}{1,3}|` +
-  String.raw` ?[^\s\p{L}\p{N}]+[\r\n]*|` +
+  String.raw` ?[^\s\p{L}\p{N}]+[\r\n/]*|` +
   String.raw`\s*[\r\n]+|` +
   String.raw`\s+(?!\S)|` +
   String.raw`\s+`;
@@ -131,7 +135,7 @@ export class MinimaxTokenizer implements RuntimeTokenizer {
   countTokens(content: unknown): number {
     const text =
       typeof content === 'string' ? content : JSON.stringify(content) || '';
-    return this.runtime.countOrdinary(text);
+    return this.runtime.countOrdinary(text.normalize('NFC'));
   }
 
   dispose(): void {

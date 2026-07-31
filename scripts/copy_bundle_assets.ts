@@ -187,4 +187,23 @@ if (existsSync(builtinSkillsSrc)) {
     dereference: true,
   });
 }
+
+// Copy official tokenizer BPE assets preserving directory structure.
+// The AssetLoader resolves these at runtime via __dirname/.../assets.
+const tokenizerAssetsSrc = join(
+  root,
+  'packages/providers/src/tokenizers/official/assets',
+);
+if (existsSync(tokenizerAssetsSrc)) {
+  const tokenizerAssetsDest = join(
+    bundleDir,
+    'tokenizers',
+    'official',
+    'assets',
+  );
+  cpSync(tokenizerAssetsSrc, tokenizerAssetsDest, {
+    recursive: true,
+    dereference: true,
+  });
+}
 // Assets copied to bundle/
