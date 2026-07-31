@@ -115,7 +115,9 @@ describe('Core auth-factories integration', () => {
 
   describe('P17 factory bodies produce real configured instances', () => {
     it('createKeyringTokenStore returns a KeyringTokenStore instance', () => {
-      const store = createKeyringTokenStore();
+      // Pass a no-op keyring loader to avoid blocking on headless Linux CI
+      // runners that have no system keyring daemon.
+      const store = createKeyringTokenStore(async () => null);
       expect(store).toBeInstanceOf(KeyringTokenStore);
       expect(typeof store.saveToken).toBe('function');
       expect(typeof store.getToken).toBe('function');
@@ -123,7 +125,7 @@ describe('Core auth-factories integration', () => {
     });
 
     it('createKeyringTokenStore can save and load tokens', async () => {
-      const store = createKeyringTokenStore();
+      const store = createKeyringTokenStore(async () => null);
       const testToken = {
         access_token: 'test-access-token-p17',
         token_type: 'Bearer' as const,
