@@ -72,16 +72,26 @@ export interface UseStreamStateReturn {
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
 }
 
-function useEmojiFilter(runtime: StreamRuntime) {
-  return useMemo(() => {
-    const rawMode = runtime.ephemeral.getEphemeralSetting('emojifilter');
-    const mode: EmojiFilterMode =
-      typeof rawMode === 'string' && rawMode.length > 0
-        ? (rawMode as EmojiFilterMode)
-        : 'auto';
+function useEmojiFilterMode(runtime: StreamRuntime): EmojiFilterMode {
+  const rawMode = runtime.ephemeral.getEphemeralSetting('emojifilter');
+  return typeof rawMode === 'string' && rawMode.length > 0
+    ? (rawMode as EmojiFilterMode)
+    : 'auto';
+}
 
-    return mode !== 'allowed' ? new EmojiFilter({ mode }) : undefined;
-  }, [runtime]);
+/**
+ * Memoised on the mode string rather than the runtime object.
+ *
+ * The filter now backs the stateful {@link PendingResponseBuffer}, so
+ * recreating it mid-stream would discard the accumulated response. Keying on a
+ * primitive means a new `runtime` identity — which callers can produce on any
+ * re-render — cannot silently truncate a reply (issue #2852).
+ */
+function useEmojiFilter(mode: EmojiFilterMode) {
+  return useMemo(
+    () => (mode !== 'allowed' ? new EmojiFilter({ mode }) : undefined),
+    [mode],
+  );
 }
 
 function useSanitizeContent(emojiFilter: EmojiFilter | undefined) {
@@ -270,7 +280,7 @@ export function useStreamState(
   const basic = useBasicStreamState();
   const storage = runtime.storage;
 
-  const emojiFilter = useEmojiFilter(runtime);
+  const emojiFilter = useEmojiFilter(useEmojiFilterMode(runtime));
   const sanitizeContent = useSanitizeContent(emojiFilter);
   const pendingResponse = useMemo(
     () => new PendingResponseBuffer(emojiFilter),

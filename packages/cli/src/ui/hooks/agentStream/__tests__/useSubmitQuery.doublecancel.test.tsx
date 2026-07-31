@@ -43,6 +43,7 @@ import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { createDeferred } from './createDeferred.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
 // We stub them so the test can isolate the turn-lifecycle / finally logic.
 const prepareQueryForAgentMock = vi.hoisted(() =>
@@ -73,17 +74,6 @@ vi.mock('../streamUtils.js', () => ({
   handleSubmissionError: handleSubmissionErrorMock,
   processSlashCommandResult: vi.fn(),
 }));
-// prettier-ignore
-function createDeferred<T = void>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-} {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-  return { promise, resolve, reject };
-}
 
 function createQueueOperations(ref: { current: QueuedSubmission[] }) {
   return {

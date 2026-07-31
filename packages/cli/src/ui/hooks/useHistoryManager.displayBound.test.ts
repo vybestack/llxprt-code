@@ -26,11 +26,17 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { useHistory } from './useHistoryManager.js';
 
 const created: string[] = [];
+const services: SessionRecordingService[] = [];
 
 const LARGE_TEXT = 'a very long assistant response. '.repeat(400_000 / 32);
 
 describe('UI history display bound preserves content elsewhere', () => {
-  afterEach(() => {
+  afterEach(async () => {
+    // Disposal here rather than inline, so a failing assertion cannot leak the
+    // recording service or its temp directory.
+    for (const service of services.splice(0)) {
+      await service.dispose();
+    }
     for (const dir of created.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -78,6 +84,7 @@ describe('UI history display bound preserves content elsewhere', () => {
       provider: 'test',
       model: 'test',
     });
+    services.push(recording);
 
     recording.recordContent({
       speaker: 'ai',
@@ -90,12 +97,14 @@ describe('UI history display bound preserves content elsewhere', () => {
       .split('\n')
       .filter((line) => line.length > 0)
       .map((line) => JSON.parse(line) as { type: string; payload: unknown });
-    const content = records.find((record) => record.type === 'content');
-    const block = (
-      content?.payload as { content: { blocks: Array<{ text: string }> } }
-    ).content.blocks[0];
+    const contentTexts = records
+      .filter((record) => record.type === 'content')
+      .map(
+        (record) =>
+          (record.payload as { content: { blocks: Array<{ text: string }> } })
+            .content.blocks[0].text,
+      );
 
-    expect(block.text).toBe(LARGE_TEXT);
-    await recording.dispose();
+    expect(contentTexts).toStrictEqual([LARGE_TEXT]);
   });
 });

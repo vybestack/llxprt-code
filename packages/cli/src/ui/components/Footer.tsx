@@ -111,11 +111,14 @@ function formatMemoryUsage(
 
 export const ResponsiveMemoryDisplay = React.memo(
   ({ compact, detailed }: ResponsiveMemoryDisplayProps) => {
+    // One snapshot for both initial states: separate lazy initialisers would
+    // each invoke the syscall and could disagree with each other.
+    const [initialUsage] = useState(() => process.memoryUsage());
     const [memoryUsage, setMemoryUsage] = useState<string>(() =>
-      formatMemoryUsage(process.memoryUsage(), compact, detailed),
+      formatMemoryUsage(initialUsage, compact, detailed),
     );
     const [memoryUsageColor, setMemoryUsageColor] = useState<string>(() =>
-      process.memoryUsage().rss >= 2 * 1024 ** 3
+      initialUsage.rss >= 2 * 1024 ** 3
         ? SemanticColors.status.error
         : SemanticColors.text.secondary,
     );

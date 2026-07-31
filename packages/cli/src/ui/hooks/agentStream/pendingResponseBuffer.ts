@@ -41,7 +41,10 @@ export class PendingResponseBuffer {
   push(delta: string): PendingResponsePushResult {
     const result = this.sanitizer.push(delta);
     if (result.blocked) {
-      return { blocked: true };
+      return {
+        blocked: true,
+        ...(result.feedback !== undefined ? { feedback: result.feedback } : {}),
+      };
     }
     this.scanner.append(result.stable);
     this.provisional = result.provisional;

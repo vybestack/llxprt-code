@@ -35,6 +35,8 @@ if (!Number.isInteger(turns) || turns < 3) {
  * warm-up turn has settled caches that legitimately persist.
  */
 const PLATEAU_TOLERANCE = 0.1;
+/** Time the target is given to exit on its own before SIGKILL. */
+const SHUTDOWN_GRACE_MS = 5_000;
 mkdirSync(artifactDir, { recursive: true });
 
 interface OsCheckpoint {
@@ -67,9 +69,13 @@ const server = createServer((request, response) => {
   }
 });
 
-await new Promise<void>((resolveListen) =>
-  server.listen(0, '127.0.0.1', resolveListen),
-);
+await new Promise<void>((resolveListen, rejectListen) => {
+  server.once('error', rejectListen);
+  server.listen(0, '127.0.0.1', () => {
+    server.removeListener('error', rejectListen);
+    resolveListen();
+  });
+});
 const address = server.address();
 if (address === null || typeof address === 'string') {
   throw new Error('Memory benchmark server did not expose a TCP port');
@@ -100,14 +106,29 @@ const cleanup = (): void => {
     child.kill('SIGTERM');
   }
 };
-process.once('SIGINT', () => {
+/**
+ * Terminates the target before exiting. Exiting immediately after SIGTERM
+ * would reparent a still-running target to PID 1 and leave it alive.
+ */
+async function gracefulShutdown(code: number): Promise<void> {
   cleanup();
-  process.exit(130);
-});
-process.once('SIGTERM', () => {
-  cleanup();
-  process.exit(143);
-});
+  if (child.exitCode === null && child.signalCode === null) {
+    await Promise.race([
+      new Promise<void>((resolveExit) =>
+        child.once('exit', () => resolveExit()),
+      ),
+      new Promise<void>((resolveTimeout) =>
+        setTimeout(() => {
+          child.kill('SIGKILL');
+          resolveTimeout();
+        }, SHUTDOWN_GRACE_MS),
+      ),
+    ]);
+  }
+  process.exit(code);
+}
+process.once('SIGINT', () => void gracefulShutdown(130));
+process.once('SIGTERM', () => void gracefulShutdown(143));
 
 let exitCode: number | null;
 try {
@@ -147,16 +168,27 @@ if (!plateau.withinTolerance) {
   );
 }
 
+interface CheckpointRecord {
+  readonly name?: string;
+  readonly jsc?: { readonly heapSize?: number };
+}
+
 /** Post-GC JSC heap size for each turn, oldest first. */
 function readPostGcHeapBytes(path: string): number[] {
   return readFileSync(path, 'utf8')
     .split('\n')
     .filter((line) => line.length > 0)
-    .map(
-      (line) => JSON.parse(line) as { name: string; jsc: { heapSize: number } },
-    )
-    .filter((record) => record.name.endsWith('-post-gc'))
-    .map((record) => record.jsc.heapSize);
+    .map((line) => JSON.parse(line) as CheckpointRecord)
+    .filter((record) => record.name?.endsWith('-post-gc') === true)
+    .map((record) => {
+      const heapSize = record.jsc?.heapSize;
+      if (typeof heapSize !== 'number' || !Number.isFinite(heapSize)) {
+        throw new Error(
+          `Checkpoint ${record.name} has no usable JSC heap size`,
+        );
+      }
+      return heapSize;
+    });
 }
 
 function captureOsCheckpoint(

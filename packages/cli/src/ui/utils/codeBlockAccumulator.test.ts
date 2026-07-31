@@ -70,31 +70,42 @@ describe('appendCodeBlockLine', () => {
   });
 
   it('appends in place rather than copying the accumulated block', () => {
-    // The previous implementation rebuilt the array per line, so accumulating L
-    // lines cost O(L^2). Compare a 10x longer block: quadratic growth would be
-    // roughly 100x, linear growth stays far below that.
-    const measure = (count: number): number => {
-      const lines = makeLines(count);
-      const start = performance.now();
-      for (let repeat = 0; repeat < 20; repeat += 1) {
-        accumulate(lines, false, undefined);
-      }
-      return performance.now() - start;
-    };
-
-    measure(500);
-    const small = measure(2_000);
-    const large = measure(20_000);
-
-    expect(large).toBeLessThan(Math.max(small, 1) * 40);
+    // The previous implementation rebuilt the array per line with
+    // `[...content, line]`, so accumulating L lines cost O(L^2). Array identity
+    // is a deterministic witness for that: a copying implementation cannot keep
+    // the same array across appends. This is checked by identity rather than by
+    // elapsed time so it cannot flake on a loaded machine.
+    const content: string[] = [];
+    const identityAtStart = content;
+    for (const line of makeLines(10_000)) {
+      appendCodeBlockLine(content, line, false, undefined);
+    }
+    expect({
+      sameArray: content === identityAtStart,
+      length: content.length,
+    }).toStrictEqual({ sameArray: true, length: 10_000 });
   });
 
-  it('does not mutate a block after it has been handed off', () => {
-    const first: string[] = [];
-    appendCodeBlockLine(first, 'a', false, undefined);
-    const handedOff = first;
-    const second: string[] = [];
-    appendCodeBlockLine(second, 'b', false, undefined);
-    expect(handedOff).toStrictEqual(['a']);
+  it('leaves a closed block untouched while the next one accumulates', () => {
+    // RenderCodeBlock receives the array when a fence closes and a fresh array
+    // replaces it, so in-place appending must never reach back into the one
+    // already handed off.
+    const closed: string[] = [];
+    appendCodeBlockLine(closed, 'first-block', false, undefined);
+
+    const next: string[] = [];
+    for (const line of makeLines(50)) {
+      appendCodeBlockLine(next, line, false, undefined);
+    }
+
+    expect(closed).toStrictEqual(['first-block']);
+  });
+
+  it('still retains a line when the terminal is too short to display any', () => {
+    // availableTerminalHeight below the reserved lines must not cap retention
+    // at zero, or the block would render empty instead of showing the
+    // "code is being written" placeholder.
+    const content = accumulate(makeLines(100), true, 0);
+    expect(content.length).toBeGreaterThan(0);
   });
 });

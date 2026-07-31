@@ -18,11 +18,12 @@ import path from 'node:path';
 import { SessionRecordingService } from './SessionRecordingService.js';
 
 const created: string[] = [];
+const services: SessionRecordingService[] = [];
 
 function createService(): SessionRecordingService {
   const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-recording-'));
   created.push(chatsDir);
-  return new SessionRecordingService({
+  const service = new SessionRecordingService({
     sessionId: 'bounded-recording',
     projectHash: 'project',
     chatsDir,
@@ -31,6 +32,8 @@ function createService(): SessionRecordingService {
     provider: 'test',
     model: 'test',
   });
+  services.push(service);
+  return service;
 }
 
 function readRecords(service: SessionRecordingService): unknown[] {
@@ -45,7 +48,12 @@ function readRecords(service: SessionRecordingService): unknown[] {
 }
 
 describe('SessionRecordingService queue retention', () => {
-  afterEach(() => {
+  afterEach(async () => {
+    // Disposal happens here rather than at the end of each test body, so an
+    // assertion failure cannot leak a recording service or its temp dir.
+    for (const service of services.splice(0)) {
+      await service.dispose();
+    }
     for (const dir of created.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -70,8 +78,6 @@ describe('SessionRecordingService queue retention', () => {
       contentRecords: records.filter((record) => record.type === 'content')
         .length,
     }).toStrictEqual({ active: true, contentRecords: total });
-
-    await service.dispose();
   });
 
   it('keeps recording active after producing far more than the high-water mark', async () => {
@@ -82,7 +88,6 @@ describe('SessionRecordingService queue retention', () => {
     }
 
     expect(service.isActive()).toBe(true);
-    await service.dispose();
   });
 
   it('releases the pending queue once the drain completes', async () => {
@@ -102,8 +107,6 @@ describe('SessionRecordingService queue retention', () => {
       pendingRecords: service.getPendingRecordCount(),
       pendingBytes: service.getPendingByteCount(),
     }).toStrictEqual({ pendingRecords: 0, pendingBytes: 0 });
-
-    await service.dispose();
   });
 
   it('preserves buffered pre-content records once content materialises the file', async () => {
@@ -124,7 +127,5 @@ describe('SessionRecordingService queue retention', () => {
       (record) => record.type === 'provider_switch',
     );
     expect(switches).toHaveLength(5_000);
-
-    await service.dispose();
   });
 });

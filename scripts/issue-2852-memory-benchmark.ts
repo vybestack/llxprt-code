@@ -29,14 +29,18 @@ export function parsePsRssBytes(output: string, pid: number): number {
   if (fields === null || Number(fields[1]) !== pid) {
     throw new Error(`Expected exact PID ${pid} in RSS sample`);
   }
-  return Number(fields[2]) * 1024;
+  const rssKilobytes = Number(fields[2]);
+  if (!Number.isFinite(rssKilobytes) || rssKilobytes < 0) {
+    throw new Error(`Invalid RSS value: ${fields[2]}`);
+  }
+  return rssKilobytes * 1024;
 }
 
 export function parseVmmapSummary(output: string): VmmapSummary {
   return {
     physicalFootprintBytes: requireMetric(
       output,
-      /Physical footprint:\s*(\d+(?:\.\d+)?[KMG])/i,
+      /Physical footprint:\s*(\d+(?:\.\d+)?\s*[KMG]?B?)/i,
       'physical footprint',
     ),
     mallocEmptyDirtyBytes: parseRegionDirty(output, 'MALLOC_SMALL (empty)'),
@@ -105,13 +109,19 @@ export function evaluatePostGcPlateau(
   if (settledBaselineBytes <= 0) {
     throw new Error('Post-GC heap readings must be positive');
   }
-  const maxBytes = Math.max(...settled);
+  const maxBytes = settled.reduce(
+    (highest, value) => (value > highest ? value : highest),
+    settledBaselineBytes,
+  );
   const growthRatio = maxBytes / settledBaselineBytes - 1;
   return {
     settledBaselineBytes,
     maxBytes,
     growthRatio,
-    withinTolerance: growthRatio <= tolerance,
+    // Compared multiplicatively rather than against `growthRatio`: the
+    // subtraction in the ratio loses precision, so growth of exactly the
+    // tolerance would otherwise be reported as a leak.
+    withinTolerance: maxBytes <= settledBaselineBytes * (1 + tolerance),
   };
 }
 
@@ -133,12 +143,15 @@ function parseRegionDirty(output: string, region: string): number {
   if (line === undefined) {
     return 0;
   }
-  const tokens = line.trim().split(/\s+/);
-  const sizes = tokens.filter((token) => /[KMG]$/.test(token));
-  if (sizes.length < 3) {
+  // Region rows are `<region name> VIRTUAL RESIDENT DIRTY [SWAPPED ...]`.
+  // Columns are read by position after stripping the known region prefix:
+  // filtering on a K/M/G suffix drops a bare `0` column and silently shifts
+  // every later column left, which would misreport dirty bytes.
+  const columns = line.slice(region.length).trim().split(/\s+/);
+  if (columns.length < 3) {
     throw new Error(`Invalid ${region} vmmap row`);
   }
-  return parseBytes(sizes[2]);
+  return parseBytes(columns[2]);
 }
 
 function parseBytes(value: string): number {

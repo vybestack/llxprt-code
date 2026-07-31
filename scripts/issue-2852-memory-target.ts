@@ -15,6 +15,12 @@
  * It runs several equivalent turns and takes a checkpoint after a controlled
  * full GC at the end of each, so the runner can check that the post-GC JSC heap
  * reaches a stable plateau instead of climbing turn over turn.
+ *
+ * The `media` mode deliberately does NOT go through the buffer. It exercises
+ * the separate question the issue raises about image payloads: whether
+ * re-materialising a data URI per retained image drives native
+ * IOAccelerator/IOSurface growth. Text and media are different code paths and
+ * are measured separately.
  */
 
 import { appendFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -44,10 +50,15 @@ if (!Number.isInteger(turns) || turns < 1) {
 mkdirSync(dirname(outputPath), { recursive: true });
 rmSync(outputPath, { force: true });
 
+/** Time the runner is given to capture OS metrics before we give up. */
+const CHECKPOINT_TIMEOUT_MS = 120_000;
+
 async function awaitSample(name: string): Promise<void> {
+  // Without a timeout a runner that dies mid-capture would leave the target
+  // hanging forever, holding its measured memory.
   const response = await fetch(
     `http://127.0.0.1:${process.env['LLXPRT_MEMORY_PORT']}/checkpoint/${name}`,
-    { method: 'POST' },
+    { method: 'POST', signal: AbortSignal.timeout(CHECKPOINT_TIMEOUT_MS) },
   );
   if (!response.ok) {
     throw new Error(`Checkpoint ${name} failed: ${response.status}`);

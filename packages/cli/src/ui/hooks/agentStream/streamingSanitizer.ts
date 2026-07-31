@@ -36,11 +36,14 @@ const EMPTY_RESULT: StreamingSanitizerResult = {
   blocked: false,
 };
 
-const BLOCKED_RESULT: StreamingSanitizerResult = {
-  stable: '',
-  provisional: '',
-  blocked: true,
-};
+function blockedResult(feedback: string | undefined): StreamingSanitizerResult {
+  return {
+    stable: '',
+    provisional: '',
+    blocked: true,
+    ...(feedback !== undefined ? { feedback } : {}),
+  };
+}
 
 interface SegmentResult {
   readonly text: string;
@@ -105,7 +108,10 @@ export class StreamingSanitizer {
     const boundary = this.resolveBoundary(combined, delta.length, scan);
     const stableSegment = combined.slice(0, boundary);
     this.carry = combined.slice(boundary);
-    this.carryHasNonAscii = this.recomputeCarryFlag(scan, boundary, combined);
+    if (boundary > 0) {
+      this.processed += this.carry.length;
+    }
+    this.carryHasNonAscii = this.carryContainsNonAscii(scan, boundary);
     return this.sanitizeSegments(stableSegment);
   }
 
@@ -148,26 +154,23 @@ export class StreamingSanitizer {
     return forcedBoundary(combined);
   }
 
-  private recomputeCarryFlag(
-    scan: DeltaScan,
-    boundary: number,
-    combined: string,
-  ): boolean {
+  /** Whether the newly retained tail holds anything the filter could act on. */
+  private carryContainsNonAscii(scan: DeltaScan, boundary: number): boolean {
     if (boundary === 0) {
+      // Nothing stabilised, so the tail is the previous tail plus this delta.
       return this.carryHasNonAscii || scan.hasNonAscii;
     }
-    this.processed += combined.length - boundary;
-    return containsNonAscii(combined, boundary);
+    return containsNonAscii(this.carry, 0);
   }
 
   private sanitizeSegments(stableSegment: string): StreamingSanitizerResult {
     const stable = this.filterSegment(stableSegment);
     if (stable.blocked) {
-      return BLOCKED_RESULT;
+      return blockedResult(this.takeFeedback(stable.feedback));
     }
     const provisional = this.filterCarry();
     if (provisional.blocked) {
-      return BLOCKED_RESULT;
+      return blockedResult(this.takeFeedback(provisional.feedback));
     }
     const feedback = this.takeFeedback(stable.feedback ?? provisional.feedback);
     return {
@@ -197,7 +200,16 @@ export class StreamingSanitizer {
     }
     const result = this.filter.filterText(segment);
     if (result.blocked) {
-      return { text: '', blocked: true };
+      // The whole-text path forwarded `systemFeedback` alongside a block, so
+      // preserve that contract even though `filterText` does not currently set
+      // it on the blocked branch.
+      return {
+        text: '',
+        blocked: true,
+        ...(result.systemFeedback !== undefined
+          ? { feedback: result.systemFeedback }
+          : {}),
+      };
     }
     return {
       text: typeof result.filtered === 'string' ? result.filtered : '',

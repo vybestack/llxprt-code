@@ -37,9 +37,22 @@ export function appendCodeBlockLine(
   if (
     isPending &&
     availableTerminalHeight !== undefined &&
-    codeBlockContent.length >= availableTerminalHeight
+    codeBlockContent.length >= retainedLineCap(availableTerminalHeight)
   ) {
     return;
   }
   codeBlockContent.push(line);
+}
+
+/**
+ * Lines to retain while a block streams.
+ *
+ * Always at least one more than `RenderCodeBlock` slices, so its
+ * `content.length > displayed` check still fires and the truncation indicator
+ * appears exactly when it did before. A terminal too short to display anything
+ * still needs a non-zero cap, or the block would render empty instead of
+ * showing the "code is being written" placeholder.
+ */
+function retainedLineCap(availableTerminalHeight: number): number {
+  return Math.max(availableTerminalHeight, CODE_BLOCK_RESERVED_LINES + 1);
 }

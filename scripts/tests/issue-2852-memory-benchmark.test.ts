@@ -28,6 +28,29 @@ describe('issue 2852 memory benchmark parsing', () => {
     expect(parsePsRssBytes(' 1234 2048 /opt/bun', 1234)).toBe(2_097_152);
   });
 
+  it('rejects a non-numeric RSS sample instead of propagating NaN', () => {
+    expect(() => parsePsRssBytes(' 1234 notanumber /opt/bun', 1234)).toThrow(
+      'Expected exact PID',
+    );
+  });
+
+  it('reads a bare zero dirty column without shifting later columns', () => {
+    // vmmap emits a bare `0` (no K/M/G suffix) for an empty category. Filtering
+    // columns by suffix would drop it and misreport the dirty bytes.
+    const vmmap = parseVmmapSummary(
+      `Physical footprint: 1.5G\nMALLOC_SMALL (empty) 4.0G 3.0G 0\nWebKit Malloc 800M 700M 600M\nIOAccelerator 300M 275M 250M\nIOSurface 20M 15M 10M`,
+    );
+    expect(vmmap.mallocEmptyDirtyBytes).toBe(0);
+  });
+
+  it('parses a footprint reported in bare bytes or with a B suffix', () => {
+    expect(
+      parseVmmapSummary(
+        `Physical footprint: 1.5 GB\nMALLOC_SMALL (empty) 2.0G 1.0G 1.0G\nWebKit Malloc 800M 700M 600M\nIOAccelerator 300M 275M 250M\nIOSurface 20M 15M 10M`,
+      ).physicalFootprintBytes,
+    ).toBe(1_610_612_736);
+  });
+
   it('parses footprint, allocator, and IOAccelerator categories separately', () => {
     const vmmap = parseVmmapSummary(
       `Physical footprint: 1.5G\nMALLOC_SMALL (empty) 2.0G 1.0G 1.0G\nWebKit Malloc 800M 700M 600M\nIOAccelerator 300M 275M 250M\nIOSurface 20M 15M 10M`,
@@ -75,6 +98,15 @@ describe('issue 2852 memory benchmark parsing', () => {
         withinTolerance: result.withinTolerance,
         growthRatio: Math.round(result.growthRatio * 100) / 100,
       }).toStrictEqual({ withinTolerance: false, growthRatio: 0.6 });
+    });
+
+    it('treats growth exactly at the tolerance as a plateau', () => {
+      // settled = [50M, 52.5M] -> growthRatio === 0.05 === tolerance.
+      const result = evaluatePostGcPlateau(
+        [40_000_000, 50_000_000, 52_500_000, 50_000_000],
+        0.05,
+      );
+      expect(result.withinTolerance).toBe(true);
     });
 
     it('refuses to judge a plateau from too few turns', () => {

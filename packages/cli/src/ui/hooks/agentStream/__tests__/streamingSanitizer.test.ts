@@ -60,9 +60,18 @@ const CORPUS: ReadonlyArray<readonly [string, string]> = [
   ['only whitespace', '   \n\t  '],
   ['surrogate heavy', '𝔘𝔫𝔦𝔠𝔬𝔡𝔢 text 𝕥𝕖𝕤𝕥 here.'],
   [
-    'long unbroken non-ascii run',
+    'long unbroken non-ascii run (BMP)',
     '✅'.repeat(400) + ' tail words after the run.',
   ],
+  [
+    'long unbroken supplementary-plane run',
+    '😀'.repeat(400) + ' tail words after the run.',
+  ],
+  [
+    'long unbroken ZWJ-sequence run',
+    '👨‍👩‍👧‍👦'.repeat(120) + ' tail words after the run.',
+  ],
+  ['long unbroken keycap run', '1️⃣'.repeat(200) + ' tail words.'],
   [
     'long realistic response',
     Array.from(
