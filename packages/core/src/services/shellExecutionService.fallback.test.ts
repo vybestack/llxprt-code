@@ -461,6 +461,7 @@ describe('ShellExecutionService child_process fallback', () => {
         expect.objectContaining({
           shell: false,
           detached: false,
+          windowsHide: true,
         }),
       );
     });
@@ -538,6 +539,47 @@ describe('ShellExecutionService child_process fallback', () => {
         (call) => call[0] === 'error',
       );
       expect(errorCalls.length).toBe(1);
+    });
+  });
+
+  describe('Windows console isolation (Issue #2548)', () => {
+    it('should include windowsHide=true in spawn options on Windows', async () => {
+      mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
+      await simulateExecution('echo hello', (cp) => cp.emit('exit', 0, null));
+
+      expect(mockCpSpawn).toHaveBeenCalledWith(
+        'powershell.exe',
+        ['-NoProfile', '-Command', 'echo hello'],
+        expect.objectContaining({
+          windowsHide: true,
+        }),
+      );
+    });
+
+    it('should still capture stdout output when windowsHide=true on Windows', async () => {
+      mockPlatform.mockReturnValue('win32');
+      stubProcessPlatform('win32');
+
+      const { result } = await simulateExecution('echo hello', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('hello world output'));
+        cp.emit('exit', 0, null);
+      });
+
+      expect(result.output).toBe('hello world output');
+      expect(onOutputEventMock).toHaveBeenCalledWith({
+        type: 'data',
+        chunk: 'hello world output',
+      });
+    });
+
+    it('should not set windowsHide on non-Windows platforms', async () => {
+      mockPlatform.mockReturnValue('linux');
+      await simulateExecution('echo hello', (cp) => cp.emit('exit', 0, null));
+
+      const spawnCall = mockCpSpawn.mock.calls[0];
+      const spawnOptions = spawnCall[2];
+      expect(spawnOptions.windowsHide).toBeUndefined();
     });
   });
 });
