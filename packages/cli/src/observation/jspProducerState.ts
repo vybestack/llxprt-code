@@ -177,7 +177,10 @@ export function applyTransition(
           lastTool: { label: transition.label, phase: transition.phase },
         });
       }
-      return next(state);
+      // A phase change for a tool that is no longer the headline is ignored.
+      // Advancing the sequence here would publish a revision that carries no
+      // state change, matching how a stale todo revision is handled.
+      return state;
     }
     case 'assistant_message.displayed': {
       return next({

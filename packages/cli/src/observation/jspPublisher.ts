@@ -11,7 +11,6 @@ import type {
 } from './jspDocuments.js';
 import type { JspBootstrap } from './jspSchema.js';
 
-type NowFn = () => number;
 
 export interface JspPublisher {
   register(snapshot: JspSnapshotDocument): Promise<boolean>;
@@ -24,10 +23,7 @@ export class JspHttpPublisher implements JspPublisher {
   private readonly authHeader: string;
   private readonly registrationId: string;
 
-  constructor(
-    bootstrap: JspBootstrap,
-    private readonly now: NowFn = Date.now,
-  ) {
+  constructor(bootstrap: JspBootstrap) {
     const endpoint = bootstrap.endpoint.replace(/\/$/, '');
     this.baseEndpoint = endpoint.endsWith('/jsp/1')
       ? endpoint
@@ -45,10 +41,7 @@ export class JspHttpPublisher implements JspPublisher {
   }
 
   heartbeat(document: JspHeartbeatDocument): Promise<boolean> {
-    return this.post('/heartbeat', {
-      ...document,
-      bridge_observed_ms: this.now(),
-    });
+    return this.post('/heartbeat', document);
   }
 
   private async post(path: string, body: unknown): Promise<boolean> {

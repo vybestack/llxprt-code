@@ -211,7 +211,32 @@ describe('tool calls', () => {
     });
   });
 
-  it('tool_call.phase_changed updates the most-recently-created tool phase', () => {
+  it('tool_call.phase_changed updates the phase when the label is the headline tool', () => {
+    const id = makeIdentity();
+    let state = initProducerState(id, nativeSession, () => 100);
+    state = applyTransition(
+      state,
+      { type: 'tool_call.created', label: 'read_file', phase: 'proposed' },
+      () => 200,
+    );
+    const created = state.sourceSequence;
+    state = applyTransition(
+      state,
+      {
+        type: 'tool_call.phase_changed',
+        label: 'read_file',
+        phase: 'succeeded',
+      },
+      () => 300,
+    );
+    expect(state.lastTool).toStrictEqual({
+      label: 'read_file',
+      phase: 'succeeded',
+    });
+    expect(state.sourceSequence).toBe(created + 1);
+  });
+
+  it('tool_call.phase_changed for a superseded tool neither updates nor advances the sequence', () => {
     const id = makeIdentity();
     let state = initProducerState(id, nativeSession, () => 100);
     state = applyTransition(
@@ -224,6 +249,7 @@ describe('tool calls', () => {
       { type: 'tool_call.created', label: 'run_shell', phase: 'scheduled' },
       () => 300,
     );
+    const beforeSequence = state.sourceSequence;
     state = applyTransition(
       state,
       {
@@ -237,6 +263,7 @@ describe('tool calls', () => {
       label: 'run_shell',
       phase: 'scheduled',
     });
+    expect(state.sourceSequence).toBe(beforeSequence);
   });
 });
 

@@ -223,7 +223,13 @@ function registerRecordingCleanup(
   lockHandle: LockHandle | null,
 ): void {
   registerCleanup(async () => {
-    await stopObservationProducer();
+    // Observation is ancillary; a failed telemetry shutdown must not skip
+    // recording disposal or lock release.
+    try {
+      await stopObservationProducer();
+    } catch {
+      // Telemetry-only failure.
+    }
     recordingIntegration.dispose();
     try {
       await recordingService.dispose();
@@ -315,13 +321,15 @@ export async function setupSessionRecording(
   }
 
   const recordingIntegration = new RecordingIntegration(activeRecordingService);
-  setupObservation(config);
-
+  // Register cleanup before observation setup. An explicitly invalid bootstrap
+  // is meant to fail startup, but it must not strand the recording service or
+  // the already-acquired lock handle on the way out.
   registerRecordingCleanup(
     recordingIntegration,
     activeRecordingService,
     activeLockHandle,
   );
+  setupObservation(config);
 
   return {
     recordingService: activeRecordingService,

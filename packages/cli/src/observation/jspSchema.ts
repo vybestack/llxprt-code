@@ -73,7 +73,8 @@ function isLoopbackHost(hostname: string): boolean {
   if (lower === 'localhost') return true;
   if (lower === '127.0.0.1' || lower === '::1') return true;
   if (lower.endsWith('.localhost')) return true;
-  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(lower);
+  const octet = '(?:25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)';
+  return new RegExp(`^127\\.${octet}\\.${octet}\\.${octet}$`).test(lower);
 }
 
 function classifyEndpoint(

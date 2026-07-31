@@ -87,4 +87,30 @@ describe('parseBootstrap', () => {
     expect(result.ok).toBe(false);
     expect(errorCode(result)).toBe('JSP-E004');
   });
+
+  // URL parsing rejects an out-of-range IPv4 literal before the loopback test
+  // runs, so this is reported as a malformed endpoint rather than a non-
+  // loopback one. Pinned so the rejection cannot silently become acceptance.
+  it('rejects a 127.x host whose octets are out of range', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'http://127.999.999.999:9123/jsp/1',
+    });
+    expect(result.ok).toBe(false);
+    expect(errorCode(result)).toBe('JSP-E001');
+  });
+
+  it('accepts a non-obvious but valid loopback host', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'http://127.255.255.254:9123/jsp/1',
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects a missing required credential', () => {
+    const { publisher_credential: _omitted, ...rest } = validBootstrap;
+    const result = parseBootstrap(rest);
+    expect(result.ok).toBe(false);
+  });
 });

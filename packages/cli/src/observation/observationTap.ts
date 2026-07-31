@@ -27,6 +27,7 @@ export interface ObservationTapTarget {
 
 export interface ObservationTap {
   onTurnStarted(): void;
+  onTurnEnded(outcome: JspTurnOutcome): void;
   processEvent(event: AgentEvent): void;
   onFlushCommitted(content: string, committedMs: number): void;
 }
@@ -70,6 +71,7 @@ export function createObservationTap(
   if (target === null) {
     return {
       onTurnStarted: () => undefined,
+      onTurnEnded: () => undefined,
       processEvent: () => undefined,
       onFlushCommitted: () => undefined,
     };
@@ -77,9 +79,25 @@ export function createObservationTap(
   const toolLabels = new Map<string, string>();
   const awaitingConfirmation = new Set<string>();
 
+  /**
+   * Tool correlation is turn-scoped. A cancelled or aborted turn never delivers
+   * terminal `tool-result` events for its in-flight tools, so entries must be
+   * discarded at each turn boundary rather than accumulating for the life of
+   * the session and leaking a stale wait into a later turn.
+   */
+  const resetTurnScopedState = (): void => {
+    toolLabels.clear();
+    awaitingConfirmation.clear();
+  };
+
   return {
     onTurnStarted(): void {
+      resetTurnScopedState();
       target.onTurnStarted();
+    },
+    onTurnEnded(outcome: JspTurnOutcome): void {
+      resetTurnScopedState();
+      target.onTurnEnded(outcome);
     },
     processEvent(event: AgentEvent): void {
       switch (event.type) {
@@ -109,7 +127,8 @@ export function createObservationTap(
           target.onToolPhaseChanged(label, phase);
           if (
             phase !== 'awaiting_approval' &&
-            awaitingConfirmation.delete(event.update.id)
+            awaitingConfirmation.delete(event.update.id) &&
+            awaitingConfirmation.size === 0
           ) {
             target.onWaitResolved();
           }
@@ -122,7 +141,10 @@ export function createObservationTap(
             event.result.isError === true ? 'failed' : 'succeeded',
           );
           toolLabels.delete(event.result.id);
-          if (awaitingConfirmation.delete(event.result.id)) {
+          if (
+            awaitingConfirmation.delete(event.result.id) &&
+            awaitingConfirmation.size === 0
+          ) {
             target.onWaitResolved();
           }
           break;
@@ -131,6 +153,7 @@ export function createObservationTap(
           target.onSourceError(event.error.message, 'AGENT_ERROR');
           break;
         case 'done':
+          resetTurnScopedState();
           target.onTurnEnded(mapDoneReason(event.reason));
           break;
         default:

@@ -150,19 +150,37 @@ export async function stopObservationProducer(): Promise<void> {
   await activeProducer?.shutdown();
 }
 
+/**
+ * Observation is optional telemetry. A failure anywhere in the tap, producer,
+ * or transport must degrade telemetry only and must never disrupt the
+ * foreground TUI. This is the single boundary that enforces that guarantee, so
+ * foreground call sites do not each carry their own guard.
+ */
+function isolate(observe: () => void): void {
+  try {
+    observe();
+  } catch {
+    // Telemetry-only failure; foreground behavior is deliberately unaffected.
+  }
+}
+
 export function observeTurnStarted(): void {
-  tap.onTurnStarted();
+  isolate(() => tap.onTurnStarted());
+}
+
+export function observeTurnFailed(): void {
+  isolate(() => tap.onTurnEnded('failed'));
 }
 
 export function observeAgentEvent(event: AgentEvent): void {
-  tap.processEvent(event);
+  isolate(() => tap.processEvent(event));
 }
 
 export function observeAssistantMessageCommitted(
   content: string,
   committedMs: number,
 ): void {
-  tap.onFlushCommitted(content, committedMs);
+  isolate(() => tap.onFlushCommitted(content, committedMs));
 }
 
 export function observeTodosReplaced(
@@ -170,5 +188,5 @@ export function observeTodosReplaced(
   agentId: string | undefined,
   todos: readonly Todo[],
 ): void {
-  producer?.observeTodosReplaced(sessionId, agentId, todos);
+  isolate(() => producer?.observeTodosReplaced(sessionId, agentId, todos));
 }
