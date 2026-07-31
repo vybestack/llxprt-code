@@ -58,6 +58,13 @@ interface TomlPolicyFile {
 /** Prefix used for rules loaded from user-tier TOML files (see toml-loader). */
 const USER_SOURCE_PREFIX = 'User:';
 
+/**
+ * Prefix used for dynamically confirmed rules (see policy/config.ts). These
+ * originate from user-tier decisions but are injected at runtime, so they must
+ * be reconciled alongside persisted user rules during reload.
+ */
+const DYNAMIC_CONFIRMED_SOURCE_PREFIX = 'Dynamic (Confirmed)';
+
 function getManagedFilePath(): string {
   return path.join(Storage.getUserPoliciesDir(), MANAGED_POLICY_FILE);
 }
@@ -182,6 +189,7 @@ export async function updateEditableRule(
       `Cannot update rule at index ${index}: only ${data.rule.length} rule(s) exist.`,
     );
   }
+  assertValidEditableRule(rule);
   const original = data.rule[index];
   const updated: TomlRule = { ...original };
   updated.decision = rule.decision;
@@ -248,9 +256,13 @@ export async function reloadUserPolicyRules(
   engine: PolicyEngine,
   approvalMode: ApprovalMode,
 ): Promise<readonly PolicyRule[]> {
-  const kept = engine
-    .getRules()
-    .filter((rule) => !(rule.source?.startsWith(USER_SOURCE_PREFIX) ?? false));
+  const kept = engine.getRules().filter((rule) => {
+    const source = rule.source ?? '';
+    return (
+      !source.startsWith(USER_SOURCE_PREFIX) &&
+      !source.startsWith(DYNAMIC_CONFIRMED_SOURCE_PREFIX)
+    );
+  });
 
   const userDir = Storage.getUserPoliciesDir();
   const { rules: freshUserRules, errors } = await loadPoliciesFromToml(

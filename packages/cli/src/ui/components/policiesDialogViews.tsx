@@ -73,8 +73,12 @@ export function engineRuleSummary(rule: PolicyRule): string {
 }
 
 export function parsePriority(value: string): number | null {
-  const n = Number.parseInt(value, 10);
-  if (Number.isNaN(n) || n < 0 || n > MAX_USER_PRIORITY) {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+  const n = Number(trimmed);
+  if (n > MAX_USER_PRIORITY) {
     return null;
   }
   return n;
@@ -277,7 +281,12 @@ export const PolicyForm: React.FC<PolicyFormProps> = ({
 
   useKeypress(
     (key) => {
-      if (key.name === 'escape' && s.step !== 1) onCancel();
+      if (key.name !== 'escape') return;
+      if (s.step > 0) {
+        s.setStep(s.step - 1);
+      } else {
+        onCancel();
+      }
     },
     { isActive: true },
   );

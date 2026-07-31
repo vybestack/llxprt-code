@@ -8,6 +8,9 @@
 
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+
+vi.mock('ink', async () => import('../../../test-utils/real-ink.js'));
+
 import {
   PoliciesDialog,
   type PoliciesDialogRuntime,

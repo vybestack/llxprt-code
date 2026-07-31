@@ -199,6 +199,54 @@ priority = 50
         }),
       ).rejects.toThrow('Cannot update rule at index 99');
     });
+
+    it('rejects a priority above 999', async () => {
+      await writeFile(`
+[[rule]]
+toolName = "edit"
+decision = "allow"
+priority = 100
+`);
+      await expect(
+        updateEditableRule(0, {
+          toolName: 'edit',
+          decision: PolicyDecision.ALLOW,
+          priority: 1000,
+        }),
+      ).rejects.toThrow('priority must be an integer');
+    });
+
+    it('rejects a negative priority', async () => {
+      await writeFile(`
+[[rule]]
+toolName = "edit"
+decision = "allow"
+priority = 100
+`);
+      await expect(
+        updateEditableRule(0, {
+          toolName: 'edit',
+          decision: PolicyDecision.ALLOW,
+          priority: -1,
+        }),
+      ).rejects.toThrow('priority must be an integer');
+    });
+
+    it('rejects a non-integer priority', async () => {
+      await writeFile(`
+[[rule]]
+toolName = "edit"
+decision = "allow"
+priority = 100
+`);
+      await expect(
+        updateEditableRule(0, {
+          toolName: 'edit',
+          decision: PolicyDecision.ALLOW,
+          priority: 50.5,
+        }),
+      ).rejects.toThrow('priority must be an integer');
+    });
   });
 
   describe('deleteEditableRule', () => {
@@ -325,6 +373,35 @@ priority = 100
 
       // Default rule preserved, no user rules added
       expect(engine.getRules()).toHaveLength(1);
+    });
+
+    it('removes Dynamic (Confirmed) rules during reload', async () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'edit',
+            decision: PolicyDecision.ALLOW,
+            priority: 1.05,
+            source: 'Default: defaults.toml',
+          },
+          {
+            toolName: 'run_shell_command',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.95,
+            source: 'Dynamic (Confirmed)',
+          },
+        ],
+      });
+
+      // No fresh user rules on disk
+      await reloadUserPolicyRules(engine, 'default' as ApprovalMode);
+
+      const rules = engine.getRules();
+      const sources = rules.map((r) => r.source);
+      // Default rule preserved
+      expect(sources).toContain('Default: defaults.toml');
+      // Dynamic (Confirmed) rule removed
+      expect(sources).not.toContain('Dynamic (Confirmed)');
     });
 
     it('throws when the user TOML is malformed', async () => {

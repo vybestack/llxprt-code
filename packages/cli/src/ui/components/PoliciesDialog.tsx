@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import {
   PolicyDecision,
@@ -58,6 +58,7 @@ interface DialogState {
   selectedIndex: number;
   formMode: 'add' | 'edit';
   message: string | null;
+  messageType: MessageType | null;
   busy: boolean;
 }
 
@@ -69,7 +70,59 @@ function initialDialogState(): DialogState {
     selectedIndex: -1,
     formMode: 'add',
     message: null,
+    messageType: null,
     busy: false,
+  };
+}
+
+/** Extract a human-readable detail string from a caught error. */
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+interface RunMutationDeps {
+  busyRef: React.MutableRefObject<boolean>;
+  mountedRef: React.MutableRefObject<boolean>;
+  patch: (p: Partial<DialogState>) => void;
+  refreshRules: () => Promise<void>;
+  recordMessage: (type: MessageType, text: string) => void;
+}
+
+/** Execute a mutation, then refresh. Report distinct errors for each phase. */
+function makeRunMutation(deps: RunMutationDeps) {
+  const { busyRef, mountedRef, patch, refreshRules, recordMessage } = deps;
+  return async (label: string, fn: () => Promise<void>): Promise<void> => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    patch({ busy: true });
+    try {
+      await fn();
+    } catch (error) {
+      if (!mountedRef.current) return;
+      recordMessage(
+        MessageType.ERROR,
+        `Policy update failed: ${errorDetail(error)}`,
+      );
+      return;
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) patch({ busy: false });
+    }
+    // Mutation succeeded; refresh may still fail. Report a distinct error
+    // so the user knows the change was written but the display is stale.
+    try {
+      await refreshRules();
+    } catch (error) {
+      if (!mountedRef.current) return;
+      recordMessage(
+        MessageType.ERROR,
+        `Policy: ${label}. Refresh failed: ${errorDetail(error)}`,
+      );
+      return;
+    }
+    if (!mountedRef.current) return;
+    recordMessage(MessageType.INFO, `Policy: ${label}`);
+    patch({ view: 'menu', selectedIndex: -1 });
   };
 }
 
@@ -110,39 +163,30 @@ function usePoliciesDialogState({
   useEffect(() => {
     void refreshRules().catch((error) => {
       if (!mountedRef.current) return;
-      const detail = error instanceof Error ? error.message : String(error);
-      patch({ message: `Policy refresh failed: ${detail}` });
+      patch({
+        message: `Policy refresh failed: ${errorDetail(error)}`,
+        messageType: MessageType.ERROR,
+      });
     });
   }, [refreshRules, patch]);
 
   const recordMessage = useCallback(
     (type: MessageType, text: string) => {
-      patch({ message: text });
+      patch({ message: text, messageType: type });
       addItem({ type, text } as HistoryItemWithoutId, Date.now());
     },
     [addItem, patch],
   );
 
-  const runMutation = useCallback(
-    async (label: string, fn: () => Promise<void>) => {
-      if (busyRef.current) return;
-      busyRef.current = true;
-      patch({ busy: true });
-      try {
-        await fn();
-        await refreshRules();
-        if (!mountedRef.current) return;
-        recordMessage(MessageType.INFO, `Policy: ${label}`);
-        patch({ view: 'menu', selectedIndex: -1 });
-      } catch (error) {
-        if (!mountedRef.current) return;
-        const detail = error instanceof Error ? error.message : String(error);
-        recordMessage(MessageType.ERROR, `Policy update failed: ${detail}`);
-      } finally {
-        busyRef.current = false;
-        if (mountedRef.current) patch({ busy: false });
-      }
-    },
+  const runMutation = useMemo(
+    () =>
+      makeRunMutation({
+        busyRef,
+        mountedRef,
+        patch,
+        refreshRules,
+        recordMessage,
+      }),
     [refreshRules, recordMessage, patch],
   );
 
@@ -321,7 +365,7 @@ const PolicyDialogShell: React.FC<PolicyDialogShellProps> = (props) => {
         padding={1}
         width="100%"
       >
-        <DialogHeader message={state.message} />
+        <DialogHeader message={state.message} messageType={state.messageType} />
 
         {state.view === 'menu' && (
           <MenuView
@@ -381,7 +425,10 @@ const PolicyDialogShell: React.FC<PolicyDialogShellProps> = (props) => {
   );
 };
 
-const DialogHeader: React.FC<{ message: string | null }> = ({ message }) => (
+const DialogHeader: React.FC<{
+  message: string | null;
+  messageType: MessageType | null;
+}> = ({ message, messageType }) => (
   <>
     <Text color={Colors.Foreground} bold>
       Policy Manager
@@ -392,7 +439,15 @@ const DialogHeader: React.FC<{ message: string | null }> = ({ message }) => (
     </Text>
     {message !== null && (
       <Box marginTop={1}>
-        <Text color={Colors.AccentGreen}>{message}</Text>
+        <Text
+          color={
+            messageType === MessageType.ERROR
+              ? theme.status.error
+              : Colors.AccentGreen
+          }
+        >
+          {message}
+        </Text>
       </Box>
     )}
   </>
