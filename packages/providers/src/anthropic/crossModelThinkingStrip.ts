@@ -70,11 +70,11 @@ function isForeignThinkingTurn(
     return true;
   }
 
-  if (
-    currentBaseURL &&
-    turnBaseURL !== undefined &&
-    turnBaseURL !== currentBaseURL
-  ) {
+  // Strip when the turn's stamped endpoint differs from the current endpoint.
+  // When currentBaseURL is undefined (e.g. native Anthropic with no explicit
+  // baseURL), any turn carrying a providerBaseURL stamp is foreign — its
+  // signatures were minted at a different endpoint.
+  if (turnBaseURL !== undefined && turnBaseURL !== currentBaseURL) {
     return true;
   }
 

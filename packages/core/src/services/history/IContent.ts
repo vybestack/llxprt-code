@@ -418,7 +418,7 @@ export function stampAiTurnModel(
   const hasBaseURL = content.metadata?.providerBaseURL !== undefined;
   const shouldStampModel = !hasModel && model !== undefined && model.length > 0;
   const shouldStampBaseURL =
-    !hasBaseURL && baseURL !== undefined && baseURL.length > 0;
+    !hasBaseURL && baseURL !== undefined && baseURL.trim().length > 0;
 
   if (!shouldStampModel && !shouldStampBaseURL) {
     return content;

@@ -450,8 +450,6 @@ describe('convertToAnthropicMessages - cross-model thinking strip (issue #2335)'
 });
 
 /**
-
-/**
  * Cross-endpoint thinking strip (issue #1469).
  *
  * When z.ai and native Anthropic serve the same model name (e.g.
@@ -610,6 +608,38 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
 
     const blocks = flatAssistantBlocks(messages);
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
+  });
+
+  it('strips when turn has providerBaseURL but currentBaseURL is undefined (OAuth switch)', () => {
+    // Issue #1469: switching from z.ai (baseURL stamped) to native Anthropic
+    // via OAuth where resolved.baseURL is undefined. The turn carries a
+    // providerBaseURL stamp, so it is foreign.
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      assistantWithModelAndBaseURL(
+        'claude-sonnet-4-5-20250929',
+        ZAI_URL,
+        'zai-sig',
+      ),
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-sonnet-4-5-20250929',
+      // currentBaseURL intentionally omitted (native Anthropic default)
+      logger: noopLogger,
+    });
+
+    const blocks = flatAssistantBlocks(messages);
+    expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
+    expect(blocks.some((b) => b.type === 'redacted_thinking')).toBe(false);
+    expect(
+      blocks.some(
+        (b) =>
+          (b as { signature?: unknown }).signature === 'zai-sig' ||
+          (b as { data?: unknown }).data === 'zai-sig',
+      ),
+    ).toBe(false);
   });
 });
 

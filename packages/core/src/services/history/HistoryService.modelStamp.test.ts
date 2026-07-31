@@ -302,4 +302,35 @@ describe('stampAiTurnModel baseURL stamping (issue #1469)', () => {
     expect(stamped.metadata?.providerBaseURL).toBeUndefined();
     expect(stamped).toBe(humanContent);
   });
+
+  it('stamps baseURL when model is already set (partial stamp)', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+      metadata: { model: 'claude-sonnet-4-5-20250929' },
+    };
+
+    const stamped = stampAiTurnModel(
+      aiContent,
+      'claude-sonnet-4-5-20250929',
+      'https://api.z.ai/api/anthropic',
+    );
+
+    expect(stamped.metadata?.model).toBe('claude-sonnet-4-5-20250929');
+    expect(stamped.metadata?.providerBaseURL).toBe(
+      'https://api.z.ai/api/anthropic',
+    );
+  });
+
+  it('returns content unchanged when baseURL is an empty string', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+    };
+
+    const stamped = stampAiTurnModel(aiContent, 'claude-opus-4-8', '');
+
+    expect(stamped.metadata?.providerBaseURL).toBeUndefined();
+    expect(stamped.metadata?.model).toBe('claude-opus-4-8');
+  });
 });
