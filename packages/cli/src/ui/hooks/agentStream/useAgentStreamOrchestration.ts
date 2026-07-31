@@ -265,7 +265,7 @@ function useEventStreamForAgent(
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     clearPendingHistoryItem: () => {
       st.setPendingHistoryItem(null);
-      st.pendingTextAccumulator.clear();
+      st.pendingResponse.reset();
     },
     performMemoryRefresh: args.performMemoryRefresh,
     markToolsAsDisplayCleared: scheduler.markToolsAsDisplayCleared,
@@ -341,7 +341,7 @@ function buildSubmitQueryDeps({
     recordingIntegration: args.recordingIntegration,
     sanitizeContent: st.sanitizeContent,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
-    pendingTextAccumulator: st.pendingTextAccumulator,
+    pendingResponse: st.pendingResponse,
     pendingHistoryItemRef: st.pendingHistoryItemRef,
     thinkingBlocksRef: st.thinkingBlocksRef,
     turnCancelledRef: st.turnCancelledRef,

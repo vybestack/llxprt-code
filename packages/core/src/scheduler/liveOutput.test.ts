@@ -24,6 +24,9 @@ function makeToken(text: string): AnsiToken {
 
 const ansiSnapshot: AnsiOutput = [[makeToken('full')]];
 
+const TRIM_MARKER =
+  '[... earlier live output trimmed ...]' + String.fromCharCode(10);
+
 describe('accumulateLiveOutput', () => {
   describe('append mode', () => {
     it('appends a string delta to an existing string', () => {
@@ -62,21 +65,63 @@ describe('accumulateLiveOutput', () => {
     });
   });
 
-  it('retains a bounded prefix and suffix for oversized append output', () => {
-    let acc: string | AnsiOutput | undefined;
-    for (let index = 0; index < 2_000; index += 1) {
-      acc = accumulateLiveOutput(acc, {
-        mode: 'append',
-        data: `${index.toString().padStart(4, '0')}:${'x'.repeat(1024)}`,
-      });
-    }
+  describe('retention bound (issue #2852)', () => {
+    it('keeps the newest output bounded across many appends', () => {
+      let acc: string | AnsiOutput | undefined;
+      for (let index = 0; index < 2_000; index += 1) {
+        acc = accumulateLiveOutput(acc, {
+          mode: 'append',
+          data: `${index.toString().padStart(4, '0')}:${'x'.repeat(1024)}`,
+        });
+      }
 
-    expect(typeof acc).toBe('string');
-    expect(Buffer.byteLength(acc as string, 'utf8')).toBeLessThanOrEqual(
-      1024 * 1024,
-    );
-    expect(acc).toContain('[... live output truncated ...]');
-    expect(acc).toContain('1999:');
+      expect({
+        isString: typeof acc === 'string',
+        withinBudget: (acc as string).length <= 256 * 1024,
+        keepsNewest: (acc as string).includes('1999:'),
+        marksTrim: (acc as string).startsWith(
+          '[... earlier live output trimmed ...]',
+        ),
+      }).toStrictEqual({
+        isString: true,
+        withinBudget: true,
+        keepsNewest: true,
+        marksTrim: true,
+      });
+    });
+
+    it('is not confused by tool output containing the truncation marker', () => {
+      // The accumulator must not recover its state by searching content for a
+      // magic string, or a tool that prints that string corrupts the preview.
+      const marker = TRIM_MARKER;
+      let acc: string | AnsiOutput | undefined;
+      acc = accumulateLiveOutput(acc, { mode: 'append', data: 'start ' });
+      acc = accumulateLiveOutput(acc, { mode: 'append', data: marker });
+      acc = accumulateLiveOutput(acc, { mode: 'append', data: 'end' });
+
+      expect(acc).toBe(`start ${marker}end`);
+    });
+
+    it('never splits a surrogate pair when trimming', () => {
+      let acc: string | AnsiOutput | undefined;
+      for (let index = 0; index < 400; index += 1) {
+        acc = accumulateLiveOutput(acc, {
+          mode: 'append',
+          data: '𝔘'.repeat(1024),
+        });
+      }
+      const text = acc as string;
+      const body = text.slice(TRIM_MARKER.length);
+      expect([...body].every((char) => char === '𝔘')).toBe(true);
+    });
+
+    it('bounds a single oversized append', () => {
+      const acc = accumulateLiveOutput('', {
+        mode: 'append',
+        data: 'y'.repeat(2_000_000),
+      });
+      expect((acc as string).length).toBeLessThanOrEqual(256 * 1024);
+    });
   });
 
   describe('replace mode', () => {

@@ -22,7 +22,7 @@ import {
   processContentEvent,
   type ContentEventDeps,
 } from '../contentEventProcessor.js';
-import { PendingTextAccumulator } from '../pendingTextAccumulator.js';
+import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 function createDeps(
   getContentPrefixIdentity: () => string | null,
@@ -30,7 +30,7 @@ function createDeps(
 ): ContentEventDeps {
   return {
     addItem: vi.fn(),
-    pendingTextAccumulator: new PendingTextAccumulator(32),
+    pendingResponse: new PendingResponseBuffer(undefined),
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
     pendingHistoryItemRef: {

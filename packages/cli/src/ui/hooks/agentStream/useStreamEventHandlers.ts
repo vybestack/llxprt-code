@@ -70,7 +70,7 @@ import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
-import type { PendingTextAccumulator } from './pendingTextAccumulator.js';
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 import {
   prepareQueryForAgent as prepareQueryImpl,
   type PrepareQueryDeps,
@@ -139,7 +139,7 @@ interface StreamEventHandlerDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
-  pendingTextAccumulator: PendingTextAccumulator;
+  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
@@ -201,29 +201,20 @@ export function useStreamEventHandlers(
 }
 
 function useContentEventHandler(deps: StreamEventHandlerDeps) {
-  const pendingTextAccumulator = deps.pendingTextAccumulator;
-  const contentEventDeps = useContentEventDeps(deps, pendingTextAccumulator);
+  const contentEventDeps = useContentEventDeps(deps, deps.pendingResponse);
   return useCallback(
     (
       eventValue: ServerContentEvent['value'],
       currentAgentMessageBuffer: string,
       userMessageTimestamp: number,
-    ): string => {
-      const appended = pendingTextAccumulator.append(eventValue);
-      // Process the first delta of each turn to ensure the pending item is
-      // created, then coalesce at publish boundaries.
-      const isFirstDelta = appended.deltaCount === 1;
-      if (!appended.publish && !isFirstDelta) {
-        return currentAgentMessageBuffer;
-      }
-      return processContentEvent(
-        appended.publish ? appended.text : pendingTextAccumulator.materialize(),
+    ): string =>
+      processContentEvent(
+        eventValue,
         currentAgentMessageBuffer,
         userMessageTimestamp,
         contentEventDeps,
-      );
-    },
-    [contentEventDeps, pendingTextAccumulator],
+      ),
+    [contentEventDeps],
   );
 }
 
@@ -483,12 +474,12 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
 
 function useContentEventDeps(
   deps: StreamEventHandlerDeps,
-  pendingTextAccumulator: PendingTextAccumulator,
+  pendingResponse: PendingResponseBuffer,
 ): ContentEventDeps {
   return useMemo(
     () => ({
       addItem: deps.addItem,
-      pendingTextAccumulator,
+      pendingResponse,
       sanitizeContent: deps.sanitizeContent,
       flushPendingHistoryItem: deps.flushPendingHistoryItem,
       pendingHistoryItemRef: deps.pendingHistoryItemRef,
@@ -499,7 +490,7 @@ function useContentEventDeps(
     }),
     [
       deps.addItem,
-      pendingTextAccumulator,
+      pendingResponse,
       deps.sanitizeContent,
       deps.flushPendingHistoryItem,
       deps.pendingHistoryItemRef,

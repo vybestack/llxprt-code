@@ -29,7 +29,7 @@ import { type QueuedSubmission } from './types.js';
 import { useQueuedSubmissions } from './useQueuedSubmissions.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 import type { SubmissionExecutor } from './useSubmitQuery.js';
-import { PendingTextAccumulator } from './pendingTextAccumulator.js';
+import { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface UseStreamStateReturn {
   initError: string | null;
@@ -60,7 +60,7 @@ export interface UseStreamStateReturn {
   tryReserveDrain: () => boolean;
   releaseDrain: () => void;
   submitQueryRef: React.MutableRefObject<SubmissionExecutor | null>;
-  pendingTextAccumulator: PendingTextAccumulator;
+  pendingResponse: PendingResponseBuffer;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -120,12 +120,7 @@ function useSanitizeContent(emojiFilter: EmojiFilter | undefined) {
 function useFlushPendingHistoryItem(
   addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>,
-  pendingTextAccumulator: PendingTextAccumulator,
-  sanitizeContent: (text: string) => {
-    text: string;
-    blocked: boolean;
-    feedback?: string;
-  },
+  pendingResponse: PendingResponseBuffer,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
@@ -135,72 +130,78 @@ function useFlushPendingHistoryItem(
     (timestamp: number) => {
       const pending = pendingHistoryItemRef.current;
       if (!pending) {
-        pendingTextAccumulator.clear();
         return;
       }
 
       if (pending.type === 'gemini' || pending.type === 'gemini_content') {
-        const accumulatedText = pendingTextAccumulator.materialize();
-        const text = accumulatedText || pending.text;
-        const exactPending = {
-          ...pending,
-          text,
-        };
-        const {
-          text: sanitized,
-          feedback,
-          blocked,
-        } = sanitizeContent(exactPending.text);
-
-        if (blocked) {
-          addItem(
-            {
-              type: MessageType.ERROR,
-              text: '[Error: Response blocked due to emoji detection]',
-            },
-            timestamp,
-          );
-
-          if (feedback) {
-            addItem({ type: MessageType.INFO, text: feedback }, timestamp);
-          }
-
-          setPendingHistoryItem(null);
-          pendingTextAccumulator.clear();
-          thinkingBlocksRef.current = [];
-          return;
-        }
-
-        const itemWithThinking = {
-          ...exactPending,
-          text: sanitized,
-          ...(thinkingBlocksRef.current.length > 0
-            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
-            : {}),
-        };
-
-        addItem(itemWithThinking, timestamp);
-        thinkingBlocksRef.current = [];
-
-        if (feedback) {
-          addItem({ type: MessageType.INFO, text: feedback }, timestamp);
-        }
+        commitAiPendingItem(
+          pending,
+          timestamp,
+          addItem,
+          pendingResponse,
+          thinkingBlocksRef,
+        );
       } else {
         addItem(pending, timestamp);
       }
 
       setPendingHistoryItem(null);
-      pendingTextAccumulator.clear();
     },
     [
       addItem,
       pendingHistoryItemRef,
-      pendingTextAccumulator,
-      sanitizeContent,
+      pendingResponse,
       setPendingHistoryItem,
       thinkingBlocksRef,
     ],
   );
+}
+
+/**
+ * Commits the in-progress assistant response. The text comes from
+ * {@link PendingResponseBuffer}, which sanitised it incrementally as it
+ * streamed, so no whole-text pass is needed here (issue #2852).
+ */
+function commitAiPendingItem(
+  pending: HistoryItemWithoutId,
+  timestamp: number,
+  addItem: (item: HistoryItemWithoutId, timestamp: number) => number,
+  pendingResponse: PendingResponseBuffer,
+  thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
+): void {
+  const { text, feedback, blocked } = pendingResponse.materialize();
+  pendingResponse.reset();
+  const thinkingBlocks = thinkingBlocksRef.current;
+  thinkingBlocksRef.current = [];
+
+  if (blocked) {
+    addItem(
+      {
+        type: MessageType.ERROR,
+        text: '[Error: Response blocked due to emoji detection]',
+      },
+      timestamp,
+    );
+    if (feedback) {
+      addItem({ type: MessageType.INFO, text: feedback }, timestamp);
+    }
+    return;
+  }
+
+  addItem(
+    {
+      ...pending,
+      text,
+      ...(thinkingBlocks.length > 0
+        ? { thinkingBlocks: [...thinkingBlocks] }
+        : {}),
+    },
+    timestamp,
+  );
+
+  if (feedback) {
+    addItem({ type: MessageType.INFO, text: feedback }, timestamp);
+  }
 }
 
 function useBasicStreamState() {
@@ -229,10 +230,6 @@ function useBasicStreamState() {
     releaseDrain,
   } = useQueuedSubmissions();
   const submitQueryRef = useRef<SubmissionExecutor | null>(null);
-  const pendingTextAccumulator = useMemo(
-    () => new PendingTextAccumulator(32),
-    [],
-  );
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
   return {
@@ -262,7 +259,6 @@ function useBasicStreamState() {
     tryReserveDrain,
     releaseDrain,
     submitQueryRef,
-    pendingTextAccumulator,
     thinkingBlocksRef,
   };
 }
@@ -276,11 +272,14 @@ export function useStreamState(
 
   const emojiFilter = useEmojiFilter(runtime);
   const sanitizeContent = useSanitizeContent(emojiFilter);
+  const pendingResponse = useMemo(
+    () => new PendingResponseBuffer(emojiFilter),
+    [emojiFilter],
+  );
   const flushPendingHistoryItem = useFlushPendingHistoryItem(
     addItem,
     basic.pendingHistoryItemRef,
-    basic.pendingTextAccumulator,
-    sanitizeContent,
+    pendingResponse,
     basic.setPendingHistoryItem,
     basic.thinkingBlocksRef,
   );
@@ -295,6 +294,7 @@ export function useStreamState(
 
   return {
     ...basic,
+    pendingResponse,
     sanitizeContent,
     flushPendingHistoryItem,
     logger,

@@ -25,7 +25,7 @@ import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingTextAccumulator } from '../pendingTextAccumulator.js';
+import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 describe('useDisplayUserMessage — consolidated profile_change path (issue #1770)', () => {
   const mockConfig = {
@@ -63,7 +63,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         onCancelSubmit: vi.fn(),
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: vi.fn(),
-        pendingTextAccumulator: new PendingTextAccumulator(32),
+        pendingResponse: new PendingResponseBuffer(undefined),
         pendingHistoryItemRef: {
           current: null,
         } as React.MutableRefObject<HistoryItemWithoutId | null>,
@@ -144,7 +144,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         onCancelSubmit: vi.fn(),
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: vi.fn(),
-        pendingTextAccumulator: new PendingTextAccumulator(32),
+        pendingResponse: new PendingResponseBuffer(undefined),
         pendingHistoryItemRef: {
           current: null,
         } as React.MutableRefObject<HistoryItemWithoutId | null>,

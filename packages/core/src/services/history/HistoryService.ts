@@ -94,9 +94,10 @@ export class HistoryService
    */
   private tokenizerFactory?: RuntimeTokenizerFactory;
 
-  private static readonly MAX_PENDING_COMPRESSION_OPERATIONS = 4096;
+  private static readonly COMPRESSION_QUEUE_HIGH_WATER = 4096;
   private isCompressing: boolean = false;
   private pendingOperations: Array<() => void> = [];
+  private pendingCompressionHighWaterReported: boolean = false;
 
   /**
    * @plan:PLAN-20260603-ISSUE1584.P05
@@ -295,19 +296,30 @@ export class HistoryService
     this.addInternal(content, modelName);
   }
 
+  /**
+   * Queues an operation that arrived while compression held the history lock.
+   *
+   * Operations are never dropped and never rejected: `add()` is on the
+   * streaming path, so failing here would lose conversation content and could
+   * break a turn. `startCompression`/`endCompression` are balanced in a
+   * `finally` by the only caller (`CompressionHandler.performCompression`), so
+   * the lock is always released and the queue is bounded by how long a single
+   * compression takes. Crossing the high-water mark is reported once so an
+   * unbalanced lock would be diagnosable rather than silent (issue #2852).
+   */
   private queueCompressionOperation(operation: () => void): void {
+    this.pendingOperations.push(operation);
     if (
+      !this.pendingCompressionHighWaterReported &&
       this.pendingOperations.length >=
-      HistoryService.MAX_PENDING_COMPRESSION_OPERATIONS
+        HistoryService.COMPRESSION_QUEUE_HIGH_WATER
     ) {
+      this.pendingCompressionHighWaterReported = true;
       this.logger.error(
-        'History compression queue limit exceeded, draining queue',
+        'History compression queue exceeded its high-water mark; the compression lock is being held for an unexpectedly long time. No operations are dropped.',
         { pendingCount: this.pendingOperations.length },
       );
-      this.pendingOperations = [];
-      throw new Error('History compression queue limit exceeded');
     }
-    this.pendingOperations.push(operation);
   }
 
   private addInternal(content: IContent, modelName?: string): void {
@@ -883,6 +895,7 @@ export class HistoryService
     });
 
     this.isCompressing = false;
+    this.pendingCompressionHighWaterReported = false;
 
     // Flush all pending operations
     const operations = this.pendingOperations;

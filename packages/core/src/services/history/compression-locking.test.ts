@@ -56,25 +56,48 @@ describe('Compression locking', () => {
     expect(allHistory[1].blocks[0].type).toBe('tool_call');
   });
 
-  it('fails fast when stalled compression would retain unbounded additions', () => {
+  it('never drops or rejects additions queued during a long compression', () => {
+    // Issue #2852: an earlier attempt threw from add() and discarded the queue
+    // once it passed a bound. add() is on the streaming path, so that lost
+    // conversation content and could break a turn.
     historyService.startCompression();
 
-    expect(() => {
-      for (let index = 0; index <= 4096; index += 1) {
-        historyService.add({
-          speaker: 'human',
-          blocks: [{ type: 'text', text: `queued-${index}` }],
-        });
-      }
-    }).toThrow('compression queue limit');
+    const queued = 5_000;
+    for (let index = 0; index < queued; index += 1) {
+      historyService.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `queued-${index}` }],
+      });
+    }
+    expect(historyService.getAll()).toHaveLength(0);
 
-    // After overflow, isCompressing remains true — the orchestrator must call
-    // endCompression to reset state and drain the cleared queue.
     historyService.endCompression();
+
+    const all = historyService.getAll();
+    expect({
+      count: all.length,
+      first: all[0].blocks[0],
+      last: all[all.length - 1].blocks[0],
+    }).toStrictEqual({
+      count: queued,
+      first: { type: 'text', text: 'queued-0' },
+      last: { type: 'text', text: `queued-${queued - 1}` },
+    });
+  });
+
+  it('releases the compression lock even when the compression body throws', () => {
+    // The queue's bound is the duration of the lock, so the lock must always be
+    // released. This mirrors CompressionHandler.performCompression's finally.
+    historyService.startCompression();
+    try {
+      throw new Error('compression failed');
+    } catch {
+      historyService.endCompression();
+    }
 
     historyService.add({
       speaker: 'human',
-      blocks: [{ type: 'text', text: 'accepted after fail-fast reset' }],
+      blocks: [{ type: 'text', text: 'applied immediately' }],
     });
     expect(historyService.getAll()).toHaveLength(1);
   });

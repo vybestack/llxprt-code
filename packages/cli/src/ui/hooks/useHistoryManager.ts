@@ -15,7 +15,17 @@ import {
 
 let globalMessageIdCounter = 0;
 
-const TRUNCATION_MARKER = '\n[... truncated to history limit ...]\n';
+/**
+ * Marker inserted when an item is too large for the on-screen scrollback
+ * budget. The bound is display-only: the model's copy lives in the core
+ * `HistoryService` and the complete text is written to the session transcript,
+ * so nothing is lost (issue #2852).
+ */
+const TRUNCATION_MARKER =
+  '\n[... middle omitted from display; full text is in the session transcript ...]\n';
+
+const DISPLAY_BOUND_NOTICE =
+  '[Item too large to display; full text is in the session transcript]';
 
 type HistoryItemUpdater = (
   prevItem: HistoryItem,
@@ -295,59 +305,86 @@ function boundHistoryItem(
   const fallback: HistoryItem = {
     id: item.id,
     type: 'info',
-    text: '[History item truncated to byte limit]',
+    text: DISPLAY_BOUND_NOTICE,
   };
   return estimateHistoryItemBytes(fallback) <= maxBytes ? fallback : undefined;
 }
 
+/**
+ * Fits `text` into the item's byte budget.
+ *
+ * The budget is computed directly from the item's serialised overhead rather
+ * than by binary-searching over `JSON.stringify` of the whole item, which cost
+ * `O(log n)` full serialisations per oversized item (issue #2852). JSON
+ * escaping can still expand the preview, so the result is verified once and,
+ * if needed, rescaled once by the observed expansion.
+ */
 function fitHistoryText(
   item: HistoryItem,
   text: string,
   maxBytes: number,
 ): HistoryItem | undefined {
-  const characters = Array.from(text);
-  let low = 0;
-  let high = characters.length;
-  let fitted: HistoryItem | undefined;
-  while (low <= high) {
-    const count = Math.floor((low + high) / 2);
+  const overhead = estimateHistoryItemBytes({
+    ...item,
+    text: '',
+  } as HistoryItem);
+  const markerBytes = Buffer.byteLength(TRUNCATION_MARKER, 'utf8');
+  let budget = maxBytes - overhead - markerBytes;
+  if (budget <= 0) {
+    return undefined;
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const candidate: HistoryItem = {
       ...item,
-      text: previewText(characters, count),
+      text: previewText(text, budget),
     } as HistoryItem;
-    if (estimateHistoryItemBytes(candidate) <= maxBytes) {
-      fitted = candidate;
-      low = count + 1;
-    } else {
-      high = count - 1;
+    const measured = estimateHistoryItemBytes(candidate);
+    if (measured <= maxBytes) {
+      return candidate;
+    }
+    budget = Math.floor(
+      (budget * (maxBytes - overhead)) / (measured - overhead),
+    );
+    if (budget <= 0) {
+      return undefined;
     }
   }
-  return fitted;
+  return undefined;
 }
 
-function previewText(characters: readonly string[], count: number): string {
-  const prefixCount = Math.ceil(count / 2);
-  const suffixCount = Math.floor(count / 2);
-  return `${characters.slice(0, prefixCount).join('')}${TRUNCATION_MARKER}${characters.slice(characters.length - suffixCount).join('')}`;
+/** Head and tail of `text` fitting `maxBytes`, joined by the display marker. */
+function previewText(text: string, maxBytes: number): string {
+  const headBytes = Math.ceil(maxBytes / 2);
+  const tailBytes = Math.floor(maxBytes / 2);
+  return `${takeUtf8(text, headBytes, false)}${TRUNCATION_MARKER}${takeUtf8(text, tailBytes, true)}`;
 }
 
 function boundUtf8Text(text: string, maxBytes: number): string {
   if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
     return text;
   }
-  const characters = Array.from(text);
-  let low = 0;
-  let high = characters.length;
-  let fitted = '';
-  while (low <= high) {
-    const count = Math.floor((low + high) / 2);
-    const candidate = previewText(characters, count);
-    if (Buffer.byteLength(candidate, 'utf8') <= maxBytes) {
-      fitted = candidate;
-      low = count + 1;
-    } else {
-      high = count - 1;
-    }
+  const markerBytes = Buffer.byteLength(TRUNCATION_MARKER, 'utf8');
+  const budget = maxBytes - markerBytes;
+  return budget > 0 ? previewText(text, budget) : '';
+}
+
+/** Head or tail of `text` within `maxBytes`, never splitting a code point. */
+function takeUtf8(text: string, maxBytes: number, fromEnd: boolean): string {
+  const bytes = Buffer.from(text, 'utf8');
+  if (bytes.length <= maxBytes) {
+    return text;
   }
-  return fitted;
+  if (!fromEnd) {
+    let end = maxBytes;
+    while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
+      end -= 1;
+    }
+    return bytes.subarray(0, end).toString('utf8');
+  }
+  let start = bytes.length - maxBytes;
+  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) {
+    start += 1;
+  }
+  return bytes.subarray(start).toString('utf8');
 }

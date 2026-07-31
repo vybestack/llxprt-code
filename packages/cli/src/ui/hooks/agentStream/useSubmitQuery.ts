@@ -42,7 +42,7 @@ import {
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime } from '../../cliUiRuntime.js';
 
-import type { PendingTextAccumulator } from './pendingTextAccumulator.js';
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 export type SubmissionDisposition =
   | 'consumed'
   | 'requeue'
@@ -91,7 +91,7 @@ export interface UseSubmitQueryDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
-  pendingTextAccumulator: PendingTextAccumulator;
+  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
@@ -185,7 +185,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     onCancelSubmit: deps.onCancelSubmit,
     sanitizeContent: deps.sanitizeContent,
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingTextAccumulator: deps.pendingTextAccumulator,
+    pendingResponse: deps.pendingResponse,
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
     thinkingBlocksRef: deps.thinkingBlocksRef,
     turnCancelledRef: deps.turnCancelledRef,

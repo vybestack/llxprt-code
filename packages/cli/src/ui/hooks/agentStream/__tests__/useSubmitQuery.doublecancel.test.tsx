@@ -40,7 +40,7 @@ import type {
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { LoadedSettings } from '../../../../config/settings.js';
 import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
-import { PendingTextAccumulator } from '../pendingTextAccumulator.js';
+import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 // ─── Module mocks ───────────────────────────────────────────────────────────
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 // useSubmitQuery internally calls useStreamEventHandlers and useSessionStats.
@@ -216,7 +216,7 @@ function createUseSubmitQueryDeps(
     recordingIntegration: overrides.recordingIntegration,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
-    pendingTextAccumulator: new PendingTextAccumulator(32),
+    pendingResponse: new PendingResponseBuffer(undefined),
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
     thinkingBlocksRef: { current: [] },
     turnCancelledRef: overrides.turnCancelledRef ?? { current: false },

@@ -22,12 +22,12 @@ import {
   MessageType,
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import { buildSplitContent, buildFullSplitItem } from './streamUtils.js';
-import type { PendingTextAccumulator } from './pendingTextAccumulator.js';
+import { buildFullSplitItem } from './streamUtils.js';
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface ContentEventDeps {
   addItem: UseHistoryManagerReturn['addItem'];
-  pendingTextAccumulator: PendingTextAccumulator;
+  pendingResponse: PendingResponseBuffer;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -68,6 +68,19 @@ function ensureAiPendingItem(
         : {}),
     });
   }
+}
+
+function buildAfterItem(
+  text: string,
+  liveProfileName: string | null,
+  existingProfileName: string | null | undefined,
+): HistoryItemAiContent {
+  const profileName = liveProfileName ?? existingProfileName ?? null;
+  return {
+    type: 'gemini_content',
+    text,
+    ...(profileName != null ? { profileName } : {}),
+  };
 }
 
 function applySplitResult(
@@ -166,12 +179,7 @@ export function processContentEvent(
   const rawIdentity = deps.getContentPrefixIdentity();
   const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
   const pendingType = getPendingAiType(deps.pendingHistoryItemRef.current);
-  const combined = eventValue;
-  const {
-    text: sanitizedCombined,
-    feedback,
-    blocked,
-  } = deps.sanitizeContent(combined);
+  const { feedback, blocked } = deps.pendingResponse.push(eventValue);
 
   const blockedResult = handleSanitizeFeedback(
     feedback,
@@ -181,7 +189,7 @@ export function processContentEvent(
     deps,
   );
   if (blockedResult !== null) {
-    deps.pendingTextAccumulator.clear();
+    deps.pendingResponse.reset();
     return blockedResult;
   }
 
@@ -200,28 +208,31 @@ export function processContentEvent(
       | HistoryItemAiContent
       | undefined
   )?.profileName;
-  const { splitPoint, beforeText, afterItem } = buildSplitContent(
-    sanitizedCombined,
-    liveProfileIdentity,
-    existingProfileName ?? null,
-    deps.thinkingBlocksRef.current,
-    pendingType,
-  );
+  const stableText = deps.pendingResponse.stableText;
+  const splitPoint = deps.pendingResponse.getSplitPoint();
 
-  if (splitPoint === sanitizedCombined.length) {
+  if (splitPoint === stableText.length) {
+    const displayText = deps.pendingResponse.displayText;
     deps.setPendingHistoryItem((item) =>
       buildFullSplitItem(
         item,
-        sanitizedCombined,
+        displayText,
         liveProfileIdentity,
         deps.thinkingBlocksRef.current,
       ),
     );
-    deps.pendingTextAccumulator.replace(sanitizedCombined);
-    return sanitizedCombined;
+    return displayText;
   }
 
-  const remaining = applySplitResult(
+  const beforeText = stableText.slice(0, splitPoint);
+  deps.pendingResponse.consume(splitPoint);
+  const afterItem = buildAfterItem(
+    deps.pendingResponse.displayText,
+    liveProfileIdentity,
+    existingProfileName ?? null,
+  );
+
+  return applySplitResult(
     beforeText,
     pendingType,
     liveProfileIdentity,
@@ -231,6 +242,4 @@ export function processContentEvent(
     afterItem,
     userMessageTimestamp,
   );
-  deps.pendingTextAccumulator.replace(remaining);
-  return remaining;
 }

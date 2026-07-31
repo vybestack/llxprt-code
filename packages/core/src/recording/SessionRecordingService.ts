@@ -43,8 +43,29 @@ import {
 } from './types.js';
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
-const MAX_PENDING_RECORDS = 4096;
-const MAX_PENDING_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Queue depth at which the writer is clearly not keeping up with production.
+ * Crossing it is reported once so the condition is diagnosable; records are
+ * never dropped, because the session file is the durable transcript.
+ */
+const QUEUE_HIGH_WATER_RECORDS = 4096;
+
+/**
+ * A record that has already been serialised. Serialising at enqueue time keeps
+ * byte accounting free and means each record — including large media payloads —
+ * is stringified exactly once instead of once for accounting and again for the
+ * write (issue #2852).
+ */
+interface PendingRecord {
+  readonly json: string;
+  readonly bytes: number;
+}
+
+function toPendingRecord(line: SessionRecordLine): PendingRecord {
+  const json = JSON.stringify(line);
+  return { json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
+}
 
 /**
  * Core service for recording session events to a JSONL file.
@@ -55,8 +76,9 @@ const MAX_PENDING_BYTES = 8 * 1024 * 1024;
  */
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
-  private queue: SessionRecordLine[] = [];
+  private queue: PendingRecord[] = [];
   private queueBytes: number = 0;
+  private highWaterReported: boolean = false;
   private seq: number = 0;
   private filePath: string | null = null;
   private materialized: boolean = false;
@@ -65,7 +87,7 @@ export class SessionRecordingService {
   private drainPromise: Promise<void> | null = null;
   private readonly sessionId: string;
   private readonly chatsDir: string;
-  private preContentBuffer: SessionRecordLine[] = [];
+  private preContentBuffer: PendingRecord[] = [];
   private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
@@ -107,16 +129,10 @@ export class SessionRecordingService {
       type,
       payload,
     };
-    const lineBytes = estimateRecordBytes(line);
-    if (
-      this.preContentBuffer.length + 1 > MAX_PENDING_RECORDS ||
-      this.preContentBytes + lineBytes > MAX_PENDING_BYTES
-    ) {
-      this.stopRecording();
-      return;
-    }
-    this.preContentBuffer.push(line);
-    this.preContentBytes += lineBytes;
+    const record = toPendingRecord(line);
+    this.preContentBuffer.push(record);
+    this.preContentBytes += record.bytes;
+    this.reportHighWater();
   }
 
   /**
@@ -135,7 +151,9 @@ export class SessionRecordingService {
       !this.materialized
     ) {
       this.materialize();
-      this.queue = [...this.queue, ...this.preContentBuffer];
+      for (const buffered of this.preContentBuffer) {
+        this.queue.push(buffered);
+      }
       this.queueBytes += this.preContentBytes;
       this.preContentBuffer = [];
       this.preContentBytes = 0;
@@ -155,17 +173,43 @@ export class SessionRecordingService {
       type,
       payload,
     };
-    const lineBytes = estimateRecordBytes(line);
+    const record = toPendingRecord(line);
+    this.queue.push(record);
+    this.queueBytes += record.bytes;
+    this.reportHighWater();
+    this.scheduleDrain();
+  }
+
+  /**
+   * Reports, once, that the writer has fallen far behind. Deliberately does not
+   * drop records: the JSONL file is the durable transcript, and the queue is
+   * bounded in practice by disk throughput, which far exceeds the rate at which
+   * a model can produce content.
+   */
+  private reportHighWater(): void {
     if (
-      this.queue.length + 1 > MAX_PENDING_RECORDS ||
-      this.queueBytes + lineBytes > MAX_PENDING_BYTES
+      this.highWaterReported ||
+      this.queue.length + this.preContentBuffer.length <
+        QUEUE_HIGH_WATER_RECORDS
     ) {
-      this.stopRecording();
       return;
     }
-    this.queue.push(line);
-    this.queueBytes += lineBytes;
-    this.scheduleDrain();
+    this.highWaterReported = true;
+    debugLogger.error(
+      `[SessionRecording] pending queue exceeded ${QUEUE_HIGH_WATER_RECORDS} records ` +
+        `(${this.queueBytes + this.preContentBytes} bytes); the session file writer is behind. ` +
+        `No records are dropped.`,
+    );
+  }
+
+  /** Number of records waiting to be written. Zero once the queue has drained. */
+  getPendingRecordCount(): number {
+    return this.queue.length + this.preContentBuffer.length;
+  }
+
+  /** Bytes waiting to be written. Zero once the queue has drained. */
+  getPendingByteCount(): number {
+    return this.queueBytes + this.preContentBytes;
   }
 
   /**
@@ -242,8 +286,7 @@ export class SessionRecordingService {
         const batch = [...this.queue];
         this.queue = [];
         this.queueBytes = 0;
-        const lines =
-          batch.map((event) => JSON.stringify(event)).join('\n') + '\n';
+        const lines = batch.map((record) => record.json).join('\n') + '\n';
         const shouldContinue = await this.writeBatchToFile(lines);
         if (!shouldContinue) {
           return;
@@ -292,6 +335,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 148-160
    */
   async flush(): Promise<void> {
+    if (!this.active) return;
     if (this.queue.length === 0 && !this.draining) return;
 
     if (this.drainPromise) {
@@ -367,7 +411,9 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 181-185
    */
   async dispose(): Promise<void> {
-    await this.flush();
+    if (this.active) {
+      await this.flush();
+    }
     this.active = false;
     this.queue = [];
     this.queueBytes = 0;
@@ -555,17 +601,4 @@ export class SessionRecordingService {
   getSessionMetadataTitle(): string | null | undefined {
     return this.sessionTitle;
   }
-
-  private stopRecording(): void {
-    this.scheduleDrain();
-    this.active = false;
-    this.preContentBuffer = [];
-    this.preContentBytes = 0;
-    this.chatsDirWatcher?.close();
-    this.chatsDirWatcher = null;
-  }
-}
-
-function estimateRecordBytes(line: SessionRecordLine): number {
-  return Buffer.byteLength(JSON.stringify(line), 'utf8') + 1;
 }

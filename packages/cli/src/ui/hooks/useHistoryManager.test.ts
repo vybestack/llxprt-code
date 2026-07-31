@@ -235,25 +235,39 @@ describe('useHistoryManager', () => {
     expect(result.current.history).toHaveLength(1);
 
     act(() => {
-      result.current.addItem({ type: 'info', text: 'small' }, timestamp + 1);
+      result.current.addItem(
+        { type: 'info', text: 'y'.repeat(150) },
+        timestamp + 1,
+      );
     });
 
     expect(result.current.history).toHaveLength(1);
-    expect(result.current.history[0].text).toBe('small');
+    expect(result.current.history[0].text).toBe('y'.repeat(150));
   });
 
-  it('hard-bounds an oversized newest item with a UTF-8-safe preview', () => {
+  it('bounds an oversized newest item for display with a UTF-8-safe preview', () => {
     const { result } = renderHook(() =>
-      useHistory({ maxItems: 10, maxBytes: 200 }),
+      useHistory({ maxItems: 10, maxBytes: 400 }),
     );
 
     act(() => {
       result.current.addItem({ type: 'info', text: '\u{1F642}'.repeat(500) });
     });
 
+    const text = result.current.history[0].text as string;
     const serialized = JSON.stringify(result.current.history[0]);
-    expect(Buffer.byteLength(serialized, 'utf8')).toBeLessThanOrEqual(200);
-    expect(result.current.history[0].text).toContain('truncated');
+    expect({
+      withinBudget: Buffer.byteLength(serialized, 'utf8') <= 400,
+      // The bound is display-only, and says so, so the user knows where the
+      // complete text lives (issue #2852).
+      explainsBound: text.includes('full text is in the session transcript'),
+      // UTF-8 safe: no replacement characters from a split code point.
+      noSplitCodePoints: !text.includes('\uFFFD'),
+    }).toStrictEqual({
+      withinBudget: true,
+      explainsBound: true,
+      noSplitCodePoints: true,
+    });
   });
 
   it('hard-bounds oversized raw tool output retained by UI history', () => {

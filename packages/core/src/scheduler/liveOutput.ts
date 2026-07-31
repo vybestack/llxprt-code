@@ -42,56 +42,64 @@ function preserveLiveOutput(existing: unknown): string | AnsiOutput {
  * includes `FileDiff` / `FileRead`). The returned type is the narrow
  * `string | AnsiOutput` union the live-output channel actually produces.
  */
-const MAX_LIVE_OUTPUT_BYTES = 1024 * 1024;
-const RETAINED_LIVE_OUTPUT_SIDE_BYTES = 64 * 1024;
-const LIVE_OUTPUT_TRUNCATION_MARKER = '\n[... live output truncated ...]\n';
+/**
+ * Retention budget for the in-progress preview, in UTF-16 code units.
+ *
+ * Live output is a preview of a running tool: the caller replaces
+ * `resultDisplay` with the tool's complete result once execution finishes, so
+ * trimming here does not lose the tool's output. Before issue #2852 this
+ * accumulator grew without bound, which made a long-running tool's preview a
+ * retained-memory leak and made each append `O(accumulated)`.
+ *
+ * Only the newest output is retained, which is what a terminal shows anyway.
+ * Trimming down to {@link RETAINED_LIVE_OUTPUT_CHARS} gives the trim path
+ * hysteresis, so its cost amortises to O(1) per character appended.
+ */
+const MAX_LIVE_OUTPUT_CHARS = 256 * 1024;
+const RETAINED_LIVE_OUTPUT_CHARS = 128 * 1024;
+const LIVE_OUTPUT_TRUNCATION_MARKER = '[... earlier live output trimmed ...]\n';
 
-function takeUtf8(text: string, maxBytes: number, fromEnd: boolean): string {
-  const bytes = Buffer.from(text, 'utf8');
-  if (bytes.length <= maxBytes) {
+/**
+ * Last `maxChars` code units of `text`, never splitting a surrogate pair.
+ */
+function takeTail(text: string, maxChars: number): string {
+  if (maxChars <= 0) {
+    return '';
+  }
+  if (text.length <= maxChars) {
     return text;
   }
-  if (!fromEnd) {
-    let end = maxBytes;
-    while (end > 0 && (bytes[end] & 0xc0) === 0x80) {
-      end -= 1;
-    }
-    return bytes.subarray(0, end).toString('utf8');
-  }
-  let start = bytes.length - maxBytes;
-  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) {
+  let start = text.length - maxChars;
+  const code = text.charCodeAt(start);
+  if (code >= 0xdc00 && code <= 0xdfff) {
     start += 1;
   }
-  return bytes.subarray(start).toString('utf8');
+  return text.slice(start);
 }
 
+/**
+ * Appends `update`, keeping the newest {@link RETAINED_LIVE_OUTPUT_CHARS} code
+ * units once the accumulated preview passes {@link MAX_LIVE_OUTPUT_CHARS}.
+ *
+ * The truncation marker is re-derived on every trim and is never read back, so
+ * tool output that itself contains the marker text cannot corrupt the
+ * accumulator.
+ */
 function appendBoundedLiveOutput(existing: string, update: string): string {
-  const markerIndex = existing.indexOf(LIVE_OUTPUT_TRUNCATION_MARKER);
-  if (markerIndex >= 0) {
-    const prefix = `${existing.slice(0, markerIndex)}${LIVE_OUTPUT_TRUNCATION_MARKER}`;
-    if (Buffer.byteLength(update, 'utf8') >= RETAINED_LIVE_OUTPUT_SIDE_BYTES) {
-      return prefix + takeUtf8(update, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true);
-    }
-    const suffixStart = markerIndex + LIVE_OUTPUT_TRUNCATION_MARKER.length;
-    const oldSuffix = existing.slice(suffixStart);
-    const oldSuffixBytes = Buffer.byteLength(oldSuffix, 'utf8');
-    const updateBytes = Buffer.byteLength(update, 'utf8');
-    if (oldSuffixBytes + updateBytes <= RETAINED_LIVE_OUTPUT_SIDE_BYTES) {
-      return prefix + oldSuffix + update;
-    }
-    // Avoid materializing the full combined suffix; take from each side.
-    const halfBudget = RETAINED_LIVE_OUTPUT_SIDE_BYTES / 2;
-    return `${prefix}${takeUtf8(oldSuffix, halfBudget, false)}${takeUtf8(update, halfBudget, true)}`;
-  }
-  const existingBytes = Buffer.byteLength(existing, 'utf8');
-  const updateBytes = Buffer.byteLength(update, 'utf8');
-  const totalBytes = existingBytes + updateBytes;
-  if (totalBytes <= MAX_LIVE_OUTPUT_BYTES) {
+  if (existing.length + update.length <= MAX_LIVE_OUTPUT_CHARS) {
     return existing + update;
   }
-  // Avoid materializing the full combined string; take from each side.
-  const halfBudget = RETAINED_LIVE_OUTPUT_SIDE_BYTES;
-  return `${takeUtf8(existing, halfBudget, false)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(update, halfBudget, true)}`;
+  if (update.length >= RETAINED_LIVE_OUTPUT_CHARS) {
+    return (
+      LIVE_OUTPUT_TRUNCATION_MARKER +
+      takeTail(update, RETAINED_LIVE_OUTPUT_CHARS)
+    );
+  }
+  const keptFromExisting = takeTail(
+    existing,
+    RETAINED_LIVE_OUTPUT_CHARS - update.length,
+  );
+  return LIVE_OUTPUT_TRUNCATION_MARKER + keptFromExisting + update;
 }
 
 export function accumulateLiveOutput(
