@@ -410,6 +410,38 @@ function useLockedRemoval({
   }, [addItem, removeRule, setIsCommitting, committingRef, mountedRef]);
 }
 
+/** Dispatches the non-trust-level entries of the trust form. */
+function useFormActionRunner(
+  viewState: ViewState,
+  runLockedRemoval: () => Promise<void>,
+): (action: TrustFormAction) => Promise<void> {
+  const { setPathDraft, setPathError, setView } = viewState;
+  return useCallback(
+    async (action: TrustFormAction): Promise<void> => {
+      switch (action) {
+        case TrustFormAction.ADD_FOLDER:
+          setPathDraft('');
+          setPathError(null);
+          setView('path-entry');
+          break;
+        case TrustFormAction.MANAGE_RULES:
+          setView('rules');
+          break;
+        case TrustFormAction.REMOVE_RULE:
+          await runLockedRemoval();
+          break;
+        default: {
+          // Compile-time exhaustiveness: a new TrustFormAction fails to build
+          // here rather than silently falling into one of the branches above.
+          const unhandled: never = action;
+          throw new Error(`Unhandled trust form action: ${String(unhandled)}`);
+        }
+      }
+    },
+    [runLockedRemoval, setPathDraft, setPathError, setView],
+  );
+}
+
 export interface PermissionsTrustDialogFlow {
   view: TrustDialogView;
   targetPath: string;
@@ -451,14 +483,13 @@ export function usePermissionsTrustDialogFlow(
   const [isCommitting, setIsCommitting] = useState(false);
   const committingRef = useRef(false);
   const mountedRef = useMountedRef();
-  const { view, setView, pathDraft, setPathDraft, pathError, setPathError } =
-    viewState;
+  const { view, pathDraft, setPathDraft, pathError } = viewState;
 
   const commitLevel = useCommitLevel({
     trust,
     addItem,
     onExit,
-    setView,
+    setView: viewState.setView,
     setFormOrigin: viewState.setFormOrigin,
     setIsCommitting,
     committingRef,
@@ -475,33 +506,17 @@ export function usePermissionsTrustDialogFlow(
     mountedRef,
   });
 
+  const runAction = useFormActionRunner(viewState, runLockedRemoval);
+
   const selectChoice = useCallback(
     async (choice: TrustFormChoice): Promise<void> => {
       // A write is in flight; ignore further selections so a late-resolving
       // commit cannot overwrite a view the user navigated to in the meantime.
       if (committingRef.current) return;
-      if (!isTrustFormAction(choice)) {
-        if (isTrustLevel(choice)) await commitLevel(choice);
-        return;
-      }
-      if (choice === TrustFormAction.ADD_FOLDER) {
-        setPathDraft('');
-        setPathError(null);
-        setView('path-entry');
-      } else if (choice === TrustFormAction.MANAGE_RULES) {
-        setView('rules');
-      } else {
-        await runLockedRemoval();
-      }
+      if (isTrustFormAction(choice)) await runAction(choice);
+      else if (isTrustLevel(choice)) await commitLevel(choice);
     },
-    [
-      commitLevel,
-      runLockedRemoval,
-      setPathDraft,
-      setPathError,
-      setView,
-      committingRef,
-    ],
+    [commitLevel, runAction, committingRef],
   );
 
   const display = useTrustFormDisplay(trust);

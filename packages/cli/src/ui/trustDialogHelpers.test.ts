@@ -314,7 +314,9 @@ describe('trustDialogHelpers', () => {
       const manage = options.find(
         (option) => option.value === TrustFormAction.MANAGE_RULES,
       );
-      expect(manage?.label).toContain('7');
+      // Exact match: a substring check would also accept "(17)" or a label that
+      // lost its parentheses.
+      expect(manage?.label).toBe('Manage existing rules (7)…');
     });
 
     it('offers removal only when the folder has a direct rule', () => {
@@ -339,9 +341,16 @@ describe('trustDialogHelpers', () => {
   });
 
   describe('isTrustFormAction', () => {
-    it('distinguishes navigation actions from trust levels', () => {
-      expect(isTrustFormAction(TrustFormAction.ADD_FOLDER)).toBe(true);
-      expect(isTrustFormAction(TrustLevel.TRUST_FOLDER)).toBe(false);
+    it('accepts every form action', () => {
+      for (const action of Object.values(TrustFormAction)) {
+        expect(isTrustFormAction(action)).toBe(true);
+      }
+    });
+
+    it('rejects every trust level', () => {
+      for (const level of Object.values(TrustLevel)) {
+        expect(isTrustFormAction(level)).toBe(false);
+      }
     });
   });
 
@@ -362,6 +371,11 @@ describe('trustDialogHelpers', () => {
 
       expect(options[0].label.startsWith('[Not trusted]')).toBe(true);
       expect(options[0].label).toContain(deepPath);
+    });
+
+    it('returns no options when nothing is configured', () => {
+      // The state the manage-rules view opens in before any rule exists.
+      expect(buildTrustRuleOptions([])).toStrictEqual([]);
     });
 
     it('returns one option per rule', () => {

@@ -15,7 +15,8 @@ export type NormalizeTrustPathResult =
 export type TrustPathProblem =
   | 'path-required'
   | 'not-found'
-  | 'not-a-directory';
+  | 'not-a-directory'
+  | 'not-accessible';
 
 function stripSurroundingQuotes(value: string): string {
   if (value.length < 2) {
@@ -73,6 +74,7 @@ const TRUST_PATH_PROBLEM_MESSAGES: Readonly<Record<TrustPathProblem, string>> =
     'path-required': 'Enter a folder path to continue.',
     'not-found': 'That folder does not exist.',
     'not-a-directory': 'That path is not a folder.',
+    'not-accessible': 'That folder cannot be read.',
   };
 
 export function getTrustPathProblemMessage(problem: TrustPathProblem): string {
@@ -103,8 +105,17 @@ export function resolveTrustDirectory(
   try {
     canonicalPath = fs.realpathSync(normalized.normalizedPath);
     stats = fs.statSync(canonicalPath);
-  } catch {
-    return { ok: false, problem: 'not-found' };
+  } catch (error) {
+    // A path that exists but cannot be read reports its own problem: telling
+    // the user it does not exist would send them looking for the wrong thing.
+    const code = (error as NodeJS.ErrnoException).code;
+    return {
+      ok: false,
+      problem:
+        code === 'ENOENT' || code === 'ENOTDIR'
+          ? 'not-found'
+          : 'not-accessible',
+    };
   }
   if (!stats.isDirectory()) {
     return { ok: false, problem: 'not-a-directory' };

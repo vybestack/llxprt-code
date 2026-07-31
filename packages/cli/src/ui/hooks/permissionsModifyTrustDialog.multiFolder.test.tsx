@@ -255,6 +255,29 @@ describe('permissions dialog multi-folder flow', () => {
     expect(result.current.pathError).toBe('That path is not a folder.');
   });
 
+  it('C4: reports an unreadable folder distinctly from a missing one', async () => {
+    const blocked = path.join(tempRoot, 'blocked');
+    fs.mkdirSync(blocked);
+    const target = path.join(blocked, 'inner');
+    fs.mkdirSync(target);
+    fs.chmodSync(blocked, 0o000);
+    const { result } = renderFlow();
+
+    try {
+      await act(async () => {
+        await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
+      });
+      act(() => result.current.setPathDraft(target));
+      act(() => result.current.submitPath());
+
+      // Saying "does not exist" here would send the user looking for a folder
+      // that is in fact present but unreadable.
+      expect(result.current.pathError).toBe('That folder cannot be read.');
+    } finally {
+      fs.chmodSync(blocked, 0o700);
+    }
+  });
+
   it('C5: reports an empty submission and stays in the input', async () => {
     const { result } = renderFlow();
 
@@ -352,14 +375,55 @@ describe('permissions dialog multi-folder flow', () => {
     await act(async () => {
       await result.current.selectChoice(TrustFormAction.REMOVE_RULE);
     });
-    act(() => result.current.handleEscape());
 
-    // The rule is gone, so the form must no longer offer to remove it.
+    // The rule is gone, so the form must no longer offer to remove it. Asserted
+    // directly after the removal so nothing else can influence the result.
     expect(
       result.current.options.some(
         (option) => option.value === TrustFormAction.REMOVE_RULE,
       ),
     ).toBe(false);
+    expect(result.current.trustRules).toStrictEqual([]);
+  });
+
+  it('C10: reports a changed level when replacing an existing rule on the cwd', async () => {
+    mockedTrustedConfig.value = { [cwd]: TrustLevel.DO_NOT_TRUST };
+    const { result } = renderFlow();
+
+    await act(async () => {
+      await result.current.selectChoice(TrustLevel.TRUST_FOLDER);
+    });
+
+    // Replacing DO_NOT_TRUST with TRUST_FOLDER is a change, so the dialog must
+    // show the updated prompt and say so rather than reporting it unchanged.
+    expect(result.current.view).toBe('updated');
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('set to Trusted'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('C10: reports an unchanged level when re-selecting the level already stored', async () => {
+    mockedTrustedConfig.value = { [cwd]: TrustLevel.TRUST_FOLDER };
+    const onExitLocal = vi.fn();
+    onExit = onExitLocal;
+    const { result } = renderFlow();
+
+    await act(async () => {
+      await result.current.selectChoice(TrustLevel.TRUST_FOLDER);
+    });
+
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('unchanged'),
+      }),
+      expect.any(Number),
+    );
+    expect(onExitLocal).toHaveBeenCalledTimes(1);
   });
 
   it('C13: a navigation action is ignored while a commit is still in flight', async () => {
