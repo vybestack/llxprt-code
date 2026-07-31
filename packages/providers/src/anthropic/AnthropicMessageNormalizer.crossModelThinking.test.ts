@@ -563,10 +563,23 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
   });
 
   it('does not require currentBaseURL — model mismatch alone still strips', () => {
-    // Backward compat: currentBaseURL is optional. Model-only mismatch still works.
+    // Backward compat: currentBaseURL is optional. Model-only mismatch (turn
+    // with metadata.model but NO providerBaseURL) still triggers the strip.
     const contents: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
-      assistantWithModelAndBaseURL('glm-5.2', ZAI_URL, 'zai-sig'),
+      {
+        speaker: 'ai',
+        metadata: { model: 'glm-5.2' },
+        blocks: [
+          {
+            type: 'thinking',
+            thought: 'reasoning',
+            sourceField: 'thinking',
+            signature: 'sig',
+          } as ThinkingBlock,
+          { type: 'text', text: 'hello' },
+        ],
+      },
     ];
 
     const messages = convertToAnthropicMessages(contents, {
@@ -640,6 +653,32 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
           (b as { data?: unknown }).data === 'zai-sig',
       ),
     ).toBe(false);
+  });
+
+  it('treats trailing-slash URL variants as the same endpoint (normalization)', () => {
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      assistantWithModelAndBaseURL(
+        'claude-sonnet-4-5-20250929',
+        'https://api.z.ai/api/anthropic/',
+        'zai-sig',
+      ),
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-sonnet-4-5-20250929',
+      currentBaseURL: 'https://api.z.ai/api/anthropic',
+      logger: noopLogger,
+    });
+
+    // Same endpoint (trailing slash difference only) → thinking retained.
+    const blocks = flatAssistantBlocks(messages);
+    const thinking = blocks.find((b) => b.type === 'thinking') as
+      | { type: 'thinking'; signature?: string }
+      | undefined;
+    expect(thinking).toBeDefined();
+    expect(thinking?.signature).toBe('zai-sig');
   });
 });
 

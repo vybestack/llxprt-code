@@ -33,6 +33,45 @@ function buildStrippedAiTurn(
 }
 
 /**
+ * Normalize a base URL for comparison. Handles trailing slashes, hostname
+ * casing, and default ports so semantically identical endpoints compare equal.
+ */
+function normalizeBaseURL(url: string | undefined): string | undefined {
+  if (url === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    const port = getDefaultPort(parsed);
+    const pathname = stripTrailingSlashes(parsed.pathname);
+    return `${parsed.protocol}//${hostname}${port}${pathname}`;
+  } catch {
+    return stripTrailingSlashes(url.trim().toLowerCase());
+  }
+}
+
+function getDefaultPort(parsed: URL): string {
+  if (parsed.port === '') {
+    return '';
+  }
+  const isHttpsDefault = parsed.protocol === 'https:' && parsed.port === '443';
+  const isHttpDefault = parsed.protocol === 'http:' && parsed.port === '80';
+  if (isHttpsDefault || isHttpDefault) {
+    return '';
+  }
+  return `:${parsed.port}`;
+}
+
+function stripTrailingSlashes(value: string): string {
+  let result = value;
+  while (result.endsWith('/')) {
+    result = result.slice(0, -1);
+  }
+  return result;
+}
+
+/**
  * Determine whether an AI turn's model-bound thinking blocks are foreign to
  * the current request. Returns true when ANY of these conditions hold:
  *  1. The turn's `metadata.model` is set and differs from `currentModel`.
@@ -64,7 +103,8 @@ function isForeignThinkingTurn(
   }
 
   const turnModel = content.metadata?.model;
-  const turnBaseURL = content.metadata?.providerBaseURL;
+  const turnBaseURL = normalizeBaseURL(content.metadata?.providerBaseURL);
+  const normalizedCurrentBaseURL = normalizeBaseURL(currentBaseURL);
 
   if (turnModel !== undefined && turnModel !== currentModel) {
     return true;
@@ -74,7 +114,7 @@ function isForeignThinkingTurn(
   // When currentBaseURL is undefined (e.g. native Anthropic with no explicit
   // baseURL), any turn carrying a providerBaseURL stamp is foreign — its
   // signatures were minted at a different endpoint.
-  if (turnBaseURL !== undefined && turnBaseURL !== currentBaseURL) {
+  if (turnBaseURL !== undefined && turnBaseURL !== normalizedCurrentBaseURL) {
     return true;
   }
 
