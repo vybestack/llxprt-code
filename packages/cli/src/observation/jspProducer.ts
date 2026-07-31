@@ -86,7 +86,7 @@ export class JspProducer {
   ) {
     this.hooks = hooks;
     this.identity = hooks.createIdentity(bootstrap);
-    this.state = initProducerState(this.identity, nativeSession, hooks.now);
+    this.state = initProducerState(this.identity, nativeSession);
     this.queue = new JspBoundedQueue(new ProducerQueueSink(hooks.publish), {
       capacity: options.capacity ?? DEFAULT_QUEUE_CAPACITY,
     });

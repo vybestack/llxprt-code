@@ -61,7 +61,7 @@ describe('createProducerIdentity', () => {
 describe('initProducerState', () => {
   it('starts with sequence/cursor zero and idle activity', () => {
     const id = makeIdentity();
-    const state = initProducerState(id, nativeSession, () => 5000);
+    const state = initProducerState(id, nativeSession);
     expect(state.sourceSequence).toBe(0);
     expect(state.cursor).toBe(0);
     expect(state.activity).toBe('idle');
@@ -76,7 +76,7 @@ describe('initProducerState', () => {
 describe('turn lifecycle', () => {
   it('turn.started sets activity to thinking and anchors elapsed at zero', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(state, { type: 'turn.started' }, () => 200);
     expect(state.activity).toBe('thinking');
     expect(state.currentTurn).toStrictEqual({ startedAtMs: 200 });
@@ -84,7 +84,7 @@ describe('turn lifecycle', () => {
 
   it('turn.ended completed sets activity idle and clears turn', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(state, { type: 'turn.started' }, () => 200);
     state = applyTransition(
       state,
@@ -97,7 +97,7 @@ describe('turn lifecycle', () => {
 
   it('turn.ended failed sets activity idle', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(state, { type: 'turn.started' }, () => 200);
     state = applyTransition(
       state,
@@ -109,7 +109,7 @@ describe('turn lifecycle', () => {
 
   it('turn.ended cancelled sets activity idle', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(state, { type: 'turn.started' }, () => 200);
     state = applyTransition(
       state,
@@ -123,7 +123,7 @@ describe('turn lifecycle', () => {
 describe('activity and wait transitions', () => {
   it('activity.changed sets native activity', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'activity.changed', state: 'acting' },
@@ -134,7 +134,7 @@ describe('activity and wait transitions', () => {
 
   it('wait.opened sets the wait reason', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'wait.opened', reason: 'permission' },
@@ -145,7 +145,7 @@ describe('activity and wait transitions', () => {
 
   it('wait.resolved clears the wait', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'wait.opened', reason: 'question' },
@@ -159,7 +159,7 @@ describe('activity and wait transitions', () => {
 describe('todos', () => {
   it('todos.replaced sets the full list with positive revision', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       {
@@ -177,7 +177,7 @@ describe('todos', () => {
 
   it('ignores a stale revision (lower or equal)', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'todos.replaced', revision: 2, items: [] },
@@ -199,7 +199,7 @@ describe('todos', () => {
 describe('tool calls', () => {
   it('tool_call.created sets the last tool by creation order', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'tool_call.created', label: 'read_file', phase: 'proposed' },
@@ -213,7 +213,7 @@ describe('tool calls', () => {
 
   it('tool_call.phase_changed updates the phase when the label is the headline tool', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'tool_call.created', label: 'read_file', phase: 'proposed' },
@@ -238,7 +238,7 @@ describe('tool calls', () => {
 
   it('tool_call.phase_changed for a superseded tool neither updates nor advances the sequence', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       { type: 'tool_call.created', label: 'read_file', phase: 'proposed' },
@@ -270,7 +270,7 @@ describe('tool calls', () => {
 describe('assistant message commit boundary', () => {
   it('assistant_message.displayed sets last message only at commit', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(
       state,
       {
@@ -290,7 +290,7 @@ describe('assistant message commit boundary', () => {
 describe('monotonic ordering', () => {
   it('increments source_sequence by exactly one per event', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     expect(state.sourceSequence).toBe(0);
     state = applyTransition(state, { type: 'turn.started' }, () => 200);
     expect(state.sourceSequence).toBe(1);
@@ -307,7 +307,7 @@ describe('monotonic ordering', () => {
 describe('buildSnapshot', () => {
   it('produces a valid current snapshot reflecting all effects through cursor', () => {
     const id = makeIdentity();
-    let state = initProducerState(id, nativeSession, () => 100);
+    let state = initProducerState(id, nativeSession);
     state = applyTransition(state, { type: 'turn.started' }, () => 200);
     state = applyTransition(
       state,

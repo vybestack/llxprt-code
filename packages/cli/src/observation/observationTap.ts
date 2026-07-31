@@ -65,6 +65,83 @@ function mapToolStatus(
   }
 }
 
+/** Mutable correlation state scoped to a single turn. */
+interface TurnScope {
+  readonly toolLabels: Map<string, string>;
+  readonly awaitingConfirmation: Set<string>;
+}
+
+function routeToolEvent(
+  event: Extract<AgentEvent, { type: 'tool-status' | 'tool-result' }>,
+  target: ObservationTapTarget,
+  scope: TurnScope,
+): void {
+  if (event.type === 'tool-status') {
+    const label = scope.toolLabels.get(event.update.id) ?? event.update.name;
+    target.onToolPhaseChanged(label, mapToolStatus(event.update.status));
+    if (
+      mapToolStatus(event.update.status) !== 'awaiting_approval' &&
+      scope.awaitingConfirmation.delete(event.update.id) &&
+      scope.awaitingConfirmation.size === 0
+    ) {
+      target.onWaitResolved();
+    }
+    return;
+  }
+  const label = scope.toolLabels.get(event.result.id) ?? event.result.name;
+  target.onToolPhaseChanged(
+    label,
+    event.result.isError === true ? 'failed' : 'succeeded',
+  );
+  scope.toolLabels.delete(event.result.id);
+  if (
+    scope.awaitingConfirmation.delete(event.result.id) &&
+    scope.awaitingConfirmation.size === 0
+  ) {
+    target.onWaitResolved();
+  }
+}
+
+function routeEvent(
+  event: AgentEvent,
+  target: ObservationTapTarget,
+  scope: TurnScope,
+  resetTurnScopedState: () => void,
+): void {
+  switch (event.type) {
+    case 'text':
+      target.onAssistantChunk(event.text);
+      target.onActivityChanged('thinking');
+      break;
+    case 'thinking':
+      target.onActivityChanged('thinking');
+      break;
+    case 'tool-call':
+      scope.toolLabels.set(event.call.id, event.call.name);
+      target.onActivityChanged('acting');
+      target.onToolCreated(event.call.name, 'proposed');
+      break;
+    case 'tool-confirmation':
+      scope.awaitingConfirmation.add(event.confirmation.toolCallId);
+      target.onToolPhaseChanged(event.confirmation.name, 'awaiting_approval');
+      target.onWaitOpened('permission');
+      break;
+    case 'tool-status':
+    case 'tool-result':
+      routeToolEvent(event, target, scope);
+      break;
+    case 'error':
+      target.onSourceError(event.error.message, 'AGENT_ERROR');
+      break;
+    case 'done':
+      resetTurnScopedState();
+      target.onTurnEnded(mapDoneReason(event.reason));
+      break;
+    default:
+      break;
+  }
+}
+
 export function createObservationTap(
   target: ObservationTapTarget | null,
 ): ObservationTap {
@@ -76,8 +153,10 @@ export function createObservationTap(
       onFlushCommitted: () => undefined,
     };
   }
-  const toolLabels = new Map<string, string>();
-  const awaitingConfirmation = new Set<string>();
+  const scope: TurnScope = {
+    toolLabels: new Map<string, string>(),
+    awaitingConfirmation: new Set<string>(),
+  };
 
   /**
    * Tool correlation is turn-scoped. A cancelled or aborted turn never delivers
@@ -86,8 +165,8 @@ export function createObservationTap(
    * the session and leaking a stale wait into a later turn.
    */
   const resetTurnScopedState = (): void => {
-    toolLabels.clear();
-    awaitingConfirmation.clear();
+    scope.toolLabels.clear();
+    scope.awaitingConfirmation.clear();
   };
 
   return {
@@ -100,65 +179,7 @@ export function createObservationTap(
       target.onTurnEnded(outcome);
     },
     processEvent(event: AgentEvent): void {
-      switch (event.type) {
-        case 'text':
-          target.onAssistantChunk(event.text);
-          target.onActivityChanged('thinking');
-          break;
-        case 'thinking':
-          target.onActivityChanged('thinking');
-          break;
-        case 'tool-call':
-          toolLabels.set(event.call.id, event.call.name);
-          target.onActivityChanged('acting');
-          target.onToolCreated(event.call.name, 'proposed');
-          break;
-        case 'tool-confirmation':
-          awaitingConfirmation.add(event.confirmation.toolCallId);
-          target.onToolPhaseChanged(
-            event.confirmation.name,
-            'awaiting_approval',
-          );
-          target.onWaitOpened('permission');
-          break;
-        case 'tool-status': {
-          const label = toolLabels.get(event.update.id) ?? event.update.name;
-          const phase = mapToolStatus(event.update.status);
-          target.onToolPhaseChanged(label, phase);
-          if (
-            phase !== 'awaiting_approval' &&
-            awaitingConfirmation.delete(event.update.id) &&
-            awaitingConfirmation.size === 0
-          ) {
-            target.onWaitResolved();
-          }
-          break;
-        }
-        case 'tool-result': {
-          const label = toolLabels.get(event.result.id) ?? event.result.name;
-          target.onToolPhaseChanged(
-            label,
-            event.result.isError === true ? 'failed' : 'succeeded',
-          );
-          toolLabels.delete(event.result.id);
-          if (
-            awaitingConfirmation.delete(event.result.id) &&
-            awaitingConfirmation.size === 0
-          ) {
-            target.onWaitResolved();
-          }
-          break;
-        }
-        case 'error':
-          target.onSourceError(event.error.message, 'AGENT_ERROR');
-          break;
-        case 'done':
-          resetTurnScopedState();
-          target.onTurnEnded(mapDoneReason(event.reason));
-          break;
-        default:
-          break;
-      }
+      routeEvent(event, target, scope, resetTurnScopedState);
     },
     onFlushCommitted(content: string, committedMs: number): void {
       if (content.length > 0) {

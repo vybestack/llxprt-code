@@ -99,7 +99,6 @@ export interface JspProducerState {
 export function initProducerState(
   identity: JspProducerIdentity,
   nativeSession: JspNativeSession,
-  _now: NowFn,
 ): JspProducerState {
   return {
     identity,
@@ -178,8 +177,8 @@ export function applyTransition(
         });
       }
       // A phase change for a tool that is no longer the headline is ignored.
-      // Advancing the sequence here would publish a revision that carries no
-      // state change, matching how a stale todo revision is handled.
+      // Advancing the sequence here would publish a revision carrying no state
+      // change, which is also how a stale task-list revision is handled.
       return state;
     }
     case 'assistant_message.displayed': {

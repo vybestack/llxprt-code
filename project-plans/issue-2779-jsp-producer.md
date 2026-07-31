@@ -109,9 +109,52 @@ Deliver one issue-linked LLxprt Code pull request implementing the opt-in native
 
 ## Review counters
 
-- Independent review/remediation cycles: 0 of 2.
-- Local OCR: 0 of 2.
+- Independent review/remediation cycles: 0 of 2. Subagent reviewers were
+  unavailable for this run: every configured profile returned a provider error
+  (usage limit reached, missing API key, or load-balancer exhaustion). This work
+  has had no independent TypeScript reviewer.
+- Local OCR: 1 of 2.
 - PR OCR: 0 of 2.
+
+## Review dispositions
+
+Addressed:
+
+- Foreground isolation. Every observation entry point is wrapped at the wiring
+  boundary rather than at individual call sites, so a tap, producer, or
+  transport failure degrades telemetry only and cannot break UI event dispatch.
+- Stuck turn. `executeStream` throwing before the agent emits `done` now closes
+  the observed turn instead of leaving it active for the session.
+- Turn-scoped tool correlation is cleared at each turn boundary, so a cancelled
+  turn cannot leak a stale approval into a later turn or grow without bound.
+- The wait resolves only once every concurrently approved tool has left
+  approval.
+- The publisher no longer overwrites the producer's `bridge_observed_ms`.
+- A phase change for a superseded tool no longer advances the sequence.
+- Loopback octets are constrained, and boundary fixtures derive from
+  `JSP_BOUNDS` rather than repeating literals.
+- Recording cleanup registers before observation setup, so the intended
+  fail-fast on an invalid bootstrap no longer strands the lock handle, and a
+  telemetry shutdown failure no longer skips recording disposal.
+- The compliance adapter reports malformed challenge JSON through its own
+  diagnostic instead of leaking a raw `SyntaxError`.
+- `initProducerState` no longer accepts an unused clock.
+
+Dismissed with reason:
+
+- "Out-of-range loopback octets are a security hole." Not reachable: URL parsing
+  rejects an invalid IPv4 literal before the loopback test runs, so the endpoint
+  is refused as malformed. The stricter pattern was still adopted, and the test
+  pins the code the implementation actually returns.
+- "Replace the queue's `Array.shift()` to avoid O(n^2) draining." Capacity is
+  256 documents, so the worst case is trivial; a head-pointer ring buffer adds
+  state and compaction logic for no measurable benefit.
+- "Log publisher failures." Any console output would corrupt the alternate-
+  screen TUI. Publication failure is observable from the broker side, and the
+  queue already records overflow and forces snapshot-first recovery.
+- "Remove the redundant `setToolContext` injection in the scheduler." Changing
+  tool context injection is outside this issue's accepted scope and carries
+  regression risk disproportionate to the cleanup.
 
 ## Verification evidence
 

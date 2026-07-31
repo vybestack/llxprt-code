@@ -11,6 +11,7 @@ import type {
   JspEventDocument,
   JspSnapshotDocument,
 } from '../packages/cli/src/observation/jspDocuments.js';
+import { JSP_BOUNDS } from '../packages/cli/src/observation/jspBounds.js';
 import { JspProducer } from '../packages/cli/src/observation/jspProducer.js';
 import type { JspBootstrap } from '../packages/cli/src/observation/jspSchema.js';
 
@@ -178,30 +179,43 @@ async function captureDocuments(
   return captured;
 }
 
-async function main(): Promise<void> {
-  const parsed = ChallengeSchema.safeParse(JSON.parse(await readStdin()));
+function parseChallenge(input: string): Challenge {
+  // Parse separately so malformed JSON reports the same diagnostic as a
+  // structurally invalid challenge instead of escaping as a raw SyntaxError.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(input);
+  } catch {
+    throw new Error('invalid closed producer challenge');
+  }
+  const parsed = ChallengeSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error('invalid closed producer challenge');
   }
-  const challenge = parsed.data;
-  const documents = await captureDocuments(challenge);
-  const snapshot = documents[0];
-  if (snapshot?.kind !== 'snapshot') {
-    throw new Error('producer did not capture a snapshot first');
-  }
+  return parsed.data;
+}
+
+function challengeFacts(
+  challenge: Challenge,
+  snapshot: JspSnapshotDocument,
+  documents: readonly JspBoundDocument[],
+): unknown[] {
   const facts: unknown[] = [];
   for (let index = 0; index < documents.length; index += 1) {
     facts.push({ fact: 'clock_set', now_ms: challenge.clock_sequence[index] });
     facts.push({ fact: 'document', document: documents[index] });
   }
+  // Both sides of the boundary derive from the same constant so the bound
+  // under test cannot drift away from the bound the producer enforces.
+  const limit = JSP_BOUNDS.displayedContentBytes;
   const atLimit = event(snapshot, 9, challenge.clock_sequence[9], {
     type: 'assistant_message.displayed',
-    content: 'x'.repeat(16_384),
+    content: 'x'.repeat(limit),
     committed_ms: challenge.clock_sequence[9],
   });
   const overLimit = event(snapshot, 9, challenge.clock_sequence[9], {
     type: 'assistant_message.displayed',
-    content: 'x'.repeat(16_385),
+    content: 'x'.repeat(limit + 1),
     committed_ms: challenge.clock_sequence[9],
   });
   facts.push(
@@ -241,6 +255,17 @@ async function main(): Promise<void> {
       }),
     },
   );
+  return facts;
+}
+
+async function main(): Promise<void> {
+  const challenge = parseChallenge(await readStdin());
+  const documents = await captureDocuments(challenge);
+  const snapshot = documents[0];
+  if (snapshot?.kind !== 'snapshot') {
+    throw new Error('producer did not capture a snapshot first');
+  }
+  const facts = challengeFacts(challenge, snapshot, documents);
   process.stdout.write(
     JSON.stringify({
       schema: 1,
