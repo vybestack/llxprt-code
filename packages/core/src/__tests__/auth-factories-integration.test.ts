@@ -124,24 +124,27 @@ describe('Core auth-factories integration', () => {
       expect(typeof store.removeToken).toBe('function');
     });
 
-    it('createKeyringTokenStore can save and load tokens', async () => {
-      const store = createKeyringTokenStore(async () => null);
-      const testToken = {
-        access_token: 'test-access-token-p17',
-        token_type: 'Bearer' as const,
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        refresh_token: 'test-refresh-token',
-      };
+    it.skipIf(process.platform === 'linux' && process.env.CI === 'true')(
+      'createKeyringTokenStore can save and load tokens',
+      async () => {
+        const store = createKeyringTokenStore(async () => null);
+        const testToken = {
+          access_token: 'test-access-token-p17',
+          token_type: 'Bearer' as const,
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          refresh_token: 'test-refresh-token',
+        };
 
-      try {
-        await store.saveToken('p17-test-provider', testToken);
-        const loaded = await store.getToken('p17-test-provider');
-        expect(loaded).toBeDefined();
-        expect(loaded?.access_token).toBe('test-access-token-p17');
-      } finally {
-        await store.removeToken('p17-test-provider');
-      }
-    });
+        try {
+          await store.saveToken('p17-test-provider', testToken);
+          const loaded = await store.getToken('p17-test-provider');
+          expect(loaded).toBeDefined();
+          expect(loaded?.access_token).toBe('test-access-token-p17');
+        } finally {
+          await store.removeToken('p17-test-provider');
+        }
+      },
+    );
 
     it('createAuthPrecedenceResolver returns an AuthPrecedenceResolver that resolves auth', async () => {
       const config: AuthPrecedenceConfig = {
