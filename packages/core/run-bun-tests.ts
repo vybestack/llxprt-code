@@ -13,8 +13,9 @@
  * file as a separate `bun test <file>` invocation avoids the multi-file
  * process management that triggers the hang.
  *
- * Files are run in concurrent batches to avoid exceeding CI timeouts.
- * The default batch size is 8 ( empirically tuned for CI runners).
+ * Each child process has a per-file timeout (default 60s). If a file's
+ * tests take longer, the process is killed to prevent a single slow/hanging
+ * file from blocking the entire suite.
  *
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
@@ -26,6 +27,7 @@ import { availableParallelism } from 'node:os';
 
 const PRELOAD = './bun-preload.ts';
 const CONCURRENCY = Math.min(8, availableParallelism());
+const PER_FILE_TIMEOUT_MS = 60_000;
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
@@ -51,7 +53,7 @@ interface TestResult {
   file: string;
   passed: boolean;
   exitCode: number | null;
-  output: string;
+  timedOut: boolean;
 }
 
 function runTestFile(file: string): Promise<TestResult> {
@@ -61,39 +63,24 @@ function runTestFile(file: string): Promise<TestResult> {
       ['test', '--preload', PRELOAD, file],
       {
         cwd: process.cwd(),
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: 'inherit',
         env: process.env,
       },
     );
 
-    let output = '';
-    child.stdout?.on('data', (data: Buffer) => {
-      const text = data.toString();
-      output += text;
-      process.stdout.write(text);
-    });
-    child.stderr?.on('data', (data: Buffer) => {
-      const text = data.toString();
-      output += text;
-      process.stderr.write(text);
-    });
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve({ file, passed: false, exitCode: null, timedOut: true });
+    }, PER_FILE_TIMEOUT_MS);
 
     child.on('exit', (code) => {
-      resolve({
-        file,
-        passed: code === 0,
-        exitCode: code,
-        output,
-      });
+      clearTimeout(timer);
+      resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
     });
 
     child.on('error', () => {
-      resolve({
-        file,
-        passed: false,
-        exitCode: -1,
-        output,
-      });
+      clearTimeout(timer);
+      resolve({ file, passed: false, exitCode: -1, timedOut: false });
     });
   });
 }
@@ -121,7 +108,13 @@ async function main(): Promise<void> {
   const failed = results.filter((r) => !r.passed);
 
   for (const result of failed) {
-    console.error(`FAILED: ${result.file} (exit code ${result.exitCode})`);
+    if (result.timedOut) {
+      console.error(
+        `TIMEOUT: ${result.file} (exceeded ${PER_FILE_TIMEOUT_MS / 1000}s)`,
+      );
+    } else {
+      console.error(`FAILED: ${result.file} (exit code ${result.exitCode})`);
+    }
   }
 
   console.log(
