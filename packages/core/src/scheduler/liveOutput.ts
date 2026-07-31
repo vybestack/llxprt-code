@@ -68,9 +68,13 @@ function takeUtf8(text: string, maxBytes: number, fromEnd: boolean): string {
 function appendBoundedLiveOutput(existing: string, update: string): string {
   const markerIndex = existing.indexOf(LIVE_OUTPUT_TRUNCATION_MARKER);
   if (markerIndex >= 0) {
+    const prefix = `${existing.slice(0, markerIndex)}${LIVE_OUTPUT_TRUNCATION_MARKER}`;
+    if (Buffer.byteLength(update, 'utf8') >= RETAINED_LIVE_OUTPUT_SIDE_BYTES) {
+      return prefix + takeUtf8(update, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true);
+    }
     const suffixStart = markerIndex + LIVE_OUTPUT_TRUNCATION_MARKER.length;
     const suffix = existing.slice(suffixStart) + update;
-    return `${existing.slice(0, markerIndex)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(suffix, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true)}`;
+    return prefix + takeUtf8(suffix, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true);
   }
   const existingBytes = Buffer.byteLength(existing, 'utf8');
   const updateBytes = Buffer.byteLength(update, 'utf8');

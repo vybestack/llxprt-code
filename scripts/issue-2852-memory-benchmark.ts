@@ -11,7 +11,7 @@ export interface ExactProcess {
 
 export interface VmmapSummary {
   readonly physicalFootprintBytes: number;
-  readonly mallocEmptyResidentBytes: number;
+  readonly mallocEmptyDirtyBytes: number;
   readonly webkitMallocDirtyBytes: number;
   readonly ioAcceleratorDirtyBytes: number;
 }
@@ -39,7 +39,7 @@ export function parseVmmapSummary(output: string): VmmapSummary {
       /Physical footprint:\s*(\d+(?:\.\d+)?[KMG])/i,
       'physical footprint',
     ),
-    mallocEmptyResidentBytes: parseRegionDirty(output, 'MALLOC_SMALL (empty)'),
+    mallocEmptyDirtyBytes: parseRegionDirty(output, 'MALLOC_SMALL (empty)'),
     webkitMallocDirtyBytes: parseRegionDirty(output, 'WebKit Malloc'),
     ioAcceleratorDirtyBytes:
       parseRegionDirty(output, 'IOAccelerator') +

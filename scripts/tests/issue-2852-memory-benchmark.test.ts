@@ -32,7 +32,7 @@ describe('issue 2852 memory benchmark parsing', () => {
     );
     expect(vmmap).toEqual({
       physicalFootprintBytes: 1_610_612_736,
-      mallocEmptyResidentBytes: 1_073_741_824,
+      mallocEmptyDirtyBytes: 1_073_741_824,
       webkitMallocDirtyBytes: 629_145_600,
       ioAcceleratorDirtyBytes: 272_629_760,
     });

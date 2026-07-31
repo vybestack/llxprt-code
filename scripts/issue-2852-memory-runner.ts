@@ -77,11 +77,6 @@ const child = spawn(
 if (child.pid === undefined) {
   throw new Error('Bun did not return a target PID');
 }
-target.pid = child.pid;
-validateExactPid(
-  target.pid,
-  run('/bin/ps', ['-p', String(target.pid), '-o', 'pid=,command=']),
-);
 
 const stdout: Buffer[] = [];
 const stderr: Buffer[] = [];
@@ -105,6 +100,11 @@ process.once('SIGTERM', () => {
 
 let exitCode: number | null;
 try {
+  target.pid = child.pid;
+  validateExactPid(
+    target.pid,
+    run('/bin/ps', ['-p', String(target.pid), '-o', 'pid=,command=']),
+  );
   exitCode = await new Promise<number | null>((resolveExit, reject) => {
     child.once('error', reject);
     child.once('exit', resolveExit);

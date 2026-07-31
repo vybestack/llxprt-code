@@ -292,7 +292,6 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 148-160
    */
   async flush(): Promise<void> {
-    if (!this.active) return;
     if (this.queue.length === 0 && !this.draining) return;
 
     if (this.drainPromise) {
@@ -368,9 +367,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 181-185
    */
   async dispose(): Promise<void> {
-    if (this.active) {
-      await this.flush();
-    }
+    await this.flush();
     this.active = false;
     this.queue = [];
     this.queueBytes = 0;

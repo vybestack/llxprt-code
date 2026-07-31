@@ -248,12 +248,14 @@ function updateHistoryItem(
   const updatedEntry = createHistoryEntry(updatedItem, limits.maxBytes);
   const entries =
     updatedEntry === undefined
-      ? previous.entries.filter((_, entryIndex) => entryIndex !== index)
+      ? previous.entries
       : previous.entries.map((entry, entryIndex) =>
           entryIndex === index ? updatedEntry : entry,
         );
   const totalBytes =
-    previous.totalBytes - oldEntry.bytes + (updatedEntry?.bytes ?? 0);
+    updatedEntry === undefined
+      ? previous.totalBytes
+      : previous.totalBytes - oldEntry.bytes + updatedEntry.bytes;
   return trimHistoryState({ entries, totalBytes }, limits);
 }
 

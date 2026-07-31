@@ -210,20 +210,21 @@ function useContentEventHandler(deps: StreamEventHandlerDeps) {
       userMessageTimestamp: number,
     ): string => {
       const appended = pendingTextAccumulator.append(eventValue);
-      // Always process the first delta of each turn to ensure the pending
-      // item is created. After that, coalesce at publish boundaries.
-      const isFirstDelta = appended.deltaCount === 1;
+      // Detect the start of a new turn by checking whether a pending item
+      // exists. We cannot use deltaCount === 1 because processContentEvent
+      // calls replace(), which resets the counter on every call.
+      const isFirstDelta = deps.pendingHistoryItemRef.current === null;
       if (!appended.publish && !isFirstDelta) {
         return currentAgentMessageBuffer;
       }
       return processContentEvent(
-        appended.publish ? appended.text : eventValue,
+        appended.publish ? appended.text : pendingTextAccumulator.materialize(),
         currentAgentMessageBuffer,
         userMessageTimestamp,
         contentEventDeps,
       );
     },
-    [contentEventDeps, pendingTextAccumulator],
+    [contentEventDeps, pendingTextAccumulator, deps.pendingHistoryItemRef],
   );
 }
 
