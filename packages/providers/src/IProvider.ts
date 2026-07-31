@@ -28,6 +28,7 @@ import type {
   ResolvedAuthToken,
   UserMemoryInput,
 } from './types/providerRuntime.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
 export type ProviderToolset = Array<{
   functionDeclarations: Array<{
@@ -63,6 +64,7 @@ export interface GenerateChatOptions {
    */
   onStreamLiveness?: (event: StreamLivenessEvent) => void;
   metadata?: Record<string, unknown>;
+  promptEnvelopeTransportToken?: object;
   resolved?: {
     model?: string;
     baseURL?: string;
@@ -106,6 +108,25 @@ export interface IProvider {
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
+
+  /**
+   * Project the finalized prompt envelope for token estimation (issue #2817).
+   *
+   * The provider builds its real request representation using the same
+   * preparation path transport consumes, then returns a pure projection of the
+   * prompt-bearing fields. The agent layer derives an estimate without ever
+   * reconstructing the provider payload.
+   *
+   * Providers that cannot project their finalized envelope resolve to
+   * `undefined`, which signals the capability is unavailable for that
+   * protocol. Callers must treat `undefined` as "no estimate", never as an
+   * error.
+   *
+   * @requirement:REQ-PE-001 (issue #2817 acceptance A3, A4, A5)
+   */
+  projectPromptEnvelope?(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection | undefined>;
   getCurrentModel?(): string;
   getDefaultModel(): string;
   // Methods for updating provider configuration

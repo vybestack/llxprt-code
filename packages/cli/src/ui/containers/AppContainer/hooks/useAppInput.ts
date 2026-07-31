@@ -32,7 +32,10 @@ import { useSteer } from './useSteer.js';
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
-import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
+import type {
+  SlashCommandRuntime,
+  UiSubagentManager,
+} from '../../../cliUiRuntime.js';
 
 export interface AppInputParams {
   // From bootstrap
@@ -41,6 +44,7 @@ export interface AppInputParams {
   agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
   runtime: AppBootstrapResult['runtime'];
+  subagentManager?: UiSubagentManager;
   history: AppBootstrapResult['history'];
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
   clearItems: AppBootstrapResult['clearItems'];
@@ -346,6 +350,7 @@ function useInputStreamSetup(
     handleExternalEditorOpen,
     recordingIntegration,
     runtimeMessageBus,
+    p.subagentManager,
   );
   return { ...bufferSetup, agentStreamResult };
 }

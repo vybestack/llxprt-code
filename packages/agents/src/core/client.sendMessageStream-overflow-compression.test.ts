@@ -295,7 +295,7 @@ function buildOverflowScenario(
   };
 }
 
-describe('AgentClient — preflight compression recovery (issue 2402)', () => {
+describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755)', () => {
   let client: AgentClient;
 
   beforeEach(async () => {
@@ -328,6 +328,11 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
           todoContinuationService: { todoToolsAvailable: boolean };
         }
       ).todoContinuationService.todoToolsAvailable = true;
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield { type: AgentEventType.Content, value: 'ok' };
+        })(),
+      );
     });
 
     it('should recover via automatic compression and proceed instead of bailing on a small overflow (issue 2402)', async () => {
@@ -354,7 +359,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       );
     });
 
-    it('should bail with ContextWindowWillOverflow when compression throws during recovery (issue 2402)', async () => {
+    it('should defer compression failure handling to finalized provider enforcement (issue 2402)', async () => {
       const handle = buildOverflowScenario(client, {
         compressionResult: new Error('boom'),
       });
@@ -370,17 +375,11 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents = events.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents).toHaveLength(1);
-      expect(overflowEvents[0]).toMatchObject({
-        value: {
-          estimatedRequestTokenCount: handle.estimatedRequestTokenCount,
-          remainingTokenCount: handle.remainingTokenCount,
-        },
-      });
-      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+      expect(overflowEvents).toHaveLength(0);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
-    it('should bail when compression is skipped because history is empty (issue 2402)', async () => {
+    it('should defer empty-history compression handling to finalized provider enforcement (issue 2402)', async () => {
       const handle = buildOverflowScenario(client, {
         postCompressionBaseline: PREFLIGHT_BASELINE,
         compressionResult: PerformCompressionResult.SKIPPED_EMPTY,
@@ -398,8 +397,8 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents = events.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents).toHaveLength(1);
-      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+      expect(overflowEvents).toHaveLength(0);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
     it('should recover via context-window enforcement when ordinary compression is a no-op (issue 2755 A1)', async () => {
@@ -455,7 +454,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
           type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
-      expect(realChat.getHistory().length).toBe(2);
+      expect(realChat.getHistory().length).toBe(3);
     });
 
     it('should recover via enforcement when compression succeeded but was insufficient (issue 2755 A2)', async () => {
@@ -508,7 +507,7 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       );
     });
 
-    it('should bail with exactly one overflow guard when enforcement cannot recover (issue 2755 A3)', async () => {
+    it('should defer unrecoverable enforcement to the finalized provider seam (issue 2755 A3)', async () => {
       const handle = buildOverflowScenario(client, {
         postCompressionBaseline: 950,
         compressionResult: PerformCompressionResult.COMPRESSED,
@@ -526,11 +525,11 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents = events.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents).toHaveLength(1);
-      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+      expect(overflowEvents).toHaveLength(0);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
-    it('should bail with exactly one overflow guard when compression is insufficient and enforcement leaves the baseline too large (issue 2755 A7)', async () => {
+    it('should defer insufficient-compression enforcement to the finalized provider seam (issue 2755 A7)', async () => {
       const handle = buildOverflowScenario(client, {
         postCompressionBaseline: 950,
         compressionResult: PerformCompressionResult.COMPRESSED,
@@ -548,11 +547,11 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents = events.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents).toHaveLength(1);
-      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+      expect(overflowEvents).toHaveLength(0);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
-    it('should bail when the projected baseline exceeds the configured limit even after enforcement (issue 2755 A3 negative-remaining)', async () => {
+    it('should defer negative-remaining enforcement to the finalized provider seam (issue 2755 A3)', async () => {
       const handle = buildOverflowScenario(client, {
         postCompressionBaseline: MOCKED_TOKEN_LIMIT + 50,
         compressionResult: PerformCompressionResult.COMPRESSED,
@@ -570,11 +569,11 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents = events.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents).toHaveLength(1);
-      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+      expect(overflowEvents).toHaveLength(0);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
-    it('should not grant a false full-window allowance when the last observed count is cleared but history is large (issue 2755 A4 consecutive)', async () => {
+    it('should defer overflow detection to finalized provider enforcement for consecutive turns with cleared counts (issue 2755 A4)', async () => {
       vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
       vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(0);
 
@@ -613,15 +612,8 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents1 = events1.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents1).toHaveLength(1);
-      expect(overflowEvents1[0]).toMatchObject({
-        value: {
-          remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
-        },
-      });
-      expect(events1.some((e) => e.type === AgentEventType.Content)).toBe(
-        false,
-      );
+      expect(overflowEvents1).toHaveLength(0);
+      expect(events1.some((e) => e.type === AgentEventType.Content)).toBe(true);
 
       const events2 = await fromAsync(
         client.sendMessageStream(request, signal, 'prompt-id-second-turn'),
@@ -630,15 +622,10 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents2 = events2.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents2).toHaveLength(1);
-      expect(overflowEvents2[0]).toMatchObject({
-        value: {
-          remainingTokenCount: MOCKED_TOKEN_LIMIT - PREFLIGHT_BASELINE,
-        },
-      });
+      expect(overflowEvents2).toHaveLength(0);
     });
 
-    it('should use the same configured context limit for initial capacity and post-recovery recheck (issue 2755 A7 exact-limit parity)', async () => {
+    it('should leave configured-limit parity to finalized provider enforcement (issue 2755 A7)', async () => {
       const injectedLimit = 842;
 
       client = (
@@ -698,8 +685,8 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
       const overflowEvents = events.filter(
         (e) => e.type === AgentEventType.ContextWindowWillOverflow,
       );
-      expect(overflowEvents).toHaveLength(1);
-      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
+      expect(overflowEvents).toHaveLength(0);
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(true);
     });
 
     it('should proceed exactly at the threshold boundary where estimated equals remaining * 0.95 (issue 2755 A7 exact threshold)', async () => {
@@ -755,6 +742,53 @@ describe('AgentClient — preflight compression recovery (issue 2402)', () => {
           type: AgentEventType.ContextWindowWillOverflow,
         }),
       );
+    });
+
+    it('should surface the deferred finalized-envelope overflow exactly once with metadata and no preflight duplicate (issue 2755 A3 surfacing)', async () => {
+      // The provider is the authority on overflow. When the finalized provider
+      // envelope overflows, the Turn maps it to a single
+      // ContextWindowWillOverflow event. The client must propagate exactly that
+      // one event (with its metadata) and NOT add its own preflight overflow.
+      const providerEstimatedTokens = 1200;
+      const providerRemainingTokens = 1000;
+      const { request } = buildOverflowScenario(client, {
+        postCompressionBaseline: 950,
+        compressionResult: PerformCompressionResult.COMPRESSED,
+        enforcementError: new Error('unrecoverable'),
+      });
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: AgentEventType.ContextWindowWillOverflow,
+            value: {
+              estimatedRequestTokenCount: providerEstimatedTokens,
+              remainingTokenCount: providerRemainingTokens,
+            },
+          };
+        })(),
+      );
+
+      const events = await fromAsync(
+        client.sendMessageStream(
+          request,
+          new AbortController().signal,
+          'prompt-id-deferred-overflow-surfaces',
+        ),
+      );
+
+      const overflowEvents = events.filter(
+        (e) => e.type === AgentEventType.ContextWindowWillOverflow,
+      );
+      expect(overflowEvents).toHaveLength(1);
+      expect(overflowEvents[0]).toStrictEqual({
+        type: AgentEventType.ContextWindowWillOverflow,
+        value: {
+          estimatedRequestTokenCount: providerEstimatedTokens,
+          remainingTokenCount: providerRemainingTokens,
+        },
+      });
+      // No recovery content was produced once the provider overflowed.
+      expect(events.some((e) => e.type === AgentEventType.Content)).toBe(false);
     });
   });
 });

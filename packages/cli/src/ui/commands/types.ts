@@ -299,6 +299,7 @@ export enum CommandKind {
   FILE = 'file',
   MCP_PROMPT = 'mcp-prompt',
   EXTENSION = 'extension',
+  SUBAGENT = 'subagent',
 }
 
 // The standardized contract for any command in the system.

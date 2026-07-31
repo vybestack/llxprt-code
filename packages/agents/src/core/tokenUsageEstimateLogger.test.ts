@@ -4,134 +4,153 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
-import { estimateRequestTokensStructured } from './clientHelpers.js';
-
-vi.mock('./clientHelpers.js', () => ({
-  estimateRequestTokensStructured: vi.fn(),
-}));
 
 import {
-  estimateStructuredTokensOrFallback,
-  recordTokenEstimate,
+  recordFinalizedPromptEnvelopeEstimate,
   resolveEstimatorType,
 } from './tokenUsageEstimateLogger.js';
 
-describe('recordTokenEstimate', () => {
-  beforeEach(() => {
-    vi.mocked(estimateRequestTokensStructured).mockReset();
-  });
-
-  it('provides a conservative numeric fallback for preflight failures', () => {
-    vi.mocked(estimateRequestTokensStructured).mockImplementation(() => {
-      throw new Error('structured estimation failed');
-    });
-    expect(estimateStructuredTokensOrFallback([], 42)).toBe(42);
-  });
-
-  it('distinguishes a failed tiktoken baseline from a real zero-token estimate', () => {
-    vi.mocked(estimateRequestTokensStructured).mockImplementation(() => {
-      throw new Error('structured estimation failed');
-    });
-    const recordEstimate = vi.fn();
+describe('recordFinalizedPromptEnvelopeEstimate', () => {
+  it('refines the existing prompt estimate with the finalized envelope count', () => {
+    const refineEstimate = vi.fn();
     const usageLogger = {
       isEnabled: () => true,
-      recordEstimate,
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'recordEstimate'>;
+      refineEstimate,
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
 
-    recordTokenEstimate(
-      { getTokenUsageLogger: () => usageLogger },
-      'prompt-1',
-      [],
-      0,
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger,
+      'prompt-finalized',
+      {
+        estimatedPromptTokens: 12,
+        model: 'gpt-4o',
+        protocol: 'openai-chat',
+        method: 'chat/completions/v1',
+        projectionRevision: 2,
+        unsupportedMedia: [],
+      },
       'openai',
-      'gpt-4',
     );
 
-    expect(recordEstimate).toHaveBeenCalledWith(
-      'prompt-1',
-      expect.objectContaining({
-        tiktokenTokens: null,
-        tiktokenEstimationFailed: true,
-      }),
-    );
-  });
-
-  it('records successful structured estimates and normalizes provider names', () => {
-    vi.mocked(estimateRequestTokensStructured).mockReturnValue(42);
-    const recordEstimate = vi.fn();
-    const usageLogger = {
-      isEnabled: () => true,
-      recordEstimate,
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'recordEstimate'>;
-
-    recordTokenEstimate(
-      { getTokenUsageLogger: () => usageLogger },
-      'prompt-2',
-      [{ text: 'hello' }],
-      10,
-      'OpenAI',
-      'gpt-4',
-    );
-
-    expect(recordEstimate).toHaveBeenCalledExactlyOnceWith('prompt-2', {
-      provider: 'OpenAI',
-      model: 'gpt-4',
-      estimatedTokens: 10,
+    expect(refineEstimate).toHaveBeenCalledExactlyOnceWith('prompt-finalized', {
+      provider: 'openai',
+      model: 'gpt-4o',
+      estimatedTokens: 12,
       estimator: 'openai-tiktoken',
-      tiktokenTokens: 42,
-      tiktokenEstimationFailed: false,
     });
   });
 
-  it('skips disabled and missing usage loggers', () => {
-    const recordEstimate = vi.fn();
-    const usageLogger = {
-      isEnabled: () => false,
-      recordEstimate,
-    } as Pick<TokenUsageLogger, 'isEnabled' | 'recordEstimate'>;
+  it('is a no-op when usageLogger is undefined', () => {
+    const refineEstimate = vi.fn();
 
-    recordTokenEstimate(undefined, 'prompt-3', [], 0, 'openai', 'gpt-4');
-    recordTokenEstimate(
-      { getTokenUsageLogger: () => undefined },
-      'prompt-4',
-      [],
-      0,
-      'openai',
-      'gpt-4',
-    );
-    recordTokenEstimate(
-      { getTokenUsageLogger: () => usageLogger },
-      'prompt-5',
-      [],
-      0,
-      'openai',
-      'gpt-4',
-    );
-
-    expect(recordEstimate).not.toHaveBeenCalled();
-  });
-
-  it('keeps logger failures from disrupting request processing', () => {
-    vi.mocked(estimateRequestTokensStructured).mockReturnValue(1);
     expect(() =>
-      recordTokenEstimate(
+      recordFinalizedPromptEnvelopeEstimate(
+        undefined,
+        'prompt-undefined-logger',
         {
-          getTokenUsageLogger: () => ({
-            isEnabled: () => true,
-            recordEstimate: () => {
-              throw new Error('record failed');
-            },
-          }),
+          estimatedPromptTokens: 12,
+          model: 'gpt-4o',
+          protocol: 'openai-chat',
+          method: 'chat/completions/v1',
+          projectionRevision: 2,
+          unsupportedMedia: [],
         },
-        'prompt-6',
-        [],
-        1,
         'openai',
-        'gpt-4',
       ),
     ).not.toThrow();
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when usageLogger is null', () => {
+    const refineEstimate = vi.fn();
+
+    expect(() =>
+      recordFinalizedPromptEnvelopeEstimate(
+        null,
+        'prompt-null-logger',
+        {
+          estimatedPromptTokens: 12,
+          model: 'gpt-4o',
+          protocol: 'openai-chat',
+          method: 'chat/completions/v1',
+          projectionRevision: 2,
+          unsupportedMedia: [],
+        },
+        'openai',
+      ),
+    ).not.toThrow();
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when usageLogger.isEnabled() returns false', () => {
+    const refineEstimate = vi.fn();
+    const usageLogger = {
+      isEnabled: () => false,
+      refineEstimate,
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger,
+      'prompt-disabled',
+      {
+        estimatedPromptTokens: 12,
+        model: 'gpt-4o',
+        protocol: 'openai-chat',
+        method: 'chat/completions/v1',
+        projectionRevision: 2,
+        unsupportedMedia: [],
+      },
+      'openai',
+    );
+
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when estimate is null', () => {
+    const refineEstimate = vi.fn();
+    const usageLogger = {
+      isEnabled: () => true,
+      refineEstimate,
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+
+    recordFinalizedPromptEnvelopeEstimate(
+      usageLogger,
+      'prompt-null-estimate',
+      null,
+      'openai',
+    );
+
+    expect(refineEstimate).not.toHaveBeenCalled();
+  });
+
+  it('keeps synchronous logger failures from disrupting a valid send', () => {
+    let refineCalls = 0;
+    const usageLogger = {
+      isEnabled: () => true,
+      refineEstimate: () => {
+        refineCalls += 1;
+        throw new Error('refine failed');
+      },
+    } as Pick<TokenUsageLogger, 'isEnabled' | 'refineEstimate'>;
+
+    expect(() =>
+      recordFinalizedPromptEnvelopeEstimate(
+        usageLogger,
+        'prompt-finalized',
+        {
+          estimatedPromptTokens: 12,
+          model: 'gpt-4o',
+          protocol: 'openai-chat',
+          method: 'chat/completions/v1',
+          projectionRevision: 2,
+          unsupportedMedia: [],
+        },
+        'openai',
+      ),
+    ).not.toThrow();
+    expect(refineCalls).toBe(1);
   });
 });
 
