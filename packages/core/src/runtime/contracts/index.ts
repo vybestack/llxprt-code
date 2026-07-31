@@ -42,3 +42,11 @@ export type {
   RuntimeProviderToolset,
   RuntimeResolvedAuthToken,
 } from './RuntimeProviderChat.js';
+export type {
+  PromptEnvelopeProtocol,
+  PromptEnvelopeMethod,
+  UnsupportedMediaEntry,
+  PromptEnvelopeProjection,
+  PromptEnvelopeEstimate,
+} from './PromptEstimation.js';
+export { estimatePromptEnvelope } from './PromptEstimation.js';

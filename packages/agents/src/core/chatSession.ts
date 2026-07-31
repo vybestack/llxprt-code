@@ -57,6 +57,7 @@ import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
@@ -566,6 +567,18 @@ export class ChatSession {
 
   getLastPromptTokenCount(): number {
     return this.compressionHandler.lastPromptTokenCount ?? 0;
+  }
+
+  /**
+   * Returns the most recent pre-send prompt-envelope estimate produced at the
+   * final per-attempt send seam (issue #2817). Checks both non-streaming and
+   * streaming processors for the latest estimate. Returns null when the
+   * provider does not implement projectPromptEnvelope.
+   */
+  getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
+    const fromTurn = this.turnProcessor.getPromptEnvelopeEstimate();
+    if (fromTurn !== null) return fromTurn;
+    return this.streamProcessor.getPromptEnvelopeEstimate();
   }
 
   getTokenUsageLogger(): TokenUsageLogger {
