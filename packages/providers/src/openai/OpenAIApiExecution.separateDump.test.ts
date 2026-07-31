@@ -200,11 +200,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     const result = await executeApiRequest(opts);
 
     const received: unknown[] = [];
-    await expect(async () => {
-      for await (const chunk of result as AsyncIterable<unknown>) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('Stream interrupted');
+    await expect(
+      (async () => {
+        for await (const chunk of result as AsyncIterable<unknown>) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('Stream interrupted');
 
     // All chunks yielded before the error should pass through
     expect(received).toStrictEqual(chunks);
@@ -521,11 +523,13 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
     const result = await executeApiRequest(opts);
     const received: unknown[] = [];
-    await expect(async () => {
-      for await (const chunk of result as AsyncIterable<unknown>) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('Stream iteration failed');
+    await expect(
+      (async () => {
+        for await (const chunk of result as AsyncIterable<unknown>) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('Stream iteration failed');
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();

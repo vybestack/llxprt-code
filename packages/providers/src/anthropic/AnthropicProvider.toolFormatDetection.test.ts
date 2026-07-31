@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { AnthropicProvider } from './AnthropicProvider.js';
 
 const mockSettingsService = vi.hoisted(() => ({
@@ -31,10 +32,10 @@ vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
     '@vybestack/llxprt-code-settings',
-  )),
+  ),
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));

@@ -298,9 +298,8 @@ describe('dumpContext', () => {
       expect(dump.provider).toBe('anthropic');
       expect(dump.request.headers['x-api-key']).toBe('[REDACTED]');
       expect(dump.request.body.model).toBe('claude-3-opus-20240229');
-      await expect(
-        fs.access(path.join(testDumpDir, responseFilename)),
-      ).resolves.toBeUndefined();
+      // fs.access throws ENOENT if the file is missing, failing the test
+      await fs.access(path.join(testDumpDir, responseFilename));
     });
   });
 
@@ -351,9 +350,8 @@ describe('dumpContext', () => {
       expect(dump.provider).toBe('gemini');
       expect(dump.request.url).toMatch(/key=\[REDACTED\]/);
       expect(dump.request.body.contents).toHaveLength(1);
-      await expect(
-        fs.access(path.join(testDumpDir, responseFilename)),
-      ).resolves.toBeUndefined();
+      // fs.access throws ENOENT if the file is missing, failing the test
+      await fs.access(path.join(testDumpDir, responseFilename));
     });
   });
 

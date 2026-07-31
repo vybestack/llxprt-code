@@ -154,8 +154,7 @@ describe('usageInfo', () => {
 
   describe('formatUsagePeriod', () => {
     beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-11-04T10:00:00Z'));
+      vi.useFakeTimers({ now: new Date('2025-11-04T10:00:00Z') });
     });
 
     afterEach(() => {
@@ -225,8 +224,7 @@ describe('usageInfo', () => {
 
   describe('formatAllUsagePeriods', () => {
     beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-11-04T10:00:00Z'));
+      vi.useFakeTimers({ now: new Date('2025-11-04T10:00:00Z') });
     });
 
     afterEach(() => {

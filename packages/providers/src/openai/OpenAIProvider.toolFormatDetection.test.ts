@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OpenAIProvider } from './OpenAIProvider.js';
 
 const mockSettingsService = vi.hoisted(() => ({
@@ -15,10 +16,10 @@ vi.mock('openai', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
     '@vybestack/llxprt-code-settings',
-  )),
+  ),
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));

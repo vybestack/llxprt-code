@@ -447,11 +447,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        for await (const _chunk of provider.generateChatCompletion(options)) {
-          // consume
-        }
-      }).rejects.toThrow(/failover/i);
+      await expect(
+        (async () => {
+          for await (const _chunk of provider.generateChatCompletion(options)) {
+            // consume
+          }
+        })(),
+      ).rejects.toThrow(/failover/i);
     });
 
     it('should not loop infinitely when all backends fail', async () => {
@@ -506,11 +508,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         messages: [{ role: 'user' as const, content: 'test' }],
       };
 
-      await expect(async () => {
-        for await (const _chunk of provider.generateChatCompletion(options)) {
-          // consume
-        }
-      }).rejects.toThrow(Error);
+      await expect(
+        (async () => {
+          for await (const _chunk of provider.generateChatCompletion(options)) {
+            // consume
+          }
+        })(),
+      ).rejects.toThrow(Error);
 
       // Should try each backend exactly once (no infinite loop)
       expect(totalAttempts).toBe(3);

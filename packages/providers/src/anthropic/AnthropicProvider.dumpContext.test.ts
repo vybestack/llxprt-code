@@ -255,11 +255,13 @@ describe('AnthropicProvider dumpContext integration', () => {
     const generator = provider['generateChatCompletionWithOptions'](options);
 
     // Expect the error to be thrown
-    await expect(async () => {
-      for await (const chunk of generator) {
-        void chunk;
-      }
-    }).rejects.toThrow(/API Error/);
+    await expect(
+      (async () => {
+        for await (const chunk of generator) {
+          void chunk;
+        }
+      })(),
+    ).rejects.toThrow(/API Error/);
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
       'anthropic',

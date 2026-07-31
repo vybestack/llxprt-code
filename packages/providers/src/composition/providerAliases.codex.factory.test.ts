@@ -16,7 +16,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // This test needs real config files, not the global mock
-vi.unmock('./providerAliases.js');
 
 import { loadProviderAliasEntries } from './providerAliases.js';
 import { createOpenAIResponsesAliasProvider } from './aliasProviderFactory.js';

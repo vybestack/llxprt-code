@@ -23,10 +23,10 @@ const { flushMockRef, providerManagerRef, providerRef } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@vybestack/llxprt-code-auth', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-auth')
-  >('@vybestack/llxprt-code-auth');
+vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = importActualSync<typeof import('@vybestack/llxprt-code-auth')>(
+    '@vybestack/llxprt-code-auth',
+  );
   const flushMock = vi.fn(() => ({
     runtimeId: 'test-runtime',
     revokedTokens: [],
@@ -47,6 +47,7 @@ import type { ProviderRegistry } from '../provider-registry.js';
 import type { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
 import type { OAuthBucketManager } from '../OAuthBucketManager.js';
 import type { TokenAccessCoordinator } from '../token-access-coordinator.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // ---------------------------------------------------------------------------
 // Helpers

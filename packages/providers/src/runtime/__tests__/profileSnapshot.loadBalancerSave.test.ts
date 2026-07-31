@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 
@@ -70,8 +71,8 @@ vi.mock('../profileApplication.js', () => ({
   applyProfileWithGuards: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const actual = await vi.importActual<
+vi.mock('@vybestack/llxprt-code-settings', () => {
+  const actual = importActualSync<
     typeof import('@vybestack/llxprt-code-settings')
   >('@vybestack/llxprt-code-settings');
   return {

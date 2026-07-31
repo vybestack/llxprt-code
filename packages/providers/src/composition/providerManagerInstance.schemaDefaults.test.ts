@@ -18,66 +18,71 @@
  * `undefined`.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-
-vi.unmock('./providerAliases.js');
 
 // Self-load reads run through strip-json-comments; keep them passthrough.
 vi.mock('strip-json-comments', () => ({
   default: (content: string) => content,
 }));
 
-function mockProviderModules(openaiCtor: unknown): void {
-  vi.doMock('../ProviderManager.js', () => {
-    class MockProviderManager {
-      setConfig(): void {}
-      setActiveProvider(): void {}
-      registerProvider(): void {}
-    }
-    return { ProviderManager: MockProviderManager };
-  });
-  vi.doMock('../gemini/GeminiProvider.js', () => {
-    class MockGeminiProvider {
-      setConfig(): void {}
-    }
-    return { GeminiProvider: MockGeminiProvider };
-  });
-  vi.doMock('../openai/OpenAIProvider.js', () => ({
-    OpenAIProvider: openaiCtor,
-  }));
-  vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
-    OpenAIResponsesProvider: class {},
-  }));
-  vi.doMock('../openai-vercel/index.js', () => ({
-    OpenAIVercelProvider: class {},
-  }));
-  vi.doMock('../anthropic/AnthropicProvider.js', () => ({
-    AnthropicProvider: class {},
-  }));
-  vi.doMock('./oauth-provider-registration.js', () => ({
-    ensureOAuthProviderRegistered: vi.fn(),
-    registerStandardOAuthProviders: vi.fn(),
-    isOAuthProviderRegistered: vi.fn(),
-    resetRegisteredProviders: vi.fn(),
-  }));
+// Shared mutable mock state — Bun cannot reset modules between tests, so the
+// mock factories use wrapper functions that read mutable variables at call
+// time. Each test updates these variables before running its assertions.
+let openaiCtorState: new (...args: unknown[]) => unknown = class {};
+
+function makeWrapper(
+  get: () => new (...args: unknown[]) => unknown,
+): new (...args: unknown[]) => unknown {
+  return function (...args: unknown[]) {
+    return Reflect.construct(get(), args, new.target);
+  };
 }
 
-describe('providerManagerInstance schema-default behavior (issue #2033)', () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.clearAllMocks();
-  });
+vi.doMock('../ProviderManager.js', () => {
+  class MockProviderManager {
+    setConfig(): void {}
+    setActiveProvider(): void {}
+    registerProvider(): void {}
+  }
+  return { ProviderManager: MockProviderManager };
+});
+vi.doMock('../gemini/GeminiProvider.js', () => {
+  class MockGeminiProvider {
+    setConfig(): void {}
+  }
+  return { GeminiProvider: MockGeminiProvider };
+});
+vi.doMock('../openai/OpenAIProvider.js', () => ({
+  OpenAIProvider: makeWrapper(() => openaiCtorState),
+}));
+vi.doMock('../openai-responses/OpenAIResponsesProvider.js', () => ({
+  OpenAIResponsesProvider: class {},
+}));
+vi.doMock('../openai-vercel/index.js', () => ({
+  OpenAIVercelProvider: class {},
+}));
+vi.doMock('../anthropic/AnthropicProvider.js', () => ({
+  AnthropicProvider: class {},
+}));
+vi.doMock('./oauth-provider-registration.js', () => ({
+  ensureOAuthProviderRegistered: vi.fn(),
+  registerStandardOAuthProviders: vi.fn(),
+  isOAuthProviderRegistered: vi.fn(),
+  resetRegisteredProviders: vi.fn(),
+}));
 
+describe('providerManagerInstance schema-default behavior (issue #2033)', () => {
   afterEach(() => {
     delete process.env.OPENAI_API_KEY;
-    vi.resetModules();
     vi.clearAllMocks();
   });
 
   it('supplies SETTINGS_SCHEMA defaults to OpenAIProvider when the user settings file is absent', async () => {
     const openaiCtor = vi.fn(() => ({}));
-    mockProviderModules(openaiCtor);
+    openaiCtorState = openaiCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
 
     const { MockFileSystem } = await import('./IFileSystem.js');
     const { createProviderManager, resetProviderManager, setFileSystem } =
@@ -109,7 +114,9 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
 
   it('honors explicit user-file values over the schema defaults', async () => {
     const openaiCtor = vi.fn(() => ({}));
-    mockProviderModules(openaiCtor);
+    openaiCtorState = openaiCtor as unknown as new (
+      ...args: unknown[]
+    ) => unknown;
 
     const { MockFileSystem } = await import('./IFileSystem.js');
     const { createProviderManager, resetProviderManager, setFileSystem } =
