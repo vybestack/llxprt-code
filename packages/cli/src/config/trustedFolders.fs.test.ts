@@ -7,7 +7,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LoadedTrustedFolders,
   saveTrustedFolders,
@@ -249,5 +249,93 @@ describe('saveTrustedFolders filesystem permissions', () => {
 
     expect(folders.user.config).toBe(config);
     expect(config).toStrictEqual({ [workspace]: TrustLevel.DO_NOT_TRUST });
+  });
+});
+
+/**
+ * Real-filesystem coverage for literal-key rule removal. `deleteValue`
+ * canonicalizes through realpath first, so it can never remove a rule whose
+ * folder has since been deleted; these tests pin the stale-rule case.
+ */
+describe('LoadedTrustedFolders.deleteRuleByKey', () => {
+  let tempDir: string;
+  let trustedFoldersPath: string;
+  let userConfig: Record<string, TrustLevel>;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-trust-delete-'));
+    trustedFoldersPath = path.join(tempDir, 'trustedFolders.json');
+    userConfig = {};
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  const load = (): LoadedTrustedFolders =>
+    new LoadedTrustedFolders(
+      { path: trustedFoldersPath, config: userConfig },
+      [],
+    );
+
+  const readPersisted = (): Record<string, string> =>
+    JSON.parse(fs.readFileSync(trustedFoldersPath, 'utf8')) as Record<
+      string,
+      string
+    >;
+
+  it('removes an existing rule and persists the removal', () => {
+    const folder = path.join(tempDir, 'real-folder');
+    fs.mkdirSync(folder);
+    userConfig[folder] = TrustLevel.TRUST_FOLDER;
+
+    load().deleteRuleByKey(folder);
+
+    expect(userConfig[folder]).toBeUndefined();
+    expect(readPersisted()[folder]).toBeUndefined();
+  });
+
+  it('removes a stale rule whose folder no longer exists on disk', () => {
+    const staleFolder = path.join(tempDir, 'deleted-folder');
+    userConfig[staleFolder] = TrustLevel.TRUST_FOLDER;
+
+    load().deleteRuleByKey(staleFolder);
+
+    expect(userConfig[staleFolder]).toBeUndefined();
+    expect(readPersisted()[staleFolder]).toBeUndefined();
+  });
+
+  it('leaves unrelated rules intact', () => {
+    const kept = path.join(tempDir, 'kept');
+    const removed = path.join(tempDir, 'removed');
+    fs.mkdirSync(kept);
+    userConfig[kept] = TrustLevel.TRUST_FOLDER;
+    userConfig[removed] = TrustLevel.DO_NOT_TRUST;
+
+    load().deleteRuleByKey(removed);
+
+    expect(userConfig).toStrictEqual({ [kept]: TrustLevel.TRUST_FOLDER });
+    expect(readPersisted()).toStrictEqual({ [kept]: TrustLevel.TRUST_FOLDER });
+  });
+
+  it('restores the in-memory rule when persistence fails', () => {
+    const removed = path.join(tempDir, 'removed');
+    userConfig[removed] = TrustLevel.TRUST_FOLDER;
+    // A directory at the destination makes the atomic rename commit fail.
+    fs.mkdirSync(trustedFoldersPath, { recursive: true });
+
+    expect(() => load().deleteRuleByKey(removed)).toThrow(Error);
+
+    expect(userConfig[removed]).toBe(TrustLevel.TRUST_FOLDER);
+  });
+
+  it('does not write anything when the key is absent', () => {
+    const existing = path.join(tempDir, 'existing');
+    userConfig[existing] = TrustLevel.TRUST_FOLDER;
+
+    load().deleteRuleByKey(path.join(tempDir, 'never-existed'));
+
+    expect(userConfig).toStrictEqual({ [existing]: TrustLevel.TRUST_FOLDER });
+    expect(fs.existsSync(trustedFoldersPath)).toBe(false);
   });
 });

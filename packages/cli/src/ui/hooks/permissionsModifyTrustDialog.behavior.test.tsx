@@ -45,14 +45,20 @@ vi.mock('../../config/trustedFolders.js', async () => {
         config: mockedUserConfig.value,
       },
       errors: [],
-      rules: [],
+      get rules() {
+        return Object.entries(mockedUserConfig.value).map(
+          ([rulePath, trustLevel]) => ({ path: rulePath, trustLevel }),
+        );
+      },
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
+      deleteRuleByKey: vi.fn(),
       getValue: mockedGetValue,
       snapshotValue: mockedSnapshotValue,
       restoreSnapshot: mockedRestoreSnapshot,
       resolvePathTrust: mockedResolvePathTrust,
-      isPathTrusted: vi.fn(() => undefined),
+      isPathTrusted: (folderPath: string) =>
+        mockedResolvePathTrust(folderPath)?.trusted,
     })),
   };
 });

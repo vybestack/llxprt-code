@@ -254,6 +254,27 @@ export class LoadedTrustedFolders {
       throw e;
     }
   }
+
+  /**
+   * Deletes the exact stored rule key without canonicalizing via realpath.
+   * Required for removing stale rules whose folder no longer exists on disk,
+   * since {@link deleteValue} canonicalizes first and therefore cannot remove
+   * such rules. Persists via {@link saveTrustedFolders} and restores the
+   * in-memory config if the save throws.
+   */
+  deleteRuleByKey(ruleKey: string): void {
+    const originalConfig = { ...this.user.config };
+    if (!(ruleKey in this.user.config)) {
+      return;
+    }
+    delete this.user.config[ruleKey];
+    try {
+      saveTrustedFolders(this.user);
+    } catch (e) {
+      restoreConfigInPlace(this.user.config, originalConfig);
+      throw e;
+    }
+  }
 }
 
 let loadedTrustedFolders: LoadedTrustedFolders | undefined;
