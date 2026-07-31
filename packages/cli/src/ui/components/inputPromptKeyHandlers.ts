@@ -443,6 +443,7 @@ export type InputHandlerDeps = {
   queuedSubmissionCount?: number;
   /** Sends all queued messages when invoked (Enter on empty input). */
   sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
   /** Clears all queued messages when invoked (Backspace on empty input). */
   clearQueuedSubmissions?: () => void;
 };
@@ -531,6 +532,17 @@ const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
   // key falls through to NEWLINE (which also matches Ctrl+Enter) for normal
   // multi-line input.
   if (deps.handleSteer && keyMatchers[Command.STEER](key)) {
+    // Ctrl+Enter on empty input while streaming with queued messages:
+    // inject all queued messages as steers (issue #2882).
+    if (
+      buffer.text.trim() === '' &&
+      (deps.queuedSubmissionCount ?? 0) > 0 &&
+      deps.steerAllQueuedSubmissions
+    ) {
+      deps.steerAllQueuedSubmissions();
+      resetCompletionState();
+      return true;
+    }
     const consumed = deps.handleSteer(buffer.text);
     if (consumed) {
       buffer.setText('');

@@ -71,6 +71,7 @@ export interface AgentStreamOrchestrationResult {
   interactiveRuntimeReady: boolean;
   cancelOngoingRequest: () => void;
   sendAllQueuedSubmissions: () => void;
+  steerAllQueuedSubmissions: () => void;
   activeShellPtyId: number | null;
   queuedSubmissions: readonly QueuedSubmission[];
 }
@@ -156,13 +157,8 @@ export function useAgentStreamOrchestration(
   const submitQuery = submitQueryResult.submitQuery;
   const scheduleNextQueuedSubmission =
     submitQueryResult.scheduleNextQueuedSubmission;
-  // Clears drain suppression (set by cancel) and immediately drains all
-  // queued messages sequentially. Used by the "send all queued" action
-  // (Enter on empty input when the drawer has items) — issue #2882.
-  const sendAllQueuedSubmissions = useCallback(() => {
-    st.drainSuppressedRef.current = false;
-    scheduleNextQueuedSubmission();
-  }, [st.drainSuppressedRef, scheduleNextQueuedSubmission]);
+  const { sendAllQueuedSubmissions, steerAllQueuedSubmissions } =
+    useQueuedActions(st, args.agent, scheduleNextQueuedSubmission);
   // Populate the ref synchronously so the first render already has the real
   // function available for any synchronous consumer.
   processAgentEventRef.current = submitQueryResult.processAgentEvent;
@@ -185,6 +181,7 @@ export function useAgentStreamOrchestration(
     pendingToolCallGroupDisplay,
     cancelOngoingRequest,
     sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions,
   );
 }
 
@@ -298,6 +295,27 @@ function usePendingToolGroupDisplay(toolCalls: TrackedToolCall[]) {
   );
 }
 
+function useQueuedActions(
+  st: ReturnType<typeof useStreamState>,
+  agent: Agent,
+  scheduleNextQueuedSubmission: () => void,
+) {
+  const { drainSuppressedRef, queuedSubmissionsRef, clearSubmissions } = st;
+  const sendAllQueuedSubmissions = useCallback(() => {
+    drainSuppressedRef.current = false;
+    scheduleNextQueuedSubmission();
+  }, [drainSuppressedRef, scheduleNextQueuedSubmission]);
+  const steerAllQueuedSubmissions = useCallback(() => {
+    const items = queuedSubmissionsRef.current;
+    if (items.length === 0) return;
+    const newline = String.fromCharCode(10);
+    const text = items.map((s) => s.query).join(newline);
+    agent.injectSteer(text);
+    clearSubmissions();
+  }, [agent, queuedSubmissionsRef, clearSubmissions]);
+  return { sendAllQueuedSubmissions, steerAllQueuedSubmissions };
+}
+
 function buildResult(
   st: ReturnType<typeof useStreamState>,
   streamingState: ReturnType<typeof useStreamingState>,
@@ -307,6 +325,7 @@ function buildResult(
   pendingToolCallGroupDisplay: HistoryItemWithoutId | undefined,
   cancelOngoingRequest: () => void,
   sendAllQueuedSubmissions: () => void,
+  steerAllQueuedSubmissions: () => void,
 ): AgentStreamOrchestrationResult {
   return {
     st,
@@ -319,6 +338,7 @@ function buildResult(
     interactiveRuntimeReady: scheduler.interactiveRuntimeReady,
     cancelOngoingRequest,
     sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions,
     activeShellPtyId: shell.activeShellPtyId,
     queuedSubmissions: st.queuedSubmissions,
   };

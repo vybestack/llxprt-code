@@ -152,6 +152,15 @@ function calculatePanelHeight(rows: number): number {
   return Math.max(1, Math.floor(rows * PANEL_HEIGHT_RATIO));
 }
 
+function calculateAdaptivePanelHeight(
+  messageCount: number,
+  maxPanelHeight: number,
+): number {
+  // Layout: 1 row (top border) + 1 row (heading) + 1 row per message.
+  const neededHeight = 2 + messageCount;
+  return Math.min(neededHeight, maxPanelHeight);
+}
+
 function calculateAvailableRows(panelHeight: number): number {
   const borderRows = panelHeight > 1 ? 1 : 0;
   const headerRows = 1;
@@ -199,7 +208,11 @@ export function prepareQueuedMessagesPanelView({
     return { kind: 'empty' };
   }
 
-  const expandedPanelHeight = calculatePanelHeight(rows);
+  const maxPanelHeight = calculatePanelHeight(rows);
+  const expandedPanelHeight = calculateAdaptivePanelHeight(
+    messages.length,
+    maxPanelHeight,
+  );
   const boundedWidth = Math.max(1, Math.min(width, columns));
 
   if (collapsed) {

@@ -394,18 +394,10 @@ function useInputStreamWiring(
     },
     [todos, updateTodos, handleFinalSubmit],
   );
-  const enqueueSteer = useCallback(
-    (message: string) => {
-      void submitQuery(message);
-    },
-    [submitQuery],
-  );
   const handleSteer = useSteer(
     p.agent,
     agentStreamResult.streamingState,
     agentStreamResult.sanitizeContent,
-    pendingHistoryItems,
-    enqueueSteer,
   );
   const {
     activeShellPtyId: _ptyIdFromStream,

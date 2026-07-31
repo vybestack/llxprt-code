@@ -161,7 +161,7 @@ describe('QueuedMessagesPanel content preparation', () => {
       ).toStrictEqual({
         kind: 'expanded',
         width: 80,
-        panelHeight: 8,
+        panelHeight: 4,
         heading: 'Queued Messages (2)',
         messages: [
           { key: 'queued-0-one', number: 1, preview: 'one' },

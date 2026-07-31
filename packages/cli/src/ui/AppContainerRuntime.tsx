@@ -417,6 +417,7 @@ function buildUIActionsParams(r: HookResults) {
     handleOAuthCodeSubmit: i.handleOAuthCodeSubmit,
     cancelOngoingRequest: i.cancelOngoingRequest,
     sendAllQueuedSubmissions: i.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: i.steerAllQueuedSubmissions,
     clearQueuedSubmissions: i.clearQueuedSubmissions,
     ...dialogActionsParams(r.dialogs),
   };

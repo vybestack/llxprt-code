@@ -123,6 +123,7 @@ function useAgentStreamReturn(
     queuedSubmissions: orchestration.queuedSubmissions,
     clearQueuedSubmissions: orchestration.st.clearSubmissions,
     sendAllQueuedSubmissions: orchestration.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: orchestration.steerAllQueuedSubmissions,
   };
 }
 

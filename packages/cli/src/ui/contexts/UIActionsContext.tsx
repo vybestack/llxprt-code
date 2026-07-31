@@ -204,6 +204,7 @@ export interface UIActions {
 
   // Queued messages actions (issue #2882)
   sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
   clearQueuedSubmissions?: () => void;
 }
 

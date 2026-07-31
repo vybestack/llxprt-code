@@ -99,6 +99,7 @@ export const Composer = ({
       isEmbeddedShellFocused={embeddedShellFocused}
       queuedSubmissionCount={queuedSubmissions.length}
       sendAllQueuedSubmissions={uiActions.sendAllQueuedSubmissions}
+      steerAllQueuedSubmissions={uiActions.steerAllQueuedSubmissions}
       clearQueuedSubmissions={uiActions.clearQueuedSubmissions}
     />
   );

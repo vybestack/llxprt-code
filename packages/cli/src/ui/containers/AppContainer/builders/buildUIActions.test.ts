@@ -159,6 +159,7 @@ const makeParams = (): UIActionsParams => ({
   // Queue actions (issue #2882)
   setQueueErrorMessage: vi.fn(),
   sendAllQueuedSubmissions: vi.fn(),
+  steerAllQueuedSubmissions: vi.fn(),
   clearQueuedSubmissions: vi.fn(),
 });
 

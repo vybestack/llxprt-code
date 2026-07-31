@@ -44,6 +44,7 @@ export interface InputPromptProps {
   queueErrorMessage?: string | null;
   queuedSubmissionCount?: number;
   sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
   clearQueuedSubmissions?: () => void;
 }
 

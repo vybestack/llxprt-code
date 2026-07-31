@@ -206,6 +206,7 @@ type InputPromptState = Pick<
   | 'focus'
   | 'queuedSubmissionCount'
   | 'sendAllQueuedSubmissions'
+  | 'steerAllQueuedSubmissions'
   | 'clearQueuedSubmissions'
 > & {
   pendingLargePastesRef: React.MutableRefObject<Map<string, string>>;
@@ -416,6 +417,7 @@ const buildInputHandlerDeps = (
   pendingLargePastesRef: state.pendingLargePastesRef,
   queuedSubmissionCount: state.queuedSubmissionCount,
   sendAllQueuedSubmissions: state.sendAllQueuedSubmissions,
+  steerAllQueuedSubmissions: state.steerAllQueuedSubmissions,
   clearQueuedSubmissions: state.clearQueuedSubmissions,
 });
 

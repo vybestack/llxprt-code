@@ -186,6 +186,7 @@ export interface UIActionsParams {
 
   // Queued messages actions (issue #2882)
   sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
   clearQueuedSubmissions?: () => void;
 }
 
@@ -193,6 +194,7 @@ function queueActions(p: UIActionsParams) {
   return {
     setQueueErrorMessage: p.setQueueErrorMessage,
     sendAllQueuedSubmissions: p.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: p.steerAllQueuedSubmissions,
     clearQueuedSubmissions: p.clearQueuedSubmissions,
   };
 }
