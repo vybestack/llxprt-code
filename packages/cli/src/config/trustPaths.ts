@@ -56,11 +56,11 @@ export function normalizeTrustPathInput(
     return { ok: false, reason: 'path-required' };
   }
   const expanded = expandTilde(unquoted);
-  const normalizedPath = path.resolve(
-    path.isAbsolute(expanded)
-      ? expanded
-      : path.join(workingDirectory, expanded),
-  );
+  // The working directory is resolved too: a relative one would otherwise send
+  // path.resolve back to process.cwd() instead of the directory asked for.
+  const normalizedPath = path.isAbsolute(expanded)
+    ? path.resolve(expanded)
+    : path.resolve(path.resolve(workingDirectory), expanded);
   return { ok: true, normalizedPath };
 }
 
@@ -80,12 +80,15 @@ export function getTrustPathProblemMessage(problem: TrustPathProblem): string {
 }
 
 /**
- * Normalizes raw user input and confirms it names an existing directory.
+ * Normalizes raw user input and confirms it names an existing directory,
+ * returning it under the same canonical identity the trust store uses.
  *
  * Trust rules are persisted under a canonical path, which `LoadedTrustedFolders`
  * derives with `fs.realpathSync`; that throws for a path which does not exist.
  * Validating here lets the dialog report a precise, actionable problem instead
- * of surfacing a commit failure.
+ * of surfacing a commit failure. Canonicalizing here as well keeps the folder
+ * the dialog reports identical to the key the rule is stored under, so a
+ * symlinked spelling does not read back as a different folder.
  */
 export function resolveTrustDirectory(
   rawInput: string,
@@ -95,14 +98,16 @@ export function resolveTrustDirectory(
   if (!normalized.ok) {
     return { ok: false, problem: normalized.reason };
   }
+  let canonicalPath: string;
   let stats: fs.Stats;
   try {
-    stats = fs.statSync(normalized.normalizedPath);
+    canonicalPath = fs.realpathSync(normalized.normalizedPath);
+    stats = fs.statSync(canonicalPath);
   } catch {
     return { ok: false, problem: 'not-found' };
   }
   if (!stats.isDirectory()) {
     return { ok: false, problem: 'not-a-directory' };
   }
-  return { ok: true, normalizedPath: normalized.normalizedPath };
+  return { ok: true, normalizedPath: canonicalPath };
 }

@@ -370,6 +370,46 @@ function useTrustFormDisplay(
   };
 }
 
+/**
+ * Runs a rule removal under the same in-flight lock a commit takes, so the form
+ * stays disabled and Escape is ignored until the write lands.
+ *
+ * The catch is the dialog's event boundary: the component dispatches selections
+ * with `void`, so anything escaping here would become an unhandled rejection
+ * that the user never sees.
+ */
+function useLockedRemoval({
+  removeRule,
+  addItem,
+  setIsCommitting,
+  committingRef,
+  mountedRef,
+}: {
+  removeRule: () => Promise<void>;
+  addItem: UseHistoryManagerReturn['addItem'];
+  setIsCommitting: React.Dispatch<React.SetStateAction<boolean>>;
+  committingRef: React.MutableRefObject<boolean>;
+  mountedRef: React.MutableRefObject<boolean>;
+}): () => Promise<void> {
+  return useCallback(async (): Promise<void> => {
+    committingRef.current = true;
+    setIsCommitting(true);
+    try {
+      await removeRule();
+    } catch (error) {
+      if (mountedRef.current) {
+        reportError(
+          addItem,
+          `Failed to remove the trust rule: ${describeError(error)}`,
+        );
+      }
+    } finally {
+      committingRef.current = false;
+      if (mountedRef.current) setIsCommitting(false);
+    }
+  }, [addItem, removeRule, setIsCommitting, committingRef, mountedRef]);
+}
+
 export interface PermissionsTrustDialogFlow {
   view: TrustDialogView;
   targetPath: string;
@@ -427,6 +467,14 @@ export function usePermissionsTrustDialogFlow(
   const { submitPath, selectRule, removeRule, handleEscape } =
     useNavigationActions(trust, viewState, addItem, onExit, mountedRef);
 
+  const runLockedRemoval = useLockedRemoval({
+    removeRule,
+    addItem,
+    setIsCommitting,
+    committingRef,
+    mountedRef,
+  });
+
   const selectChoice = useCallback(
     async (choice: TrustFormChoice): Promise<void> => {
       // A write is in flight; ignore further selections so a late-resolving
@@ -443,26 +491,16 @@ export function usePermissionsTrustDialogFlow(
       } else if (choice === TrustFormAction.MANAGE_RULES) {
         setView('rules');
       } else {
-        // Removal is a write too, so it takes the same in-flight lock as a
-        // commit: the form stays disabled and Escape is ignored until it lands.
-        committingRef.current = true;
-        setIsCommitting(true);
-        try {
-          await removeRule();
-        } finally {
-          committingRef.current = false;
-          if (mountedRef.current) setIsCommitting(false);
-        }
+        await runLockedRemoval();
       }
     },
     [
       commitLevel,
-      removeRule,
+      runLockedRemoval,
       setPathDraft,
       setPathError,
       setView,
       committingRef,
-      mountedRef,
     ],
   );
 

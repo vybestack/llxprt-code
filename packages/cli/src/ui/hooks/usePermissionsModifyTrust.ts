@@ -129,6 +129,11 @@ type TrustCommitResult =
  * session trust from `liveTrustPath` (the working directory). This split
  * ensures that committing a rule for an arbitrary folder only affects the
  * live session when that folder is an ancestor of the working directory.
+ *
+ * The returned `effectiveTrust` is therefore the session's trust, not the
+ * target folder's. It is only surfaced by the "Trust level updated" prompt,
+ * which the dialog shows for working-directory commits; a commit for any other
+ * folder returns to the rules list instead of reporting an effective state.
  */
 async function commitSavedTrustLevel(
   config: PermissionsTrustRuntime | undefined,

@@ -198,6 +198,14 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     // Empty input must leave the active target alone — it must neither resolve
     // to the working directory by way of an empty path segment nor reset it.
     expect(result.current.targetPath).toBe(WORKSPACE_FIRST);
+
+    // The empty string is a distinct branch: path.resolve(dir, '') returns dir,
+    // so an unguarded implementation would silently retarget here.
+    act(() => {
+      result.current.setTargetPath('');
+    });
+
+    expect(result.current.targetPath).toBe(WORKSPACE_FIRST);
   });
 
   it('B2: setTargetPath expands a tilde-prefixed input to the home directory', () => {

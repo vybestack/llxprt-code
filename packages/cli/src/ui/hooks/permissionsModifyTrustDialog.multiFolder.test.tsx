@@ -200,6 +200,32 @@ describe('permissions dialog multi-folder flow', () => {
     expect(result.current.targetPath).toBe(path.join(cwd, 'nested'));
   });
 
+  it('C3: a symlinked spelling resolves to the same folder the rule is stored under', async () => {
+    const linkPath = path.join(tempRoot, 'other-link');
+    fs.symlinkSync(otherFolder, linkPath, 'dir');
+    const { result } = renderFlow();
+
+    await act(async () => {
+      await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
+    });
+    act(() => result.current.setPathDraft(linkPath));
+    act(() => result.current.submitPath());
+
+    // The store keys rules by canonical path, so the dialog must target the
+    // canonical folder rather than the link, or the rule it writes would read
+    // back as a different folder.
+    expect(result.current.targetPath).toBe(otherFolder);
+
+    await act(async () => {
+      await result.current.selectChoice(TrustLevel.TRUST_FOLDER);
+    });
+
+    expect(mockedSetValue).toHaveBeenCalledWith(
+      otherFolder,
+      TrustLevel.TRUST_FOLDER,
+    );
+  });
+
   it('C4: reports a path that does not exist and stays in the input', async () => {
     const { result } = renderFlow();
 
@@ -270,6 +296,13 @@ describe('permissions dialog multi-folder flow', () => {
 
     expect(result.current.view).toBe('form');
     expect(result.current.targetPath).toBe(otherFolder);
+    // The form must recompute for the new target, otherwise it would offer the
+    // previous folder's actions — the selected rule is removable.
+    expect(
+      result.current.options.some(
+        (option) => option.value === TrustFormAction.REMOVE_RULE,
+      ),
+    ).toBe(true);
   });
 
   it('C8: offers rule removal only when the active target has a direct rule', async () => {
@@ -374,6 +407,11 @@ describe('permissions dialog multi-folder flow', () => {
     expect(mockedTrustedConfig.value[otherFolder]).toBe(
       TrustLevel.TRUST_FOLDER,
     );
+    // The list the user lands back on must show the level just committed, not
+    // the pre-commit snapshot.
+    expect(result.current.trustRules).toStrictEqual([
+      { path: otherFolder, trustLevel: TrustLevel.TRUST_FOLDER },
+    ]);
   });
 
   it('C9: a non-cwd commit does not grant the session the target folder trust', async () => {
