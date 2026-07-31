@@ -27,15 +27,15 @@ import { useHistory } from './useHistoryManager.js';
 
 const created: string[] = [];
 
-afterEach(() => {
-  for (const dir of created.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 const LARGE_TEXT = 'a very long assistant response. '.repeat(400_000 / 32);
 
 describe('UI history display bound preserves content elsewhere', () => {
+  afterEach(() => {
+    for (const dir of created.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('bounds the on-screen copy while core history keeps the full text', () => {
     const historyService = new HistoryService();
     historyService.add({

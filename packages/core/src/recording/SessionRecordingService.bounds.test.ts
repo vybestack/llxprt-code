@@ -44,13 +44,13 @@ function readRecords(service: SessionRecordingService): unknown[] {
     .map((line) => JSON.parse(line) as unknown);
 }
 
-afterEach(() => {
-  for (const dir of created.splice(0)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 describe('SessionRecordingService queue retention', () => {
+  afterEach(() => {
+    for (const dir of created.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('writes every record even when far more are produced than the high-water mark', async () => {
     const service = createService();
     const total = 10_000;

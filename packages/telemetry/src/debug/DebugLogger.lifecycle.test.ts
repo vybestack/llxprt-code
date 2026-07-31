@@ -32,11 +32,11 @@ function listenerCount(): number {
   return manager.listeners.size;
 }
 
-afterEach(async () => {
-  await DebugLogger.resetForTesting();
-});
-
 describe('DebugLogger retention', () => {
+  afterEach(async () => {
+    await DebugLogger.resetForTesting();
+  });
+
   it('registers nothing globally when loggers are constructed directly', () => {
     const before = listenerCount();
 
