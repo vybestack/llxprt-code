@@ -21,6 +21,8 @@ import { normalize, readRootFile } from './ocr-review-workflow-helpers.ts';
 
 const WORKFLOW_PATH = '.github/workflows/pr-review.yml';
 
+const POST_COMMENT_STEP_NAME = 'Post walkthrough comment';
+
 function loadWorkflow(relPath: string): WorkflowDocument {
   return parseWorkflowYaml(readRootFile(relPath));
 }
@@ -289,7 +291,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     it('targets the llxprt-walkthrough marker in the post step', () => {
       const steps = jobSteps(reviewJob);
       const postStep = steps.find(
-        (step) => step.name === 'Post walkthrough comment',
+        (step) => step.name === POST_COMMENT_STEP_NAME,
       );
       expect(postStep, 'should have a comment-post step').toBeTruthy();
       expect(asOptionalRecord(postStep?.['env'])?.['COMMENT_MARKER']).toBe(
@@ -300,7 +302,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     it('the post step no longer uses the thollander comment-tag input', () => {
       const steps = jobSteps(reviewJob);
       const postStep = steps.find(
-        (step) => step.name === 'Post walkthrough comment',
+        (step) => step.name === POST_COMMENT_STEP_NAME,
       );
       expect(asOptionalRecord(postStep?.with)?.['comment-tag']).toBeUndefined();
     });
@@ -420,7 +422,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   describe('idempotent comment posting', () => {
     it('uses github-script to find-or-update the comment in place', () => {
       const postStep = jobSteps(reviewJob).find(
-        (step: WorkflowStep) => step.name === 'Post walkthrough comment',
+        (step: WorkflowStep) => step.name === POST_COMMENT_STEP_NAME,
       );
       expect(postStep?.['uses'], 'should use github-script').toContain(
         'actions/github-script',
@@ -508,7 +510,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
         (s: WorkflowStep) => s.name === 'Ensure fallback comment',
       );
       const postIdx = steps.findIndex(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(fallbackIdx).toBeGreaterThanOrEqual(0);
       expect(postIdx).toBeGreaterThan(fallbackIdx);
@@ -531,7 +533,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
   describe('post-comment step always runs', () => {
     it('the post-comment step uses if: always()', () => {
       const postStep = jobSteps(reviewJob).find(
-        (step: WorkflowStep) => step.name === 'Post walkthrough comment',
+        (step: WorkflowStep) => step.name === POST_COMMENT_STEP_NAME,
       );
       expect(postStep?.if).toBe('always()');
     });
@@ -582,7 +584,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
 
     it('Post walkthrough comment has continue-on-error', () => {
       const step = jobSteps(reviewJob).find(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(continueOnError(step)).toBe(true);
     });
@@ -664,7 +666,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
 
     it('Post walkthrough comment runs under always()', () => {
       const post = jobSteps(reviewJob).find(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(
         evalStepIf(post?.if, { outcomes: { walkthrough: 'failure' } }),
@@ -733,7 +735,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       };
       const fallback = stepByName('Ensure fallback comment');
       const post = jobSteps(reviewJob).find(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
       expect(evalStepIf(post?.if, scenarios)).toBe(true);
@@ -752,7 +754,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       };
       const fallback = stepByName('Ensure fallback comment');
       const post = jobSteps(reviewJob).find(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
       expect(evalStepIf(post?.if, scenarios)).toBe(true);
@@ -772,7 +774,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       const upload = stepByName('Upload walkthrough diagnostics');
       const fallback = stepByName('Ensure fallback comment');
       const post = jobSteps(reviewJob).find(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(evalStepIf(upload?.if, scenarios)).toBe(true);
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
@@ -802,7 +804,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
 
     it('comment-posting failure is non-blocking (continue-on-error on post)', () => {
       const post = jobSteps(reviewJob).find(
-        (s: WorkflowStep) => s.name === 'Post walkthrough comment',
+        (s: WorkflowStep) => s.name === POST_COMMENT_STEP_NAME,
       );
       expect(continueOnError(post)).toBe(true);
     });

@@ -45,6 +45,7 @@ runs:
         CLI_FULL_TEXT_SUMMARY_FILE: '${{ inputs.cli_full_text_summary_file }}'
         CORE_FULL_TEXT_SUMMARY_FILE: '${{ inputs.core_full_text_summary_file }}'
         COMMENT_FILE: 'coverage-comment.md'
+        COMMENT_MARKER_INPUT: '${{ inputs.comment-marker }}'
         NODE_VERSION: '${{ inputs.node_version }}'
         OS: '${{ inputs.os }}'
       run: |-
@@ -70,7 +71,7 @@ runs:
         fi
 
         # Marker so the comment can be found/updated and captured by PR review.
-        echo '${{ inputs.comment-marker }}' > "$COMMENT_FILE"
+        echo "$COMMENT_MARKER_INPUT" > "$COMMENT_FILE"
         echo "" >> "$COMMENT_FILE"
         echo "## Code Coverage Summary" >> "$COMMENT_FILE"
         echo "| Package | Lines | Statements | Functions | Branches |" >> "$COMMENT_FILE"
