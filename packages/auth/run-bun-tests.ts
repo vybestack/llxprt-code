@@ -12,7 +12,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { availableParallelism } from 'node:os';
 
@@ -67,6 +67,33 @@ function runTestFile(file: string): Promise<TestResult> {
   });
 }
 
+function generateJUnit(
+  results: TestResult[],
+  totalFiles: number,
+  failedCount: number,
+): string {
+  const newlines = '\n';
+  const testCases = results
+    .map((r) => {
+      const className = r.file.replace(/^src\//, '').replace(/\.test\.ts$/, '');
+      const failureXml = r.passed
+        ? ''
+        : `<failure message="Exit code ${r.exitCode}">FAILED</failure>`;
+      const timeAttr = r.passed ? '' : ' time="0"';
+      return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
+    })
+    .join(newlines);
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<testsuites tests="${totalFiles}" failures="${failedCount}">`,
+    `  <testsuite name="auth" tests="${totalFiles}" failures="${failedCount}">`,
+    testCases,
+    '  </testsuite>',
+    '</testsuites>',
+  ].join(newlines);
+}
+
 async function main(): Promise<void> {
   const testFiles = findTestFiles('src');
   if (testFiles.length === 0) {
@@ -97,6 +124,12 @@ async function main(): Promise<void> {
     `Passed ${passed}/${testFiles.length} test files` +
       (failed.length > 0 ? ` (${failed.length} failed)` : ''),
   );
+
+  writeFileSync(
+    'junit.xml',
+    generateJUnit(results, testFiles.length, failed.length),
+  );
+
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
