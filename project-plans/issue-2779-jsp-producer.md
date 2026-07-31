@@ -114,7 +114,10 @@ Deliver one issue-linked LLxprt Code pull request implementing the opt-in native
   (usage limit reached, missing API key, or load-balancer exhaustion). This work
   has had no independent TypeScript reviewer.
 - Local OCR: 1 of 2.
-- PR OCR: 0 of 2.
+- PR OCR: 1 of 2. The PR-side reviewer raised 45 inline findings.
+- CodeRabbit: 1 review, 6 findings. Every thread has a reply recording the
+  action taken and is resolved. Findings that were not adopted are recorded
+  with evidence in the pull request discussion and under review dispositions.
 
 ## Review dispositions
 
