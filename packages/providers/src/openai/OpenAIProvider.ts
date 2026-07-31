@@ -73,7 +73,7 @@ import {
  * @issue #2524 — Replaces the 12-positional-parameter list for clarity and
  *   safety.
  */
-export interface DispatchResponseOptions {
+interface DispatchResponseOptions {
   response:
     | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
     | OpenAI.Chat.Completions.ChatCompletion;

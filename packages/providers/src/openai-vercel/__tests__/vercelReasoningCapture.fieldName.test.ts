@@ -184,4 +184,27 @@ describe('parseReasoningFromSseStream — configurable field name (#2488)', () =
     expect(captureBuffer.reasoningChunks).toStrictEqual(['standard reasoning']);
     expect(captureBuffer.actualFieldName).toBe('reasoning_content');
   });
+
+  it('preserves whitespace-only reasoning_content as usable (no fallback, #721/#2524)', async () => {
+    const whitespace = '  \n\t  ';
+    const captureBuffer = createCaptureBuffer();
+    const sseData = [
+      'data: ' +
+        JSON.stringify({
+          choices: [
+            { delta: { reasoning_content: whitespace, reasoning: 'fallback' } },
+          ],
+        }),
+    ];
+    const stream = createSseStream(sseData);
+
+    await parseReasoningFromSseStream(
+      stream.getReader(),
+      captureBuffer,
+      logger,
+    );
+
+    expect(captureBuffer.reasoningChunks).toStrictEqual([whitespace]);
+    expect(captureBuffer.actualFieldName).toBe('reasoning_content');
+  });
 });
