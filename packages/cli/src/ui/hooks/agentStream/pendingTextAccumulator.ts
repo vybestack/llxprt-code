@@ -4,11 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-interface TextSegment {
-  readonly text: string;
-  readonly level: number;
-}
-
 export interface PendingTextAppendResult {
   readonly publish: boolean;
   readonly text: string;
@@ -16,8 +11,7 @@ export interface PendingTextAppendResult {
 }
 
 export class PendingTextAccumulator {
-  private segments: readonly TextSegment[] = [];
-  private deltaCount = 0;
+  private text = '';
 
   constructor(private readonly publishInterval: number) {
     if (!Number.isInteger(publishInterval) || publishInterval < 1) {
@@ -26,13 +20,13 @@ export class PendingTextAccumulator {
   }
 
   append(delta: string): PendingTextAppendResult {
+    this.text += delta;
     this.deltaCount += 1;
-    this.segments = appendSegment(this.segments, { text: delta, level: 0 });
     const publish =
       this.deltaCount % this.publishInterval === 0 || delta.includes('\n');
     const result: PendingTextAppendResult = {
       publish,
-      text: publish ? this.materialize() : '',
+      text: publish ? this.text : '',
       deltaCount: this.deltaCount,
     };
     if (publish) {
@@ -42,33 +36,18 @@ export class PendingTextAccumulator {
   }
 
   replace(text: string): void {
-    this.segments = text === '' ? [] : [{ text, level: 0 }];
+    this.text = text;
     this.deltaCount = 0;
   }
 
   materialize(): string {
-    return this.segments.map((segment) => segment.text).join('');
+    return this.text;
   }
 
   clear(): void {
-    this.segments = [];
+    this.text = '';
     this.deltaCount = 0;
   }
-}
 
-function appendSegment(
-  segments: readonly TextSegment[],
-  next: TextSegment,
-): readonly TextSegment[] {
-  if (segments.length === 0) {
-    return [next];
-  }
-  const previous = segments[segments.length - 1];
-  if (previous.level !== next.level) {
-    return [...segments, next];
-  }
-  return appendSegment(segments.slice(0, -1), {
-    text: previous.text + next.text,
-    level: next.level + 1,
-  });
+  private deltaCount = 0;
 }

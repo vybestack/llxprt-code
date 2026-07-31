@@ -69,21 +69,18 @@ function appendBoundedLiveOutput(existing: string, update: string): string {
   const markerIndex = existing.indexOf(LIVE_OUTPUT_TRUNCATION_MARKER);
   if (markerIndex >= 0) {
     const suffixStart = markerIndex + LIVE_OUTPUT_TRUNCATION_MARKER.length;
-    return `${existing.slice(0, markerIndex)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(
-      existing.slice(suffixStart) + update,
-      RETAINED_LIVE_OUTPUT_SIDE_BYTES,
-      true,
-    )}`;
+    const suffix = existing.slice(suffixStart) + update;
+    return `${existing.slice(0, markerIndex)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(suffix, RETAINED_LIVE_OUTPUT_SIDE_BYTES, true)}`;
   }
-  const combined = existing + update;
-  if (Buffer.byteLength(combined, 'utf8') <= MAX_LIVE_OUTPUT_BYTES) {
-    return combined;
+  const existingBytes = Buffer.byteLength(existing, 'utf8');
+  const updateBytes = Buffer.byteLength(update, 'utf8');
+  const totalBytes = existingBytes + updateBytes;
+  if (totalBytes <= MAX_LIVE_OUTPUT_BYTES) {
+    return existing + update;
   }
-  return `${takeUtf8(combined, RETAINED_LIVE_OUTPUT_SIDE_BYTES, false)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(
-    combined,
-    RETAINED_LIVE_OUTPUT_SIDE_BYTES,
-    true,
-  )}`;
+  // Avoid materializing the full combined string; take from each side.
+  const halfBudget = RETAINED_LIVE_OUTPUT_SIDE_BYTES;
+  return `${takeUtf8(existing, halfBudget, false)}${LIVE_OUTPUT_TRUNCATION_MARKER}${takeUtf8(update, halfBudget, true)}`;
 }
 
 export function accumulateLiveOutput(

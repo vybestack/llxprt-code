@@ -182,7 +182,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
       yield makeFinishChunk('', 'STOP');
     }
 
-    const start = Date.now();
+    const start = performance.now();
     let yieldedCount = 0;
     for await (const _chunk of processor.processStreamResponse(
       hugeStream(),
@@ -190,7 +190,7 @@ describe('StreamProcessor.processStreamResponse — accumulation efficiency (#28
     )) {
       yieldedCount++;
     }
-    const elapsed = Date.now() - start;
+    const elapsed = performance.now() - start;
 
     expect(yieldedCount).toBe(chunkCount + 1);
     // O(N²) takes ~2800ms for 20000 chunks. O(N) takes <50ms.

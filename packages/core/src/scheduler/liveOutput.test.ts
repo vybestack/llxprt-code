@@ -71,9 +71,10 @@ describe('accumulateLiveOutput', () => {
       });
     }
 
-    expect(
-      typeof acc === 'string' && Buffer.byteLength(acc, 'utf8'),
-    ).toBeLessThanOrEqual(1024 * 1024);
+    expect(typeof acc).toBe('string');
+    expect(Buffer.byteLength(acc as string, 'utf8')).toBeLessThanOrEqual(
+      1024 * 1024,
+    );
     expect(acc).toContain('[... live output truncated ...]');
     expect(acc).toContain('1999:');
   });

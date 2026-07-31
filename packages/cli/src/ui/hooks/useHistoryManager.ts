@@ -191,7 +191,7 @@ function trimHistoryState(
   const itemBounded = state.entries.slice(itemStart);
   let totalBytes = itemBounded.reduce((total, entry) => total + entry.bytes, 0);
   let byteStart = 0;
-  while (totalBytes > limits.maxBytes && byteStart < itemBounded.length) {
+  while (totalBytes > limits.maxBytes && byteStart < itemBounded.length - 1) {
     totalBytes -= itemBounded[byteStart].bytes;
     byteStart += 1;
   }

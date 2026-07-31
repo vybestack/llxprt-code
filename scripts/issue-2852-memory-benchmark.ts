@@ -36,7 +36,7 @@ export function parseVmmapSummary(output: string): VmmapSummary {
   return {
     physicalFootprintBytes: requireMetric(
       output,
-      /Physical footprint:\s*([\d.]+[KMG])/i,
+      /Physical footprint:\s*(\d+(?:\.\d+)?[KMG])/i,
       'physical footprint',
     ),
     mallocEmptyResidentBytes: parseRegionDirty(output, 'MALLOC_SMALL (empty)'),
@@ -50,7 +50,7 @@ export function parseVmmapSummary(output: string): VmmapSummary {
 export function parseFootprintBytes(output: string): number {
   return requireMetric(
     output,
-    /phys_footprint:\s*([\d.]+\s*[KMG]?B)/i,
+    /phys_footprint:\s*(\d+(?:\.\d+)?\s*[KMG]?B)/i,
     'physical footprint total',
   );
 }
@@ -89,7 +89,7 @@ function parseRegionDirty(output: string, region: string): number {
 }
 
 function parseBytes(value: string): number {
-  const match = value.trim().match(/^([\d.]+)\s*([KMG]?)(?:B)?$/i);
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*([KMG]?)(?:B)?$/i);
   if (match === null) {
     throw new Error(`Invalid byte value: ${value}`);
   }
