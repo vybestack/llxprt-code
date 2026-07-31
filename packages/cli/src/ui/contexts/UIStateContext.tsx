@@ -85,6 +85,7 @@ export interface UIState {
    */
   isSessionBrowserDialogOpen: boolean;
   isModelConfigDialogOpen: boolean;
+  isPoliciesDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];

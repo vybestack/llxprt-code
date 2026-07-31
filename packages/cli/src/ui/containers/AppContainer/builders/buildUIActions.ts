@@ -135,6 +135,10 @@ export interface UIActionsParams {
   openModelConfigDialog: () => void;
   closeModelConfigDialog: () => void;
 
+  // Policies dialog
+  openPoliciesDialog: () => void;
+  closePoliciesDialog: () => void;
+
   // Session browser dialog
   openSessionBrowserDialog: () => void;
   closeSessionBrowserDialog: () => void;
@@ -183,6 +187,13 @@ export interface UIActionsParams {
 
   // Queue error message
   setQueueErrorMessage: (message: string | null) => void;
+}
+
+function policiesActions(p: UIActionsParams) {
+  return {
+    openPoliciesDialog: p.openPoliciesDialog,
+    closePoliciesDialog: p.closePoliciesDialog,
+  };
 }
 
 /**
@@ -284,6 +295,8 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     // Model config dialog
     openModelConfigDialog: params.openModelConfigDialog,
     closeModelConfigDialog: params.closeModelConfigDialog,
+
+    ...policiesActions(params),
 
     // Session browser dialog
     openSessionBrowserDialog: params.openSessionBrowserDialog,

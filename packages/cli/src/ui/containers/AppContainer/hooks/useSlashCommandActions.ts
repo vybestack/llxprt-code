@@ -29,6 +29,7 @@ interface UseSlashCommandActionsParams {
   ) => void;
   openModelsDialog: (data?: ModelsDialogData) => void;
   openPermissionsDialog: () => void;
+  openPoliciesDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;
@@ -65,6 +66,7 @@ export interface SlashCommandActions {
   ) => void;
   openModelsDialog: (data?: ModelsDialogData) => void;
   openPermissionsDialog: () => void;
+  openPoliciesDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void | Promise<void>;
   openCreateProfileDialog: () => void;

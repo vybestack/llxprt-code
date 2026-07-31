@@ -110,6 +110,10 @@ const makeParams = (): UIActionsParams => ({
   openModelConfigDialog: vi.fn(),
   closeModelConfigDialog: vi.fn(),
 
+  // Policies dialog
+  openPoliciesDialog: vi.fn(),
+  closePoliciesDialog: vi.fn(),
+
   // Session browser dialog
   openSessionBrowserDialog: vi.fn(),
   closeSessionBrowserDialog: vi.fn(),
@@ -219,6 +223,8 @@ describe('buildUIActions', () => {
     expect(result.closeModelsDialog).toBeDefined();
     expect(result.openModelConfigDialog).toBeDefined();
     expect(result.closeModelConfigDialog).toBeDefined();
+    expect(result.openPoliciesDialog).toBeDefined();
+    expect(result.closePoliciesDialog).toBeDefined();
     expect(result.openSessionBrowserDialog).toBeDefined();
     expect(result.closeSessionBrowserDialog).toBeDefined();
     expect(result.onWorkspaceMigrationDialogOpen).toBeDefined();
@@ -302,6 +308,8 @@ describe('buildUIActions', () => {
     expect(result.closeModelsDialog).toBe(params.closeModelsDialog);
     expect(result.openModelConfigDialog).toBe(params.openModelConfigDialog);
     expect(result.closeModelConfigDialog).toBe(params.closeModelConfigDialog);
+    expect(result.openPoliciesDialog).toBe(params.openPoliciesDialog);
+    expect(result.closePoliciesDialog).toBe(params.closePoliciesDialog);
     expect(result.openSessionBrowserDialog).toBe(
       params.openSessionBrowserDialog,
     );
