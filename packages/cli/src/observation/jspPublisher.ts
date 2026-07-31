@@ -11,7 +11,6 @@ import type {
 } from './jspDocuments.js';
 import type { JspBootstrap } from './jspSchema.js';
 
-
 export interface JspPublisher {
   register(snapshot: JspSnapshotDocument): Promise<boolean>;
   publish(document: JspBoundDocument): Promise<boolean>;
