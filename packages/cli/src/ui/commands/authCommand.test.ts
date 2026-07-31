@@ -28,9 +28,11 @@ const setBrowserProfileAssociationMock = vi.fn();
 const clearBrowserProfileAssociationMock = vi.fn();
 const clearSessionBucketMock = vi.fn();
 const logoutAllBucketsMock = vi.fn();
+const activateNamedLoginBucketMock = vi.fn();
 const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
+  activateNamedLoginBucket: activateNamedLoginBucketMock,
   isOAuthEnabled: vi.fn(),
   isAuthenticated: vi.fn(),
   getAuthStatus: vi.fn(),
@@ -56,6 +58,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     getOAuthTokenMock.mockReset();
     clearSessionBucketMock.mockReset();
     logoutAllBucketsMock.mockReset();
+    activateNamedLoginBucketMock.mockReset();
     executor = new AuthCommandExecutor(mockOAuthManager);
     mockContext = {
       services: {
@@ -234,7 +237,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid action: invalid. Use create, disable, enable, login, logout, profile, status, or switch',
+          'Invalid action: invalid. Use create, disable, enable, lock, login, logout, profile, status, switch, or unlock',
       });
     });
   });
@@ -604,7 +607,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         '  2: Work (profile: Profile 1)',
         '',
         'To associate a profile, run:',
-        '  /auth claudecode profile mybucket <number-or-directory>',
+        '  /auth claudecode profile mybucket <number|directory|--clear>',
         'Then authenticate with:',
         '  /auth claudecode login mybucket',
       ].join('\n');
@@ -694,6 +697,26 @@ describe('AuthCommandExecutor OAuth Support', () => {
         'Invalid profile selector',
       );
     });
+    it('@given named login authenticates but activation fails @then reports post-auth activation failure distinctly', async () => {
+      const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
+      (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
+      activateNamedLoginBucketMock.mockRejectedValue(
+        new Error('session activation failed'),
+      );
+
+      const result = await executor.execute(
+        mockContext,
+        'claudecode login mybucket',
+      );
+
+      expect(mockAuthenticate).toHaveBeenCalled();
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Authenticated claudecode, but failed to activate bucket mybucket: session activation failed. Run /auth claudecode switch mybucket.',
+      });
+    });
 
     it('@given traversal selector @when profile selector has path separators @then returns error', async () => {
       const result = await executor.execute(
@@ -708,10 +731,10 @@ describe('AuthCommandExecutor OAuth Support', () => {
       );
     });
 
-    it('@given --clear flag @when profile clear @then clears association', async () => {
+    it('@given whitespace-padded --clear flag @when profile clear @then clears association', async () => {
       const result = await executor.execute(
         mockContext,
-        'claudecode profile mybucket --clear',
+        'claudecode profile mybucket   --clear   ',
       );
 
       expect(clearBrowserProfileAssociationMock).toHaveBeenCalledWith(
@@ -774,6 +797,10 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(mockAuthenticate).toHaveBeenCalledWith('claudecode', 'mybucket', {
         signalAuthCompletion: true,
       });
+      expect(activateNamedLoginBucketMock).toHaveBeenCalledWith(
+        'claudecode',
+        'mybucket',
+      );
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',

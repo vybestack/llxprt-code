@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { discoverBrowserProfiles } from './browser-profile-discovery.js';
 
@@ -128,8 +129,15 @@ describe('discoverBrowserProfiles', () => {
         readFile: () => JSON.stringify(localState),
       });
 
-      expect(capturedPath).toContain(
-        'Library/Application Support/Google/Chrome/Local State',
+      expect(capturedPath).toBe(
+        path.join(
+          '/Users/testuser',
+          'Library',
+          'Application Support',
+          'Google',
+          'Chrome',
+          'Local State',
+        ),
       );
     });
 
@@ -153,7 +161,9 @@ describe('discoverBrowserProfiles', () => {
         readFile: () => JSON.stringify(localState),
       });
 
-      expect(capturedPath).toContain('.config/google-chrome/Local State');
+      expect(capturedPath).toBe(
+        path.join('/home/testuser', '.config', 'google-chrome', 'Local State'),
+      );
     });
 
     it('uses the default userDataDir for win32', () => {
@@ -201,7 +211,7 @@ describe('discoverBrowserProfiles', () => {
         readFile: () => JSON.stringify(localState),
       });
 
-      expect(capturedPath).toBe('/custom/chrome/dir/Local State');
+      expect(capturedPath).toBe(path.join('/custom/chrome/dir', 'Local State'));
     });
   });
 
@@ -253,12 +263,18 @@ Path=Profiles/xxxxxxxx.default-release`;
         readFile: () => profilesIni,
       });
 
+      const expectedProfilePath = path.resolve(
+        '/Users/testuser',
+        'Library',
+        'Application Support',
+        'Firefox',
+        'Profiles',
+        'xxxxxxxx.default-release',
+      );
       expect(profiles).toStrictEqual([
         {
-          directoryName:
-            '/Users/testuser/Library/Application Support/Firefox/Profiles/xxxxxxxx.default-release',
-          displayName:
-            '/Users/testuser/Library/Application Support/Firefox/Profiles/xxxxxxxx.default-release',
+          directoryName: expectedProfilePath,
+          displayName: expectedProfilePath,
         },
       ]);
     });

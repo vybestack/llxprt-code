@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as path from 'node:path';
 
 import { createOrchestrator } from '../src/service/orchestrator';
 import type { LspConfig } from '../src/service/diagnostics';
+import { runCleanupTaskGroups } from './cleanup';
 
-const WORKSPACE_ROOT = '/workspace';
-const FIXTURE_PATH = new URL('./fixtures/fake-lsp-server.ts', import.meta.url)
-  .pathname;
+const WORKSPACE_ROOT = path.resolve('/workspace');
+const WORKSPACE_URI = pathToFileURL(WORKSPACE_ROOT).toString();
+const FIXTURE_PATH = fileURLToPath(
+  new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
+);
 
 function createFakeServer(
   id: string,
@@ -16,7 +21,7 @@ function createFakeServer(
     id,
     command: process.execPath,
     args: [FIXTURE_PATH, ...extraArgs],
-    rootUri: `file://${WORKSPACE_ROOT}`,
+    rootUri: WORKSPACE_URI,
     extensions,
   };
 }
@@ -28,16 +33,11 @@ function createConfig(servers: LspConfig['servers']): LspConfig {
 const createdOrchestrators: ReturnType<typeof createOrchestrator>[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    createdOrchestrators.map(async (orchestrator) => {
-      try {
-        await orchestrator.shutdown();
-      } catch {
-        // ignore cleanup errors during red-phase TDD
-      }
-    }),
+  const orchestrators = createdOrchestrators.splice(0);
+  await runCleanupTaskGroups(
+    [orchestrators.map((orchestrator) => () => orchestrator.shutdown())],
+    'LSP orchestrator integration cleanup failed',
   );
-  createdOrchestrators.length = 0;
 });
 
 describe('Orchestrator integration with real registry/language map/client paths', () => {
@@ -56,7 +56,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const diagnostics = await orchestrator.checkFile(
-      '/workspace/src/app.ts',
+      path.join(WORKSPACE_ROOT, 'src/app.ts'),
       'const x = TYPE_ERROR',
     );
     expect(diagnostics.length).toBeGreaterThan(0);
@@ -79,7 +79,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     ).toBe(false);
 
     await orchestrator.checkFile(
-      '/workspace/src/lazy.ts',
+      path.join(WORKSPACE_ROOT, 'src/lazy.ts'),
       'const x = TYPE_ERROR',
     );
 
@@ -104,8 +104,14 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const [tsDiagnostics, pyDiagnostics] = await Promise.all([
-      orchestrator.checkFile('/workspace/src/a.ts', 'const x = TYPE_ERROR'),
-      orchestrator.checkFile('/workspace/src/b.py', 'TYPE_ERROR = 1'),
+      orchestrator.checkFile(
+        path.join(WORKSPACE_ROOT, 'src/a.ts'),
+        'const x = TYPE_ERROR',
+      ),
+      orchestrator.checkFile(
+        path.join(WORKSPACE_ROOT, 'src/b.py'),
+        'TYPE_ERROR = 1',
+      ),
     ]);
 
     expect(tsDiagnostics.length).toBeGreaterThan(0);
@@ -142,18 +148,18 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/k1.ts',
+      path.join(WORKSPACE_ROOT, 'src/k1.ts'),
       'const x = TYPE_ERROR',
     );
     await orchestrator.checkFile(
-      '/workspace/src/k2.ts',
+      path.join(WORKSPACE_ROOT, 'src/k2.ts'),
       'const x = TYPE_ERROR',
     );
 
     const all = await orchestrator.getAllDiagnostics();
     expect(Object.keys(all).sort()).toEqual([
-      '/workspace/src/k1.ts',
-      '/workspace/src/k2.ts',
+      path.join(WORKSPACE_ROOT, 'src/k1.ts'),
+      path.join(WORKSPACE_ROOT, 'src/k2.ts'),
     ]);
   });
 
@@ -171,11 +177,11 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/crash.ts',
+      path.join(WORKSPACE_ROOT, 'src/crash.ts'),
       'const x = TYPE_ERROR',
     );
     const afterCrash = await orchestrator.checkFile(
-      '/workspace/src/crash.ts',
+      path.join(WORKSPACE_ROOT, 'src/crash.ts'),
       'const x = TYPE_ERROR',
     );
 
@@ -194,7 +200,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/shutdown.ts',
+      path.join(WORKSPACE_ROOT, 'src/shutdown.ts'),
       'const x = TYPE_ERROR',
     );
     await orchestrator.shutdown();
@@ -220,11 +226,11 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/s1.ts',
+      path.join(WORKSPACE_ROOT, 'src/s1.ts'),
       'const x = TYPE_ERROR',
     );
     await orchestrator.checkFile(
-      '/workspace/src/s2.tsx',
+      path.join(WORKSPACE_ROOT, 'src/s2.tsx'),
       'const x = TYPE_ERROR',
     );
 
@@ -249,7 +255,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const definitions = await orchestrator.gotoDefinition(
-      '/workspace/src/nav.ts',
+      path.join(WORKSPACE_ROOT, 'src/nav.ts'),
       0,
       6,
     );
@@ -268,7 +274,7 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const diagnostics = await orchestrator.checkFile(
-      '/workspace/src/file.unknown',
+      path.join(WORKSPACE_ROOT, 'src/file.unknown'),
       'TYPE_ERROR',
     );
     expect(diagnostics).toEqual([]);
@@ -289,12 +295,14 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     await orchestrator.checkFile(
-      '/workspace/src/known.ts',
+      path.join(WORKSPACE_ROOT, 'src/known.ts'),
       'const x = TYPE_ERROR',
     );
     const all = await orchestrator.getAllDiagnostics();
 
-    expect(all['/workspace/src/known.ts']?.length ?? 0).toBeGreaterThan(0);
+    expect(
+      all[path.join(WORKSPACE_ROOT, 'src/known.ts')]?.length ?? 0,
+    ).toBeGreaterThan(0);
   });
 
   /**
@@ -311,11 +319,11 @@ describe('Orchestrator integration with real registry/language map/client paths'
     createdOrchestrators.push(orchestrator);
 
     const first = await orchestrator.checkFile(
-      '/workspace/src/touch-timeout.ts',
+      path.join(WORKSPACE_ROOT, 'src/touch-timeout.ts'),
       'const x = TYPE_ERROR',
     );
     const second = await orchestrator.checkFile(
-      '/workspace/src/touch-timeout.ts',
+      path.join(WORKSPACE_ROOT, 'src/touch-timeout.ts'),
       'const x = TYPE_ERROR // changed',
     );
 
@@ -367,5 +375,71 @@ describe('Orchestrator integration with real registry/language map/client paths'
       'm-server',
       'z-server',
     ]);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P17
+   * @scenario:shutdown error aggregation
+   * @given:Two initialized servers that both ignore the shutdown request,
+   *        causing LspRequestTimeoutError in each client
+   * @when:orchestrator.shutdown() is called
+   * @then:shutdown rejects with an AggregateError containing both failures
+   *        rather than swallowing them, proving cleanup attempts all clients
+   *        before propagating
+   */
+  it('propagates an AggregateError when multiple clients fail during shutdown', async () => {
+    const orchestrator = createOrchestrator(
+      createConfig([
+        createFakeServer('fail-a', ['.ts'], ['--ignore-shutdown']),
+        createFakeServer('fail-b', ['.tsx'], ['--ignore-shutdown']),
+      ]),
+      WORKSPACE_ROOT,
+    );
+    createdOrchestrators.push(orchestrator);
+
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/a.ts'),
+      'const x = TYPE_ERROR',
+    );
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/b.tsx'),
+      'const y = TYPE_ERROR',
+    );
+
+    let thrown: unknown = null;
+    try {
+      await orchestrator.shutdown();
+    } catch (error: unknown) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const aggregate = thrown as AggregateError;
+    expect(aggregate.errors).toHaveLength(2);
+  });
+
+  /**
+   * @plan:PLAN-20250212-LSP.P17
+   * @scenario:single client shutdown error propagation
+   * @given:One initialized server that ignores the shutdown request
+   * @when:orchestrator.shutdown() is called
+   * @then:shutdown rejects with the single underlying error (not wrapped in
+   *        an AggregateError when there is only one failure)
+   */
+  it('propagates a single error when one client fails during shutdown', async () => {
+    const orchestrator = createOrchestrator(
+      createConfig([
+        createFakeServer('fail-single', ['.ts'], ['--ignore-shutdown']),
+      ]),
+      WORKSPACE_ROOT,
+    );
+    createdOrchestrators.push(orchestrator);
+
+    await orchestrator.checkFile(
+      path.join(WORKSPACE_ROOT, 'src/single.ts'),
+      'const x = TYPE_ERROR',
+    );
+
+    await expect(orchestrator.shutdown()).rejects.toThrow(/timed out/);
   });
 });

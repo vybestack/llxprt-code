@@ -17,16 +17,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { glob, escape as globEscape } from 'glob';
 import {
+  createImageResizeToolResult,
   detectFileType,
+  getImageResizeToolResult,
+  getImageSourceSizeLimit,
+  getProcessedFileSkipReason,
+  isAssetExplicitlyRequested,
+  type ProcessedFileReadResult,
   processSingleFileContent,
+  shouldResizeExplicitImage,
   DEFAULT_ENCODING,
-  getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
+  getSpecificMimeType,
 } from '../utils/fileUtils.js';
 import { type ContentPartUnion } from '../types/wire-types.js';
 import { stat } from 'fs/promises';
 import { ToolErrorType } from '../types/tool-error.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
+import {
+  resolveImageResizePolicy,
+  type ImageResizePolicy,
+} from '../utils/imageResize.js';
 import {
   buildParameterSchema,
   formatExcludePatterns,
@@ -43,6 +54,9 @@ interface AddFileContentResult {
   totalTokens: number;
   action: AddFileContentAction;
 }
+
+type ProcessFilesResult = Readonly<{ totalTokens: number; error?: ToolResult }>;
+type ProcessSingleFileResult = ProcessFilesResult & { readonly done: boolean };
 
 /**
  * Parameters for the ReadManyFilesTool.
@@ -226,7 +240,7 @@ ${this.host.getTargetDir()}
     contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
   ): Promise<ToolResult> {
-    const totalTokens = await this.processFiles(
+    const processResult = await this.processFiles(
       sortedFiles,
       inputPatterns,
       skippedFiles,
@@ -234,11 +248,14 @@ ${this.host.getTargetDir()}
       contentParts,
       limits,
     );
+    if (processResult.error !== undefined) {
+      return processResult.error;
+    }
 
     const displayMessage = this.buildDisplayMessage(
       processedFilesRelativePaths,
       skippedFiles,
-      totalTokens,
+      processResult.totalTokens,
     );
 
     if (contentParts.length > 0) {
@@ -499,7 +516,21 @@ ${this.host.getTargetDir()}
     processedFilesRelativePaths: string[],
     contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
-  ): Promise<number> {
+  ): Promise<ProcessFilesResult> {
+    const ephemeralSettings = this.host.getEphemeralSettings();
+    let imageResizePolicy: ImageResizePolicy | undefined;
+    try {
+      imageResizePolicy = resolveImageResizePolicy(ephemeralSettings);
+    } catch (error) {
+      return createImageResizeToolResult(
+        getErrorMessage(error),
+        ToolErrorType.READ_CONTENT_FAILURE,
+        0,
+      );
+    }
+    const maxLinesPerFile =
+      (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
+      DEFAULT_MAX_LINES_TEXT_FILE;
     let totalTokens = 0;
     for (const filePath of sortedFiles) {
       const result = await this.processSingleFile(
@@ -511,13 +542,15 @@ ${this.host.getTargetDir()}
         contentParts,
         limits,
         totalTokens,
+        imageResizePolicy,
+        maxLinesPerFile,
       );
-      if (result.done) {
-        return result.totalTokens;
+      if (result.error !== undefined || result.done) {
+        return result;
       }
       totalTokens = result.totalTokens;
     }
-    return totalTokens;
+    return { totalTokens };
   }
 
   private async processSingleFile(
@@ -529,37 +562,52 @@ ${this.host.getTargetDir()}
     contentParts: Array<string | ContentPartUnion>,
     limits: ReturnType<ReadManyFilesToolInvocation['resolveLimits']>,
     currentTokens: number,
-  ): Promise<{ done: boolean; totalTokens: number }> {
+    imageResizePolicy: ImageResizePolicy | undefined,
+    maxLinesPerFile: number,
+  ): Promise<ProcessSingleFileResult> {
     const relativePathForDisplay = path
       .relative(this.host.getTargetDir(), filePath)
       .replace(/\\/g, '/');
-
-    const sizeCheck = await this.checkFileSize(
+    const resizeBeforeOutputLimit = await shouldResizeExplicitImage(
       filePath,
-      relativePathForDisplay,
-      skippedFiles,
+      inputPatterns,
+      imageResizePolicy !== undefined,
+    );
+    if (
+      (await this.checkFileSize(
+        filePath,
+        relativePathForDisplay,
+        skippedFiles,
+        getImageSourceSizeLimit(resizeBeforeOutputLimit, limits.fileSizeLimit),
+      )) === 'skip' ||
+      (await this.checkAssetFile(
+        filePath,
+        relativePathForDisplay,
+        inputPatterns,
+        skippedFiles,
+      )) === 'skip'
+    ) {
+      return { done: false, totalTokens: currentTokens };
+    }
+
+    const fileReadResult = await processSingleFileContent(
+      filePath,
+      this.host.getTargetDir(),
+      undefined,
+      maxLinesPerFile,
+      imageResizePolicy,
+    );
+    const resizeError = getImageResizeToolResult(fileReadResult, currentTokens);
+    if (resizeError !== undefined) {
+      return resizeError;
+    }
+    const skipReason = getProcessedFileSkipReason(
+      fileReadResult,
+      resizeBeforeOutputLimit,
       limits.fileSizeLimit,
     );
-    if (sizeCheck === 'skip') {
-      return { done: false, totalTokens: currentTokens };
-    }
-
-    const assetCheck = await this.checkAssetFile(
-      filePath,
-      relativePathForDisplay,
-      inputPatterns,
-      skippedFiles,
-    );
-    if (assetCheck === 'skip') {
-      return { done: false, totalTokens: currentTokens };
-    }
-
-    const fileReadResult = await this.readFileContent(filePath);
-    if (fileReadResult.error) {
-      skippedFiles.push({
-        path: relativePathForDisplay,
-        reason: `Read error: ${fileReadResult.error}`,
-      });
+    if (skipReason !== undefined) {
+      skippedFiles.push({ path: relativePathForDisplay, reason: skipReason });
       return { done: false, totalTokens: currentTokens };
     }
 
@@ -586,7 +634,6 @@ ${this.host.getTargetDir()}
     }
     return { done: false, totalTokens: addResult.totalTokens };
   }
-
   private async checkFileSize(
     filePath: string,
     relativePathForDisplay: string,
@@ -619,45 +666,22 @@ ${this.host.getTargetDir()}
     skippedFiles: Array<{ path: string; reason: string }>,
   ): Promise<'skip' | 'continue'> {
     const fileType = await detectFileType(filePath);
-    if (fileType === 'image' || fileType === 'pdf' || fileType === 'audio') {
-      const fileExtension = path.extname(filePath).toLowerCase();
-      const fileNameWithoutExtension = path.basename(filePath, fileExtension);
-      const requestedExplicitly = inputPatterns.some(
-        (pattern: string) =>
-          pattern.toLowerCase().includes(fileExtension) ||
-          pattern.includes(fileNameWithoutExtension),
-      );
-
-      if (!requestedExplicitly) {
-        skippedFiles.push({
-          path: relativePathForDisplay,
-          reason:
-            'asset file (image/pdf/audio) was not explicitly requested by name or extension',
-        });
-        return 'skip';
-      }
+    if (
+      (fileType === 'image' || fileType === 'pdf' || fileType === 'audio') &&
+      !isAssetExplicitlyRequested(filePath, inputPatterns)
+    ) {
+      skippedFiles.push({
+        path: relativePathForDisplay,
+        reason:
+          'asset file (image/pdf/audio) was not explicitly requested by name or extension',
+      });
+      return 'skip';
     }
     return 'continue';
   }
 
-  private async readFileContent(
-    filePath: string,
-  ): Promise<Awaited<ReturnType<typeof processSingleFileContent>>> {
-    const maxLinesPerFile =
-      (this.host.getEphemeralSettings()['file-read-max-lines'] as
-        | number
-        | undefined) ?? DEFAULT_MAX_LINES_TEXT_FILE;
-
-    return processSingleFileContent(
-      filePath,
-      this.host.getTargetDir(),
-      undefined,
-      maxLinesPerFile,
-    );
-  }
-
   private addFileContent(
-    fileReadResult: Awaited<ReturnType<typeof processSingleFileContent>>,
+    fileReadResult: ProcessedFileReadResult,
     filePath: string,
     relativePathForDisplay: string,
     skippedFiles: Array<{ path: string; reason: string }>,
@@ -697,7 +721,7 @@ ${this.host.getTargetDir()}
   }
 
   private addTextFileContent(
-    fileReadResult: Awaited<ReturnType<typeof processSingleFileContent>>,
+    fileReadResult: ProcessedFileReadResult,
     filePath: string,
     relativePathForDisplay: string,
     skippedFiles: Array<{ path: string; reason: string }>,

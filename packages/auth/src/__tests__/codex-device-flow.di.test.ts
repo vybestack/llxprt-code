@@ -23,6 +23,8 @@ import type { AddressInfo } from 'net';
 import { CodexDeviceFlow } from '../flows/codex-device-flow.js';
 import type { IDebugLogger } from '../interfaces/index.js';
 
+const originalFetch = globalThis.fetch;
+
 // ─── Test doubles ────────────────────────────────────────────────────────────
 
 function createCollectingLogger(): IDebugLogger & {
@@ -58,6 +60,11 @@ function createTestIdToken(accountId: string): string {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('CodexDeviceFlow DI behavioral tests', () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
   it('constructs with injected IDebugLogger without error', () => {
     const logger = createCollectingLogger();
     const flow = new CodexDeviceFlow({ logger });
@@ -142,6 +149,223 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
     ).rejects.toThrow('PKCE code verifier not found for state');
   });
 
+  it('aborts a live-hung device-code network request at the configured deadline', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const fallback = setTimeout(
+            () => reject(new Error('mock fetch fallback timeout')),
+            2_000,
+          );
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(fallback);
+            reject(init.signal?.reason ?? new Error('aborted'));
+          });
+        }),
+    );
+
+    try {
+      const flow = new CodexDeviceFlow({
+        logger: createCollectingLogger(),
+        networkTimeoutMs: 50,
+      });
+
+      await expect(flow.requestDeviceCode()).rejects.toThrow(
+        'Codex OAuth network request timed out',
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('does not start a network request when the parent signal is already aborted', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn<typeof fetch>();
+    globalThis.fetch = fetchMock;
+    const controller = new AbortController();
+    controller.abort(new Error('overall auth timed out'));
+
+    try {
+      const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+
+      await expect(flow.requestDeviceCode(controller.signal)).rejects.toThrow(
+        'overall auth timed out',
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('keeps the request deadline active while consuming a stalled response body', async () => {
+    const originalFetch = globalThis.fetch;
+    let bodyCancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"device_auth_id":'));
+      },
+      cancel() {
+        bodyCancelled = true;
+      },
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    try {
+      const flow = new CodexDeviceFlow({
+        logger: createCollectingLogger(),
+        networkTimeoutMs: 50,
+      });
+
+      await expect(flow.requestDeviceCode()).rejects.toThrow(
+        'Codex OAuth network request timed out',
+      );
+      expect(bodyCancelled).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await body.cancel().catch(() => undefined);
+    }
+  });
+
+  it('keeps the parent abort active during body consumption and never completes late', async () => {
+    const originalFetch = globalThis.fetch;
+    let bodyCancelled = false;
+    let completed = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"device_auth_id":'));
+      },
+      cancel() {
+        bodyCancelled = true;
+      },
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const controller = new AbortController();
+
+    try {
+      const flow = new CodexDeviceFlow({
+        logger: createCollectingLogger(),
+        networkTimeoutMs: 1_000,
+      });
+      const request = flow
+        .requestDeviceCode(controller.signal)
+        .then((value) => {
+          completed = true;
+          return value;
+        });
+      controller.abort(new Error('parent auth aborted'));
+
+      await expect(request).rejects.toThrow('parent auth aborted');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect({ bodyCancelled, completed }).toStrictEqual({
+        bodyCancelled: true,
+        completed: false,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      await body.cancel().catch(() => undefined);
+    }
+  });
+
+  it('rejects the deadline even when reader.cancel() never settles (issue #2819)', async () => {
+    const originalFetch = globalThis.fetch;
+    let cancelCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"device_auth_id":'));
+      },
+      cancel() {
+        cancelCount += 1;
+        return new Promise<void>(() => {});
+      },
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    try {
+      const flow = new CodexDeviceFlow({
+        logger: createCollectingLogger(),
+        networkTimeoutMs: 50,
+      });
+
+      const start = Date.now();
+      await expect(flow.requestDeviceCode()).rejects.toThrow(
+        'Codex OAuth network request timed out',
+      );
+      const elapsed = Date.now() - start;
+      await vi.waitFor(() => expect(body.locked).toBe(false));
+
+      expect({ cancelCount, prompt: elapsed < 500 }).toStrictEqual({
+        cancelCount: 1,
+        prompt: true,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('discards the PKCE verifier after an invalid token response', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response('{"access_token":42}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    try {
+      const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+      const redirectUri = 'http://127.0.0.1:1455/callback';
+      const state = 'invalid-response-state';
+      flow.buildAuthorizationUrl(redirectUri, state);
+
+      await expect(
+        flow.exchangeCodeForToken('code', redirectUri, state),
+      ).rejects.toThrow('Expected string, received number');
+      await expect(
+        flow.exchangeCodeForToken('code', redirectUri, state),
+      ).rejects.toThrow('PKCE code verifier not found');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('reports malformed successful device-code responses meaningfully', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response('not-json', { status: 200 }));
+    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+
+    await expect(flow.requestDeviceCode()).rejects.toThrow(
+      'Device code request failed: invalid JSON response (status 200)',
+    );
+  });
+
+  it('reports empty successful refresh responses meaningfully', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response('', { status: 200 }));
+    const flow = new CodexDeviceFlow({ logger: createCollectingLogger() });
+
+    await expect(flow.refreshToken('old-refresh-token')).rejects.toThrow(
+      'Token refresh failed: invalid JSON response (status 200)',
+    );
+  });
+
   describe('with test HTTP server for token exchange', () => {
     let testServer: Server;
     let serverPort: number;
@@ -184,15 +408,15 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
       const state = 'exchange-test-state';
       flow.buildAuthorizationUrl(redirectUri, state);
 
-      const originalFetch = global.fetch;
+      const realFetch = originalFetch;
       global.fetch = vi.fn((input: RequestInfo | URL) => {
         const url = input.toString();
         if (url.includes('auth.openai.com/oauth/token')) {
-          return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
+          return realFetch(`http://localhost:${serverPort}/oauth/token`, {
             method: 'POST',
           });
         }
-        return originalFetch(input);
+        return realFetch(input);
       }) as typeof fetch;
 
       try {
@@ -231,15 +455,15 @@ describe('CodexDeviceFlow DI behavioral tests', () => {
         res.end(JSON.stringify(mockRefreshResponse));
       });
 
-      const originalFetch = global.fetch;
+      const realFetch = originalFetch;
       global.fetch = vi.fn((input: RequestInfo | URL) => {
         const url = input.toString();
         if (url.includes('auth.openai.com/oauth/token')) {
-          return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
+          return realFetch(`http://localhost:${serverPort}/oauth/token`, {
             method: 'POST',
           });
         }
-        return originalFetch(input);
+        return realFetch(input);
       }) as typeof fetch;
 
       try {

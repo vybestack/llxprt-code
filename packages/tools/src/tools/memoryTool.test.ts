@@ -655,7 +655,7 @@ describe('MemoryTool', () => {
       const normalizedTitle = result.title.replace(/\\/g, '/');
       const normalizedFileName = result.fileName.replace(/\\/g, '/');
       expect(normalizedTitle).toContain('.llxprt/LLXPRT.md');
-      expect(normalizedFileName).toContain(mockWorkingDir);
+      expect(normalizedFileName).toContain(mockWorkingDir.replace(/\\/g, '/'));
       expect(normalizedFileName).toContain('.llxprt');
     });
   });
@@ -714,7 +714,7 @@ describe('MemoryTool', () => {
       const filePath = invocation.getMemoryFilePath();
       // Normalize paths for cross-platform compatibility
       const normalizedPath = filePath.replace(/\\/g, '/');
-      expect(normalizedPath).toContain(mockWorkingDir);
+      expect(normalizedPath).toContain(mockWorkingDir.replace(/\\/g, '/'));
       expect(normalizedPath).toContain('.llxprt');
       expect(normalizedPath).toContain('.LLXPRT_SYSTEM');
     });

@@ -558,6 +558,8 @@ describe('.github/workflows/nightly.yml', () => {
   it('makes the failure notification job depend on all nightly test jobs', () => {
     const expectedNeeds = [
       'windows_ci',
+      'macos_ci',
+      'macos_secure_store',
       'e2e_full',
       'behavioral_evals',
       'windows_bun_native_smoke',

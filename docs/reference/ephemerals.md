@@ -53,6 +53,19 @@ Prevent tools from flooding the context. Applied to all tools via the batch sche
 | `tool-output-item-size-limit` | number | `524288` (512KB)                  | yes     | Max bytes per individual file/item. Prevents one huge file from consuming the budget.                                                                                       |
 | `file-read-max-lines`         | number | `2000`                            | yes     | Default max lines when reading a text file with no explicit limit. Prevents accidentally reading massive files.                                                             |
 
+## Image Resizing
+
+`read_file` and explicitly requested images in `read_many_files` automatically downscale images when an effective model or profile limit is present. The fit preserves aspect ratio and never upscales. Images already within every configured limit are returned byte-for-byte without re-encoding. Resized PNG, JPEG, GIF, and WebP inputs retain their MIME type and container; animated GIF/WebP inputs retain their frame count. Resize-required corrupt images and unsupported containers fail clearly rather than returning oversized originals.
+
+| Setting                     | Type    | Default       | Profile | Description                                                                                        |
+| --------------------------- | ------- | ------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `image-resize.enabled`      | boolean | model default | yes     | Set `false` to disable automatic image resizing, including model defaults, and preserve originals. |
+| `image-resize.maxLongEdge`  | number  | model default | yes     | Positive integer maximum for the orientation-independent longer edge, in pixels.                   |
+| `image-resize.maxShortEdge` | number  | model default | yes     | Positive integer maximum for the orientation-independent shorter edge, in pixels.                  |
+| `image-resize.maxPixels`    | number  | model default | yes     | Positive integer maximum decoded pixel count.                                                      |
+
+Built-in visual-model aliases provide conservative advisory defaults: Claude Opus/Sonnet use `1568`/`1568`/`1229312`; OpenAI `gpt-*` uses `2048`/`2048`/`1572864`; Kimi uses `4096`/`2160`/`8847360` (long edge/short edge/pixels). These are useful-resolution targets, not universal provider hard limits. Explicit profile values take precedence over model defaults. When no limit is configured, image reads retain legacy byte-for-byte behavior. Setting `image-resize.enabled false` disables all automatic limits for the profile. For one `read_file` call, pass `skip_image_resize: true` to return the original image; `read_many_files` has no per-call opt-out.
+
 ## Timeouts
 
 Prevent commands and tasks from hanging indefinitely. In seconds (not milliseconds, despite older docs).

@@ -33,6 +33,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import sharp from 'sharp';
 import type { IToolHost, IStorageService } from '../interfaces/index.js';
 import {
   DeleteLineRangeTool,
@@ -81,7 +82,10 @@ function createTempDir(prefix = 'llxprt-fs-test-'): {
 /**
  * Minimal structural fake for IToolHost providing a temp directory.
  */
-function _createFakeFileHost(targetDir: string): IToolHost {
+function _createFakeFileHost(
+  targetDir: string,
+  ephemeralSettings: Record<string, unknown> = {},
+): IToolHost {
   return {
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
@@ -106,7 +110,7 @@ function _createFakeFileHost(targetDir: string): IToolHost {
     recordFileRead: () => {},
     getFileSystemService: () => undefined,
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    getEphemeralSettings: () => ({ ...ephemeralSettings }),
     getDebugMode: () => false,
   };
 }
@@ -163,6 +167,40 @@ async function executeDeclarativeToolForBehavioralAssertion(
   }
 }
 
+function readInlineImage(result: ToolResult): {
+  data: Buffer;
+  mimeType: string | undefined;
+  displayName: string | undefined;
+} {
+  if (typeof result.llmContent === 'string') {
+    throw new Error(result.llmContent);
+  }
+  const inlineData = result.llmContent.inlineData;
+  if (inlineData?.data === undefined) {
+    throw new Error('Expected inline image data');
+  }
+  return {
+    data: Buffer.from(inlineData.data, 'base64'),
+    mimeType: inlineData.mimeType,
+    displayName: inlineData.displayName,
+  };
+}
+
+async function createPngFixture(
+  targetDir: string,
+  fileName: string,
+  background: { r: number; g: number; b: number },
+): Promise<{ filePath: string; original: Buffer }> {
+  const filePath = join(targetDir, fileName);
+  const original = await sharp({
+    create: { width: 240, height: 120, channels: 3, background },
+  })
+    .png()
+    .toBuffer();
+  writeFileSync(filePath, original);
+  return { filePath, original };
+}
+
 describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10', () => {
   let tempDir: string;
   let cleanup: () => void;
@@ -211,6 +249,139 @@ describe('Filesystem Tool Group Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P
 
       expect(result.error).toContain('does-not-exist.txt');
       expect(result.llmContent).toContain('does-not-exist.txt');
+    });
+
+    it('resizes an oversized image according to effective profile limits', async () => {
+      const { filePath } = await createPngFixture(tempDir, 'oversized.png', {
+        r: 90,
+        g: 120,
+        b: 150,
+      });
+      const tool = new ReadFileTool(
+        _createFakeFileHost(tempDir, {
+          'image-resize.maxLongEdge': 120,
+        }),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        file_path: filePath,
+      });
+      const image = readInlineImage(result);
+      const metadata = await sharp(image.data).metadata();
+
+      expect(metadata.autoOrient).toEqual({ width: 120, height: 60 });
+      expect(image.mimeType).toBe('image/png');
+      expect(image.displayName).toBe('oversized.png');
+    });
+
+    it('preserves original bytes when profile resizing is explicitly disabled', async () => {
+      const { filePath, original } = await createPngFixture(
+        tempDir,
+        'disabled.png',
+        { r: 120, g: 90, b: 60 },
+      );
+      const tool = new ReadFileTool(
+        _createFakeFileHost(tempDir, {
+          'image-resize.enabled': false,
+          'image-resize.maxLongEdge': 120,
+        }),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        file_path: filePath,
+      });
+
+      expect(readInlineImage(result).data).toEqual(original);
+    });
+
+    it('exposes and honors skip_image_resize for a single image read', async () => {
+      const { filePath, original } = await createPngFixture(
+        tempDir,
+        'original.png',
+        { r: 30, g: 60, b: 90 },
+      );
+      const tool = new ReadFileTool(
+        _createFakeFileHost(tempDir, {
+          'image-resize.maxLongEdge': 120,
+        }),
+      );
+
+      expect(tool.schema.parametersJsonSchema).toMatchObject({
+        properties: {
+          skip_image_resize: { type: 'boolean' },
+        },
+      });
+      const result = await executeToolForBehavioralAssertion(tool, {
+        file_path: filePath,
+        skip_image_resize: true,
+      });
+
+      expect(readInlineImage(result).data).toEqual(original);
+    });
+
+    it('preserves exact image bytes when no resize policy is configured', async () => {
+      const { filePath, original } = await createPngFixture(
+        tempDir,
+        'absent-policy.png',
+        { r: 15, g: 45, b: 75 },
+      );
+
+      const result = await executeToolForBehavioralAssertion(
+        new ReadFileTool(_createFakeFileHost(tempDir)),
+        { file_path: filePath },
+      );
+
+      expect(readInlineImage(result).data).toEqual(original);
+    });
+
+    it('returns a clear error for malformed image resize settings', async () => {
+      const { filePath } = await createPngFixture(
+        tempDir,
+        'invalid-policy.png',
+        {
+          r: 15,
+          g: 30,
+          b: 45,
+        },
+      );
+      const tool = new ReadFileTool(
+        _createFakeFileHost(tempDir, {
+          'image-resize.maxLongEdge': 0,
+        }),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        file_path: filePath,
+      });
+
+      expect(result.error).toContain(
+        'image-resize.maxLongEdge must be a positive integer',
+      );
+      expect(result.returnDisplay).toContain(
+        'Image Resize Configuration Error',
+      );
+    });
+
+    it('returns a clear error for corrupt images under automatic resizing', async () => {
+      const filePath = join(tempDir, 'corrupt.png');
+      writeFileSync(
+        filePath,
+        Buffer.from([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02,
+          0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        ]),
+      );
+      const tool = new ReadFileTool(
+        _createFakeFileHost(tempDir, {
+          'image-resize.maxLongEdge': 120,
+        }),
+      );
+
+      const result = await executeToolForBehavioralAssertion(tool, {
+        file_path: filePath,
+      });
+
+      expect(result.error).toContain('Unable to resize image corrupt.png');
     });
   });
 

@@ -45,7 +45,15 @@ export {
 } from './types.js';
 
 // ─── Token Store ─────────────────────────────────────────────────────────────
-export type { TokenStore } from './token-store.js';
+export type {
+  TokenStore,
+  AuthLockStatus,
+  AuthLockRecoveryResult,
+  ForceRecoverOptions,
+  LockSchemaClassification,
+  LockStartTimeSource,
+  TokenVisibility,
+} from './token-store.js';
 
 // ─── Keyring Token Store ─────────────────────────────────────────────────────
 export { KeyringTokenStore } from './keyring-token-store.js';

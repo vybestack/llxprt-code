@@ -417,6 +417,10 @@ const NO_TEST_METADATA = new Set<string>([
   '.prettierrc.json',
   '.editorconfig',
   '.prettierignore',
+  '.npmrc',
+  'bunfig.toml',
+  'junit-integration.xml',
+  'tsconfig.scripts.json',
 ]);
 
 /** Regexes for paths that never affect tests (docs, metadata). */
@@ -427,6 +431,27 @@ const NO_TEST_PATH_RES: readonly RegExp[] = [
   DEV_DOCS_RE,
   EVALS_RE,
   MARKDOWN_RE,
+];
+
+/** Path prefixes for repo-level config/infra directories that never affect tests. */
+const NO_TEST_PREFIXES: readonly string[] = [
+  '.allstar/',
+  '.claude/',
+  '.gcp/',
+  '.gemini/',
+  '.llxprt/',
+  'shell-scripts/',
+  'test-scripts/',
+];
+
+/**
+ * Root-level config files that are exercised by scripts-shard tests (lint
+ * guards, coverage-flag tests). They select the scripts shard so those guard
+ * tests run, but do not force all six shards.
+ */
+const SCRIPTS_INFRA_FILES: readonly string[] = [
+  'eslint.config.js',
+  'vitest.coverage.ts',
 ];
 
 /**
@@ -445,11 +470,19 @@ const FILE_OBSERVERS: Readonly<Record<string, readonly string[]>> = {
  * docs-only.
  */
 function classifyOtherPath(p: string): PathClassification | null {
-  // integration-tests/ fixtures (any extension) affect any shard → fail closed.
+  // integration-tests/ harness/logic (.ts) affects any shard → fail closed.
+  // Fixture data (.responses, .jsonl, .md, etc.) is only consumed by the
+  // integration-tests CI job, not by any unit-test shard → scripts shard.
   if (p.startsWith('integration-tests/')) {
-    return fullRun(
-      `integration-tests path '${p}' → fail closed`,
-      `integration-tests path '${p}' may affect any shard`,
+    if (p.endsWith('.ts')) {
+      return fullRun(
+        `integration-tests harness '${p}' → fail closed`,
+        `integration-tests harness '${p}' may affect any shard`,
+      );
+    }
+    return selectShards(
+      ['scripts'],
+      `integration-tests fixture '${p}' selects scripts shard only`,
     );
   }
   const fileObs = FILE_OBSERVERS[p];
@@ -461,6 +494,16 @@ function classifyOtherPath(p: string): PathClassification | null {
   }
   if (NO_TEST_PATH_RES.some((re) => re.test(p))) {
     return noShards(`documentation/metadata path '${p}' selects no test shard`);
+  }
+  if (NO_TEST_PREFIXES.some((prefix) => p.startsWith(prefix))) {
+    return noShards(`repo config/infra path '${p}' selects no test shard`);
+  }
+  // Root-level config files exercised by scripts-shard guard tests.
+  if (SCRIPTS_INFRA_FILES.includes(p)) {
+    return selectShards(
+      ['scripts'],
+      `test-infra config '${p}' selects scripts shard`,
+    );
   }
   // Workflow/hook/.github harness changes are exercised by scripts-shard tests.
   if (
@@ -769,8 +812,10 @@ function main(): void {
 
 /**
  * Writes selection results to GITHUB_OUTPUT and GITHUB_STEP_SUMMARY for use in
- * GitHub Actions CI. Builds a matrix JSON array (shard × os × node-version)
- * that the test_shard job consumes via fromJSON().
+ * GitHub Actions CI. Builds a matrix JSON array (shard × node-version; issue
+ * #2876 removed the per-OS dimension — the PR test matrix is ubuntu-only, and
+ * macOS coverage moved to the nightly workflow) that the test_shard job
+ * consumes via fromJSON().
  *
  * PR-controlled values (event, fullRunReason/path text) are sanitized of CR/LF
  * before being written to prevent GITHUB_OUTPUT injection. Keys/shape preserved.
@@ -787,16 +832,16 @@ function outputGithubActions(result: SelectionResult, event: string): void {
   const ghOutputPath = process.env.GITHUB_OUTPUT;
   const ghSummaryPath = process.env.GITHUB_STEP_SUMMARY;
 
-  // Build the matrix: one entry per selected shard per OS.
+  // Build the matrix: one entry per selected shard (issue #2876).
+  // macOS test coverage moved to the nightly workflow (nightly.yml), so
+  // the PR test matrix is ubuntu-only — macOS is nightly-only like Windows.
   const matrix: Array<{
     readonly shard: string;
     readonly os: string;
     readonly 'node-version': string;
   }> = [];
   for (const shard of result.selectedShards) {
-    for (const os of ['ubuntu-latest', 'macos-latest']) {
-      matrix.push({ shard, os, 'node-version': '24.x' });
-    }
+    matrix.push({ shard, os: 'ubuntu-latest', 'node-version': '24.x' });
   }
 
   const selectedStr = sanitizeGhValue(result.selectedShards.join(','));

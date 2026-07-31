@@ -15,6 +15,7 @@ export interface RetryErrorCounters {
   consecutive429s: number;
   consecutiveAuthErrors: number;
   consecutiveNetworkErrors: number;
+  consecutiveServerErrors: number;
 }
 
 export interface RetryErrorClassification {
@@ -24,6 +25,7 @@ export interface RetryErrorClassification {
   readonly is402: boolean;
   readonly isAuthError: boolean;
   readonly isNetworkError: boolean;
+  readonly is5xxServerError: boolean;
 }
 
 const errorsAfterStreamOutput = new WeakSet<object>();
@@ -62,13 +64,24 @@ export function isTerminalRetryError(error: unknown): boolean {
 export function classifyRetryError(error: unknown): RetryErrorClassification {
   const status = getErrorStatus(error);
   const category = classifyProviderError(error, status);
+  const is429 = status === 429 || isOverloadError(error);
+  const is402 = status === 402;
+  const isAuthError = status === 401 || status === 403;
+  const isNetworkError = category === 'network';
+  // Server errors include plain HTTP 5xx statuses and Anthropic api_error.
+  // category === 'server_error' is already mutually exclusive with the
+  // rate_limit/quota/authentication categories, so the only overlap is with
+  // is429 (which catches api_error via isOverloadError). Exclude is429 so
+  // api_error/overloaded_error use the existing 429 failover path.
+  const is5xxServerError = category === 'server_error' && !is429;
   return {
     status,
     category,
-    is429: status === 429 || isOverloadError(error),
-    is402: status === 402,
-    isAuthError: status === 401 || status === 403,
-    isNetworkError: category === 'network',
+    is429,
+    is402,
+    isAuthError,
+    isNetworkError,
+    is5xxServerError,
   };
 }
 
@@ -76,7 +89,8 @@ export function updateRetryErrorCounters(
   state: RetryErrorCounters,
   classification: RetryErrorClassification,
 ): void {
-  const { is429, isAuthError, isNetworkError } = classification;
+  const { is429, isAuthError, isNetworkError, is5xxServerError } =
+    classification;
   state.consecutive429s = is429 ? state.consecutive429s + 1 : 0;
   state.consecutiveAuthErrors = isAuthError
     ? state.consecutiveAuthErrors + 1
@@ -85,10 +99,14 @@ export function updateRetryErrorCounters(
     isNetworkError && !is429 && !isAuthError
       ? state.consecutiveNetworkErrors + 1
       : 0;
+  state.consecutiveServerErrors = is5xxServerError
+    ? state.consecutiveServerErrors + 1
+    : 0;
 }
 
 export function resetRetryErrorCounters(state: RetryErrorCounters): void {
   state.consecutive429s = 0;
   state.consecutiveAuthErrors = 0;
   state.consecutiveNetworkErrors = 0;
+  state.consecutiveServerErrors = 0;
 }

@@ -116,7 +116,29 @@ OAuth tokens and API keys use a layered storage model:
 
 1. **OS keyring (primary)** — macOS Keychain, GNOME Keyring / KWallet, or Windows Credential Vault, accessed via `@napi-rs/keyring`. This is encrypted at rest and requires authentication to read.
 2. **Encrypted file fallback (secondary)** — if the keyring is unavailable, tokens fall back to encrypted files under `<data>/secure-store/<service>/`. These files are encrypted with a machine-local secret (`<data>/machine_secret`) and are **not** plain JSON.
-3. **OAuth advisory locks** — short-lived, credential-free lock files under `<log>/oauth/locks/` that coordinate concurrent refresh attempts. They contain no secrets. Stale locks left behind by a crashed process are reclaimed **only when the owner's PID is verifiably dead** (probed via `process.kill(pid, 0)`); a malformed or tokenless lock carries no verifiable owner identity and is left in place (deferred to manual cleanup) as a conservative safety-over-availability choice. If you encounter a stuck lock, remove it manually only when no LLxprt process is running.
+3. **OAuth advisory locks** — short-lived, credential-free lock files under `<log>/oauth/locks/` that coordinate concurrent refresh and interactive login attempts. Versioned lock metadata records a random owner token, PID, hostname, and process-start identity. The start-time source quality is tracked (`canonical` for OS-observed, `approximate` for computed-from-uptime, `unavailable`); only `canonical` start times may be used for PID-reuse proof, so approximate/unavailable owners are never reclaimed on a start-time mismatch. LLxprt reclaims a versioned lock only when it can prove that its local owner process is dead (ESRCH or canonical start-time mismatch); live owners, different-host owners, malformed metadata, legacy metadata, and unverifiable process identities are never age-stolen. Recovery carries the exact inspected owner identity through a fenced takeover, verifies the record is unchanged, and re-probes it under the fence before unlinking, so concurrent recovery cannot remove a successor lock. Legacy v0.10 locks (`{pid,timestamp,token}`) lack hostname and process-start identity, so even local ESRCH cannot distinguish local residue from a remote process sharing the path. They are always unverifiable and require acknowledged force recovery. If manual cleanup is unavoidable, stop every LLxprt process first.
+
+### Auth lock status and recovery
+
+When a lock is stuck or you see a lock-acquisition failure, use the built-in commands:
+
+```bash
+# Inspect lock status (default bucket if omitted)
+/auth <provider> lock status [bucket]
+
+# Attempt fenced recovery of a proven-dead lock
+/auth <provider> unlock [bucket]
+
+# Force-remove a stuck lock (legacy/malformed/unverifiable)
+# Requires acknowledging all LLxprt processes sharing the path are stopped
+/auth <provider> unlock [bucket] --force --i-have-stopped-all-processes
+```
+
+Normal `/auth unlock` runs the same fenced, proof-based recovery as automatic recovery: it only succeeds for an unchanged versioned lock whose owner is re-proven dead under the fence. Force unlock refuses verified-live owners; for legacy, malformed, or unverifiable residue it requires `--i-have-stopped-all-processes` to acknowledge that all LLxprt processes sharing the path have been stopped. Force unlock removes only the lock file — it never deletes tokens.
+
+Lock status and recovery are driven by the lock file, independently of credential storage. Status reports token visibility as `valid`, `invalid`, or `unknown`; an `unknown` result includes the keyring diagnostic. A keyring failure cannot prevent filesystem lock inspection or either recovery path.
+
+On macOS the current lock path is `~/Library/Logs/llxprt-code/oauth/locks/`.
 
 The legacy `oauth_creds.json` plaintext token files (under the old `~/.llxprt` directory, or `~/.gemini/oauth_creds.json` from Gemini CLI) are obsolete. They are read **only** as a one-time migration input; LLxprt never creates them during normal operation.
 

@@ -72,6 +72,12 @@ const dynamicSettings = (settings: unknown): DynamicLoadedSettings =>
   settings as DynamicLoadedSettings;
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
+const MOCK_SYSTEM_SETTINGS_PATH = pathActual.resolve(
+  '/mock/system/settings.json',
+);
+const MOCK_SYSTEM_DEFAULTS_PATH = pathActual.resolve(
+  '/mock/system/system-defaults.json',
+);
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency
 const MOCK_WORKSPACE_SETTINGS_PATH = pathActual.join(
   MOCK_WORKSPACE_DIR,
@@ -120,10 +126,10 @@ describe('Settings Loading and Merging', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    // Set environment variables to override system paths
-    process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
-    process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
-      '/mock/system/system-defaults.json';
+    // Set environment variables to override system paths (resolved for
+    // cross-platform absolute-path validity).
+    process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = MOCK_SYSTEM_SETTINGS_PATH;
+    process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH = MOCK_SYSTEM_DEFAULTS_PATH;
 
     mockFsExistsSync = vi.mocked(fs.existsSync);
     mockFsMkdirSync = vi.mocked(fs.mkdirSync);
@@ -138,8 +144,8 @@ describe('Settings Loading and Merging', () => {
       (p: fs.PathOrFileDescriptor) => {
         // Handle system paths specifically
         if (
-          p === '/mock/system/settings.json' ||
-          p === '/mock/system/system-defaults.json'
+          p === MOCK_SYSTEM_SETTINGS_PATH ||
+          p === MOCK_SYSTEM_DEFAULTS_PATH
         ) {
           return '{}'; // Return valid empty JSON for system paths
         }
@@ -364,9 +370,9 @@ describe('Settings Loading and Merging', () => {
 
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
-          if (p === '/mock/system/settings.json')
+          if (p === MOCK_SYSTEM_SETTINGS_PATH)
             return JSON.stringify(systemSettingsContent);
-          if (p === '/mock/system/system-defaults.json')
+          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
             return JSON.stringify(systemDefaultsContent);
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
@@ -396,9 +402,9 @@ describe('Settings Loading and Merging', () => {
 
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
-          if (p === '/mock/system/settings.json')
+          if (p === MOCK_SYSTEM_SETTINGS_PATH)
             return JSON.stringify(systemSettingsContent);
-          if (p === '/mock/system/system-defaults.json')
+          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
             return JSON.stringify(systemDefaultsContent);
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
@@ -426,9 +432,9 @@ describe('Settings Loading and Merging', () => {
 
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
-          if (p === '/mock/system/settings.json')
+          if (p === MOCK_SYSTEM_SETTINGS_PATH)
             return JSON.stringify(systemSettingsContent);
-          if (p === '/mock/system/system-defaults.json')
+          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
             return JSON.stringify(systemDefaultsContent);
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
@@ -454,9 +460,9 @@ describe('Settings Loading and Merging', () => {
 
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
-          if (p === '/mock/system/settings.json')
+          if (p === MOCK_SYSTEM_SETTINGS_PATH)
             return JSON.stringify(systemSettingsContent);
-          if (p === '/mock/system/system-defaults.json')
+          if (p === MOCK_SYSTEM_DEFAULTS_PATH)
             return JSON.stringify(systemDefaultsContent);
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);

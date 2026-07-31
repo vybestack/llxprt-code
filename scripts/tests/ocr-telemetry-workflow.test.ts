@@ -409,13 +409,15 @@ describe('.github/workflows/ocr-review.yml — OCR telemetry (issue #2676)', () 
         'Verify review scope includes changed tests',
       );
       const previewRun = commandText(previewStep);
-      const selectedFilesWrite = previewRun.indexOf('> ocr-selected-files.txt');
+      const selectedFilesWrite = previewRun.indexOf(
+        "'ocr-selected-files.txt',",
+      );
       const changedTestsGuard = previewRun.indexOf(
         'if [ -n "$changed_tests" ]; then',
       );
       expect(selectedFilesWrite).toBeGreaterThan(-1);
       expect(selectedFilesWrite).toBeLessThan(changedTestsGuard);
-      expect(previewRun.match(/> ocr-selected-files\.txt/g)).toHaveLength(1);
+      expect(previewRun.match(/'ocr-selected-files\.txt'/g)).toHaveLength(1);
     });
   });
 });
