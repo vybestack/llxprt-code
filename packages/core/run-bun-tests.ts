@@ -6,21 +6,26 @@
 
 /**
  * Bun test runner for the core workspace that discovers all test files
- * and runs each one in an isolated bun test process.
+ * and runs them in isolated bun test processes with bounded parallelism.
  *
  * This avoids a Bun 1.3.x runtime bug on Linux where `bun test --parallel`
  * hangs during process teardown after all tests have passed. Running each
  * file as a separate `bun test <file>` invocation avoids the multi-file
  * process management that triggers the hang.
  *
+ * Files are run in concurrent batches to avoid exceeding CI timeouts.
+ * The default batch size is 8 ( empirically tuned for CI runners).
+ *
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { availableParallelism } from 'node:os';
 
 const PRELOAD = './bun-preload.ts';
+const CONCURRENCY = Math.min(8, availableParallelism());
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
@@ -42,42 +47,88 @@ function findTestFiles(dir: string): string[] {
   return results.sort();
 }
 
-function main(): void {
+interface TestResult {
+  file: string;
+  passed: boolean;
+  exitCode: number | null;
+  output: string;
+}
+
+function runTestFile(file: string): Promise<TestResult> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      process.execPath,
+      ['test', '--preload', PRELOAD, file],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      },
+    );
+
+    let output = '';
+    child.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      process.stdout.write(text);
+    });
+    child.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      process.stderr.write(text);
+    });
+
+    child.on('exit', (code) => {
+      resolve({
+        file,
+        passed: code === 0,
+        exitCode: code,
+        output,
+      });
+    });
+
+    child.on('error', () => {
+      resolve({
+        file,
+        passed: false,
+        exitCode: -1,
+        output,
+      });
+    });
+  });
+}
+
+async function main(): Promise<void> {
   const testFiles = [...findTestFiles('src'), ...findTestFiles('test')];
   if (testFiles.length === 0) {
     console.error('No test files found');
     process.exit(1);
   }
 
-  console.log(`Running ${testFiles.length} test files in isolated processes`);
+  console.log(
+    `Running ${testFiles.length} test files with concurrency ${CONCURRENCY}`,
+  );
 
-  let passed = 0;
-  let failed = 0;
+  const results: TestResult[] = [];
 
-  for (const file of testFiles) {
-    const result = spawnSync(
-      process.execPath,
-      ['test', '--preload', PRELOAD, file],
-      {
-        cwd: process.cwd(),
-        stdio: 'inherit',
-        env: process.env,
-      },
-    );
+  for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
+    const batch = testFiles.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(runTestFile));
+    results.push(...batchResults);
+  }
 
-    if (result.status === 0) {
-      passed++;
-    } else {
-      console.error(`FAILED: ${file} (exit code ${result.status})`);
-      failed++;
-    }
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.filter((r) => !r.passed);
+
+  for (const result of failed) {
+    console.error(`FAILED: ${result.file} (exit code ${result.exitCode})`);
   }
 
   console.log(
     `Passed ${passed}/${testFiles.length} test files` +
-      (failed > 0 ? ` (${failed} failed)` : ''),
+      (failed.length > 0 ? ` (${failed.length} failed)` : ''),
   );
-  process.exit(failed > 0 ? 1 : 0);
+  process.exit(failed.length > 0 ? 1 : 0);
 }
 
 main();
