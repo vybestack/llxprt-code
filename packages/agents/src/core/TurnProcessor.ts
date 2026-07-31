@@ -785,7 +785,6 @@ export class TurnProcessor {
   ): Promise<void> {
     try {
       const currentModel = this.runtimeContext.state.model;
-      const currentBaseURL = this.runtimeContext.state.baseUrl;
       const afcHistory = response.afcHistory;
 
       const filteredAfcHistory =
@@ -793,21 +792,12 @@ export class TurnProcessor {
           ? afcHistory.filter((content: IContent) => content.blocks.length > 0)
           : undefined;
       if (filteredAfcHistory && filteredAfcHistory.length > 0) {
-        this._recordAfcHistory(
-          filteredAfcHistory,
-          currentModel,
-          currentBaseURL,
-        );
+        this._recordAfcHistory(filteredAfcHistory, currentModel);
       } else {
         this._recordUserContents(userContents, currentModel);
       }
 
-      this._recordOutputContent(
-        response,
-        currentModel,
-        currentBaseURL,
-        filteredAfcHistory,
-      );
+      this._recordOutputContent(response, currentModel, filteredAfcHistory);
 
       await this._syncTokenCounts(response, _prompt_id);
     } finally {
@@ -818,16 +808,16 @@ export class TurnProcessor {
   private _recordAfcHistory(
     afcHistory: IContent[],
     currentModel: string | undefined,
-    currentBaseURL: string | undefined,
   ): void {
     const curatedHistory = this.historyService.getCurated();
     const index = curatedHistory.length;
     const newEntries = afcHistory.slice(index);
+    const baseURL = this.runtimeContext.state.baseUrl;
     for (const content of newEntries) {
       // AFC history is mixed user/model; stampAiTurnModel no-ops on non-ai
       // entries, so only freshly generated model turns get the origin stamp.
       this.historyService.add(
-        stampAiTurnModel(content, currentModel, currentBaseURL),
+        stampAiTurnModel(content, currentModel, baseURL),
         currentModel,
       );
     }
@@ -845,10 +835,10 @@ export class TurnProcessor {
   private _recordOutputContent(
     response: ModelOutput,
     currentModel: string | undefined,
-    currentBaseURL: string | undefined,
     afcHistory: IContent[] | undefined,
   ): void {
     const outputContent = response.content;
+    const baseURL = this.runtimeContext.state.baseUrl;
     if (outputContent.blocks.length > 0) {
       const includeThoughts =
         this.runtimeContext.ephemerals.reasoning.includeInContext();
@@ -866,7 +856,7 @@ export class TurnProcessor {
           stampAiTurnModel(
             iContentFromBlocks(contentForHistory, 'ai'),
             currentModel,
-            currentBaseURL,
+            baseURL,
           ),
           currentModel,
         );
@@ -876,7 +866,7 @@ export class TurnProcessor {
         stampAiTurnModel(
           iContentFromBlocks([], 'ai'),
           currentModel,
-          currentBaseURL,
+          baseURL,
         ),
         currentModel,
       );
