@@ -341,11 +341,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       // This test verifies that errors without HTTP status are handled
       // similarly to 429 with failover_retry_count: 1. Both exhaust
       // per-backend retries and fail over, but the difference is:
-      // - Non-status errors: never retry even if retryCount > 1 (no status
-      //   to classify as failover-eligible)
-      // - 429: retries on same backend when retryCount > 1 (issue #2849)
+      // - Non-status errors: shouldFailover() returns false, so shouldRetry
+      //   is always false — the LB advances to the next backend without
+      //   retrying the same backend, even when retryCount > 1.
+      // - 429: shouldFailover() returns true, so the LB retries on the same
+      //   backend when retryCount > 1 (issue #2849).
       //
-      // With failover_retry_count: 1 (pinned), a non-status error will:
+      // With failover_retry_count: 1 (pinned), both behave identically:
       // 1. Try backend1, fail, exhaust retries (1 attempt)
       // 2. Move to backend2, succeed
       // Total: 2 calls

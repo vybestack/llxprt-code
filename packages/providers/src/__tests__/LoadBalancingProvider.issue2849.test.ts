@@ -102,10 +102,12 @@ function makeGlmConfig(
     'makora-provider',
     'ollama-provider',
   ],
+  ephemeralSettings: Record<string, unknown> = {},
 ): LoadBalancingProviderConfig {
   return {
     profileName,
     strategy: 'failover',
+    lbProfileEphemeralSettings: ephemeralSettings,
     subProfiles: [
       {
         name: 'zai',
@@ -324,7 +326,9 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     }
 
     const lb = new LoadBalancingProvider(
-      makeGlmConfig('glm-all-persistent-429'),
+      makeGlmConfig('glm-all-persistent-429', undefined, {
+        failover_retry_count: 2,
+      }),
       providerManager,
     );
 
@@ -335,5 +339,50 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     // Each backend tried 2 times (retryCount=2). 3 backends × 2 = 6 total.
     const total = counters.reduce((sum, c) => sum + c.value, 0);
     expect(total).toBe(6);
+  });
+
+  /**
+   * Boundary: if a backend yields one or more chunks and THEN throws 429,
+   * the LB must re-throw immediately (immediate-throw) — it cannot retry or
+   * fail over because doing so would duplicate the already-yielded chunks.
+   * This is enforced by `handleFailoverError` when `chunksYielded === true`.
+   */
+  it('re-throws immediately when 429 occurs mid-stream after chunks are yielded', async () => {
+    const zai = makeFakeProvider(
+      () =>
+        (async function* (): AsyncGenerator<IContent> {
+          yield {
+            type: 'text' as const,
+            content: 'partial',
+          } as unknown as IContent;
+          throw statusError('rate limited', 429);
+        })(),
+      'zai-provider',
+    );
+    const makora = makeFakeProvider(() => successChunk(), 'makora-provider');
+    providerManager.registerProvider(zai.provider);
+    providerManager.registerProvider(makora.provider);
+
+    const lb = new LoadBalancingProvider(
+      makeGlmConfig('glm-midstream-429'),
+      providerManager,
+    );
+
+    // The stream yields the partial chunk then throws the raw 429 error.
+    const chunks: IContent[] = [];
+    await expect(
+      (async () => {
+        for await (const chunk of lb.generateChatCompletion(makeOptions())) {
+          chunks.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('rate limited');
+
+    // The partial chunk WAS yielded before the error.
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toStrictEqual({ type: 'text', content: 'partial' });
+    // Only zai was called — no failover to makora after mid-stream 429.
+    expect(zai.counter.value).toBe(1);
+    expect(makora.counter.value).toBe(0);
   });
 });
