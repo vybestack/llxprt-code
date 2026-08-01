@@ -13,7 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { buildSeatbeltArgs, runSeatbeltSandbox } from './sandbox-seatbelt.js';
 import {
   assertSeatbeltProxyPortAvailable,
-  waitForFixtureProcessExit,
+  captureSeatbeltHarnessProcessState,
+  cleanupSeatbeltHarnessFixture,
+  restoreSeatbeltHarnessFixture,
 } from './sandbox-seatbelt.test-helpers.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
@@ -487,18 +489,6 @@ const ISSUE_1456_ENV_KEYS = [
 const PROXIED_PROFILE_ERROR =
   'Seatbelt proxied profile requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.';
 const BUILTIN_PROFILE_DIRECTORY = __dirname;
-const PROCESS_LISTENER_EVENTS = ['exit', 'SIGINT', 'SIGTERM'] as const;
-
-type ProcessListenerEvent = (typeof PROCESS_LISTENER_EVENTS)[number];
-type ProcessListener = (...args: unknown[]) => void;
-
-function isProcessListener(listener: unknown): listener is ProcessListener {
-  return typeof listener === 'function';
-}
-
-function processListeners(event: ProcessListenerEvent): ProcessListener[] {
-  return process.rawListeners(event).filter(isProcessListener);
-}
 
 type Issue1456Environment = Partial<
   Record<(typeof ISSUE_1456_ENV_KEYS)[number], string>
@@ -543,128 +533,100 @@ function writeExecutable(filePath: string, content: string): void {
   fs.writeFileSync(filePath, content, { mode: 0o755 });
 }
 
-function removeAddedProcessListeners(
-  initialListeners: ReadonlyMap<
-    ProcessListenerEvent,
-    ReadonlySet<ProcessListener>
-  >,
-): void {
-  for (const event of PROCESS_LISTENER_EVENTS) {
-    const original = initialListeners.get(event) ?? new Set();
-    for (const listener of processListeners(event)) {
-      if (!original.has(listener)) process.off(event, listener);
-    }
-  }
-}
-
 function createSeatbeltHarness(cwd: string = process.cwd()): SeatbeltHarness {
+  const restoreHarnessState = captureSeatbeltHarnessProcessState();
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seatbelt-1456-'));
-  const argsFile = path.join(fixtureDir, 'args');
-  const envFile = path.join(fixtureDir, 'env');
-  const sandboxMarker = path.join(fixtureDir, 'sandbox-spawned');
-  const sandboxExitMarker = path.join(fixtureDir, 'sandbox-exit');
-  const proxyMarker = path.join(fixtureDir, 'proxy-listening');
-  const proxyPidFile = path.join(fixtureDir, 'proxy-pid');
-  const proxyServer = path.join(fixtureDir, 'proxy.cjs');
-  const initialListeners = new Map(
-    PROCESS_LISTENER_EVENTS.map((event) => [
-      event,
-      new Set(processListeners(event)),
-    ]),
-  );
 
-  writeExecutable(
-    path.join(fixtureDir, 'sandbox-exec'),
-    `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\nenv > "${envFile}"\ntouch "${sandboxMarker}"\nif [ -n "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" ]; then attempts=0; while [ ! -f "${sandboxExitMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done; fi\n`,
-  );
-  fs.writeFileSync(
-    proxyServer,
-    [
-      "const fs = require('node:fs');",
-      "const http = require('node:http');",
-      `const server = http.createServer((_request, response) => response.end('ok'));`,
-      `server.listen(8877, '127.0.0.1', () => {`,
-      `  fs.writeFileSync(${JSON.stringify(proxyPidFile)}, String(process.pid));`,
-      `  fs.writeFileSync(${JSON.stringify(proxyMarker)}, 'listening');`,
-      `  const interval = setInterval(() => {`,
-      `    if (fs.existsSync(${JSON.stringify(sandboxMarker)})) {`,
-      `      clearInterval(interval);`,
-      `      fs.writeFileSync(${JSON.stringify(sandboxExitMarker)}, 'exit');`,
-      `      server.close(() => process.exit(0));`,
-      `    }`,
-      `  }, 10);`,
-      '});',
-      "process.on('SIGTERM', () => server.close(() => process.exit(0)));",
-    ].join('\n'),
-  );
-  writeExecutable(
-    path.join(fixtureDir, 'timeout'),
-    [
-      '#!/bin/sh',
-      'duration="$1"',
-      'shift',
-      '"$@" &',
-      'child=$!',
-      '( sleep "$duration"; kill -TERM "$child" 2>/dev/null ) >/dev/null 2>&1 &',
-      'watchdog=$!',
-      'wait "$child"',
-      'status=$?',
-      'kill -TERM "$watchdog" 2>/dev/null || true',
-      'exit "$status"',
-    ].join('\n'),
-  );
-  writeExecutable(
-    path.join(fixtureDir, 'curl'),
-    `#!/bin/sh\ncase "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" in *proxy.cjs*) attempts=0; while [ ! -f "${proxyMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done;; esac\nexit 0\n`,
-  );
-  process.env.PATH = `${fixtureDir}:${process.env.PATH ?? ''}`;
+  try {
+    const argsFile = path.join(fixtureDir, 'args');
+    const envFile = path.join(fixtureDir, 'env');
+    const sandboxMarker = path.join(fixtureDir, 'sandbox-spawned');
+    const sandboxExitMarker = path.join(fixtureDir, 'sandbox-exit');
+    const proxyMarker = path.join(fixtureDir, 'proxy-listening');
+    const proxyPidFile = path.join(fixtureDir, 'proxy-pid');
+    const proxyServer = path.join(fixtureDir, 'proxy.cjs');
 
-  const originalProcessKill = process.kill;
-  const originalProcessExit = process.exit;
-  Object.defineProperty(process, 'kill', {
-    configurable: true,
-    value: () => true,
-    writable: true,
-  });
-  Object.defineProperty(process, 'exit', {
-    configurable: true,
-    value: () => undefined,
-    writable: true,
-  });
+    writeExecutable(
+      path.join(fixtureDir, 'sandbox-exec'),
+      `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\nenv > "${envFile}"\ntouch "${sandboxMarker}"\nif [ -n "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" ]; then attempts=0; while [ ! -f "${sandboxExitMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done; fi\n`,
+    );
+    fs.writeFileSync(
+      proxyServer,
+      [
+        "const fs = require('node:fs');",
+        "const http = require('node:http');",
+        `const server = http.createServer((_request, response) => response.end('ok'));`,
+        `server.listen(8877, '127.0.0.1', () => {`,
+        `  fs.writeFileSync(${JSON.stringify(proxyPidFile)}, String(process.pid));`,
+        `  fs.writeFileSync(${JSON.stringify(proxyMarker)}, 'listening');`,
+        `  const interval = setInterval(() => {`,
+        `    if (fs.existsSync(${JSON.stringify(sandboxMarker)})) {`,
+        `      clearInterval(interval);`,
+        `      fs.writeFileSync(${JSON.stringify(sandboxExitMarker)}, 'exit');`,
+        `      server.close(() => process.exit(0));`,
+        `    }`,
+        `  }, 10);`,
+        '});',
+        "process.on('SIGTERM', () => server.close(() => process.exit(0)));",
+      ].join('\n'),
+    );
+    writeExecutable(
+      path.join(fixtureDir, 'timeout'),
+      [
+        '#!/bin/sh',
+        'duration="$1"',
+        'shift',
+        '"$@" &',
+        'child=$!',
+        '( sleep "$duration"; kill -TERM "$child" 2>/dev/null ) >/dev/null 2>&1 &',
+        'watchdog=$!',
+        'wait "$child"',
+        'status=$?',
+        'kill -TERM "$watchdog" 2>/dev/null || true',
+        'exit "$status"',
+      ].join('\n'),
+    );
+    writeExecutable(
+      path.join(fixtureDir, 'curl'),
+      `#!/bin/sh\ncase "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" in *proxy.cjs*) attempts=0; while [ ! -f "${proxyMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done;; esac\nexit 0\n`,
+    );
+    process.env.PATH = `${fixtureDir}:${process.env.PATH ?? ''}`;
 
-  const proxyCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(proxyServer)}`;
-  const cleanup = async (): Promise<void> => {
-    try {
-      if (fs.existsSync(proxyPidFile)) {
-        const proxyPid = Number(fs.readFileSync(proxyPidFile, 'utf8').trim());
-        spawnSync('kill', ['-TERM', String(proxyPid)]);
-        await waitForFixtureProcessExit(proxyPid);
-        await assertSeatbeltProxyPortAvailable();
-      }
-    } finally {
-      removeAddedProcessListeners(initialListeners);
-      Object.defineProperty(process, 'kill', {
-        configurable: true,
-        value: originalProcessKill,
-        writable: true,
-      });
-      Object.defineProperty(process, 'exit', {
-        configurable: true,
-        value: originalProcessExit,
-        writable: true,
-      });
-      fs.rmSync(fixtureDir, { recursive: true, force: true });
-    }
-  };
-  return {
-    cwd,
-    argsFile,
-    envFile,
-    sandboxMarker,
-    proxyMarker,
-    proxyCommand,
-    cleanup,
-  };
+    Object.defineProperty(process, 'kill', {
+      configurable: true,
+      value: () => true,
+      writable: true,
+    });
+    Object.defineProperty(process, 'exit', {
+      configurable: true,
+      value: () => undefined,
+      writable: true,
+    });
+
+    const proxyCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(proxyServer)}`;
+    const cleanup = async (): Promise<void> => {
+      const proxyPid = fs.existsSync(proxyPidFile)
+        ? Number(fs.readFileSync(proxyPidFile, 'utf8').trim())
+        : undefined;
+      await cleanupSeatbeltHarnessFixture(
+        fixtureDir,
+        restoreHarnessState,
+        proxyPid,
+      );
+    };
+    return {
+      cwd,
+      argsFile,
+      envFile,
+      sandboxMarker,
+      proxyMarker,
+      proxyCommand,
+      cleanup,
+    };
+  } catch (error) {
+    restoreSeatbeltHarnessFixture(fixtureDir, restoreHarnessState);
+    throw error;
+  }
 }
 
 async function executeSeatbeltHarness(

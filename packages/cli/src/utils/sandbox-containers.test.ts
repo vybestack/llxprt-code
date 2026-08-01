@@ -179,14 +179,12 @@ describe.sequential('#1456 container network policy', () => {
     expect(args).toContain('HTTP_PROXY=http://llxprt-code-sandbox-proxy:8877/');
     expect(args).toContain('--network');
     expect(args).toContain('llxprt-code-sandbox');
-    expect(vi.mocked(childProcess.execSync).mock.calls).toStrictEqual([
-      [
-        'docker network inspect llxprt-code-sandbox || docker network create --internal llxprt-code-sandbox',
-      ],
-      [
-        'docker network inspect llxprt-code-sandbox-proxy || docker network create llxprt-code-sandbox-proxy',
-      ],
-    ]);
+    expect(vi.mocked(childProcess.execSync)).toHaveBeenCalledWith(
+      'docker network inspect llxprt-code-sandbox || docker network create --internal llxprt-code-sandbox',
+    );
+    expect(vi.mocked(childProcess.execSync)).toHaveBeenCalledWith(
+      'docker network inspect llxprt-code-sandbox-proxy || docker network create llxprt-code-sandbox-proxy',
+    );
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });

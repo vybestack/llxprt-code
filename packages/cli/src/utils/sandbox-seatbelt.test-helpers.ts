@@ -5,24 +5,104 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
+
+const PROCESS_LISTENER_EVENTS = ['exit', 'SIGINT', 'SIGTERM'] as const;
+
+type FixtureSignal = '-TERM' | '-KILL';
+type ProcessListenerEvent = (typeof PROCESS_LISTENER_EVENTS)[number];
+type ProcessListener = (...args: unknown[]) => void;
+
+function isProcessListener(listener: unknown): listener is ProcessListener {
+  return typeof listener === 'function';
+}
+
+function processListeners(event: ProcessListenerEvent): ProcessListener[] {
+  return process.rawListeners(event).filter(isProcessListener);
+}
+
+export function captureSeatbeltHarnessProcessState(): () => void {
+  const initialListeners = new Map(
+    PROCESS_LISTENER_EVENTS.map((event) => [
+      event,
+      new Set(processListeners(event)),
+    ]),
+  );
+  const originalProcessKill = Object.getOwnPropertyDescriptor(process, 'kill');
+  const originalProcessExit = Object.getOwnPropertyDescriptor(process, 'exit');
+  if (originalProcessKill === undefined || originalProcessExit === undefined) {
+    throw new Error('Expected process kill and exit descriptors');
+  }
+  const originalPath = process.env.PATH;
+
+  return (): void => {
+    for (const event of PROCESS_LISTENER_EVENTS) {
+      const original = initialListeners.get(event) ?? new Set();
+      for (const listener of processListeners(event)) {
+        if (!original.has(listener)) process.off(event, listener);
+      }
+    }
+    Object.defineProperty(process, 'kill', originalProcessKill);
+    Object.defineProperty(process, 'exit', originalProcessExit);
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+  };
+}
+
+function runKill(arguments_: string[]): number {
+  const result = spawnSync('kill', arguments_);
+  if (result.error) throw result.error;
+  if (result.status === null) {
+    throw new Error(`kill ${arguments_.join(' ')} did not return a status`);
+  }
+  return result.status;
+}
+
+export function signalFixtureProcess(pid: number, signal: FixtureSignal): void {
+  runKill([signal, String(pid)]);
+}
 
 export async function waitForFixtureProcessExit(pid: number): Promise<void> {
   if (await waitUntilStopped(pid)) return;
-  spawnSync('kill', ['-KILL', String(pid)]);
+  signalFixtureProcess(pid, '-KILL');
   if (await waitUntilStopped(pid)) return;
   throw new Error(`Proxy fixture process ${pid} did not exit`);
 }
 
+export function restoreSeatbeltHarnessFixture(
+  fixtureDir: string,
+  restoreState: () => void,
+): void {
+  try {
+    restoreState();
+  } finally {
+    fs.rmSync(fixtureDir, { recursive: true, force: true });
+  }
+}
+
+export async function cleanupSeatbeltHarnessFixture(
+  fixtureDir: string,
+  restoreState: () => void,
+  proxyPid: number | undefined,
+): Promise<void> {
+  try {
+    if (proxyPid !== undefined) {
+      signalFixtureProcess(proxyPid, '-TERM');
+      await waitForFixtureProcessExit(proxyPid);
+    }
+    await assertSeatbeltProxyPortAvailable();
+  } finally {
+    restoreSeatbeltHarnessFixture(fixtureDir, restoreState);
+  }
+}
+
 async function waitUntilStopped(pid: number): Promise<boolean> {
   const deadline = Date.now() + 2000;
-  while (
-    Date.now() < deadline &&
-    spawnSync('kill', ['-0', String(pid)]).status === 0
-  ) {
+  while (Date.now() < deadline && runKill(['-0', String(pid)]) === 0) {
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-  return spawnSync('kill', ['-0', String(pid)]).status !== 0;
+  return runKill(['-0', String(pid)]) !== 0;
 }
 
 export async function assertSeatbeltProxyPortAvailable(): Promise<void> {
