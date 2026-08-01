@@ -70,6 +70,7 @@ import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 import {
   prepareQueryForAgent as prepareQueryImpl,
   type PrepareQueryDeps,
@@ -138,6 +139,7 @@ interface StreamEventHandlerDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
+  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
@@ -203,7 +205,7 @@ export function useStreamEventHandlers(
 }
 
 function useContentEventHandler(deps: StreamEventHandlerDeps) {
-  const contentEventDeps = useContentEventDeps(deps);
+  const contentEventDeps = useContentEventDeps(deps, deps.pendingResponse);
   return useCallback(
     (
       eventValue: ServerContentEvent['value'],
@@ -474,10 +476,14 @@ function usePrepareQueryForAgent(deps: StreamEventHandlerDeps) {
   );
 }
 
-function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
+function useContentEventDeps(
+  deps: StreamEventHandlerDeps,
+  pendingResponse: PendingResponseBuffer,
+): ContentEventDeps {
   return useMemo(
     () => ({
       addItem: deps.addItem,
+      pendingResponse,
       sanitizeContent: deps.sanitizeContent,
       flushPendingHistoryItem: deps.flushPendingHistoryItem,
       pendingHistoryItemRef: deps.pendingHistoryItemRef,
@@ -488,6 +494,7 @@ function useContentEventDeps(deps: StreamEventHandlerDeps): ContentEventDeps {
     }),
     [
       deps.addItem,
+      pendingResponse,
       deps.sanitizeContent,
       deps.flushPendingHistoryItem,
       deps.pendingHistoryItemRef,

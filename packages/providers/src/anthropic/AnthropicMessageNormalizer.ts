@@ -34,6 +34,7 @@ import {
   ensureValidMessageSequence,
   stripEmptyTextBlocks,
 } from './AnthropicMessageValidator.js';
+import { stripCrossModelThinking } from './crossModelThinkingStrip.js';
 
 // Type definitions moved from AnthropicProvider.ts
 
@@ -151,82 +152,6 @@ function filterOrphanedToolResponses(contents: IContent[]): IContent[] {
     startIndex++;
   }
   return contents.slice(startIndex);
-}
-
-function buildStrippedAiTurn(
-  content: IContent,
-  turnModel: string,
-  currentModel: string,
-  logger: { debug: (fn: () => string) => void },
-): IContent | undefined {
-  const filteredBlocks = content.blocks.filter(
-    (b) => !(b.type === 'thinking' && b.sourceField === 'thinking'),
-  );
-
-  if (filteredBlocks.length === 0) {
-    logger.debug(
-      () =>
-        `Dropping cross-model thinking-only AI turn (origin ${turnModel}, current ${currentModel})`,
-    );
-    return undefined;
-  }
-
-  return { ...content, blocks: filteredBlocks };
-}
-
-/**
- * Drop model-bound thinking blocks from AI turns whose originating model differs
- * from the current request model. Anthropic thinking-block signatures are
- * cryptographically bound to the model that produced them; replaying a foreign
- * signature (as `thinking` or `redacted_thinking`) triggers a 400
- * "Invalid signature in thinking block".
- *
- * Only blocks with `sourceField === 'thinking'` are model-bound — those are the
- * ones converted into `thinking`/`redacted_thinking` API blocks. Thinking blocks
- * from other sources become plain text and are harmless cross-model.
- *
- * Turns without `metadata.model` cannot be judged and are left untouched. This
- * includes history recorded before the model-stamping fix landed (issue #2335):
- * such turns carry no origin stamp and may still hold a cross-model signature,
- * so the conservative choice is to leave them as-is rather than risk dropping
- * legitimately useful reasoning. Under load-balancer profiles the stamp records
- * the parent profile model, which can differ from the specific instance that
- * produced a given block — this errs toward stripping (the safe direction),
- * since it never replays a foreign signature.
- */
-function stripCrossModelThinking(
-  contents: IContent[],
-  currentModel: string | undefined,
-  logger: { debug: (fn: () => string) => void },
-): IContent[] {
-  if (!currentModel) {
-    return contents;
-  }
-
-  const result: IContent[] = [];
-
-  for (const content of contents) {
-    const turnModel = content.metadata?.model;
-    if (
-      content.speaker !== 'ai' ||
-      turnModel === undefined ||
-      turnModel === currentModel
-    ) {
-      result.push(content);
-    } else {
-      const stripped = buildStrippedAiTurn(
-        content,
-        turnModel,
-        currentModel,
-        logger,
-      );
-      if (stripped) {
-        result.push(stripped);
-      }
-    }
-  }
-
-  return result;
 }
 
 function mergeThinkingOnlyChain(
@@ -883,6 +808,7 @@ export function convertToAnthropicMessages(
     reasoningEnabled: boolean;
     config: unknown;
     currentModel?: string;
+    currentBaseURL?: string;
     unprefixToolName: (name: string, isOAuth: boolean) => string;
     logger: { debug: (fn: () => string) => void };
   },
@@ -890,6 +816,7 @@ export function convertToAnthropicMessages(
   const crossModelStripped = stripCrossModelThinking(
     contents,
     options.currentModel,
+    options.currentBaseURL,
     options.logger,
   );
   const filtered = filterOrphanedToolResponses(crossModelStripped);

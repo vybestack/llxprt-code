@@ -57,7 +57,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const output = lastFrame();
-    expect(output).toContain('1.0GB');
+    expect(output).toContain('RSS: 1.0GB');
 
     unmount();
   });
@@ -79,7 +79,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const output = lastFrame();
-    expect(output).toContain('3.0GB');
+    expect(output).toContain('RSS: 3.0GB');
 
     unmount();
   });
@@ -101,7 +101,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const output = lastFrame();
-    expect(output).toContain('2.0GB');
+    expect(output).toContain('RSS: 2.0GB');
 
     unmount();
   });
@@ -124,7 +124,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
 
     const output = lastFrame();
     expect(output).toContain('|');
-    expect(output).toContain('512MB');
+    expect(output).toContain('RSS: 512MB');
 
     unmount();
   });
@@ -144,7 +144,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
 
     // Wait for initial render
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(lastFrame()).toContain('1.0GB');
+    expect(lastFrame()).toContain('RSS: 1.0GB');
 
     // Change memory usage
     memoryValue = 2.5 * 1024 * 1024 * 1024; // 2.5GB

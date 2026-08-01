@@ -7,7 +7,7 @@
  * @requirement REQ-INT-001.1
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, SemanticColors } from '../colors.js';
 import {
@@ -89,46 +89,49 @@ interface ResponsiveMemoryDisplayProps {
   detailed: boolean;
 }
 
-const ResponsiveMemoryDisplay = React.memo(
+function formatGigabytes(bytes: number): string {
+  return (bytes / 1024 ** 3).toFixed(1);
+}
+
+function formatMemoryUsage(
+  usage: NodeJS.MemoryUsage,
+  compact: boolean,
+  detailed: boolean,
+): string {
+  const heapUsed = formatGigabytes(usage.heapUsed);
+  const heapLimit = formatGigabytes(heapSizeLimit);
+  const rssValue = formatGigabytes(usage.rss);
+  const heap = `Heap: ${heapUsed}${compact ? 'G' : 'GB'}/${heapLimit}${compact ? 'G' : 'GB'}`;
+  const rss = `RSS: ${rssValue}${compact ? 'G' : 'GB'}`;
+  if (compact || !detailed) {
+    return `${heap} ${rss}`;
+  }
+  return `${heap} External: ${formatGigabytes(usage.external)}GB ArrayBuffers: ${formatGigabytes(usage.arrayBuffers)}GB ${rss}`;
+}
+
+export const ResponsiveMemoryDisplay = React.memo(
   ({ compact, detailed }: ResponsiveMemoryDisplayProps) => {
-    const initialUsage = process.memoryUsage().rss;
-    const initialPercentage = Math.round((initialUsage / heapSizeLimit) * 100);
-
-    let initialText: string;
-    if (detailed) {
-      const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
-      const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
-      initialText = `Memory: ${initialPercentage}% (${usageGB}GB/${totalGB}GB)`;
-    } else if (compact) {
-      initialText = `Mem: ${initialPercentage}%`;
-    } else {
-      initialText = `Memory: ${initialPercentage}%`;
-    }
-
-    const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
-    const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
-      initialUsage >= 2 * 1024 * 1024 * 1024
+    // One snapshot for both initial states: separate lazy initialisers would
+    // each invoke the syscall and could disagree with each other. A ref rather
+    // than state, because this value never changes and must never re-render.
+    const initialUsageRef = useRef<NodeJS.MemoryUsage | null>(null);
+    initialUsageRef.current ??= process.memoryUsage();
+    const initialUsage = initialUsageRef.current;
+    const [memoryUsage, setMemoryUsage] = useState<string>(() =>
+      formatMemoryUsage(initialUsage, compact, detailed),
+    );
+    const [memoryUsageColor, setMemoryUsageColor] = useState<string>(() =>
+      initialUsage.rss >= 2 * 1024 ** 3
         ? SemanticColors.status.error
         : SemanticColors.text.secondary,
     );
 
     useEffect(() => {
       const updateMemory = () => {
-        const usage = process.memoryUsage().rss;
-        const percentage = Math.round((usage / heapSizeLimit) * 100);
-
-        if (detailed) {
-          const usageGB = (usage / (1024 * 1024 * 1024)).toFixed(1);
-          const totalGB = (heapSizeLimit / (1024 * 1024 * 1024)).toFixed(1);
-          setMemoryUsage(`Memory: ${percentage}% (${usageGB}GB/${totalGB}GB)`);
-        } else if (compact) {
-          setMemoryUsage(`Mem: ${percentage}%`);
-        } else {
-          setMemoryUsage(`Memory: ${percentage}%`);
-        }
-
+        const usage = process.memoryUsage();
+        setMemoryUsage(formatMemoryUsage(usage, compact, detailed));
         setMemoryUsageColor(
-          usage >= 2 * 1024 * 1024 * 1024
+          usage.rss >= 2 * 1024 ** 3
             ? SemanticColors.status.error
             : SemanticColors.text.secondary,
         );

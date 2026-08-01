@@ -209,6 +209,60 @@ cat "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-"*.js
 tail -f "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-<PID>.jsonl" | jq '.'
 ```
 
+## Tracing Message Order (Chronology Markers)
+
+Every item that enters the conversation history is stamped with a client-side
+chronology marker, so you can reconstruct the exact order of events even when
+requests are retried or tool calls interleave with ordinary messages.
+
+Each marker carries:
+
+| Field        | Meaning                                                              |
+| ------------ | -------------------------------------------------------------------- |
+| `seq`        | Monotonic insertion ordinal. Never reused, including after `/clear`. |
+| `userTurn`   | Which user turn the item belongs to (`0` before the first prompt).   |
+| `step`       | Position within that user turn, so tool round-trips stay ordered.    |
+| `recordedAt` | Epoch milliseconds when the item entered history.                    |
+
+Markers are **client-side only**. They are never included in a provider request
+payload, and they are excluded from token estimation so they cannot affect when
+compression triggers.
+
+### In debug logs
+
+Chronology appears on every "Adding content to history" record:
+
+```bash
+LLXPRT_DEBUG=llxprt:history:service llxprt
+
+cat "${LLXPRT_LOG_HOME:-$HOME/.local/state/llxprt-code}/debug/llxprt-debug-"*.jsonl \
+  | jq 'select(.namespace == "llxprt:history:service") | .args[1].chronology'
+```
+
+### In context dumps
+
+`/dumpcontext now` writes the full ordered trace into the request dump file
+under a top-level `chronology` key, as a sibling of `request`:
+
+```bash
+jq '.chronology' ~/.cache/llxprt-code/dumps/<baseId>-request.json
+```
+
+The trace lists structural descriptors only — speaker, block types, tool call
+and tool response IDs — and never message text, tool parameters, or tool
+results, so it is safe to attach to a bug report. `request.body` stays exactly
+what the provider receives.
+
+### After compression
+
+Compression destroys history items, which shows up as a gap in the `seq`
+series. When a summary replaces those items, the summary records the span it
+stands in for:
+
+```json
+{ "chronologyReplaced": { "fromSeq": 1, "toSeq": 42, "itemCount": 42 } }
+```
+
 ## Examples
 
 ### Debugging Provider Issues

@@ -144,6 +144,7 @@ export function logContentAdded(
       })),
     contentId: content.metadata?.id,
     modelName,
+    chronology: content.metadata?.chronology,
   });
 }
 

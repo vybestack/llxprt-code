@@ -190,6 +190,7 @@ describe('dumpcontextCommand', () => {
           { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
           { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there' }] },
         ]),
+        getChronologyTrace: vi.fn().mockReturnValue([]),
       });
       const mockGetProviderManager = vi.fn().mockReturnValue({
         getActiveProviderName: vi.fn().mockReturnValue('anthropic'),
@@ -212,6 +213,8 @@ describe('dumpcontextCommand', () => {
       expect(dumpRequestContext).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ url: 'immediate-context-dump' }),
         'anthropic',
+        undefined,
+        [],
       );
       expect(result).toStrictEqual({
         type: 'message',
@@ -239,6 +242,7 @@ describe('dumpcontextCommand', () => {
           .mockReturnValue([
             { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
           ]),
+        getChronologyTrace: vi.fn().mockReturnValue([]),
       };
 
       const configWithReceiverDependentMethod = {
@@ -264,6 +268,8 @@ describe('dumpcontextCommand', () => {
       expect(dumpRequestContext).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ url: 'immediate-context-dump' }),
         'anthropic',
+        undefined,
+        [],
       );
       expect(result).toStrictEqual({
         type: 'message',
@@ -320,6 +326,7 @@ describe('dumpcontextCommand', () => {
                     ],
                   },
                 ]),
+                getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
             getEphemeralSettings: vi.fn().mockReturnValue({}),
@@ -380,6 +387,7 @@ describe('dumpcontextCommand', () => {
             getAgentClient: vi.fn().mockReturnValue({
               getHistoryService: vi.fn().mockReturnValue({
                 getAll: vi.fn().mockReturnValue(history),
+                getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
             getEphemeralSettings: vi.fn().mockReturnValue({}),
@@ -450,6 +458,7 @@ describe('dumpcontextCommand', () => {
                     ],
                   },
                 ]),
+                getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
             getEphemeralSettings: vi.fn().mockReturnValue({}),
@@ -545,6 +554,7 @@ describe('dumpcontextCommand', () => {
                     ],
                   },
                 ]),
+                getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
             getEphemeralSettings: vi.fn().mockReturnValue({}),
@@ -626,6 +636,7 @@ describe('dumpcontextCommand', () => {
                 ],
               },
             ]),
+            getChronologyTrace: vi.fn().mockReturnValue([]),
           }),
         }),
         getProviderManager: vi.fn().mockReturnValue({
@@ -676,6 +687,7 @@ describe('dumpcontextCommand', () => {
             getAgentClient: vi.fn().mockReturnValue({
               getHistoryService: vi.fn().mockReturnValue({
                 getAll: vi.fn().mockReturnValue(history),
+                getChronologyTrace: vi.fn().mockReturnValue([]),
               }),
             }),
             getEphemeralSettings: vi.fn().mockReturnValue({}),
@@ -754,6 +766,7 @@ describe('dumpcontextCommand', () => {
           .mockReturnValue([
             { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
           ]),
+        getChronologyTrace: vi.fn().mockReturnValue([]),
       });
 
       const ctxNoProviderManager = createMockCommandContext({
