@@ -24,8 +24,16 @@ describe('parseValue numeric edge cases', () => {
     expect(parseValue('-2.')).toBe('-2.');
   });
 
-  it('returns leading-dot values as strings', () => {
-    expect(parseValue('.5')).toBe('.5');
+  it('parses leading-dot decimals as numbers (issue #2896)', () => {
+    expect(parseValue('.5')).toBe(0.5);
+    expect(parseValue('.95')).toBe(0.95);
+    expect(parseValue('-.5')).toBe(-0.5);
+  });
+
+  it('parses exponent notation as numbers (issue #2896)', () => {
+    expect(parseValue('1e-5')).toBe(1e-5);
+    expect(parseValue('1.5e3')).toBe(1500);
+    expect(parseValue('-2E+4')).toBe(-20000);
   });
 
   it('parses booleans', () => {
@@ -39,5 +47,22 @@ describe('parseValue numeric edge cases', () => {
 
   it('returns non-JSON strings as-is', () => {
     expect(parseValue('hello')).toBe('hello');
+  });
+
+  it('rejects malformed numeric strings (issue #2896 A3)', () => {
+    // Each must NOT become a number via looksNumeric — it falls through to
+    // JSON.parse/string. Note: JSON.parse can convert some of these (e.g.
+    // '1' with whitespace), but the numeric scanner itself must reject them.
+    expect(parseValue('.')).toBe('.');
+    expect(parseValue('-')).toBe('-');
+    expect(parseValue('-.')).toBe('-.');
+    expect(parseValue('1.2.3')).toBe('1.2.3');
+    expect(parseValue('abc')).toBe('abc');
+    expect(parseValue('1abc')).toBe('1abc');
+    expect(parseValue('0x10')).toBe('0x10');
+    expect(parseValue('Infinity')).toBe('Infinity');
+    expect(parseValue('NaN')).toBe('NaN');
+    expect(parseValue('1_000')).toBe('1_000');
+    expect(parseValue('')).toBe('');
   });
 });

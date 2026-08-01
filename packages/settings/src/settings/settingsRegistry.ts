@@ -22,6 +22,7 @@ import type {
 import { REGISTRY_ENTRIES_PART_1 } from './registry/registry-entries-1.js';
 import { REGISTRY_ENTRIES_PART_2 } from './registry/registry-entries-2.js';
 import { REGISTRY_ENTRIES_PART_3 } from './registry/registry-entries-3.js';
+import { isStrictNumericString } from './numericString.js';
 
 const ALIAS_NORMALIZATION_RULES: Record<string, string> = {
   'max-tokens': 'max_tokens',
@@ -98,8 +99,24 @@ export function normalizeSetting(key: string, value: unknown): unknown {
     return spec.normalize(value);
   }
 
-  // Reasoning spec already has normalize, but keep fallback for safety
-  // until all reasoning normalization is verified through spec.normalize
+  // Registry-type-driven coercion: repair ALREADY-PERSISTED bad profiles at
+  // settings egress (issue #2896). A numeric string stored on disk for a
+  // number-type model-param is coerced to a number. Non-numeric strings are
+  // left untouched so the provider surfaces the error rather than silently
+  // dropping the value. Specs with their own `normalize` (handled above)
+  // always win and are not affected by this coercion.
+  if (
+    spec?.category === 'model-param' &&
+    spec.type === 'number' &&
+    typeof value === 'string' &&
+    isStrictNumericString(value)
+  ) {
+    const coerced = Number(value);
+    // A syntactically valid literal can still overflow to Infinity ('1e400'),
+    // which JSON-serializes to null. Coerce only what round-trips as a finite
+    // number; anything else stays a string so the provider rejects it visibly.
+    return Number.isFinite(coerced) ? coerced : value;
+  }
 
   return value;
 }
@@ -161,10 +178,24 @@ function extractCustomHeaders(
  *  - Nested objects under a prefix are expanded into dotted keys; the original
  *    container is kept only when it has its own bare spec (e.g. `reasoning`),
  *    so a prefix-only container never falls through to modelParams.
+ *  - When a SYNTHESIZED container is retained (it is also a bare registry key),
+ *    every sub-key that corresponds to a REGISTERED dotted setting is stripped
+ *    from the retained container so it cannot fan out into modelParams a second
+ *    time as a foreign dialect (issue #2896). Unregistered sub-keys (e.g.
+ *    `{ exclude: true }` passthrough) are preserved. If stripping empties the
+ *    container, it is removed entirely.
  *  - Explicit flat keys always win over values extracted from a nested object.
+ *
+ * Provenance matters (issue #2896): a `reasoning` object in the GLOBAL settings
+ * tree is synthesized by `SettingsService.set('reasoning.effort', …)` nesting a
+ * dotted key, so its registered members are settings, not model params, and must
+ * be stripped. A `reasoning` object in the PROVIDER settings tree can only come
+ * from an explicit `/set modelparam reasoning {…}` or a profile's `modelParams`,
+ * so it is preserved verbatim and reaches the request body unchanged.
  */
 function flattenRegistryPrefixedObjects(
   source: Record<string, unknown>,
+  stripSynthesizedContainers: boolean,
 ): Record<string, unknown> {
   const { prefixes, bareKeys } = getRegistryStructure();
   const result: Record<string, unknown> = { ...source };
@@ -176,10 +207,42 @@ function flattenRegistryPrefixedObjects(
     emitFlattenedEntries(result, key, value);
     if (!bareKeys.has(key)) {
       delete result[key];
+    } else if (stripSynthesizedContainers) {
+      stripRegisteredSubKeysFromContainer(result, key, bareKeys);
     }
   }
 
   return result;
+}
+
+/**
+ * Remove from the retained container every sub-key that corresponds to a
+ * registered dotted setting (e.g. `reasoning.effort` is registered, so
+ * `effort` is stripped from the `reasoning` container). Unregistered sub-keys
+ * are preserved. If the container is left empty, it is deleted.
+ */
+function stripRegisteredSubKeysFromContainer(
+  result: Record<string, unknown>,
+  containerKey: string,
+  bareKeys: Set<string>,
+): void {
+  const container = result[containerKey];
+  if (!isPlainObject(container)) {
+    return;
+  }
+  const stripped: Record<string, unknown> = {};
+  for (const [subKey, subValue] of Object.entries(container)) {
+    const dottedKey = `${containerKey}.${subKey}`;
+    if (bareKeys.has(dottedKey)) {
+      continue;
+    }
+    stripped[subKey] = subValue;
+  }
+  if (Object.keys(stripped).length > 0) {
+    result[containerKey] = stripped;
+  } else {
+    delete result[containerKey];
+  }
 }
 
 function emitFlattenedEntries(
@@ -196,7 +259,11 @@ function emitFlattenedEntries(
         continue;
       }
     }
-    if (!(childKey in result)) {
+    // Only REGISTERED dotted keys are emitted. An unregistered member (e.g.
+    // OpenRouter's `reasoning.exclude`) would otherwise become a literal
+    // `reasoning.exclude` model param and reach the wire as a bogus top-level
+    // field; it stays inside its container instead (issue #2896).
+    if (bareKeys.has(childKey) && !(childKey in result)) {
       result[childKey] = subValue;
     }
   }
@@ -237,15 +304,19 @@ function getRegistryStructure(): {
  * separately and spread on top so provider-specific values always win —
  * including when an override arrives as a nested container (e.g. `text` →
  * `text.verbosity`) against a base-level flat key of the same name.
+ *
+ * Only base (global) containers are treated as synthesized. Provider-scoped
+ * containers are explicit model params and are preserved verbatim (#2896).
  */
 function mergeProviderSettings(
   mixed: Record<string, unknown>,
   providerOverrides: Record<string, unknown>,
 ): Record<string, unknown> {
-  const baseFlattened = flattenRegistryPrefixedObjects({ ...mixed });
-  const overridesFlattened = flattenRegistryPrefixedObjects({
-    ...providerOverrides,
-  });
+  const baseFlattened = flattenRegistryPrefixedObjects({ ...mixed }, true);
+  const overridesFlattened = flattenRegistryPrefixedObjects(
+    { ...providerOverrides },
+    false,
+  );
   return { ...baseFlattened, ...overridesFlattened };
 }
 

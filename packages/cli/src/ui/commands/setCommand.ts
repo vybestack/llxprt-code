@@ -16,7 +16,10 @@ import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import { resolveAlias } from '@vybestack/llxprt-code-settings';
+import {
+  resolveAlias,
+  isStrictNumericString,
+} from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
@@ -312,27 +315,6 @@ export function parseValue(value: string): unknown {
 }
 
 function looksNumeric(value: string): boolean {
-  let i = 0;
-  if (value[0] === '-') {
-    i = 1;
-  }
-  const digitsStart = i;
-  while (i < value.length && value[i] >= '0' && value[i] <= '9') {
-    i++;
-  }
-  const hasIntegerDigits = i > digitsStart;
-
-  if (i < value.length && value[i] === '.') {
-    i++;
-    const fractionStart = i;
-    while (i < value.length && value[i] >= '0' && value[i] <= '9') {
-      i++;
-    }
-    const hasFractionDigits = i > fractionStart;
-    // Dot must be followed by at least one digit
-    return hasIntegerDigits && hasFractionDigits && i === value.length;
-  }
-
-  return hasIntegerDigits && i === value.length;
+  return isStrictNumericString(value);
 }
 // Stryker restore all
