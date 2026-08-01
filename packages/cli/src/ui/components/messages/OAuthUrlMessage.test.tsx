@@ -55,45 +55,68 @@ function flattenText(node: React.ReactNode): string {
 
 const OSC8_PREFIX = '\x1b]8;;';
 
-/**
- * Extract every OSC 8 link target from the flattened text. Splits on the
- * opening prefix, then takes the substring up to the BEL in each segment.
- */
-function extractOsc8Targets(text: string): string[] {
-  const segments = text.split(OSC8_PREFIX);
-  // First segment is text before any link; skip it.
-  const targets: string[] = [];
-  for (let i = 1; i < segments.length; i++) {
-    const belIndex = segments[i].indexOf('\x07');
-    if (belIndex !== -1) {
-      targets.push(segments[i].slice(0, belIndex));
-    }
-  }
-  return targets;
+const OSC8_CLOSE = `${OSC8_PREFIX}\x07`;
+const BEL = '\x07';
+
+interface Osc8Link {
+  target: string;
+  label: string;
 }
 
 /**
- * Extract every visible label from OSC 8 sequences. Each link is:
- * `ESC]8;;URL BELLABEL ESC]8;;BELL`. After splitting on the opening prefix,
- * the segment is `URL BELLABEL ESC]8;;BELL`. The label is between the first
- * BEL and the next prefix occurrence.
+ * Parse the next complete OSC 8 hyperlink (`ESC]8;;URL BEL LABEL ESC]8;;BEL`)
+ * at or after `cursor`, returning the link and the offset just past it.
  */
-function extractOsc8Labels(text: string): string[] {
-  const segments = text.split(OSC8_PREFIX);
-  const labels: string[] = [];
-  for (let i = 1; i < segments.length; i++) {
-    const belIndex = segments[i].indexOf('\x07');
-    if (belIndex === -1) {
-      continue;
-    }
-    const afterFirstBel = segments[i].slice(belIndex + 1);
-    // The label ends where the closing prefix starts (or end of segment)
-    const closeStart = afterFirstBel.indexOf(OSC8_PREFIX);
-    const label =
-      closeStart !== -1 ? afterFirstBel.slice(0, closeStart) : afterFirstBel;
-    labels.push(label);
+function parseOsc8LinkAt(
+  text: string,
+  cursor: number,
+): { link: Osc8Link; nextCursor: number } | null {
+  const openStart = text.indexOf(OSC8_PREFIX, cursor);
+  if (openStart === -1) {
+    return null;
   }
-  return labels;
+  const targetStart = openStart + OSC8_PREFIX.length;
+  const targetEnd = text.indexOf(BEL, targetStart);
+  if (targetEnd === -1) {
+    return null;
+  }
+  const closeStart = text.indexOf(OSC8_CLOSE, targetEnd + 1);
+  if (closeStart === -1) {
+    return null;
+  }
+  return {
+    link: {
+      target: text.slice(targetStart, targetEnd),
+      label: text.slice(targetEnd + 1, closeStart),
+    },
+    nextCursor: closeStart + OSC8_CLOSE.length,
+  };
+}
+
+/**
+ * Scan `text` for complete OSC 8 hyperlinks. The scan must skip past each
+ * closing sequence explicitly: the closing sequence also begins with
+ * `OSC8_PREFIX`, so splitting on the prefix would treat the text between two
+ * links as a link body.
+ */
+function scanOsc8Links(text: string): Osc8Link[] {
+  const links: Osc8Link[] = [];
+  let parsed = parseOsc8LinkAt(text, 0);
+  while (parsed !== null) {
+    links.push(parsed.link);
+    parsed = parseOsc8LinkAt(text, parsed.nextCursor);
+  }
+  return links;
+}
+
+/** Extract every OSC 8 link target from the flattened text. */
+function extractOsc8Targets(text: string): string[] {
+  return scanOsc8Links(text).map((link) => link.target);
+}
+
+/** Extract every visible OSC 8 link label from the flattened text. */
+function extractOsc8Labels(text: string): string[] {
+  return scanOsc8Links(text).map((link) => link.label);
 }
 
 const LONG_OAUTH_URL =

@@ -233,7 +233,7 @@ describe('createUrlLink', () => {
     expect(label).toBe('Click here');
   });
 
-  it('produces a zero-width link for a long OAuth URL under string-width (AC-7)', () => {
+  it('adds no display width beyond the visible label for a long OAuth URL (AC-7)', () => {
     expect(LONG_OAUTH_URL.length).toBeGreaterThan(300);
     const link = createUrlLink(LONG_OAUTH_URL);
 
@@ -241,7 +241,7 @@ describe('createUrlLink', () => {
     expect(stringWidth(link ?? '')).toBe(LONG_OAUTH_URL.length);
   });
 
-  it('produces a zero-width link with a custom label under string-width (AC-7)', () => {
+  it('adds no display width beyond a custom label (AC-7)', () => {
     const url = 'https://example.com/some/path';
     const link = createUrlLink(url, 'Click here');
 

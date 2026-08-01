@@ -220,6 +220,8 @@ describe('RenderInline URL linkification', () => {
       const node = renderInlineNode({ text: `${url}${punct}` });
       const flat = flattenText(node);
       expect(extractFirstOsc8Target(flat)).toBe(url);
+      // The punctuation must remain visible outside the closing sequence
+      expect(flat.endsWith(`${OSC8_PREFIX}\x07${punct}`)).toBe(true);
     }
   });
 
@@ -273,6 +275,50 @@ describe('RenderInline URL linkification', () => {
 
     const flat = flattenText(node);
     expect(flat).not.toContain(OSC8_PREFIX);
+  });
+
+  it('strips a trailing ) followed by a period from a bare URL (AC-4)', () => {
+    const url = 'https://example.com/docs';
+    const node = renderInlineNode({ text: `(${url}.)` });
+
+    const flat = flattenText(node);
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+  });
+
+  it('does not linkify a markdown link whose URL was truncated at an unbalanced ( (AC-2)', () => {
+    // The markdown-link tokenizer stops at the first ')', so this URL is
+    // captured without its closing parenthesis. Linking the truncated URL
+    // would navigate somewhere the author did not write.
+    const node = renderInlineNode({
+      text: 'See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) now.',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('wiki');
+    expect(flat).toContain('https://en.wikipedia.org/wiki/Foo_(bar');
+  });
+
+  it('does not linkify a URL inside an inline code span (AC-3)', () => {
+    const node = renderInlineNode({
+      text: 'Run `curl https://example.com/api` to check.',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('curl https://example.com/api');
+  });
+
+  it('rejects dangerous schemes regardless of letter case (AC-3)', () => {
+    for (const scheme of [
+      'JavaScript:alert(1)',
+      'JAVASCRIPT:alert(1)',
+      'DaTa:text/html,<script>alert(1)</script>',
+      'FILE:///etc/passwd',
+    ]) {
+      const node = renderInlineNode({ text: `See [x](${scheme}).` });
+      expect(flattenText(node)).not.toContain(OSC8_PREFIX);
+    }
   });
 });
 

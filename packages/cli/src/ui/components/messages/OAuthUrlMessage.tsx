@@ -30,7 +30,10 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   // The full URL is the PRIMARY click target: both the OSC 8 target and the
   // visible label are the complete URL. This makes the URL copyable and
   // clickable even when OSC 8 metadata is unsupported or stripped, and Ink's
-  // wrapping re-emits the hyperlink on every wrapped row.
+  // wrapping re-emits the hyperlink on every wrapped row. `createUrlLink`
+  // returns null for a URL that must not be linkified (non-http(s) scheme or
+  // control characters); the raw URL is still displayed so the user can see
+  // and copy what the provider returned.
   const urlLink = createUrlLink(url);
 
   return (

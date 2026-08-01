@@ -131,6 +131,23 @@ function renderInlineCodeNode(
   return null;
 }
 
+/**
+ * Does the candidate contain more `(` than `)`? The markdown-link tokenizer
+ * terminates at the first `)`, so an unbalanced opening parenthesis means the
+ * captured URL was cut short.
+ */
+function hasUnbalancedOpenParen(candidate: string): boolean {
+  let depth = 0;
+  for (const character of candidate) {
+    if (character === '(') {
+      depth++;
+    } else if (character === ')') {
+      depth--;
+    }
+  }
+  return depth > 0;
+}
+
 function renderLinkNode(
   fullMatch: string,
   key: string,
@@ -150,7 +167,13 @@ function renderLinkNode(
       const [, linkText, url] = linkMatch;
       // Link the visible label and keep the raw `(url)` fallback, itself
       // linked, so the target stays reachable in terminals without OSC 8.
-      const combinedLink = createUrlLink(url, `${linkText} (${url})`);
+      // The markdown-link pattern stops at the first `)`, so a URL containing
+      // an unbalanced `(` was truncated by the tokenizer. Linking a truncated
+      // URL would send the user somewhere they did not ask for, so such links
+      // stay plain text.
+      const combinedLink = hasUnbalancedOpenParen(url)
+        ? null
+        : createUrlLink(url, `${linkText} (${url})`);
       if (combinedLink !== null) {
         return (
           <Text key={key} color={theme.text.link}>
@@ -289,11 +312,21 @@ function splitTrailingUrlPunctuation(token: string): {
   trailing: string;
 } {
   let end = token.length;
-  while (end > 0 && URL_TRAILING_PUNCTUATION.has(token[end - 1])) {
-    end--;
-  }
-  if (end > 0 && token[end - 1] === ')' && !token.slice(0, end).includes('(')) {
-    end--;
+  let trimmed = true;
+  while (trimmed && end > 0) {
+    trimmed = false;
+    while (end > 0 && URL_TRAILING_PUNCTUATION.has(token[end - 1])) {
+      end--;
+      trimmed = true;
+    }
+    if (
+      end > 0 &&
+      token[end - 1] === ')' &&
+      !token.slice(0, end).includes('(')
+    ) {
+      end--;
+      trimmed = true;
+    }
   }
   return { url: token.slice(0, end), trailing: token.slice(end) };
 }
