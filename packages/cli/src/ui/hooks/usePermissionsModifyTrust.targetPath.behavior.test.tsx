@@ -213,7 +213,9 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
     act(() => {
-      result.current.setTargetPath(path.join('~', 'projects'));
+      // Written literally rather than joined: path.join would emit "~\projects"
+      // on Windows, which is a different input from the one under test.
+      result.current.setTargetPath('~/projects');
     });
 
     // path.resolve, not path.join: the helper resolves, which on Windows adds

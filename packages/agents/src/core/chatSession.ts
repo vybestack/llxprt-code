@@ -77,6 +77,7 @@ import { TurnProcessor } from './TurnProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
+import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
 import * as nodePath from 'node:path';
 import {
   convertPartListUnionToIContent,
@@ -244,10 +245,21 @@ export class ChatSession {
     this.tokenUsageLogger = this._createTokenUsageLogger(view);
     this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
+    // Resolve the Anthropic default base URL at construction time so that
+    // streaming turns from native Anthropic are stamped with an explicit
+    // endpoint. Load balancer endpoints are resolved per-request in
+    // resolveProviderBaseUrl (see TurnProcessor._commitSendResult).
+    const initialBaseUrl =
+      this.runtimeState.baseUrl ??
+      (this.runtimeState.provider === 'anthropic'
+        ? ANTHROPIC_DEFAULT_BASE_URL
+        : undefined);
+
     this.conversationManager = new ConversationManager(
       this.historyService,
       view,
       model,
+      initialBaseUrl,
     );
 
     this.conversationManager.importInitialHistory(initialHistory, model);
@@ -464,7 +476,25 @@ export class ChatSession {
     );
   }
 
-  private resolveProviderBaseUrl(_provider: IProvider): string | undefined {
+  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
+    // Load balancers: use the last-selected sub-profile's base URL so that
+    // turns are stamped with the actual endpoint that generated them. This
+    // enables cross-endpoint thinking-block stripping when a load balancer
+    // rotates between Anthropic-compatible endpoints (e.g. z.ai and native
+    // Anthropic).
+    const lbProvider = provider as unknown as {
+      getLastSelectedBaseUrl?: () => string | undefined;
+    };
+    if (typeof lbProvider.getLastSelectedBaseUrl === 'function') {
+      const lbBaseUrl = lbProvider.getLastSelectedBaseUrl();
+      if (lbBaseUrl) return lbBaseUrl;
+    }
+    // Native Anthropic without an explicit base URL defaults to
+    // api.anthropic.com. Stamping turns with this default ensures they are
+    // distinguishable from z.ai turns and can be stripped when switching.
+    if (provider.name === 'anthropic') {
+      return this.runtimeState.baseUrl ?? ANTHROPIC_DEFAULT_BASE_URL;
+    }
     return this.runtimeState.baseUrl;
   }
 

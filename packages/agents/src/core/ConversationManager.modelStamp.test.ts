@@ -40,8 +40,12 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 
 const GENERATING_MODEL = 'claude-opus-4-8';
+const GENERATING_BASE_URL = 'https://api.anthropic.com';
 
-function buildConversationManager(model: string): {
+function buildConversationManager(
+  model: string,
+  baseURL?: string,
+): {
   conversationManager: ConversationManager;
   historyService: HistoryService;
 } {
@@ -104,6 +108,7 @@ function buildConversationManager(model: string): {
     historyService,
     view,
     model,
+    baseURL,
   );
 
   return { conversationManager, historyService };
@@ -114,8 +119,10 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
   let historyService: HistoryService;
 
   beforeEach(() => {
-    ({ conversationManager, historyService } =
-      buildConversationManager(GENERATING_MODEL));
+    ({ conversationManager, historyService } = buildConversationManager(
+      GENERATING_MODEL,
+      GENERATING_BASE_URL,
+    ));
   });
 
   it('stamps metadata.model on a freshly generated AI turn', () => {
@@ -137,6 +144,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     const human = all.find((c) => c.speaker === 'human');
 
     expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
+    expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
     expect(human?.metadata?.model).toBeUndefined();
   });
 
@@ -167,6 +175,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     const human = all.find((c) => c.speaker === 'human');
 
     expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
+    expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
     expect(human?.metadata?.model).toBeUndefined();
 
     // The signed thinking block must still be present (stamping does not strip).
@@ -224,6 +233,7 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
     expect(aiTurns.length).toBeGreaterThan(0);
     for (const ai of aiTurns) {
       expect(ai.metadata?.model).toBe(GENERATING_MODEL);
+      expect(ai.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
     }
     // User turns (including those mixed into the AFC history) are not stamped.
     for (const human of humanTurns) {
@@ -257,6 +267,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
 
     // Imported turns have unknown origin and must remain unstamped.
     expect(ai?.metadata?.model).toBeUndefined();
+    expect(ai?.metadata?.providerBaseURL).toBeUndefined();
   });
 
   it('setHistory does NOT stamp metadata.model on restored AI turns', () => {
@@ -274,6 +285,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
     const ai = all.find((c) => c.speaker === 'ai');
 
     expect(ai?.metadata?.model).toBeUndefined();
+    expect(ai?.metadata?.providerBaseURL).toBeUndefined();
   });
 
   it('addHistory does NOT stamp metadata.model on externally-supplied turns', () => {
@@ -288,5 +300,6 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
     const ai = all.find((c) => c.speaker === 'ai');
 
     expect(ai?.metadata?.model).toBeUndefined();
+    expect(ai?.metadata?.providerBaseURL).toBeUndefined();
   });
 });

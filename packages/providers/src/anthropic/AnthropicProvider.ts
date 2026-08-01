@@ -39,7 +39,10 @@ import {
   getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
-import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
+import {
+  isAnthropicOAuthBaseURL,
+  ANTHROPIC_DEFAULT_BASE_URL,
+} from './AnthropicEndpointUtils.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
@@ -743,7 +746,7 @@ export class AnthropicProvider extends BaseProvider {
     const baseURL = firstTruthyString(
       options.resolved.baseURL,
       this.getBaseURL(),
-      'https://api.anthropic.com',
+      ANTHROPIC_DEFAULT_BASE_URL,
     );
 
     return executeAnthropicApiCall({

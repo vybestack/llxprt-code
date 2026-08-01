@@ -475,18 +475,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
 
-    // Pass tools directly in Gemini format - they'll be converted per call
-    const generator = this.generateChatCompletionImpl(
+    // Delegate streaming to the pipeline implementation (yield* forwards
+    // each chunk identically to an explicit for-await loop).
+    yield* this.generateChatCompletionImpl(
       options,
       callFormatter,
       client,
       logger,
       prepared?.requestContext,
     );
-
-    for await (const item of generator) {
-      yield item;
-    }
   }
 
   /**
@@ -839,13 +836,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
     const settings = this.resolveSettingsService();
-    const format = resolveToolFormat(
-      modelName,
-      this.name,
-      settings,
-      new DebugLogger('llxprt:provider:openai'),
-    );
     const logger = new DebugLogger('llxprt:provider:openai');
+    const format = resolveToolFormat(modelName, this.name, settings, logger);
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: this.getModel(),

@@ -94,7 +94,20 @@ describe('permissions dialog multi-folder flow', () => {
         mockedTrustedConfig.value[folderPath] = trustLevel;
       }
     });
-    mockedResolvePathTrust.mockReturnValue(undefined);
+    // Resolve against the stored rules rather than returning a constant, so a
+    // rule written during a test is visible to the trust resolution that
+    // follows it. Individual tests still override this for inherited cases.
+    mockedResolvePathTrust.mockImplementation((folderPath: string) => {
+      const trustLevel = mockedTrustedConfig.value[folderPath];
+      return trustLevel === undefined
+        ? undefined
+        : {
+            rule: { path: folderPath, trustLevel },
+            effectivePath: folderPath,
+            trusted: trustLevel !== TrustLevel.DO_NOT_TRUST,
+            provenance: 'direct' as const,
+          };
+    });
 
     addItem = vi.fn();
     onExit = vi.fn();
@@ -423,6 +436,9 @@ describe('permissions dialog multi-folder flow', () => {
     // Replacing DO_NOT_TRUST with TRUST_FOLDER is a change, so the dialog must
     // show the updated prompt and say so rather than reporting it unchanged.
     expect(result.current.view).toBe('updated');
+    // The session's live trust must be re-applied for its own folder, not just
+    // persisted.
+    expect(setTrustedFolderLive).toHaveBeenCalledWith(true);
     expect(addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageType.INFO,

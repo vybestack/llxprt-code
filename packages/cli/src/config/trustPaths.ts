@@ -34,8 +34,13 @@ function expandTilde(value: string): string {
   if (value === '~') {
     return os.homedir();
   }
-  if (value.startsWith('~/')) {
-    return path.join(os.homedir(), value.slice(2));
+  // Windows accepts either separator after the tilde; on POSIX a backslash is a
+  // legal filename character, so only "/" may introduce a home-relative path.
+  const separators =
+    process.platform === 'win32' ? ['~/', `~${path.sep}`] : ['~/'];
+  const prefix = separators.find((candidate) => value.startsWith(candidate));
+  if (prefix !== undefined) {
+    return path.join(os.homedir(), value.slice(prefix.length));
   }
   return value;
 }
