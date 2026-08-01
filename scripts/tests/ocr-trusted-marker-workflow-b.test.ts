@@ -531,7 +531,11 @@ no checkpoint here`,
       expect(result.updateCalls).toHaveLength(0);
     });
 
-    it('B1: does not reset when the edited comment is not the canonical marker', async () => {
+    it('resets the canonical marker when a trusted DUPLICATE is the edited comment', async () => {
+      // Duplicates can exist transiently (a concurrent run not yet
+      // reconciled) and the user checks whichever box they can see.
+      // Requiring the edit to land on the canonical comment would silently
+      // ignore a legitimate re-enable and leave the PR suspended.
       const result = await executeAutoGate({
         script: autoGateScript,
         eventName: 'issue_comment',
@@ -545,6 +549,31 @@ no checkpoint here`,
           markerComment(888, newBody),
           markerComment(999, newBody),
         ],
+      });
+      expect(result.outputs['auto-should-run']).toBe('true');
+      expect(result.outputs['is-manual']).toBe('true');
+      expect(result.outputs['current-count']).toBe('0');
+      // The reset is still written to the CANONICAL (oldest) marker.
+      expect(result.updateCalls).toHaveLength(1);
+      expect(Number(result.updateCalls[0]['comment_id'])).toBe(888);
+      expect(String(result.updateCalls[0]['body'])).toContain(
+        '<!-- ocr-auto-count:0 -->',
+      );
+    });
+
+    it('does not reset when the edited comment id is not a trusted marker', async () => {
+      // Security guard: the edited comment must itself be one of the trusted
+      // markers, so a stray id cannot drive a reset.
+      const result = await executeAutoGate({
+        script: autoGateScript,
+        eventName: 'issue_comment',
+        eventAction: 'edited',
+        commentBody: newBody,
+        changesFrom: oldBody,
+        commentUserType: 'Bot',
+        commentUserLogin: 'github-actions[bot]',
+        commentId: '777',
+        listComments: [markerComment(888, newBody)],
       });
       expect(result.outputs['auto-should-run']).toBe('false');
       expect(result.outputs['is-manual']).toBe('false');

@@ -385,13 +385,23 @@ jobs:
                 let resetSucceeded = false;
                 try {
                   let marker = null;
+                  let editedIsTrustedMarker = false;
                   try {
                     const resetComments = await fetchCommentsOnce();
                     marker = canonicalMarkerComment(resetComments, trustedLogins, MARKER);
+                    // The edit must land on a trusted marker, but it need not
+                    // be the canonical one: duplicates can exist transiently
+                    // and the user checks whichever box they can see. Requiring
+                    // identity with the canonical comment would silently ignore
+                    // a legitimate re-enable. Trust still comes from
+                    // isTrustedMarkerComment above, so an unrelated bot editing
+                    // its own marker cannot reach here.
+                    editedIsTrustedMarker = trustedMarkerComments(resetComments, trustedLogins, MARKER)
+                      .some((candidate) => candidate.id === commentIdNum);
                   } catch (fetchErr) {
                     core.warning(`Failed to fetch marker comment for checkbox reset: ${fetchErr.message || fetchErr}`);
                   }
-                  if (marker && commentIdNum === marker.id) {
+                  if (marker && editedIsTrustedMarker) {
                     const resetBody = replaceHiddenState(marker.body, 0);
                     await github.rest.issues.updateComment({
                       owner: context.repo.owner,

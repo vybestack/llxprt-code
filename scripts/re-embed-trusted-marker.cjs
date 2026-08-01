@@ -31,6 +31,16 @@ const WORKFLOW_PATH = path.join(ROOT, '.github', 'workflows', 'ocr-review.yml');
 const BEGIN = '// --- BEGIN OCR TRUSTED MARKER SNIPPET ---';
 const END = '// --- END OCR TRUSTED MARKER SNIPPET ---';
 const INDENT = '            ';
+
+/**
+ * Drop a trailing carriage return so sentinel comparisons succeed on a
+ * CRLF checkout without rewriting the file's line endings.
+ * @param {string} line - a single line, possibly CRLF-terminated
+ * @returns {string} the line without a trailing carriage return
+ */
+function stripCarriageReturn(line) {
+  return line.endsWith('\r') ? line.slice(0, -1) : line;
+}
 const EXPECTED_SITES = 4;
 
 /**
@@ -38,7 +48,10 @@ const EXPECTED_SITES = 4;
  * @param {string} content - full module source
  * @returns {string} the snippet including sentinel lines
  */
-function extractSnippet(content) {
+function extractSnippet(rawContent) {
+  // Normalize CRLF so sentinel lines compare equal on a Windows checkout;
+  // the workflow this feeds is LF-only per .gitattributes.
+  const content = rawContent.replace(/\r\n/g, '\n');
   const beginIdx = content.indexOf(BEGIN);
   const endIdx = content.indexOf(END);
   if (beginIdx < 0) {
@@ -75,7 +88,7 @@ function indentSnippet(text) {
  * @returns {Array<{startLine: number, endLine: number}>}
  */
 function findEmbeddedBlocks(workflow) {
-  const lines = workflow.split('\n');
+  const lines = workflow.split('\n').map(stripCarriageReturn);
   const blocks = [];
   for (let i = 0; i < lines.length; i++) {
     if (lines[i] === INDENT + BEGIN) {
@@ -108,10 +121,14 @@ function findEmbeddedBlocks(workflow) {
  * @param {string} workflowContent - .github/workflows/ocr-review.yml
  * @returns {string} the updated workflow content
  */
-function reEmbed(moduleContent, workflowContent) {
+function reEmbed(moduleContent, rawWorkflowContent) {
   const snippet = extractSnippet(moduleContent);
   const indentedSnippet = indentSnippet(snippet);
 
+  // The workflow is LF-only per .gitattributes. Normalizing here keeps the
+  // sentinel matching, the splice and the post-write verification all
+  // consistent on a CRLF checkout instead of failing with "found 0".
+  const workflowContent = rawWorkflowContent.replace(/\r\n/g, '\n');
   const blocks = findEmbeddedBlocks(workflowContent);
   if (blocks.length !== EXPECTED_SITES) {
     throw new Error(

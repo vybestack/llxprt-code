@@ -115,6 +115,11 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
       const result = await executeAutoGate({
         script: autoGateScript,
         ocrBotLogin: '',
+        // Simulate the real production failure, not merely an empty login:
+        // the workflow token cannot reach the authenticated-user endpoint.
+        getAuthenticatedThrows: new Error(
+          'Resource not accessible by integration',
+        ),
         listComments: [
           markerComment(1, `${MARKER}\n<!-- ocr-auto-count:1 -->`),
         ],
@@ -436,6 +441,10 @@ suspension body`,
       );
       expect(storeComments2).toHaveLength(1);
       expect(storeComments2[0].body).toContain('<!-- ocr-auto-count:2 -->');
+      // "Reconcile without losing state" includes the comment's identity.
+      // A delete-and-recreate would satisfy the count assertions above while
+      // discarding reactions and edit history, so pin the id across runs.
+      expect(storeComments2[0].id).toBe(storeComments1[0].id);
     });
 
     it('I6: marker on page 2 is still discovered via real pagination', async () => {
