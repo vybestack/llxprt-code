@@ -109,6 +109,12 @@ function classifyEndpoint(
   if (!isLoopbackHost(parsed.hostname)) {
     return { ok: false, code: 'JSP-E004' };
   }
+  // The publisher appends the "/jsp/1" route segment to this endpoint. A query
+  // or fragment would end up before that segment and produce a malformed URL,
+  // so reject it here rather than silently building a broken request target.
+  if (parsed.search !== '' || parsed.hash !== '') {
+    return { ok: false, code: 'JSP-E001' };
+  }
   return { ok: true, url: parsed };
 }
 

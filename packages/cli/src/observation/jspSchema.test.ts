@@ -45,6 +45,24 @@ describe('parseBootstrap', () => {
     expect(errorCode(result)).toBe('JSP-E004');
   });
 
+  it('rejects an endpoint carrying a query string', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'http://127.0.0.1:9123?token=abc',
+    });
+    expect(result.ok).toBe(false);
+    expect(errorCode(result)).toBe('JSP-E001');
+  });
+
+  it('rejects an endpoint carrying a fragment', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      endpoint: 'http://127.0.0.1:9123#frag',
+    });
+    expect(result.ok).toBe(false);
+    expect(errorCode(result)).toBe('JSP-E001');
+  });
+
   it('rejects a wrong protocol version', () => {
     const result = parseBootstrap({
       ...validBootstrap,
