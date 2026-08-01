@@ -56,6 +56,11 @@ export interface UseDialogOrchestrationResult {
   isModelConfigDialogOpen: boolean;
   openModelConfigDialog: () => void;
   closeModelConfigDialog: () => void;
+
+  // Policies dialog
+  isPoliciesDialogOpen: boolean;
+  openPoliciesDialog: () => void;
+  closePoliciesDialog: () => void;
 }
 
 function useBooleanDialog(): [boolean, () => void, () => void] {
@@ -144,6 +149,9 @@ export function useDialogOrchestration(): UseDialogOrchestrationResult {
     closeModelConfigDialog,
   ] = useBooleanDialog();
 
+  const [isPoliciesDialogOpen, openPoliciesDialog, closePoliciesDialog] =
+    useBooleanDialog();
+
   return {
     // Permissions dialog
     isPermissionsDialogOpen,
@@ -178,5 +186,10 @@ export function useDialogOrchestration(): UseDialogOrchestrationResult {
     isModelConfigDialogOpen,
     openModelConfigDialog,
     closeModelConfigDialog,
+
+    // Policies dialog
+    isPoliciesDialogOpen,
+    openPoliciesDialog,
+    closePoliciesDialog,
   };
 }

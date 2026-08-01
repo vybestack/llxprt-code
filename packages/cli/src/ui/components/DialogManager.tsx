@@ -49,6 +49,7 @@ import { SubagentManagerDialog } from './SubagentManagement/index.js';
 import { SubagentView } from './SubagentManagement/types.js';
 import { ModelsDialog } from './ModelDialog.js';
 import { ModelConfigDialog } from './ModelConfigDialog.js';
+import { PoliciesDialog } from './PoliciesDialog.js';
 import { useModelDialogHandler } from './modelDialogHandler.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
@@ -719,6 +720,15 @@ function renderDialogBodySecondHalf(
       <Box flexDirection="column">
         <ModelConfigDialog onClose={uiActions.closeModelConfigDialog} />
       </Box>
+    );
+  }
+  if (uiState.isPoliciesDialogOpen) {
+    return (
+      <PoliciesDialog
+        config={config}
+        addItem={addItem}
+        onExit={uiActions.closePoliciesDialog}
+      />
     );
   }
   return null;

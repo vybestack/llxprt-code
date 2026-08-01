@@ -63,9 +63,12 @@ function oracleSelectedCount(): number {
       ignore: ['**/node_modules/**', '**/dist/**'],
     },
   );
+  // Explicit re-include entries carve out specific excluded files, so they
+  // bypass the exclude filter — matching discoverTestFiles semantics.
+  const explicitSet = new Set(EXPLICIT_INCLUDE_PATTERNS);
   const candidates = [...all, ...EXPLICIT_INCLUDE_PATTERNS];
   const filtered = candidates.filter(
-    (f) => !micromatch.isMatch(f, BASE_EXCLUDE_PATTERNS),
+    (f) => explicitSet.has(f) || !micromatch.isMatch(f, BASE_EXCLUDE_PATTERNS),
   );
   const existing = filtered.filter((f) => existsSync(resolve(PACKAGE_ROOT, f)));
   return new Set(existing).size;
@@ -310,6 +313,7 @@ describe('buildTestGroups — preserved special-selection semantics', () => {
       'src/ui/hooks/useToolScheduler.test.ts',
       'src/ui/commands/directoryCommand.test.tsx',
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
+      'src/ui/components/PoliciesDialog.test.tsx',
     ]) {
       expect(allRouted).toContain(rel);
     }

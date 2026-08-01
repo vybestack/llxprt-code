@@ -212,7 +212,8 @@ export type DialogType =
   | 'profileDetail'
   | 'profileEditor'
   | 'welcome'
-  | 'sessionBrowser';
+  | 'sessionBrowser'
+  | 'policies';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {

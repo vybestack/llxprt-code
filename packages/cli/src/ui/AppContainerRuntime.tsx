@@ -108,6 +108,7 @@ function buildInputParams(
     openSubagentDialog: dialogs.openSubagentDialog,
     openModelsDialog: dialogs.openModelsDialog,
     openPermissionsDialog: dialogs.openPermissionsDialog,
+    openPoliciesDialog: dialogs.openPoliciesDialog,
     openProviderDialog: dialogs.openProviderDialog,
     openLoadProfileDialog: dialogs.openLoadProfileDialog,
     openCreateProfileDialog: dialogs.openCreateProfileDialog,
@@ -244,6 +245,7 @@ function buildUIStateParamsCore(
     isModelsDialogOpen: d.isModelsDialogOpen,
     isSessionBrowserDialogOpen: d.isSessionBrowserDialogOpen,
     isModelConfigDialogOpen: d.isModelConfigDialogOpen,
+    isPoliciesDialogOpen: d.isPoliciesDialogOpen,
     providerOptions: d.isCreateProfileDialogOpen
       ? d.createProfileProviders
       : d.providerOptions,
@@ -334,6 +336,15 @@ function buildUIStateParamsExtra(r: HookResults) {
   };
 }
 
+function extraDialogActions(d: AppDialogsResult) {
+  return {
+    openModelConfigDialog: d.openModelConfigDialog,
+    closeModelConfigDialog: d.closeModelConfigDialog,
+    openPoliciesDialog: d.openPoliciesDialog,
+    closePoliciesDialog: d.closePoliciesDialog,
+  };
+}
+
 function dialogActionsParams(d: HookResults['dialogs']) {
   return {
     refreshStatic: d.refreshStatic,
@@ -380,8 +391,9 @@ function dialogActionsParams(d: HookResults['dialogs']) {
     closeSubagentDialog: d.closeSubagentDialog,
     openModelsDialog: d.openModelsDialog,
     closeModelsDialog: d.closeModelsDialog,
-    openModelConfigDialog: d.openModelConfigDialog,
-    closeModelConfigDialog: d.closeModelConfigDialog,
+
+    ...extraDialogActions(d),
+
     openSessionBrowserDialog: d.openSessionBrowserDialog,
     closeSessionBrowserDialog: d.closeSessionBrowserDialog,
     onWorkspaceMigrationDialogOpen: d.onWorkspaceMigrationDialogOpen,

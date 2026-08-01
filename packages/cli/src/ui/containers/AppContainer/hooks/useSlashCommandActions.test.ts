@@ -22,6 +22,7 @@ describe('useSlashCommandActions', () => {
       openSubagentDialog: createCallback(),
       openModelsDialog: createCallback(),
       openPermissionsDialog: createCallback(),
+      openPoliciesDialog: createCallback(),
       openProviderDialog: createCallback(),
       openLoadProfileDialog: createCallback(),
       openCreateProfileDialog: createCallback(),
@@ -54,6 +55,9 @@ describe('useSlashCommandActions', () => {
     expect(result.current.openModelsDialog).toBe(callbacks.openModelsDialog);
     expect(result.current.openPermissionsDialog).toBe(
       callbacks.openPermissionsDialog,
+    );
+    expect(result.current.openPoliciesDialog).toBe(
+      callbacks.openPoliciesDialog,
     );
     expect(result.current.openProviderDialog).toBe(
       callbacks.openProviderDialog,
@@ -100,6 +104,7 @@ describe('useSlashCommandActions', () => {
       openSubagentDialog: createCallback(),
       openModelsDialog: createCallback(),
       openPermissionsDialog: createCallback(),
+      openPoliciesDialog: createCallback(),
       openProviderDialog: createCallback(),
       openLoadProfileDialog: createCallback(),
       openCreateProfileDialog: createCallback(),

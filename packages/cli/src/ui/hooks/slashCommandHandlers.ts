@@ -287,6 +287,7 @@ function buildSimpleDialogActions(
     settings: () => actions.openSettingsDialog(),
     logging: (data) => openLoggingDialog(actions, data),
     permissions: () => actions.openPermissionsDialog(),
+    policies: () => actions.openPoliciesDialog(),
     provider: () => actions.openProviderDialog(),
     loadProfile: () => actions.openLoadProfileDialog(),
     createProfile: () => actions.openCreateProfileDialog(),
