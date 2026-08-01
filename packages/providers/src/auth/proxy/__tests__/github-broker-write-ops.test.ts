@@ -22,6 +22,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { OP_REGISTRY } from '../github-broker-ops.js';
 import { validateParams } from '../github-broker-validation.js';
+import { truncateWithMarker } from '../github-broker-shaping.js';
 import { withBodyFiles } from '../github-broker-body-file.js';
 import {
   buildIssueCreateArgv,
@@ -318,5 +319,44 @@ describe('required parameters', () => {
       undeclared,
       'ops interpolate a positional but declare no requiredParams',
     ).toStrictEqual([]);
+  });
+});
+
+describe('truncation is byte-accurate', () => {
+  /**
+   * The budget is measured in UTF-8 bytes, so the cut must be too. Slicing
+   * by UTF-16 code units under-cuts multi-byte text, leaving a result that
+   * is still over budget.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('respects the byte budget for multi-byte text', () => {
+    const emoji = '😀'.repeat(200); // 4 UTF-8 bytes each, 2 UTF-16 units each
+    const limit = 100;
+    const out = truncateWithMarker(emoji, 'body', limit);
+    expect(out.truncated).not.toBeNull();
+    expect(Buffer.byteLength(out.value, 'utf8')).toBeLessThanOrEqual(limit);
+  });
+
+  /**
+   * Cutting mid-sequence must not leave a replacement character.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('does not split a multi-byte character', () => {
+    const out = truncateWithMarker('😀'.repeat(50), 'body', 21);
+    expect(out.value).not.toContain('\uFFFD');
+  });
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('leaves text within budget untouched', () => {
+    const out = truncateWithMarker('short', 'body', 1000);
+    expect(out.truncated).toBeNull();
+    expect(out.value).toBe('short');
   });
 });

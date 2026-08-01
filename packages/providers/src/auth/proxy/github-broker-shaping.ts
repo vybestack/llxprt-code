@@ -172,7 +172,20 @@ export function truncateWithMarker(
   if (originalBytes <= limit) {
     return { value, truncated: null };
   }
-  const cut = value.slice(0, Math.max(0, limit - TRUNCATION_MARKER.length));
+  // The budget is measured in UTF-8 bytes, so the cut must be too. Slicing
+  // by UTF-16 code units would under-cut multi-byte text (leaving the result
+  // over budget) and can split a surrogate pair, producing a replacement
+  // character. Cutting the encoded buffer and decoding with a stream-aware
+  // decoder drops any partial trailing sequence cleanly instead.
+  const budget = Math.max(0, limit - Buffer.byteLength(TRUNCATION_MARKER));
+  // `stream: true` makes the decoder hold back an incomplete trailing
+  // sequence instead of emitting U+FFFD for it. Without it the replacement
+  // character both corrupts the text and costs three bytes we did not
+  // budget for, pushing the result back over the limit.
+  const cut = new TextDecoder('utf-8').decode(
+    Buffer.from(value, 'utf8').subarray(0, budget),
+    { stream: true },
+  );
   return {
     value: cut + TRUNCATION_MARKER,
     truncated: { field, originalBytes },

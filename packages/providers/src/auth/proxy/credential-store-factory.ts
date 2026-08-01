@@ -42,6 +42,15 @@ let proxyKeyStorage: ProxyProviderKeyStorage | undefined;
 let proxyKeyStorageClient: ProxySocketClient | undefined;
 let proxyKeyStorageCapabilityToken: string | undefined;
 let proxyKeyStorageSocketPath: string | undefined;
+/**
+ * Cached socket client for brokered GitHub operations.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-003
+ */
+let brokerClient: ProxySocketClient | undefined;
+let brokerClientCapabilityToken: string | undefined;
+let brokerClientSocketPath: string | undefined;
 let directKeyStorage: ProviderKeyStorage | undefined;
 
 /**
@@ -247,6 +256,12 @@ function cleanupProxySingletons(): void {
     proxyTokenStoreCapabilityToken = undefined;
     proxyTokenStoreSocketPath = undefined;
   }
+  if (brokerClient !== undefined) {
+    safeClose(() => brokerClient?.close());
+    brokerClient = undefined;
+    brokerClientCapabilityToken = undefined;
+    brokerClientSocketPath = undefined;
+  }
   if (proxyKeyStorage !== undefined) {
     safeClose(() => proxyKeyStorageClient?.close());
     proxyKeyStorageClient = undefined;
@@ -327,7 +342,22 @@ export function createGitHubBrokerSocketClient(): ProxySocketClient | null {
     createTokenStore();
   }
   if (!socketPath) return null;
-  return new ProxySocketClient(socketPath, resolveCapabilityToken());
+  const capabilityToken = resolveCapabilityToken();
+  // Cached and torn down like the other proxy clients. Returning a fresh
+  // untracked client per call would leak a socket on every rebuild and
+  // survive resetFactorySingletons, which tests rely on to isolate.
+  if (
+    brokerClient === undefined ||
+    brokerClientCapabilityToken !== capabilityToken ||
+    brokerClientSocketPath !== socketPath
+  ) {
+    const oldClient = brokerClient;
+    brokerClient = new ProxySocketClient(socketPath, capabilityToken);
+    safeClose(() => oldClient?.close());
+    brokerClientCapabilityToken = capabilityToken;
+    brokerClientSocketPath = socketPath;
+  }
+  return brokerClient;
 }
 
 export function createProviderKeyStorage(): ProviderKeyStorageLike {

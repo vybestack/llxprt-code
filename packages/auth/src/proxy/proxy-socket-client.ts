@@ -78,6 +78,39 @@ export class ProxySocketClient {
     onPartialFrameTimeout: () => this.handlePartialFrameTimeout(),
   });
   private pendingRequests: Map<string, PendingRequest> = new Map();
+  /**
+   * Detaches abort listeners for requests that settle without aborting.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-007
+   */
+  private abortCleanups: Map<string, () => void> = new Map();
+
+  /**
+   * Detaches and forgets the abort listener for a settled request.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-007
+   */
+  private releaseAbortCleanup(id: string): void {
+    const cleanup = this.abortCleanups.get(id);
+    if (cleanup) {
+      cleanup();
+      this.abortCleanups.delete(id);
+    }
+  }
+
+  /**
+   * Detaches every outstanding abort listener. Used when the connection is
+   * torn down and all pending requests are rejected at once.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-007
+   */
+  private releaseAllAbortCleanups(): void {
+    for (const cleanup of this.abortCleanups.values()) cleanup();
+    this.abortCleanups.clear();
+  }
   private handshakeComplete: boolean = false;
   /**
    * Protocol version negotiated with the server during handshake. A v1
@@ -171,6 +204,8 @@ export class ProxySocketClient {
     const promise = new Promise<ProxyResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
+        this.releaseAbortCleanup(id);
+        this.releaseAbortCleanup(id);
         this.cancel(id);
         reject(new Error(`Request timed out after ${timeoutMs}ms`));
       }, timeoutMs);
@@ -183,6 +218,8 @@ export class ProxySocketClient {
       const signal = options.signal;
       if (signal.aborted) {
         this.pendingRequests.delete(id);
+        this.releaseAbortCleanup(id);
+        this.releaseAbortCleanup(id);
         // Cannot await here — fire-and-forget the cancel frame.
         this.cancel(id);
         return Promise.reject(new Error('Request cancelled'));
@@ -192,12 +229,22 @@ export class ProxySocketClient {
         if (pending) {
           clearTimeout(pending.timer);
           this.pendingRequests.delete(id);
+          this.releaseAbortCleanup(id);
+          this.releaseAbortCleanup(id);
+          this.releaseAbortCleanup(id);
           this.cancel(id);
           pending.reject(new Error('Request cancelled'));
           this.maybeArmIdleTimer();
         }
       };
       signal.addEventListener('abort', abortHandler, { once: true });
+      // `once` only removes the listener if it actually fires. A request
+      // that settles normally would otherwise leave it attached, and a
+      // long-lived or reused signal — a session-level controller, say —
+      // would accumulate one listener per request.
+      this.abortCleanups.set(id, () =>
+        signal.removeEventListener('abort', abortHandler),
+      );
     }
 
     this.socket!.write(encodeFrame(frame));
@@ -238,6 +285,7 @@ export class ProxySocketClient {
       pending.reject(new Error('Connection closing'));
     }
     this.pendingRequests.clear();
+    this.releaseAllAbortCleanups();
     if (this.handshakeResolver) {
       const resolver = this.handshakeResolver;
       this.handshakeResolver = null;
@@ -403,6 +451,7 @@ export class ProxySocketClient {
     if (pending) {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(id);
+      this.releaseAbortCleanup(id);
       if (isProxyResponseFrame(frame)) {
         pending.resolve(frame);
       } else {
@@ -438,6 +487,7 @@ export class ProxySocketClient {
       pending.reject(new Error(message));
     }
     this.pendingRequests.clear();
+    this.releaseAllAbortCleanups();
 
     this.handshakeComplete = false;
 
