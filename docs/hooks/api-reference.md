@@ -553,8 +553,11 @@ Hooks receive these environment variables:
 | Variable             | Description               |
 | -------------------- | ------------------------- |
 | `LLXPRT_PROJECT_DIR` | Current working directory |
-| `GEMINI_PROJECT_DIR` | Alias for compatibility   |
-| `CLAUDE_PROJECT_DIR` | Alias for compatibility   |
+
+`LLXPRT_PROJECT_DIR` is the only variable LLxprt Code adds to the hook
+environment; the rest of the environment is inherited from the LLxprt Code
+process. `$LLXPRT_PROJECT_DIR` is also the only variable expanded inside a
+hook's `command` string.
 
 ## MessageBus Contracts
 

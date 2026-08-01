@@ -1,237 +1,190 @@
-# Message Bus and Policy Engine
+# Controlling Tool Execution
 
-## Overview
+LLxprt Code decides what happens every time the model wants to use a tool: the
+tool runs automatically, the tool asks you to confirm first, or the tool is
+blocked. You control those decisions with policies — TOML rules that match a
+tool (and optionally its arguments) and specify one of three outcomes:
 
-The message bus and policy engine provide a flexible, rule-based system for controlling tool execution in llxprt-code. This modern approach replaces the legacy approval mode system with configurable policies that determine whether tools should execute automatically, require user confirmation, or be blocked.
+- **Allow** — the tool runs immediately, no prompt.
+- **Ask** — you see the request and choose whether to proceed.
+- **Deny** — the tool is blocked before it runs.
 
-## Key Concepts
+Every tool call passes through the same authorization path regardless of how
+LLxprt Code was started. There is no toggle to bypass it.
 
-### Message Bus
+## What you can do
 
-The message bus is an event-driven communication system that handles tool confirmation requests and responses. It decouples tool execution logic from UI components, enabling:
+| If you want to…                                     | Do this                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Auto-approve read-only tools, confirm writes        | Use the default approval mode (no configuration needed).                                   |
+| Auto-approve edits but still confirm shell commands | Use auto-edit mode: `--approval-mode auto_edit` or press `Ctrl+E` in the interactive UI.   |
+| Auto-approve everything                             | Use YOLO mode: `--approval-mode yolo` (or `--yolo`) or press `Ctrl+Y`.                     |
+| Allow a specific tool without confirmation          | Use `--allowed-tools <name>` on the command line, or write an allow rule in a policy file. |
+| Block a specific tool                               | Write a deny rule in a policy file, or exclude it via settings (`tools.exclude`).          |
+| Block dangerous shell commands automatically        | This happens by default — see [Dangerous command blocking](#dangerous-command-blocking).   |
+| Inspect which rules are active right now            | Run `/policies` (see [Inspecting active rules](#inspecting-active-rules)).                 |
 
-- Asynchronous tool confirmations
-- Policy-based authorization
-- Observability through message events
-- Flexible UI integration patterns
+## How priorities work
 
-### Policy Engine
+Each rule carries a numeric priority; when two rules match the same tool call,
+the rule with the higher priority wins. Priorities are divided into three tiers
+so that your custom rules always override the built-in defaults:
 
-The policy engine evaluates tool execution requests against configurable rules. Each rule can:
+| Tier    | Range         | Who sets it                                                          | Examples                                                         |
+| ------- | ------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Default | 1.000 – 1.999 | Built-in policy files shipped with LLxprt Code                       | Read-only tools allowed; write tools ask; YOLO allow-all.        |
+| User    | 2.000 – 2.999 | Your policy files, CLI flags, and interactive "Always Allow" choices | Custom allow/deny rules; `--allowed-tools`; trusted MCP servers. |
+| Admin   | 3.000 – 3.999 | System-level policy files                                            | Enterprise-wide blocks.                                          |
 
-- Match specific tools or use wildcards to match all tools
-- Match tool arguments using regular expressions
-- Specify a decision: `allow`, `deny`, or `ask_user`
-- Define a priority to control rule precedence
+Within a tier, higher numbers win. A custom rule at priority 2.5 overrides a
+default rule at 1.05, but a higher custom rule at 2.8 overrides it.
 
-### Priority Bands
+### Where each rule type lands
 
-Rules are organized into three priority tiers:
+These priorities are fixed by the engine; you cannot change them from a policy
+file.
 
-- **Tier 3 (Admin): 3.xxx** - Enterprise admin policies (highest priority)
-- **Tier 2 (User): 2.xxx** - User settings and custom policies
-- **Tier 1 (Default): 1.xxx** - Built-in default policies (lowest priority)
+| Priority | Source                                                              | Decision |
+| -------- | ------------------------------------------------------------------- | -------- |
+| 2.95     | "Always Allow" selections made in the interactive UI                | Allow    |
+| 2.9      | MCP servers in the excluded list                                    | Deny     |
+| 2.4      | Tools excluded via settings (`tools.exclude`)                       | Deny     |
+| 2.3      | `--allowed-tools` flag and `tools.allowed` setting                  | Allow    |
+| 2.2      | MCP servers with `trust: true`                                      | Allow    |
+| 2.1      | MCP servers in the allowed list                                     | Allow    |
+| 1.999    | YOLO allow-all (active only in YOLO mode)                           | Allow    |
+| 1.05     | Built-in read-only tools (glob, grep, read_file, etc.)              | Allow    |
+| 1.015    | Auto-edit override (active only in auto-edit mode)                  | Allow    |
+| 1.01     | Built-in write tools (replace, write_file, run_shell_command, etc.) | Ask      |
 
-Within each tier, higher priority numbers win. For example, a rule with priority 2.5 overrides a rule with priority 2.3.
+Rules you write in a policy file always land in the user tier (2.000–2.999). To
+override a default, use any priority in that range; to override a CLI flag
+(priority 2.3), use 2.4 or higher.
 
-## Benefits Over Legacy Approval Mode
+## Dangerous command blocking
 
-The message bus and policy engine offer several advantages:
+Regardless of which rules are active, LLxprt Code hard-denies a set of
+irreversibly destructive shell commands before any rule matching happens. This
+guard cannot be overridden by an allow rule or by YOLO mode. The blocked
+patterns include:
 
-1. **Fine-grained Control**: Define rules per tool or per argument pattern, not just blanket approval modes
-2. **Declarative Configuration**: Policies are defined in TOML files that can be version-controlled
-3. **Composable Rules**: Combine multiple rule sources (defaults, user settings, CLI flags)
-4. **Security**: Block dangerous commands (e.g., `rm -rf /`) at the policy level
-5. **Extensibility**: MCP server trust settings integrate seamlessly with policies
-6. **Observability**: Message bus events provide insight into tool execution flow
+- Recursive deletion of sensitive filesystem roots (`rm -rf /`, `/usr`, `/etc`,
+  `/home`, and similar), including `~` and `$HOME` references that resolve to
+  the home directory.
+- `mkfs` and `mkfs.<type>` — filesystem formatting.
+- `dd` writing to block devices (`of=/dev/...`), excluding safe pseudo-devices
+  like `/dev/null`.
+- Dangerous `chmod` — setuid/setgid assignments and recursive `chmod 777` on
+  sensitive roots.
+- Fork bombs.
+- Writes to credential paths (`.ssh`, `.aws/credentials`, and similar) via
+  redirection, `tee`, `truncate`, or `dd`.
 
-## Message Bus Integration
+The detection is self-contained: it canonicalizes the command (expanding
+`$IFS`, stripping quotes, peeling wrapper commands like `sudo`) before
+matching, so it cannot be bypassed by quoting tricks or variable splitting.
 
-Message bus routing and the policy engine are now always enabled in llxprt-code. No additional settings or profile changes are required.
+## Approval modes and mode-specific rules
 
-## How It Works
+Three approval modes control which built-in rules are active. You set the mode
+with `--approval-mode` (values: `default`, `auto_edit`, `yolo`) or switch at
+runtime with `Ctrl+E` (auto-edit) and `Ctrl+Y` (YOLO).
 
-### Legacy Path (Historical Reference)
+- **`default`** — read-only tools are allowed; write tools ask for confirmation.
+- **`auto_edit`** — edit tools (replace, write_file, insert_at_line,
+  delete_line_range, apply_patch, ast_edit) are auto-approved; shell commands
+  and other tools still follow the normal policy stack.
+- **`yolo`** — a wildcard allow-all rule at priority 1.999 becomes active,
+  auto-approving every tool call. Dangerous command blocking still applies.
 
-```
-Tool Request → shouldConfirmExecute() → UI Dialog → Execute
-```
+Some built-in rules carry a `modes` filter so they activate only in a specific
+mode (for example, the auto-edit overrides are tagged `modes = ["autoEdit"]`).
+When you switch modes the engine updates immediately — no restart needed.
 
-### Current Flow
+> **Warning:** YOLO mode auto-approves every tool except hard-blocked dangerous
+> commands. Use it only in trusted environments. If your administrator has
+> enabled `disableYoloMode` or `secureModeEnabled`, YOLO is unavailable.
 
-```
-Tool Request → Policy Engine → ALLOW/DENY/ASK_USER
-                                  ↓
-                            Message Bus → UI → Response → Execute
-```
+## Legacy flags and settings
 
-The policy engine first evaluates the request against all configured rules. Based on the highest-priority matching rule:
+The `--yolo` flag, `--approval-mode`, `--allowed-tools`, and the
+`approvalMode` / `allowedTools` settings keys all still work. They are
+translated into the corresponding rules and priorities listed above before the
+engine evaluates any tool call, so the behavior is consistent with policy
+files.
 
-- **ALLOW**: Tool executes immediately
-- **DENY**: Tool is blocked with a policy rejection message
-- **ASK_USER**: Message bus publishes a confirmation request, waits for UI response
+## Inspecting active rules
 
-## Using the /policies Command
-
-The `/policies` slash command displays all active policy rules:
+The `/policies` slash command lists every active rule, grouped by tier, in
+priority order:
 
 ```
 > /policies
 
-Active Policy Rules:
+Configured Policy Rules:
 
-  2.950 │ *                         │ allow    (Always Allow - runtime)
-  2.300 │ edit                      │ allow    (--allowed-tools)
-  2.000 │ shell                     │ deny     (args: rm\s+-rf\s+/)
-  1.999 │ *                         │ allow    (YOLO mode)
-  1.050 │ glob                      │ allow    (read-only default)
-  1.010 │ edit                      │ ask_user (write default)
+Tier 2 (User-defined):
+  Priority 2.950: * → ALLOW [Source: Dynamic (Confirmed)]
+  Priority 2.300: replace → ALLOW [Source: Settings (Tools Allowed)]
 
-Default decision: ask_user
-Non-interactive mode: false
+Tier 1 (Defaults):
+  Priority 1.999: * → ALLOW [Source: Default: yolo.toml]
+  Priority 1.050: glob → ALLOW [Source: Default: read-only.toml]
+  Priority 1.010: replace → ASK_USER [Source: Default: write.toml]
+
+Default Decision: ASK_USER
+Non-Interactive Mode: false
 ```
 
-This shows:
+The output shows the resolved priority, the tool the rule matches (`*` for a
+wildcard), the decision, and the rule's source. Use `/policies menu` to open an
+interactive editor for the managed overrides file.
 
-- Priority order (highest first)
-- Tool name (`*` = wildcard matching all tools)
-- Decision (allow/deny/ask_user)
-- Args pattern (if applicable)
+## Non-interactive mode
 
-## Default Policies
+When LLxprt Code runs non-interactively (for example in CI with `-p`), any rule
+that would normally ask for confirmation is treated as a denial instead. This
+prevents the process from hanging while waiting for a response that will never
+come. Add explicit allow rules for tools you need in non-interactive workflows.
 
-llxprt-code ships with built-in policies:
+## Adding custom policies
 
-### Read-Only Tools (Priority 1.05)
-
-These tools auto-approve by default:
-
-- glob, grep, ls, read_file, read_many_files, ripgrep
-- exa_web_search, task, write_todos, list_subagents
-- notebook_edit, slash_command, skill
-
-### Write Tools (Priority 1.01)
-
-These tools require confirmation by default:
-
-- edit, write_file
-- shell, memory, direct_web_fetch
-- mcp_tool
-
-### Dangerous Shell Commands (Priority 2.0)
-
-These patterns are blocked:
-
-- `rm -rf /` - Recursive root deletion
-- `chmod 777` - Insecure permissions
-- `dd if=` - Disk overwrite
-- `mkfs.` - Filesystem formatting
-- Fork bombs and other malicious patterns
-
-### YOLO Mode (Priority 1.999)
-
-When `--yolo` flag is used, a wildcard allow-all rule is added at priority 1.999.
-
-## Configuration File Format
-
-See [Policy Configuration Guide](policy-configuration.md) for detailed TOML syntax and examples.
-
-## Legacy Compatibility
-
-The system maintains full backward compatibility:
-
-### ApprovalMode Mapping
-
-Legacy approval modes map to policy rules:
-
-| ApprovalMode | Policy Behavior                     |
-| ------------ | ----------------------------------- |
-| `DEFAULT`    | Standard policy stack applies       |
-| `AUTO_EDIT`  | Allow write tools at priority 1.015 |
-| `YOLO`       | Allow all tools at priority 1.999   |
-
-### CLI Flags
-
-- `--allowed-tools`: Each tool becomes an ALLOW rule at priority 2.3
-- `--yolo`: Adds wildcard ALLOW rule at priority 1.999
-
-Legacy approval settings are now expressed as policy rules that flow through the message bus; there is no toggle to bypass the new architecture.
+Write rules in a TOML file and place it in your user policy directory (see
+[Application Directories](reference/application-directories.md) for the path on
+each operating system). Files in that directory are loaded automatically at tier 2. For full TOML syntax, examples, and pattern-matching guidance, see
+[Policy Configuration](policy-configuration.md).
 
 ## Troubleshooting
 
-### Policy Not Taking Effect
+### A policy rule is not taking effect
 
-1. Verify your policy file path (`settings.policyFiles`) is correct and readable
-2. Restart llxprt-code (or reload settings) after edits
-3. Use `/policies` to inspect active rules and priorities
-4. Ensure your custom policy has higher priority than defaults
+1. Run `/policies` to confirm the rule appears in the list.
+2. Check that your rule's priority is higher than the rule you expect it to
+   override (use 2.5 or higher to beat defaults and CLI flags).
+3. Restart LLxprt Code after adding a new policy file to the user directory.
+4. If the rule uses `argsPattern`, verify the regular expression is valid and
+   matches the serialized arguments. Use `/policies` to see the resolved
+   priority and source.
 
-### Tool Blocked Unexpectedly
+### A tool is blocked unexpectedly
 
-1. Use `/policies` to see which rule matched
-2. Check for DENY rules with higher priority than your ALLOW rules
-3. Review args patterns for overly broad matches
+1. Run `/policies` and look for a deny rule with a higher priority than your
+   allow rule.
+2. Check whether the tool call hit the [dangerous command blocking](#dangerous-command-blocking)
+   guard — those blocks are not shown as rules.
+3. If running non-interactively, remember that ask rules become denials.
 
-### Timeout Errors
+### Confirmation requests time out
 
-If tool confirmations timeout (default 5 minutes):
+Confirmation prompts time out after 5 minutes by default. If the timeout fires,
+the tool call is treated as denied. In non-interactive mode, ask decisions are
+denied immediately rather than waiting.
 
-- Check that UI is responding to confirmation requests
-- In non-interactive mode, ASK_USER decisions become DENY
-- Consider adding ALLOW rules for trusted tools
+## Related documentation
 
-### Policy File Errors
-
-If policy loading fails:
-
-- Check TOML syntax (use online validator)
-- Verify priority is in range [1.0, 4.0)
-- Ensure regex patterns in `argsPattern` are valid
-- Check file path in settings
-
-## Security Considerations
-
-### Server Name Spoofing Prevention
-
-MCP tools are validated to prevent spoofing:
-
-- Expected format: `serverName__toolName`
-- If serverName doesn't match prefix, tool is denied
-- Built-in tools cannot be spoofed via MCP
-
-### Priority Band Enforcement
-
-The policy engine validates that priorities fall within allowed bands:
-
-- Tier 1: 1.0 - 1.999
-- Tier 2: 2.0 - 2.999
-- Tier 3: 3.0 - 3.999
-
-Custom policies with priorities outside this range will fail to load.
-
-### Non-Interactive Mode
-
-When `--non-interactive` flag is used:
-
-- ASK_USER decisions automatically become DENY
-- Prevents tools from hanging waiting for user input
-- Recommended for CI/CD environments
-
-## Performance Notes
-
-### Rule Evaluation
-
-- Rules are sorted by priority once at engine initialization
-- Evaluation stops at first matching rule (O(n) worst case)
-- Stable stringify for args matching adds minimal overhead
-
-### Message Bus Overhead
-
-- EventEmitter-based pub/sub is lightweight
-- Correlation IDs use crypto.randomUUID() (fast)
-- Timeout cleanup prevents memory leaks
-
-## Next Steps
-
-- Read [Policy Configuration Guide](policy-configuration.md) to create custom policies
-- See [Migration Guide](migration/approval-mode-to-policies.md) to migrate from legacy approval modes
+- [Policy Configuration](policy-configuration.md) — TOML syntax, examples, and
+  pattern-matching reference.
+- [Migration: Approval Mode to Policies](migration/approval-mode-to-policies.md)
+  — how to move from legacy approval settings to policy files.
+- For internal architecture, component diagrams, and the message flow, see
+  `dev-docs/architecture/message-bus.md` in a repository checkout.

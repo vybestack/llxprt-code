@@ -1,10 +1,8 @@
-# Memory Import Processor
+# Memory Imports
 
-The Memory Import Processor is a feature that allows you to modularize your LLXPRT.md files by importing content from other files using the `@file.md` syntax.
-
-## Overview
-
-This feature enables you to break down large LLXPRT.md files into smaller, more manageable components that can be reused across different contexts. The import processor supports both relative and absolute paths, with built-in safety features to prevent circular imports and ensure file access security.
+You can modularize your `LLXPRT.md` files by importing content from other files
+using the `@file.md` syntax. This lets you break large memory files into smaller,
+reusable components.
 
 ## Syntax
 
@@ -22,21 +20,24 @@ More content here.
 @./shared/configuration.md
 ```
 
-## Supported Path Formats
+When LLxprt Code loads your memory files, it resolves each `@` import, inlines
+the referenced file's content, and passes the combined result to the model.
 
-### Relative Paths
+## Supported path formats
 
-- `@./file.md` - Import from the same directory
-- `@../file.md` - Import from parent directory
-- `@./components/file.md` - Import from subdirectory
+### Relative paths
 
-### Absolute Paths
+- `@./file.md` — import from the same directory
+- `@../file.md` — import from the parent directory
+- `@./components/file.md` — import from a subdirectory
 
-- `@/absolute/path/to/file.md` - Import using absolute path
+### Absolute paths
+
+- `@/absolute/path/to/file.md` — import using an absolute path
 
 ## Examples
 
-### Basic Import
+### Basic import
 
 ```markdown
 # My LLXPRT.md
@@ -50,9 +51,9 @@ Welcome to my project!
 @./features/overview.md
 ```
 
-### Nested Imports
+### Nested imports
 
-The imported files can themselves contain imports, creating a nested structure:
+Imported files can themselves contain imports, creating a nested structure:
 
 ```markdown
 # main.md
@@ -70,146 +71,65 @@ The imported files can themselves contain imports, creating a nested structure:
 @./shared/title.md
 ```
 
-## Safety Features
+## Safety features
 
-### Circular Import Detection
+### Circular import detection
 
-The processor automatically detects and prevents circular imports:
+LLxprt Code automatically detects and prevents circular imports. If file A
+imports file B, and file B imports file A, the cycle is broken and the repeated
+import is skipped.
 
-```markdown
-# file-a.md
+### File access security
 
-@./file-b.md
+Imports are validated before reading. The resolved path must stay within the
+project root directory. URL-based imports (`file://`, `http://`, `https://`) and
+path traversal attempts are rejected.
 
-# file-b.md
+### Maximum import depth
 
-@./file-a.md <!-- This will be detected and prevented -->
-```
+To prevent infinite recursion, imports are limited to a depth of 5 levels. If a
+file's import chain exceeds this limit, further imports are stopped and the
+remaining content is left as-is.
 
-### File Access Security
+## Code region detection
 
-The `validateImportPath` function ensures that imports are only allowed from specified directories, preventing access to sensitive files outside the allowed scope.
+The `@` symbol is only treated as an import directive when it appears in normal
+Markdown text. Inside fenced code blocks and inline code spans, `@` is left
+untouched so examples that use `@` in code are preserved as written.
 
-### Maximum Import Depth
+## Error handling
 
-To prevent infinite recursion, there's a configurable maximum import depth (default: 5 levels).
+### Missing files
 
-## Error Handling
+If a referenced file does not exist, the import fails gracefully. An error
+comment is inserted in the output where the import was attempted.
 
-### Missing Files
+### File access errors
 
-If a referenced file doesn't exist, the import will fail gracefully with an error comment in the output.
+Permission issues or other file system errors produce a readable error message
+in the output rather than crashing the session.
 
-### File Access Errors
+## Best practices
 
-Permission issues or other file system errors are handled gracefully with appropriate error messages.
-
-## Code Region Detection
-
-The import processor uses the `marked` library to detect code blocks and inline code spans, ensuring that `@` imports inside these regions are properly ignored. This provides robust handling of nested code blocks and complex Markdown structures.
-
-## Import Tree Structure
-
-The processor returns an import tree that shows the hierarchy of imported files, similar to Claude's `/memory` feature. This helps users debug problems with their LLXPRT.md files by showing which files were read and their import relationships.
-
-Example tree structure:
-
-```
-Memory Files
- L project: LLXPRT.md
-            L a.md
-              L b.md
-                L c.md
-              L d.md
-                L e.md
-                  L f.md
-            L included.md
-```
-
-The tree preserves the order that files were imported and shows the complete import chain for debugging purposes.
-
-## Comparison to Claude Code's `/memory` (`claude.md`) Approach
-
-Claude Code's `/memory` feature (as seen in `claude.md`) produces a flat, linear document by concatenating all included files, always marking file boundaries with clear comments and path names. It does not explicitly present the import hierarchy, but the LLM receives all file contents and paths, which is sufficient for reconstructing the hierarchy if needed.
-
-Note: The import tree is mainly for clarity during development and has limited relevance to LLM consumption.
-
-## API Reference
-
-### `processImports(content, basePath, debugMode?, importState?)`
-
-Processes import statements in LLXPRT.md content.
-
-**Parameters:**
-
-- `content` (string): The content to process for imports
-- `basePath` (string): The directory path where the current file is located
-- `debugMode` (boolean, optional): Whether to enable debug logging (default: false)
-- `importState` (ImportState, optional): State tracking for circular import prevention
-
-**Returns:** Promise<ProcessImportsResult> - Object containing processed content and import tree
-
-### `ProcessImportsResult`
-
-```typescript
-interface ProcessImportsResult {
-  content: string; // The processed content with imports resolved
-  importTree: MemoryFile; // Tree structure showing the import hierarchy
-}
-```
-
-### `MemoryFile`
-
-```typescript
-interface MemoryFile {
-  path: string; // The file path
-  imports?: MemoryFile[]; // Direct imports, in the order they were imported
-}
-```
-
-### `validateImportPath(importPath, basePath, allowedDirectories)`
-
-Validates import paths to ensure they are safe and within allowed directories.
-
-**Parameters:**
-
-- `importPath` (string): The import path to validate
-- `basePath` (string): The base directory for resolving relative paths
-- `allowedDirectories` (string[]): Array of allowed directory paths
-
-**Returns:** boolean - Whether the import path is valid
-
-### `findProjectRoot(startDir)`
-
-Finds the project root by searching for a `.git` directory upwards from the given start directory. Implemented as an **async** function using non-blocking file system APIs to avoid blocking the Node.js event loop.
-
-**Parameters:**
-
-- `startDir` (string): The directory to start searching from
-
-**Returns:** Promise<string> - The project root directory (or the start directory if no `.git` is found)
-
-## Best Practices
-
-1. **Use descriptive file names** for imported components
-2. **Keep imports shallow** - avoid deeply nested import chains
-3. **Document your structure** - maintain a clear hierarchy of imported files
-4. **Test your imports** - ensure all referenced files exist and are accessible
-5. **Use relative paths** when possible for better portability
+1. **Use descriptive file names** for imported components.
+2. **Keep imports shallow** — avoid deeply nested import chains.
+3. **Document your structure** — maintain a clear hierarchy of imported files.
+4. **Test your imports** — ensure all referenced files exist and are accessible.
+5. **Use relative paths** when possible for better portability.
 
 ## Troubleshooting
 
-### Common Issues
+### Common issues
 
-1. **Import not working**: Check that the file exists and the path is correct
-2. **Circular import warnings**: Review your import structure for circular references
-3. **Permission errors**: Ensure the files are readable and within allowed directories
-4. **Path resolution issues**: Use absolute paths if relative paths aren't resolving correctly
+1. **Import not working**: Check that the file exists and the path is correct.
+2. **Circular import warnings**: Review your import structure for circular
+   references.
+3. **Permission errors**: Ensure the files are readable and within the project
+   root.
+4. **Path resolution issues**: Use absolute paths if relative paths are not
+   resolving correctly.
 
-### Debug Mode
-
-Enable debug mode to see detailed logging of the import process:
-
-```typescript
-const result = await processImports(content, basePath, true);
-```
+For internal implementation details — including the function and type
+signatures, import tree structure, debug mode internals, and a cross-product
+comparison — see
+[Memory Import Internals](../../dev-docs/core/memport-internals.md).

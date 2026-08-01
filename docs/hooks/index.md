@@ -64,15 +64,18 @@ following to your [user `settings.json`](../reference/application-directories.md
 
 ```json
 {
-  "hooks": {
+  "hooksConfig": {
     "enabled": true
   }
 }
 ```
 
 There is also an experimental gate (`tools.enableHooks`) that defaults to
-`true`. Both `hooks.enabled` and `tools.enableHooks` must be `true` for hooks
-to run.
+`true`. Both `hooksConfig.enabled` and `tools.enableHooks` must be `true` for
+hooks to run.
+
+> **Note:** The `hooks.enabled` key is a legacy form. LLxprt Code migrates it to
+> `hooksConfig.enabled` automatically, but prefer the canonical key.
 
 ### 2. Configure a Hook
 
@@ -162,7 +165,7 @@ For details on how extension hooks work, including scope precedence and security
 
 ## Next Steps
 
-- **[Creating Custom Hooks](./creating-custom-hooks.md)** - Step-by-step tutorial with examples
+- **[Writing Hooks](./writing-hooks.md)** - Step-by-step tutorial with examples
 - **[API Reference](./api-reference.md)** - Complete type definitions and interfaces
 
 ## Example Use Cases

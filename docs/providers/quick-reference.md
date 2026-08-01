@@ -1,30 +1,27 @@
-# Provider Quick Reference
+# Provider Setup Quick Reference
 
-This guide provides concise setup instructions for common LLM providers. For complete documentation, see the [full provider guide](../cli/providers.md).
+Concise setup instructions for configuring LLM providers in LLxprt Code. For
+complete documentation, see the [full provider guide](../cli/providers.md). For
+specific model names, context windows, pricing, and recommended runtime tuning,
+see [Provider Models and Limits](./models-and-limits.md).
 
-## Provider Configuration Methods
+## How to configure a provider
 
-LLxprt Code supports two main ways to configure providers:
+LLxprt Code supports two configuration methods. Most providers have a built-in
+alias for quick setup; providers without an alias use the OpenAI-compatible
+endpoint approach.
 
-### 1. Using Built-in Aliases
-
-Many popular providers have built-in aliases for quick setup:
+### Using a built-in alias
 
 ```bash
-# Use the alias (recommended for supported providers)
 /provider anthropic
-/provider gemini
-/provider qwen
-/provider synthetic
-
-# Then set your key and model
 /key sk-your-api-key
-/model your-model-name
+/model claude-opus-5
 ```
 
-### 2. Using OpenAI-Compatible Endpoint
+### Using an OpenAI-compatible endpoint
 
-For providers without aliases, use the OpenAI protocol:
+For providers without an alias, or custom endpoints:
 
 ```bash
 /provider openai
@@ -33,104 +30,127 @@ For providers without aliases, use the OpenAI protocol:
 /model model-name
 ```
 
-## Where Model Limits Live
+## Built-in provider aliases
 
-Default model limits are data-driven and layered. Each layer takes precedence
-over the one below it:
+LLxprt Code ships with these aliases. Use `/provider <alias>` to switch. The
+alias name is what you type after `/provider`.
 
-1. **User override** — `/set context-limit <N>` or a profile
-   `ephemeralSettings.context-limit`. Always wins; config never silently
-   overrides an explicit user value.
-2. **Provider alias config** —
-   `packages/providers/src/composition/aliases/*.config`. The primary source for
-   models that have an alias:
-   - **Codex** (`codex.config`): provider-wide
-     `ephemeralSettings.context-limit: 262144`; per-model `contextWindow` on each
-     `staticModels` entry (for example, `gpt-5.3-codex-spark` → `131072`).
-   - **Anthropic** (`anthropic.config`): provider-wide
-     `ephemeralSettings.maxOutputTokens: 40000`; per-model `context-limit` via
-     `modelDefaults` (for example, `claude-opus-5`, `claude-opus-4-8`,
-     `claude-sonnet-4-6`, and `claude-fable-5` → `200000`).
-3. **Core fallback catalog** — `packages/core/src/core/model-limits.json`
-   (Zod-validated by `model-limits.schema.ts`). The safety net for any model not
-   covered by an alias config. `tokenLimit()` reads this catalog at module load;
-   its signature and resolution order are unchanged.
+| Provider                   | Alias           | Default model                | Auth method                    |
+| -------------------------- | --------------- | ---------------------------- | ------------------------------ |
+| Anthropic (API key)        | `anthropic`     | `claude-opus-5`              | API key (`ANTHROPIC_API_KEY`)  |
+| Claude Code (subscription) | `claudecode`    | `claude-opus-5`              | OAuth                          |
+| Google Gemini              | `gemini`        | `gemini-2.5-pro`             | API key (`GEMINI_API_KEY`)     |
+| OpenAI (API)               | `openai`        | `gpt-5.5`                    | API key (`OPENAI_API_KEY`)     |
+| OpenAI Codex (ChatGPT sub) | `codex`         | `gpt-5.6-sol`                | OAuth                          |
+| Qwen (DashScope)           | `qwen`          | `qwen3-coder-plus`           | API key (`DASHSCOPE_API_KEY`)  |
+| Kimi                       | `kimi`          | `kimi-for-coding`            | API key                        |
+| xAI (Grok)                 | `xai`           | `grok-4`                     | API key (`XAI_API_KEY`)        |
+| DeepSeek                   | `deepseek`      | `deepseek-v4-flash`          | API key (`DEEPSEEK_API_KEY`)   |
+| Z.AI                       | `zai`           | `glm-5`                      | API key (`ZAI_API_KEY`)        |
+| Synthetic                  | `synthetic`     | `hf:zai-org/GLM-4.7`         | API key                        |
+| Chutes AI                  | `chutes-ai`     | `zai-org/GLM-5-TEE`          | API key (`CHUTES_API_KEY`)     |
+| Makora                     | `makora`        | `nvidia/Kimi-K2.6-NVFP4`     | API key (`MAKORA_API_KEY`)     |
+| Fireworks                  | `fireworks`     | `fireworks/minimax-m3`       | API key (`FIREWORKS_API_KEY`)  |
+| OpenRouter                 | `openrouter`    | `nvidia/nemotron-nano-9b-v2` | API key (`OPENROUTER_API_KEY`) |
+| Cerebras Code              | `cerebras-code` | `qwen-3-coder-480b`          | API key (`CEREBRAS_API_KEY`)   |
+| Mistral                    | `mistral`       | `mistral-large-latest`       | API key (`MISTRAL_API_KEY`)    |
+| LiteLLM (gateway)          | `litellm`       | `gpt-4o`                     | API key (`LITELLM_API_KEY`)    |
+| Ollama Cloud (hosted)      | `ollama-cloud`  | `kimi-k2.6`                  | API key (`OLLAMA_API_KEY`)     |
+| LM Studio (local)          | `lm-studio`     | `gemma-3b-it`                | None required                  |
+| llama.cpp (local)          | `llama-cpp`     | `local-model`                | None required                  |
 
-Adding or updating a limit is a data edit; no limit-logic code changes are
-needed. The core fallback catalog is imported as a JSON module. In development,
-Bun resolves it at runtime from `src/`. A built
-`@vybestack/llxprt-code-core` package must be rebuilt to copy the JSON asset next
-to the compiled JS (`dist/src/core/model-limits.json`) via
-`scripts/copy_files.ts`. Provider alias `.config` files are read at runtime. See
-`model-limits.json` for the full fallback table.
+For model-specific setup details, context windows, and pricing, see
+[Provider Models and Limits](./models-and-limits.md).
 
-## Model Geometry and Budgeting (all providers)
+## Subscription and OAuth providers
 
-When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
+Two providers support OAuth for authentication:
 
-- **context-limit**: The total tokens allowed for the entire request (prompt + output)
-- **max_tokens**: The maximum tokens reserved for the model's response (output only)
-- **Effective prompt budget** = context-limit − max_tokens − safety-margin
-
-**Important constraint**: You cannot set context-limit + max_tokens to exceed the model's actual limit. For example:
-
-- If a model supports 200k total context, you CANNOT set context-limit=200000 AND max_tokens=100000
-- The system needs room for both your prompt AND the response within the limit
-
-**Safety margin**: 256–2048 tokens (recommend 1024) to avoid last-second overflows from tool wrappers, system prompt, and LLXPRT.md.
-
-**Tip**: If you see "would exceed the token context window" errors, lower max_tokens first or reduce LLXPRT.md size.
-
-Examples:
-
-- Large coding session: context-limit 121000, max_tokens 10000 → prompt budget ≈ 110k (minus safety).
-- Writing mode: context-limit 190000, max_tokens 8000 → prompt budget ≈ 181k (minus safety).
-
-> **Auth-variant note:** Context windows often differ between API-key access and OAuth/subscription access for the same model. The numbers below name the variant where it matters. When in doubt, start lower and increase until you hit a provider limit error.
-
-> **Reasoning tips:**
-> Interleaved-thinking models (e.g. MiniMax, Kimi) rely on prior reasoning tokens, so keep recent reasoning in context (`/set reasoning.stripFromContext none`).
-> When you need to manage a large window, trim older reasoning while surfacing recent thinking blocks (`/set reasoning.stripFromContext allButLast` or `all`).
-
-## Subscription & OAuth Providers
-
-### OpenAI Codex (ChatGPT Plus/Pro OAuth)
-
-Use your ChatGPT Plus or Pro subscription directly — no API key needed:
+- **Claude Code** (`claudecode`) — Claude.ai subscription OAuth
+- **Codex** (`codex`) — ChatGPT Plus/Pro subscription OAuth
 
 ```bash
+# Enable OAuth for a subscription provider
+/auth claudecode enable
+/provider claudecode
+/model claude-opus-5
+
+# Or for Codex
 /auth codex enable
 /provider codex
 /model gpt-5.6-sol
 ```
 
-This uses OAuth to authenticate with your ChatGPT subscription.
+OAuth is lazy — authentication happens when you first use the provider, not when
+you enable it. Check OAuth status with `/auth`, and log out with
+`/auth <provider> logout`.
 
-#### Model geometry & recommended settings (Codex)
+> **Note:** Anthropic API keys and Claude.ai subscription OAuth are separate
+> identities. `anthropic` is API-key access (no OAuth). `claudecode` is
+> subscription OAuth. `/auth anthropic` does not perform OAuth; it redirects
+> subscription users to `/auth claudecode` and API-key users to
+> `/provider anthropic` plus `/key` or `/keyfile`.
 
-- Context: 262,144 tokens (Codex OAuth)
-- gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
-- Reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`
+## Authentication methods
+
+### API keys
+
+Set a key directly or load it from a file:
 
 ```bash
-/set context-limit 262144
-/set modelparam max_tokens 8192
-/set reasoning.effort high
+# Set key directly (session-only)
+/key sk-your-api-key
+
+# Load from a file
+/keyfile ~/.keys/your-provider.key
 ```
 
-**Common models:** `gpt-5.6-sol` (default), `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`
+### Environment variables
+
+Set keys in your shell environment. LLxprt Code auto-detects the standard
+environment variable for each provider's alias:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="..."
+```
+
+The environment variable name for each alias is listed in the
+[alias table](#built-in-provider-aliases) above.
+
+### Keyfiles
+
+A keyfile loads an API key from a file on disk, which is more secure than
+passing the key inline:
+
+```bash
+/keyfile ~/.kimi_key
+```
+
+## Saving configuration as profiles
+
+Save your provider setup for reuse across sessions:
+
+```bash
+# After configuring your provider
+/profile save my-setup
+
+# Load later
+/profile load my-setup
+
+# Use at startup
+llxprt --profile-load my-setup
+```
+
+See [Settings and Profiles](../settings-and-profiles.md) for complete profile
+management.
+
+## Provider setup examples
 
 ### Anthropic (Claude)
 
-Anthropic API keys and Claude Code (Claude.ai subscription) OAuth are now
-separate identities (issue #2274):
-
-- **`anthropic`** — Anthropic API-key access. Configure with `/provider anthropic`
-  plus `/key` or `/keyfile` (or `ANTHROPIC_API_KEY`). No OAuth.
-- **`claudecode`** — Claude.ai subscription OAuth. Configure with
-  `/auth claudecode enable`, then `/provider claudecode`.
-
-#### Using an Anthropic API key (Recommended for API access)
+Using an Anthropic API key:
 
 ```bash
 /provider anthropic
@@ -138,7 +158,7 @@ separate identities (issue #2274):
 /model claude-opus-5
 ```
 
-#### Or Claude Code OAuth (Claude Pro/Max subscription)
+Or Claude Code OAuth (Claude.ai subscription):
 
 ```bash
 /auth claudecode enable
@@ -146,43 +166,7 @@ separate identities (issue #2274):
 /model claude-opus-5
 ```
 
-Note: OAuth is lazy — authentication happens when you first use the provider.
-`/auth anthropic` does not perform OAuth; it redirects subscription users to
-`/auth claudecode` and API-key users to `/provider anthropic` plus `/key` or
-`/keyfile`.
-
-#### Model geometry & recommended settings (Anthropic)
-
-Common models: `claude-opus-5`, `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-haiku-4-5`
-
-Guidance:
-
-- Default context-limit 200000 (Opus). Sonnet may support a larger window depending on your Anthropic plan; the very large (1M-class) windows are plan/credit-gated rather than always-on. Check Anthropic's documentation for your current limits.
-- If you enable thinking, increase max_tokens as needed and keep ≥1k tokens of safety.
-
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-/set reasoning.effort high
-```
-
-**Profile JSON (API key):**
-
-```json
-{
-  "version": 1,
-  "provider": "anthropic",
-  "model": "claude-opus-5",
-  "modelParams": { "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
-}
-```
-
-**Environment variable:** `export ANTHROPIC_API_KEY=sk-ant-...`
-
 ### Google Gemini
-
-#### Using Alias
 
 ```bash
 /provider gemini
@@ -190,47 +174,19 @@ Guidance:
 /model gemini-2.5-pro
 ```
 
-#### Or API Key
+> **Note:** Google has removed the free consumer "Login with Google" flow for
+> the Gemini CLI. Use a Gemini API key (`GEMINI_API_KEY`) or Vertex AI
+> credentials. See [Google Cloud auth](../cli/google-cloud-auth.md).
+
+### OpenAI (API key)
 
 ```bash
-/key save gemini your-gemini-key
+/provider openai
+/keyfile ~/.openai_key
+/model gpt-5.5
 ```
-
-Note: Set the key before your first request to that provider.
-
-> **Important (Gemini "Login with Google" removed):** Google has removed the free consumer "Login with Google" flow for the Gemini CLI entirely. Use a Gemini **API key** (`GEMINI_API_KEY`) or **Vertex AI** credentials instead. See [Google Cloud auth](../cli/google-cloud-auth.md).
-
-#### Model geometry & recommended settings (Gemini)
-
-Common models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` (stable). Preview models `gemini-3-pro-preview` and `gemini-3-flash-preview` are also selectable.
-
-Guidance:
-
-- Context-limit up to 1048576 (API key) for Gemini 2.5 models; lower if you see provider limit errors.
-- Max output tokens: up to 65536
-
-```bash
-/set context-limit 1048576
-/set modelparam max_tokens 4096
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "gemini",
-  "model": "gemini-2.5-pro",
-  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 1048576 }
-}
-```
-
-**Environment variable:** `export GEMINI_API_KEY=...`
 
 ### Qwen
-
-#### Using Alias with API Key
 
 ```bash
 /provider qwen
@@ -238,178 +194,33 @@ Guidance:
 /model qwen3-coder-plus
 ```
 
-> **Qwen is now API-key-only.** Qwen's free OAuth tier ended 2026-04-15 and the OAuth provider has been removed. Use a DashScope API key (`DASHSCOPE_API_KEY`) or an OpenRouter API key. See [authentication](../cli/authentication.md) for details.
+> **Note:** Qwen is API-key-only. The free OAuth tier ended 2026-04-15 and the
+> OAuth provider has been removed. Use a DashScope API key
+> (`DASHSCOPE_API_KEY`) or an OpenRouter API key. See
+> [authentication](../cli/authentication.md) for details.
 
-#### Model geometry & recommended settings (Qwen)
+### Kimi
 
-Common models: `qwen3-coder-plus`, `qwen3-coder`
-
-Guidance:
-
-- Start with context-limit 200000; lower if you hit provider limits.
-- This alias is for Qwen's own service. It is **not** used for Cerebras.
-
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "qwen",
-  "model": "qwen3-coder-plus",
-  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
-}
-```
-
-## API-Key Providers (with aliases)
-
-### OpenAI (API Key)
+Kimi's `kimi` alias defaults to the subscription path (`kimi-for-coding`). For
+the pay-per-token Moonshot API, point the alias at the raw endpoint:
 
 ```bash
-/provider openai
-/keyfile ~/.openai_key
-/model gpt-5.6-sol
-```
-
-#### Model geometry & recommended settings (OpenAI)
-
-Common models: `gpt-5.6` (Sol alias), `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`
-
-GPT-5.6+ models automatically use the Responses API on canonical OpenAI (`api.openai.com`); custom OpenAI-compatible base URLs stay on Chat Completions.
-
-Guidance:
-
-- Context: up to 1,048,576 tokens on the OpenAI API (vs. 262,144 via Codex OAuth — see the Codex section above)
-- gpt-5.x reasoning models do NOT support temperature — use `/set reasoning.effort` instead
-- Reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. `max` is model/provider-specific; project `minimal` maps to wire `none` for GPT-5.6 Responses.
-
-```bash
-/set context-limit 400000 # adjust to your model's actual window (check provider docs)
-/set modelparam max_tokens 8192
-/set reasoning.effort high
-```
-
-### Kimi (Moonshot AI)
-
-Kimi ships the K3 frontier model with deep reasoning, multi-step tool orchestration, and native multimodal vision. There are two ways to reach it:
-
-- **`kimi-for-coding`** — the subscription-served model (Kimi Code subscription). Use the `kimi` provider alias, which points at the `/coding/v1` endpoint. Thinking is always on.
-- **`kimi-k3`** — the pay-per-token model on the raw Moonshot API (`https://api.moonshot.ai/v1`). Same K3 capabilities, billed per token.
-
-> **Note:** The `kimi` alias's `defaultModel` is `kimi-for-coding` (the subscription path). To use the pay-per-token `kimi-k3` on the Moonshot API, point the alias at the raw endpoint with `/baseurl https://api.moonshot.ai/v1` and `/model kimi-k3`.
-
-#### Using the subscription (kimi-for-coding)
-
-```bash
+# Subscription (kimi-for-coding)
 /provider kimi
 /keyfile ~/.kimi_key
 /model kimi-for-coding
-```
 
-#### Using the Moonshot API pay-per-token (kimi-k3)
-
-```bash
+# Pay-per-token (kimi-k3 on the Moonshot API)
 /provider kimi
 /baseurl https://api.moonshot.ai/v1
 /keyfile ~/.moonshot_key
 /model kimi-k3
 ```
 
-#### Model geometry & recommended settings (Kimi K3)
+See [Provider Models and Limits](./models-and-limits.md) for Kimi K3 context
+windows, pricing, and multimodal support details.
 
-- Context: 1,000,000 tokens (1M)
-- Max output: 131,072 tokens (default; up to 1,048,576 max)
-- Architecture: Frontier MoE with always-on thinking
-- Strengths: Deep reasoning, 200-300 sequential tool calls, native vision (images **and** video)
-- Reasoning effort: `low` / `high` / `max` (default `max`). **There is no `medium` for K3.** Thinking is always on and cannot be disabled.
-- Vision: Native, but requires base64 or `ms://<file-id>` inputs — public image URLs are not accepted.
-
-```bash
-/set context-limit 1000000
-/set modelparam max_tokens 131072
-/set reasoning.effort max
-/set reasoning.enabled true
-/set reasoning.includeInResponse true
-```
-
-**Profile JSON (pay-per-token kimi-k3 on the Moonshot API):**
-
-```json
-{
-  "version": 1,
-  "provider": "kimi",
-  "model": "kimi-k3",
-  "modelParams": { "max_tokens": 131072 },
-  "ephemeralSettings": {
-    "context-limit": 1000000,
-    "base-url": "https://api.moonshot.ai/v1",
-    "reasoning.effort": "max",
-    "reasoning.enabled": true,
-    "reasoning.includeInResponse": true
-  }
-}
-```
-
-#### Multimodal support (Kimi K3)
-
-The `kimi` alias declares K3's media capabilities through its `mediaSupport`
-config:
-
-| Capability          | Status                        | Notes                                                                                                                                       |
-| ------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inline images       | Enabled                       | Images in user messages and tool responses flow as `image_url` content parts.                                                               |
-| PDF/document upload | Enabled                       | Base64 PDFs are uploaded with `purpose: file-extract` and referenced by file id, keeping large documents out of the token budget.           |
-| Video               | Experimental (off by default) | Base64 videos are uploaded with `purpose: video`, then sent as `video_url` content with an `ms://<file-id>` URL on Kimi/Moonshot endpoints. |
-
-**PDF handling:** When a base64 PDF media block is present in a user message or
-tool response, it is uploaded through Kimi's Files API before the chat request.
-The uploaded file id is injected into the system message, and the inline PDF is
-replaced with a short text reference. An in-memory content-hash cache
-de-duplicates uploads across turns for the same Moonshot endpoint and account.
-If an upload fails, the PDF falls back to inline `file_data` so the request still
-proceeds.
-
-**Experimental video:** To enable native video forwarding, set:
-
-```bash
-/set kimi.experimental-video true
-```
-
-This is gated behind both the `kimi.experimental-video` setting and the
-`mediaSupport.videoSupport` capability flag. When enabled, base64 `video/*`
-blocks from user or tool messages are uploaded to Kimi/Moonshot and referenced
-in chat with the native `video_url`/`ms://<file-id>` format. This includes common
-formats such as MP4, MPEG, MOV, AVI, FLV, MPG, WebM, WMV, and 3GPP. Third-party
-aliases such as Chutes and Synthetic do not declare this capability and keep the
-default placeholder behavior.
-
-#### Pricing (Kimi K3)
-
-- **Subscription (`kimi-for-coding`)** — flat-rate Kimi Code subscription plan; usage is covered by the subscription.
-- **Pay-per-token (`kimi-k3` on the Moonshot API)** — $0.30 / 1M cached input tokens, $3.00 / 1M non-cached input tokens, $15.00 / 1M output tokens (flat).
-
-#### Kimi K3 via Synthetic/Chutes
-
-Kimi K3 is also available through third-party providers:
-
-```bash
-# Via Synthetic
-/provider synthetic
-/keyfile ~/.synthetic_key
-/model hf:moonshotai/Kimi-K3
-
-# Via Chutes
-/provider chutes-ai
-/keyfile ~/.chutes_key
-/model moonshotai/Kimi-K3
-```
-
-### Synthetic (Hugging Face Models)
+### Synthetic (Hugging Face models)
 
 ```bash
 /provider synthetic
@@ -417,47 +228,12 @@ Kimi K3 is also available through third-party providers:
 /model hf:zai-org/GLM-4.7
 ```
 
-#### Model geometry & recommended settings (Synthetic)
-
-Popular models: `hf:zai-org/GLM-4.7`, `hf:moonshotai/Kimi-K3`
-
-Guidance:
-
-- Context varies by model/runtime. Start with context-limit 200000 and adjust.
-
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "synthetic",
-  "model": "hf:zai-org/GLM-4.7",
-  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
-}
-```
-
 ### Chutes AI
 
 ```bash
-/provider chutes-ai    # Has built-in alias
-# OR
-/provider openai
-/baseurl https://api.chutes.ai/v1/
+/provider chutes-ai
 /key your-chutes-key
 /model zai-org/GLM-5-TEE
-```
-
-#### Model geometry & recommended settings (Chutes AI)
-
-```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
 ```
 
 ### DeepSeek
@@ -484,69 +260,26 @@ Guidance:
 /model nvidia/Kimi-K2.6-NVFP4
 ```
 
-## Models Requiring Custom BaseURL
-
-These providers use the OpenAI-compatible endpoint approach (most also have built-in aliases shown above).
-
 ### xAI (Grok)
 
 ```bash
-/provider xai          # Has built-in alias
-# OR
-/provider openai
-/baseurl https://api.x.ai/v1/
+/provider xai
 /key your-xai-key
 /model grok-4
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "openai",
-  "model": "grok-4",
-  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
-  "ephemeralSettings": {
-    "context-limit": 200000,
-    "base-url": "https://api.x.ai/v1"
-  }
-}
 ```
 
 ### OpenRouter
 
 ```bash
-/provider openrouter   # Has built-in alias
-# OR
-/provider openai
-/baseurl https://openrouter.ai/api/v1/
+/provider openrouter
 /key your-openrouter-key
 /model nvidia/nemotron-nano-9b-v2
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "openai",
-  "model": "nvidia/nemotron-nano-9b-v2",
-  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
-  "ephemeralSettings": {
-    "context-limit": 200000,
-    "base-url": "https://openrouter.ai/api/v1"
-  }
-}
 ```
 
 ### Fireworks
 
 ```bash
-/provider fireworks    # Has built-in alias
-# OR
-/provider openai
-/baseurl https://api.fireworks.ai/inference/v1/
+/provider fireworks
 /key your-fireworks-key
 /model fireworks/minimax-m3
 ```
@@ -554,31 +287,32 @@ These providers use the OpenAI-compatible endpoint approach (most also have buil
 ### Cerebras Code
 
 ```bash
-/provider cerebras-code   # Has built-in alias
-# OR
-/provider openai
-/baseurl https://api.cerebras.ai/v1/
+/provider cerebras-code
 /key your-cerebras-key
 /model qwen-3-coder-480b
-# Recommended runtime tuning:
-/set context-limit 131000
-/set modelparam max_tokens 10000
 ```
 
-**Notes:**
+> **Note:** The `/provider qwen` alias is for Qwen's own DashScope service, not
+> for Cerebras.
 
-- The Cerebras endpoint may limit context below a model's full window; budget room for completions.
-- Effective prompt budget = context-limit − max_tokens − safety.
-- The `/provider qwen` alias is for Qwen's own service, not for Cerebras.
+### Mistral
 
-## AI Gateways / Proxies
+```bash
+/provider mistral
+/key your-mistral-key
+/model mistral-large-latest
+```
+
+## AI gateways and proxies
 
 ### LiteLLM
 
-[LiteLLM](https://github.com/BerriAI/litellm) is an open-source AI gateway that provides a unified OpenAI-compatible interface to 100+ LLM providers (Azure OpenAI, AWS Bedrock, Vertex AI, Groq, Together, and more).
+[LiteLLM](https://github.com/BerriAI/litellm) is an open-source AI gateway that
+provides a unified OpenAI-compatible interface to 100+ LLM providers (Azure
+OpenAI, AWS Bedrock, Vertex AI, Groq, Together, and more).
 
 ```bash
-/provider litellm      # Has built-in alias
+/provider litellm
 /key your-litellm-key
 /model anthropic/claude-sonnet-4-20250514
 ```
@@ -592,38 +326,22 @@ Or without the alias:
 /model gpt-4o
 ```
 
-#### Model geometry & recommended settings (LiteLLM)
-
-Context and output limits depend on the underlying model routed through the proxy. Start with conservative defaults and adjust:
-
-```bash
-/set context-limit 128000
-/set modelparam max_tokens 4096
-```
-
-**Profile JSON:**
-
-```json
-{
-  "version": 1,
-  "provider": "litellm",
-  "model": "anthropic/claude-sonnet-4-20250514",
-  "modelParams": { "max_tokens": 4096 },
-  "ephemeralSettings": { "context-limit": 200000 }
-}
-```
-
 **Environment variable:** `export LITELLM_API_KEY=sk-...`
 
-## Local Models
+## Local models
 
 For complete local-model guidance, see [Using Local Models](../local-models.md).
 
 ### LM Studio
 
 ```bash
-/provider lm-studio    # Has built-in alias
-# OR
+/provider lm-studio
+/model your-local-model
+```
+
+Or without the alias:
+
+```bash
 /provider openai
 /baseurl http://127.0.0.1:1234/v1/
 /model your-local-model
@@ -632,25 +350,22 @@ For complete local-model guidance, see [Using Local Models](../local-models.md).
 ### llama.cpp
 
 ```bash
-/provider llama-cpp    # Has built-in alias
-# OR
+/provider llama-cpp
+/model your-model
+```
+
+Or without the alias:
+
+```bash
 /provider openai
 /baseurl http://localhost:8080/v1/
 /model your-model
 ```
 
-#### Model geometry & recommended settings (Local)
+### Ollama (local)
 
-Context depends on your local runtime and model build. Start small and increase:
-
-```bash
-/set context-limit 32000
-/set modelparam max_tokens 2048
-```
-
-### Ollama
-
-Ollama exposes an OpenAI-compatible endpoint. Use the `openai` provider with a local base URL (there is no separate local `ollama` alias; the built-in `ollama-cloud` alias is for the hosted ollama.com service):
+Ollama exposes an OpenAI-compatible endpoint. There is no separate local `ollama`
+alias — the `ollama-cloud` alias is for the hosted ollama.com service:
 
 ```bash
 /provider openai
@@ -667,82 +382,26 @@ For the hosted Ollama Cloud service:
 /model kimi-k2.6
 ```
 
-## Authentication Methods
+## Provider commands reference
 
-### API Keys
+| Command     | Description                                                 |
+| ----------- | ----------------------------------------------------------- |
+| `/provider` | List all providers or switch to one                         |
+| `/model`    | List available models or switch models                      |
+| `/baseurl`  | Set a custom API endpoint (for OpenAI-compatible providers) |
+| `/key`      | Set the API key for the current session                     |
+| `/keyfile`  | Load an API key from a file                                 |
+| `/auth`     | Manage OAuth authentication                                 |
+| `/profile`  | Save, load, and manage configuration profiles               |
+| `/set`      | Set model parameters or ephemeral settings                  |
 
-Set directly with `/key` or load from file:
-
-```bash
-# Set key directly
-/key sk-your-api-key
-
-# Load from file (more secure)
-/keyfile ~/.keys/your-provider.key
-```
-
-### OAuth
-
-**Two** providers support OAuth for authentication: Claude Code (Claude.ai subscription) and Codex (ChatGPT).
-
-```bash
-# Enable OAuth provider (lazy authentication - happens on first use)
-/auth claudecode enable
-/auth codex enable
-
-# Check OAuth status
-/auth
-
-# Logout from provider
-/auth provider-name logout
-```
-
-Anthropic API keys are configured separately via `/provider anthropic` plus
-`/key` or `/keyfile` (or `ANTHROPIC_API_KEY`). `/auth anthropic` does not perform
-OAuth.
-
-### Environment Variables
-
-Set keys in your shell environment (auto-detected):
-
-```bash
-export OPENAI_API_KEY="sk-..."
-export ANTHROPIC_API_KEY="sk-ant-..."
-export GEMINI_API_KEY="..."
-```
-
-## Saving Configuration as Profiles
-
-Save your provider setup for reuse:
-
-```bash
-# After configuring your provider
-/profile save my-setup
-
-# Load later
-/profile load my-setup
-
-# Use at startup
-llxprt --profile-load my-setup
-```
-
-**See [Settings and Profiles](../settings-and-profiles.md) for complete profile management**
-
-## Provider Commands Reference
-
-- `/provider` - List all providers or switch to one
-- `/model` - List available models or switch models
-- `/baseurl` - Set custom API endpoint (for OpenAI-compatible providers)
-- `/key` - Set API key for current session
-- `/keyfile` - Load key from file
-- `/auth` - OAuth authentication
-- `/profile save` - Save current provider configuration
-
-## Next Steps
+## Next steps
 
 1. **Configure your provider** using the examples above
 2. **Save as profile** for easy reuse: `/profile save my-config`
-3. **Adjust model parameters** like temperature: `/set modelparam temperature 0.7`
-4. **Learn about profiles**: [Settings and Profiles Guide](../settings-and-profiles.md)
+3. **Adjust model parameters**: `/set modelparam temperature 0.7`
+4. **Check model limits and pricing**: [Provider Models and Limits](./models-and-limits.md)
+5. **Learn about profiles**: [Settings and Profiles](../settings-and-profiles.md)
 
-**See [complete CLI provider documentation](../cli/providers.md) for advanced configuration**
+See the [complete CLI provider documentation](../cli/providers.md) for advanced
+configuration.

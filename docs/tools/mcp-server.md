@@ -1,20 +1,79 @@
 # MCP Servers
 
-MCP (Model Context Protocol) servers add third-party tools to LLxprt Code. They let you connect to external services, databases, APIs, or custom tooling that goes beyond the built-in tools.
+MCP (Model Context Protocol) servers add third-party tools to LLxprt Code. They
+let you connect to external services, databases, APIs, or custom tooling that
+goes beyond the built-in tools.
 
-## Adding an MCP Server
+This page walks through the tasks you perform with MCP servers, in order: add a
+server, authenticate to it, verify the connection, use what it exposes, restrict
+how much you trust it, troubleshoot, and remove it.
 
-### Via CLI
+## Add a server
+
+You can add an MCP server two ways: with the `llxprt mcp add` command, or by
+editing your `settings.json` directly. Both write to the same configuration.
+
+### Via the CLI
 
 ```bash
 llxprt mcp add my-server -- npx -y @example/mcp-server
 ```
 
-This adds the server to your [user `settings.json`](../reference/application-directories.md) automatically.
+This adds the server to your project configuration by default. To add it to your
+user configuration (available in every project), pass `--scope user`.
+
+The `add` command writes to either the user `settings.json` or the project
+`.llxprt/settings.json` — see
+[Application Directories](../reference/application-directories.md).
+
+**Command:**
+
+```bash
+llxprt mcp add [options] <name> <commandOrUrl> [args...]
+```
+
+- `<name>` — a unique name for the server.
+- `<commandOrUrl>` — the command to run (for `stdio`) or the URL (for `http`,
+  `streamable-http`, or `sse`).
+- `[args...]` — optional arguments for a `stdio` command. Use `--` to separate
+  flags that belong to the server command itself.
+
+**Options:**
+
+| Flag              | Description                                                            | Default   |
+| ----------------- | ---------------------------------------------------------------------- | --------- |
+| `-s, --scope`     | Configuration scope: `user` or `project`.                              | `project` |
+| `-t, --transport` | Transport type: `stdio`, `sse`, `http`, `streamable-http`.             | `stdio`   |
+| `-e, --env`       | Environment variable, as `KEY=value`. Repeatable.                      | —         |
+| `-H, --header`    | HTTP header, as `Key: Value`. For SSE and HTTP transports. Repeatable. | —         |
+| `--timeout`       | Connection timeout in milliseconds.                                    | —         |
+| `--trust`         | Trust the server (skip per-tool-call confirmation prompts).            | —         |
+| `--description`   | Description for the server.                                            | —         |
+| `--include-tools` | Comma-separated list of tools to include.                              | —         |
+| `--exclude-tools` | Comma-separated list of tools to exclude.                              | —         |
+
+#### Examples
+
+```bash
+# stdio server with environment variables
+llxprt mcp add -e API_KEY=123 -e DEBUG=true my-stdio-server /path/to/server arg1 arg2
+
+# stdio server, separating server-specific args with --
+llxprt mcp add python-server python server.py -- --server-arg my-value
+
+# HTTP (Streamable HTTP) server
+llxprt mcp add --transport http http-server https://api.example.com/mcp/
+
+# HTTP server with an authentication header
+llxprt mcp add --transport http secure-http https://api.example.com/mcp/ --header "Authorization: Bearer abc123"
+
+# SSE server
+llxprt mcp add --transport sse sse-server https://api.example.com/sse/
+```
 
 ### Via settings.json
 
-Add entries under `mcpServers`:
+Add entries under the `mcpServers` key:
 
 ```json
 {
@@ -30,7 +89,7 @@ Add entries under `mcpServers`:
 }
 ```
 
-### Transport Types
+### Transport types
 
 **stdio** (default) — runs a local process:
 
@@ -43,17 +102,8 @@ Add entries under `mcpServers`:
 }
 ```
 
-**SSE** — legacy remote transport for servers that have not migrated to Streamable HTTP:
-
-```json
-{
-  "my-remote": {
-    "url": "https://mcp.example.com/sse"
-  }
-}
-```
-
-**Streamable HTTP** — preferred transport for remote MCP servers:
+**Streamable HTTP** — preferred transport for remote MCP servers. Set the `url`
+and optionally `type`:
 
 ```json
 {
@@ -65,62 +115,129 @@ Add entries under `mcpServers`:
 ```
 
 > `"type": "streamable-http"` is accepted as an alias for `"type": "http"` —
-> both select the Streamable HTTP transport.
+> both select the Streamable HTTP transport. If you omit `type` on a URL-based
+> server, Streamable HTTP is used by default.
 
-## Managing Servers
+**SSE** — legacy remote transport for servers that have not migrated to
+Streamable HTTP:
 
 ```json
 {
-  "mcpServers": {
-    "httpServer": {
-      "httpUrl": "http://localhost:3000/mcp",
-      "timeout": 5000
+  "my-remote": {
+    "url": "https://mcp.example.com/sse",
+    "type": "sse"
+  }
+}
+```
+
+> The `httpUrl` field is deprecated. Use `url` with `"type": "http"` instead.
+> If both `httpUrl` and `url` are present, `httpUrl` is used and a deprecation
+> warning is logged.
+
+### Tool filtering
+
+Limit which tools a server exposes with `includeTools` and `excludeTools`:
+
+```json
+{
+  "filteredServer": {
+    "command": "python",
+    "args": ["-m", "my_mcp_server"],
+    "includeTools": ["safe_tool", "file_reader", "data_processor"],
+    "excludeTools": ["dangerous_tool"]
+  }
+}
+```
+
+`excludeTools` takes precedence over `includeTools`.
+
+## Authenticate
+
+Remote MCP servers may require authentication. LLxprt Code supports OAuth and
+custom HTTP headers, and can impersonate a service account for
+Google Cloud IAP-protected services.
+
+### OAuth
+
+Remote servers that require OAuth are supported with an automatic flow. On
+first connect, LLxprt Code performs dynamic client registration (RFC 7591) with
+PKCE and a loopback redirect, then opens your browser for authorization. Tokens
+are stored and refreshed automatically — no `mcp-remote` bridge needed.
+
+If `auth.noBrowser` is set, the flow falls back to a manual mode where you copy
+and paste the authorization URL yourself.
+
+You can pre-configure OAuth explicitly. All fields are optional — if omitted,
+LLxprt Code discovers them automatically via
+`/.well-known/oauth-authorization-server`:
+
+```json
+{
+  "my-oauth-server": {
+    "url": "https://mcp.example.com/mcp",
+    "type": "http",
+    "oauth": {
+      "clientId": "your-client-id",
+      "authorizationUrl": "https://auth.example.com/authorize",
+      "tokenUrl": "https://auth.example.com/token",
+      "scopes": ["read", "write"]
     }
   }
 }
 ```
 
-#### HTTP-based MCP Server with Custom Headers
+If a server's OAuth discovery or registration does not conform to the automatic
+flow, fall back to the `mcp-remote` stdio bridge:
+
+```json
+{
+  "mcpServers": {
+    "webflow": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.webflow.com/mcp"],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+To authenticate or re-authenticate a server during a session:
+
+```text
+/mcp auth <server-name>
+```
+
+Running `/mcp auth` with no argument lists servers that require OAuth.
+
+### Custom headers
+
+For servers that use static API keys or bearer tokens, pass headers directly:
 
 ```json
 {
   "mcpServers": {
     "httpServerWithAuth": {
-      "httpUrl": "http://localhost:3000/mcp",
+      "url": "http://localhost:3000/mcp",
+      "type": "http",
       "headers": {
         "Authorization": "Bearer your-api-token",
-        "X-Custom-Header": "custom-value",
-        "Content-Type": "application/json"
-      },
-      "timeout": 5000
+        "X-Custom-Header": "custom-value"
+      }
     }
   }
 }
 ```
 
-#### MCP Server with Tool Filtering
+### Service-account impersonation
 
-```json
-{
-  "mcpServers": {
-    "filteredServer": {
-      "command": "python",
-      "args": ["-m", "my_mcp_server"],
-      "includeTools": ["safe_tool", "file_reader", "data_processor"],
-      // "excludeTools": ["dangerous_tool", "file_deleter"],
-      "timeout": 30000
-    }
-  }
-}
-```
-
-### SSE MCP Server with SA Impersonation
+For Google Cloud IAP-protected services, you can impersonate a service account:
 
 ```json
 {
   "mcpServers": {
     "myIapProtectedServer": {
       "url": "https://my-iap-service.run.app/sse",
+      "type": "sse",
       "authProviderType": "service_account_impersonation",
       "targetAudience": "YOUR_IAP_CLIENT_ID.apps.googleusercontent.com",
       "targetServiceAccount": "your-sa@your-project.iam.gserviceaccount.com"
@@ -129,389 +246,118 @@ Add entries under `mcpServers`:
 }
 ```
 
-## Discovery Process Deep Dive
+## Verify it worked
 
-When the LLxprt Code starts, it performs MCP server discovery through the following detailed process:
+After adding a server, check that it connected successfully.
 
-### 1. Server Iteration and Connection
+### With `/mcp`
 
-For each configured server in `mcpServers`:
-
-1. **Status tracking begins:** Server status is set to `CONNECTING`
-2. **Transport selection:** Based on configuration properties:
-   - `httpUrl` → `StreamableHTTPClientTransport`
-   - `url` → `SSEClientTransport`
-   - `command` → `StdioClientTransport`
-3. **Connection establishment:** The MCP client attempts to connect with the configured timeout
-4. **Error handling:** Connection failures are logged and the server status is set to `DISCONNECTED`
-
-### 2. Tool Discovery
-
-Upon successful connection:
-
-1. **Tool listing:** The client calls the MCP server's tool listing endpoint
-2. **Schema validation:** Each tool's function declaration is validated
-3. **Tool filtering:** Tools are filtered based on `includeTools` and `excludeTools` configuration
-4. **Name sanitization:** Tool names are cleaned to meet Gemini API requirements:
-   - Invalid characters (non-alphanumeric, underscore, dot, hyphen) are replaced with underscores
-   - Names longer than 63 characters are truncated with middle replacement (`___`)
-
-### 3. Conflict Resolution
-
-When multiple servers expose tools with the same name:
-
-1. **First registration wins:** The first server to register a tool name gets the unprefixed name
-2. **Automatic prefixing:** Subsequent servers get prefixed names: `serverName__toolName`
-3. **Registry tracking:** The tool registry maintains mappings between server names and their tools
-
-### 4. Schema Processing
-
-Tool parameter schemas undergo sanitization for Gemini API compatibility:
-
-- **`$schema` properties** are removed
-- **`additionalProperties`** are stripped
-- **`anyOf` with `default`** have their default values removed (Vertex AI compatibility)
-- **Recursive processing** applies to nested schemas
-
-### 5. Connection Management
-
-After discovery:
-
-- **Persistent connections:** Servers that successfully register tools maintain their connections
-- **Cleanup:** Servers that provide no usable tools have their connections closed
-- **Status updates:** Final server statuses are set to `CONNECTED` or `DISCONNECTED`
-
-## Tool Execution Flow
-
-When the Gemini model decides to use an MCP tool, the following execution flow occurs:
-
-### 1. Tool Invocation
-
-The model generates a `FunctionCall` with:
-
-- **Tool name:** The registered name (potentially prefixed)
-- **Arguments:** JSON object matching the tool's parameter schema
-
-### 2. Confirmation Process
-
-Each `DiscoveredMCPTool` implements sophisticated confirmation logic:
-
-#### Trust-based Bypass
-
-```typescript
-if (this.trust) {
-  return false; // No confirmation needed
-}
-```
-
-#### Dynamic Allow-listing
-
-The system maintains internal allow-lists for:
-
-- **Server-level:** `serverName` → All tools from this server are trusted
-- **Tool-level:** `serverName.toolName` → This specific tool is trusted
-
-#### User Choice Handling
-
-When confirmation is required, users can choose:
-
-- **Proceed once:** Execute this time only
-- **Always allow this tool:** Add to tool-level allow-list
-- **Always allow this server:** Add to server-level allow-list
-- **Cancel:** Abort execution
-
-### 3. Execution
-
-Upon confirmation (or trust bypass):
-
-1. **Parameter preparation:** Arguments are validated against the tool's schema
-2. **MCP call:** The underlying `CallableTool` invokes the server with:
-
-   ```typescript
-   const functionCalls = [
-     {
-       name: this.serverToolName, // Original server tool name
-       args: params,
-     },
-   ];
-   ```
-
-3. **Response processing:** Results are formatted for both LLM context and user display
-
-### 4. Response Handling
-
-The execution result contains:
-
-- **`llmContent`:** Raw response parts for the language model's context
-- **`returnDisplay`:** Formatted output for user display (often JSON in markdown code blocks)
-
-## How to interact with your MCP server
-
-### Using the `/mcp` Command
-
-The `/mcp` command provides comprehensive information about your MCP server setup:
-
-```bash
+```text
 /mcp
 ```
 
-This displays:
+This lists every configured server, its connection status, and a count of
+tools, prompts, and resources it exposes. A server entry looks like:
 
-- **Server list:** All configured MCP servers
-- **Connection status:** `CONNECTED`, `CONNECTING`, or `DISCONNECTED`
-- **Server details:** Configuration summary (excluding sensitive data)
-- **Available tools:** List of tools from each server with descriptions
-- **Discovery state:** Overall discovery process status
+```text
+[READY] my-server - Ready (3 tools, 1 prompt, 2 resources)
+```
 
-After editing `settings.json` or running `llxprt mcp add` or `llxprt mcp remove`
-in another terminal, apply the persisted changes to the current session with:
+Status indicators:
+
+- **`[READY]`** — connected and available.
+- **`[STARTING]`** — connecting; first startup may take longer.
+- **`[DISCONNECTED]`** — not connected or failed.
+
+You can show tool descriptions and parameter schemas:
+
+```text
+/mcp desc      # show server and tool descriptions
+/mcp schema    # show tool parameter schemas (also shows descriptions)
+/mcp nodesc    # hide descriptions
+```
+
+If no servers are configured, `/mcp` links you to this documentation.
+
+### With `llxprt mcp list`
+
+Outside a session, test whether each server is reachable:
+
+```bash
+llxprt mcp list
+```
+
+This attempts a live connection to each server and prints its name,
+configuration, and whether the connection succeeded.
+
+### Connection states
+
+Each server tracks one of these states:
+
+- **Disconnected** — not connected, or a connection error occurred.
+- **Connecting** — a connection attempt is in progress.
+- **Connected** — the server is connected and ready.
+
+### Apply configuration changes
+
+After editing `settings.json` or running `llxprt mcp add` or
+`llxprt mcp remove` in another terminal, apply the persisted changes to the
+current session:
 
 ```text
 /mcp reload
 ```
 
 Reloading adds newly configured servers, disconnects removed servers, and
-reconnects servers whose effective configuration changed. Existing profile,
-extension, administrative, and command-line restrictions from session startup
-remain in effect. Use `/mcp refresh` when you only want to reconnect the servers
-that are already loaded without rereading configuration.
+reconnects servers whose configuration changed. Use `/mcp refresh` when you only
+want to restart the servers already loaded, without rereading configuration.
 
-Changing OAuth settings may still require `/mcp auth <server>`. Installing or
-removing an extension still requires the extension reload flow or a new session.
+> Changing OAuth settings may still require `/mcp auth <server>`. Installing or
+> removing an extension still requires the extension reload flow or a new
+> session.
 
-### Example `/mcp` Output
+## Use it
 
-```
-MCP Servers Status:
+Once a server is connected, its tools, prompts, and resources become available.
 
-📡 pythonTools (CONNECTED)
-  Command: python -m my_mcp_server --port 8080
-  Working Directory: ./mcp-servers/python
-  Timeout: 15000ms
-  Tools: calculate_sum, file_analyzer, data_processor
+### Tools
 
-🔌 nodeServer (DISCONNECTED)
-  Command: node dist/server.js --verbose
-  Error: Connection refused
+MCP tools work like built-in tools. The model selects them based on your
+request, asks for confirmation before running each call (unless the server is
+trusted — see [Restrict trust](#restrict-trust)), executes them, and displays
+the results.
 
-🐳 dockerizedServer (CONNECTED)
-  Command: docker run -i --rm -e API_KEY my-mcp-server:latest
-  Tools: docker__deploy, docker__status
+Tool names are namespaced as `mcp__<server-name>__<tool-name>` so tools from
+different servers never collide.
 
-Discovery State: COMPLETED
-```
+### Prompts as slash commands
 
-### Tool Usage
+MCP servers can define **prompts** — reusable templates that appear as `/`
+commands in LLxprt Code. Each prompt becomes a slash command you can invoke by
+name.
 
-Once discovered, MCP tools are available to the Gemini model like built-in tools. The model will automatically:
-
-1. **Select appropriate tools** based on your requests
-2. **Present confirmation dialogs** (unless the server is trusted)
-3. **Execute tools** with proper parameters
-4. **Display results** in a user-friendly format
-
-## Status Monitoring and Troubleshooting
-
-### Connection States
-
-The MCP integration tracks several states:
-
-#### Server Status (`MCPServerStatus`)
-
-- **`DISCONNECTED`:** Server is not connected or has errors
-- **`CONNECTING`:** Connection attempt in progress
-- **`CONNECTED`:** Server is connected and ready
-
-#### Discovery State (`MCPDiscoveryState`)
-
-- **`NOT_STARTED`:** Discovery hasn't begun
-- **`IN_PROGRESS`:** Currently discovering servers
-- **`COMPLETED`:** Discovery finished (with or without errors)
-
-### Common Issues and Solutions
-
-#### Server Won't Connect
-
-**Symptoms:** Server shows `DISCONNECTED` status
-
-**Troubleshooting:**
-
-1. **Check configuration:** Verify `command`, `args`, and `cwd` are correct
-2. **Test manually:** Run the server command directly to ensure it works
-3. **Check dependencies:** Ensure all required packages are installed
-4. **Review logs:** Look for error messages in the CLI output
-5. **Verify permissions:** Ensure the CLI can execute the server command
-
-#### No Tools Discovered
-
-**Symptoms:** Server connects but no tools are available
-
-**Troubleshooting:**
-
-1. **Verify tool registration:** Ensure your server actually registers tools
-2. **Check MCP protocol:** Confirm your server implements the MCP tool listing correctly
-3. **Review server logs:** Check stderr output for server-side errors
-4. **Test tool listing:** Manually test your server's tool discovery endpoint
-
-#### Tools Not Executing
-
-**Symptoms:** Tools are discovered but fail during execution
-
-**Troubleshooting:**
-
-1. **Parameter validation:** Ensure your tool accepts the expected parameters
-2. **Schema compatibility:** Verify your input schemas are valid JSON Schema
-3. **Error handling:** Check if your tool is throwing unhandled exceptions
-4. **Timeout issues:** Consider increasing the `timeout` setting
-
-#### Sandbox Compatibility
-
-**Symptoms:** MCP servers fail when sandboxing is enabled
-
-**Solutions:**
-
-1. **Docker-based servers:** Use Docker containers that include all dependencies
-2. **Path accessibility:** Ensure server executables are available in the sandbox
-3. **Network access:** Configure sandbox to allow necessary network connections
-4. **Environment variables:** Verify required environment variables are passed through
-
-### Debugging Tips
-
-1. **Enable debug mode:** Run the CLI with `--debug` for verbose output (use F12
-   to open debug console in interactive mode)
-2. **Check stderr:** MCP server stderr is captured and logged (INFO messages
-   filtered)
-3. **Test isolation:** Test your MCP server independently before integrating
-4. **Incremental setup:** Start with simple tools before adding complex functionality
-5. **Use `/mcp` frequently:** Monitor server status during development
-
-## MCP Resources in LLxprt Code
-
-The LLxprt Code supports MCP resources in three user-facing ways:
-
-1. **Resource-aware `@` attachments in chat input**
-2. **Resource suggestions in `@` completion**
-3. **Resource visibility in `/mcp` status output**
-
-### Referencing a resource in chat input
-
-You can reference an MCP resource directly by using the format:
-
-```
-@serverName:resourceUri
+```text
+/poem-writer --title="LLxprt Code" --mood="reverent"
 ```
 
-For example:
+Or, using positional arguments:
 
-```
-@docs:file:///workspace/README.md
-```
-
-When this pattern matches a discovered MCP resource, LLxprt Code reads that resource via MCP (`resources/read`) and injects the resulting content into the request context.
-
-### Binary resource behavior
-
-If a resource contains binary content, LLxprt Code adds a safe placeholder summary (mime type and size) rather than raw binary text.
-
-### `@` completion behavior
-
-When typing `@`, completion suggestions include:
-
-- file path suggestions (existing behavior)
-- MCP resource suggestions in `serverName:resourceUri` format
-
-File suggestions are preserved and resources are added to the same suggestion stream.
-
-### `/mcp` status output
-
-The `/mcp` command includes resource information per server:
-
-- resource counts in per-server status summaries
-- a `Resources:` section listing discovered resource names and URIs
-
-This is implemented in this branch's text-based `/mcp` rendering path (the local architecture does not use the upstream MCP status view component).
-
-## Important Notes
-
-### Security Considerations
-
-- **Trust settings:** The `trust` option bypasses all confirmation dialogs. Use cautiously and only for servers you completely control
-- **Access tokens:** Be security-aware when configuring environment variables containing API keys or tokens
-- **Sandbox compatibility:** When using sandboxing, ensure MCP servers are available within the sandbox environment
-- **Private data:** Using broadly scoped personal access tokens can lead to information leakage between repositories
-
-### Performance and Resource Management
-
-- **Connection persistence:** The CLI maintains persistent connections to servers that successfully register tools
-- **Automatic cleanup:** Connections to servers providing no tools are automatically closed
-- **Timeout management:** Configure appropriate timeouts based on your server's response characteristics
-- **Resource monitoring:** MCP servers run as separate processes and consume system resources
-
-### Schema Compatibility
-
-- **Property stripping:** The system automatically removes certain schema properties (`$schema`, `additionalProperties`) for Gemini API compatibility
-- **Name sanitization:** Tool names are automatically sanitized to meet API requirements
-- **Conflict resolution:** Tool name conflicts between servers are resolved through automatic prefixing
-
-This comprehensive integration makes MCP servers a powerful way to extend the LLxprt Code's capabilities while maintaining security, reliability, and ease of use.
-
-## Returning Rich Content from Tools
-
-MCP tools are not limited to returning simple text. You can return rich, multi-part content, including text, images, audio, and other binary data in a single tool response. This allows you to build powerful tools that can provide diverse information to the model in a single turn.
-
-All data returned from the tool is processed and sent to the model as context for its next generation, enabling it to reason about or summarize the provided information.
-
-### How It Works
-
-To return rich content, your tool's response must adhere to the MCP specification for a [`CallToolResult`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-result). The `content` field of the result should be an array of `ContentBlock` objects. LLxprt Code will correctly process this array, separating text from binary data and packaging it for the model.
-
-You can mix and match different content block types in the `content` array. The supported block types include:
-
-- `text`
-- `image`
-- `audio`
-- `resource` (embedded content)
-- `resource_link`
-
-### Example: Returning Text and an Image
-
-Here is an example of a valid JSON response from an MCP tool that returns both a text description and an image:
-
-```json
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "Here is the logo you requested."
-    },
-    {
-      "type": "image",
-      "data": "BASE64_ENCODED_IMAGE_DATA_HERE",
-      "mimeType": "image/png"
-    },
-    {
-      "type": "text",
-      "text": "The logo was created in 2025."
-    }
-  ]
-}
+```text
+/poem-writer "LLxprt Code" reverent
 ```
 
-When LLxprt Code receives this response, it will:
+When you invoke a prompt, LLxprt Code calls the `prompts/get` method on the MCP
+server with the arguments you provide. The server substitutes the arguments
+into the prompt template and returns the final text, which is sent to the
+model.
 
-1.  Extract all the text and combine it into a single `functionResponse` part for the model.
-2.  Present the image data as a separate `inlineData` part.
-3.  Provide a clean, user-friendly summary in the CLI, indicating that both text and an image were received.
+Use `<prompt-name> help` to see the arguments a prompt accepts, or `/help` to
+see all available commands.
 
-This enables you to build sophisticated tools that can provide rich, multi-modal context to the Gemini model.
+#### Defining prompts on the server
 
-## MCP Prompts as Slash Commands
-
-In addition to tools, MCP servers can expose predefined prompts that can be executed as slash commands within the LLxprt Code. This allows you to create shortcuts for common or complex queries that can be easily invoked by name.
-
-### Defining Prompts on the Server
-
-Here's a small example of a stdio MCP server that defines prompts:
+Here is a minimal stdio MCP server that defines a prompt using the
+`@modelcontextprotocol/sdk`:
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -536,7 +382,7 @@ server.registerPrompt(
         role: 'user',
         content: {
           type: 'text',
-          text: `Write a haiku${mood ? ` with the mood ${mood}` : ''} called ${title}. Note that a haiku is 5 syllables followed by 7 syllables followed by 5 syllables `,
+          text: `Write a haiku${mood ? ` with the mood ${mood}` : ''} called ${title}. Note that a haiku is 5 syllables followed by 7 syllables followed by 5 syllables.`,
         },
       },
     ],
@@ -547,307 +393,262 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
 
-This can be included in `settings.json` under `mcpServers` with:
+### Resources
+
+MCP servers can expose **resources** — readable content you can pull into your
+conversation. You reference a resource with the `@` syntax:
+
+```text
+@serverName:resourceUri
+```
+
+For example:
+
+```text
+@docs:file:///workspace/README.md
+```
+
+When this pattern matches a discovered resource, LLxprt Code reads it via
+`resources/read` and injects the content into the request. Binary resources are
+shown as a safe placeholder summary (MIME type and size) rather than raw bytes.
+
+Resources also appear in `/mcp` output, which lists each server's discovered
+resource names and URIs.
+
+### Rich content from tools
+
+MCP tools can return rich, multi-part content in a single response — text,
+images, audio, and embedded resources. To return rich content, your tool's
+response must follow the MCP specification for a
+[`CallToolResult`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-result):
+the `content` field is an array of content blocks.
+
+Supported block types:
+
+- `text`
+- `image`
+- `audio`
+- `resource` (embedded content)
+- `resource_link`
 
 ```json
-"nodeServer": {
-  "command": "node",
-  "args": ["filename.ts"],
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Here is the logo you requested."
+    },
+    {
+      "type": "image",
+      "data": "BASE64_ENCODED_IMAGE_DATA_HERE",
+      "mimeType": "image/png"
+    },
+    {
+      "type": "text",
+      "text": "The logo was created in 2025."
+    }
+  ]
 }
 ```
 
-### Invoking Prompts
+LLxprt Code extracts text blocks and combines them into the model's context,
+presents images and audio as separate parts, and shows a readable summary in
+the CLI.
 
-Once a prompt is discovered, you can invoke it using its name as a slash command. The CLI will automatically handle parsing arguments.
+## Restrict trust
+
+MCP servers run code and make network requests. Control how much trust each
+server gets.
+
+### Confirmation prompts
+
+By default, every MCP tool call asks for confirmation before it runs. When
+prompted, you can choose to:
+
+- **Proceed once** — run this call only.
+- **Always allow this tool** — skip confirmation for this specific tool going
+  forward.
+- **Always allow this server** — skip confirmation for every tool from this
+  server.
+- **Cancel** — abort the call.
+
+### The `trust` option
+
+The `trust` option bypasses all confirmation dialogs for a server. Use it only
+for servers you completely control:
+
+```json
+{
+  "my-server": {
+    "command": "npx",
+    "args": ["-y", "@example/mcp-server"],
+    "trust": true
+  }
+}
+```
+
+You can also set trust when adding a server:
 
 ```bash
-/poem-writer --title="LLxprt Code" --mood="reverent"
+llxprt mcp add --trust my-server /path/to/server
 ```
 
-or, using positional arguments:
+> Trust bypasses confirmation only when the working directory is a trusted
+> folder. In an untrusted folder, confirmation is still required.
 
-```bash
-/poem-writer "LLxprt Code" reverent
+### Security considerations
+
+- **Access tokens.** Be careful when configuring environment variables or
+  headers that contain API keys or tokens.
+- **Personal access tokens.** Broadly scoped tokens can leak information between
+  repositories or projects.
+- **Sandboxing.** When running in a [sandbox](../sandbox.md), MCP servers must
+  be available inside the container. If your server uses `npx`, the npm package
+  must be installable within the sandbox environment.
+
+### Lazy MCP schema loading
+
+When you have many MCP servers with large tool schemas, every tool schema is
+sent to the model on each request. The `mcp.lazy` setting defers those schemas
+so only the servers you actually need are published.
+
+- **Servers stay connected.** Discovery, connection, tool registration, prompts,
+  and resources all work as before. Only model-facing schema publication is
+  deferred.
+- **The model gets an `activate_mcp_server` tool.** Its description lists each
+  deferred server's name, tool count, and up to 12 tool names — never full
+  parameter schemas. The model calls it with a server name to activate that
+  server.
+- **Activation is session-scoped.** Once activated, a server's full schemas are
+  published for the rest of the session. There is no automatic deactivation; to
+  restart, create a new session.
+- **Eager exceptions.** Use `mcp.eagerServers` to keep specific servers
+  always-eager even when lazy mode is on.
+
+**Scope:** ephemeral (also persistable to a profile).
+**Default:** `false` (eager). **Persistable:** yes.
+
+Enable lazy mode:
+
+```text
+/set mcp.lazy true
 ```
 
-When you run this command, the LLxprt Code executes the `prompts/get` method on the MCP server with the provided arguments. The server is responsible for substituting the arguments into the prompt template and returning the final prompt text. The CLI then sends this prompt to the model for execution. This provides a convenient way to automate and share common workflows.
+Keep specific servers eager:
 
-## Managing MCP Servers with `llxprt mcp`
-
-While you can always configure MCP servers by manually editing your `settings.json` file, the LLxprt Code provides a convenient set of commands to manage your server configurations programmatically. These commands streamline the process of adding, listing, and removing MCP servers without needing to directly edit JSON files.
-
-### Adding a Server (`llxprt mcp add`)
-
-The `add` command configures a new MCP server in your `settings.json`. Based on the scope (`-s, --scope`), it will be added to either the user config (`<config>/settings.json` — see [Application Directories](../reference/application-directories.md)) or the project config `<project>/.llxprt/settings.json` file.
-
-**Command:**
-
-```bash
-llxprt mcp add [options] <name> <commandOrUrl> [args...]
+```text
+/set mcp.eagerServers ["my-important-server","another-server"]
 ```
 
-- `<name>`: A unique name for the server.
-- `<commandOrUrl>`: The command to execute (for `stdio`) or the URL (for `http`, `streamable-http`, or `sse`).
-- `[args...]`: Optional arguments for a `stdio` command.
+> `/set` updates ephemeral settings but does not republish tools in an
+> already-initialized chat. To apply lazy mode, save and reload a named profile
+> (`/profile save lazy-mcp`, then `/profile load lazy-mcp`) or start a new
+> session with that profile.
 
-**Options (Flags):**
+#### Tradeoffs
 
-- `-s, --scope`: Configuration scope (user or project). [default: "project"]
-- `-t, --transport`: Transport type (stdio, sse, http, streamable-http). [default: "stdio"]
-- `-e, --env`: Set environment variables (e.g. -e KEY=value).
-- `-H, --header`: Set HTTP headers for SSE and HTTP transports (e.g. -H "X-Api-Key: abc123" -H "Authorization: Bearer abc123").
-- `--timeout`: Set connection timeout in milliseconds.
-- `--trust`: Trust the server (bypass all tool call confirmation prompts).
-- `--description`: Set the description for the server.
-- `--include-tools`: A comma-separated list of tools to include.
-- `--exclude-tools`: A comma-separated list of tools to exclude.
+Lazy mode reduces token overhead for sessions with large MCP tool sets, but the
+model must spend a turn calling `activate_mcp_server` before it can use a
+deferred server's tools. For sessions where you always use every MCP tool,
+eager mode (the default) is better.
 
-#### Adding an stdio server
+## Troubleshoot
 
-This is the default transport for running local servers.
+### Server won't connect
 
-```bash
-# Basic syntax
-llxprt mcp add [options] <name> <command> [args...]
+- Verify the `command`, `args`, and `cwd` are correct in your configuration.
+- For `stdio` servers, run the command manually to see startup errors.
+- Check the server's dependencies are installed.
+- Enable debug logging for detailed connection output:
 
-# Example: Adding a local server with environment variables
-llxprt mcp add -e API_KEY=123 -e DEBUG=true my-stdio-server /path/to/server arg1 arg2 arg3
+  ```bash
+  llxprt --debug llxprt:mcp:*
+  ```
 
-# Example: Adding a local python server with server arguments
-llxprt mcp add python-server python server.py -- --server-arg my-value
+  You can also use `LLXPRT_DEBUG=llxprt:mcp:*`. Debug output is written to a
+  JSONL file in your log directory and to stderr. Use **F12** to open the debug
+  console in an interactive session.
+
+### No tools discovered
+
+- Run `/mcp` to confirm the server is connected.
+- The server may need time to start — tools appear after the connection is
+  established.
+- If tool names conflict with built-in tools, the built-in tool takes
+  precedence.
+- Verify the server actually registers tools and implements the MCP tool-listing
+  protocol correctly.
+
+### Tools not executing
+
+- Ensure your tool accepts the parameters the model sends.
+- Verify your input schemas are valid JSON Schema.
+- Check whether the tool is throwing unhandled exceptions (review server logs).
+- If calls time out, increase the `timeout` setting.
+
+### OAuth failures
+
+- Ensure the OAuth URLs and client ID are correct.
+- Check whether the server's OAuth flow requires specific scopes.
+- Try re-authenticating: `/mcp auth <server>`.
+- Remove cached tokens from your OS-standard data directory and reconnect.
+
+### "SSE is no longer supported" error
+
+Some MCP providers have deprecated their SSE endpoint in favor of Streamable
+HTTP. Switch your configuration from the SSE endpoint to the Streamable HTTP
+endpoint with `"type": "http"`:
+
+```json
+{
+  "mcpServers": {
+    "webflow": {
+      "url": "https://mcp.webflow.com/mcp",
+      "type": "http"
+    }
+  }
+}
 ```
 
-#### Adding an HTTP server
+If the provider's OAuth flow does not work with the automatic mode, fall back to
+the `mcp-remote` stdio bridge as shown in [Authenticate](#oauth).
 
-This transport is for servers that use the streamable HTTP transport.
+### Environment variables not reaching the server
 
-```bash
-# Basic syntax
-llxprt mcp add --transport http <name> <url>
+- Variables in the `env` block are passed to the server process.
+- They do not inherit from your shell unless explicitly listed.
 
-# Example: Adding an HTTP server
-llxprt mcp add --transport http http-server https://api.example.com/mcp/
+### Sandbox compatibility
 
-# Example: Adding an HTTP server with an authentication header
-llxprt mcp add --transport http secure-http https://api.example.com/mcp/ --header "Authorization: Bearer abc123"
-```
+When sandboxing is enabled, MCP servers must be available inside the container:
 
-#### Adding an SSE server
+- Use Docker-based servers that include all dependencies.
+- Ensure server executables are reachable from inside the sandbox.
+- Configure the sandbox to allow any network connections the server needs.
+- Verify required environment variables are passed through.
 
-This transport is for servers that use Server-Sent Events (SSE).
-
-```bash
-# Basic syntax
-llxprt mcp add --transport sse <name> <url>
-
-# Example: Adding an SSE server
-llxprt mcp add --transport sse sse-server https://api.example.com/sse/
-
-# Example: Adding an SSE server with an authentication header
-llxprt mcp add --transport sse secure-sse https://api.example.com/sse/ --header "Authorization: Bearer abc123"
-```
-
-### Listing Servers (`llxprt mcp list`)
-
-To view all MCP servers currently configured, use the `list` command. It displays each server's name, configuration details, and connection status. This command has no flags.
-
-**Command:**
-
-```bash
-llxprt mcp list
-```
-
-Or during a session:
-
-```
-/mcp
-```
-
-This shows all configured servers, their connection status, and the tools they provide.
-
-### Remove a Server
+## Remove a server
 
 ```bash
 llxprt mcp remove my-server
 ```
 
-### Check Status
+By default this removes the server from your project configuration. To remove it
+from your user configuration, pass `--scope user`:
 
-```
-/mcp
-```
-
-Shows connection states: `connected`, `connecting`, `failed`, `not_started`.
-
-## OAuth Authentication
-
-Remote MCP servers that require OAuth are supported. When connecting, LLxprt Code handles the OAuth flow automatically:
-
-1. Server responds with a `401` and OAuth metadata (or LLxprt Code discovers it via `/.well-known/oauth-authorization-server`)
-2. LLxprt Code performs automatic dynamic client registration (RFC 7591) with PKCE and a loopback redirect
-3. Your browser opens for authorization on first connect
-4. Tokens are stored and refreshed automatically — no `mcp-remote` bridge needed
-
-You can pre-configure OAuth explicitly (all fields are optional — if omitted, LLxprt Code discovers them automatically):
-
-```json
-{
-  "my-oauth-server": {
-    "url": "https://mcp.example.com/mcp",
-    "type": "streamable-http",
-    "oauth": {
-      "clientId": "your-client-id",
-      "authorizationUrl": "https://auth.example.com/authorize",
-      "tokenUrl": "https://auth.example.com/token",
-      "scopes": ["read", "write"]
-    }
-  }
-}
+```bash
+llxprt mcp remove --scope user my-server
 ```
 
-If `auth.noBrowser` is set, the flow falls back to a manual code-entry mode.
+If the server is not found in the specified scope, the command reports that and
+makes no change.
 
-### Webflow MCP (Streamable HTTP + Browser OAuth)
-
-[Webflow's MCP endpoint](https://mcp.webflow.com/mcp) uses Streamable HTTP
-with browser-based OAuth. LLxprt Code supports it directly — no `mcp-remote`
-wrapper required:
-
-```json
-{
-  "mcpServers": {
-    "webflow": {
-      "url": "https://mcp.webflow.com/mcp",
-      "type": "streamable-http"
-    }
-  }
-}
-```
-
-On first connect, LLxprt Code will open your browser for Webflow authorization
-and cache/refresh tokens automatically.
-
-> **Tip:** Add `"trust": true` to skip per-tool-call confirmation prompts for
-> trusted servers. Only do this for servers whose tools you are comfortable
-> running without manual approval.
-
-## MCP Prompts as Slash Commands
-
-MCP servers can define **prompts** — reusable templates that appear as `/` commands in LLxprt Code:
-
-```
-/my-server:analyze-code --language typescript --focus performance
-```
-
-Use `/help` to see available MCP prompts alongside built-in commands.
-
-## Sandboxing
-
-When running in a [sandbox](../sandbox.md), MCP servers must be available **inside the container**. If your server uses `npx`, the npm package must be installable within the sandbox environment.
-
-## Lazy MCP Schema Loading
-
-When you have many MCP servers with large tool schemas, every tool schema is sent to the model on each request. The `mcp.lazy` ephemeral setting defers those schemas so only the servers you actually need are published.
-
-### How It Works
-
-- **Servers stay connected.** MCP discovery, connection, tool registration, prompts, and resources all work exactly as before. Nothing is deferred except the model-facing schema publication.
-- **The model gets an `activate_mcp_server` tool.** Its compact description lists each deferred server's name, tool count, and up to 12 tool names — never full parameter schemas. The model calls this tool with a server name to activate it.
-- **Activation is session-scoped.** Once a server is activated, its full schemas are published for the rest of the session. There is no automatic un-activation; if you want to restart, create a new session.
-- **Eager exceptions.** Use `mcp.eagerServers` to pin specific servers as always-eager even when lazy mode is on.
-
-### Enabling Lazy Mode
-
-```
-/set mcp.lazy true
-```
-
-To keep specific servers eager:
-
-```
-/set mcp.eagerServers ["my-important-server","another-server"]
-```
-
-> `/set` updates the ephemeral settings but does not republish tools in an
-> already-initialized chat. To apply lazy mode, save and reload a named profile
-> (`/profile save lazy-mcp`, then `/profile load lazy-mcp`) or start a new
-> session with that profile. MCP tools are synchronized when the session
-> initializes and on each MCP lifecycle refresh.
-
-### Tradeoffs
-
-Lazy mode **reduces token overhead** for sessions with large MCP tool sets, but the model must spend a turn calling `activate_mcp_server` before it can use a deferred server's tools. For sessions where you always use all MCP tools, eager mode (the default) is better.
-
-### What Is Not Affected
-
-- MCP server connection, transport, and process lifecycle
-- OAuth, trust, and per-tool-call confirmation
-- `includeTools` and `excludeTools` filtering
-- MCP prompts, resources, and server instructions
-- Subagent tool whitelists (`getFunctionDeclarationsFiltered`)
-
-## Common Issues
-
-**Server won't connect:**
-
-- Check the command path exists and is executable
-- For stdio servers, try running the command manually to see errors
-- Check `LLXPRT_DEBUG=llxprt:mcp:*` for detailed connection logs
-
-**"SSE is no longer supported, use /mcp" error:**
-
-Some MCP providers (e.g. Webflow) have deprecated their SSE endpoint in favor
-of Streamable HTTP. If you see this error, switch your configuration from the
-SSE endpoint (e.g. `https://mcp.example.com/sse`) to the Streamable HTTP
-endpoint (e.g. `https://mcp.example.com/mcp`) with `"type": "streamable-http"`
-or `"type": "http"`:
-
-```json
-{
-  "mcpServers": {
-    "webflow": {
-      "url": "https://mcp.webflow.com/mcp",
-      "type": "streamable-http"
-    }
-  }
-}
-```
-
-If your MCP provider's OAuth discovery/registration does not conform to the
-automatic flow, you can fall back to the `mcp-remote` stdio bridge as a
-workaround:
-
-```json
-{
-  "mcpServers": {
-    "webflow": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "https://mcp.webflow.com/mcp"],
-      "type": "stdio"
-    }
-  }
-}
-```
-
-**Tools not appearing:**
-
-- Run `/mcp` to check if the server is connected
-- The server may need time to start — tools appear after connection is established
-- If tool names conflict with built-in tools, the built-in tool takes precedence
-
-**OAuth failures:**
-
-- Ensure the OAuth URLs and client ID are correct
-- Check if the server's OAuth flow requires specific scopes
-- Try removing cached tokens: check the token storage in your OS-standard data directory
-
-**Environment variables not reaching the server:**
-
-- Variables in the `env` block are passed to the server process
-- They don't inherit from your shell unless explicitly listed
+You can also remove a server by deleting its entry from `mcpServers` in your
+`settings.json`, then running `/mcp reload` to apply the change to a running
+session.
 
 ## Related
 
 - [Tools](./index.md) — all built-in tools
 - [Sandboxing](../sandbox.md) — running in a container
-- [Settings](../settings-and-profiles.md) — where MCP config lives
+- [Settings](../settings-and-profiles.md) — where MCP configuration lives

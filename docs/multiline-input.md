@@ -1,32 +1,22 @@
 # Multi-line Input in LLxprt Code
 
-LLxprt Code supports multi-line input, allowing you to enter complex prompts or code snippets that span multiple lines.
+LLxprt Code supports multi-line input, allowing you to enter complex prompts or
+code snippets that span multiple lines.
 
-## How to Insert Line Breaks
+## How to insert line breaks
 
-You can insert a line break (newline) in your input using any of these methods:
+The key combination for a new line depends on your platform:
 
-- **Alt+Enter** (Option+Enter on macOS) - Insert a new line
-- **Ctrl+Enter** - Insert a new line
-- **Paste multi-line content** - When you paste content containing line breaks, they are preserved
+- **Ctrl+J** (macOS and Linux) — insert a new line
+- **Ctrl+Enter** (Windows) — insert a new line
+- **Alt+Enter** — works on certain Linux distributions
+- **Paste multi-line content** — when you paste content containing line breaks,
+  they are preserved
 
-## Example Usage
+You can also insert a new line by ending the current line with a backslash (`\`)
+and pressing **Enter**. The backslash is consumed and a new line begins.
 
-```
-User input with Alt+Enter:
-This is line 1 [Alt+Enter]
-This is line 2 [Alt+Enter]
-This is line 3 [Enter to submit]
-```
+## Regular Enter key behavior
 
-## Regular Enter Key Behavior
-
-- **Enter** without modifiers - Submits the current input
-- **Enter** when line ends with `\` - Inserts a newline (line continuation)
-
-## Implementation Details
-
-The feature is implemented in:
-
-- `packages/cli/src/ui/components/InputPrompt.tsx` - Handles the key combinations
-- `packages/cli/src/ui/hooks/useKeypress.ts` - Detects Alt/Meta key through escape sequences
+- **Enter** (no modifiers) — submits the current input
+- **Enter** when the line ends with `\` — inserts a newline (line continuation)

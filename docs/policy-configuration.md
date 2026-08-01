@@ -413,46 +413,43 @@ priority = 2.6
 
 ## Creating Custom Policies
 
-### Step 1: Create a TOML file
+### Step 1: Create a TOML file in your user policy directory
 
-Create a new file (e.g., `<config>/my-policy.toml` in LLxprt's [config directory](./reference/application-directories.md)):
+Policy files are discovered by directory, not by a path you configure. Create
+your file inside the user policy directory — the `policies` subdirectory of
+LLxprt's [config directory](./reference/application-directories.md) — for
+example `<config>/policies/my-policy.toml`:
 
 ```toml
 # My custom policy
 
 [[rule]]
-toolName = "edit"
+toolName = "replace"
 decision = "allow"
-priority = 2.5
+priority = 500
 ```
 
-### Step 2: Configure Settings
+Every file in that directory is loaded at tier 2, so the `priority = 500` above
+resolves to **2.500**.
 
-Add to your [settings.json](./reference/application-directories.md):
+> **Note:** There is no per-project policy directory and no setting that points
+> the loader at a specific file. Files are read from the built-in policy
+> directory (tier 1), your user policy directory (tier 2), and the system policy
+> directory (tier 3).
 
-```json
-{
-  "tools": {
-    "policyPath": "/absolute/path/to/my-policy.toml"
-  }
-}
-```
+### Step 2: Test Your Policy
 
-**Important:** Use absolute paths, not relative paths or `~`.
-
-### Step 3: Test Your Policy
-
-1. Restart llxprt-code
+1. Restart LLxprt Code
 2. Run `/policies` to verify your rules loaded
 3. Test tool execution to confirm behavior
 
-### Step 4: Debug Issues
+### Step 3: Debug Issues
 
 If rules don't appear in `/policies`:
 
-- Check TOML syntax (use online validator)
-- Verify file path is absolute and correct
-- Check llxprt-code startup logs for errors
+- Check TOML syntax (use an online validator)
+- Verify the file is inside the user policy directory and ends in `.toml`
+- Check LLxprt Code startup logs for policy load errors
 
 ## Legacy --allowed-tools Migration
 

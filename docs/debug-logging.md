@@ -169,12 +169,9 @@ Debug output can be sent to stderr (terminal) instead of or in addition to files
 
 ### Zero Overhead When Disabled
 
-The debug system uses lazy evaluation - when debugging is disabled, there is zero performance impact:
-
-```typescript
-// This function is never called if debug is disabled
-logger.debug(() => `Processing ${expensiveComputation()}`);
-```
+The debug system uses lazy evaluation — when debugging is disabled, log messages
+are never evaluated, so there is zero performance impact even if the code passes
+expensive computations as arguments.
 
 ### Sensitive Data Redaction
 
@@ -326,22 +323,7 @@ Default location: `<log>/debug/` (see [Application Directories](./reference/appl
 - Check permissions on the directory
 - Verify output target includes "file"
 
-## API Usage (For Developers)
+## Related
 
-```typescript
-import { DebugLogger } from '@vybestack/llxprt-code-core';
-
-// Create a logger with a specific namespace
-const logger = new DebugLogger('llxprt:mycomponent:feature');
-
-// Basic logging
-logger.log('Simple message');
-logger.debug('Debug message');
-logger.error('Error message');
-
-// Lazy evaluation for expensive operations
-logger.debug(() => `Result: ${JSON.stringify(largeObject)}`);
-
-// With additional arguments
-logger.log('Processing request', requestId, userId);
-```
+- For the programmatic logging API and internal architecture, see
+  [Debug Logging Internals](../dev-docs/debug-logging-internals.md).

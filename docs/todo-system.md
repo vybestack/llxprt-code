@@ -1,65 +1,82 @@
-# LLxprt Code: Todo Management System
+# Todo System
 
-The LLxprt Code features a sophisticated task management system to help AI agents track and execute multi-step workflows. This system is primarily composed of three core tools accessible to the AI model: `todo_read`, `todo_write`, and `todo_pause`. Additionally, a "Todo Continuation" system automatically prompts the AI to keep working under specific conditions.
+LLxprt Code can track multi-step work with a live todo list. When you give the
+model a complex task, it can create, update, and complete items in that list so
+you can watch progress in real time.
 
-## `todo_read` Tool
+## What you see
 
-This built-in tool allows the AI model to read the current state of the todo list for the active session.
+When the model uses the todo tools, a **Todo panel** appears in the session
+showing the current task list with status icons:
 
-**Purpose**: To retrieve the list of tasks, their statuses, subtasks, and recent tool calls.
-**Returns**: A markdown block that mirrors the Todo panel, including status icons (/○/→), subtasks, and the five most recent tool calls per todo.
-**Parameters**: None.
+- ○ — pending (not started)
+- → — in progress
+- ✓ — completed
 
-## `todo_write` Tool
+Each entry can carry subtasks. The panel updates automatically every time the
+model modifies the list, so you can follow along without scrolling through tool
+output.
 
-This built-in tool allows the AI model to create, update, or overwrite the entire todo list for the active session.
+## Show or hide the Todo panel
 
-**Purpose**: To manage a structured list of tasks.
-**Parameters**:
+The Todo panel is on by default. To hide it:
 
-- `todos` (array[object], required): The complete list of todos to set for the session. Each todo object must contain the following fields:
-  - `id` (string, required): A unique identifier for the todo item.
-  - `content` (string, required): A clear, descriptive task for the AI to perform.
-  - `status` (string, enum: "pending", "in_progress", "completed", required): The current status of the task.
+1. Open the settings dialog with `/settings`.
+2. Navigate to **UI → Show Todo Panel**.
+3. Toggle it off.
 
-**Behavior**:
-The tool completely replaces the current todo list with the one provided in the `todos` array. In non-interactive sessions it returns a simplified markdown view of the list to the AI. In interactive sessions the CLI renders the Todo panel by default, but if you disable the panel (see below) LLxprt synthesizes the same structured markdown that `todo_read` now emits so the entire list remains visible in scrollback.
+The change takes effect immediately — no restart is needed. When the panel is
+hidden, todo updates render inline in the scrollback as a structured text list
+(status icons, subtasks, and recent tool calls) instead of a one-line
+placeholder, so nothing is lost.
 
-## `todo_pause` Tool
+Toggle the setting back on to restore the panel.
 
-This built-in tool allows the AI model to pause its automatic workflow continuation if it encounters a blocker or a task it cannot perform.
+You can also edit `.llxprt/settings.json` directly and set `showTodoPanel` to
+`false`.
 
-**Purpose**: To signal an interruption in the AI's self-directed task execution loop.
-**Parameters**:
+## Todo continuation
 
-- `reason` (string, 1-500 characters, required): A clear explanation of why the AI cannot proceed (e.g., "Missing configuration file", "Encountered an unknown error").
-  **Behavior**:
-  When called successfully, the AI's execution stream will halt, and the provided reason will be displayed to the user. This prevents the "Todo Continuation" system from automatically sending further prompts.
+LLxprt Code can prompt the model to keep working after it finishes a response,
+so a multi-step task can proceed without you re-sending each instruction.
 
----
+### What it does
 
-## Controlling the Todo Panel
+When **todo continuation** is enabled (the default), LLxprt Code monitors the
+session for complex, multi-step work. If the model ends a response without
+making tool calls and there is still pending work, LLxprt Code automatically
+sends a follow-up prompt such as:
 
-Some users prefer all todo updates to remain in the scrollback instead of a separate Ink panel. Open `/settings` (or edit `.llxprt/settings.json`) and toggle **UI → Show Todo Panel**. When this setting is off:
+> Continue working on this task: \<todo content\>
 
-- The Todo panel is hidden immediately—no restart required.
-- `todo_write` tool calls render the full structured todo list inline (status icons, subtasks, recent tool calls) instead of the ` Todo list updated` placeholder.
-- `todo_read` outputs the same formatter, so both tools always share one canonical textual representation.
+If you never create a todo list, LLxprt Code may still nudge the model to
+formalize one after detecting several complex turns.
 
-Re-enable the toggle to restore the rich Ink panel without losing any history.
+### How to control it
 
-## Todo Continuation System
+Todo continuation is an **ephemeral setting** — it lasts for the current session
+and does not modify your saved profiles.
 
-The `todo-continuation` ephemeral setting controls a powerful feature of LLxprt Code: its ability to automatically prompt the AI to continue working.
+```bash
+# Disable for this session
+/set todo-continuation false
 
-**Mechanism**: When `todo-continuation` is enabled (default `true`), LLxprt monitors each turn for signals of complex, multi-step work:
+# Re-enable (or set explicitly to true)
+/set todo-continuation true
+```
 
-- Consecutive user prompts that contain ordered/sequential keywords ("first", "then", "next", etc.)
-- Detected task lists, file references, or multiple questions extracted by the complexity analyzer
-- Active todos that remain in `pending`/`in_progress`
+| Property    | Value                                                        |
+| ----------- | ------------------------------------------------------------ |
+| Setting key | `todo-continuation`                                          |
+| Type        | boolean                                                      |
+| Default     | enabled (the feature is on unless explicitly set to `false`) |
+| Scope       | ephemeral (current session only)                             |
+| Persistence | session only; use `/profile save` to keep it across sessions |
 
-If the AI finishes a response without making tool calls and the analyzer detects a backlog of tasks, LLxprt automatically emits a follow-up prompt such as "Continue working on this task: <todo content>". If the user never created a todo list, the system now escalates reminders (“Use TodoWrite now…”) once a threshold of complex turns is exceeded.
+## What the model sees
 
-**Goal**: This creates a seamless, self-directed workflow where the AI can work through a list of tasks without requiring the user to manually prompt it after each step, while nudging the model to formalize todo lists for complex work.
-
-**Control**: You can disable this feature for the current session using `/ephemeral todo-continuation false`.
+The model interacts with the todo list through built-in tools (`todo_read`,
+`todo_write`, `todo_pause`). You never call these directly — they are part of
+the model's toolset. The behavioral details of how continuation detects
+complexity and decides when to prompt are documented in
+[Todo System Internals](../dev-docs/todo-system-internals.md).
