@@ -188,6 +188,21 @@ export class LoadedTrustedFolders {
       : this.user.config[canonicalPath];
   }
 
+  /**
+   * Stored keys naming the same place as `location` by path alone.
+   *
+   * Used only once the folder is gone and realpath can no longer identify it.
+   * Comparing resolved paths rather than raw strings catches a key that was
+   * written without normalization, which would otherwise be unremovable. Keys
+   * that only realpath could tie together are genuinely unknowable here.
+   */
+  private lexicalMatchesFor(location: string): string[] {
+    const resolvedLocation = path.resolve(location);
+    return Object.keys(this.user.config).filter(
+      (rulePath) => path.resolve(rulePath) === resolvedLocation,
+    );
+  }
+
   private aliasesFor(canonicalPath: string): string[] {
     return Object.keys(this.user.config).filter(
       (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
@@ -246,6 +261,36 @@ export class LoadedTrustedFolders {
     }
     for (const alias of aliases) {
       delete this.user.config[alias];
+    }
+    try {
+      saveTrustedFolders(this.user);
+    } catch (e) {
+      restoreConfigInPlace(this.user.config, originalConfig);
+      throw e;
+    }
+  }
+
+  /**
+   * Removes the rule that applies directly to `location`.
+   *
+   * While the folder still exists the removal is by canonical identity, so every
+   * alias of it (for example a symlinked spelling) is cleared, matching
+   * {@link deleteValue}. Once the folder is gone realpath can no longer resolve
+   * it, so the literal stored key is removed instead — without that, a rule for
+   * a deleted folder could never be cleaned up.
+   */
+  removeRule(location: string): void {
+    const canonicalPath = resolveCanonicalPath(location);
+    const ruleKeys =
+      canonicalPath === undefined
+        ? this.lexicalMatchesFor(location)
+        : this.aliasesFor(canonicalPath);
+    if (ruleKeys.length === 0) {
+      return;
+    }
+    const originalConfig = { ...this.user.config };
+    for (const ruleKey of ruleKeys) {
+      delete this.user.config[ruleKey];
     }
     try {
       saveTrustedFolders(this.user);

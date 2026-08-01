@@ -179,12 +179,84 @@ export function buildTrustLevelOptions(
   });
 }
 
-export function findInitialTrustOptionIndex(
-  options: Array<RadioSelectItem<TrustLevel>>,
+/**
+ * Index of the option matching the current trust level, or 0 when the level is
+ * unset or absent from the list. Generic over the option value so it serves both
+ * the plain trust-level list and the list that also carries navigation actions.
+ */
+export function findInitialTrustOptionIndex<T>(
+  options: Array<RadioSelectItem<T>>,
   currentTrustLevel: TrustLevel | undefined,
 ): number {
   const index = options.findIndex(
     (option) => option.value === currentTrustLevel,
   );
   return index >= 0 ? index : 0;
+}
+
+/** Non-trust-level actions offered alongside the trust levels in the form. */
+export enum TrustFormAction {
+  ADD_FOLDER = 'add_folder',
+  MANAGE_RULES = 'manage_rules',
+  REMOVE_RULE = 'remove_rule',
+}
+
+export type TrustFormChoice = TrustLevel | TrustFormAction;
+
+export function isTrustFormAction(
+  value: TrustFormChoice,
+): value is TrustFormAction {
+  return Object.values(TrustFormAction).includes(value as TrustFormAction);
+}
+
+/**
+ * Builds the trust form options: the three trust levels first — so the default
+ * "press Enter to trust this folder" flow is unchanged — followed by the
+ * navigation actions for managing other folders.
+ */
+export function buildTrustFormOptions(
+  folderName: string,
+  parentFolderName: string,
+  options: { hasDirectRule: boolean; ruleCount: number },
+): Array<RadioSelectItem<TrustFormChoice>> {
+  const levelOptions: Array<RadioSelectItem<TrustFormChoice>> =
+    buildTrustLevelOptions(folderName, parentFolderName);
+  const actions: Array<RadioSelectItem<TrustFormChoice>> = [];
+  if (options.hasDirectRule) {
+    actions.push({
+      label: 'Remove this rule',
+      value: TrustFormAction.REMOVE_RULE,
+      key: TrustFormAction.REMOVE_RULE,
+    });
+  }
+  actions.push(
+    {
+      label: 'Add another folder…',
+      value: TrustFormAction.ADD_FOLDER,
+      key: TrustFormAction.ADD_FOLDER,
+    },
+    {
+      label: `Manage existing rules (${options.ruleCount})…`,
+      value: TrustFormAction.MANAGE_RULES,
+      key: TrustFormAction.MANAGE_RULES,
+    },
+  );
+  return [...levelOptions, ...actions];
+}
+
+/**
+ * Rule options for the manage-rules list.
+ *
+ * The trust level is placed first because the list truncates long labels at the
+ * end; trailing the level behind a deep path would hide the very thing the row
+ * is reporting.
+ */
+export function buildTrustRuleOptions(
+  rules: ReadonlyArray<{ path: string; trustLevel: TrustLevel }>,
+): Array<RadioSelectItem<string>> {
+  return rules.map((rule) => ({
+    label: `[${getLocalTrustLevelDisplay(rule.trustLevel)}] ${rule.path}`,
+    value: rule.path,
+    key: rule.path,
+  }));
 }

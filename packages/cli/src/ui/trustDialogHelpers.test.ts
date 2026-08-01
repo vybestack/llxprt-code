@@ -18,6 +18,10 @@ import {
   buildTrustLevelOptions,
   combineTrustUpdateFailure,
   findInitialTrustOptionIndex,
+  buildTrustFormOptions,
+  buildTrustRuleOptions,
+  isTrustFormAction,
+  TrustFormAction,
 } from './trustDialogHelpers.js';
 
 describe('trustDialogHelpers', () => {
@@ -269,6 +273,118 @@ describe('trustDialogHelpers', () => {
     it('defaults to 0 when the current trust level is not found', () => {
       const options = buildTrustLevelOptions('project', 'workspace');
       expect(findInitialTrustOptionIndex(options, undefined)).toBe(0);
+    });
+  });
+
+  describe('buildTrustFormOptions', () => {
+    it('lists the three trust levels first so Enter still trusts the folder', () => {
+      const options = buildTrustFormOptions('project', 'workspace', {
+        hasDirectRule: false,
+        ruleCount: 0,
+      });
+
+      expect(options.slice(0, 3).map((option) => option.value)).toStrictEqual([
+        TrustLevel.TRUST_FOLDER,
+        TrustLevel.TRUST_PARENT,
+        TrustLevel.DO_NOT_TRUST,
+      ]);
+    });
+
+    it('appends the add-folder and manage-rules actions', () => {
+      const options = buildTrustFormOptions('project', 'workspace', {
+        hasDirectRule: false,
+        ruleCount: 4,
+      });
+
+      expect(options.map((option) => option.value)).toStrictEqual([
+        TrustLevel.TRUST_FOLDER,
+        TrustLevel.TRUST_PARENT,
+        TrustLevel.DO_NOT_TRUST,
+        TrustFormAction.ADD_FOLDER,
+        TrustFormAction.MANAGE_RULES,
+      ]);
+    });
+
+    it('reports the rule count in the manage-rules label', () => {
+      const options = buildTrustFormOptions('project', 'workspace', {
+        hasDirectRule: false,
+        ruleCount: 7,
+      });
+
+      const manage = options.find(
+        (option) => option.value === TrustFormAction.MANAGE_RULES,
+      );
+      // Exact match: a substring check would also accept "(17)" or a label that
+      // lost its parentheses.
+      expect(manage?.label).toBe('Manage existing rules (7)…');
+    });
+
+    it('offers removal only when the folder has a direct rule', () => {
+      const withRule = buildTrustFormOptions('project', 'workspace', {
+        hasDirectRule: true,
+        ruleCount: 1,
+      });
+      const withoutRule = buildTrustFormOptions('project', 'workspace', {
+        hasDirectRule: false,
+        ruleCount: 1,
+      });
+
+      expect(
+        withRule.some((option) => option.value === TrustFormAction.REMOVE_RULE),
+      ).toBe(true);
+      expect(
+        withoutRule.some(
+          (option) => option.value === TrustFormAction.REMOVE_RULE,
+        ),
+      ).toBe(false);
+    });
+  });
+
+  describe('isTrustFormAction', () => {
+    it('accepts every form action', () => {
+      for (const action of Object.values(TrustFormAction)) {
+        expect(isTrustFormAction(action)).toBe(true);
+      }
+    });
+
+    it('rejects every trust level', () => {
+      for (const level of Object.values(TrustLevel)) {
+        expect(isTrustFormAction(level)).toBe(false);
+      }
+    });
+  });
+
+  describe('buildTrustRuleOptions', () => {
+    it('uses the rule path as the selectable value', () => {
+      const options = buildTrustRuleOptions([
+        { path: '/a/b', trustLevel: TrustLevel.TRUST_FOLDER },
+      ]);
+
+      expect(options[0].value).toBe('/a/b');
+    });
+
+    it('states the trust level before the path so a long path cannot truncate it away', () => {
+      const deepPath = `/${'nested/'.repeat(40)}folder`;
+      const options = buildTrustRuleOptions([
+        { path: deepPath, trustLevel: TrustLevel.DO_NOT_TRUST },
+      ]);
+
+      expect(options[0].label.startsWith('[Not trusted]')).toBe(true);
+      expect(options[0].label).toContain(deepPath);
+    });
+
+    it('returns no options when nothing is configured', () => {
+      // The state the manage-rules view opens in before any rule exists.
+      expect(buildTrustRuleOptions([])).toStrictEqual([]);
+    });
+
+    it('returns one option per rule', () => {
+      const options = buildTrustRuleOptions([
+        { path: '/a', trustLevel: TrustLevel.TRUST_FOLDER },
+        { path: '/b', trustLevel: TrustLevel.DO_NOT_TRUST },
+      ]);
+
+      expect(options).toHaveLength(2);
     });
   });
 });

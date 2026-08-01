@@ -15,6 +15,7 @@ import { createMockCommandContext as createBaseMockCommandContext } from '../../
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const mockedCwd = vi.hoisted(() => vi.fn());
+const mockedHomedir = vi.hoisted(() => vi.fn(() => '/mock/home/user'));
 const mockSetValue = vi.fn();
 const mockSnapshotValue = vi.fn();
 const mockRestoreSnapshot = vi.fn();
@@ -29,6 +30,14 @@ vi.mock('node:process', async (importOriginal) => {
   return {
     ...actual,
     cwd: mockedCwd,
+  };
+});
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return {
+    ...actual,
+    homedir: mockedHomedir,
   };
 });
 
@@ -281,6 +290,26 @@ describe('permissionsCommand', () => {
 
       expect(mockSetValue).toHaveBeenCalledWith(
         expect.any(String),
+        'TRUST_FOLDER',
+      );
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining('Trust level set to TRUST_FOLDER'),
+      });
+    });
+
+    it('A6: expands a tilde-prefixed target path through the shared helper', async () => {
+      mockedHomedir.mockReturnValue('/mock/home/user');
+      const mockContext = createMockContext();
+      const args = 'TRUST_FOLDER ~/projects/x';
+
+      const result = await permissionsCommand.action?.(mockContext, args);
+
+      // path.resolve, not path.join: on Windows the production helper resolves
+      // against the current drive, which path.join would not reproduce.
+      expect(mockSetValue).toHaveBeenCalledWith(
+        path.resolve('/mock/home/user', 'projects', 'x'),
         'TRUST_FOLDER',
       );
       expect(result).toStrictEqual({
