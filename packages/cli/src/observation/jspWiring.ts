@@ -22,6 +22,7 @@ import type { JspNativeSession } from './jspDocuments.js';
 import { createObservationTap, type ObservationTap } from './observationTap.js';
 
 const BOOTSTRAP_ENV = 'LLXPRT_JSP_BOOTSTRAP_FILE';
+const NO_CONTENT_ENV = 'LLXPRT_JSP_NO_CONTENT';
 
 export interface ObservationSessionContext {
   readonly repository: string;
@@ -84,6 +85,20 @@ function toNativeSession(context: ObservationSessionContext): JspNativeSession {
   };
 }
 
+/**
+ * Read the no-content opt-in from the environment.
+ *
+ * When enabled, assistant message text is suppressed in the published
+ * documents while status fields and timestamps are preserved. This is the
+ * same environment-variable mechanism the bootstrap file uses, so an operator
+ * activates it alongside the bootstrap without a separate config surface.
+ */
+export function shouldSuppressContent(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env[NO_CONTENT_ENV] === 'true' || env[NO_CONTENT_ENV] === '1';
+}
+
 export function createObservationProducer(
   bootstrap: JspBootstrap | null,
   sessionContext: ObservationSessionContext,
@@ -103,6 +118,7 @@ export function createObservationProducer(
     register: (snapshot) => publisher.register(snapshot),
     publish: (document) => publisher.publish(document),
     heartbeat: (document) => publisher.heartbeat(document),
+    noContent: hooksOverride?.noContent ?? shouldSuppressContent(),
     ...hooksOverride,
   };
   const nextProducer = new JspProducer(
