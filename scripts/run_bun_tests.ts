@@ -512,6 +512,7 @@ function main(): void {
         cmd: [...cmd],
         stdout: 'pipe',
         stderr: 'pipe',
+        timeout: 5_000,
       });
       return { stdout: decodeOutput(result.stdout) };
     },
