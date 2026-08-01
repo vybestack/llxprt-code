@@ -264,7 +264,8 @@ describe('RenderInline URL linkification', () => {
 
     const flat = flattenText(node);
     expect(flat).not.toContain(OSC8_PREFIX);
-    expect(flat).toContain('javascript:alert(1)');
+    // Refusing to linkify must not censor the text: label and target both stay
+    expect(flat).toBe('See xss (javascript:alert(1)).');
   });
 
   it('keeps trailing punctuation out of the link colour when the URL cannot be linkified (AC-3)', () => {
@@ -293,6 +294,7 @@ describe('RenderInline URL linkification', () => {
 
     const flat = flattenText(node);
     expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toBe('javascript:alert(1)');
   });
 
   it('strips both a trailing period and the parenthesis wrapping a bare URL (AC-4)', () => {
@@ -353,7 +355,10 @@ describe('RenderInline URL linkification', () => {
       'FILE:///etc/passwd',
     ]) {
       const node = renderInlineNode({ text: `See [x](${scheme}).` });
-      expect(flattenText(node)).not.toContain(OSC8_PREFIX);
+      const flat = flattenText(node);
+      expect(flat).not.toContain(OSC8_PREFIX);
+      // The label and the rejected target both remain visible
+      expect(flat).toBe(`See x (${scheme}).`);
     }
   });
 });
