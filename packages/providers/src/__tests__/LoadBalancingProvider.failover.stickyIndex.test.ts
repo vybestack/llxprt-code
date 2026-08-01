@@ -58,6 +58,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-sticky-wraparound',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'backend-a',
@@ -164,6 +165,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-reset-on-all-fail',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'backend-a',
@@ -242,6 +244,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-full-rotation-from-zero',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'backend-a',
@@ -332,6 +335,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-not-pegged',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'zai',
