@@ -298,6 +298,13 @@ describe('createUrlLink', () => {
     );
   });
 
+  it('falls back to the URL when the label is empty, so the link is never invisible', () => {
+    const url = 'https://example.com/some/path';
+
+    expect(extractOsc8Label(createUrlLink(url, '') ?? '')).toBe(url);
+    expect(createUrlLink(url, '')).toBe(createUrlLink(url));
+  });
+
   it('rejects a label containing control characters (AC-3)', () => {
     const url = 'https://example.com/some/path';
 

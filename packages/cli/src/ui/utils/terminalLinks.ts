@@ -105,7 +105,10 @@ export function createUrlLink(url: string, label?: string): string | null {
   if (label !== undefined && hasControlCharacter(label)) {
     return null;
   }
-  return createOsc8Link(label ?? url, url);
+  // An empty label would produce a hyperlink with no visible click target, so
+  // it falls back to the URL just like an omitted label.
+  const visibleLabel = label === undefined || label.length === 0 ? url : label;
+  return createOsc8Link(visibleLabel, url);
 }
 
 /**
