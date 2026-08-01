@@ -30,6 +30,7 @@ import {
   extractString,
   truncateWithMarker,
   type ShapedComment,
+  assertListShape,
 } from './github-broker-shaping.js';
 
 // ─── pr.list ─────────────────────────────────────────────────────────────────
@@ -109,7 +110,7 @@ export interface ShapedPrListItem {
  */
 export function shapePrList(rawJson: unknown): readonly ShapedPrListItem[] {
   assertNotPartialSuccess(rawJson);
-  if (!Array.isArray(rawJson)) return [];
+  assertListShape(rawJson, 'pr.list');
   return rawJson.map((item): ShapedPrListItem => {
     const obj = (item ?? {}) as Record<string, unknown>;
     return {

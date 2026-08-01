@@ -15,7 +15,11 @@
  * @pseudocode 003-github-broker.md lines 101-126
  */
 
-import { mapGraphQLErrorType } from './github-broker-errors.js';
+import {
+  mapGraphQLErrorType,
+  makeBrokerError,
+  BrokerErrorException,
+} from './github-broker-errors.js';
 
 /**
  * The shaped comment in the issue.view / pr.view contract.
@@ -190,4 +194,30 @@ export function truncateWithMarker(
     value: cut + TRUNCATION_MARKER,
     truncated: { field, originalBytes },
   };
+}
+
+/**
+ * Asserts that a list-shaped gh response really is a list.
+ *
+ * Returning an empty array for a non-array response makes an authentication
+ * failure, a CLI error or an unexpected payload look identical to "no
+ * results", which is the worst possible reading of it. The partial-success
+ * guard runs first, so anything reaching here that is not an array is a
+ * genuine surprise and should surface.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-013
+ */
+export function assertListShape(
+  rawJson: unknown,
+  op: string,
+): asserts rawJson is unknown[] {
+  if (!Array.isArray(rawJson)) {
+    throw new BrokerErrorException(
+      makeBrokerError(
+        'GITHUB_ERROR',
+        `${op}: expected a list from gh but received ${typeof rawJson}`,
+      ),
+    );
+  }
 }

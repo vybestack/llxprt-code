@@ -96,7 +96,11 @@ export class ResponseWriter {
     if (this.socket.destroyed || !this.socket.writable) return;
     const negotiatedVersion = this.getNegotiatedVersion();
     const frame = encodeFrame({ id, ...response });
-    if (negotiatedVersion === 1 && frame.length > V1_MAX_FRAME_SIZE + 4) {
+    // V1_MAX_FRAME_SIZE is the total frame budget a v1 peer accepts, and
+    // frame.length already includes the 4-byte length header encodeFrame
+    // prepends. The earlier `+ 4` let four bytes past what a v1 decoder
+    // will take.
+    if (negotiatedVersion === 1 && frame.length > V1_MAX_FRAME_SIZE) {
       this.auditLog('WARN', this.connectionId, 'response_too_large', {
         version: negotiatedVersion,
         frameSize: frame.length,

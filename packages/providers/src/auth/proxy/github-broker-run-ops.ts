@@ -23,6 +23,7 @@ import {
   assertNotPartialSuccess,
   extractNumber,
   extractString,
+  assertListShape,
 } from './github-broker-shaping.js';
 
 /**
@@ -97,7 +98,7 @@ export interface ShapedRunListItem {
  */
 export function shapeRunList(rawJson: unknown): readonly ShapedRunListItem[] {
   assertNotPartialSuccess(rawJson);
-  if (!Array.isArray(rawJson)) return [];
+  assertListShape(rawJson, 'run.list');
   return rawJson.map((item): ShapedRunListItem => {
     const obj = (item ?? {}) as Record<string, unknown>;
     return {

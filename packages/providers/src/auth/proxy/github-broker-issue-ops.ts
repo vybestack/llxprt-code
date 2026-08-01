@@ -27,6 +27,7 @@ import {
   extractNumber,
   extractString,
   type ShapedComment,
+  assertListShape,
 } from './github-broker-shaping.js';
 import { resolveLimit } from './github-broker-validation.js';
 
@@ -256,7 +257,7 @@ export function shapeIssueList(
   rawJson: unknown,
 ): readonly ShapedIssueListItem[] {
   assertNotPartialSuccess(rawJson);
-  if (!Array.isArray(rawJson)) return [];
+  assertListShape(rawJson, 'issue.list');
   return rawJson.map((item): ShapedIssueListItem => {
     const obj = (item ?? {}) as Record<string, unknown>;
     return {

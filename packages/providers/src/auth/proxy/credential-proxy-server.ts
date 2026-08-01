@@ -422,7 +422,11 @@ export class CredentialProxyServer {
     });
     socket.write(
       encodeFrame({
-        v: PROTOCOL_VERSION,
+        // Reply at the NEGOTIATED version, not the server maximum. A v1
+        // client that negotiated down cannot parse a v2 frame, so replying
+        // with our max breaks the very compatibility the handshake just
+        // established.
+        v: state.negotiatedVersion,
         op: 'handshake',
         ok: true,
         data: { version: state.negotiatedVersion },

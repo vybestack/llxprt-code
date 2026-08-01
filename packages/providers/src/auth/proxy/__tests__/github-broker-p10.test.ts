@@ -290,9 +290,18 @@ describe('issue.list pure functions (P10)', () => {
       expect(shaped[0]).not.toHaveProperty('body');
     });
 
-    it('returns empty array for non-array input', () => {
-      expect(shapeIssueList(null)).toStrictEqual([]);
-      expect(shapeIssueList({})).toStrictEqual([]);
+    /**
+     * A non-array response means gh returned something unexpected — an auth
+     * failure, a CLI error, a changed payload. Returning [] made all of
+     * those indistinguishable from "no results", which is the worst
+     * available reading, so it now surfaces instead.
+     *
+     * @plan PLAN-20260731-GHBROKER.P19
+     * @requirement REQ-013
+     */
+    it('fails loudly for non-array input rather than reporting no results', () => {
+      expect(() => shapeIssueList(null)).toThrow(/expected a list/);
+      expect(() => shapeIssueList({})).toThrow(/expected a list/);
     });
 
     it('handles missing fields defensively', () => {

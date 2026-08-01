@@ -23,6 +23,7 @@ import {
   assertNotPartialSuccess,
   extractNumber,
   extractString,
+  assertListShape,
 } from './github-broker-shaping.js';
 
 /**
@@ -102,7 +103,7 @@ export function shapeSearchResults(
   rawJson: unknown,
 ): readonly ShapedSearchItem[] {
   assertNotPartialSuccess(rawJson);
-  if (!Array.isArray(rawJson)) return [];
+  assertListShape(rawJson, 'search');
   return rawJson.map((item): ShapedSearchItem => {
     const obj = (item ?? {}) as Record<string, unknown>;
     return {

@@ -21,6 +21,7 @@ import { resolveLimit, validateParams } from './github-broker-validation.js';
 import {
   assertNotPartialSuccess,
   extractString,
+  assertListShape,
 } from './github-broker-shaping.js';
 
 /**
@@ -85,7 +86,7 @@ export function shapeLabelList(
   rawJson: unknown,
 ): readonly ShapedLabelListItem[] {
   assertNotPartialSuccess(rawJson);
-  if (!Array.isArray(rawJson)) return [];
+  assertListShape(rawJson, 'label.list');
   return rawJson.map((item): ShapedLabelListItem => {
     const obj = (item ?? {}) as Record<string, unknown>;
     return {
