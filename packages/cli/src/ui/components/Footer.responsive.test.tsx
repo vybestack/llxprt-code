@@ -5,6 +5,7 @@
  */
 
 import { render } from 'ink-testing-library';
+import type React from 'react';
 import {
   describe,
   it,
@@ -24,6 +25,12 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
   }),
 }));
 
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => ({
+    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+  }),
+}));
+
 vi.mock('node:v8', () => ({
   default: {
     getHeapStatistics: vi.fn(() => ({
@@ -32,9 +39,29 @@ vi.mock('node:v8', () => ({
   },
 }));
 
-describe('Footer Responsive Behavior', () => {
-  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+const mockUseTerminalSize = useTerminalSize as MockedFunction<
+  typeof useTerminalSize
+>;
 
+function renderFooter(
+  props: React.ComponentProps<typeof Footer>,
+): ReturnType<typeof render> {
+  const result = render(<Footer {...props} />);
+  // ink-testing-library hardcodes stdout.columns to 100, but the Footer uses
+  // the mocked useTerminalSize for its responsive logic. Patch stdout.columns
+  // to match the mocked width so Ink's layout engine and the Footer agree on
+  // the available space — otherwise wide content (detailed memory labels +
+  // timestamp) wraps mid-pattern.
+  const mocked = mockUseTerminalSize();
+  Object.defineProperty(result.stdout, 'columns', {
+    value: mocked.columns,
+    configurable: true,
+  });
+  result.rerender(<Footer {...props} />);
+  return result;
+}
+
+describe('Footer Responsive Behavior', () => {
   const defaultProps = {
     model: 'gemini-2.5-pro',
     targetDir: '/home/user/projects/long-project-name',
@@ -53,9 +80,6 @@ describe('Footer Responsive Behavior', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseTerminalSize = useTerminalSize as MockedFunction<
-      typeof useTerminalSize
-    >;
   });
 
   describe('NARROW width behavior (< 80 cols)', () => {
@@ -63,18 +87,19 @@ describe('Footer Responsive Behavior', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
     });
 
-    it('should show abbreviated memory indicator', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+    it('should show memory heap and RSS labels', () => {
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
-      // Should show abbreviated memory format
-      expect(output).toMatch(testRegex('Mem:', ''));
-      // Should NOT show full "Memory:" text
-      expect(output).not.toMatch(testRegex('Memory:', ''));
+      // Should show Heap and RSS labels at all widths
+      expect(output).toMatch(testRegex('Heap:', ''));
+      expect(output).toMatch(testRegex('RSS:', ''));
+      // Should NOT show dimensionally-invalid percentage (RSS/heap)
+      expect(output).not.toMatch(testRegex('[0-9]+%', ''));
     });
 
     it('should show abbreviated context indicator', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should show abbreviated context format
@@ -84,7 +109,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should NOT show model name at narrow width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should NOT show model name
@@ -93,7 +118,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should NOT show timestamp at narrow width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should NOT show timestamp
@@ -122,20 +147,22 @@ describe('Footer Responsive Behavior', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
     });
 
-    it('should show full memory indicator label', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+    it('should show full memory indicator label with Heap and RSS', () => {
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
-      // Should show full "Memory:" label
-      expect(output).toMatch(testRegex('Memory:', ''));
-      // Should NOT show percentage details in parens
+      // Should show Heap and RSS labels
+      expect(output).toMatch(testRegex('Heap:', ''));
+      expect(output).toMatch(testRegex('RSS:', ''));
+      // Should NOT show dimensionally-invalid percentage
       expect(output).not.toMatch(
         testRegex('Memory: \\d+% \\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''),
       );
+      expect(output).not.toMatch(testRegex('Mem:', ''));
     });
 
     it('should show full context indicator label', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should show full "Context:" label
@@ -147,7 +174,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show model name at standard width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should show model name
@@ -156,7 +183,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should NOT show timestamp at standard width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should NOT show timestamp
@@ -169,27 +196,33 @@ describe('Footer Responsive Behavior', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
     });
 
-    it('should show detailed memory usage with parenthetical details', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+    it('should show detailed memory usage with External and ArrayBuffers', () => {
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
-      // Should show detailed memory format (may wrap across lines in two-line layout)
-      expect(output).toMatch(testRegex('Memory: \\d+%', ''));
-      expect(output).toMatch(
-        testRegex('\\(\\d+\\.\\d+GB\\/\\d+\\.\\d+GB\\)', ''),
-      );
+      // Should show detailed memory format with heap, external, arrayBuffers, RSS
+      expect(output).toMatch(testRegex('Heap:', ''));
+      expect(output).toMatch(testRegex('RSS:', ''));
+      expect(output).toMatch(testRegex('External:', ''));
+      expect(output).toMatch(testRegex('ArrayBuffers:', ''));
+      // Should NOT show percentage
+      expect(output).not.toMatch(testRegex('Memory: \\d+%', ''));
     });
 
     it('should show detailed context usage with comma-separated numbers', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
-      // Should show detailed context format (shows as 8,234/100,000 tokens)
-      expect(output).toMatch(testRegex('Context: \\d+,\\d+\\/\\d+,\\d+', ''));
+      // ink-testing-library wraps at its internal column width; join lines
+      // to verify the full detailed context pattern is present in the output.
+      const joined = output!.replace(/\n/g, '');
+      expect(joined).toMatch(
+        testRegex('Context:\\s*\\d+,\\d+\\/\\d+,\\d+', ''),
+      );
     });
 
     it('should show model name at wide width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should show model name
@@ -198,19 +231,22 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show timestamp at wide width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
-      // Should show timestamp in HH:MM:SS format (may wrap across lines)
-      expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', ''));
+      // ink-testing-library wraps at its internal column width; join lines
+      // to verify the timestamp pattern survives wrapping.
+      const joined = output!.replace(/\n/g, '');
+      expect(joined).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', ''));
     });
 
     it('should show full branch name when space allows', () => {
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation';
-      const { lastFrame } = render(
-        <Footer {...defaultProps} branchName={longBranchName} />,
-      );
+      const { lastFrame } = renderFooter({
+        ...defaultProps,
+        branchName: longBranchName,
+      });
       const output = lastFrame();
 
       // Should show branch name at wide width
@@ -223,12 +259,15 @@ describe('Footer Responsive Behavior', () => {
       // Test exactly at NARROW threshold (80 cols) - should be STANDARD
       mockUseTerminalSize.mockReturnValue({ columns: 80, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // At exactly 80, should be STANDARD behavior
-      expect(output).toMatch(testRegex('Memory:', '')); // Not abbreviated
-      expect(output).toContain('gemini-2.5-pro'); // Model shown
+      expect(output).toMatch(testRegex('Heap:', '')); // Not abbreviated
+      // Model is visible (not hidden as in NARROW). At exactly 80 cols the
+      // long fixture strings cause the model name to wrap, so check for its
+      // prefix rather than the full contiguous string.
+      expect(output).toContain('gemini'); // Model shown
       expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // No timestamp
     });
 
@@ -236,11 +275,11 @@ describe('Footer Responsive Behavior', () => {
       // Test exactly at STANDARD threshold (120 cols) - should be STANDARD
       mockUseTerminalSize.mockReturnValue({ columns: 120, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // At exactly 120, should be STANDARD behavior (not WIDE)
-      expect(output).toMatch(testRegex('Memory:', ''));
+      expect(output).toMatch(testRegex('Heap:', ''));
       expect(output).toContain('gemini-2.5-pro');
       expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // Still no timestamp
     });
@@ -252,11 +291,12 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        const { lastFrame } = render(<Footer {...defaultProps} />);
+        const { lastFrame } = renderFooter(defaultProps);
         const output = lastFrame();
 
         // Memory and context should always be visible
-        expect(output).toMatch(testRegex('(Mem:|Memory:)', ''));
+        expect(output).toMatch(testRegex('Heap:', ''));
+        expect(output).toMatch(testRegex('RSS:', ''));
         expect(output).toMatch(testRegex('(Ctx:|Context:)', ''));
       });
     });
@@ -268,9 +308,10 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        const { lastFrame } = render(
-          <Footer {...defaultProps} branchName={longBranchName} />,
-        );
+        const { lastFrame } = renderFooter({
+          ...defaultProps,
+          branchName: longBranchName,
+        });
         const output = lastFrame();
 
         // Branch should always be visible (even if truncated)
@@ -285,15 +326,15 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        const { lastFrame } = render(<Footer {...defaultProps} />);
+        const { lastFrame } = renderFooter(defaultProps);
         const output = lastFrame();
 
         if (!output) {
           throw new Error('Expected output to be defined');
         }
 
-        // Should have status info (Memory|Context) separate from path info
-        expect(output).toMatch(testRegex('(Mem:|Memory:)', ''));
+        // Should have status info (Heap|RSS|Context) separate from path info
+        expect(output).toMatch(testRegex('Heap:', ''));
         expect(output).toMatch(testRegex('(Ctx:|Context:)', ''));
         // Path check - should contain path elements (may be truncated)
         expect(output).toMatch(
@@ -307,13 +348,16 @@ describe('Footer Responsive Behavior', () => {
     it('should show Memory|Context|Time together when wide', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
-      // Should have Memory, Context, and Time displayed
-      expect(output).toMatch(testRegex('Memory:', ''));
+      // Should have Heap, RSS, Context, and Time displayed
+      expect(output).toMatch(testRegex('Heap:', ''));
+      expect(output).toMatch(testRegex('RSS:', ''));
       expect(output).toMatch(testRegex('Context:', ''));
-      expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', '')); // Timestamp (may wrap)
+      // Timestamp may wrap due to ink-testing-library's internal column width
+      const joined = output!.replace(/\n/g, '');
+      expect(joined).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', ''));
 
       // Should also have path and model displayed
       expect(output).toMatch(
@@ -325,7 +369,7 @@ describe('Footer Responsive Behavior', () => {
     it('should organize Path and Model information appropriately', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = renderFooter(defaultProps);
       const output = lastFrame();
 
       // Should contain path and model information
@@ -335,38 +379,43 @@ describe('Footer Responsive Behavior', () => {
       expect(output).toContain('gemini-2.5-pro');
       expect(output).toContain('feature'); // Branch name (from defaultProps)
 
-      // Should also have memory and context (they can be on separate logical lines)
-      expect(output).toMatch(testRegex('Memory:', ''));
+      // Should also have heap and context (they can be on separate logical lines)
+      expect(output).toMatch(testRegex('Heap:', ''));
       expect(output).toMatch(testRegex('Context:', ''));
     });
 
     it('should adapt content appropriately across width breakpoints', () => {
       // Test narrow width
       mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
-      let { lastFrame } = render(<Footer {...defaultProps} />);
+      let { lastFrame } = renderFooter(defaultProps);
       let output = lastFrame();
 
-      expect(output).toMatch(testRegex('Mem:', '')); // Abbreviated
+      expect(output).toMatch(testRegex('Heap:', '')); // Always present
+      expect(output).toMatch(testRegex('RSS:', '')); // Always present
       expect(output).toMatch(testRegex('Ctx:', '')); // Abbreviated
       expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // No timestamp at narrow
 
       // Test standard width
       mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
-      ({ lastFrame } = render(<Footer {...defaultProps} />));
+      ({ lastFrame } = renderFooter(defaultProps));
       output = lastFrame();
 
-      expect(output).toMatch(testRegex('Memory:', '')); // Full label
+      expect(output).toMatch(testRegex('Heap:', '')); // Full label
       expect(output).toMatch(testRegex('Context:', '')); // Full label
       expect(output).not.toMatch(testRegex('\\d{2}:\\d{2}:\\d{2}', '')); // Still no timestamp at standard
 
       // Test wide width
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
-      ({ lastFrame } = render(<Footer {...defaultProps} />));
+      ({ lastFrame } = renderFooter(defaultProps));
       output = lastFrame();
 
-      expect(output).toMatch(testRegex('Memory:', '')); // Full label
+      expect(output).toMatch(testRegex('Heap:', '')); // Full label
+      expect(output).toMatch(testRegex('External:', '')); // Detailed at wide
+      expect(output).toMatch(testRegex('ArrayBuffers:', '')); // Detailed at wide
       expect(output).toMatch(testRegex('Context:', '')); // Full label
-      expect(output).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', '')); // Timestamp at wide (may wrap)
+      // Timestamp may wrap due to ink-testing-library's internal column width
+      const joinedWide = output!.replace(/\n/g, '');
+      expect(joinedWide).toMatch(testRegex('\\d{1,2}:\\d{2}:\\d', '')); // Timestamp at wide
     });
   });
 });

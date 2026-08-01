@@ -10,11 +10,8 @@ import type {
   ModelStreamChunk,
   ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  emptyModelOutput,
-  accumulateModelStreamChunk,
-  toModelStreamChunk,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   isRetryableError,
@@ -846,12 +843,11 @@ export class StreamProcessor {
     streamResponse: AsyncGenerator<ModelStreamChunk>,
     userInput: IContent | IContent[],
   ): AsyncGenerator<ModelStreamChunk> {
-    let acc = emptyModelOutput();
     const includeThoughts =
       this.runtimeContext.ephemerals.reasoning.includeInContext();
 
+    const accumulator = new StreamOutputAccumulator();
     for await (const chunk of streamResponse) {
-      // Apply hook restrictions from the chunk's hookRestrictions field
       const allowedToolNames = chunk.hookRestrictions?.allowedToolNames;
       const filteredChunk: ModelStreamChunk = {
         ...chunk,
@@ -863,11 +859,15 @@ export class StreamProcessor {
           ),
         },
       };
-      acc = accumulateModelStreamChunk(acc, filteredChunk);
+      accumulator.add(filteredChunk);
       yield filteredChunk;
     }
 
-    await this._finalizeStreamProcessing(acc, userInput, includeThoughts);
+    await this._finalizeStreamProcessing(
+      accumulator.materialize(),
+      userInput,
+      includeThoughts,
+    );
   }
 
   private async _finalizeStreamProcessing(
