@@ -48,7 +48,7 @@ import { type DumpMode } from '../utils/dumpContext.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
-import { createBoundedCache } from '../kimi/kimiFileUpload.js';
+import { kimiFileUploadCache } from './kimiFileUploadCache.js';
 import {
   resolveOpenAITransport,
   resolveExplicitTransportModeFromSources,
@@ -960,10 +960,3 @@ function resolveAgentSettings(
 ): Record<string, unknown> {
   return invocationSettings ?? providerConfig?.getEphemeralSettings?.() ?? {};
 }
-
-/**
- * Process-level cache for Kimi file uploads, keyed by content hash.
- * Prevents re-uploading the same PDF across turns within a session.
- * Bounded via the wrapper to avoid unbounded memory growth.
- */
-const kimiFileUploadCache = createBoundedCache<string>(100);

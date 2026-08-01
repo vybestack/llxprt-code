@@ -6,13 +6,17 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as path from 'node:path';
+import type React from 'react';
 import {
   loadTrustedFolders,
   resolveLocalWorkspaceTrust,
   type LoadedTrustedFolders,
   TrustLevel,
+  type ResolvedTrustRule,
+  type TrustRule,
   type TrustedFolderSnapshot,
 } from '../../config/trustedFolders.js';
+import { normalizeTrustPathInput } from '../../config/trustPaths.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useIdeTrustListener } from './useIdeTrustListener.js';
 import { combineTrustUpdateFailure } from '../trustDialogHelpers.js';
@@ -75,6 +79,18 @@ export interface UsePermissionsModifyTrustReturn {
   parentFolderName: string;
   /** The loaded trusted folders configuration */
   trustedFolders: LoadedTrustedFolders;
+  /** The folder path currently targeted for trust changes */
+  targetPath: string;
+  /** Set the target folder path; input is normalized via the shared helper */
+  setTargetPath: (rawPath: string) => void;
+  /** Whether the active target path is the working directory */
+  isTargetCwd: boolean;
+  /** The current trust rules (path + level), refreshed after every mutation */
+  trustRules: readonly TrustRule[];
+  /** Remove a stored trust rule by its exact key (works for stale paths) */
+  removeTrustRule: (
+    ruleKey: string,
+  ) => Promise<{ success: true } | { success: false; error: unknown }>;
 }
 
 function restoreSavedTrustLevel(
@@ -108,15 +124,27 @@ type TrustCommitResult =
       rollbackSucceeded: boolean;
     };
 
+/**
+ * Persists a trust rule for `persistPath` while always resolving the live
+ * session trust from `liveTrustPath` (the working directory). This split
+ * ensures that committing a rule for an arbitrary folder only affects the
+ * live session when that folder is an ancestor of the working directory.
+ *
+ * The returned `effectiveTrust` is therefore the session's trust, not the
+ * target folder's. It is only surfaced by the "Trust level updated" prompt,
+ * which the dialog shows for working-directory commits; a commit for any other
+ * folder returns to the rules list instead of reporting an effective state.
+ */
 async function commitSavedTrustLevel(
   config: PermissionsTrustRuntime | undefined,
   trustedFolders: LoadedTrustedFolders,
-  folderPath: string,
+  persistPath: string,
+  liveTrustPath: string,
   nextLevel: TrustLevel,
 ): Promise<{ result: TrustCommitResult; effectiveTrust?: boolean }> {
   let savedSnapshot: TrustedFolderSnapshot;
   try {
-    savedSnapshot = trustedFolders.snapshotValue(folderPath);
+    savedSnapshot = trustedFolders.snapshotValue(persistPath);
   } catch (error) {
     return {
       result: {
@@ -129,7 +157,7 @@ async function commitSavedTrustLevel(
   }
   const previousLiveTrust = config?.isTrustedFolder() ?? false;
   try {
-    trustedFolders.setValue(folderPath, nextLevel);
+    trustedFolders.setValue(persistPath, nextLevel);
   } catch (error) {
     return {
       result: {
@@ -152,7 +180,7 @@ async function commitSavedTrustLevel(
       effectiveTrust: await applyLiveTrustLevel(
         config,
         trustedFolders,
-        folderPath,
+        liveTrustPath,
       ),
     };
   } catch (error) {
@@ -183,63 +211,45 @@ async function commitSavedTrustLevel(
   }
 }
 
+type CommitSetter = (
+  effectiveTrust: boolean | undefined,
+  nextLevel: TrustLevel,
+) => void;
+
 /**
- * Hook that manages folder trust settings for the permissions dialog.
- * Handles current trust level state, pending changes, inherited trust detection,
- * and live Config updates via setTrustedFolderLive.
+ * Builds the serialized commit callback. State setters are passed in to keep
+ * the factory pure and keep the main hook body under its complexity budget.
  */
-export function usePermissionsModifyTrust(
-  config?: PermissionsTrustRuntime,
-): UsePermissionsModifyTrustReturn {
-  const normalizedCwd = path.resolve(config?.getWorkingDir() ?? process.cwd());
-  const trustedFolders = useMemo(() => loadTrustedFolders(), []);
-  const winningRule = trustedFolders.resolvePathTrust(normalizedCwd);
-  const currentEffectiveTrust =
-    config?.isTrustedFolder() ?? winningRule?.trusted;
-  const { isIdeTrusted } = useIdeTrustListener(config ?? emptyIdeState);
-  const isParentTrusted =
-    isIdeTrusted === undefined && winningRule?.provenance === 'inherited';
-  const [pendingTrustLevel, setPendingTrustLevel] = useState<
-    TrustLevel | undefined
-  >(() => trustedFolders.getValue(normalizedCwd));
-  const [committedLevel, setCommittedLevel] = useState<TrustLevel>();
-  const [effectiveTrust, setEffectiveTrust] = useState(currentEffectiveTrust);
-  const commitQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const mountedRef = useMountedRef();
-  const currentWorkingDirectoryRef = useRef(normalizedCwd);
-  currentWorkingDirectoryRef.current = normalizedCwd;
-  useEffect(() => {
-    setPendingTrustLevel(trustedFolders.getValue(normalizedCwd));
-    setCommittedLevel(undefined);
-  }, [normalizedCwd, trustedFolders]);
-  useEffect(
-    () => setEffectiveTrust(currentEffectiveTrust),
-    [currentEffectiveTrust],
-  );
-  const commitTrustLevel = useCallback(
+function useCommitCallback(
+  pendingTrustLevel: TrustLevel | undefined,
+  trustedFolders: LoadedTrustedFolders,
+  targetPath: string,
+  workingDirectory: string,
+  config: PermissionsTrustRuntime | undefined,
+  mountedRef: React.MutableRefObject<boolean>,
+  currentTargetPathRef: React.MutableRefObject<string>,
+  commitQueueRef: React.MutableRefObject<Promise<void>>,
+  applyCommitSuccess: CommitSetter,
+): (level?: TrustLevel) => Promise<TrustCommitResult> {
+  return useCallback(
     (level?: TrustLevel): Promise<TrustCommitResult> => {
       const nextLevel = level ?? pendingTrustLevel;
       if (nextLevel === undefined) {
         return Promise.resolve({ success: true });
       }
-
       const runCommit = async (): Promise<TrustCommitResult> => {
         const commit = await commitSavedTrustLevel(
           config,
           trustedFolders,
-          normalizedCwd,
+          targetPath,
+          workingDirectory,
           nextLevel,
         );
         if (!commit.result.success) {
           return commit.result;
         }
-        if (
-          mountedRef.current &&
-          currentWorkingDirectoryRef.current === normalizedCwd
-        ) {
-          setEffectiveTrust(commit.effectiveTrust);
-          setPendingTrustLevel(nextLevel);
-          setCommittedLevel(nextLevel);
+        if (mountedRef.current && currentTargetPathRef.current === targetPath) {
+          applyCommitSuccess(commit.effectiveTrust, nextLevel);
         }
         return { success: true };
       };
@@ -250,11 +260,248 @@ export function usePermissionsModifyTrust(
       );
       return commit;
     },
-    [pendingTrustLevel, trustedFolders, normalizedCwd, config, mountedRef],
+    [
+      pendingTrustLevel,
+      trustedFolders,
+      targetPath,
+      workingDirectory,
+      config,
+      mountedRef,
+      currentTargetPathRef,
+      commitQueueRef,
+      applyCommitSuccess,
+    ],
+  );
+}
+
+/**
+ * Builds the rule-removal callback.
+ *
+ * After a removal the direct level for the active target is re-read rather than
+ * compared against the removed key: stored keys are canonical (realpath) while
+ * the target path is only lexically resolved, so a string comparison would miss
+ * a symlinked spelling of the same folder and leave a deleted rule on screen.
+ */
+function useRemoveCallback(
+  trustedFolders: LoadedTrustedFolders,
+  mountedRef: React.MutableRefObject<boolean>,
+  currentTargetPathRef: React.MutableRefObject<string>,
+  refreshRules: () => void,
+  setPendingTrustLevel: (level: TrustLevel | undefined) => void,
+): (
+  ruleKey: string,
+) => Promise<{ success: true } | { success: false; error: unknown }> {
+  return useCallback(
+    async (
+      ruleKey: string,
+    ): Promise<{ success: true } | { success: false; error: unknown }> => {
+      try {
+        trustedFolders.removeRule(ruleKey);
+        if (mountedRef.current) {
+          refreshRules();
+          setPendingTrustLevel(
+            trustedFolders.getValue(currentTargetPathRef.current),
+          );
+        }
+        return { success: true };
+      } catch (error) {
+        return { success: false, error };
+      }
+    },
+    [
+      trustedFolders,
+      mountedRef,
+      currentTargetPathRef,
+      refreshRules,
+      setPendingTrustLevel,
+    ],
+  );
+}
+
+interface TargetPathState {
+  targetPath: string;
+  setTargetPath: (rawPath: string) => void;
+  isTargetCwd: boolean;
+}
+
+/**
+ * Manages the target folder path state, resetting to the cwd when the working
+ * directory changes and normalizing user input via the shared helper.
+ */
+function useTargetPath(workingDirectory: string): TargetPathState {
+  const [targetPath, setTargetPathState] = useState(workingDirectory);
+
+  useEffect(() => {
+    setTargetPathState(workingDirectory);
+  }, [workingDirectory]);
+
+  const setTargetPath = useCallback(
+    (rawPath: string): void => {
+      const result = normalizeTrustPathInput(rawPath, workingDirectory);
+      if (result.ok) {
+        setTargetPathState(result.normalizedPath);
+      }
+    },
+    [workingDirectory],
   );
 
-  const trustChanged = committedLevel !== undefined;
+  return {
+    targetPath,
+    setTargetPath,
+    isTargetCwd: targetPath === workingDirectory,
+  };
+}
 
+interface DerivedTrustState {
+  winningRule: ResolvedTrustRule | undefined;
+  currentEffectiveTrust: boolean | undefined;
+  isIdeTrusted: boolean | undefined;
+  isParentTrusted: boolean;
+}
+
+/**
+ * Derives the winning trust rule, effective trust, IDE trust, and parent-trust
+ * provenance from the current target path.
+ *
+ * IDE trust and the live session trust describe the IDE's workspace (the
+ * working directory) only. When the target is some other folder, both are
+ * ignored and the state is derived purely from that folder's own winning rule,
+ * so an unrelated folder is never displayed as trusted just because the current
+ * session is.
+ */
+function useDerivedTrustState(
+  config: PermissionsTrustRuntime | undefined,
+  trustedFolders: LoadedTrustedFolders,
+  targetPath: string,
+  isTargetCwd: boolean,
+): DerivedTrustState {
+  const winningRule = trustedFolders.resolvePathTrust(targetPath);
+  const { isIdeTrusted: workspaceIdeTrust } = useIdeTrustListener(
+    config ?? emptyIdeState,
+  );
+  const isIdeTrusted = isTargetCwd ? workspaceIdeTrust : undefined;
+  const currentEffectiveTrust = isTargetCwd
+    ? (config?.isTrustedFolder() ?? winningRule?.trusted)
+    : winningRule?.trusted;
+  const isParentTrusted =
+    isIdeTrusted === undefined && winningRule?.provenance === 'inherited';
+  return { winningRule, currentEffectiveTrust, isIdeTrusted, isParentTrusted };
+}
+
+interface TrustSessionState {
+  pendingTrustLevel: TrustLevel | undefined;
+  setPendingTrustLevel: React.Dispatch<
+    React.SetStateAction<TrustLevel | undefined>
+  >;
+  committedLevel: TrustLevel | undefined;
+  effectiveTrust: boolean | undefined;
+  trustRules: readonly TrustRule[];
+  refreshRules: () => void;
+  applyCommitSuccess: CommitSetter;
+}
+
+/**
+ * Mutable dialog-session state: the pending/committed level for the active
+ * target path, the live effective trust, and the rule list that must be
+ * refreshed after every mutation.
+ */
+function useTrustSessionState(
+  trustedFolders: LoadedTrustedFolders,
+  targetPath: string,
+  currentEffectiveTrust: boolean | undefined,
+): TrustSessionState {
+  const [pendingTrustLevel, setPendingTrustLevel] = useState<
+    TrustLevel | undefined
+  >(() => trustedFolders.getValue(targetPath));
+  const [committedLevel, setCommittedLevel] = useState<TrustLevel>();
+  const [effectiveTrust, setEffectiveTrust] = useState(currentEffectiveTrust);
+  const [trustRules, setTrustRules] = useState<readonly TrustRule[]>(
+    () => trustedFolders.rules,
+  );
+  useEffect(() => {
+    setPendingTrustLevel(trustedFolders.getValue(targetPath));
+    setCommittedLevel(undefined);
+  }, [targetPath, trustedFolders]);
+  useEffect(
+    () => setEffectiveTrust(currentEffectiveTrust),
+    [currentEffectiveTrust],
+  );
+  const refreshRules = useCallback(
+    () => setTrustRules(trustedFolders.rules),
+    [trustedFolders],
+  );
+  const applyCommitSuccess = useCallback(
+    (nextEffectiveTrust: boolean | undefined, nextLevel: TrustLevel): void => {
+      // This is the session's effective trust, and it is updated after every
+      // commit regardless of which folder was written: a rule on an ancestor of
+      // the working directory legitimately changes what the session may do, and
+      // scoping this to cwd-only commits would miss exactly that case.
+      setEffectiveTrust(nextEffectiveTrust);
+      setPendingTrustLevel(nextLevel);
+      setCommittedLevel(nextLevel);
+      setTrustRules(trustedFolders.rules);
+    },
+    [trustedFolders],
+  );
+  return {
+    pendingTrustLevel,
+    setPendingTrustLevel,
+    committedLevel,
+    effectiveTrust,
+    trustRules,
+    refreshRules,
+    applyCommitSuccess,
+  };
+}
+
+/**
+ * Hook that manages folder trust settings for the permissions dialog.
+ * Handles current trust level state, pending changes, inherited trust detection,
+ * and live Config updates via setTrustedFolderLive. The `targetPath` determines
+ * which folder a trust change applies to; live session trust is always resolved
+ * from the working directory.
+ */
+export function usePermissionsModifyTrust(
+  config?: PermissionsTrustRuntime,
+): UsePermissionsModifyTrustReturn {
+  const normalizedCwd = path.resolve(config?.getWorkingDir() ?? process.cwd());
+  const trustedFolders = useMemo(() => loadTrustedFolders(), []);
+  const { targetPath, setTargetPath, isTargetCwd } =
+    useTargetPath(normalizedCwd);
+  const { winningRule, currentEffectiveTrust, isIdeTrusted, isParentTrusted } =
+    useDerivedTrustState(config, trustedFolders, targetPath, isTargetCwd);
+  const {
+    pendingTrustLevel,
+    setPendingTrustLevel,
+    committedLevel,
+    effectiveTrust,
+    trustRules,
+    refreshRules,
+    applyCommitSuccess,
+  } = useTrustSessionState(trustedFolders, targetPath, currentEffectiveTrust);
+  const commitQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const mountedRef = useMountedRef();
+  const currentTargetPathRef = useRef(targetPath);
+  currentTargetPathRef.current = targetPath;
+  const commitTrustLevel = useCommitCallback(
+    pendingTrustLevel,
+    trustedFolders,
+    targetPath,
+    normalizedCwd,
+    config,
+    mountedRef,
+    currentTargetPathRef,
+    commitQueueRef,
+    applyCommitSuccess,
+  );
+  const removeTrustRule = useRemoveCallback(
+    trustedFolders,
+    mountedRef,
+    currentTargetPathRef,
+    refreshRules,
+    setPendingTrustLevel,
+  );
+  const trustChanged = committedLevel !== undefined;
   return {
     pendingTrustLevel,
     setPendingTrustLevel,
@@ -266,7 +513,12 @@ export function usePermissionsModifyTrust(
     committedTrustLevel: committedLevel,
     effectiveTrust,
     workingDirectory: normalizedCwd,
-    parentFolderName: path.basename(path.dirname(normalizedCwd)),
+    parentFolderName: path.basename(path.dirname(targetPath)),
     trustedFolders,
+    targetPath,
+    setTargetPath,
+    isTargetCwd,
+    trustRules,
+    removeTrustRule,
   };
 }
