@@ -692,6 +692,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
             await fs.rm(localTempDir, { recursive: true, force: true });
           }
         }),
+        { numRuns: 20 },
       ));
 
     /**
@@ -834,6 +835,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
             await fs.rm(localTempDir, { recursive: true, force: true });
           }
         }),
+        { numRuns: 20 },
       ));
 
     /**
@@ -910,6 +912,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
             }
           },
         ),
+        { numRuns: 20 },
       ));
   });
 });
