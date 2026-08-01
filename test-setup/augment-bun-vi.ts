@@ -196,7 +196,13 @@ setWaitForScheduler(bunWaitForScheduler);
 
 const resolveActualId = (id: string): string => {
   const resolvedId = resolveModuleSpecifier(id);
-  return isBuiltin(resolvedId) ? resolvedId : localRequire.resolve(resolvedId);
+  if (isBuiltin(resolvedId)) return resolvedId;
+  if (resolvedId.startsWith('/')) return resolvedId;
+  try {
+    return localRequire.resolve(resolvedId);
+  } catch {
+    return Bun.resolveSync(resolvedId, import.meta.dir);
+  }
 };
 
 const actualModules = new Map<string, Promise<unknown>>();
