@@ -12,6 +12,7 @@ import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Config } from '../config/config.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
+import type { MemoryLoadResult } from '../utils/memoryDiscovery.js';
 
 const mockLoadGlobalMemory = vi.hoisted(() => vi.fn());
 const mockLoadEnvironmentMemory = vi.hoisted(() => vi.fn());
@@ -58,7 +59,7 @@ describe('ContextManager', () => {
 
   describe('refresh', () => {
     it('should load and format global and environment memory', async () => {
-      const mockGlobalResult: memoryDiscovery.MemoryLoadResult = {
+      const mockGlobalResult: MemoryLoadResult = {
         files: [
           {
             path: '/home/user/.llxprt/.LLXPRT_SYSTEM',
@@ -68,12 +69,12 @@ describe('ContextManager', () => {
       };
       mockLoadGlobalMemory.mockResolvedValue(mockGlobalResult);
 
-      const mockEnvResult: memoryDiscovery.MemoryLoadResult = {
+      const mockEnvResult: MemoryLoadResult = {
         files: [{ path: '/app/.llxprt/LLXPRT.md', content: 'Env Content' }],
       };
       mockLoadEnvironmentMemory.mockResolvedValue(mockEnvResult);
 
-      const mockCoreResult: memoryDiscovery.MemoryLoadResult = {
+      const mockCoreResult: MemoryLoadResult = {
         files: [],
       };
       mockLoadCoreMemory.mockResolvedValue(mockCoreResult);

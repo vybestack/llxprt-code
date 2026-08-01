@@ -184,12 +184,16 @@ export class WorkspaceContext {
     try {
       const resolvedDir = fs.realpathSync(dir);
       return path.join(resolvedDir, base);
-    } catch {
-      // Parent directory also doesn't exist; try resolving recursively.
-      if (dir !== inputPath && dir !== path.dirname(dir)) {
-        return path.join(this.resolveSymlinksInPath(dir), base);
+    } catch (e: unknown) {
+      // Parent directory also doesn't exist (ENOENT); try resolving
+      // recursively. Rethrow any other error (EACCES, ELOOP, etc.).
+      if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
+        if (dir !== inputPath && dir !== path.dirname(dir)) {
+          return path.join(this.resolveSymlinksInPath(dir), base);
+        }
+        return inputPath;
       }
-      return inputPath;
+      throw e;
     }
   }
 

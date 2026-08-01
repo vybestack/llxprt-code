@@ -9,6 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { type SkillDefinition } from './skillLoader.js';
+import { type LlxprtExtension } from '../config/config.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
