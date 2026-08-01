@@ -1,0 +1,115 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 5000,
+    "scrollbackLines": 2000,
+    "initialWaitMs": 6000
+  },
+  "steps": [
+    {
+      "type": "line",
+      "text": "/permissions",
+      "submitKeys": ["Escape"],
+      "postTypeMs": 1500
+    },
+    { "type": "wait", "ms": 1200 },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Modify Trust Settings",
+      "timeoutMs": 20000
+    },
+    { "type": "expect", "scope": "screen", "contains": "Trust folder" },
+    { "type": "expect", "scope": "screen", "contains": "Add another folder" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Manage existing rules"
+    },
+    { "type": "capture", "label": "01-trust-form" },
+
+    { "type": "keys", "keys": ["Down", "Down", "Down"] },
+    { "type": "wait", "ms": 400 },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Enter a folder path",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "02-path-entry" },
+
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Enter a folder path to continue",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "03-empty-path-error" },
+
+    {
+      "type": "line",
+      "text": "/definitely/not/a/real/folder",
+      "submitKeys": ["Enter"],
+      "postTypeMs": 600
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "That folder does not exist",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "04-missing-path-error" },
+
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Modify Trust Settings",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "05-escape-back-to-form" },
+
+    { "type": "keys", "keys": ["Down", "Down", "Down", "Down"] },
+    { "type": "wait", "ms": 400 },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Existing trust rules",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "06-rules-list" },
+
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Modify Trust Settings",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "07-escape-back-from-rules" },
+
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "Modify Trust Settings",
+      "timeoutMs": 10000
+    },
+    { "type": "capture", "label": "08-dialog-closed" },
+
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": ["Escape"],
+      "postTypeMs": 1500
+    },
+    { "type": "wait", "ms": 1200 },
+    { "type": "key", "key": "Enter" },
+    { "type": "waitForExit", "timeoutMs": 20000 }
+  ]
+}

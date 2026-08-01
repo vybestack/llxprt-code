@@ -107,6 +107,10 @@ function makeFailoverConfig(profileName: string): LoadBalancingProviderConfig {
         authToken: 'token-3',
       },
     ],
+    // Issue #2849 raised the LB default retry count to 2. These tests focus on
+    // aggregate-retryability classification, not per-backend retry count, so
+    // pin retryCount=1 to preserve each test's attempt-count assertions.
+    lbProfileEphemeralSettings: { failover_retry_count: 1 },
   };
 }
 
@@ -485,7 +489,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     },
   );
 
-  it('preserves immediate failover-to-next-backend behavior on a single 429 (issue #902 regression guard)', async () => {
+  it('advances to next backend when retryCount=1 and a 429 exhausts per-backend retries', async () => {
     const { provider, counter } = makeFakeProvider(function* (
       attempt: number,
     ): AsyncGenerator<IContent> {
@@ -511,13 +515,13 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
   });
 
   /**
-   * Streaming edge case (issue #2450 regression guard): when an immediate
-   * failover error (e.g. 429) occurs AFTER the backend has already yielded
-   * chunks to the consumer, the load balancer abandons the failover path and
-   * re-throws the RAW backend error rather than wrapping it in a
-   * LoadBalancerFailoverError. A partial stream cannot be silently retried
-   * against another backend, so the consumer must see the underlying status
-   * error, not the aggregate. This documents and guards that distinct path.
+   * Streaming edge case (issue #2450 regression guard): when an error occurs
+   * AFTER the backend has already yielded chunks to the consumer, the load
+   * balancer abandons the failover path and re-throws the RAW backend error
+   * rather than wrapping it in a LoadBalancerFailoverError. A partial stream
+   * cannot be silently retried against another backend, so the consumer must
+   * see the underlying status error, not the aggregate. This documents and
+   * guards that distinct path.
    *
    * The second backend's error is deliberately a distinct 500 (not a 429) so
    * that `getErrorStatus(thrown) === 429` can only pass if the FIRST backend's

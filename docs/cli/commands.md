@@ -60,15 +60,15 @@ Slash commands control the CLI itself — configuration, navigation, session man
 
 ### Tools and MCP
 
-| Command        | Description                              |
-| -------------- | ---------------------------------------- |
-| `/tools`       | List available tools and their status    |
-| `/mcp`         | Manage MCP server connections            |
-| `/tasks`       | View running async subagent tasks        |
-| `/subagent`    | Manage subagent configurations           |
-| `/permissions` | View and manage tool permission settings |
-| `/policies`    | View active policy rules                 |
-| `/todo`        | View or manage the current todo list     |
+| Command        | Description                           |
+| -------------- | ------------------------------------- |
+| `/tools`       | List available tools and their status |
+| `/mcp`         | Manage MCP server connections         |
+| `/tasks`       | View running async subagent tasks     |
+| `/subagent`    | Manage subagent configurations        |
+| `/permissions` | View and manage folder trust settings |
+| `/policies`    | View active policy rules              |
+| `/todo`        | View or manage the current todo list  |
 
 ### UI and Display
 
@@ -129,6 +129,40 @@ Extensions are managed from the terminal with `llxprt extensions` (not slash com
 | Command            | Description      |
 | ------------------ | ---------------- |
 | `/quit` or `/exit` | Exit LLxprt Code |
+
+## Managing folder trust with `/permissions`
+
+Folder trust rules decide which directories LLxprt Code will operate in without extra confirmation. They are stored per user in `trustedFolders.json`.
+
+Run `/permissions` with no arguments to open the trust dialog. It opens on the folder you are currently in, so pressing Enter still trusts the current folder exactly as before. The option list also lets you manage any other folder without restarting the CLI there:
+
+- **Add another folder** — type or paste a path. Absolute paths, paths relative to the current folder, and paths starting with `~` all work, and surrounding quotes are stripped so pasted paths work as-is. The path must be an existing directory; otherwise the dialog reports the problem and keeps the input open.
+- **Manage existing rules** — lists every configured rule with its trust level. Selecting one switches the form to that folder so you can change its level.
+- **Remove this rule** — shown when the selected folder has a rule of its own. This also removes rules whose folder no longer exists on disk.
+
+Changing several folders in one session is supported: after you change a folder other than the current one, the dialog returns to the rules list.
+
+Only the current working directory affects the running session's trust. Setting a rule for an unrelated folder saves that rule without changing what the current session is allowed to do; a rule on a parent of the current folder can still change it, because the session's trust is re-evaluated from the current folder after every change.
+
+### Trusting a folder is not the same as adding it to the workspace
+
+These are two separate gates, and file tools only check the second one:
+
+- **Trust** decides how much LLxprt is allowed to do in the folder it is running in — privileged approval modes, project hooks, extensions, project settings, and MCP trusted rules.
+- **Workspace directories** decide which paths the file tools will touch at all. A path outside them is rejected with "File path must be within one of the workspace directories", no matter how it is trusted.
+
+So trusting `/tmp` does not let the file tools write there. Trust is the _precondition_ for adding it:
+
+    /permissions TRUST_FOLDER /tmp
+    /directory add /tmp
+
+`/directory add` refuses an untrusted folder and points you back at `/permissions`, so run them in that order. Use `/directory show` to see the current workspace directories.
+
+To set a rule non-interactively, pass the level and path directly:
+
+    /permissions TRUST_FOLDER ~/projects/my-app
+
+Valid levels are `TRUST_FOLDER`, `TRUST_PARENT`, and `DO_NOT_TRUST`.
 
 ## Custom Commands
 

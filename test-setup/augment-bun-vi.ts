@@ -272,6 +272,16 @@ const loadIsolatedModule = (resolvedId: string): Promise<unknown> => {
 };
 
 /**
+ * Tracks resolved module IDs that have a mock registered via mock.module.
+ * Preserved from issue #2909/#2910 to prevent silent mock recursion: if
+ * code ever uses localRequire (which IS intercepted by mock.module) on a
+ * mocked path, it would spread the mock into itself. Our loadIsolatedModuleSync
+ * uses require() which bypasses mock.module entirely, so this Set is a
+ * safety net for any future code that might use localRequire.
+ */
+const mockedResolvedIds = new Set<string>();
+
+/**
  * Synchronously loads a module bypassing mock.module interception.
  * Uses require() which is NOT intercepted by Bun's mock.module, unlike
  * ESM dynamic import() which IS intercepted and deadlocks inside factories.
@@ -390,6 +400,7 @@ const registerModuleMock = (
     // Pre-load and cache the real module BEFORE mock.module registration.
     // The automock factory runs lazily (when the module is first imported),
     // at which point require() would return the mocked namespace.
+    mockedResolvedIds.add(resolvedId);
     const realModule = loadIsolatedModuleSync(resolvedId);
     const actualSnapshot: Record<string | symbol, unknown> = {};
     if (typeof realModule === 'object' && realModule !== null) {
@@ -424,6 +435,11 @@ const registerModuleMock = (
   //    once the Promise settles. This works because mock.module is reentrant
   //    — calling mock.module again with the same id replaces the previous
   //    registration.
+  //
+  // Track that a mock is registered for this resolved path. This lets
+  // loadActualSync detect the dangerous case where localRequire would
+  // return the mock instead of the actual module (issue #2909 / #2910).
+  mockedResolvedIds.add(resolvedId);
   const syncActual = loadIsolatedModuleSync(resolvedId);
   // Cache a SHALLOW CLONE of the real module so vi.importActual returns the
   // REAL exports, not the mock.module-patched namespace. Bun's mock.module
