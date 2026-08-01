@@ -95,15 +95,21 @@ type GhResult = GhSuccess | GhFailure;
  * Runs `gh` with the given argv via execFile (shell: false), parsing stdout
  * as JSON. Classifies failures into structured broker errors.
  *
- * @plan PLAN-20260731-GHBROKER.P08
+ * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
  * @requirement REQ-001, REQ-002
  * @pseudocode 003-github-broker.md lines 56-66
  */
 async function runGh(
   argv: readonly string[],
   signal: AbortSignal,
+  options?: {
+    rawOutput?: boolean;
+    tolerateNonZeroExit?: boolean;
+  },
 ): Promise<GhResult> {
   const env = buildMinimalEnv();
+  const rawOutput = options?.rawOutput === true;
+  const tolerateNonZeroExit = options?.tolerateNonZeroExit === true;
   try {
     const { stdout } = await execFileAsync('gh', [...argv], {
       shell: false,
@@ -111,10 +117,58 @@ async function runGh(
       maxBuffer: MAX_BUFFER,
       env,
     });
-    const json = parseJsonSafe(stdout);
+    const json = rawOutput ? stdout : parseJsonSafe(stdout);
     return { kind: 'success', json };
   } catch (err) {
+    if (tolerateNonZeroExit) {
+      const recovered = tryRecoverFromNonZeroExit(err, rawOutput);
+      if (recovered !== null) return recovered;
+    }
     return classifyExecError(err);
+  }
+}
+
+/**
+ * Attempts to recover from a non-zero gh exit by checking whether stdout
+ * still has parseable content. If so, returns a success result so the
+ * caller can classify by content (used by pr.checks where gh exits
+ * non-zero when checks are failing or pending).
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-013
+ * @pseudocode 003-github-broker.md lines 105-109
+ */
+function tryRecoverFromNonZeroExit(
+  err: unknown,
+  rawOutput: boolean,
+): GhResult | null {
+  const error = err as NodeJS.ErrnoException & {
+    stdout?: string;
+    stderr?: string;
+    code?: string | number;
+    signal?: string;
+  };
+  if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
+  if (error.code === 'ABORT_ERR' || error.signal === 'SIGTERM') return null;
+  const stdout = typeof error.stdout === 'string' ? error.stdout : '';
+  if (stdout.length === 0) return null;
+  const json = rawOutput ? stdout : tryParseJsonSafe(stdout);
+  if (json === undefined) return null;
+  return { kind: 'success', json };
+}
+
+/**
+ * Tries to parse stdout as JSON, returning undefined on failure (rather
+ * than throwing) so the caller can decide whether to fall back.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-004
+ */
+function tryParseJsonSafe(stdout: string): unknown | undefined {
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    return undefined;
   }
 }
 
@@ -278,7 +332,7 @@ function makeBrokerErrorInstance(
  * `github` op name. Requests reach it only after the capability-token
  * handshake gate (REQ-003, REQ-015).
  *
- * @plan PLAN-20260731-GHBROKER.P08
+ * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
  * @requirement REQ-002, REQ-003, REQ-004
  * @pseudocode 003-github-broker.md lines 01-11, 46-50
  */
@@ -318,9 +372,12 @@ export function createGitHubBrokerHandler(): GitHubBrokerHandler {
       return;
     }
 
-    // Build argv and run gh
+    // Build argv and run gh with the descriptor's output-mode flags
     const argv = descriptor.buildArgv(opParams);
-    const result = await runGh(argv, signal);
+    const result = await runGh(argv, signal, {
+      rawOutput: descriptor.rawOutput === true,
+      tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
+    });
 
     if (result.kind === 'failure') {
       state.writer.sendError(id, result.error.code, result.error.message);
@@ -328,24 +385,27 @@ export function createGitHubBrokerHandler(): GitHubBrokerHandler {
     }
 
     // Check for GraphQL partial success (data AND errors)
-    try {
-      assertNoPartialSuccess(result.json);
-    } catch (err) {
-      if (err instanceof BrokerErrorException) {
-        state.writer.sendError(
-          id,
-          err.brokerError.code,
-          err.brokerError.message,
-        );
-        return;
+    if (descriptor.rawOutput !== true) {
+      try {
+        assertNoPartialSuccess(result.json);
+      } catch (err) {
+        if (err instanceof BrokerErrorException) {
+          state.writer.sendError(
+            id,
+            err.brokerError.code,
+            err.brokerError.message,
+          );
+          return;
+        }
+        throw err;
       }
-      throw err;
     }
 
-    // Shape the raw JSON into the contract
+    // Shape the raw JSON/text into the contract, passing params for
+    // ops that need them (e.g. pr.reviews actionable filtering)
     let shaped: unknown;
     try {
-      shaped = descriptor.shape(result.json);
+      shaped = descriptor.shape(result.json, opParams);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to shape response';
@@ -353,8 +413,11 @@ export function createGitHubBrokerHandler(): GitHubBrokerHandler {
       return;
     }
 
-    // Send the shaped response
-    const data = shaped as Record<string, unknown>;
+    // Send the shaped response. If the shaped result is an array (e.g.
+    // issue.list), wrap it in an object so it conforms to the
+    // Record<string, unknown> contract of sendOk. The caller unwraps
+    // via response.data.items or response.data as appropriate.
+    const data = wrapShapedResult(shaped);
     state.writer.sendOk(id, data);
   };
 
@@ -379,4 +442,23 @@ function extractOpParams(
     }
   }
   return result;
+}
+
+/**
+ * Wraps the shaped result so it conforms to the Record<string, unknown>
+ * contract of sendOk. Array results (e.g. issue.list) are wrapped under
+ * the `items` key. Object results pass through unchanged. Scalar or null
+ * results are wrapped under `data`.
+ *
+ * @plan PLAN-20260731-GHBROKER.P10
+ * @requirement REQ-013
+ */
+function wrapShapedResult(shaped: unknown): Record<string, unknown> {
+  if (Array.isArray(shaped)) {
+    return { items: shaped };
+  }
+  if (shaped !== null && typeof shaped === 'object' && !Array.isArray(shaped)) {
+    return shaped as Record<string, unknown>;
+  }
+  return { data: shaped };
 }

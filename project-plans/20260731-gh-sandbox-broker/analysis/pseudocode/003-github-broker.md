@@ -216,10 +216,22 @@ frame budget and removes the caller's need for `--jq`.
 117:   The thread `id` is what pr.resolve-thread consumes, so the actionable
 118:     listing and the resolve op compose without a second round trip.
 119:
-120: issue.list / search.* → [{ number, title, state, labels[], updatedAt }]
-121:   Bodies EXCLUDED from list results. A list of 68 issues with bodies is
-122:   the single most likely way to blow the frame budget.
-123:   DEFAULT limit 30; hard maximum 100.
+120: issue.list / search.* → { issues: [{ number, title, state, labels[],
+121:                                       updatedAt }] }
+122:   Bodies EXCLUDED from list results. A list of 68 issues with bodies is
+123:   the single most likely way to blow the frame budget.
+124:   DEFAULT limit 30; hard maximum 100.
+124a:
+124b: CRITICAL — RESPONSE ENVELOPE: every op MUST return a non-array object.
+124c:   isProxyResponseFrame() in proxy-socket-client.ts explicitly rejects an
+124d:   array as `data`:
+124e:       Array.isArray(frame.data) → invalid frame
+124f:   A bare array is therefore silently unusable on the client. Collection
+124g:   ops wrap in a named key: issue.list → { issues }, pr.list → { prs },
+124h:   label.list → { labels }, run.list → { runs },
+124i:   search.issues → { issues }, search.prs → { prs }.
+124j:   This matches pr.checks ({ checks, summary }) and pr.reviews
+124k:   ({ threads, truncated }), which were already correct.
 124:
 125: TRUNCATION: if a shaped body exceeds 64 KiB, truncate and set
 126:   truncated: { field, originalBytes }. Never silently drop.

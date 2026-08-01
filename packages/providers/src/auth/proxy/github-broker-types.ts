@@ -60,10 +60,12 @@ export type ParamKind =
   | 'number'
   | 'boolean'
   | 'state'
+  | 'stateIssue'
   | 'label'
   | 'threadId'
   | 'body'
-  | 'freetext';
+  | 'freetext'
+  | 'limit';
 
 /**
  * Descriptor for a single GitHub broker operation.
@@ -75,7 +77,7 @@ export type ParamKind =
  * - `shape`: pure function that transforms raw gh JSON into the shaped
  *   contract.
  *
- * @plan PLAN-20260731-GHBROKER.P08
+ * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
  * @requirement REQ-002, REQ-004
  * @pseudocode 003-github-broker.md lines 38-44
  */
@@ -84,7 +86,41 @@ export interface OpDescriptor {
   readonly mutating: boolean;
   readonly params: Readonly<Record<string, ParamKind>>;
   readonly buildArgv: (params: Record<string, unknown>) => string[];
-  readonly shape: (rawJson: unknown) => unknown;
+  readonly shape: (
+    rawJson: unknown,
+    params: Record<string, unknown>,
+  ) => unknown;
+  /**
+   * When true, stdout is NOT JSON-parsed; the raw text string is passed
+   * directly to `shape`. Used by ops like pr.diff that return unified
+   * diff text rather than JSON.
+   *
+   * @plan PLAN-20260731-GHBROKER.P10
+   * @requirement REQ-013
+   * @pseudocode 003-github-broker.md lines 125-126
+   */
+  readonly rawOutput?: boolean;
+  /**
+   * When true, a non-zero gh exit code does NOT short-circuit the
+   * response as an error. Instead stdout is still passed to `shape` so
+   * the caller can classify by content. Used by pr.checks where gh
+   * exits non-zero whenever checks are failing or pending.
+   *
+   * @plan PLAN-20260731-GHBROKER.P10
+   * @requirement REQ-013
+   * @pseudocode 003-github-broker.md lines 105-109
+   */
+  readonly tolerateNonZeroExit?: boolean;
+  /**
+   * When true, the op invokes gh via `gh api graphql` (rather than a
+   * subcommand returning --json). The dispatcher uses this to apply
+   * GraphQL partial-success validation before shaping.
+   *
+   * @plan PLAN-20260731-GHBROKER.P10
+   * @requirement REQ-013
+   * @pseudocode 003-github-broker.md lines 67-76
+   */
+  readonly usesGraphql?: boolean;
 }
 
 /**
