@@ -324,12 +324,101 @@ export interface CommandParseResult {
   hasError: boolean;
 }
 
-function hasShellSubstitutionSyntax(command: string): boolean {
+type SourceRange = {
+  startIndex: number;
+  endIndex: number;
+};
+
+function findNamedChild(node: Node, type: string): Node | null {
+  for (let index = 0; index < node.namedChildCount; index += 1) {
+    const child = node.namedChild(index);
+    if (child?.type === type) {
+      return child;
+    }
+  }
+  return null;
+}
+
+function collectHeredocRedirects(root: Node): Node[] {
+  const redirects: Node[] = [];
+  const stack: Node[] = [root];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current) {
+      continue;
+    }
+
+    if (current.type === 'heredoc_redirect') {
+      redirects.push(current);
+    }
+
+    for (let index = current.namedChildCount - 1; index >= 0; index -= 1) {
+      const child = current.namedChild(index);
+      if (child) {
+        stack.push(child);
+      }
+    }
+  }
+
+  return redirects;
+}
+
+function isQuotedHeredocStart(node: Node, source: string): boolean {
+  const delimiter = source.slice(node.startIndex, node.endIndex);
+  return (
+    delimiter.includes("'") ||
+    delimiter.includes('"') ||
+    delimiter.includes('\\')
+  );
+}
+
+function collectLiteralHeredocBodyRanges(
+  root: Node,
+  source: string,
+): SourceRange[] {
+  const ranges: SourceRange[] = [];
+
+  for (const redirect of collectHeredocRedirects(root)) {
+    const start = findNamedChild(redirect, 'heredoc_start');
+    const body = findNamedChild(redirect, 'heredoc_body');
+    if (start && body && isQuotedHeredocStart(start, source)) {
+      ranges.push({
+        startIndex: body.startIndex,
+        endIndex: body.endIndex,
+      });
+    }
+  }
+
+  return ranges;
+}
+
+function getLiteralRange(
+  ranges: SourceRange[],
+  index: number,
+): SourceRange | null {
+  if (index < 0 || index >= ranges.length) {
+    return null;
+  }
+  return ranges[index];
+}
+
+function hasShellSubstitutionSyntax(command: string, root: Node): boolean {
+  const literalRanges = collectLiteralHeredocBodyRanges(root, command);
+  let literalRangeIndex = 0;
   let inSingleQuotes = false;
   let inDoubleQuotes = false;
   let skipCurrent = false;
 
   for (let i = 0; i < command.length; i += 1) {
+    const literalRange = getLiteralRange(literalRanges, literalRangeIndex);
+    if (literalRange !== null && i >= literalRange.endIndex) {
+      literalRangeIndex += 1;
+    } else if (literalRange !== null && i >= literalRange.startIndex) {
+      i = literalRange.endIndex - 1;
+      continue;
+    }
+
     const char = command[i];
     if (skipCurrent) {
       skipCurrent = false;
@@ -550,7 +639,9 @@ export function parseCommandDetails(
     // Check for syntax errors, empty command list, dangerous prompt transformations,
     // or substitution syntax that the grammar failed to expose as executable commands.
     const hasMissingSubstitutionDetails =
-      hasShellSubstitutionSyntax(command) && !hasCommandSubstitution(tree);
+      hasUnrepresentedHeredocBacktickSubstitution(tree.rootNode, command) ||
+      (hasShellSubstitutionSyntax(command, tree.rootNode) &&
+        !hasParsedCommandSubstitution(tree));
     const hasError =
       tree.rootNode.hasError ||
       details.length === 0 ||
@@ -587,19 +678,11 @@ export function parseCommandDetails(
   }
 }
 
-/**
- * Check if a command contains command substitution patterns.
- * Uses tree-sitter AST to accurately detect:
- * - $() command substitution
- * - `` backtick substitution
- * - <() process substitution
- */
-export function hasCommandSubstitution(tree: Tree): boolean {
+function hasParsedCommandSubstitution(tree: Tree): boolean {
   if (!bashLanguage) {
     return false;
   }
 
-  // Query for command_substitution and process_substitution nodes
   const query = bashLanguage.query(`
     [
       (command_substitution) @sub
@@ -613,6 +696,52 @@ export function hasCommandSubstitution(tree: Tree): boolean {
   } finally {
     query.delete();
   }
+}
+
+function containsUnescapedBacktick(text: string): boolean {
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '\\') {
+      index += 1;
+    } else if (text[index] === '`') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasUnrepresentedHeredocBacktickSubstitution(
+  root: Node,
+  source: string,
+): boolean {
+  for (const redirect of collectHeredocRedirects(root)) {
+    const start = findNamedChild(redirect, 'heredoc_start');
+    const body = findNamedChild(redirect, 'heredoc_body');
+    if (
+      start &&
+      body &&
+      !isQuotedHeredocStart(start, source) &&
+      containsUnescapedBacktick(body.text)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if a command contains executable command substitution patterns.
+ * The bash grammar omits backtick nodes in heredoc bodies, so unquoted
+ * heredoc bodies require a narrow source-text check for unescaped backticks.
+ */
+export function hasCommandSubstitution(tree: Tree): boolean {
+  return (
+    hasParsedCommandSubstitution(tree) ||
+    hasUnrepresentedHeredocBacktickSubstitution(
+      tree.rootNode,
+      tree.rootNode.text,
+    )
+  );
 }
 
 /**
