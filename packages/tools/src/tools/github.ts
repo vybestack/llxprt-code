@@ -29,6 +29,7 @@ import {
   type ToolCallConfirmationDetails,
   type ToolInvocation,
   type ToolResult,
+  type LiveOutputUpdate,
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
 
@@ -89,6 +90,57 @@ export const SUPPORTED_OPS: readonly string[] = [
   'label.list',
   'label.create',
 ];
+
+/** How often to report elapsed time while a watch blocks. */
+const PROGRESS_INTERVAL_MS = 15_000;
+
+/** Marks a check's bucket for display. */
+function bucketMark(bucket: string): string {
+  if (bucket === 'pass') return 'pass';
+  if (bucket === 'fail') return 'FAIL';
+  if (bucket === 'skipping') return 'skip';
+  return bucket || '?';
+}
+
+/**
+ * Renders a completed watch as a readable check list rather than raw JSON.
+ *
+ * Failures are listed first: after waiting minutes for CI, what you need is
+ * the thing that broke, not an alphabetical roster.
+ *
+ * @plan PLAN-20260731-GHBROKER.P14
+ * @requirement REQ-011
+ */
+export function renderChecks(data: Record<string, unknown>): string {
+  const checks = Array.isArray(data.checks)
+    ? (data.checks as Array<Record<string, unknown>>)
+    : [];
+  if (checks.length === 0) return 'No checks reported.';
+
+  const summary = (data.summary ?? {}) as Record<string, number>;
+  const rank = (c: Record<string, unknown>): number => {
+    if (c.bucket === 'fail') return 0;
+    if (c.bucket === 'pending') return 1;
+    return 2;
+  };
+  const ordered = [...checks].sort((a, b) => rank(a) - rank(b));
+
+  const lines = ordered.map((c) => {
+    const name = typeof c.name === 'string' ? c.name : '';
+    return `  ${bucketMark(String(c.bucket ?? ''))}  ${name}`;
+  });
+
+  const counts = ['pass', 'fail', 'pending', 'skipping']
+    .filter((k) => (summary[k] ?? 0) > 0)
+    .map((k) => `${summary[k]} ${k}`)
+    .join(', ');
+  let status = 'timed out';
+  if (data.cancelled === true) status = 'cancelled';
+  else if (data.concluded === true) status = 'complete';
+
+  const header = `Checks ${status}${counts ? ` — ${counts}` : ''}`;
+  return [header, ...lines].join('\n');
+}
 
 /** Parameters accepted by the tool. */
 export interface GithubToolParams {
@@ -205,14 +257,63 @@ export class GithubToolInvocation extends BaseToolInvocation<
     };
   }
 
-  async execute(signal: AbortSignal): Promise<ToolResult> {
+  /**
+   * True when this call will block on CI rather than returning promptly.
+   *
+   * @plan PLAN-20260731-GHBROKER.P14
+   * @requirement REQ-011
+   */
+  private isWatching(): boolean {
+    return this.params.op === 'pr.checks' && this.params.watch === true;
+  }
+
+  /**
+   * Reports elapsed time while a watch blocks.
+   *
+   * The host owns the polling loop, so per-check transitions are not visible
+   * here without protocol progress frames, which are deliberately deferred.
+   * Elapsed time is still worth showing: a multi-minute silent block is
+   * otherwise indistinguishable from a hang.
+   *
+   * @plan PLAN-20260731-GHBROKER.P14
+   * @requirement REQ-011
+   */
+  private startProgress(
+    updateOutput: (update: LiveOutputUpdate) => void,
+  ): () => void {
+    const started = Date.now();
+    const emit = (): void => {
+      const seconds = Math.round((Date.now() - started) / 1000);
+      const mins = Math.floor(seconds / 60);
+      const elapsed = mins > 0 ? `${mins}m${seconds % 60}s` : `${seconds}s`;
+      updateOutput({
+        mode: 'append',
+        data: `Waiting for checks on #${this.params.number} — ${elapsed}\n`,
+      });
+    };
+    emit();
+    const timer = setInterval(emit, PROGRESS_INTERVAL_MS);
+    if (typeof timer.unref === 'function') timer.unref();
+    return () => clearInterval(timer);
+  }
+
+  async execute(
+    signal: AbortSignal,
+    updateOutput?: (update: LiveOutputUpdate) => void,
+  ): Promise<ToolResult> {
     const { op, ...rest } = this.params;
+    const stopProgress =
+      this.isWatching() && updateOutput !== undefined
+        ? this.startProgress(updateOutput)
+        : undefined;
     try {
       const data = await this.client.runOperation(op, rest, signal);
       const json = JSON.stringify(data, null, 2);
       return {
         llmContent: json,
-        returnDisplay: `${this.getDescription()}\n\n\`\`\`json\n${json}\n\`\`\``,
+        returnDisplay: this.isWatching()
+          ? renderChecks(data)
+          : `${this.getDescription()}\n\n\`\`\`json\n${json}\n\`\`\``,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -221,6 +322,8 @@ export class GithubToolInvocation extends BaseToolInvocation<
         returnDisplay: `GitHub operation failed: ${message}`,
         error: { message },
       };
+    } finally {
+      stopProgress?.();
     }
   }
 }

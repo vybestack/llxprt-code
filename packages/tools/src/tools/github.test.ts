@@ -21,6 +21,7 @@ import {
   GithubTool,
   MUTATING_OPS,
   SUPPORTED_OPS,
+  renderChecks,
   type GitHubBrokerClient,
 } from './github.js';
 
@@ -193,6 +194,87 @@ describe('github tool', () => {
         .execute(new AbortController().signal);
       expect(result.error?.message).toContain('NOT_FOUND');
       expect(String(result.llmContent)).toContain('NOT_FOUND');
+    });
+  });
+
+  describe('watch presentation', () => {
+    const watchResult = {
+      concluded: true,
+      cancelled: false,
+      summary: { pass: 2, fail: 1, pending: 0, skipping: 0 },
+      checks: [
+        { name: 'test', bucket: 'pass' },
+        { name: 'lint', bucket: 'fail' },
+        { name: 'build', bucket: 'pass' },
+      ],
+    };
+
+    /**
+     * After waiting minutes for CI, the thing that broke is what you need,
+     * not an alphabetical roster.
+     *
+     * @plan PLAN-20260731-GHBROKER.P14
+     * @requirement REQ-011
+     */
+    it('lists failures first', () => {
+      const rendered = renderChecks(watchResult);
+      const lines = rendered.split(String.fromCharCode(10));
+      expect(lines[1]).toContain('lint');
+      expect(lines[0]).toContain('complete');
+      expect(lines[0]).toContain('1 fail');
+    });
+
+    /**
+     * @plan PLAN-20260731-GHBROKER.P14
+     * @requirement REQ-011
+     */
+    it('distinguishes cancelled from complete', () => {
+      expect(
+        renderChecks({ ...watchResult, concluded: false, cancelled: true }),
+      ).toContain('cancelled');
+      expect(renderChecks({ ...watchResult })).toContain('complete');
+    });
+
+    /**
+     * @plan PLAN-20260731-GHBROKER.P14
+     * @requirement REQ-011
+     */
+    it('handles a watch that reported no checks', () => {
+      expect(renderChecks({ checks: [] })).toBe('No checks reported.');
+    });
+
+    /**
+     * A multi-minute silent block is indistinguishable from a hang, so the
+     * watch must emit progress immediately rather than after the first tick.
+     *
+     * @plan PLAN-20260731-GHBROKER.P14
+     * @requirement REQ-011
+     */
+    it('reports progress as soon as a watch starts', async () => {
+      const updates: string[] = [];
+      const tool = new GithubTool(stubClient(watchResult));
+      await tool
+        .build({ op: 'pr.checks', number: 1, watch: true })
+        .execute(new AbortController().signal, (u) => {
+          if (u.mode === 'append') updates.push(u.data);
+        });
+      expect(updates.length).toBeGreaterThan(0);
+      expect(updates[0]).toContain('Waiting for checks on #1');
+    });
+
+    /**
+     * @plan PLAN-20260731-GHBROKER.P14
+     * @requirement REQ-011
+     */
+    it('emits no progress for a non-watch operation', async () => {
+      const updates: string[] = [];
+      const tool = new GithubTool(stubClient({ number: 1 }));
+      await tool
+        .build({ op: 'pr.checks', number: 1 })
+        .execute(new AbortController().signal, (u) => {
+          if (u.mode === 'append') updates.push(u.data);
+        });
+      expect(updates).toStrictEqual([]);
     });
   });
 
