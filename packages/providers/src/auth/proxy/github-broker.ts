@@ -41,6 +41,8 @@ import {
   mapGraphQLErrorType,
   redactTokenShaped,
   makeBrokerError,
+  brokerError,
+  BrokerErrorException,
   type BrokerError,
 } from './github-broker-errors.js';
 
@@ -289,38 +291,10 @@ function assertNoPartialSuccess(parsed: unknown): void {
     const type = typeof first.type === 'string' ? first.type : undefined;
     const message =
       typeof first.message === 'string' ? first.message : 'GraphQL error';
-    throw makeBrokerErrorInstance(mapGraphQLErrorType(type), message);
+    throw brokerError(mapGraphQLErrorType(type), message);
   }
 }
 
-/**
- * Creates an Error that carries a BrokerError, so shaping functions can
- * throw it and the dispatcher can extract the structured code.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-004
- */
-class BrokerErrorException extends Error {
-  readonly brokerError: BrokerError;
-  constructor(brokerError: BrokerError) {
-    super(brokerError.message);
-    this.name = 'BrokerError';
-    this.brokerError = brokerError;
-  }
-}
-
-/**
- * Throws a BrokerErrorException carrying a BrokerError.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-004
- */
-function makeBrokerErrorInstance(
-  code: BrokerError['code'],
-  message: string,
-): BrokerErrorException {
-  return new BrokerErrorException(makeBrokerError(code, message));
-}
 // ─── Shared execution ────────────────────────────────────────────────────────
 
 /**
@@ -345,13 +319,14 @@ export async function executeGitHubOp(
   signal: AbortSignal,
 ): Promise<Record<string, unknown>> {
   if (!Object.prototype.hasOwnProperty.call(OP_REGISTRY, op)) {
-    throw makeBrokerErrorInstance('UNKNOWN_OP', `Unknown operation: ${op}`);
+    throw brokerError('UNKNOWN_OP', `Unknown operation: ${op}`);
   }
   const descriptor = OP_REGISTRY[op];
 
   const validationError: ValidationError | null = validateParams(
     descriptor.params,
     opParams,
+    descriptor.requiredParams,
   );
   if (validationError !== null) {
     throw new BrokerErrorException(

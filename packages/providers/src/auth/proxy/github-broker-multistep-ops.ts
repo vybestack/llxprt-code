@@ -23,22 +23,24 @@ import type {
   ParamKind,
 } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
-import { makeBrokerError } from './github-broker-errors.js';
+import {
+  brokerError,
+  type BrokerErrorException,
+} from './github-broker-errors.js';
 
 /**
- * Thrown for a caller-supplied value that cannot be satisfied, e.g. an
- * issue type name that the repository does not define.
+ * Raises an INVALID_PARAM failure for a caller-supplied value that cannot be
+ * satisfied, e.g. an issue type name the repository does not define.
+ *
+ * Uses the shared BrokerErrorException so the dispatcher's instanceof check
+ * recognises it; a module-local error class would have its structured code
+ * silently downgraded to GITHUB_ERROR.
  *
  * @plan PLAN-20260731-GHBROKER.P11
  * @requirement REQ-002
  */
-class InvalidParamError extends Error {
-  readonly brokerError = makeBrokerError('INVALID_PARAM', '');
-  constructor(message: string) {
-    super(message);
-    this.name = 'BrokerError';
-    (this.brokerError as { message: string }).message = message;
-  }
+function invalidParam(message: string): BrokerErrorException {
+  return brokerError('INVALID_PARAM', message);
 }
 
 /** Appends `--repo owner/name` when present. */
@@ -180,7 +182,7 @@ async function resolveIssueTypeId(
       return obj.id;
     }
   }
-  throw new InvalidParamError(
+  throw invalidParam(
     `Unknown issue type "${typeName}". Available types: ${
       available.length > 0 ? available.join(', ') : '(none defined)'
     }`,
@@ -209,9 +211,7 @@ async function resolveIssueNodeId(
   ]);
   const id = dig(raw, ['data', 'repository', 'issue', 'id']);
   if (typeof id !== 'string') {
-    throw new InvalidParamError(
-      `Issue #${number} not found in ${owner}/${name}`,
-    );
+    throw invalidParam(`Issue #${number} not found in ${owner}/${name}`);
   }
   return id;
 }
@@ -230,7 +230,7 @@ async function resolveOwnerName(
   const owner = dig(raw, ['owner', 'login']);
   const name = dig(raw, ['name']);
   if (typeof owner !== 'string' || typeof name !== 'string') {
-    throw new InvalidParamError(
+    throw invalidParam(
       'Could not determine the current repository; pass repo explicitly',
     );
   }
@@ -282,6 +282,7 @@ export async function executeIssueEdit(
 /** The issue.edit operation descriptor. */
 export const issueEditDescriptor: OpDescriptor = {
   name: 'issue.edit',
+  requiredParams: ['number'],
   mutating: true,
   params: ISSUE_EDIT_PARAMS,
   bodyParams: ['body'],
@@ -337,6 +338,7 @@ export async function executeResolveThread(
 /** The pr.resolve-thread operation descriptor. */
 export const prResolveThreadDescriptor: OpDescriptor = {
   name: 'pr.resolve-thread',
+  requiredParams: ['threadId'],
   mutating: true,
   params: PR_RESOLVE_THREAD_PARAMS,
   buildArgv: () => ['api', 'graphql'],

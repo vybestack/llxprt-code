@@ -250,6 +250,7 @@ export function shapePrView(rawJson: unknown): ShapedPrView {
  */
 export const prViewDescriptor: OpDescriptor = {
   name: 'pr.view',
+  requiredParams: ['number'],
   mutating: false,
   params: PR_VIEW_PARAMS,
   buildArgv: (params) => {
@@ -345,6 +346,7 @@ export function shapePrDiff(rawText: unknown): ShapedPrDiff {
  */
 export const prDiffDescriptor: OpDescriptor = {
   name: 'pr.diff',
+  requiredParams: ['number'],
   mutating: false,
   params: PR_DIFF_PARAMS,
   buildArgv: (params) => buildPrDiffArgv(params),
@@ -494,6 +496,7 @@ function countByBucket(checks: readonly ShapedCheck[]): {
  */
 export const prChecksDescriptor: OpDescriptor = {
   name: 'pr.checks',
+  requiredParams: ['number'],
   mutating: false,
   params: PR_CHECKS_PARAMS,
   buildArgv: (params) => buildPrChecksArgv(params),
@@ -784,6 +787,7 @@ function extractReviewComments(value: unknown): readonly ShapedReviewComment[] {
  */
 export const prReviewsDescriptor: OpDescriptor = {
   name: 'pr.reviews',
+  requiredParams: ['number'],
   mutating: false,
   params: PR_REVIEWS_PARAMS,
   buildArgv: (params) => buildPrReviewsArgv(params),

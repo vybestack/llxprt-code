@@ -115,6 +115,7 @@ export function buildPrCreateArgv(params: Record<string, unknown>): string[] {
 /** The pr.create operation descriptor. */
 export const prCreateDescriptor: OpDescriptor = {
   name: 'pr.create',
+  requiredParams: ['title'],
   mutating: true,
   params: PR_CREATE_PARAMS,
   bodyParams: ['body'],
@@ -160,6 +161,7 @@ export function buildPrCommentArgv(params: Record<string, unknown>): string[] {
 /** The pr.comment operation descriptor. */
 export const prCommentDescriptor: OpDescriptor = {
   name: 'pr.comment',
+  requiredParams: ['number', 'body'],
   mutating: true,
   params: PR_COMMENT_PARAMS,
   bodyParams: ['body'],
@@ -215,6 +217,7 @@ export function buildPrEditArgv(params: Record<string, unknown>): string[] {
 /** The pr.edit operation descriptor. */
 export const prEditDescriptor: OpDescriptor = {
   name: 'pr.edit',
+  requiredParams: ['number'],
   mutating: true,
   params: PR_EDIT_PARAMS,
   bodyParams: ['body'],
@@ -258,6 +261,7 @@ export function buildPrReadyArgv(params: Record<string, unknown>): string[] {
 /** The pr.ready operation descriptor. */
 export const prReadyDescriptor: OpDescriptor = {
   name: 'pr.ready',
+  requiredParams: ['number'],
   mutating: true,
   params: PR_READY_PARAMS,
   rawOutput: true,
@@ -308,6 +312,7 @@ export function buildLabelCreateArgv(
 /** The label.create operation descriptor. */
 export const labelCreateDescriptor: OpDescriptor = {
   name: 'label.create',
+  requiredParams: ['name'],
   mutating: true,
   params: LABEL_CREATE_PARAMS,
   rawOutput: true,

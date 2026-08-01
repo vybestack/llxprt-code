@@ -142,3 +142,36 @@ export function makeBrokerError(
 ): BrokerError {
   return { code, message: redactTokenShaped(rawMessage) };
 }
+
+/**
+ * An Error carrying a structured BrokerError.
+ *
+ * Defined here rather than in github-broker.ts so every module that needs to
+ * raise a structured failure throws the SAME class. A module-local
+ * look-alike would not satisfy the dispatcher's `instanceof` check, and its
+ * code would be silently downgraded to GITHUB_ERROR.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002
+ */
+export class BrokerErrorException extends Error {
+  readonly brokerError: BrokerError;
+  constructor(brokerError: BrokerError) {
+    super(brokerError.message);
+    this.name = 'BrokerError';
+    this.brokerError = brokerError;
+  }
+}
+
+/**
+ * Convenience for throwing a structured broker failure.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002
+ */
+export function brokerError(
+  code: BrokerErrorCode,
+  message: string,
+): BrokerErrorException {
+  return new BrokerErrorException(makeBrokerError(code, message));
+}

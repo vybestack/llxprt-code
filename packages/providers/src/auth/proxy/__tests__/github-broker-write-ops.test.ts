@@ -21,6 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { OP_REGISTRY } from '../github-broker-ops.js';
+import { validateParams } from '../github-broker-validation.js';
 import { withBodyFiles } from '../github-broker-body-file.js';
 import {
   buildIssueCreateArgv,
@@ -251,5 +252,72 @@ describe('P11a write operations', () => {
       expect(out).toStrictEqual({ number: 1 });
       expect((await tmpBodyDirs()).length).toBe(before.length);
     });
+  });
+});
+
+describe('required parameters', () => {
+  /**
+   * Builders interpolate positionals directly, so without this check a
+   * missing number reaches gh as the literal string "undefined".
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002
+   */
+  it('rejects an operation missing a required positional', () => {
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['issue.close', {}],
+      ['issue.comment', { body: 'x' }],
+      ['pr.ready', {}],
+      ['pr.resolve-thread', {}],
+      ['label.create', {}],
+      ['search.issues', {}],
+    ];
+    for (const [name, params] of cases) {
+      const descriptor = OP_REGISTRY[name];
+      const error = validateParams(
+        descriptor.params,
+        params,
+        descriptor.requiredParams,
+      );
+      expect(
+        error,
+        `${name} must reject missing required params`,
+      ).not.toBeNull();
+      expect(error?.message).toContain('Missing required parameter');
+    }
+  });
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002
+   */
+  it('accepts an operation once required params are supplied', () => {
+    const descriptor = OP_REGISTRY['issue.close'];
+    expect(
+      validateParams(
+        descriptor.params,
+        { number: 7 },
+        descriptor.requiredParams,
+      ),
+    ).toBeNull();
+  });
+
+  /**
+   * Every op whose builder interpolates a positional must declare it, or the
+   * "undefined" argv bug returns for that op alone.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002
+   */
+  it('declares required params for every op that interpolates one', () => {
+    for (const [name, descriptor] of Object.entries(OP_REGISTRY)) {
+      const argv = descriptor.buildArgv({});
+      if (argv.includes('undefined')) {
+        expect(
+          descriptor.requiredParams ?? [],
+          `${name} interpolates a positional but declares no requiredParams`,
+        ).not.toStrictEqual([]);
+      }
+    }
   });
 });

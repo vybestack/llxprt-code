@@ -145,6 +145,15 @@ export interface OpDescriptor {
    */
   readonly bodyParams?: readonly string[];
   /**
+   * Parameters that must be present. Builders interpolate positionals
+   * directly, so a missing one would otherwise reach gh as the literal
+   * string "undefined" rather than being rejected.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002
+   */
+  readonly requiredParams?: readonly string[];
+  /**
    * When true, a non-zero gh exit code does NOT short-circuit the
    * response as an error. Instead stdout is still passed to `shape` so
    * the caller can classify by content. Used by pr.checks where gh

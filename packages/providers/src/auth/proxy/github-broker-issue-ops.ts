@@ -136,6 +136,7 @@ export function shapeIssueView(rawJson: unknown): ShapedIssueView {
  */
 export const issueViewDescriptor: OpDescriptor = {
   name: 'issue.view',
+  requiredParams: ['number'],
   mutating: false,
   params: ISSUE_VIEW_PARAMS,
   buildArgv: (params) => {

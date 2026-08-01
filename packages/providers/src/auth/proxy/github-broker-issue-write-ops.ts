@@ -130,6 +130,7 @@ export function buildIssueCreateArgv(
 /** The issue.create operation descriptor. */
 export const issueCreateDescriptor: OpDescriptor = {
   name: 'issue.create',
+  requiredParams: ['title'],
   mutating: true,
   params: ISSUE_CREATE_PARAMS,
   bodyParams: ['body'],
@@ -177,6 +178,7 @@ export function buildIssueCommentArgv(
 /** The issue.comment operation descriptor. */
 export const issueCommentDescriptor: OpDescriptor = {
   name: 'issue.comment',
+  requiredParams: ['number', 'body'],
   mutating: true,
   params: ISSUE_COMMENT_PARAMS,
   bodyParams: ['body'],
@@ -222,6 +224,7 @@ export function buildIssueCloseArgv(params: Record<string, unknown>): string[] {
 /** The issue.close operation descriptor. */
 export const issueCloseDescriptor: OpDescriptor = {
   name: 'issue.close',
+  requiredParams: ['number'],
   mutating: true,
   params: ISSUE_CLOSE_PARAMS,
   rawOutput: true,

@@ -160,6 +160,7 @@ function appendSearchQuery(
  */
 export const searchIssuesDescriptor: OpDescriptor = {
   name: 'search.issues',
+  requiredParams: ['query'],
   mutating: false,
   params: SEARCH_ISSUES_PARAMS,
   buildArgv: (params) => buildSearchIssuesArgv(params),
@@ -225,6 +226,7 @@ export function buildSearchPrsArgv(params: Record<string, unknown>): string[] {
  */
 export const searchPrsDescriptor: OpDescriptor = {
   name: 'search.prs',
+  requiredParams: ['query'],
   mutating: false,
   params: SEARCH_PRS_PARAMS,
   buildArgv: (params) => buildSearchPrsArgv(params),

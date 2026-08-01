@@ -59,8 +59,13 @@ export const DEFAULT_LIMIT = 30;
  *
  * Rules:
  * - unknown params are rejected (not ignored)
+ * - required params must be present
  * - string params beginning with `-` are rejected (flag injection defense)
  * - each param kind has its own validation
+ *
+ * Required params matter because builders interpolate positionals directly:
+ * without this check `issue.close` with no number produces the argv
+ * `gh issue close undefined`, which is both wrong and confusing to debug.
  *
  * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
  * @requirement REQ-002
@@ -69,12 +74,21 @@ export const DEFAULT_LIMIT = 30;
 export function validateParams(
   spec: Readonly<Record<string, ParamKind>>,
   params: Record<string, unknown>,
+  required?: readonly string[],
 ): ValidationError | null {
   for (const key of Object.keys(params)) {
     if (!(key in spec)) {
       return {
         code: 'INVALID_PARAM',
         message: `Unknown parameter: ${key}`,
+      };
+    }
+  }
+  for (const key of required ?? []) {
+    if (params[key] === undefined) {
+      return {
+        code: 'INVALID_PARAM',
+        message: `Missing required parameter: ${key}`,
       };
     }
   }
