@@ -198,15 +198,33 @@ const resolveActualId = (id: string): string => {
 const actualModules = new Map<string, unknown>();
 const actualAsyncModules = new Map<string, Promise<unknown>>();
 const bareSpecResolvedPaths = new Set<string>();
+const mockedResolvedIds = new Set<string>();
 let actualImportSequence = 0;
 
 /**
  * Synchronously loads the actual (un-mocked) module for a resolved ID.
  * Used by importActualSync (sync factories that were pre-loaded).
+ *
+ * If a mock has been registered for this module (via mock.module) and the
+ * module was NOT pre-loaded into the cache, this function throws. This
+ * prevents the dangerous scenario where localRequire returns the mock
+ * instead of the actual module — which would cause the mock factory's
+ * spread-actual pattern ({ ...actual, override }) to spread the mock into
+ * itself, potentially creating infinite recursion.
  */
 const loadActualSync = (resolvedId: string): unknown => {
   const cached = actualModules.get(resolvedId);
   if (cached !== undefined) return cached;
+
+  if (mockedResolvedIds.has(resolvedId)) {
+    throw new Error(
+      `loadActualSync: module "${resolvedId}" was not pre-loaded and is now ` +
+        `intercepted by mock.module. localRequire would return the mock, ` +
+        `not the actual module. Fix: ensure the module loads synchronously ` +
+        `during pre-load, or use an async vi.mock factory with the ` +
+        `importOriginal parameter instead.`,
+    );
+  }
 
   const actual = localRequire(resolvedId);
   actualModules.set(resolvedId, actual);
@@ -381,6 +399,7 @@ const registerModuleMock = (
   if (!factory) {
     const resolvedId = resolveActualId(id);
     const automocked = automockModule(resolvedId);
+    mockedResolvedIds.add(resolvedId);
     return mock.module(mockId, () => automocked);
   }
 
@@ -389,23 +408,32 @@ const registerModuleMock = (
   // not the mock's incomplete evaluation state. Only safe for SYNCHRONOUS
   // factories — pre-loading an async factory causes mock.module to evaluate
   // it eagerly, which deadlocks the event loop.
+  const resolvedId = resolveActualId(id);
   if (preloadActual) {
-    const isAsyncFactory =
-      factory.constructor.name === 'AsyncFunction' ||
-      async function () {}?.constructor?.name === factory.constructor.name;
+    const asyncFunctionName = async function () {}.constructor.name;
+    const isAsyncFactory = factory.constructor.name === asyncFunctionName;
     if (!isAsyncFactory) {
-      const resolvedId = resolveActualId(id);
       try {
         loadActualSync(resolvedId);
       } catch {
-        // Module may fail to load (e.g. native bindings). The factory's
-        // importActual call will handle the error at evaluation time.
+        // The module genuinely cannot be loaded via localRequire (native
+        // bindings, ESM-only, etc.). Allow mock registration to proceed —
+        // the factory's async importOriginal callback uses Bun.build (not
+        // localRequire) and may still succeed. The mockedResolvedIds guard
+        // below ensures importActualSync calls inside the factory will
+        // fail-fast rather than return the mock.
       }
     }
   }
 
+  // Track that a mock is registered for this resolved path. This lets
+  // loadActualSync detect the dangerous case where localRequire would
+  // return the mock instead of the actual module (if pre-load failed or
+  // was skipped for async factories).
+  mockedResolvedIds.add(resolvedId);
+
   return mock.module(mockId, () =>
-    factory(() => importResolvedActual(resolveActualId(id))),
+    factory(() => importResolvedActual(resolvedId)),
   );
 };
 
