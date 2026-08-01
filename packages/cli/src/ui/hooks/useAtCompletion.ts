@@ -252,14 +252,30 @@ async function buildNonFileSuggestions(
   // response delay suggestions that are already computed locally.
   // fetchGitHubSuggestions swallows its own errors, so no rejection here can
   // short-circuit the others.
-  const [resourceSuggestions, subagentSuggestions, github] = await Promise.all([
-    searchResourceCandidates(pattern, buildResourceCandidates(config), signal),
-    buildSubagentCandidates(config).then((candidates) =>
-      searchSubagentCandidates(pattern, candidates, signal),
-    ),
-    buildGitHubSuggestions(pattern, config, signal),
+  // allSettled, not all: these sources are independent affordances, so one
+  // failing must not discard the others' results. Promise.all would reject
+  // the whole set and drop suggestions that had already been computed.
+  // Each source is also invoked inside its own thunk so a synchronous throw
+  // during construction cannot escape before the others start.
+  const settled = await Promise.allSettled([
+    (async () =>
+      searchResourceCandidates(
+        pattern,
+        buildResourceCandidates(config),
+        signal,
+      ))(),
+    (async () =>
+      searchSubagentCandidates(
+        pattern,
+        await buildSubagentCandidates(config),
+        signal,
+      ))(),
+    (async () => buildGitHubSuggestions(pattern, config, signal))(),
   ]);
-  return { github, rest: [...resourceSuggestions, ...subagentSuggestions] };
+  const [resources, subagents, github] = settled.map((r) =>
+    r.status === 'fulfilled' ? r.value : [],
+  );
+  return { github, rest: [...resources, ...subagents] };
 }
 
 async function searchResourceCandidates(

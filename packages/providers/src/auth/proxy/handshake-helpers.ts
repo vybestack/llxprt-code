@@ -34,16 +34,30 @@ export function computeNegotiatedVersion(
   const min = payload?.minVersion as number | undefined;
   const max = payload?.maxVersion as number | undefined;
 
-  if (min !== undefined && max !== undefined) {
-    const serverMin = 1;
-    if (max >= serverMin && min <= serverProtocolVersion) {
+  // Both bounds must be real numbers and the range must be the right way
+  // round. An inverted range such as min 20 / max 10 previously satisfied
+  // the overlap test and negotiated a version the client never offered.
+  if (typeof min === 'number' && typeof max === 'number') {
+    const wellFormed =
+      Number.isInteger(min) && Number.isInteger(max) && min <= max;
+    const overlapsServer = max >= 1 && min <= serverProtocolVersion;
+    if (wellFormed && overlapsServer) {
       return Math.min(serverProtocolVersion, max);
     }
     return undefined;
   }
 
-  const v = frame.v as number | undefined;
-  if (v !== undefined && v >= 1 && v <= serverProtocolVersion) return v;
+  // Guard the type too: a numeric string would otherwise be returned as-is
+  // and violate the declared number return.
+  const v = frame.v;
+  if (
+    typeof v === 'number' &&
+    Number.isInteger(v) &&
+    v >= 1 &&
+    v <= serverProtocolVersion
+  ) {
+    return v;
+  }
   return undefined;
 }
 

@@ -23,7 +23,12 @@ export function appendRepo(
   argv: string[],
   params: Record<string, unknown>,
 ): void {
-  if (typeof params.repo === 'string') argv.push('--repo', params.repo);
+  // Skip empty like the other helpers do. Emitting `--repo ''` makes gh
+  // reject the call instead of falling back to the current repository,
+  // which is the inconsistency this module exists to remove.
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
+    argv.push('--repo', params.repo);
+  }
 }
 
 /** Appends `flag value` when the value is a non-empty string. */

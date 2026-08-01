@@ -59,6 +59,9 @@ export async function withBodyFiles<T>(
     }
     return await fn(effective);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    // A throwing cleanup in `finally` would replace the operation's error
+    // with a filesystem error, hiding why the call actually failed. Removal
+    // is best-effort; the temp dir is mode-0700 under the system temp path.
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
