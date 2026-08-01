@@ -211,7 +211,8 @@ describe('RenderInline URL linkification', () => {
 
     const flat = flattenText(node);
     expect(extractFirstOsc8Target(flat)).toBe(url);
-    expect(flat).toContain(',');
+    // The comma must sit after the closing sequence, not inside the label
+    expect(flat).toContain(`${OSC8_PREFIX}\x07,`);
   });
 
   it('excludes trailing semicolon, colon, exclamation, and question mark from a bare URL (AC-4)', () => {
@@ -277,7 +278,7 @@ describe('RenderInline URL linkification', () => {
     expect(flat).not.toContain(OSC8_PREFIX);
   });
 
-  it('strips a trailing ) followed by a period from a bare URL (AC-4)', () => {
+  it('strips both a trailing period and the parenthesis wrapping a bare URL (AC-4)', () => {
     const url = 'https://example.com/docs';
     const node = renderInlineNode({ text: `(${url}.)` });
 
@@ -285,10 +286,11 @@ describe('RenderInline URL linkification', () => {
     expect(extractFirstOsc8Target(flat)).toBe(url);
   });
 
-  it('does not linkify a markdown link whose URL was truncated at an unbalanced ( (AC-2)', () => {
-    // The markdown-link tokenizer stops at the first ')', so this URL is
-    // captured without its closing parenthesis. Linking the truncated URL
-    // would navigate somewhere the author did not write.
+  it('does not linkify a markdown link whose URL has an unbalanced ( (AC-2)', () => {
+    // A URL with more '(' than ')' cannot be the complete target the author
+    // wrote, so linking it would navigate somewhere they did not write. The
+    // markdown-link tokenizer produces this shape when the URL itself
+    // contains parentheses.
     const node = renderInlineNode({
       text: 'See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) now.',
     });
