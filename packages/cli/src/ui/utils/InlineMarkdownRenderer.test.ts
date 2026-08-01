@@ -348,6 +348,18 @@ describe('RenderInline URL linkification', () => {
     expect(flat).toContain('https://evil.test/[2Jx');
   });
 
+  it('never prints raw control characters from a markdown link label (AC-3)', () => {
+    const node = renderInlineNode({
+      text: 'See [ev\u001b[2Jil](https://example.com/a\u0007b) now.',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain('\u001b[2J');
+    expect(flat).not.toContain('\u0007');
+    expect(flat).toContain('ev[2Jil');
+    expect(flat).toContain('https://example.com/ab');
+  });
+
   it('rejects dangerous schemes regardless of letter case (AC-3)', () => {
     for (const scheme of [
       'JavaScript:alert(1)',

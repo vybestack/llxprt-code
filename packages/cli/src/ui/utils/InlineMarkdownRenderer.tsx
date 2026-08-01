@@ -169,6 +169,10 @@ function renderLinkNode(
     const linkMatch = fullMatch.match(new RegExp(linkPattern));
     if (linkMatch) {
       const [, linkText, url] = linkMatch;
+      // Both halves are cleaned up front so neither the hyperlink label nor
+      // the plain-text fallback can carry escape bytes to the terminal.
+      const safeText = stripControlCharacters(linkText);
+      const safeUrl = stripControlCharacters(url);
       // Link the visible label and keep the raw `(url)` fallback, itself
       // linked, so the target stays reachable in terminals without OSC 8.
       // The markdown-link pattern stops at the first `)`, so a URL containing
@@ -178,7 +182,7 @@ function renderLinkNode(
       // links were clickable.
       const combinedLink = hasUnbalancedOpenParen(url)
         ? null
-        : createUrlLink(url, `${linkText} (${url})`);
+        : createUrlLink(url, `${safeText} (${safeUrl})`);
       if (combinedLink !== null) {
         return (
           <Text key={key} color={theme.text.link}>
@@ -188,8 +192,8 @@ function renderLinkNode(
       }
       return (
         <Text key={key} color={baseColor}>
-          {linkText}
-          <Text color={theme.text.link}> ({stripControlCharacters(url)})</Text>
+          {safeText}
+          <Text color={theme.text.link}> ({safeUrl})</Text>
         </Text>
       );
     }
