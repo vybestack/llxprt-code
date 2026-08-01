@@ -384,3 +384,38 @@ describe('buildSnapshot', () => {
     });
   });
 });
+
+describe('post-terminal immutability', () => {
+  it('ignores transitions that arrive after the session ended', () => {
+    let clock = 100;
+    const now = () => clock;
+    let state = initProducerState(makeIdentity(), nativeSession);
+    state = applyTransition(state, { type: 'turn.started' }, now);
+    clock = 200;
+    state = applyTransition(state, { type: 'session.ended' }, now);
+
+    const terminal = buildSnapshot(state, now);
+    const terminalSequence = state.sourceSequence;
+
+    // Late traffic must not revive the session or advance the stream.
+    clock = 300;
+    for (const transition of [
+      { type: 'turn.started' } as const,
+      { type: 'activity.changed', state: 'acting' } as const,
+      { type: 'session.ended' } as const,
+    ]) {
+      state = applyTransition(state, transition, now);
+    }
+
+    expect(state.sourceSequence).toBe(terminalSequence);
+    expect(state.terminalState).not.toBeNull();
+    expect(state.currentTurn).toBeNull();
+    expect(buildSnapshot(state, now).source_sequence).toBe(
+      terminal.source_sequence,
+    );
+    expect(buildSnapshot(state, now).native_activity).toMatchObject({
+      availability: 'known',
+      value: { state: 'idle' },
+    });
+  });
+});

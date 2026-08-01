@@ -126,6 +126,22 @@ export function applyTransition(
   transition: JspTransition,
   now: NowFn,
 ): JspProducerState {
+  // A session that has ended is terminal under the current-state protocol.
+  // Accepting a later transition would advance source_sequence and mutate the
+  // terminal snapshot, so an observer would see the session come back to life.
+  // Re-ending an already-ended session is likewise a no-op.
+  if (state.terminalState !== null) {
+    return state;
+  }
+  return applyOpenTransition(state, transition, now);
+}
+
+/** Apply a transition to a session that has not reached a terminal state. */
+function applyOpenTransition(
+  state: JspProducerState,
+  transition: JspTransition,
+  now: NowFn,
+): JspProducerState {
   switch (transition.type) {
     case 'turn.started': {
       return next({

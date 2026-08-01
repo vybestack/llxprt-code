@@ -471,3 +471,45 @@ describe('JspProducer', () => {
     producer.stop();
   });
 });
+
+describe('construction and shutdown robustness', () => {
+  it('rejects a non-positive or non-integer heartbeat interval', () => {
+    const { hooks } = makeHarness();
+    for (const heartbeatMs of [0, -1, 5.5]) {
+      expect(
+        () => new JspProducer(bootstrap, nativeSession, hooks, { heartbeatMs }),
+      ).toThrow(RangeError);
+    }
+  });
+
+  it('rejects a non-positive capacity', () => {
+    const { hooks } = makeHarness();
+    for (const capacity of [0, -5]) {
+      expect(
+        () => new JspProducer(bootstrap, nativeSession, hooks, { capacity }),
+      ).toThrow(RangeError);
+    }
+  });
+
+  it('still stops cleanly when the final drain rejects', async () => {
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 100,
+      createIdentity: () => identity,
+      register: () => Promise.resolve(OK),
+      publish: () => Promise.reject(new Error('broker vanished mid-drain')),
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    producer.observeTurnStarted();
+
+    // shutdown must not propagate the drain failure, and must leave the
+    // producer stopped rather than half-torn-down: a stopped producer is
+    // inert, so a later observation cannot advance the stream.
+    await expect(producer.shutdown()).resolves.toBeUndefined();
+    const after = producer.snapshot().source_sequence;
+    producer.observeTurnStarted();
+    expect(producer.snapshot().source_sequence).toBe(after);
+  });
+});

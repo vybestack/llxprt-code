@@ -114,6 +114,9 @@ export class JspBoundedQueue {
       delivered = false;
     }
     if (delivered) {
+      // The transport is working again, so a later gap deserves a fresh
+      // recovery request. This is the only place the outstanding flag clears.
+      this.recoveryRequested = false;
       return;
     }
     // The document is gone, so the observer now has a sequence gap and will
@@ -124,14 +127,23 @@ export class JspBoundedQueue {
     this.requestRecovery();
   }
 
-  /** Ask the owner to enqueue a fresh snapshot, at most once per gap. */
+  /**
+   * Ask the owner to enqueue a fresh snapshot, at most once per gap.
+   *
+   * The outstanding flag is deliberately NOT cleared when the callback runs.
+   * The recovery snapshot is itself sent through this queue, so if the
+   * transport is down that send also fails and would request recovery again:
+   * clearing the flag eagerly turns a broker outage into an unbounded
+   * microtask loop that starves the event loop. The flag is cleared only by a
+   * send that actually succeeds, which is the point at which the transport has
+   * demonstrably recovered and a further gap is worth reporting.
+   */
   private requestRecovery(): void {
     if (this.recoveryRequested || this.isStopped) {
       return;
     }
     this.recoveryRequested = true;
     queueMicrotask(() => {
-      this.recoveryRequested = false;
       if (!this.isStopped) {
         this.onRecoveryNeeded?.();
       }

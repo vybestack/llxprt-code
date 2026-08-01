@@ -155,6 +155,16 @@ export class JspProducer {
     this.hooks = hooks;
     this.identity = hooks.createIdentity(bootstrap);
     this.state = initProducerState(this.identity, nativeSession);
+    // A zero or negative interval makes setInterval fire continuously, turning
+    // telemetry into a busy loop. Reject it at construction rather than
+    // discovering it as runaway heartbeat traffic. Capacity is validated by
+    // JspBoundedQueue, where the value is actually consumed.
+    const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+    if (!Number.isInteger(heartbeatMs) || heartbeatMs <= 0) {
+      throw new RangeError(
+        'JSP producer heartbeatMs must be a positive integer',
+      );
+    }
     this.queue = new JspBoundedQueue(new ProducerQueueSink(hooks.publish), {
       capacity: options.capacity ?? DEFAULT_QUEUE_CAPACITY,
       onRecoveryNeeded: () => this.publishRecoverySnapshot(),
@@ -196,14 +206,21 @@ export class JspProducer {
 
   async shutdown(): Promise<void> {
     this.stopHeartbeat();
-    if (this.started) {
-      this.observeSessionEnded();
-      await this.flush();
-      if (this.registered) {
-        await this.hooks.publish(this.snapshot()).catch(() => undefined);
+    // Cleanup must happen however the drain ends. If flush() rejects (the
+    // broker going away mid-drain, say) an unguarded await would propagate and
+    // leave the producer started with a live queue, so stop() is run in a
+    // finally block rather than after the awaits.
+    try {
+      if (this.started) {
+        this.observeSessionEnded();
+        await this.flush().catch(() => undefined);
+        if (this.registered) {
+          await this.hooks.publish(this.snapshot()).catch(() => undefined);
+        }
       }
+    } finally {
+      this.stop();
     }
-    this.stop();
   }
 
   private stopHeartbeat(): void {
