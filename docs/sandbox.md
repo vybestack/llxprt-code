@@ -116,7 +116,7 @@ Profiles are JSON files in `<config>/sandboxes/` (see [Application Directories](
 
 For Docker and Podman, `network: off` adds `--network none`. `network: proxied` requires a non-whitespace `LLXPRT_SANDBOX_PROXY_COMMAND`; invalid configuration stops before network setup or process launch. A valid command uses the existing isolated `llxprt-code-sandbox` network and proxy-container network instead of falling back to unrestricted networking.
 
-For Seatbelt, a non-empty `SEATBELT_PROFILE` remains an advanced explicit override. Otherwise `LLXPRT_SANDBOX_NETWORK` (or the legacy `SANDBOX_NETWORK` when the primary variable is absent) selects `permissive-closed` for `off`, `permissive-proxied` for `proxied`, and `permissive-open` for `on`, unset, or other values. The two built-in proxied profiles require `LLXPRT_SANDBOX_PROXY_COMMAND`; arbitrary custom profile names retain their existing lookup semantics.
+For Seatbelt, a non-empty `SEATBELT_PROFILE` remains an advanced explicit override. Otherwise `LLXPRT_SANDBOX_NETWORK` (or the legacy `SANDBOX_NETWORK` when the primary variable is undefined; a defined empty primary still wins) selects `permissive-closed` for `off`, `permissive-proxied` for `proxied`, and `permissive-open` for `on`, unset, or other values. The two built-in proxied profiles require `LLXPRT_SANDBOX_PROXY_COMMAND`; arbitrary custom profile names retain their existing lookup semantics.
 
 ### Creating Custom Profiles
 

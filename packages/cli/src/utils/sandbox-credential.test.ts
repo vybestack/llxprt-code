@@ -100,7 +100,7 @@ function invokeCredentialSetup(
 
 describe.sequential('#1456 credential proxy network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
-  let tmpDir: string;
+  let tmpDir = '';
   let isolatedHome: string;
 
   beforeEach(() => {
@@ -134,7 +134,9 @@ describe.sequential('#1456 credential proxy network policy', () => {
   afterEach(() => {
     process.env = environmentSnapshot;
     vi.restoreAllMocks();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (tmpDir !== '') {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it.each([
