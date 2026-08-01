@@ -74,63 +74,24 @@ export type ParamKind =
   | 'branch';
 
 /**
- * The result of a single `gh` invocation: raw stdout text plus a flag
- * indicating whether the dispatcher should treat it as raw text or parse
- * it as JSON.
+ * Runs one `gh` invocation on behalf of a multi-step operation.
+ *
+ * Resolves with the parsed JSON (or raw text when `rawOutput` is set) and
+ * THROWS a BrokerErrorException on failure, so an op's `execute` reads as
+ * straight-line code and a failed step aborts the sequence instead of being
+ * silently skipped. Ops therefore never handle a result union.
  *
  * @plan PLAN-20260731-GHBROKER.P11
  * @requirement REQ-002
- * @pseudocode 003-github-broker.md lines 56-62
+ * @pseudocode 003-github-broker.md lines 56-66
  */
-export interface GhResult {
-  readonly stdout: string;
-  readonly rawOutput: boolean;
-}
-
-/**
- * A function that runs `gh` with the given argv array and signal. This is
- * the callback that the dispatcher passes to an op's `execute` function,
- * so the op can perform multiple `gh` calls (e.g. issue.edit's hybrid
- * gh-issue-edit + GraphQL mutation) without coupling to the real
- * `execFile` implementation.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md lines 56-62
- */
-export type RunGhFn = (
+export type GhRunner = (
   argv: readonly string[],
-  signal: AbortSignal,
   options?: {
     rawOutput?: boolean;
     tolerateNonZeroExit?: boolean;
   },
-) => Promise<GhResult>;
-
-/**
- * The context passed to an op's `execute` function, providing the `runGh`
- * callback and the abort signal.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- * @pseudocode 003-github-broker.md lines 46-55
- */
-export interface ExecuteContext {
-  readonly runGh: RunGhFn;
-  readonly signal: AbortSignal;
-}
-
-/**
- * The result returned by an op's `execute` function: the raw gh output
- * (for shaping) plus any additional params to pass through to `shape`.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-export interface ExecuteResult {
-  readonly rawJson: unknown;
-  readonly params: Record<string, unknown>;
-}
+) => Promise<unknown>;
 
 /**
  * Descriptor for a single GitHub broker operation.
@@ -205,12 +166,11 @@ export interface OpDescriptor {
    */
   readonly usesGraphql?: boolean;
   /**
-   * Optional custom execution function for ops that need multi-step
-   * execution (e.g. issue.edit: gh issue edit for most fields, then
-   * GraphQL updateIssue for issue type). When present, the dispatcher
-   * calls this instead of buildArgv + runGh, passing a runGh callback
-   * and the abort signal. The function returns raw gh output and any
-   * additional params for shaping.
+   * Optional execution function for ops needing more than one `gh` call
+   * (e.g. issue.edit: `gh issue edit` for most fields, then a GraphQL
+   * updateIssue for issue type). When present the dispatcher calls this
+   * INSTEAD of buildArgv + runGh + shape, and its return value is the
+   * shaped response, which must be a non-array object like every other op.
    *
    * @plan PLAN-20260731-GHBROKER.P11
    * @requirement REQ-002
@@ -218,8 +178,8 @@ export interface OpDescriptor {
    */
   readonly execute?: (
     params: Record<string, unknown>,
-    ctx: ExecuteContext,
-  ) => Promise<ExecuteResult>;
+    run: GhRunner,
+  ) => Promise<unknown>;
 }
 
 /**

@@ -32,6 +32,8 @@ import type {
   RequestHandler,
   ValidationError,
   GitHubBrokerHandler,
+  OpDescriptor,
+  GhRunner,
 } from './github-broker-types.js';
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
 import { withBodyFiles } from './github-broker-body-file.js';
@@ -321,6 +323,60 @@ function makeBrokerErrorInstance(
   return new BrokerErrorException(makeBrokerError(code, message));
 }
 
+/**
+ * Runs a multi-step operation's `execute` and sends its shaped response.
+ *
+ * The runner handed to `execute` resolves parsed output and throws a
+ * BrokerErrorException on failure, so an op reads as straight-line code and
+ * a failed step aborts the sequence instead of being silently skipped.
+ * Body parameters are still materialised into temp files first, and removed
+ * afterwards, exactly as for single-call ops.
+ *
+ * @plan PLAN-20260731-GHBROKER.P11
+ * @requirement REQ-002, REQ-013
+ * @pseudocode 003-github-broker.md lines 46-55
+ */
+async function dispatchMultiStep(
+  descriptor: OpDescriptor,
+  opParams: Record<string, unknown>,
+  signal: AbortSignal,
+  id: string,
+  state: {
+    writer: {
+      sendOk: (id: string, data: Record<string, unknown>) => void;
+      sendError: (id: string, code: string, error: string) => void;
+    };
+  },
+): Promise<void> {
+  const run: GhRunner = async (argv, options) => {
+    const outcome = await runGh(argv, signal, options);
+    if (outcome.kind === 'failure') {
+      throw new BrokerErrorException(outcome.error);
+    }
+    if (options?.rawOutput !== true) assertNoPartialSuccess(outcome.json);
+    return outcome.json;
+  };
+
+  const execute = descriptor.execute;
+  if (execute === undefined) return;
+
+  try {
+    // execute receives the temp-file-substituted params, exactly as
+    // buildArgv does for single-call ops.
+    const shaped = await withBodyFiles(descriptor.bodyParams, opParams, (p) =>
+      execute(p, run),
+    );
+    state.writer.sendOk(id, shaped as Record<string, unknown>);
+  } catch (err) {
+    if (err instanceof BrokerErrorException) {
+      state.writer.sendError(id, err.brokerError.code, err.brokerError.message);
+      return;
+    }
+    const message = err instanceof Error ? err.message : 'Operation failed';
+    state.writer.sendError(id, 'GITHUB_ERROR', redactTokenShaped(message));
+  }
+}
+
 // ─── Handler factory ─────────────────────────────────────────────────────────
 
 /**
@@ -370,6 +426,15 @@ export function createGitHubBrokerHandler(): GitHubBrokerHandler {
         validationError.code,
         redactTokenShaped(validationError.message),
       );
+      return;
+    }
+
+    // Ops needing more than one gh call supply `execute` and produce the
+    // shaped response themselves. The runner resolves parsed output and
+    // throws on failure, so a failed step aborts the sequence rather than
+    // being silently skipped.
+    if (descriptor.execute !== undefined) {
+      await dispatchMultiStep(descriptor, opParams, signal, id, state);
       return;
     }
 

@@ -36,6 +36,11 @@ import {
   buildLabelCreateArgv,
 } from '../github-broker-pr-write-ops.js';
 
+/**
+ * Every mutating operation. `issue.edit` and `pr.resolve-thread` are
+ * multi-step (P11b) but are still writes, so they belong here: the
+ * complement of this list must contain no mutating op.
+ */
 const WRITE_OPS = [
   'issue.create',
   'issue.comment',
@@ -45,7 +50,14 @@ const WRITE_OPS = [
   'pr.edit',
   'pr.ready',
   'label.create',
+  'issue.edit',
+  'pr.resolve-thread',
 ] as const;
+
+/** Ops covered by the single-call argv/shape assertions in this file. */
+const SINGLE_CALL_WRITE_OPS = WRITE_OPS.filter(
+  (name) => name !== 'issue.edit' && name !== 'pr.resolve-thread',
+);
 
 describe('P11a write operations', () => {
   describe('registry', () => {
@@ -178,7 +190,7 @@ describe('P11a write operations', () => {
      * @requirement REQ-013
      */
     it('no write op shape returns an array', () => {
-      for (const name of WRITE_OPS) {
+      for (const name of SINGLE_CALL_WRITE_OPS) {
         const shaped = OP_REGISTRY[name].shape('', { number: 1, name: 'x' });
         expect(Array.isArray(shaped), `${name} returned an array`).toBe(false);
         expect(typeof shaped).toBe('object');

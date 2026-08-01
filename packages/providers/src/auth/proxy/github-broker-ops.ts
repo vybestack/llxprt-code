@@ -149,6 +149,10 @@ import {
   prReadyDescriptor,
   labelCreateDescriptor,
 } from './github-broker-pr-write-ops.js';
+import {
+  issueEditDescriptor,
+  prResolveThreadDescriptor,
+} from './github-broker-multistep-ops.js';
 
 /**
  * The registry of all operation descriptors. Unknown ops yield UNKNOWN_OP.
@@ -177,4 +181,6 @@ export const OP_REGISTRY: Readonly<Record<string, OpDescriptor>> = {
   'pr.edit': prEditDescriptor,
   'pr.ready': prReadyDescriptor,
   'label.create': labelCreateDescriptor,
+  'issue.edit': issueEditDescriptor,
+  'pr.resolve-thread': prResolveThreadDescriptor,
 };
