@@ -290,6 +290,7 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(installRun).not.toContain('${OCR_PREFIX}/bin');
     expect(installRun).not.toContain('npm install -g');
     expect(installRun).not.toContain('@alibaba-group/open-code-review@1.6.1');
+    expect(installRun).not.toContain('@alibaba-group/open-code-review@1.7.17');
     expect(installRun).not.toContain('@alibaba-group/open-code-review@latest');
   });
 

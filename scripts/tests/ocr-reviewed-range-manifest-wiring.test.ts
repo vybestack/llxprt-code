@@ -163,6 +163,126 @@ describe('.github/workflows/ocr-review.yml — manifest artifacts & YAML wiring 
   });
 
   // -----------------------------------------------------------------------
+  // Issue #2929: terminal-status regression coverage for the 1.8.x envelope.
+  // Pins the fail-closed contract against the new additive fields and
+  // terminal states introduced upstream (budget_exceeded, summary.budget_exceeded,
+  // subtask_error warnings on completed_with_errors).
+  // -----------------------------------------------------------------------
+  describe('OCR 1.8.x terminal-status fail-closed contract', () => {
+    it('budget_exceeded status yields an empty eligible completed set and partial completeness', () => {
+      const eligible = loadFunction('eligibleCompletedFilesForReview');
+      const selected = ['src/a.ts', 'src/b.ts'];
+      const result = eligible({
+        ran: true,
+        exitCode: 0,
+        previewValidated: true,
+        ocrStatus: 'budget_exceeded',
+        eligibleFiles: selected,
+        completedFiles: selected.length,
+        completedFilesValid: true,
+      });
+      expect(result).toEqual([]);
+
+      const completeness = loadFunction('resolveCompleteness');
+      expect(
+        completeness({
+          ocrExitCode: 0,
+          ocrStatus: 'budget_exceeded',
+          selectedFiles: selected,
+          completedFiles: selected,
+          failedFiles: [],
+          reusedFiles: [],
+          waivedFiles: [],
+          skipped: false,
+        }),
+      ).toBe('partial');
+    });
+
+    it('completed_with_errors with a subtask_error warning reports that file as failed and is not complete', () => {
+      // This is the exact real 1.8.4 envelope captured in EVIDENCE.md.
+      const envelope = {
+        status: 'completed_with_errors',
+        message: 'Some files could not be reviewed due to errors.',
+        summary: {
+          files_reviewed: 2,
+          comments: 0,
+          total_tokens: 92295,
+          input_tokens: 90747,
+          output_tokens: 1548,
+          cache_read_tokens: 73792,
+          elapsed: '1m36s',
+        },
+        comments: [],
+        warnings: [
+          {
+            type: 'subtask_error',
+            file: 'packages/cli/src/ui/utils/commandUtils.ts',
+            message: 'main_task did not complete before stopping',
+          },
+        ],
+        session_id: 'ff715c9b-38c6-4510-9042-ebda3ce05931',
+      };
+      const failedFiles = loadFunction('failedFilesFromResult');
+      expect(failedFiles(envelope)).toEqual([
+        'packages/cli/src/ui/utils/commandUtils.ts',
+      ]);
+
+      const completeness = loadFunction('resolveCompleteness');
+      expect(
+        completeness({
+          ocrExitCode: 0,
+          ocrStatus: 'completed_with_errors',
+          selectedFiles: [
+            'packages/cli/src/ui/utils/commandUtils.ts',
+            'packages/cli/src/other.ts',
+          ],
+          completedFiles: ['packages/cli/src/other.ts'],
+          failedFiles: ['packages/cli/src/ui/utils/commandUtils.ts'],
+          reusedFiles: [],
+          waivedFiles: [],
+          skipped: false,
+        }),
+      ).toBe('partial');
+    });
+
+    it('an additive summary.budget_exceeded field does not invalidate the summary projection', () => {
+      const sandbox = loadFunctionsTogether([
+        'completionStateForResult',
+        'ocrObservabilityFromResult',
+      ]);
+      const observability = asVmFunction(sandbox.ocrObservabilityFromResult);
+      const result = asRecord(
+        observability({
+          status: 'success',
+          summary: {
+            files_reviewed: 3,
+            comments: 1,
+            total_tokens: 5000,
+            input_tokens: 4500,
+            output_tokens: 500,
+            cache_read_tokens: 1000,
+            cache_write_tokens: 200,
+            elapsed: '12s',
+            budget_exceeded: true,
+          },
+          comments: [{ path: 'src/a.ts' }],
+          session_id: 'abc-123',
+        }),
+      );
+      // The unknown extra field must not invalidate the summary counters.
+      expect(result['completed_files']).toBe(3);
+      expect(result['completed_files_valid']).toBe(true);
+      const tokens = asRecord(result['tokens']);
+      expect(tokens['total']).toBe(5000);
+      expect(tokens['input']).toBe(4500);
+      expect(tokens['output']).toBe(500);
+      expect(tokens['cache_read']).toBe(1000);
+      expect(tokens['cache_write']).toBe(200);
+      expect(result['elapsed']).toBe('12s');
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // serializeManifest (redaction)
   // -----------------------------------------------------------------------
   describe('serializeManifest behavior', () => {

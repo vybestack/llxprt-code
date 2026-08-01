@@ -79,7 +79,7 @@ describe('.github/workflows/ocr-review.yml — issue #2673 concurrency canary', 
         'Run OpenCodeReview',
       );
       const reviewRun = commandText(reviewStep);
-      expect(asOptionalRecord(workflow.env)?.['OCR_VERSION']).toBe('1.7.17');
+      expect(asOptionalRecord(workflow.env)?.['OCR_VERSION']).toBe('1.8.4');
       expect(asOptionalRecord(reviewStep.env)?.['OCR_LLM_MODEL']).toBe(
         '${{ vars.OCR_LLM_MODEL }}',
       );
