@@ -40,6 +40,68 @@ import {
 } from './bun-test-manifest.js';
 
 /**
+ * Detects and kills stale orphaned `bun test` processes (PPID=1) before
+ * starting a new run. When a parent test runner is killed (e.g. by OOM),
+ * child `bun test` processes reparent to PID 1 and keep spinning
+ * indefinitely — consuming CPU and memory. This guard prevents that
+ * accumulation by reaping orphans at the start of every run.
+ *
+ * Exposed as a standalone function for testability.
+ */
+function isOrphanedTestProcess(
+  ppid: number,
+  pid: number,
+  comm: string,
+  ownPid: number,
+): boolean {
+  if (ppid !== 1 || pid === ownPid) return false;
+  const runtime = comm.includes('bun') || comm.includes('node');
+  const isTest = comm.includes('test') || comm.includes('spec');
+  return runtime && isTest;
+}
+
+export function reapStaleBunTestProcesses(
+  spawnSync: (cmd: readonly string[]) => { stdout: string | null },
+  kill: (pid: number, signal: string) => void,
+  ownPid: number,
+  stderr?: (line: string) => void,
+): number {
+  let output: string;
+  try {
+    output = spawnSync(['ps', '-eo', 'pid=,ppid=,comm=']).stdout ?? '';
+  } catch {
+    return 0;
+  }
+
+  let killed = 0;
+  for (const line of output.split('\n')) {
+    const parts = line.trim().split(/\s+/);
+    const pid = parseInt(parts[0] ?? '', 10);
+    const ppid = parseInt(parts[1] ?? '', 10);
+    const comm = parts.slice(2).join(' ');
+    if (
+      Number.isFinite(pid) &&
+      Number.isFinite(ppid) &&
+      isOrphanedTestProcess(ppid, pid, comm, ownPid)
+    ) {
+      try {
+        kill(pid, 'SIGTERM');
+        killed++;
+      } catch {
+        // Process may have already exited
+      }
+    }
+  }
+
+  if (killed > 0 && stderr) {
+    stderr(
+      `[run_bun_tests] Reaped ${killed} stale orphaned test process(es) (PPID=1) before run.`,
+    );
+  }
+  return killed;
+}
+
+/**
  * Bun SyncSubprocess shape for the fields used in diagnostics.  The full
  * interface includes stdout/stderr buffers and resourceUsage, but only the
  * exit-related fields matter here.
@@ -440,6 +502,40 @@ export function runBunTests(
 function main(): void {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = resolve(scriptDir, '..');
+
+  // Reap any stale orphaned test processes from previous runs before starting.
+  // This prevents orphaned bun test processes from accumulating when parent
+  // runners are killed (e.g. by OOM). See issue #2909.
+  reapStaleBunTestProcesses(
+    (cmd) => {
+      const result = Bun.spawnSync({
+        cmd: [...cmd],
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      return { stdout: decodeOutput(result.stdout) };
+    },
+    (pid, signal) => process.kill(pid, signal),
+    process.pid,
+    console.error,
+  );
+
+  // Register signal handlers so that Ctrl-C or CI cancellation exits promptly.
+  // Since Bun.spawnSync blocks the event loop, these handlers only fire
+  // between files (not during a running child), so they cannot kill an
+  // in-flight child. For SIGKILL (OOM), the pre-run reaping guard above
+  // is the protection mechanism.
+  let terminating = false;
+  const handleSignal = (signal: string): void => {
+    if (terminating) return;
+    terminating = true;
+    console.error(`[run_bun_tests] Received ${signal}, exiting.`);
+    process.exit(130);
+  };
+  process.on('SIGTERM', () => handleSignal('SIGTERM'));
+  process.on('SIGINT', () => handleSignal('SIGINT'));
+  process.on('SIGHUP', () => handleSignal('SIGHUP'));
+
   process.exitCode = runBunTests(process.argv.slice(2), {
     repoRoot,
     invocationDirectory: process.cwd(),
