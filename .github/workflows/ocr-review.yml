@@ -331,7 +331,18 @@ jobs:
               return max;
             }
             // --- END OCR TRUSTED MARKER SNIPPET ---
-            const trustedLogins = resolveTrustedMarkerLogins(process.env.OCR_BOT_LOGIN);
+            // Issue #2860 Q1: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              apiLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+            }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
 
             // ----- Helpers -----
 
@@ -609,7 +620,18 @@ jobs:
               return max;
             }
             // --- END OCR TRUSTED MARKER SNIPPET ---
-            const trustedLogins = resolveTrustedMarkerLogins(process.env.OCR_BOT_LOGIN);
+            // Issue #2860 Q1: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              apiLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+            }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
 
             const NEWLINE = String.fromCharCode(10);
             const suspensionBlock = [

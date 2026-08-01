@@ -165,9 +165,108 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
       );
       expect(count).toBe(3);
     });
-  });
 
-  // ---- AM5/AM6: User-authored and unrelated-bot comments are never trusted ----
+    // Q1: gate and suspension poster must fold in apiLogin from
+    // getAuthenticated() symmetrically with the checkpoint reader and
+    // results poster. A marker authored by a login returned ONLY by
+    // getAuthenticated (not github-actions[bot], OCR_BOT_LOGIN unset)
+    // must be discovered at all four sites.
+    it('Q1: auto-review gate discovers count from a some-app[bot] marker when getAuthenticated returns some-app[bot] and OCR_BOT_LOGIN is unset', async () => {
+      const result = await executeAutoGate({
+        script: autoGateScript,
+        ocrBotLogin: '',
+        getAuthenticatedLogin: 'some-app[bot]',
+        getAuthenticatedThrows: null,
+        listComments: [
+          markerComment(
+            1,
+            `${MARKER}
+<!-- ocr-auto-count:2 -->`,
+            {
+              type: 'Bot',
+              login: 'some-app[bot]',
+            },
+          ),
+        ],
+      });
+      expect(result.outputs['current-count']).toBe('2');
+    });
+
+    it('Q1: auto-review gate warns and continues with defaults when getAuthenticated throws 403', async () => {
+      const result = await executeAutoGate({
+        script: autoGateScript,
+        ocrBotLogin: '',
+        getAuthenticatedLogin: null,
+        getAuthenticatedThrows: new Error(
+          'Resource not accessible by integration',
+        ),
+        listComments: [
+          markerComment(
+            1,
+            `${MARKER}
+<!-- ocr-auto-count:1 -->`,
+          ),
+        ],
+      });
+      expect(result.outputs['current-count']).toBe('1');
+      expect(
+        result.warnings.some((w) =>
+          w.includes('Could not resolve authenticated bot login'),
+        ),
+      ).toBe(true);
+    });
+
+    it('Q1: post-suspension reconciles a some-app[bot] marker when getAuthenticated returns some-app[bot] and OCR_BOT_LOGIN is unset', async () => {
+      const result = await executePostSuspension({
+        script: postSuspensionScript,
+        ocrBotLogin: '',
+        getAuthenticatedLogin: 'some-app[bot]',
+        getAuthenticatedThrows: null,
+        currentCount: '2',
+        listComments: [
+          markerComment(
+            10,
+            `${MARKER}
+suspension body`,
+            {
+              type: 'Bot',
+              login: 'some-app[bot]',
+            },
+          ),
+        ],
+      });
+      // The trusted some-app[bot] marker is recognised: it gets updated
+      // (canonical) rather than creating a duplicate.
+      expect(result.updateCalls).toHaveLength(1);
+      expect(result.createCalls).toHaveLength(0);
+    });
+
+    it('Q1: post-suspension warns and continues with defaults when getAuthenticated throws 403', async () => {
+      const result = await executePostSuspension({
+        script: postSuspensionScript,
+        ocrBotLogin: '',
+        getAuthenticatedLogin: null,
+        getAuthenticatedThrows: new Error(
+          'Resource not accessible by integration',
+        ),
+        currentCount: '2',
+        listComments: [
+          markerComment(
+            10,
+            `${MARKER}
+suspension body`,
+          ),
+        ],
+      });
+      // github-actions[bot] default still trusted: marker updated.
+      expect(result.updateCalls).toHaveLength(1);
+      expect(
+        result.warnings.some((w) =>
+          w.includes('Could not resolve authenticated bot login'),
+        ),
+      ).toBe(true);
+    });
+  });
 
   describe('AM5/AM6 — untrusted authors never adopted or deleted', () => {
     it.each(UNTRUSTED_AUTHORS)(

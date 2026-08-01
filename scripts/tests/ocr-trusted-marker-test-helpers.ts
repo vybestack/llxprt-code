@@ -562,6 +562,8 @@ export interface PostSuspensionParams {
   currentCount?: string;
   ocrBotLogin?: string;
   listComments?: FakeComment[];
+  getAuthenticatedLogin?: string | null;
+  getAuthenticatedThrows?: Error | null;
 }
 
 export interface PostSuspensionResult {
@@ -578,6 +580,8 @@ export async function executePostSuspension({
   currentCount = '2',
   ocrBotLogin = '',
   listComments = [],
+  getAuthenticatedLogin = null,
+  getAuthenticatedThrows = null,
 }: PostSuspensionParams): Promise<PostSuspensionResult> {
   const warnings: string[] = [];
   const deleteCalls: number[] = [];
@@ -586,6 +590,13 @@ export async function executePostSuspension({
   const github = {
     paginate: makePaginate(),
     rest: {
+      users: {
+        getAuthenticated: async (): Promise<{ data: { login: string } }> => {
+          if (getAuthenticatedThrows instanceof Error)
+            throw getAuthenticatedThrows;
+          return { data: { login: getAuthenticatedLogin ?? '' } };
+        },
+      },
       issues: {
         listComments: async (): Promise<{ data: FakeComment[] }> => ({
           data: listComments,
@@ -642,8 +653,7 @@ export function extractLoadedFunctions(
   const result: LoadedFunctions = {};
   for (const [key, val] of Object.entries(raw)) {
     if (typeof val === 'function') {
-      const fn = (...args: unknown[]) =>
-        (val as (...a: unknown[]) => unknown)(...args);
+      const fn = (...args: unknown[]) => val(...args);
       result[key] = fn;
     }
   }
@@ -723,6 +733,38 @@ export function loadFunctionsFromScript(
   return extractLoadedFunctions(sandbox);
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Resolve a field (owner or repo) from the context.repo object with
+ * explicit boundary validation. Throws a clear error naming the missing
+ * field when it is absent or not a non-empty string — no type assertions.
+ */
+function resolveRepoField(
+  context: Record<string, unknown>,
+  field: string,
+): string {
+  const repo = asRecord(context)['repo'];
+  if (!isRecordLike(repo)) {
+    throw new Error(
+      `context.repo is missing or not a record (cannot resolve ${field})`,
+    );
+  }
+  const value = repo[field];
+  if (!isNonEmptyString(value)) {
+    throw new Error(
+      `context.repo.${field} is missing or not a non-empty string`,
+    );
+  }
+  return value;
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Load and execute functions from the workflow script that depend on
  * `github`, `core`, `context`, and `process.env` being available in the
@@ -771,12 +813,8 @@ export function loadFunctionsFromScriptWithGithub(
     },
   };
   const envPrNumber = env['PR_NUMBER'] || '42';
-  const ctxOwner = (asRecord(context)['repo'] as Record<string, unknown>)?.[
-    'owner'
-  ] as string;
-  const ctxRepo = (asRecord(context)['repo'] as Record<string, unknown>)?.[
-    'repo'
-  ] as string;
+  const ctxOwner = resolveRepoField(context, 'owner');
+  const ctxRepo = resolveRepoField(context, 'repo');
   const helperFuncNames = [
     'escapeRegExp',
     'redactSecretDiagnostics',

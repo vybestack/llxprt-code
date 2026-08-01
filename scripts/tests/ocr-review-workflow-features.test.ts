@@ -634,9 +634,7 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       // Override listComments to return empty on the first call (no existing
       // marker), then populate the store (simulating a concurrent create)
       // before createComment throws. Subsequent fetches return the markers.
-      const issues = (github['rest'] as Record<string, unknown>)[
-        'issues'
-      ] as Record<string, unknown>;
+      const issues = asRecord(asRecord(asRecord(github)['rest'])['issues']);
       issues['listComments'] = async (
         opts: Record<string, unknown>,
       ): Promise<{ data: StoreComment[]; status: number }> => {

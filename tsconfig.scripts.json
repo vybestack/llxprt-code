@@ -287,6 +287,7 @@
     "scripts/tests/publish-dependency-protocols.test.ts",
     "scripts/tests/publish-integrity.test.ts",
     "scripts/tests/published-closure-regressions.test.ts",
+    "scripts/tests/re-embed-trusted-marker.test.ts",
     "scripts/tests/release-process-b.test.ts",
     "scripts/tests/release-process.test.ts",
     "scripts/tests/runner-image-consistency.test.ts",

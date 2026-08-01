@@ -351,7 +351,9 @@ interface HeredocMatch {
 }
 
 function findAllHeredocs(source: string): HeredocMatch[] {
-  const openerPattern = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+  // Group 1 captures the optional dash in <<- (strip-leading-tabs form).
+  // Group 2 is the optional quote; group 3 is the delimiter word.
+  const openerPattern = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
   const results: HeredocMatch[] = [];
   const allMatches = source.matchAll(openerPattern);
   for (const openerMatch of allMatches) {
@@ -368,12 +370,17 @@ function extractHeredocFromOpener(
   openerMatch: RegExpMatchArray,
 ): HeredocMatch | null {
   if (openerMatch.index === undefined) return null;
-  const delimiter = openerMatch[2];
+  const isDashForm = openerMatch[1] === '-';
+  const delimiter = openerMatch[3];
   const bodyStartIndex = source.indexOf('\n', openerMatch.index);
   if (bodyStartIndex < 0) return null;
   const searchFrom = bodyStartIndex + 1;
+  // Bash heredoc terminator rules:
+  //   Plain form (<<): terminator must be at column 0 (no leading whitespace).
+  //   Dash form (<<-): terminator may be indented with TABS only (no spaces).
+  const leadingPattern = isDashForm ? '\\t*' : '';
   const terminatorPattern = new RegExp(
-    `^\\s*${escapeRegex(delimiter)}\\s*$`,
+    `^${leadingPattern}${escapeRegex(delimiter)}\\s*$`,
     'm',
   );
   const terminatorMatch = terminatorPattern.exec(source.slice(searchFrom));
@@ -381,9 +388,16 @@ function extractHeredocFromOpener(
   const bodyEndIndex = searchFrom + terminatorMatch.index;
   const newline = String.fromCharCode(10);
   const rawBody = source.slice(searchFrom, bodyEndIndex);
-  const body = rawBody.endsWith(newline)
+  const trimmedBody = rawBody.endsWith(newline)
     ? rawBody.slice(0, rawBody.length - 1)
     : rawBody;
+  // The dash form (<<-) strips leading tabs from every body line.
+  const body = isDashForm
+    ? trimmedBody
+        .split(newline)
+        .map((line) => line.replace(/^\t*/, ''))
+        .join(newline)
+    : trimmedBody;
   return { body, delimiter };
 }
 

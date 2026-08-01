@@ -4,6 +4,14 @@
  * bodies in .github/workflows/ocr-review.yml. The snippet text (between
  * the BEGIN/END sentinels, inclusive) is indented by 12 spaces to match
  * the YAML inline-script indentation.
+ *
+ * The replacement is EXACT and self-verifying: rather than matching any
+ * text between two sentinel-shaped lines (which is fragile against a body
+ * line that happens to look like a sentinel), it locates the previously
+ * embedded block by finding each BEGIN sentinel at exactly 12-space
+ * indent, then walks line-by-line to the matching END sentinel at the
+ * same indent, replaces that precise span, and verifies the result
+ * contains exactly four copies of the canonical snippet.
  */
 
 /* eslint-env node */
@@ -22,8 +30,15 @@ const WORKFLOW_PATH = path.join(ROOT, '.github', 'workflows', 'ocr-review.yml');
 
 const BEGIN = '// --- BEGIN OCR TRUSTED MARKER SNIPPET ---';
 const END = '// --- END OCR TRUSTED MARKER SNIPPET ---';
+const INDENT = '            ';
+const EXPECTED_SITES = 4;
 
-const extractSnippet = (content) => {
+/**
+ * Extract the snippet text (BEGIN..END inclusive) from the module source.
+ * @param {string} content - full module source
+ * @returns {string} the snippet including sentinel lines
+ */
+function extractSnippet(content) {
   const beginIdx = content.indexOf(BEGIN);
   const endIdx = content.indexOf(END);
   if (beginIdx < 0) {
@@ -33,36 +48,163 @@ const extractSnippet = (content) => {
     throw new Error('END sentinel not found or precedes BEGIN in module');
   }
   return content.slice(beginIdx, endIdx + END.length);
-};
-
-const indent12 = (text) =>
-  text
-    .split('\n')
-    .map((line) => (line.length > 0 ? '            ' + line : line))
-    .join('\n');
-
-const moduleContent = fs.readFileSync(MODULE_PATH, 'utf8');
-const snippet = extractSnippet(moduleContent);
-const indentedSnippet = indent12(snippet);
-
-let workflow = fs.readFileSync(WORKFLOW_PATH, 'utf8');
-let count = 0;
-
-// Replace each occurrence of the old indented snippet block.
-// Match from the indented BEGIN to the indented END (inclusive).
-const pattern =
-  / {12}\/\/ --- BEGIN OCR TRUSTED MARKER SNIPPET ---[\s\S]*? {12}\/\/ --- END OCR TRUSTED MARKER SNIPPET ---/g;
-
-workflow = workflow.replace(pattern, () => {
-  count += 1;
-  return indentedSnippet;
-});
-
-if (count !== 4) {
-  throw new Error(
-    'Expected 4 snippet sites, replaced ' + count + '. Aborting.',
-  );
 }
 
-fs.writeFileSync(WORKFLOW_PATH, workflow, 'utf8');
-console.log('Re-embedded canonical snippet into ' + count + ' sites.');
+/**
+ * Indent every non-empty line of the snippet by 12 spaces.
+ * @param {string} text - snippet text (unindented)
+ * @returns {string} 12-space-indented snippet
+ */
+function indentSnippet(text) {
+  return text
+    .split('\n')
+    .map((line) => (line.length > 0 ? INDENT + line : line))
+    .join('\n');
+}
+
+/**
+ * Find all embedded snippet blocks in the workflow by locating each
+ * line that is EXACTLY INDENT + BEGIN, then walking forward line-by-line
+ * to the next line that is EXACTLY INDENT + END. This avoids the lazy-
+ * regex pitfall where a body line shaped like the END sentinel would
+ * truncate the match.
+ *
+ * Returns an array of { startLine, endLine } pairs (0-based line indices,
+ * inclusive) for every embedded block.
+ * @param {string} workflow - full workflow source
+ * @returns {Array<{startLine: number, endLine: number}>}
+ */
+function findEmbeddedBlocks(workflow) {
+  const lines = workflow.split('\n');
+  const blocks = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === INDENT + BEGIN) {
+      let j = i + 1;
+      while (j < lines.length && lines[j] !== INDENT + END) {
+        j += 1;
+      }
+      if (j >= lines.length) {
+        throw new Error(
+          'Unterminated embedded snippet: BEGIN sentinel at line ' +
+            (i + 1) +
+            ' has no matching END sentinel at ' +
+            INDENT.length +
+            '-space indent.',
+        );
+      }
+      blocks.push({ startLine: i, endLine: j });
+      i = j;
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Re-embed the canonical snippet into the workflow source.
+ *
+ * Pure function: takes the module content and workflow content, returns
+ * the re-embedded workflow content. Throws on any structural violation.
+ * @param {string} moduleContent - .github/scripts/ocr-trusted-marker.cjs
+ * @param {string} workflowContent - .github/workflows/ocr-review.yml
+ * @returns {string} the updated workflow content
+ */
+function reEmbed(moduleContent, workflowContent) {
+  const snippet = extractSnippet(moduleContent);
+  const indentedSnippet = indentSnippet(snippet);
+
+  const blocks = findEmbeddedBlocks(workflowContent);
+  if (blocks.length !== EXPECTED_SITES) {
+    throw new Error(
+      'Expected ' +
+        EXPECTED_SITES +
+        ' embedded snippet sites, found ' +
+        blocks.length +
+        '. Aborting.',
+    );
+  }
+
+  // Replace each block precisely. Work backwards so earlier indices
+  // remain valid as we splice.
+  const lines = workflowContent.split('\n');
+  const indentedLines = indentedSnippet.split('\n');
+  for (let k = blocks.length - 1; k >= 0; k--) {
+    const { startLine, endLine } = blocks[k];
+    lines.splice(startLine, endLine - startLine + 1, ...indentedLines);
+  }
+
+  const result = lines.join('\n');
+
+  // Self-verify: the result must contain exactly EXPECTED_SITES copies
+  // of the exact indented snippet.
+  const snippetCount = countOccurrences(result, indentedSnippet);
+  if (snippetCount !== EXPECTED_SITES) {
+    throw new Error(
+      'Self-verification failed: expected ' +
+        EXPECTED_SITES +
+        ' occurrences of the exact indented snippet, found ' +
+        snippetCount +
+        '.',
+    );
+  }
+
+  // Verify sentinel balance.
+  const beginCount = countOccurrences(result, INDENT + BEGIN);
+  const endCount = countOccurrences(result, INDENT + END);
+  if (beginCount !== EXPECTED_SITES || endCount !== EXPECTED_SITES) {
+    throw new Error(
+      'Self-verification failed: BEGIN sentinels = ' +
+        beginCount +
+        ', END sentinels = ' +
+        endCount +
+        ' (expected ' +
+        EXPECTED_SITES +
+        ' each).',
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Count non-overlapping occurrences of needle in haystack.
+ * @param {string} haystack
+ * @param {string} needle
+ * @returns {number}
+ */
+function countOccurrences(haystack, needle) {
+  if (needle.length === 0) return 0;
+  let count = 0;
+  let pos = 0;
+  while ((pos = haystack.indexOf(needle, pos)) !== -1) {
+    count += 1;
+    pos += needle.length;
+  }
+  return count;
+}
+
+// Export for testing.
+module.exports = {
+  reEmbed,
+  extractSnippet,
+  indentSnippet,
+  findEmbeddedBlocks,
+  BEGIN,
+  END,
+  INDENT,
+  EXPECTED_SITES,
+};
+
+// CLI entry point — only run when executed directly, not when required.
+if (require.main === module) {
+  const moduleContent = fs.readFileSync(MODULE_PATH, 'utf8');
+  const workflowContent = fs.readFileSync(WORKFLOW_PATH, 'utf8');
+  const updated = reEmbed(moduleContent, workflowContent);
+  if (updated !== workflowContent) {
+    fs.writeFileSync(WORKFLOW_PATH, updated, 'utf8');
+    console.log(
+      'Re-embedded canonical snippet into ' + EXPECTED_SITES + ' sites.',
+    );
+  } else {
+    console.log('All ' + EXPECTED_SITES + ' sites already up to date.');
+  }
+}

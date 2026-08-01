@@ -17,6 +17,7 @@ import {
   asNumber,
   asRecord,
   asString,
+  asStringSet,
   asVmFunction,
 } from './typed-test-helpers.ts';
 import type { WorkflowJob } from './typed-test-helpers.ts';
@@ -42,6 +43,36 @@ import {
   executeAutoGate,
   loadFunctionsFromScriptWithGithub,
 } from './ocr-trusted-marker-test-helpers.ts';
+
+/**
+ * Extract the ordered list of output keys from the Resolve review range
+ * heredoc JavaScript. The authoritative key order is defined by the
+ * `for (const key of ['KEY1', 'KEY2', ...])` loop in the heredoc source.
+ * Returns the keys in source order so the test can map logged lines to
+ * keys by position instead of hardcoding positions. Throws if the key
+ * array cannot be found.
+ */
+function extractRangeOutputKeys(heredocJs: string): string[] {
+  const match = heredocJs.match(
+    /for\s*\(\s*const\s+key\s+of\s*\[([^\]]*)\]\s*\)\s*\{[^}]*console\.log/,
+  );
+  if (!match) {
+    throw new Error(
+      'Could not find the output key array in the Resolve review range heredoc. ' +
+        'The for...of console.log loop may have been changed.',
+    );
+  }
+  const keys = match[1]
+    .split(',')
+    .map((k) => k.trim().replace(/['"]/g, ''))
+    .filter((k) => k.length > 0);
+  if (keys.length === 0) {
+    throw new Error(
+      'The output key array in the Resolve review range heredoc is empty.',
+    );
+  }
+  return keys;
+}
 
 describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (issue #2860) — part B', () => {
   let autoReviewJob: WorkflowJob | undefined;
@@ -416,17 +447,23 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
         error: (): void => {},
       };
       vm.runInNewContext(heredocJs, sandbox);
-      // The heredoc outputs: FROM_SHA, RANGE_MODE, CHECKPOINT_HEAD,
-      // FALLBACK_REASON, CHECKPOINT_FOUND, SAME_HEAD
-      expect(lines.length).toBeGreaterThanOrEqual(6);
-      return {
-        FROM_SHA: lines[0],
-        RANGE_MODE: lines[1],
-        CHECKPOINT_HEAD: lines[2],
-        FALLBACK_REASON: lines[3],
-        CHECKPOINT_FOUND: lines[4],
-        SAME_HEAD: lines[5],
-      };
+      // The heredoc JS logs the result fields to stdout via console.log,
+      // one per key, in the order defined by the `for (const key of [...])`
+      // loop in the heredoc source. Parse structurally by key: extract the
+      // authoritative key list from the heredoc source, map each logged
+      // line to its key by position, and fail loudly if the number of
+      // logged lines does not match the number of expected keys.
+      const expectedKeys = extractRangeOutputKeys(heredocJs);
+      expect(
+        lines.length,
+        `heredoc logged ${lines.length} lines but expected ${expectedKeys.length} keys (${expectedKeys.join(', ')}). ` +
+          'A debug log or extra console.log may have been added to the heredoc.',
+      ).toBe(expectedKeys.length);
+      const result: Record<string, unknown> = {};
+      for (let i = 0; i < expectedKeys.length; i++) {
+        result[expectedKeys[i]] = lines[i];
+      }
+      return result;
     }
 
     it('a real checkpoint reader + real resolver yields incremental selection', async () => {
@@ -650,7 +687,7 @@ no checkpoint here`,
       // Real existingInlineCommentKeys: only the github-actions[bot] comment key
       const keysResult = await asVmFunction(fns['existingInlineCommentKeys'])();
       expect(keysResult).toBeInstanceOf(Set);
-      const keySet = keysResult as Set<string>;
+      const keySet = asStringSet(keysResult);
       expect(keySet.size).toBe(1);
       // The coderabbitai[bot] comment is NOT in the dedup set
       const hasCoderabbit = [...keySet].some((k) => k.includes('src/file2.ts'));
@@ -745,11 +782,58 @@ no checkpoint on this one`,
       expect(extractHeredocBody(source, 'test-step')).toBe('const x = 1;');
     });
 
-    it('handles the <<- (strip-leading-tabs) operator', () => {
+    it('handles the <<- (strip-leading-tabs) operator with tab-indented terminator', () => {
       const source = ['node <<-HEREDOC', '\tconst x = 1;', '\tHEREDOC'].join(
         '\n',
       );
-      expect(extractHeredocBody(source, 'test-step')).toBe('\tconst x = 1;');
+      // Q3: the dash form strips leading tabs from the body, matching
+      // bash <<- semantics.
+      expect(extractHeredocBody(source, 'test-step')).toBe('const x = 1;');
+    });
+
+    it('Q3: plain form does NOT terminate on a space-indented body line equal to the delimiter', () => {
+      // Bash plain heredoc (<<) requires the terminator at column 0.
+      // A space-indented body line that happens to equal the delimiter
+      // must NOT terminate early.
+      const source = [
+        "node <<'NODE'",
+        'const x = 1;',
+        '  NODE',
+        'const y = 2;',
+        'NODE',
+      ].join('\n');
+      expect(extractHeredocBody(source, 'test-step')).toBe(
+        'const x = 1;\n  NODE\nconst y = 2;',
+      );
+    });
+
+    it('Q3: dash form accepts a tab-indented terminator and strips tabs from body', () => {
+      const source = [
+        'node <<-EOF',
+        '\tline one',
+        '\t\tline two',
+        '\tEOF',
+      ].join('\n');
+      // Q3: the dash form strips ALL leading tabs from each body line,
+      // matching bash <<- semantics. `\t\tline two` → `line two`.
+      expect(extractHeredocBody(source, 'test-step')).toBe(
+        'line one\nline two',
+      );
+    });
+
+    it('Q3: dash form does NOT terminate on a space-indented delimiter line', () => {
+      // Bash <<- allows only TAB-indented terminators, not space-indented.
+      const source = [
+        'node <<-EOF',
+        '\tconst x = 1;',
+        '    EOF',
+        '\tconst y = 2;',
+        '\tEOF',
+      ].join('\n');
+      // The space-indented EOF must not terminate; only \tEOF does.
+      expect(extractHeredocBody(source, 'test-step')).toBe(
+        'const x = 1;\n    EOF\nconst y = 2;',
+      );
     });
 
     it('throws a clear error when no heredoc is found', () => {

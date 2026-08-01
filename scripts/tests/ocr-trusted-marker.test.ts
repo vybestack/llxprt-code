@@ -67,11 +67,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isFunction(value: unknown): value is (...args: unknown[]) => unknown {
+  return typeof value === 'function';
+}
+
+function getRequired(
+  map: Map<string, (...args: unknown[]) => unknown>,
+  name: string,
+): (...args: unknown[]) => unknown {
+  const fn = map.get(name);
+  if (!fn) {
+    throw new Error(`internal: validated function missing: ${name}`);
+  }
+  return fn;
+}
+
 function loadModule(): OcrTrustedMarkerModule {
   if (!isRecord(rawModule)) {
     throw new Error('ocr-trusted-marker.cjs should export an object');
   }
-  const expectedKeys: ReadonlyArray<keyof OcrTrustedMarkerModule> = [
+  const expectedKeys: readonly string[] = [
     'OCR_DEFAULT_TRUSTED_MARKER_LOGINS',
     'normalizeTrustedMarkerLogin',
     'resolveTrustedMarkerLogins',
@@ -88,7 +103,196 @@ function loadModule(): OcrTrustedMarkerModule {
       throw new Error(`ocr-trusted-marker.cjs should export ${key}`);
     }
   }
-  return rawModule as unknown as OcrTrustedMarkerModule;
+  const logins = rawModule['OCR_DEFAULT_TRUSTED_MARKER_LOGINS'];
+  if (!Array.isArray(logins)) {
+    throw new Error('OCR_DEFAULT_TRUSTED_MARKER_LOGINS should be an array');
+  }
+  const functionExports: ReadonlyArray<readonly [string, unknown]> = [
+    ['normalizeTrustedMarkerLogin', rawModule['normalizeTrustedMarkerLogin']],
+    ['resolveTrustedMarkerLogins', rawModule['resolveTrustedMarkerLogins']],
+    ['isTrustedMarkerAuthor', rawModule['isTrustedMarkerAuthor']],
+    ['isTrustedMarkerComment', rawModule['isTrustedMarkerComment']],
+    ['trustedMarkerComments', rawModule['trustedMarkerComments']],
+    ['canonicalMarkerComment', rawModule['canonicalMarkerComment']],
+    ['newestTrustedMarkerMatching', rawModule['newestTrustedMarkerMatching']],
+    ['parseHiddenAutoCount', rawModule['parseHiddenAutoCount']],
+    ['resolveHiddenAutoCount', rawModule['resolveHiddenAutoCount']],
+  ];
+  const validatedFuncs = new Map<string, (...args: unknown[]) => unknown>();
+  for (const [name, value] of functionExports) {
+    if (!isFunction(value)) {
+      throw new Error(`ocr-trusted-marker.cjs should export function: ${name}`);
+    }
+    validatedFuncs.set(name, value);
+  }
+  const normalizeTrustedMarkerLogin = getRequired(
+    validatedFuncs,
+    'normalizeTrustedMarkerLogin',
+  );
+  const resolveTrustedMarkerLogins = getRequired(
+    validatedFuncs,
+    'resolveTrustedMarkerLogins',
+  );
+  const isTrustedMarkerAuthor = getRequired(
+    validatedFuncs,
+    'isTrustedMarkerAuthor',
+  );
+  const isTrustedMarkerComment = getRequired(
+    validatedFuncs,
+    'isTrustedMarkerComment',
+  );
+  const trustedMarkerComments = getRequired(
+    validatedFuncs,
+    'trustedMarkerComments',
+  );
+  const canonicalMarkerComment = getRequired(
+    validatedFuncs,
+    'canonicalMarkerComment',
+  );
+  const newestTrustedMarkerMatching = getRequired(
+    validatedFuncs,
+    'newestTrustedMarkerMatching',
+  );
+  const parseHiddenAutoCount = getRequired(
+    validatedFuncs,
+    'parseHiddenAutoCount',
+  );
+  const resolveHiddenAutoCount = getRequired(
+    validatedFuncs,
+    'resolveHiddenAutoCount',
+  );
+  return {
+    OCR_DEFAULT_TRUSTED_MARKER_LOGINS: logins.map((v) => {
+      if (typeof v !== 'string') {
+        throw new Error('OCR_DEFAULT_TRUSTED_MARKER_LOGINS must be strings');
+      }
+      return v;
+    }),
+    normalizeTrustedMarkerLogin: (value: unknown): string =>
+      asString(normalizeTrustedMarkerLogin(value)),
+    resolveTrustedMarkerLogins: (...sources: unknown[]): Set<string> =>
+      asStringSet(resolveTrustedMarkerLogins(...sources)),
+    isTrustedMarkerAuthor: (user: unknown, trustedLogins: unknown): boolean =>
+      asBoolean(isTrustedMarkerAuthor(user, trustedLogins)),
+    isTrustedMarkerComment: (
+      comment: unknown,
+      trustedLogins: unknown,
+      marker: unknown,
+    ): boolean =>
+      asBoolean(isTrustedMarkerComment(comment, trustedLogins, marker)),
+    trustedMarkerComments: (
+      comments: unknown,
+      trustedLogins: unknown,
+      marker: unknown,
+    ): TrustedMarkerComment[] =>
+      asTrustedMarkerCommentArray(
+        trustedMarkerComments(comments, trustedLogins, marker),
+      ),
+    canonicalMarkerComment: (
+      comments: unknown,
+      trustedLogins: unknown,
+      marker: unknown,
+    ): TrustedMarkerComment | null => {
+      const result = canonicalMarkerComment(comments, trustedLogins, marker);
+      return result === null ? null : asTrustedMarkerComment(result);
+    },
+    newestTrustedMarkerMatching: (
+      comments: unknown,
+      trustedLogins: unknown,
+      marker: unknown,
+      predicate: unknown,
+    ): TrustedMarkerComment | null => {
+      const result = newestTrustedMarkerMatching(
+        comments,
+        trustedLogins,
+        marker,
+        predicate,
+      );
+      return result === null ? null : asTrustedMarkerComment(result);
+    },
+    parseHiddenAutoCount: (body: unknown): number =>
+      asNumber(parseHiddenAutoCount(body)),
+    resolveHiddenAutoCount: (
+      comments: unknown,
+      trustedLogins: unknown,
+      marker: unknown,
+    ): number =>
+      asNumber(resolveHiddenAutoCount(comments, trustedLogins, marker)),
+  };
+}
+
+function asBoolean(value: unknown): boolean {
+  if (typeof value !== 'boolean') {
+    throw new Error(`expected boolean, got ${typeof value}`);
+  }
+  return value;
+}
+
+function asNumber(value: unknown): number {
+  if (typeof value !== 'number') {
+    throw new Error(`expected number, got ${typeof value}`);
+  }
+  return value;
+}
+
+function asString(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new Error(`expected string, got ${typeof value}`);
+  }
+  return value;
+}
+
+function asStringSet(value: unknown): Set<string> {
+  if (!(value instanceof Set)) {
+    throw new Error(
+      `expected Set, got ${value === null ? 'null' : typeof value}`,
+    );
+  }
+  const result: Set<string> = new Set();
+  for (const element of value) {
+    if (typeof element !== 'string') {
+      throw new Error('expected Set<string>, found non-string element');
+    }
+    result.add(element);
+  }
+  return result;
+}
+
+function asTrustedMarkerUser(value: unknown): TrustedMarkerUser {
+  if (!isRecord(value)) {
+    throw new Error('TrustedMarkerUser should be a record');
+  }
+  const type = value['type'];
+  const login = value['login'];
+  if (typeof type !== 'string') {
+    throw new Error('TrustedMarkerUser.type should be a string');
+  }
+  if (typeof login !== 'string') {
+    throw new Error('TrustedMarkerUser.login should be a string');
+  }
+  return { type, login };
+}
+
+function asTrustedMarkerComment(value: unknown): TrustedMarkerComment {
+  if (!isRecord(value)) {
+    throw new Error('expected a TrustedMarkerComment record');
+  }
+  const id = value['id'];
+  const body = value['body'];
+  if (typeof id !== 'number') {
+    throw new Error('TrustedMarkerComment.id should be a number');
+  }
+  if (typeof body !== 'string') {
+    throw new Error('TrustedMarkerComment.body should be a string');
+  }
+  return { id, body, user: asTrustedMarkerUser(value['user']) };
+}
+
+function asTrustedMarkerCommentArray(value: unknown): TrustedMarkerComment[] {
+  if (!Array.isArray(value)) {
+    throw new Error('expected an array of TrustedMarkerComment');
+  }
+  return value.map(asTrustedMarkerComment);
 }
 
 const mod = loadModule();
