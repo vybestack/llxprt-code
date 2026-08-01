@@ -306,7 +306,7 @@ export class JspProducer {
     if (!this.started || !this.registered) {
       return;
     }
-    if (this.queue.enqueue(this.snapshot())) {
+    if (this.queue.enqueueRecoverySnapshot(this.snapshot())) {
       this.queue.markSnapshotRecoveryDone();
     }
   }

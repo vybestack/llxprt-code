@@ -50,9 +50,33 @@ export class JspBoundedQueue {
       if (!this.isStopped) {
         this.didOverflow = true;
         this.snapshotRecoveryNeeded = true;
+        // Overflow drops a document, which is exactly the gap condition the
+        // recovery callback exists for. Without this the observer stays gapped
+        // and rejects everything until some later send also happens to fail.
+        this.requestRecovery();
       }
       return false;
     }
+    this.buffer.push(document);
+    this.scheduleDrain();
+    return true;
+  }
+
+  /**
+   * Enqueue a recovery snapshot, displacing anything still buffered.
+   *
+   * Once the stream has gapped, the observer rejects every event until a fresh
+   * snapshot arrives, so the pre-gap documents still sitting in the buffer can
+   * no longer be accepted. Replacing them with the snapshot is both cheaper and
+   * the only ordering that can actually be applied, and it guarantees the
+   * snapshot has room even though the overflow that triggered it means the
+   * buffer was full.
+   */
+  enqueueRecoverySnapshot(document: JspBoundDocument): boolean {
+    if (this.isStopped) {
+      return false;
+    }
+    this.buffer.length = 0;
     this.buffer.push(document);
     this.scheduleDrain();
     return true;

@@ -597,3 +597,42 @@ describe('heartbeat resilience', () => {
     }
   });
 });
+
+describe('overflow recovery', () => {
+  it('publishes a fresh snapshot after the queue overflows', async () => {
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const published: JspBoundDocument[] = [];
+    const hooks: JspProducerHooks = {
+      now: () => 100,
+      createIdentity: () => identity,
+      register: () => Promise.resolve(OK),
+      publish: (document) => {
+        published.push(document);
+        return Promise.resolve(OK);
+      },
+      heartbeat: () => Promise.resolve(OK),
+    };
+    // Capacity of one makes the second event in a burst overflow.
+    const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+      capacity: 1,
+    });
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    // Burst past capacity in one synchronous run so the drain cannot keep up.
+    producer.observeTurnStarted();
+    producer.observeActivityChanged('acting');
+    producer.observeTurnEnded('completed');
+    await producer.flush();
+    // Let the recovery microtask and its drain settle.
+    await producer.flush();
+
+    // The gap must be reported and repaired by a fresh snapshot, otherwise the
+    // observer rejects everything that follows.
+    expect(published.some((document) => document.kind === 'snapshot')).toBe(
+      true,
+    );
+    producer.stop();
+  });
+});
