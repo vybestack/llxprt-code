@@ -107,10 +107,12 @@ describe('createObservationTap', () => {
   });
 
   it('resolves the wait only once every concurrently approved tool has left approval', () => {
-    const calls: string[] = [];
+    const opened: string[] = [];
+    const resolved: string[] = [];
     const tap = createObservationTap({
-      ...noopTarget(calls),
-      onWaitResolved: () => calls.push('wait.resolved'),
+      ...noopTarget([]),
+      onWaitOpened: (reason) => opened.push(reason),
+      onWaitResolved: () => resolved.push('resolved'),
     });
 
     tap.onTurnStarted();
@@ -119,13 +121,18 @@ describe('createObservationTap', () => {
     tap.processEvent(secondToolCallEvent);
     tap.processEvent(secondConfirmationEvent);
 
+    // With two concurrent approvals, the wait must be opened exactly once
+    // (empty-to-nonempty transition) and not twice.
+    expect(opened).toStrictEqual(['permission']);
+    expect(resolved).toStrictEqual([]);
+
     tap.processEvent(executingEvent);
-    expect(calls).not.toContain('wait.resolved');
+    expect(resolved).toStrictEqual([]);
 
     tap.processEvent(secondExecutingEvent);
-    expect(calls.filter((call) => call === 'wait.resolved')).toStrictEqual([
-      'wait.resolved',
-    ]);
+    // The wait resolves exactly once when the last approval clears, matching
+    // the single open.
+    expect(resolved).toStrictEqual(['resolved']);
   });
 
   it('discards tool correlation at a turn boundary so a cancelled turn cannot leak a wait', () => {

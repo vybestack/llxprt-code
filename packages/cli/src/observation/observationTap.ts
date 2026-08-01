@@ -141,9 +141,14 @@ function routeEvent(
       target.onToolCreated(event.call.name, 'proposed');
       break;
     case 'tool-confirmation':
-      scope.awaitingConfirmation.add(event.confirmation.toolCallId);
+      // Open the wait only on the empty-to-nonempty transition so that N
+      // concurrent approvals produce one opened and one resolved signal,
+      // not N opened and 1 resolved.
       target.onToolPhaseChanged(event.confirmation.name, 'awaiting_approval');
-      target.onWaitOpened('permission');
+      if (scope.awaitingConfirmation.size === 0) {
+        target.onWaitOpened('permission');
+      }
+      scope.awaitingConfirmation.add(event.confirmation.toolCallId);
       break;
     case 'tool-status':
     case 'tool-result':
