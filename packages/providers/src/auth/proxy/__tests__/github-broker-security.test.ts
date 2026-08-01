@@ -267,13 +267,31 @@ describe('GitHub broker security regressions (#1954)', () => {
     const path = await import('node:path');
     const url = await import('node:url');
     const here = path.dirname(url.fileURLToPath(import.meta.url));
-    const source = await fs.readFile(
-      path.resolve(here, '..', 'github-broker.ts'),
-      'utf8',
+    const dir = path.resolve(here, '..');
+    // Every broker module, not just the entry point. Spawning could be
+    // introduced in any of them and a single-file check would miss it.
+    const brokerFiles = (await fs.readdir(dir)).filter(
+      (f) => f.startsWith('github-broker') && f.endsWith('.ts'),
     );
-    expect(source).toContain('shell: false');
-    expect(source).not.toMatch(/\bexec\(/);
-    expect(source).not.toMatch(/shell:\s*true/);
+    expect(brokerFiles.length).toBeGreaterThan(1);
+
+    // Match shell-capable spawns specifically. A bare /exec\(/ also matches
+    // RegExp.prototype.exec, which is unrelated and produced a false
+    // positive; the risk is child_process exec/spawn, or shell: true on any
+    // call.
+    const SHELL_SPAWN =
+      /(?:child_process['"]\s*\)?[\s\S]{0,200}?\b(?:exec|spawn)\s*\()|(?:\bimport\s*\{[^}]*\b(?:exec|spawn)\b[^}]*\}\s*from\s*['"]node:child_process)|(?:shell:\s*true)/;
+    const offenders: string[] = [];
+    for (const file of brokerFiles) {
+      const source = await fs.readFile(path.join(dir, file), 'utf8');
+      if (SHELL_SPAWN.test(source)) offenders.push(file);
+    }
+    expect(offenders, 'gh must never be spawned through a shell').toStrictEqual(
+      [],
+    );
+
+    const entry = await fs.readFile(path.join(dir, 'github-broker.ts'), 'utf8');
+    expect(entry).toContain('shell: false');
   });
 });
 

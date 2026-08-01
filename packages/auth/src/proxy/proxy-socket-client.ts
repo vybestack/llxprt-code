@@ -198,7 +198,11 @@ export class ProxySocketClient {
     options?: RequestOptions,
   ): Promise<ProxyResponse> {
     const id = crypto.randomUUID();
-    const frame = { v: PROTOCOL_VERSION, id, op, payload };
+    // Post-handshake frames carry the NEGOTIATED version, not our maximum.
+    // Against a v1 peer, sending v: 2 here makes every request unparseable
+    // and the connection silently useless — which is exactly the case the
+    // negotiation exists to handle.
+    const frame = { v: this._negotiatedVersion, id, op, payload };
     const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
     const promise = new Promise<ProxyResponse>((resolve, reject) => {
@@ -264,7 +268,7 @@ export class ProxySocketClient {
   cancel(id: string): void {
     if (!this.isConnected()) return;
     const cancelFrame = {
-      v: PROTOCOL_VERSION,
+      v: this._negotiatedVersion,
       id: crypto.randomUUID(),
       op: 'cancel',
       payload: { targetId: id },

@@ -134,6 +134,39 @@ describe('github tool', () => {
         expect(SUPPORTED_OPS, `${op} missing from SUPPORTED_OPS`).toContain(op);
       }
     });
+
+    /**
+     * The inverse direction, which is the one that fails open. Anything not
+     * in MUTATING_OPS is treated as a read and skips confirmation, so a
+     * write added to SUPPORTED_OPS without being classified would silently
+     * execute unattended. Pinning the read set means adding an operation
+     * forces a deliberate choice here rather than defaulting to no prompt.
+     *
+     * @plan PLAN-20260731-GHBROKER.P19
+     * @requirement REQ-012
+     */
+    it('classifies every supported operation as read or mutating', () => {
+      const KNOWN_READ_OPS = [
+        'issue.view',
+        'issue.list',
+        'pr.view',
+        'pr.list',
+        'pr.diff',
+        'pr.checks',
+        'pr.reviews',
+        'search.issues',
+        'search.prs',
+        'run.list',
+        'label.list',
+      ];
+      const unclassified = SUPPORTED_OPS.filter(
+        (op) => !MUTATING_OPS.has(op) && !KNOWN_READ_OPS.includes(op),
+      );
+      expect(
+        unclassified,
+        'operations must be added to MUTATING_OPS or to the known-read list; anything else silently skips confirmation',
+      ).toStrictEqual([]);
+    });
   });
 
   describe('dispatch', () => {

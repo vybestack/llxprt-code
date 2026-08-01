@@ -101,7 +101,9 @@ export function classifyStderr(stderr: string): BrokerErrorCode {
  * @pseudocode 003-github-broker.md lines 90-95
  */
 const TOKEN_PATTERNS: readonly RegExp[] = [
-  /gh[pousr]_[A-Za-z0-9]{20,}/g,
+  // ghp_ gho_ ghu_ ghs_ ghr_ ghx_ — the trailing x covers legacy
+  // fine-grained tokens, which the original class omitted.
+  /gh[pousrx]_[A-Za-z0-9]{20,}/g,
   /github_pat_[A-Za-z0-9_]{20,}/g,
 ];
 
