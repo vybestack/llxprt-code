@@ -63,7 +63,28 @@ export async function runSeatbeltSandbox(
     );
   }
 
-  const profile = (process.env.SEATBELT_PROFILE ??= 'permissive-open');
+  const explicitProfile = process.env.SEATBELT_PROFILE;
+  const networkMode =
+    process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
+  let automaticProfile = 'permissive-open';
+  if (networkMode === 'off') {
+    automaticProfile = 'permissive-closed';
+  } else if (networkMode === 'proxied') {
+    automaticProfile = 'permissive-proxied';
+  }
+  const profile =
+    explicitProfile !== undefined && explicitProfile.length > 0
+      ? explicitProfile
+      : automaticProfile;
+  process.env.SEATBELT_PROFILE = profile;
+  if (
+    (profile === 'permissive-proxied' || profile === 'restrictive-proxied') &&
+    !process.env.LLXPRT_SANDBOX_PROXY_COMMAND?.trim()
+  ) {
+    throw new FatalSandboxError(
+      'Seatbelt proxied profile requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
+    );
+  }
   let profileFile = fileURLToPath(
     new URL(`./sandbox-macos-${profile}.sb`, import.meta.url),
   );

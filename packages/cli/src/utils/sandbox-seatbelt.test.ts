@@ -4,14 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildSeatbeltArgs, runSeatbeltSandbox } from './sandbox-seatbelt.js';
+import {
+  assertSeatbeltProxyPortAvailable,
+  waitForFixtureProcessExit,
+} from './sandbox-seatbelt.test-helpers.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -381,18 +386,6 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
       process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/fake-dirty.sock';
       process.env.SEATBELT_PROFILE = 'permissive-open';
       process.env.SEATBELT_ENV_CAPTURE = capturedEnvPath;
-      // Under vitest, import.meta.url inside sandbox-seatbelt.ts may resolve
-      // to a transform-relative path, so the builtin .sb profile may not be
-      // found. Spy on fs.existsSync to allow the profile check to pass; the
-      // stub sandbox-exec binary ignores the profile entirely.
-      const realExistsSync = fs.existsSync;
-      const existsSpy = vi
-        .spyOn(fs, 'existsSync')
-        .mockImplementation((p: fs.PathLike) => {
-          if (String(p).includes('sandbox-macos-permissive-open.sb'))
-            return true;
-          return realExistsSync(p);
-        });
       process.env.PATH = `${stubDir}:${process.env.PATH ?? ''}`;
       try {
         await runSeatbeltSandbox(
@@ -420,7 +413,6 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
         process.env.PATH = savedPath;
         delete process.env.SEATBELT_ENV_CAPTURE;
         fs.rmSync(stubDir, { recursive: true, force: true });
-        existsSpy.mockRestore();
       }
     },
   );
@@ -478,6 +470,427 @@ describe('AC11: seatbelt spawn env carries no capability transport (#1954)', () 
         'env',
       ]);
       expect(fail.error !== undefined || fail.status !== 0).toBe(true);
+    },
+  );
+});
+
+const ISSUE_1456_ENV_KEYS = [
+  'SEATBELT_PROFILE',
+  'LLXPRT_SANDBOX_NETWORK',
+  'SANDBOX_NETWORK',
+  'LLXPRT_SANDBOX_PROXY_COMMAND',
+  'LLXPRT_CAPABILITY_TOKEN',
+  'LLXPRT_CAPABILITY_FD',
+  'LLXPRT_CREDENTIAL_SOCKET',
+  'PATH',
+] as const;
+const PROXIED_PROFILE_ERROR =
+  'Seatbelt proxied profile requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.';
+const BUILTIN_PROFILE_DIRECTORY = __dirname;
+const PROCESS_LISTENER_EVENTS = ['exit', 'SIGINT', 'SIGTERM'] as const;
+
+type ProcessListenerEvent = (typeof PROCESS_LISTENER_EVENTS)[number];
+type ProcessListener = (...args: unknown[]) => void;
+
+function isProcessListener(listener: unknown): listener is ProcessListener {
+  return typeof listener === 'function';
+}
+
+function processListeners(event: ProcessListenerEvent): ProcessListener[] {
+  return process.rawListeners(event).filter(isProcessListener);
+}
+
+type Issue1456Environment = Partial<
+  Record<(typeof ISSUE_1456_ENV_KEYS)[number], string>
+>;
+
+interface SeatbeltHarness {
+  readonly cwd: string;
+  readonly argsFile: string;
+  readonly envFile: string;
+  readonly sandboxMarker: string;
+  readonly proxyMarker: string;
+  readonly proxyCommand: string;
+  readonly cleanup: () => Promise<void>;
+}
+
+function restoreEnvironment(
+  snapshot: Readonly<Record<string, string | undefined>>,
+): void {
+  for (const key of ISSUE_1456_ENV_KEYS) {
+    const value = snapshot[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
+function applyEnvironment(environment: Issue1456Environment): void {
+  for (const key of ISSUE_1456_ENV_KEYS) {
+    if (key !== 'PATH') delete process.env[key];
+  }
+  Object.assign(
+    process.env,
+    Object.fromEntries(
+      ISSUE_1456_ENV_KEYS.flatMap((key) => {
+        const value = environment[key];
+        return value === undefined ? [] : [[key, value]];
+      }),
+    ),
+  );
+}
+
+function writeExecutable(filePath: string, content: string): void {
+  fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
+function removeAddedProcessListeners(
+  initialListeners: ReadonlyMap<
+    ProcessListenerEvent,
+    ReadonlySet<ProcessListener>
+  >,
+): void {
+  for (const event of PROCESS_LISTENER_EVENTS) {
+    const original = initialListeners.get(event) ?? new Set();
+    for (const listener of processListeners(event)) {
+      if (!original.has(listener)) process.off(event, listener);
+    }
+  }
+}
+
+function createSeatbeltHarness(cwd: string = process.cwd()): SeatbeltHarness {
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seatbelt-1456-'));
+  const argsFile = path.join(fixtureDir, 'args');
+  const envFile = path.join(fixtureDir, 'env');
+  const sandboxMarker = path.join(fixtureDir, 'sandbox-spawned');
+  const sandboxExitMarker = path.join(fixtureDir, 'sandbox-exit');
+  const proxyMarker = path.join(fixtureDir, 'proxy-listening');
+  const proxyPidFile = path.join(fixtureDir, 'proxy-pid');
+  const proxyServer = path.join(fixtureDir, 'proxy.cjs');
+  const initialListeners = new Map(
+    PROCESS_LISTENER_EVENTS.map((event) => [
+      event,
+      new Set(processListeners(event)),
+    ]),
+  );
+
+  writeExecutable(
+    path.join(fixtureDir, 'sandbox-exec'),
+    `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\nenv > "${envFile}"\ntouch "${sandboxMarker}"\nif [ -n "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" ]; then attempts=0; while [ ! -f "${sandboxExitMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done; fi\n`,
+  );
+  fs.writeFileSync(
+    proxyServer,
+    [
+      "const fs = require('node:fs');",
+      "const http = require('node:http');",
+      `const server = http.createServer((_request, response) => response.end('ok'));`,
+      `server.listen(8877, '127.0.0.1', () => {`,
+      `  fs.writeFileSync(${JSON.stringify(proxyPidFile)}, String(process.pid));`,
+      `  fs.writeFileSync(${JSON.stringify(proxyMarker)}, 'listening');`,
+      `  const interval = setInterval(() => {`,
+      `    if (fs.existsSync(${JSON.stringify(sandboxMarker)})) {`,
+      `      clearInterval(interval);`,
+      `      fs.writeFileSync(${JSON.stringify(sandboxExitMarker)}, 'exit');`,
+      `      server.close(() => process.exit(0));`,
+      `    }`,
+      `  }, 10);`,
+      '});',
+      "process.on('SIGTERM', () => server.close(() => process.exit(0)));",
+    ].join('\n'),
+  );
+  writeExecutable(
+    path.join(fixtureDir, 'timeout'),
+    [
+      '#!/bin/sh',
+      'duration="$1"',
+      'shift',
+      '"$@" &',
+      'child=$!',
+      '( sleep "$duration"; kill -TERM "$child" 2>/dev/null ) >/dev/null 2>&1 &',
+      'watchdog=$!',
+      'wait "$child"',
+      'status=$?',
+      'kill -TERM "$watchdog" 2>/dev/null || true',
+      'exit "$status"',
+    ].join('\n'),
+  );
+  writeExecutable(
+    path.join(fixtureDir, 'curl'),
+    `#!/bin/sh\ncase "${'$'}{LLXPRT_SANDBOX_PROXY_COMMAND-}" in *proxy.cjs*) attempts=0; while [ ! -f "${proxyMarker}" ]; do attempts=$((attempts + 1)); [ "$attempts" -ge 1000 ] && exit 124; sleep 0.01; done;; esac\nexit 0\n`,
+  );
+  process.env.PATH = `${fixtureDir}:${process.env.PATH ?? ''}`;
+
+  const originalProcessKill = process.kill;
+  const originalProcessExit = process.exit;
+  Object.defineProperty(process, 'kill', {
+    configurable: true,
+    value: () => true,
+    writable: true,
+  });
+  Object.defineProperty(process, 'exit', {
+    configurable: true,
+    value: () => undefined,
+    writable: true,
+  });
+
+  const proxyCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(proxyServer)}`;
+  const cleanup = async (): Promise<void> => {
+    try {
+      if (fs.existsSync(proxyPidFile)) {
+        const proxyPid = Number(fs.readFileSync(proxyPidFile, 'utf8').trim());
+        spawnSync('kill', ['-TERM', String(proxyPid)]);
+        await waitForFixtureProcessExit(proxyPid);
+        await assertSeatbeltProxyPortAvailable();
+      }
+    } finally {
+      removeAddedProcessListeners(initialListeners);
+      Object.defineProperty(process, 'kill', {
+        configurable: true,
+        value: originalProcessKill,
+        writable: true,
+      });
+      Object.defineProperty(process, 'exit', {
+        configurable: true,
+        value: originalProcessExit,
+        writable: true,
+      });
+      fs.rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  };
+  return {
+    cwd,
+    argsFile,
+    envFile,
+    sandboxMarker,
+    proxyMarker,
+    proxyCommand,
+    cleanup,
+  };
+}
+
+async function executeSeatbeltHarness(
+  harness: SeatbeltHarness,
+  environment: Issue1456Environment,
+): Promise<number> {
+  applyEnvironment(environment);
+  process.chdir(harness.cwd);
+  return runSeatbeltSandbox(
+    { command: 'sandbox-exec', image: 'test' },
+    [],
+    undefined,
+    [],
+  );
+}
+
+function assertSelectedProfile(
+  harness: SeatbeltHarness,
+  expectedProfile: string,
+): void {
+  const args = fs.readFileSync(harness.argsFile, 'utf8').trim().split('\n');
+  const profileFlagIndex = args.indexOf('-f');
+  expect(profileFlagIndex).toBeGreaterThanOrEqual(0);
+  const selectedProfile = args[profileFlagIndex + 1] ?? '';
+  expect(selectedProfile).toBe(expectedProfile);
+  expect(fs.existsSync(path.resolve(harness.cwd, selectedProfile))).toBe(true);
+}
+
+function assertScrubbedEnvironment(harness: SeatbeltHarness): void {
+  const childEnvironment = fs.readFileSync(harness.envFile, 'utf8');
+  expect(childEnvironment).not.toContain('LLXPRT_CAPABILITY_TOKEN=');
+  expect(childEnvironment).not.toContain('LLXPRT_CAPABILITY_FD=');
+  expect(childEnvironment).not.toContain('LLXPRT_CREDENTIAL_SOCKET=');
+}
+
+describe.sequential('#1456 Seatbelt network policy', () => {
+  let environmentSnapshot: Record<string, string | undefined>;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    environmentSnapshot = Object.fromEntries(
+      ISSUE_1456_ENV_KEYS.map((key) => [key, process.env[key]]),
+    );
+    originalCwd = process.cwd();
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    restoreEnvironment(environmentSnapshot);
+  });
+
+  it.skipIf(process.platform === 'win32').each([
+    ['off', undefined, 'permissive-closed'],
+    ['on', undefined, 'permissive-open'],
+    ['unexpected', undefined, 'permissive-open'],
+    [undefined, undefined, 'permissive-open'],
+    [undefined, 'off', 'permissive-closed'],
+    ['on', 'off', 'permissive-open'],
+    ['', 'off', 'permissive-open'],
+  ])(
+    'maps primary=%s and legacy=%s to %s',
+    async (primary, legacy, profile) => {
+      const harness = createSeatbeltHarness();
+      try {
+        await executeSeatbeltHarness(harness, {
+          LLXPRT_SANDBOX_NETWORK: primary,
+          SANDBOX_NETWORK: legacy,
+        });
+        assertSelectedProfile(
+          harness,
+          path.join(BUILTIN_PROFILE_DIRECTORY, `sandbox-macos-${profile}.sb`),
+        );
+        expect(fs.existsSync(harness.sandboxMarker)).toBe(true);
+        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'uses an empty explicit profile as automatic network selection',
+    async () => {
+      const harness = createSeatbeltHarness();
+      try {
+        await executeSeatbeltHarness(harness, {
+          SEATBELT_PROFILE: '',
+          LLXPRT_SANDBOX_NETWORK: 'off',
+        });
+        assertSelectedProfile(
+          harness,
+          path.join(
+            BUILTIN_PROFILE_DIRECTORY,
+            'sandbox-macos-permissive-closed.sb',
+          ),
+        );
+        expect(fs.existsSync(harness.sandboxMarker)).toBe(true);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'honors a conflicting non-empty explicit profile',
+    async () => {
+      const harness = createSeatbeltHarness();
+      try {
+        await executeSeatbeltHarness(harness, {
+          SEATBELT_PROFILE: 'permissive-closed',
+          LLXPRT_SANDBOX_NETWORK: 'proxied',
+        });
+        assertSelectedProfile(
+          harness,
+          path.join(
+            BUILTIN_PROFILE_DIRECTORY,
+            'sandbox-macos-permissive-closed.sb',
+          ),
+        );
+        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it
+    .skipIf(process.platform === 'win32')
+    .each(['custom-policy', 'custom-proxied-policy'])(
+    'loads real custom profile %s from an isolated cwd',
+    async (profile) => {
+      const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'seatbelt-cwd-1456-'));
+      const profileDirectory = path.join(cwd, '.llxprt');
+      const profilePath = path.join(
+        profileDirectory,
+        `sandbox-macos-${profile}.sb`,
+      );
+      fs.mkdirSync(profileDirectory, { recursive: true });
+      fs.writeFileSync(profilePath, '(version 1)\n(deny default)\n');
+      const harness = createSeatbeltHarness(cwd);
+      try {
+        await executeSeatbeltHarness(harness, {
+          SEATBELT_PROFILE: profile,
+          LLXPRT_SANDBOX_NETWORK: 'proxied',
+        });
+        assertSelectedProfile(
+          harness,
+          path.join('.llxprt', `sandbox-macos-${profile}.sb`),
+        );
+        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+      } finally {
+        await harness.cleanup();
+        fs.rmSync(cwd, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'allocates both proxy listener and sandbox for valid proxied mode and scrubs child credentials',
+    async () => {
+      await assertSeatbeltProxyPortAvailable();
+      const harness = createSeatbeltHarness();
+      try {
+        await executeSeatbeltHarness(harness, {
+          LLXPRT_SANDBOX_NETWORK: 'proxied',
+          LLXPRT_SANDBOX_PROXY_COMMAND: harness.proxyCommand,
+          LLXPRT_CAPABILITY_TOKEN: 'd'.repeat(64),
+          LLXPRT_CAPABILITY_FD: '3',
+          LLXPRT_CREDENTIAL_SOCKET: '/tmp/credential.sock',
+        });
+        assertSelectedProfile(
+          harness,
+          path.join(
+            BUILTIN_PROFILE_DIRECTORY,
+            'sandbox-macos-permissive-proxied.sb',
+          ),
+        );
+        expect(fs.existsSync(harness.proxyMarker)).toBe(true);
+        expect(fs.existsSync(harness.sandboxMarker)).toBe(true);
+        assertScrubbedEnvironment(harness);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32').each([
+    ['missing', undefined],
+    ['empty', ''],
+    ['whitespace', '   '],
+  ])(
+    'rejects automatic proxied mode with %s command before allocation',
+    async (_label, command) => {
+      const harness = createSeatbeltHarness();
+      try {
+        const result = executeSeatbeltHarness(harness, {
+          LLXPRT_SANDBOX_NETWORK: 'proxied',
+          LLXPRT_SANDBOX_PROXY_COMMAND: command,
+        });
+        await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
+        await expect(result).rejects.toThrowError(PROXIED_PROFILE_ERROR);
+        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+        expect(fs.existsSync(harness.sandboxMarker)).toBe(false);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
+  it
+    .skipIf(process.platform === 'win32')
+    .each(['permissive-proxied', 'restrictive-proxied'])(
+    'rejects explicit built-in %s without a proxy command',
+    async (profile) => {
+      const harness = createSeatbeltHarness();
+      try {
+        const result = executeSeatbeltHarness(harness, {
+          SEATBELT_PROFILE: profile,
+        });
+        await expect(result).rejects.toBeInstanceOf(FatalSandboxError);
+        await expect(result).rejects.toThrowError(PROXIED_PROFILE_ERROR);
+        expect(fs.existsSync(harness.proxyMarker)).toBe(false);
+        expect(fs.existsSync(harness.sandboxMarker)).toBe(false);
+      } finally {
+        await harness.cleanup();
+      }
     },
   );
 });
