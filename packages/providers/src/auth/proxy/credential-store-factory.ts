@@ -310,6 +310,26 @@ export function createTokenStore(): TokenStore {
  *
  * @plan PLAN-20250214-CREDPROXY.P36
  */
+/**
+ * Returns a socket client for brokered GitHub operations when running in a
+ * sandbox, or null when running on the host.
+ *
+ * Capability resolution stays here rather than in the caller: #2784 confines
+ * the token to this module's private cache, and handing it out to build a
+ * client elsewhere would widen that boundary for no benefit.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
+ * @requirement REQ-003, REQ-015
+ */
+export function createGitHubBrokerSocketClient(): ProxySocketClient | null {
+  const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
+  if (!socketPath && process.env.LLXPRT_CAPABILITY_FD !== undefined) {
+    createTokenStore();
+  }
+  if (!socketPath) return null;
+  return new ProxySocketClient(socketPath, resolveCapabilityToken());
+}
+
 export function createProviderKeyStorage(): ProviderKeyStorageLike {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (!socketPath && process.env.LLXPRT_CAPABILITY_FD !== undefined) {

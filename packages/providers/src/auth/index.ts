@@ -59,6 +59,7 @@ export {
 export {
   createTokenStore,
   createProviderKeyStorage,
+  createGitHubBrokerSocketClient,
   resetFactorySingletons,
 } from './proxy/credential-store-factory.js';
 
@@ -80,6 +81,18 @@ export type {
   SandboxProxyConfig,
   SandboxProxyHandle,
 } from './proxy/sandbox-proxy-lifecycle.js';
+
+/**
+ * Brokered GitHub operations. `executeGitHubOp` is the shared dispatch used
+ * by both the socket handler and the in-process host path.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
+ * @requirement REQ-003, REQ-004
+ */
+export {
+  createGitHubBrokerHandler,
+  executeGitHubOp,
+} from './proxy/github-broker.js';
 
 // ─── File-backed OAuth Settings Provider ─────────────────────────────────────
 // Isolated-runtime OAuth enablement surface: reads the user-scope global
