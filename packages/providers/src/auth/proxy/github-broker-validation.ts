@@ -170,8 +170,26 @@ function validateByKind(
     case 'freetext':
       return validateStringParam(key, value);
     default:
-      return null;
+      // Exhaustiveness check. Returning null here would mean a ParamKind
+      // added later silently bypasses ALL validation for that parameter -
+      // failing open on the boundary this module exists to enforce. The
+      // never assignment makes that a compile error instead.
+      return assertUnreachableKind(kind, key);
   }
+}
+
+/**
+ * Fails the build if a ParamKind gains a variant without a validator, and
+ * rejects at runtime if one somehow reaches here.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002
+ */
+function assertUnreachableKind(kind: never, key: string): ValidationError {
+  return {
+    code: 'INVALID_PARAM',
+    message: `Parameter ${key} has an unvalidated kind: ${String(kind)}`,
+  };
 }
 
 /**

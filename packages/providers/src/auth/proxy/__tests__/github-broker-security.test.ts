@@ -28,6 +28,7 @@ import { createGitHubBrokerHandler } from '../github-broker.js';
 import { encodeFrame, FrameDecoder } from '@vybestack/llxprt-code-auth';
 import { OP_REGISTRY } from '../github-broker-ops.js';
 import { validateParams } from '../github-broker-validation.js';
+import { auditLog } from '../audit-log.js';
 
 const CAPABILITY = 'test-capability-token-with-plenty-of-entropy';
 /** A realistically shaped GitHub token; must never appear in any response. */
@@ -383,5 +384,55 @@ describe('handler dispatch is not prototype-reachable', () => {
       expect(reply?.ok, `${op} must not dispatch`).toBe(false);
       expect(reply?.code).toBe('INVALID_REQUEST');
     }
+  });
+});
+
+describe('audit log enforces its no-secrets claim', () => {
+  /**
+   * The details argument is caller-supplied. The previous implementation
+   * asserted in a comment that secrets were never included while nothing
+   * checked, which is the kind of guarantee that quietly stops being true.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-001
+   */
+  it('redacts token-shaped values passed in details', () => {
+    const written: string[] = [];
+    const original = process.stderr.write.bind(process.stderr);
+    (process.stderr as { write: unknown }).write = (chunk: string): boolean => {
+      written.push(String(chunk));
+      return true;
+    };
+    try {
+      auditLog('INFO', 1, 'test_op', { leaked: SECRET });
+    } finally {
+      (process.stderr as { write: unknown }).write = original;
+    }
+    expect(written.join('')).not.toContain(SECRET);
+  });
+
+  /**
+   * A missing audit record is itself a security signal, so a value that
+   * cannot be serialised must still produce a line.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-001
+   */
+  it('still emits a record when details cannot be serialised', () => {
+    const written: string[] = [];
+    const original = process.stderr.write.bind(process.stderr);
+    (process.stderr as { write: unknown }).write = (chunk: string): boolean => {
+      written.push(String(chunk));
+      return true;
+    };
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    try {
+      auditLog('WARN', 2, 'circular_op', circular);
+    } finally {
+      (process.stderr as { write: unknown }).write = original;
+    }
+    expect(written.join('')).toContain('circular_op');
+    expect(written.join('')).toContain('unserialisable');
   });
 });
