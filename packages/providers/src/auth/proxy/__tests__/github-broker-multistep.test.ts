@@ -244,9 +244,30 @@ describe('pr.resolve-thread (multi-step)', () => {
    * @plan PLAN-20260731-GHBROKER.P11
    * @requirement REQ-013
    */
-  it('reports isResolved false when the mutation does not confirm', async () => {
+  /**
+   * Reporting isResolved: false for a missing payload made "the mutation
+   * did not happen" indistinguishable from "the thread is still
+   * unresolved". A caller driving a review loop would silently skip the
+   * thread instead of retrying, so the ambiguity now surfaces.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('fails when the mutation returns no resolution state', async () => {
     const { run } = makeRunner();
-    const out = await executeResolveThread({ threadId: 'PRRT_y' }, run);
+    await expect(
+      executeResolveThread({ threadId: 'PRRT_y' }, run),
+    ).rejects.toThrow(/no resolution state/);
+  });
+
+  it('reports isResolved false when the mutation says so explicitly', async () => {
+    const { run } = makeRunner([
+      [
+        'resolveReviewThread',
+        { data: { resolveReviewThread: { thread: { isResolved: false } } } },
+      ],
+    ]);
+    const out = await executeResolveThread({ threadId: 'PRRT_z' }, run);
     expect(out.isResolved).toBe(false);
   });
 });

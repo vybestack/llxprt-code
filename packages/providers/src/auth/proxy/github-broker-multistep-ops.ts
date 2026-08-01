@@ -140,7 +140,10 @@ async function resolveIssueTypeId(
   name: string,
   typeName: string,
 ): Promise<string> {
-  const query = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issueTypes(first:50){nodes{id name}}}}`;
+  // 100 is the GraphQL page maximum. At 50 a repository with more issue
+  // types than that reported "Unknown issue type" for a type that exists,
+  // which sends the caller looking for the wrong problem entirely.
+  const query = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){issueTypes(first:100){nodes{id name}}}}`;
   const raw = await run([
     'api',
     'graphql',
@@ -315,7 +318,17 @@ export async function executeResolveThread(
     'thread',
     'isResolved',
   ]);
-  return { threadId, isResolved: resolved === true };
+  // Only a literal boolean is a real answer. Reporting isResolved: false
+  // for a missing or malformed payload makes "the mutation did not happen"
+  // indistinguishable from "the thread is still unresolved", and a caller
+  // driving a review loop would silently skip the thread rather than retry.
+  if (typeof resolved !== 'boolean') {
+    throw brokerError(
+      'GITHUB_ERROR',
+      `pr.resolve-thread: no resolution state returned for ${threadId}`,
+    );
+  }
+  return { threadId, isResolved: resolved };
 }
 
 /** The pr.resolve-thread operation descriptor. */
