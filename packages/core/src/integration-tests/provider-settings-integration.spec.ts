@@ -121,7 +121,9 @@ describe('Provider Settings Integration', () => {
     const providerWithGlobalSettings = instantiateProvider('test-global');
 
     // These should work with global SettingsService
-    await providerWithGlobalSettings.setModelInSettings('test-model');
+    await expect(
+      providerWithGlobalSettings.setModelInSettings('test-model'),
+    ).resolves.toBeUndefined();
     await expect(
       providerWithGlobalSettings.getModelFromSettings(),
     ).resolves.toBe('test-model');

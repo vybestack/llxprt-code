@@ -615,8 +615,6 @@ const viAugmentations = {
     // not on vi. Delegate to it so vi.setSystemTime() works.
     if (time === undefined) {
       bunSetSystemTime();
-    } else if (typeof time === 'number') {
-      bunSetSystemTime(time);
     } else {
       bunSetSystemTime(time);
     }
@@ -649,7 +647,6 @@ const forceOverride = new Set([
   'restoreAllMocks',
   'clearAllTimers',
   'setSystemTime',
-  'clearAllTimers',
 ]);
 
 for (const [key, value] of Object.entries(viAugmentations)) {
