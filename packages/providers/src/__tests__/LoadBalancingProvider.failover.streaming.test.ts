@@ -375,6 +375,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-non-status-error',
         strategy: 'failover',
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
         subProfiles: [
           {
             name: 'backend1',
