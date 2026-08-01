@@ -19,6 +19,7 @@ import type {
   ValidationError,
 } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
+import { watchChecks } from './github-broker-watch.js';
 import {
   assertNotPartialSuccess,
   extractAuthor,
@@ -363,6 +364,7 @@ export const prDiffDescriptor: OpDescriptor = {
 const PR_CHECKS_PARAMS: Readonly<Record<string, ParamKind>> = {
   number: 'number',
   repo: 'repo',
+  watch: 'boolean',
 };
 
 /**
@@ -497,6 +499,21 @@ export const prChecksDescriptor: OpDescriptor = {
   buildArgv: (params) => buildPrChecksArgv(params),
   shape: (rawJson) => shapePrChecks(rawJson),
   tolerateNonZeroExit: true,
+  /**
+   * With `watch: true` the host owns the polling loop and the call blocks
+   * until CI concludes, replacing the pattern where the model polls itself
+   * and fights tool timeouts. Without it, this is a single call.
+   *
+   * @plan PLAN-20260731-GHBROKER.P13
+   * @requirement REQ-007, REQ-010
+   */
+  execute: async (params, run, signal) => {
+    const argv = buildPrChecksArgv(params);
+    if (params.watch !== true) {
+      return shapePrChecks(await run(argv, { tolerateNonZeroExit: true }));
+    }
+    return watchChecks(argv, run, signal);
+  },
 };
 
 // ─── pr.reviews ──────────────────────────────────────────────────────────────

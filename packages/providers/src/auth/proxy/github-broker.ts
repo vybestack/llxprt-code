@@ -364,7 +364,7 @@ async function dispatchMultiStep(
     // execute receives the temp-file-substituted params, exactly as
     // buildArgv does for single-call ops.
     const shaped = await withBodyFiles(descriptor.bodyParams, opParams, (p) =>
-      execute(p, run),
+      execute(p, run, signal),
     );
     state.writer.sendOk(id, shaped as Record<string, unknown>);
   } catch (err) {

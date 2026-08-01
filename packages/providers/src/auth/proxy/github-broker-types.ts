@@ -179,6 +179,7 @@ export interface OpDescriptor {
   readonly execute?: (
     params: Record<string, unknown>,
     run: GhRunner,
+    signal: AbortSignal,
   ) => Promise<unknown>;
 }
 
