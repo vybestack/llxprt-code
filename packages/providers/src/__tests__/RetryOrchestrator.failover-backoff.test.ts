@@ -134,11 +134,18 @@ describe('RetryOrchestrator - bucket failover backoff delay (issue #1564)', () =
   });
 
   it('applies backoff delay after Anthropic overloaded_error failover', async () => {
-    // Anthropic's overloaded_error carries no HTTP status — it is a
-    // body-level error recognized via isOverloadError.
+    // Anthropic SDK wraps stream errors so the retryable type lives at
+    // error.error.error.type (the intermediate error.error.type is the
+    // generic envelope value "error"). This matches the real SDK shape
+    // documented in isOverloadError.
     const overloadedError = new Error('Overloaded');
-    (overloadedError as unknown as { error: { type: string } }).error = {
-      type: 'overloaded_error',
+    (
+      overloadedError as unknown as {
+        error: { type: string; error: { type: string } };
+      }
+    ).error = {
+      type: 'error',
+      error: { type: 'overloaded_error' },
     };
     const throttleCalls: number[] = [];
     const { handler, getCurrentBucket } = createFailoverHandler([
