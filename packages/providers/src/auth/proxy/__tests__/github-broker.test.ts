@@ -1,0 +1,955 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Integration tests for the GitHub broker (P08).
+ *
+ * These tests use REAL Unix domain sockets and the REAL gh binary. node:net
+ * and the credential proxy server are never mocked. Only the infrastructure
+ * boundary (TokenStore / ProviderKeyStorage) uses in-memory test doubles,
+ * which is permitted by the mock-hygiene rules.
+ *
+ * The primary path (issue.view) is exercised against real public data in
+ * vybestack/llxprt-code to prove argv construction and shaping actually work.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-001, REQ-002, REQ-003, REQ-004
+ * @pseudocode 003-github-broker.md lines T1-T14
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as net from 'node:net';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+
+import {
+  CredentialProxyServer,
+  type CredentialProxyServerOptions,
+} from '../credential-proxy-server.js';
+import type {
+  TokenStore,
+  OAuthToken,
+  BucketStats,
+} from '@vybestack/llxprt-code-core';
+import { ProxySocketClient } from '@vybestack/llxprt-code-core';
+import type { ProxyResponse } from '@vybestack/llxprt-code-auth';
+import { encodeFrame, FrameDecoder } from '@vybestack/llxprt-code-auth';
+import {
+  createGitHubBrokerHandler,
+  type GitHubBrokerHandler,
+} from '../github-broker.js';
+import {
+  redactTokenShaped,
+  mapGraphQLErrorType,
+  classifyStderr,
+} from '../github-broker-errors.js';
+import {
+  buildIssueViewArgv,
+  shapeIssueView,
+  validateIssueViewParams,
+} from '../github-broker-ops.js';
+
+const isWindows = process.platform === 'win32';
+
+// Set RUN_GH_NETWORK_TESTS=1 to enable tests that hit the live GitHub API.
+const RUN_NETWORK_TESTS =
+  process.env.RUN_GH_NETWORK_TESTS === '1' || process.env.CI !== undefined;
+
+/**
+ * Asserts the structural shape of a shaped comment object. Extracted so the
+ * T1 network test can validate comment structure without placing `expect`
+ * calls inside an `if` block (vitest/no-conditional-expect).
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-013
+ * @pseudocode 003-github-broker.md lines 101-103
+ */
+function assertCommentShape(comment: Record<string, unknown>): void {
+  expect(typeof comment.author).toBe('string');
+  expect(typeof comment.createdAt).toBe('string');
+  expect(typeof comment.body).toBe('string');
+}
+const skipNetwork = !RUN_NETWORK_TESTS || isWindows;
+
+// ─── In-Memory Test Doubles (infrastructure boundary) ────────────────────────
+
+class InMemoryTokenStore implements TokenStore {
+  protected tokens: Map<string, OAuthToken> = new Map();
+  private locks: Set<string> = new Set();
+  private bucketStats: Map<string, BucketStats> = new Map();
+
+  private key(provider: string, bucket?: string): string {
+    return bucket ? `${provider}:${bucket}` : provider;
+  }
+
+  async saveToken(
+    provider: string,
+    token: OAuthToken,
+    bucket?: string,
+  ): Promise<void> {
+    this.tokens.set(this.key(provider, bucket), token);
+  }
+
+  async getToken(
+    provider: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
+    return this.tokens.get(this.key(provider, bucket)) ?? null;
+  }
+
+  async removeToken(provider: string, bucket?: string): Promise<void> {
+    this.tokens.delete(this.key(provider, bucket));
+  }
+
+  async listProviders(): Promise<string[]> {
+    const providers = new Set<string>();
+    for (const k of this.tokens.keys()) {
+      providers.add(k.split(':')[0]);
+    }
+    return [...providers];
+  }
+
+  async listBuckets(provider: string): Promise<string[]> {
+    const buckets: string[] = [];
+    for (const k of this.tokens.keys()) {
+      const parts = k.split(':');
+      if (parts[0] === provider && parts.length > 1) {
+        buckets.push(parts[1]);
+      }
+    }
+    return buckets;
+  }
+
+  async getBucketStats(
+    provider: string,
+    bucket: string,
+  ): Promise<BucketStats | null> {
+    return this.bucketStats.get(this.key(provider, bucket)) ?? null;
+  }
+
+  async acquireRefreshLock(
+    provider: string,
+    options?: { waitMs?: number; bucket?: string },
+  ): Promise<boolean> {
+    const k = this.key(provider, options?.bucket);
+    if (this.locks.has(k)) return false;
+    this.locks.add(k);
+    return true;
+  }
+
+  async releaseRefreshLock(provider: string, bucket?: string): Promise<void> {
+    this.locks.delete(this.key(provider, bucket));
+  }
+
+  async acquireAuthLock(
+    provider: string,
+    options?: { waitMs?: number; bucket?: string },
+  ): Promise<boolean> {
+    const k = `${this.key(provider, options?.bucket)}:auth`;
+    if (this.locks.has(k)) return false;
+    this.locks.add(k);
+    return true;
+  }
+
+  async releaseAuthLock(provider: string, bucket?: string): Promise<void> {
+    this.locks.delete(`${this.key(provider, bucket)}:auth`);
+  }
+}
+
+class InMemoryProviderKeyStorage {
+  private keys: Map<string, string> = new Map();
+
+  async saveKey(name: string, apiKey: string): Promise<void> {
+    this.keys.set(name, apiKey.trim());
+  }
+
+  async getKey(name: string): Promise<string | null> {
+    return this.keys.get(name) ?? null;
+  }
+
+  async deleteKey(name: string): Promise<boolean> {
+    return this.keys.delete(name);
+  }
+
+  async listKeys(): Promise<string[]> {
+    return [...this.keys.keys()];
+  }
+
+  async hasKey(name: string): Promise<boolean> {
+    return this.keys.has(name);
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const CAPABILITY_TOKEN = 'a'.repeat(64);
+
+async function startAndConnect(
+  serverInstance: CredentialProxyServer,
+  capabilityToken?: string,
+): Promise<ProxySocketClient> {
+  const socketPath = await serverInstance.start();
+  const c = new ProxySocketClient(socketPath, capabilityToken);
+  await c.ensureConnected();
+  return c;
+}
+
+/**
+ * Builds server options with the GitHub broker wired in as an extraHandler.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-003
+ * @pseudocode 003-github-broker.md lines 01-11
+ */
+function serverOptionsWithBroker(
+  tokenStore: InMemoryTokenStore,
+  keyStorage: InMemoryProviderKeyStorage,
+  overrides: Partial<CredentialProxyServerOptions> = {},
+): CredentialProxyServerOptions & { broker: GitHubBrokerHandler } {
+  const broker = createGitHubBrokerHandler();
+  return {
+    tokenStore,
+    providerKeyStorage:
+      keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
+    extraHandlers: { github: broker.handler },
+    ...overrides,
+    broker,
+  };
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+describe('GitHub broker (P08)', () => {
+  let tokenStore: InMemoryTokenStore;
+  let keyStorage: InMemoryProviderKeyStorage;
+  let server: CredentialProxyServer;
+  let client: ProxySocketClient;
+
+  beforeEach(() => {
+    tokenStore = new InMemoryTokenStore();
+    keyStorage = new InMemoryProviderKeyStorage();
+  });
+
+  afterEach(async () => {
+    try {
+      client.close();
+    } catch {
+      // client may not be initialized
+    }
+    try {
+      await server.stop();
+    } catch {
+      // server may not be started
+    }
+  });
+
+  // ─── T1: issue.view returns the shaped contract ───────────────────────────
+
+  /**
+   * issue.view against real public issue #135 in vybestack/llxprt-code
+   * returns the shaped contract: number, title, state, author, labels[],
+   * body, and comments[] when comments:true.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-004, REQ-013
+   * @pseudocode 003-github-broker.md lines T1, 101-103
+   */
+  it.skipIf(skipNetwork)(
+    'T1: issue.view returns the shaped contract (real gh)',
+    async () => {
+      const opts = serverOptionsWithBroker(tokenStore, keyStorage);
+      server = new CredentialProxyServer(opts);
+      client = await startAndConnect(server);
+
+      const result = await client.request('github', {
+        op: 'issue.view',
+        number: 135,
+        repo: 'vybestack/llxprt-code',
+        comments: true,
+      });
+
+      expect(result.ok).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.number).toBe(135);
+      expect(typeof data.title).toBe('string');
+      expect(data.title).toContain('Git');
+      expect(typeof data.state).toBe('string');
+      expect(typeof data.author).toBe('string');
+      expect(Array.isArray(data.labels)).toBe(true);
+      expect(typeof data.body).toBe('string');
+      expect(Array.isArray(data.comments)).toBe(true);
+      // Verify comment shape using a helper to avoid conditional expects
+      const comments = data.comments as unknown[];
+      comments
+        .slice(0, 1)
+        .forEach((c) => assertCommentShape(c as Record<string, unknown>));
+    },
+    30000,
+  );
+
+  // ─── T2: issue.view with repo targets another repository ──────────────────
+
+  /**
+   * issue.view with repo param targeting a different repository retrieves
+   * that repo's issue. We verify the repo flag is passed through and the
+   * response comes from the specified repo.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-009
+   * @pseudocode 003-github-broker.md lines T2, 52-55
+   */
+  it.skipIf(skipNetwork)(
+    'T2: issue.view with repo targets another repository (real gh)',
+    async () => {
+      const opts = serverOptionsWithBroker(tokenStore, keyStorage);
+      server = new CredentialProxyServer(opts);
+      client = await startAndConnect(server);
+
+      // Use a well-known public repo with a stable issue number
+      const result = await client.request('github', {
+        op: 'issue.view',
+        number: 1,
+        repo: 'octocat/Hello-World',
+        comments: false,
+      });
+
+      expect(result.ok).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.number).toBe(1);
+    },
+    30000,
+  );
+
+  // ─── T3: parameter beginning with '-' is rejected INVALID_PARAM ───────────
+
+  /**
+   * A parameter value beginning with '-' is rejected with INVALID_PARAM,
+   * even under execFile, because a value like "--repo" in a positional
+   * slot would be read by gh as a flag.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-002
+   * @pseudocode 003-github-broker.md lines T3, 26-28
+   */
+  it('T3: a parameter beginning with dash is rejected INVALID_PARAM', async () => {
+    const opts = serverOptionsWithBroker(tokenStore, keyStorage);
+    server = new CredentialProxyServer(opts);
+    client = await startAndConnect(server);
+
+    const result = await client.request('github', {
+      op: 'issue.view',
+      number: 135,
+      repo: '--malicious',
+      comments: false,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('INVALID_PARAM');
+  });
+
+  // ─── T4: unknown op → UNKNOWN_OP; unknown param → INVALID_PARAM ───────────
+
+  /**
+   * An unknown op yields UNKNOWN_OP and an unknown param yields
+   * INVALID_PARAM. A typo must not silently produce a different query.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-002
+   * @pseudocode 003-github-broker.md lines T4, 30-31, 47
+   */
+  it('T4: unknown op → UNKNOWN_OP and unknown param → INVALID_PARAM', async () => {
+    const opts = serverOptionsWithBroker(tokenStore, keyStorage);
+    server = new CredentialProxyServer(opts);
+    client = await startAndConnect(server);
+
+    const unknownOp = await client.request('github', {
+      op: 'issue.nonexistent',
+      number: 135,
+    });
+    expect(unknownOp.ok).toBe(false);
+    expect(unknownOp.code).toBe('UNKNOWN_OP');
+
+    const unknownParam = await client.request('github', {
+      op: 'issue.view',
+      number: 135,
+      bogusParam: true,
+    });
+    expect(unknownParam.ok).toBe(false);
+    expect(unknownParam.code).toBe('INVALID_PARAM');
+  });
+
+  // ─── T5: constructing server with colliding extraHandler throws ───────────
+
+  /**
+   * Constructing the server with an extraHandler whose key collides with a
+   * built-in op name (e.g. get_api_key) must THROW at construction time.
+   * A silent override would be catastrophic.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-003
+   * @pseudocode 003-github-broker.md lines T5, 01-06
+   */
+  it('T5: constructing server with colliding extraHandler throws', () => {
+    expect(
+      () =>
+        new CredentialProxyServer({
+          tokenStore,
+          providerKeyStorage:
+            keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
+          extraHandlers: {
+            get_api_key: async () => {},
+          },
+        }),
+    ).toThrow(/collides with a built-in/i);
+  });
+
+  // ─── T6: GraphQL errors array maps to the right structured code ───────────
+
+  /**
+   * A GraphQL HTTP 200 response with a top-level errors[] array maps to the
+   * right structured code based on the error type.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-004
+   * @pseudocode 003-github-broker.md lines T6, 67-74
+   */
+  it('T6: GraphQL errors array maps to structured code', () => {
+    expect(mapGraphQLErrorType('NOT_FOUND')).toBe('NOT_FOUND');
+    expect(mapGraphQLErrorType('FORBIDDEN')).toBe('PERMISSION_DENIED');
+    expect(mapGraphQLErrorType('RATE_LIMITED')).toBe('RATE_LIMITED');
+    expect(mapGraphQLErrorType('UNKNOWN')).toBe('GITHUB_ERROR');
+  });
+
+  // ─── T7: GraphQL data+errors together surfaces as error ───────────────────
+
+  /**
+   * GraphQL responses containing BOTH data and errors must surface as an
+   * error, never as partial data.
+   *
+   * This is tested at the shaping layer by feeding the shapeIssueView
+   * function a raw JSON with both data and errors, expecting it to throw
+   * a structured error rather than returning partial data.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-004
+   * @pseudocode 003-github-broker.md lines T7, 75-76
+   */
+  it('T7: GraphQL data+errors together surfaces as error not partial data', () => {
+    const rawWithBoth = {
+      data: { node: { number: 42, title: 'fake' } },
+      errors: [{ type: 'FORBIDDEN', message: 'Access denied to resource' }],
+    };
+
+    expect(() => shapeIssueView(rawWithBoth)).toThrow(
+      /FORBIDDEN|PERMISSION_DENIED|error/i,
+    );
+  });
+
+  // ─── T8: stderr carrying a token-shaped string is redacted ────────────────
+
+  /**
+   * Outbound messages are run through a redactor for token-shaped substrings.
+   * This is belt-and-braces — the broker never holds a token — but stderr
+   * comes from an external process we do not control.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-001
+   * @pseudocode 003-github-broker.md lines T8, 90-95
+   */
+  it('T8: stderr carrying a token-shaped string is redacted', () => {
+    const ghoToken = 'gho_abcdefghijklmnopqrstuvwx';
+    const patToken = 'github_pat_abcdefghijklmnopqrst';
+    const message = `some error ${ghoToken} and ${patToken} trailing text`;
+    const redacted = redactTokenShaped(message);
+    expect(redacted).not.toContain(ghoToken);
+    expect(redacted).not.toContain(patToken);
+    expect(redacted).toContain('[REDACTED]');
+    // The surrounding text is preserved.
+    expect(redacted).toContain('some error');
+    expect(redacted).toContain('trailing text');
+  });
+
+  // ─── T9: broker import graph excludes credential storage ──────────────────
+
+  /**
+   * The broker module's import graph contains no credential-storage module.
+   * The broker must not import providerKeyStorage, TokenStore, or anything
+   * from the credential-storage layer.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-004
+   * @pseudocode 003-github-broker.md lines T9, I2
+   */
+  it('T9: broker import graph excludes credential storage', async () => {
+    const brokerPath = path.resolve(__dirname, '..', 'github-broker.ts');
+    const moduleText = fs.readFileSync(brokerPath, 'utf-8');
+
+    // The broker module must not import any credential-storage symbol.
+    const forbidden = [
+      'providerKeyStorage',
+      'ProviderKeyStorage',
+      'TokenStore',
+      'credential-store',
+      'credential-storage',
+      'getKey',
+      'saveKey',
+    ];
+    for (const term of forbidden) {
+      // Allow the term in comments only (rare). Check import lines.
+      const importLines = moduleText
+        .split('\n')
+        .filter((l) => l.trim().startsWith('import'));
+      for (const line of importLines) {
+        expect(line).not.toContain(term);
+      }
+    }
+
+    // Also verify no import from the storage or auth proxy credential modules
+    expect(moduleText).not.toMatch(
+      /from\s+['"]@vybestack\/llxprt-code-storage['"]/,
+    );
+    expect(moduleText).not.toMatch(
+      /from\s+['"][^'"]*credential-store-factory['"]/,
+    );
+  });
+
+  // ─── T13: gh missing from PATH → HOST_GH_UNAVAILABLE ──────────────────────
+
+  /**
+   * When gh is absent (ENOENT), the broker returns HOST_GH_UNAVAILABLE.
+   * This is tested by using a PATH with no gh.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-004
+   * @pseudocode 003-github-broker.md lines T13, 88
+   */
+  it.skipIf(isWindows)(
+    'T13: gh missing from PATH → HOST_GH_UNAVAILABLE',
+    async () => {
+      const opts = serverOptionsWithBroker(tokenStore, keyStorage);
+      server = new CredentialProxyServer(opts);
+      client = await startAndConnect(server);
+
+      // We need to trigger a gh invocation with an empty PATH. The broker
+      // uses the process env PATH at call time, but we can't easily change
+      // the server's env per-request. Instead, we verify the classifyStderr
+      // and ENOENT path directly via the error translation module, which is
+      // the code that produces HOST_GH_UNAVAILABLE.
+      //
+      // We also verify the full path by temporarily setting the env PATH to
+      // a directory with no gh in the process that runs runGh.
+
+      // Save and restore PATH. Use an empty temp dir so the spawn truly
+      // fails to find gh.
+      const origPath = process.env.PATH;
+      const emptyDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'gh-broker-test-'),
+      );
+      process.env.PATH = emptyDir;
+      let result: ProxyResponse;
+      try {
+        result = await client.request('github', {
+          op: 'issue.view',
+          number: 135,
+          repo: 'vybestack/llxprt-code',
+          comments: false,
+        });
+      } finally {
+        process.env.PATH = origPath;
+        try {
+          fs.rmSync(emptyDir, { recursive: true, force: true });
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe('HOST_GH_UNAVAILABLE');
+    },
+    30000,
+  );
+
+  // ─── T14: capability-token auth still required ────────────────────────────
+
+  /**
+   * Capability-token authentication is still required to reach any github op.
+   * Requests reach handlers only after the handshake gate, so an
+   * unauthenticated connection must be rejected identically to today.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-015
+   * @pseudocode 003-github-broker.md lines T14
+   */
+  it.skipIf(isWindows)(
+    'T14: capability-token auth required for github op',
+    async () => {
+      const opts = serverOptionsWithBroker(tokenStore, keyStorage, {
+        capabilityToken: CAPABILITY_TOKEN,
+      });
+      server = new CredentialProxyServer(opts);
+      const socketPath = await server.start();
+
+      // Connect WITHOUT the capability token — handshake must be rejected.
+      const result = await new Promise<Record<string, unknown>>(
+        (resolve, reject) => {
+          const rawSocket = net.createConnection(socketPath);
+          const decoder = new FrameDecoder();
+          const timer = setTimeout(() => {
+            rawSocket.destroy();
+            reject(new Error('Timeout'));
+          }, 5000);
+          rawSocket.on('data', (chunk: Buffer) => {
+            try {
+              const frames = decoder.feed(chunk);
+              for (const frame of frames) {
+                clearTimeout(timer);
+                rawSocket.destroy();
+                resolve(frame);
+                return;
+              }
+            } catch {
+              clearTimeout(timer);
+              rawSocket.destroy();
+              resolve({ ok: false });
+            }
+          });
+          rawSocket.on('close', () => {
+            process.nextTick(() => {
+              clearTimeout(timer);
+              resolve({ ok: false });
+            });
+          });
+          rawSocket.on('connect', () => {
+            rawSocket.write(
+              encodeFrame({
+                v: 2,
+                op: 'handshake',
+                payload: { minVersion: 1, maxVersion: 2 },
+              }),
+            );
+          });
+          rawSocket.on('error', (err) => {
+            clearTimeout(timer);
+            reject(err);
+          });
+        },
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe('UNAUTHORIZED');
+
+      // Also verify a connection WITH the token CAN reach the github op
+      // (but with invalid params so we don't need network). This proves the
+      // handler is wired behind the gate.
+      const authedClient = new ProxySocketClient(socketPath, CAPABILITY_TOKEN);
+      await authedClient.ensureConnected();
+      const githubResult = await authedClient.request('github', {
+        op: 'issue.nonexistent',
+        number: 1,
+      });
+      // The op is rejected (UNKNOWN_OP), NOT UNAUTHORIZED — proving the
+      // handshake gate passed and the handler was reached.
+      expect(githubResult.ok).toBe(false);
+      expect(githubResult.code).toBe('UNKNOWN_OP');
+      authedClient.close();
+    },
+  );
+});
+
+// ─── Pure-function unit tests (no server needed) ─────────────────────────────
+
+/**
+ * Unit tests for the pure functions: buildArgv, shapeIssueView,
+ * validateIssueViewParams, classifyStderr. These test the pure logic
+ * without I/O.
+ *
+ * @plan PLAN-20260731-GHBROKER.P08
+ * @requirement REQ-002, REQ-004
+ * @pseudocode 003-github-broker.md lines 13-31, 46-50, 67-95, 101-103
+ */
+describe('GitHub broker pure functions (P08)', () => {
+  // ─── buildIssueViewArgv ───────────────────────────────────────────────────
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-002
+   * @pseudocode 003-github-broker.md lines 46-50, 52-55
+   */
+  describe('buildIssueViewArgv', () => {
+    it('builds argv with issue subcommand, view, json fields, and number', () => {
+      const argv = buildIssueViewArgv({ number: 135 }, false);
+      expect(argv[0]).toBe('issue');
+      expect(argv[1]).toBe('view');
+      expect(argv).toContain('135');
+      expect(argv).toContain('--json');
+    });
+
+    it('includes comments field when comments=true', () => {
+      const argv = buildIssueViewArgv({ number: 135 }, true);
+      const jsonIdx = argv.indexOf('--json');
+      const fieldsValue = argv[jsonIdx + 1];
+      expect(fieldsValue).toContain('comments');
+    });
+
+    it('omits comments field when comments=false', () => {
+      const argv = buildIssueViewArgv({ number: 135 }, false);
+      const jsonIdx = argv.indexOf('--json');
+      const fieldsValue = argv[jsonIdx + 1];
+      expect(fieldsValue).not.toContain('comments');
+    });
+
+    it('appends --repo when repo is provided', () => {
+      const argv = buildIssueViewArgv(
+        { number: 135, repo: 'vybestack/llxprt-code' },
+        false,
+      );
+      const repoIdx = argv.indexOf('--repo');
+      expect(repoIdx).toBeGreaterThan(-1);
+      expect(argv[repoIdx + 1]).toBe('vybestack/llxprt-code');
+    });
+
+    it('omits --repo when repo is not provided', () => {
+      const argv = buildIssueViewArgv({ number: 135 }, false);
+      expect(argv).not.toContain('--repo');
+    });
+  });
+
+  // ─── validateIssueViewParams ──────────────────────────────────────────────
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-002
+   * @pseudocode 003-github-broker.md lines 13-31
+   */
+  describe('validateIssueViewParams', () => {
+    it('accepts valid number and comments', () => {
+      const result = validateIssueViewParams({
+        number: 135,
+        comments: true,
+      });
+      expect(result).toBeNull();
+    });
+
+    it('rejects missing number', () => {
+      const result = validateIssueViewParams({ comments: true });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('rejects non-integer number', () => {
+      const result = validateIssueViewParams({ number: 1.5 });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('rejects zero number', () => {
+      const result = validateIssueViewParams({ number: 0 });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('rejects negative number', () => {
+      const result = validateIssueViewParams({ number: -5 });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('accepts valid repo', () => {
+      const result = validateIssueViewParams({
+        number: 135,
+        repo: 'vybestack/llxprt-code',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('rejects repo with invalid format (no slash)', () => {
+      const result = validateIssueViewParams({
+        number: 135,
+        repo: 'invalidrepo',
+      });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('rejects repo beginning with dash', () => {
+      const result = validateIssueViewParams({
+        number: 135,
+        repo: '--malicious',
+      });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('rejects unknown parameter', () => {
+      const result = validateIssueViewParams({
+        number: 135,
+        bogusParam: 'x',
+      });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+
+    it('rejects string param value beginning with dash', () => {
+      // Simulate a string param (body is not in issue.view, but we test the
+      // generic dash-rejection via the repo param)
+      const result = validateIssueViewParams({
+        number: 135,
+        repo: '-foo/bar',
+      });
+      expect(result?.code).toBe('INVALID_PARAM');
+    });
+  });
+
+  // ─── shapeIssueView ───────────────────────────────────────────────────────
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-013
+   * @pseudocode 003-github-broker.md lines 101-103
+   */
+  describe('shapeIssueView', () => {
+    it('shapes a minimal raw gh JSON into the contract', () => {
+      const raw = {
+        number: 42,
+        title: 'Test Issue',
+        state: 'OPEN',
+        author: { login: 'testuser' },
+        labels: [{ name: 'bug' }],
+        body: 'This is a test body',
+        comments: [
+          {
+            author: { login: 'commenter1' },
+            createdAt: '2026-01-01T00:00:00Z',
+            body: 'First comment',
+          },
+        ],
+      };
+      const shaped = shapeIssueView(raw);
+      expect(shaped.number).toBe(42);
+      expect(shaped.title).toBe('Test Issue');
+      expect(shaped.state).toBe('OPEN');
+      expect(shaped.author).toBe('testuser');
+      expect(shaped.labels).toStrictEqual(['bug']);
+      expect(shaped.body).toBe('This is a test body');
+      expect(Array.isArray(shaped.comments)).toBe(true);
+      const c = shaped.comments[0];
+      expect(c.author).toBe('commenter1');
+      expect(c.createdAt).toBe('2026-01-01T00:00:00Z');
+      expect(c.body).toBe('First comment');
+    });
+
+    it('excludes comments when comments array is absent', () => {
+      const raw = {
+        number: 42,
+        title: 'Test',
+        state: 'OPEN',
+        author: { login: 'user' },
+        labels: [],
+        body: 'body',
+      };
+      const shaped = shapeIssueView(raw);
+      expect(shaped.comments).toBeNull();
+    });
+
+    it('handles missing labels gracefully', () => {
+      const raw = {
+        number: 42,
+        title: 'Test',
+        state: 'OPEN',
+        author: { login: 'user' },
+        body: 'body',
+      };
+      const shaped = shapeIssueView(raw);
+      expect(shaped.labels).toStrictEqual([]);
+    });
+
+    it('handles author as a string (defensive for external data)', () => {
+      const raw = {
+        number: 42,
+        title: 'Test',
+        state: 'OPEN',
+        author: 'plainuser',
+        labels: [],
+        body: 'body',
+      };
+      const shaped = shapeIssueView(raw);
+      expect(shaped.author).toBe('plainuser');
+    });
+  });
+
+  // ─── classifyStderr ───────────────────────────────────────────────────────
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-004
+   * @pseudocode 003-github-broker.md lines 78-86
+   */
+  describe('classifyStderr', () => {
+    it('classifies rate limit', () => {
+      expect(classifyStderr('HTTP 403: API rate limit exceeded')).toBe(
+        'RATE_LIMITED',
+      );
+    });
+
+    it('classifies not found', () => {
+      expect(classifyStderr('Could not resolve to a node')).toBe('NOT_FOUND');
+      expect(classifyStderr('issue not found')).toBe('NOT_FOUND');
+    });
+
+    it('classifies auth required', () => {
+      expect(classifyStderr('please run gh auth login')).toBe(
+        'HOST_AUTH_REQUIRED',
+      );
+      expect(classifyStderr('authentication required')).toBe(
+        'HOST_AUTH_REQUIRED',
+      );
+    });
+
+    it('classifies permission denied (HTTP 403)', () => {
+      expect(classifyStderr('HTTP 403: Forbidden')).toBe('PERMISSION_DENIED');
+    });
+
+    it('classifies unknown as GITHUB_ERROR', () => {
+      expect(classifyStderr('some random error')).toBe('GITHUB_ERROR');
+    });
+  });
+
+  // ─── redactTokenShaped ────────────────────────────────────────────────────
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-001
+   * @pseudocode 003-github-broker.md lines 90-95
+   */
+  describe('redactTokenShaped', () => {
+    it('redacts gho_ tokens', () => {
+      const result = redactTokenShaped('error: gho_ABCDEFGHIJKLMNOPQRSTUVWX');
+      expect(result).not.toContain('gho_');
+      expect(result).toContain('[REDACTED]');
+    });
+
+    it('redacts github_pat_ tokens', () => {
+      const result = redactTokenShaped(
+        'error: github_pat_ABCDEFGHIJKLMNOPQRST',
+      );
+      expect(result).not.toContain('github_pat_');
+      expect(result).toContain('[REDACTED]');
+    });
+
+    it('redacts ghp_ tokens', () => {
+      const result = redactTokenShaped('error: ghp_ABCDEFGHIJKLMNOPQRSTUVWX');
+      expect(result).not.toContain('ghp_');
+    });
+
+    it('redacts ghs_ tokens', () => {
+      const result = redactTokenShaped('error: ghs_ABCDEFGHIJKLMNOPQRSTUVWX');
+      expect(result).not.toContain('ghs_');
+    });
+
+    it('preserves non-token text', () => {
+      const result = redactTokenShaped('a normal error message');
+      expect(result).toBe('a normal error message');
+    });
+
+    it('handles strings with no tokens', () => {
+      const result = redactTokenShaped('no secrets here');
+      expect(result).toBe('no secrets here');
+    });
+  });
+});

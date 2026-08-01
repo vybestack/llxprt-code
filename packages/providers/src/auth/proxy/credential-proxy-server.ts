@@ -42,8 +42,10 @@ import {
   computeNegotiatedVersion,
   validateCapabilityToken,
 } from './handshake-helpers.js';
+import { mergeExtraHandlers } from './extra-handler-merger.js';
 
 export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
+export type { RequestHandler } from './github-broker-request-handler.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -78,6 +80,20 @@ export interface CredentialProxyServerOptions {
    * (non-sandbox / legacy backward compatibility).
    */
   capabilityToken?: string;
+  /**
+   * Extra request handlers merged into the server's requestHandlers at
+   * construction. If any key collides with a built-in op name, the
+   * constructor THROWS (fail fast). A silent override of get_api_key would
+   * be catastrophic.
+   *
+   * The handler signature must match the server's internal handler type:
+   * (socket, id, payload, state, signal) => Promise<void> | void.
+   *
+   * @plan PLAN-20260731-GHBROKER.P08
+   * @requirement REQ-003
+   * @pseudocode 003-github-broker.md lines 01-06
+   */
+  extraHandlers?: Record<string, unknown>;
 }
 
 // ─── Per-Connection State ────────────────────────────────────────────────────
@@ -148,6 +164,7 @@ export class CredentialProxyServer {
     this.expectedTokenHash = options.capabilityToken
       ? crypto.createHash('sha256').update(options.capabilityToken).digest()
       : null;
+    mergeExtraHandlers(this.requestHandlers, options.extraHandlers);
   }
 
   async start(): Promise<string> {
