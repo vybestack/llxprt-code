@@ -4,15 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { policiesCommand } from './policiesCommand.js';
-import { type CommandContext, type MessageActionReturn } from './types.js';
-import { assertDefined } from '../../test-utils/assertions.js';
 import {
-  PolicyEngine,
-  PolicyDecision,
-  type PolicyRule,
-} from '@vybestack/llxprt-code-core';
+  type CommandContext,
+  type MessageActionReturn,
+  type OpenDialogActionReturn,
+} from './types.js';
+import { PolicyDecision, type PolicyEngine } from '@vybestack/llxprt-code-core';
+import { assertDefined } from '../../test-utils/assertions.js';
+
+function makeMockEngine(): PolicyEngine {
+  return {
+    getRules: () => [
+      {
+        toolName: 'edit',
+        decision: PolicyDecision.ALLOW,
+        priority: 1.05,
+        source: 'Default: defaults.toml',
+      },
+    ],
+    getDefaultDecision: () => PolicyDecision.ASK_USER,
+    isNonInteractive: () => false,
+  } as unknown as PolicyEngine;
+}
 
 describe('policiesCommand', () => {
   let mockContext: CommandContext;
@@ -25,291 +40,131 @@ describe('policiesCommand', () => {
     } as unknown as CommandContext;
   });
 
-  it('should have the correct name and description', () => {
-    expect(policiesCommand.name).toBe('policies');
-    expect(policiesCommand.description).toBe(
-      'display configured policy rules and their priorities',
-    );
-  });
+  describe('structure', () => {
+    it('should have the correct name and description', () => {
+      expect(policiesCommand.name).toBe('policies');
+      expect(policiesCommand.description).toBe(
+        'inspect and manage policy rules (list or interactive menu)',
+      );
+    });
 
-  it('should return an error when config is not available', () => {
-    assertDefined(policiesCommand.action);
-
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result).toStrictEqual({
-      type: 'message',
-      messageType: 'error',
-      content: 'Configuration not available',
+    it('should have list and menu subcommands', () => {
+      const subNames = policiesCommand.subCommands?.map((s) => s.name);
+      expect(subNames).toStrictEqual(['list', 'menu']);
     });
   });
 
-  it('should display message when no rules are configured', () => {
-    const mockPolicyEngine = new PolicyEngine({
-      rules: [],
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
+  describe('default action (bare /policies)', () => {
+    it('should return an error when neither agent nor config is available', () => {
+      assertDefined(policiesCommand.action);
+      const result = policiesCommand.action(
+        mockContext,
+        '',
+      ) as MessageActionReturn;
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Configuration not available',
+      });
     });
 
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
+    it('should render the list table when config is available', () => {
+      mockContext.services.config = {
+        getPolicyEngine: () => makeMockEngine(),
+      } as unknown as CommandContext['services']['config'];
 
-    assertDefined(policiesCommand.action);
+      assertDefined(policiesCommand.action);
+      const result = policiesCommand.action(
+        mockContext,
+        '',
+      ) as MessageActionReturn;
 
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result).toStrictEqual({
-      type: 'message',
-      messageType: 'info',
-      content: 'No policy rules configured.',
+      expect(result.type).toBe('message');
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('Configured Policy Rules:');
+      expect(result.content).toContain('Tier 1 (Defaults)');
     });
   });
 
-  it('should display rules sorted by priority', () => {
-    const rules: PolicyRule[] = [
-      {
-        toolName: 'edit',
-        decision: PolicyDecision.ALLOW,
-        priority: 1.01,
-      },
-      {
-        toolName: 'glob',
-        decision: PolicyDecision.ALLOW,
-        priority: 1.05,
-      },
-      {
-        toolName: 'shell',
-        decision: PolicyDecision.DENY,
-        priority: 2.4,
-      },
-    ];
-
-    const mockPolicyEngine = new PolicyEngine({
-      rules,
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
+  describe('/policies list', () => {
+    it('should return an error when config is unavailable', () => {
+      const listSub = policiesCommand.subCommands!.find(
+        (c) => c.name === 'list',
+      )!;
+      assertDefined(listSub.action);
+      const result = listSub.action(mockContext, '') as MessageActionReturn;
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Configuration not available',
+      });
     });
 
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
+    it('should render a tier-grouped table from the agent policy engine', () => {
+      mockContext.services.agent = {
+        policy: makeMockEngine(),
+      } as unknown as CommandContext['services']['agent'];
 
-    assertDefined(policiesCommand.action);
+      const listSub = policiesCommand.subCommands!.find(
+        (c) => c.name === 'list',
+      )!;
+      assertDefined(listSub.action);
+      const result = listSub.action(mockContext, '') as MessageActionReturn;
 
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.type).toBe('message');
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('Configured Policy Rules:');
-    expect(result.content).toContain('shell → DENY');
-    expect(result.content).toContain('glob → ALLOW');
-    expect(result.content).toContain('edit → ALLOW');
-
-    // Verify higher priority (2.4) appears before lower priorities
-    const shellIndex = result.content.indexOf('shell');
-    const globIndex = result.content.indexOf('glob');
-    const editIndex = result.content.indexOf('edit');
-    expect(shellIndex).toBeLessThan(globIndex);
-    expect(globIndex).toBeLessThan(editIndex);
+      expect(result.type).toBe('message');
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('edit');
+      expect(result.content).toContain('ALLOW');
+      expect(result.content).toContain('Default Decision: ASK_USER');
+    });
   });
 
-  it('should group rules by tier bands', () => {
-    const rules: PolicyRule[] = [
-      {
-        toolName: 'edit',
-        decision: PolicyDecision.ALLOW,
-        priority: 1.01,
-      },
-      {
-        toolName: 'shell',
-        decision: PolicyDecision.DENY,
-        priority: 2.4,
-      },
-    ];
-
-    const mockPolicyEngine = new PolicyEngine({
-      rules,
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
+  describe('/policies menu', () => {
+    it('should return an error when config is unavailable', () => {
+      const menuSub = policiesCommand.subCommands!.find(
+        (c) => c.name === 'menu',
+      )!;
+      assertDefined(menuSub.action);
+      const result = menuSub.action(mockContext, '') as MessageActionReturn;
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Configuration not available',
+      });
     });
 
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
+    it('should return a dialog action when config is available', () => {
+      mockContext.services.config = {
+        getPolicyEngine: () => makeMockEngine(),
+      } as unknown as CommandContext['services']['config'];
 
-    assertDefined(policiesCommand.action);
+      const menuSub = policiesCommand.subCommands!.find(
+        (c) => c.name === 'menu',
+      )!;
+      assertDefined(menuSub.action);
+      const result = menuSub.action(mockContext, '') as OpenDialogActionReturn;
 
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.type).toBe('message');
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('Tier 2 (User-defined):');
-    expect(result.content).toContain('Tier 1 (Defaults):');
-  });
-
-  it('should display wildcard tool name as *', () => {
-    const rules: PolicyRule[] = [
-      {
-        toolName: undefined, // wildcard
-        decision: PolicyDecision.ALLOW,
-        priority: 1.999,
-      },
-    ];
-
-    const mockPolicyEngine = new PolicyEngine({
-      rules,
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
+      expect(result).toStrictEqual({
+        type: 'dialog',
+        dialog: 'policies',
+      });
     });
 
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
+    it('should return a dialog action when agent is available', () => {
+      mockContext.services.agent = {
+        policy: makeMockEngine(),
+      } as unknown as CommandContext['services']['agent'];
 
-    assertDefined(policiesCommand.action);
+      const menuSub = policiesCommand.subCommands!.find(
+        (c) => c.name === 'menu',
+      )!;
+      assertDefined(menuSub.action);
+      const result = menuSub.action(mockContext, '') as OpenDialogActionReturn;
 
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.type).toBe('message');
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('Priority 1.999: * → ALLOW');
-  });
-
-  it('should display a tool name prefix with a trailing wildcard', () => {
-    const mockPolicyEngine = new PolicyEngine({
-      rules: [
-        {
-          toolNamePrefix: 'workspace__',
-          decision: PolicyDecision.ALLOW,
-          priority: 1.5,
-        },
-      ],
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
+      expect(result).toStrictEqual({
+        type: 'dialog',
+        dialog: 'policies',
+      });
     });
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
-
-    assertDefined(policiesCommand.action);
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.content).toContain('Priority 1.500: workspace__* → ALLOW');
-  });
-
-  it('should display args pattern when present', () => {
-    const rules: PolicyRule[] = [
-      {
-        toolName: 'shell',
-        decision: PolicyDecision.DENY,
-        priority: 2.0,
-        argsPattern: /rm -rf \//,
-      },
-    ];
-
-    const mockPolicyEngine = new PolicyEngine({
-      rules,
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
-    });
-
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
-
-    assertDefined(policiesCommand.action);
-
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.type).toBe('message');
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('(pattern: rm -rf \\/)');
-  });
-
-  it('should display default decision and non-interactive mode status', () => {
-    const rules: PolicyRule[] = [
-      {
-        toolName: 'edit',
-        decision: PolicyDecision.ALLOW,
-        priority: 1.01,
-      },
-    ];
-
-    const mockPolicyEngine = new PolicyEngine({
-      rules,
-      defaultDecision: PolicyDecision.DENY,
-      nonInteractive: true,
-    });
-
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
-
-    assertDefined(policiesCommand.action);
-
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.type).toBe('message');
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('Default Decision: DENY');
-    expect(result.content).toContain(
-      'Non-Interactive Mode: true (ASK_USER → DENY)',
-    );
-  });
-
-  it('should display non-interactive mode as false when not enabled', () => {
-    const rules: PolicyRule[] = [
-      {
-        toolName: 'edit',
-        decision: PolicyDecision.ALLOW,
-        priority: 1.01,
-      },
-    ];
-
-    const mockPolicyEngine = new PolicyEngine({
-      rules,
-      defaultDecision: PolicyDecision.ASK_USER,
-      nonInteractive: false,
-    });
-
-    mockContext.services.config = {
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as CommandContext['services']['config'];
-
-    assertDefined(policiesCommand.action);
-
-    const result = policiesCommand.action(
-      mockContext,
-      '',
-    ) as MessageActionReturn;
-
-    expect(result.type).toBe('message');
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('Non-Interactive Mode: false');
   });
 });

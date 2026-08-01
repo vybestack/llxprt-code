@@ -808,4 +808,79 @@ describe('PolicyEngine', () => {
       expect(engine.getRules()).toHaveLength(0);
     });
   });
+
+  describe('replaceRules', () => {
+    it('replaces the entire rule set', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'edit',
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+          },
+          {
+            toolName: 'shell',
+            decision: PolicyDecision.DENY,
+            priority: 1.0,
+          },
+        ],
+      });
+
+      engine.replaceRules([
+        {
+          toolName: 'glob',
+          decision: PolicyDecision.ASK_USER,
+          priority: 2.5,
+        },
+      ]);
+
+      const rules = engine.getRules();
+      expect(rules).toHaveLength(1);
+      expect(rules[0].toolName).toBe('glob');
+    });
+
+    it('sorts the new rules by priority', () => {
+      const engine = new PolicyEngine({
+        rules: [{ toolName: 'edit', decision: PolicyDecision.ALLOW }],
+      });
+
+      engine.replaceRules([
+        { toolName: 'low', decision: PolicyDecision.ALLOW, priority: 1.0 },
+        { toolName: 'high', decision: PolicyDecision.DENY, priority: 3.0 },
+        { toolName: 'mid', decision: PolicyDecision.ALLOW, priority: 2.0 },
+      ]);
+
+      const rules = engine.getRules();
+      expect(rules[0].toolName).toBe('high');
+      expect(rules[1].toolName).toBe('mid');
+      expect(rules[2].toolName).toBe('low');
+    });
+
+    it('clears all rules when given an empty array', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'edit', decision: PolicyDecision.ALLOW },
+          { toolName: 'glob', decision: PolicyDecision.DENY },
+        ],
+      });
+
+      engine.replaceRules([]);
+
+      expect(engine.getRules()).toHaveLength(0);
+    });
+
+    it('reflects new rules in evaluate()', () => {
+      const engine = new PolicyEngine({
+        rules: [{ toolName: 'edit', decision: PolicyDecision.ALLOW }],
+      });
+
+      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ALLOW);
+
+      engine.replaceRules([
+        { toolName: 'edit', decision: PolicyDecision.DENY, priority: 2.0 },
+      ]);
+
+      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.DENY);
+    });
+  });
 });

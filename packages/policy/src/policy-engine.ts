@@ -417,4 +417,19 @@ export class PolicyEngine {
       }
     }
   }
+
+  /**
+   * Replaces the entire base rule set and re-sorts by priority.
+   *
+   * Used by interactive surfaces (e.g. the /policies dialog) to refresh the
+   * active stack after the underlying policy files change, without requiring
+   * a full process restart. The supplied rules become the new canonical list.
+   */
+  replaceRules(rules: readonly PolicyRule[]): void {
+    this.baseRules.length = 0;
+    for (const rule of rules) {
+      this.baseRules.push(cloneRule(rule));
+    }
+    this.baseRules.sort(compareRulePriority);
+  }
 }
