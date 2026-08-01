@@ -240,6 +240,7 @@
     "scripts/tests/ocr-concurrency-canary-2673-evidence.test.ts",
     "scripts/tests/ocr-concurrency-canary-2673-helpers.ts",
     "scripts/tests/ocr-concurrency-canary-2673.test.ts",
+    "scripts/tests/ocr-heredoc-extraction.test.ts",
     "scripts/tests/ocr-manifest-test-helpers.ts",
     "scripts/tests/ocr-notifier-classification.test.ts",
     "scripts/tests/ocr-review-coverage-integration-b.test.ts",

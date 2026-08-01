@@ -694,10 +694,19 @@ function loadSnippetContext(
   const endLine = '// --- END OCR TRUSTED MARKER SNIPPET ---';
   const beginIdx = script.indexOf(beginLine);
   const endIdx = script.indexOf(endLine);
-  const snippetText =
-    beginIdx >= 0 && endIdx >= 0
-      ? script.slice(beginIdx, endIdx + endLine.length)
-      : '';
+  // Fail fast with a diagnostic naming the real cause. Returning an empty
+  // snippet would let the VM run without the canonical functions and surface
+  // as an opaque ReferenceError from the __FUNCTIONS__ assignment instead.
+  if (beginIdx < 0 || endIdx < beginIdx) {
+    throw new Error(
+      'loadSnippetContext: could not locate the OCR trusted-marker snippet ' +
+        `sentinels in the supplied script (BEGIN found: ${beginIdx >= 0}, ` +
+        `END found: ${endIdx >= 0}). The workflow step may no longer embed ` +
+        'the canonical snippet; re-embed it with ' +
+        'node scripts/re-embed-trusted-marker.cjs',
+    );
+  }
+  const snippetText = script.slice(beginIdx, endIdx + endLine.length);
   const requestedSnippetFuncs = functionNames.filter((name) =>
     snippetFuncNames.includes(name),
   );

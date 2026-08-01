@@ -574,6 +574,30 @@ describe('ocr-trusted-marker.cjs — trustedMarkerComments', () => {
     const result = mod.trustedMarkerComments(comments, logins, MARKER);
     expect(result.map((c) => c.id)).toEqual([10, 50]);
   });
+  // Regression guard: review flagged the safe-integer check as rejecting every
+  // real GitHub comment id, claiming ids are ~1.9e19. They are not — issue
+  // comment ids observed in production are ~3.7e9, roughly 4e-7 of
+  // MAX_SAFE_INTEGER (9.007e15). These are the actual ids GitHub returned for
+  // review comments on this PR, pinned so the claim cannot resurface untested.
+  it('accepts real production-scale GitHub comment ids', () => {
+    const logins = mod.resolveTrustedMarkerLogins();
+    const realIds = [3694895795, 3696120574, 3696245857, 3696246048];
+    for (const id of realIds) {
+      expect(Number.isSafeInteger(id)).toBe(true);
+    }
+    const comments = realIds.map((id, index) =>
+      markerComment(id, `${MARKER}<!-- ocr-auto-count:${index + 1} -->`),
+    );
+    expect(mod.trustedMarkerComments(comments, logins, MARKER)).toHaveLength(
+      realIds.length,
+    );
+    expect(mod.canonicalMarkerComment(comments, logins, MARKER)?.id).toBe(
+      3694895795,
+    );
+    expect(mod.resolveHiddenAutoCount(comments, logins, MARKER)).toBe(
+      realIds.length,
+    );
+  });
 
   it('deduplicates trusted markers with the same id', () => {
     const logins = mod.resolveTrustedMarkerLogins();

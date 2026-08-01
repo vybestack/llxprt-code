@@ -387,17 +387,17 @@ function extractHeredocFromOpener(
   if (terminatorMatch === null) return null;
   const bodyEndIndex = searchFrom + terminatorMatch.index;
   const newline = String.fromCharCode(10);
+  // Full fidelity: in bash the body is every line between the opener and the
+  // terminator, each including its newline. Trimming the final newline would
+  // silently drop a trailing blank body line.
   const rawBody = source.slice(searchFrom, bodyEndIndex);
-  const trimmedBody = rawBody.endsWith(newline)
-    ? rawBody.slice(0, rawBody.length - 1)
-    : rawBody;
   // The dash form (<<-) strips leading tabs from every body line.
   const body = isDashForm
-    ? trimmedBody
+    ? rawBody
         .split(newline)
         .map((line) => line.replace(/^\t*/, ''))
         .join(newline)
-    : trimmedBody;
+    : rawBody;
   return { body, delimiter };
 }
 

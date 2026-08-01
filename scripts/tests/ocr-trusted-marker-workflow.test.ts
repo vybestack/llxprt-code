@@ -485,5 +485,33 @@ suspension body`,
       );
       expect(gateOutputs['current-count']).toBe('1');
     });
+
+    // ---- Snippet-sentinel guard: fail fast with a real diagnostic ----
+
+    describe('snippet loaders fail fast when the canonical sentinels are absent', () => {
+      const scriptWithoutSnippet = 'const x = 1;';
+
+      it('loadFunctionsFromScript names the missing snippet rather than throwing ReferenceError', () => {
+        expect(() =>
+          loadFunctionsFromScript(scriptWithoutSnippet, [
+            'isTrustedMarkerComment',
+          ]),
+        ).toThrow(/could not locate the OCR trusted-marker snippet/);
+      });
+
+      it('loadFunctionsFromScriptWithGithub names the missing snippet too', () => {
+        expect(() =>
+          loadFunctionsFromScriptWithGithub(
+            scriptWithoutSnippet,
+            ['isTrustedMarkerComment'],
+            {},
+            {},
+            { repo: { owner: 'o', repo: 'r' } },
+            {},
+            [],
+          ),
+        ).toThrow(/could not locate the OCR trusted-marker snippet/);
+      });
+    });
   });
 });
