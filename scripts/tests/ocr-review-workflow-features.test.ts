@@ -389,48 +389,45 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
   // Feature 3 (cont.): bot identity validation
   // -----------------------------------------------------------------------
   describe('Feature 3: bot identity validation for history dedup (issue #2670)', () => {
-    it('resolves the authenticated bot login via getAuthenticated', () => {
+    it('feeds the authenticated login into the canonical trusted set as an additional source (issue #2860)', () => {
       expectContainsAll(postScript, [
         'github.rest.users.getAuthenticated',
-        'let botLogin',
-        'botLogin = botUser.login',
+        'let apiLogin',
+        'apiLogin = botUser.login',
+        'resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN)',
       ]);
     });
 
-    it('existingReviewCommentSpans filters by bot type and authenticated login', () => {
+    it('existingReviewCommentSpans filters by trusted canonical author rule (issue #2860)', () => {
       const source = extractFunctionSource(
         postScript,
         'existingReviewCommentSpans',
       );
-      // Must authenticate via bot identity (type === 'Bot'), the resolved
-      // botLogin, and require side === 'RIGHT'.
-      expect(source).toContain("comment.user.type === 'Bot'");
-      expect(source).toContain('botLogin');
+      // The canonical snippet's isTrustedMarkerComment replaces the old
+      // exact-login predicate. side === 'RIGHT' is still required.
+      expect(source).toContain('isTrustedMarkerComment(');
+      expect(source).toContain('trustedLogins');
+      expect(source).toContain('INLINE_MARKER');
       expect(source).toContain("comment.side === 'RIGHT'");
       // Must NOT restrict to the current head SHA (cross-revision dedup).
       expect(source).not.toContain('commit_id === headSha');
-      // Fail-closed: botLogin must be required (&&), not optional (||).
-      // If getAuthenticated fails, botLogin is '' and NO bot should match.
-      expect(source).toContain(
-        "botLogin !== '' && comment.user.login === botLogin",
-      );
-      expect(source).not.toContain("botLogin === '' ||");
+      // The old exact-login predicate must be gone.
+      expect(source).not.toContain('botLogin !==');
+      expect(source).not.toContain('comment.user.login === botLogin');
     });
 
-    it('existingInlineCommentKeys filters by bot type and authenticated login', () => {
+    it('existingInlineCommentKeys filters by trusted canonical author rule (issue #2860)', () => {
       const source = extractFunctionSource(
         postScript,
         'existingInlineCommentKeys',
       );
-      expect(source).toContain("comment.user.type === 'Bot'");
-      expect(source).toContain('botLogin');
+      expect(source).toContain('isTrustedMarkerComment(');
+      expect(source).toContain('trustedLogins');
+      expect(source).toContain('INLINE_MARKER');
       expect(source).toContain("comment.side === 'RIGHT'");
       expect(source).not.toContain('commit_id === headSha');
-      // Fail-closed: botLogin must be required (&&), not optional (||).
-      expect(source).toContain(
-        "botLogin !== '' && comment.user.login === botLogin",
-      );
-      expect(source).not.toContain("botLogin === '' ||");
+      expect(source).not.toContain('botLogin !==');
+      expect(source).not.toContain('comment.user.login === botLogin');
     });
 
     it('history dedup no longer depends on the current head SHA', () => {
@@ -548,19 +545,16 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       );
     });
 
-    it('re-fetches marker comments in reconcileMarkerComment(null) (issue #2670)', () => {
-      // Issue 5: reconcileMarkerComment(null) must call fetchMarkerComments()
-      // instead of reusing the stale markerComments array.
+    it('re-fetches marker comments in fetchMarkerComments (issue #2670)', () => {
+      // Issue 5: fetchMarkerComments must paginate issues.listComments and
+      // delegate to trustedMarkerComments instead of reusing stale arrays.
       expect(postScript).toContain('function fetchMarkerComments()');
-      const reconcileSource = extractFunctionSource(
+      const fetchSource = extractFunctionSource(
         postScript,
-        'reconcileMarkerComment',
+        'fetchMarkerComments',
       );
-      expect(reconcileSource).toContain('fetchMarkerComments()');
-      // Must not simply reuse the stale markerComments array when existingComments is null.
-      expect(reconcileSource).not.toContain(
-        'const comments = existingComments || markerComments',
-      );
+      expect(fetchSource).toContain('github.paginate');
+      expect(fetchSource).toContain('trustedMarkerComments(');
     });
 
     it('counts rediscovered fallback duplicates as skipped, not posted (issue #2670)', () => {
@@ -584,20 +578,15 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
     it('reconciles marker comments after successful create (issue #2670)', () => {
       // CodeRabbit: successful concurrent creates can leave duplicate sticky
       // summaries. The createComment success path must also re-fetch and
-      // reconcile.
+      // reconcile via deleteDuplicateMarkerComments.
       const createFnSource = extractFunctionSource(
         postScript,
         'createOrUpdateMarkerComment',
       );
-      // After createComment returns successfully, reconcileMarkerComment(null)
-      // must be called to clean up any concurrent duplicates.
-      expect(createFnSource).toContain('reconcileMarkerComment(null)');
-      // Count occurrences — should appear in both the catch path AND the
-      // success path now.
-      const reconcileCalls = createFnSource.match(
-        /reconcileMarkerComment\(null\)/g,
-      );
-      expect(reconcileCalls?.length).toBeGreaterThanOrEqual(2);
+      // After createComment returns successfully, post-create reconciliation
+      // must re-fetch and delete duplicates.
+      expect(createFnSource).toContain('fetchMarkerComments()');
+      expect(createFnSource).toContain('deleteDuplicateMarkerComments');
     });
   });
 });

@@ -257,7 +257,7 @@ export function extractFunctionSource(
     '\\$&',
   );
   const declarationPattern = new RegExp(
-    `function\\s+${escapedFunctionName}(?![A-Za-z0-9_$])`,
+    `(?:async\\s+)?function\\s+${escapedFunctionName}(?![A-Za-z0-9_$])`,
   );
   const match = declarationPattern.exec(source);
   expect(match, `script should define ${functionName}`).toBeTruthy();

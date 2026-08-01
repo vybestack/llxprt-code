@@ -159,10 +159,13 @@ jobs:
           PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
           OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
           OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2'
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
+          COMMENT_USER_LOGIN: ${{ github.event.comment.user.login }}
+          COMMENT_ID: ${{ github.event.comment.id }}
           CHANGES_FROM: ${{ github.event.changes.body.from }}
         with:
           script: |
@@ -176,6 +179,8 @@ jobs:
             const eventAction = process.env.EVENT_ACTION || '';
             const commentBody = process.env.COMMENT_BODY || '';
             const commentUserType = process.env.COMMENT_USER_TYPE || '';
+            const commentUserLogin = process.env.COMMENT_USER_LOGIN || '';
+            const commentIdRaw = process.env.COMMENT_ID || '';
             const changesFrom = process.env.CHANGES_FROM || '';
             const limitRaw = process.env.OCR_AUTO_REVIEW_LIMIT ||
               process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2';
@@ -188,23 +193,155 @@ jobs:
               (eventName === 'issue_comment' && eventAction === 'created');
             const isEditedComment =
               eventName === 'issue_comment' && eventAction === 'edited';
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
+            const trustedLogins = resolveTrustedMarkerLogins(process.env.OCR_BOT_LOGIN);
 
             // ----- Helpers -----
 
-            function parseHiddenCount(body) {
-              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(body || '');
-              return match ? Number(match[1]) : 0;
-            }
-
-            async function fetchMarkerComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, {
+            async function fetchCommentsOnce() {
+              return github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: number,
                 per_page: 100,
               });
-              return comments.find((c) =>
-                typeof c.body === 'string' && c.body.includes(MARKER)) || null;
             }
 
             function replaceHiddenState(body, count) {
@@ -218,11 +355,13 @@ jobs:
             // ----- Checkbox-reset detection (issue_comment.edited) -----
 
             if (isEditedComment) {
-              // Only act on edits to a bot-authored OCR marker comment.
-              const containsMarker =
-                typeof commentBody === 'string' && commentBody.includes(MARKER);
-              const wasBot = commentUserType === 'Bot';
-              if (!containsMarker || !wasBot) {
+              const commentIdNum = Number(commentIdRaw);
+              const eventComment = {
+                id: commentIdNum,
+                body: commentBody,
+                user: { type: commentUserType, login: commentUserLogin },
+              };
+              if (!isTrustedMarkerComment(eventComment, trustedLogins, MARKER)) {
                 core.setOutput('auto-should-run', 'false');
                 core.setOutput('suspended', 'false');
                 core.setOutput('is-manual', 'false');
@@ -232,20 +371,16 @@ jobs:
               const wasUnchecked = /-\s*\[\s\]\s*Re-enable automatic reviews/.test(changesFrom);
               const nowChecked = /-\s*\[[xX]\]\s*Re-enable automatic reviews/.test(commentBody);
               if (wasUnchecked && nowChecked) {
-                // Reset the counter to 0 in the hidden state of the comment
-                // and immediately allow a review on the current head.
-                // If the reset write fails, do NOT proceed — otherwise the
-                // stale count in the comment would cause a premature
-                // suspension on the next automatic trigger.
                 let resetSucceeded = false;
                 try {
                   let marker = null;
                   try {
-                    marker = await fetchMarkerComment();
+                    const resetComments = await fetchCommentsOnce();
+                    marker = canonicalMarkerComment(resetComments, trustedLogins, MARKER);
                   } catch (fetchErr) {
                     core.warning(`Failed to fetch marker comment for checkbox reset: ${fetchErr.message || fetchErr}`);
                   }
-                  if (marker) {
+                  if (marker && commentIdNum === marker.id) {
                     const resetBody = replaceHiddenState(marker.body, 0);
                     await github.rest.issues.updateComment({
                       owner: context.repo.owner,
@@ -275,10 +410,8 @@ jobs:
 
             let currentCount = 0;
             try {
-              const marker = await fetchMarkerComment();
-              if (marker && typeof marker.body === 'string') {
-                currentCount = parseHiddenCount(marker.body);
-              }
+              const countComments = await fetchCommentsOnce();
+              currentCount = resolveHiddenAutoCount(countComments, trustedLogins, MARKER);
             } catch (fetchErr) {
               core.warning(`Failed to read OCR sticky comment for auto-review state: ${fetchErr.message || fetchErr}`);
             }
@@ -320,6 +453,7 @@ jobs:
           CURRENT_COUNT: ${{ needs.auto-review-gate.outputs.current-count }}
           OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
           OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2'
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
         with:
           script: |
             const MARKER = '<!-- llxprt-code-ocr-review -->';
@@ -337,6 +471,145 @@ jobs:
               : Number(process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
+            const trustedLogins = resolveTrustedMarkerLogins(process.env.OCR_BOT_LOGIN);
 
             const NEWLINE = String.fromCharCode(10);
             const suspensionBlock = [
@@ -355,14 +628,45 @@ jobs:
               '<!-- ocr-auto-count:' + currentCount + ' -->',
             ].join(NEWLINE);
 
-            async function reconcileMarkerComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, {
+            async function fetchMarkerComments() {
+              const allComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              const markerComments = comments.filter((comment) =>
-                comment.body && comment.body.includes(MARKER));
-              const existing = markerComments[0];
-              for (const duplicate of markerComments.slice(1)) {
+              return trustedMarkerComments(allComments, trustedLogins, MARKER);
+            }
+
+            function selectCanonicalMarker(markerComments) {
+              return markerComments.length > 0 ? markerComments[0] : null;
+            }
+
+            function newestCheckpointFromMarkers(markerComments) {
+              const checkpointPattern = /<!--\s*ocr-checkpoint:\s*([\s\S]*?)\s*-->/;
+              let result = null;
+              for (const comment of markerComments) {
+                const match = checkpointPattern.exec(String(comment.body || ''));
+                if (match && match[1].trim()) {
+                  result = match[0];
+                }
+              }
+              return result;
+            }
+
+            function resolveMergedMaxCount(markerComments) {
+              let max = 0;
+              for (const comment of markerComments) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+
+            async function deleteDuplicateMarkerComments(markerComments, keepId) {
+              for (const duplicate of markerComments) {
+                if (duplicate.id === keepId) {
+                  continue;
+                }
                 try {
                   await github.rest.issues.deleteComment({
                     owner, repo, comment_id: duplicate.id,
@@ -372,45 +676,70 @@ jobs:
                   core.warning(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`);
                 }
               }
-              return existing || null;
             }
 
             try {
-              let existing = null;
+              let markerComments = [];
               try {
-                existing = await reconcileMarkerComment();
-              } catch (reconcileErr) {
-                core.warning(`Reconciliation failed before suspension posting; attempting create: ${reconcileErr.message || reconcileErr}`);
+                markerComments = await fetchMarkerComments();
+              } catch (fetchErr) {
+                core.warning(`Failed to fetch marker comments for suspension: ${fetchErr.message || fetchErr}`);
               }
-              // Preserve the previous review summary by appending the
-              // suspension notice to the existing body (minus old markers).
+              const canonical = selectCanonicalMarker(markerComments);
+              const mergedMaxCount = resolveMergedMaxCount(markerComments);
+              const mergedCheckpoint = newestCheckpointFromMarkers(markerComments);
+
               let finalBody = suspensionBlock;
-              if (existing && typeof existing.body === 'string') {
-                const preserved = existing.body
+              if (canonical && typeof canonical.body === 'string') {
+                const preserved = canonical.body
                   .replace(MARKER, '')
                   .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
                   .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '')
+                  .replace(/<!--\s*ocr-checkpoint:[\s\S]*?-->/g, '')
                   .replace(/## OpenCodeReview — automatic reviews suspended[\s\S]*$/, '')
                   .trim();
                 if (preserved) {
                   finalBody = suspensionBlock + NEWLINE + NEWLINE + '---' + NEWLINE + NEWLINE + preserved;
                 }
               }
-              if (existing) {
+              if (mergedMaxCount > currentCount) {
+                finalBody = finalBody.replace(
+                  /<!--\s*ocr-auto-count:\s*\d+\s*-->/g,
+                  '',
+                );
+                finalBody += NEWLINE + '<!-- ocr-auto-count:' + mergedMaxCount + ' -->';
+              }
+              if (mergedCheckpoint) {
+                const canonicalHasCheckpoint = canonical
+                  ? /<!--\s*ocr-checkpoint:/.test(canonical.body || '')
+                  : false;
+                if (!canonicalHasCheckpoint) {
+                  finalBody += NEWLINE + mergedCheckpoint;
+                }
+              }
+              if (canonical) {
                 await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body: finalBody,
+                  owner, repo, comment_id: canonical.id, body: finalBody,
                 });
+                await deleteDuplicateMarkerComments(markerComments, canonical.id);
               } else {
                 try {
                   await github.rest.issues.createComment({
                     owner, repo, issue_number: number, body: finalBody,
                   });
                 } catch (createErr) {
-                  const reconciled = await reconcileMarkerComment();
-                  if (reconciled) {
+                  let retryMarkers = [];
+                  try {
+                    retryMarkers = await fetchMarkerComments();
+                  } catch (retryErr) {
+                    core.warning(`Post-create re-fetch failed: ${retryErr.message || retryErr}`);
+                  }
+                  const retryCanonical = selectCanonicalMarker(retryMarkers);
+                  if (retryCanonical) {
                     await github.rest.issues.updateComment({
-                      owner, repo, comment_id: reconciled.id, body: finalBody,
+                      owner, repo, comment_id: retryCanonical.id, body: finalBody,
                     });
+                    await deleteDuplicateMarkerComments(retryMarkers, retryCanonical.id);
                   } else {
                     throw createErr;
                   }
@@ -567,6 +896,144 @@ jobs:
             const number = Number(process.env.PR_NUMBER);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
 
             function deserializeCheckpoint(base64) {
               const normalized = typeof base64 === 'string' ? base64.trim() : '';
@@ -593,28 +1060,54 @@ jobs:
               return match ? deserializeCheckpoint(match[1]) : null;
             }
 
-            let botLogin = '';
+            // Issue #2860 I2: a checkpoint is "usable" only if it is
+            // structurally complete (schema 1, complete, 40-hex head/base).
+            // This is checkpoint-specific, so it is kept OUT of the canonical
+            // trusted-marker snippet.
+            const SHA_PATTERN = /^[0-9a-f]{40}$/i;
+            function isUsableCheckpoint(checkpoint) {
+              return Boolean(
+                checkpoint
+                  && typeof checkpoint === 'object'
+                  && checkpoint.schema === 1
+                  && checkpoint.completion_state === 'complete'
+                  && typeof checkpoint.head_sha === 'string'
+                  && SHA_PATTERN.test(checkpoint.head_sha)
+                  && typeof checkpoint.base_sha === 'string'
+                  && SHA_PATTERN.test(checkpoint.base_sha),
+              );
+            }
+
+            // Issue #2860: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
             try {
               const { data: botUser } = await github.rest.users.getAuthenticated();
-              botLogin = botUser.login || '';
+              apiLogin = botUser.login || '';
             } catch (e) {
               core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
-              botLogin = process.env.OCR_BOT_LOGIN || '';
             }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: number, per_page: 100,
             });
-            const markerComment = comments.find((comment) =>
-              comment.user && comment.user.type === 'Bot'
-                && botLogin !== '' && comment.user.login === botLogin
-                && typeof comment.body === 'string' && comment.body.includes(MARKER));
+            // Issue #2860 I2: three-tier selection — prefer the newest trusted
+            // marker carrying a structurally usable checkpoint; else the newest
+            // trusted marker carrying any ocr-checkpoint comment; else the
+            // canonical (oldest) trusted marker.
+            const markerComment =
+              newestTrustedMarkerMatching(comments, trustedLogins, MARKER, (c) => isUsableCheckpoint(extractCheckpointFromComment(c.body))) ||
+              newestTrustedMarkerMatching(comments, trustedLogins, MARKER, (c) => checkpointPattern.test(String(c.body || ''))) ||
+              canonicalMarkerComment(comments, trustedLogins, MARKER);
             const encodedMatch = markerComment
               ? checkpointPattern.exec(markerComment.body)
               : null;
             const checkpoint = markerComment
               ? extractCheckpointFromComment(markerComment.body)
               : null;
-            const shaPattern = /^[0-9a-f]{40}$/i;
+            const shaPattern = SHA_PATTERN;
             core.setOutput('CHECKPOINT_FOUND', String(Boolean(encodedMatch)));
             core.setOutput('CHECKPOINT_VALID', String(Boolean(checkpoint)));
             core.setOutput('CHECKPOINT_SCHEMA', String(checkpoint?.schema ?? ''));
@@ -1925,7 +2418,7 @@ jobs:
           # excess of this number are routed to the sticky summary rather than
           # waiting for a large batch to fail. Default 50.
           OCR_INLINE_COMMENT_CAP: ${{ vars.OCR_INLINE_COMMENT_CAP }}
-          # Fallback bot login for dedup when getAuthenticated() fails.
+          # Additional trust source for comment dedup when OCR_BOT_LOGIN is set.
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
           # Issue #2675: configurable coverage threshold (0..100, default 90).
           OCR_COVERAGE_THRESHOLD: ${{ vars.OCR_COVERAGE_THRESHOLD }}
@@ -1956,24 +2449,160 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
 
-            // Issue 1 (#2670): resolve the authenticated bot login ONCE so
-            // historical review-comment dedup can be scoped to this bot.
-            // Without this, a fork contributor could post an inline review
-            // comment containing the INLINE_MARKER and suppress real findings.
-            let botLogin = '';
+            // Issue 1 (#2670): scope historical review-comment dedup to this
+            // bot so a fork contributor cannot post an inline review comment
+            // containing the INLINE_MARKER and suppress real findings.
+            // Issue #2860: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
             try {
               const { data: botUser } = await github.rest.users.getAuthenticated();
-              botLogin = botUser.login || '';
+              apiLogin = botUser.login || '';
             } catch (e) {
               core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
-              // Fall back to a configurable bot login so dedup remains
-              // functional when the authenticated-user API is unavailable.
-              botLogin = process.env.OCR_BOT_LOGIN || '';
-              if (botLogin) {
-                core.info(`Using fallback bot login from OCR_BOT_LOGIN: ${botLogin}`);
-              }
             }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
 
             function readTrimmed(fileName, fallback = '') {
               try {
@@ -2624,11 +3253,8 @@ jobs:
                 owner, repo, pull_number: number, per_page: 100,
               });
               return comments
-                .filter((comment) => comment.user && comment.user.type === 'Bot'
-                  && botLogin !== '' && comment.user.login === botLogin
-                  && (comment.side === undefined || comment.side === 'RIGHT')
-                  && typeof comment.body === 'string'
-                  && comment.body.includes(INLINE_MARKER))
+                .filter((comment) => isTrustedMarkerComment(comment, trustedLogins, INLINE_MARKER)
+                  && (comment.side === undefined || comment.side === 'RIGHT'))
                 .map((comment) => ({
                   path: comment.path,
                   span: lineSpan({
@@ -2655,11 +3281,8 @@ jobs:
                 owner, repo, pull_number: number, per_page: 100,
               });
               return new Set(comments
-                .filter((comment) => comment.user && comment.user.type === 'Bot'
-                  && botLogin !== '' && comment.user.login === botLogin
-                  && (comment.side === undefined || comment.side === 'RIGHT')
-                  && typeof comment.body === 'string'
-                  && comment.body.includes(INLINE_MARKER))
+                .filter((comment) => isTrustedMarkerComment(comment, trustedLogins, INLINE_MARKER)
+                  && (comment.side === undefined || comment.side === 'RIGHT'))
                 .map((comment) => inlineCommentKey({
                   path: comment.path,
                   line: comment.line || comment.original_line,
@@ -3634,28 +4257,16 @@ jobs:
 
             // Read the current auto-review count from the existing sticky
             // comment so it can be incremented (issue #2666). Manual triggers
-            // do not increment the counter. Fetch the comment list once and
-            // reuse it for both count parsing and reconciliation below.
-            let markerComments = [];
+            // do not increment the counter.
+            let preFetchAllComments = [];
             try {
-              const allComments = await github.paginate(github.rest.issues.listComments, {
+              preFetchAllComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              markerComments = allComments.filter((c) =>
-                c.user && c.user.type === 'Bot'
-                  && botLogin !== '' && c.user.login === botLogin
-                  && typeof c.body === 'string' && c.body.includes(MARKER));
             } catch (preFetchErr) {
               core.warning(redactSecretDiagnostics(`Could not list OCR comments for auto-review count: ${preFetchErr.message || preFetchErr}`));
             }
-            let autoReviewCount = 0;
-            const preMarker = markerComments[0];
-            if (preMarker) {
-              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(preMarker.body);
-              if (match) {
-                autoReviewCount = Number(match[1]);
-              }
-            }
+            let autoReviewCount = resolveHiddenAutoCount(preFetchAllComments, trustedLogins, MARKER);
             if (isAutomatic) {
               autoReviewCount += 1;
             }
@@ -3735,26 +4346,38 @@ jobs:
               const allComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              return allComments.filter((c) =>
-                c.user && c.user.type === 'Bot'
-                  && botLogin !== '' && c.user.login === botLogin
-                  && typeof c.body === 'string' && c.body.includes(MARKER));
+              return trustedMarkerComments(allComments, trustedLogins, MARKER);
             }
 
-            async function reconcileMarkerComment(existingComments) {
-              let comments;
-              if (existingComments) {
-                comments = existingComments;
-              } else {
-                try {
-                  comments = await fetchMarkerComments();
-                } catch (fetchErr) {
-                  core.warning(redactSecretDiagnostics(`Could not re-fetch OCR marker comments: ${fetchErr.message || fetchErr}`));
-                  comments = [];
-                }
+            function selectCanonicalMarker(comments) {
+              return comments.length > 0 ? comments[0] : null;
+            }
+
+            function resolveNonRegressingCount(existingBody, candidateCount, isAutomatic) {
+              const existingCount = parseHiddenAutoCount(existingBody);
+              const minRequired = existingCount + (isAutomatic ? 1 : 0);
+              return candidateCount >= minRequired ? candidateCount : minRequired;
+            }
+
+            function applyNonRegressingCount(summary, existingBody, isAutomatic) {
+              const summaryCount = parseHiddenAutoCount(summary);
+              const minRequired = resolveNonRegressingCount(existingBody, summaryCount, isAutomatic);
+              if (summaryCount >= minRequired) {
+                return summary;
               }
-              const existing = comments[0];
-              for (const duplicate of comments.slice(1)) {
+              const NEWLINE = String.fromCharCode(10);
+              const withoutCount = String(summary).replace(
+                /<!--\s*ocr-auto-count:\s*\d+\s*-->/g,
+                '',
+              );
+              return withoutCount + NEWLINE + '<!-- ocr-auto-count:' + minRequired + ' -->';
+            }
+
+            async function deleteDuplicateMarkerComments(comments, keepId) {
+              for (const duplicate of comments) {
+                if (duplicate.id === keepId) {
+                  continue;
+                }
                 try {
                   await github.rest.issues.deleteComment({
                     owner, repo, comment_id: duplicate.id,
@@ -3764,31 +4387,49 @@ jobs:
                   core.warning(redactSecretDiagnostics(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`));
                 }
               }
-              return existing || null;
             }
 
-            async function createOrUpdateMarkerComment(summary) {
+            async function createOrUpdateMarkerComment(summary, isAutomatic) {
               let existing = null;
+              let reconciledComments = [];
               try {
-                existing = await reconcileMarkerComment();
-              } catch (reconcileErr) {
-                core.warning(redactSecretDiagnostics(`Reconciliation failed before summary posting; attempting create: ${reconcileErr.message || reconcileErr}`));
+                reconciledComments = await fetchMarkerComments();
+              } catch (fetchErr) {
+                core.warning(redactSecretDiagnostics(`Could not re-fetch OCR marker comments: ${fetchErr.message || fetchErr}`));
               }
+              existing = selectCanonicalMarker(reconciledComments);
+              const nonRegressingSummary = existing
+                ? applyNonRegressingCount(summary, existing.body, isAutomatic)
+                : summary;
               if (existing) {
                 const updated = await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body: summary,
+                  owner, repo, comment_id: existing.id, body: nonRegressingSummary,
                 });
+                await deleteDuplicateMarkerComments(reconciledComments, existing.id);
                 return updated?.data || existing;
               }
               try {
                 const created = await github.rest.issues.createComment({
-                  owner, repo, issue_number: number, body: summary,
+                  owner, repo, issue_number: number, body: nonRegressingSummary,
                 });
                 // Re-fetch to reconcile any concurrent duplicate marker
                 // comments that may have been posted between the initial
-                // pre-fetch and this create.
+                // pre-fetch and this create. If the just-created comment is
+                // not the canonical one (a concurrent lower-id marker exists),
+                // update the surviving canonical and return IT — never return
+                // a comment that was deleted, because the checkpoint-advancement
+                // step updates the returned comment's id.
                 try {
-                  await reconcileMarkerComment(null);
+                  const postCreateComments = await fetchMarkerComments();
+                  const surviving = selectCanonicalMarker(postCreateComments);
+                  if (surviving && surviving.id !== (created?.data?.id ?? null)) {
+                    await github.rest.issues.updateComment({
+                      owner, repo, comment_id: surviving.id, body: nonRegressingSummary,
+                    });
+                    await deleteDuplicateMarkerComments(postCreateComments, surviving.id);
+                    return surviving;
+                  }
+                  await deleteDuplicateMarkerComments(postCreateComments, created?.data?.id ?? null);
                 } catch (reconcileErr) {
                   core.warning(redactSecretDiagnostics(`Post-create reconciliation failed; duplicate marker comments may remain: ${reconcileErr.message || reconcileErr}`));
                 }
@@ -3797,11 +4438,18 @@ jobs:
                 // After a failed create (e.g. a race where a marker was just
                 // posted), re-list comments fresh to reconcile, since the
                 // pre-fetched list is stale at this point.
-                const reconciled = await reconcileMarkerComment(null);
+                let retryComments = [];
+                try {
+                  retryComments = await fetchMarkerComments();
+                } catch (retryErr) {
+                  core.warning(redactSecretDiagnostics(`Post-failure re-fetch failed: ${retryErr.message || retryErr}`));
+                }
+                const reconciled = selectCanonicalMarker(retryComments);
                 if (reconciled) {
                   const updated = await github.rest.issues.updateComment({
-                    owner, repo, comment_id: reconciled.id, body: summary,
+                    owner, repo, comment_id: reconciled.id, body: nonRegressingSummary,
                   });
+                  await deleteDuplicateMarkerComments(retryComments, reconciled.id);
                   return updated?.data || reconciled;
                 } else {
                   throw createErr;
@@ -3818,7 +4466,7 @@ jobs:
             let summaryComment = null;
             let summaryCommentUrl = '';
             try {
-              summaryComment = await createOrUpdateMarkerComment(summaryWithExistingCheckpoint);
+              summaryComment = await createOrUpdateMarkerComment(summaryWithExistingCheckpoint, isAutomatic);
               summaryCommentUrl = (summaryComment && summaryComment.html_url) || '';
               if (batchPublicationAmbiguous) {
                 publicationState = 'ambiguous';
