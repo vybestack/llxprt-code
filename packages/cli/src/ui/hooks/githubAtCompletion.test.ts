@@ -198,3 +198,25 @@ describe('fetching suggestions', () => {
     expect(out).toStrictEqual([]);
   });
 });
+
+describe('pattern arrives with the leading at-sign stripped', () => {
+  /**
+   * The user types @issue-123 but at-completion strips the sigil before
+   * calling us. Pinning both halves stops the documentation and the
+   * implementation drifting apart again.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-014
+   */
+  it('matches the stripped form and not the literal user spelling', () => {
+    expect(parseGitHubAtPattern('issue-123')).toStrictEqual({
+      kind: 'issue',
+      query: '123',
+    });
+    expect(parseGitHubAtPattern('pr-45')).toStrictEqual({
+      kind: 'pr',
+      query: '45',
+    });
+    expect(parseGitHubAtPattern('@issue-123')).toBeNull();
+  });
+});

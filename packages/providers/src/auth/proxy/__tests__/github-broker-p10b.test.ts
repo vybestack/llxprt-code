@@ -560,7 +560,7 @@ describe.skipIf(skipNetwork)('GitHub broker P10 end-to-end (real gh)', () => {
     ).toBe(false);
     const items = resp[key] as unknown[];
     expect(Array.isArray(items)).toBe(true);
-    items.slice(0, 1).forEach((item) => {
+    items.forEach((item) => {
       const record = item as Record<string, unknown>;
       expect(record).not.toHaveProperty('body');
     });

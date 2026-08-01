@@ -643,7 +643,10 @@ describe('GitHub broker (P08)', () => {
       // Also verify a connection WITH the token CAN reach the github op
       // (but with invalid params so we don't need network). This proves the
       // handler is wired behind the gate.
+      // Assign to the instance variable so afterEach closes it even when an
+      // assertion below throws; a local would leak the socket on failure.
       const authedClient = new ProxySocketClient(socketPath, CAPABILITY_TOKEN);
+      client = authedClient;
       await authedClient.ensureConnected();
       const githubResult = await authedClient.request('github', {
         op: 'issue.nonexistent',

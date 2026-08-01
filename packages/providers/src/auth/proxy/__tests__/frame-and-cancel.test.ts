@@ -416,10 +416,11 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
           rejectionReason = err;
         });
 
-      // Advance 35s — past the default 30s REQUEST_TIMEOUT_MS.
+      // Real time, so this cannot cross the 30s default; it only shows the
+      // request is still outstanding rather than rejected immediately. The
+      // proof that the override is actually applied is the short-timeout
+      // test below, which observes the configured value in the rejection.
       await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // The promise must NOT have rejected at 35s with a 900s timeout.
       expect(rejected).toBe(false);
 
       // Release the gate and confirm the op completes successfully.
@@ -899,4 +900,35 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
       expect(hasResult.code).toBe('FORBIDDEN');
     },
   );
+
+  /**
+   * Proves the per-op timeout is genuinely applied rather than the 30s
+   * default: a short override must reject at its own configured value, and
+   * the rejection message carries that value.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-007
+   */
+  it('honours a short per-op timeout override', async () => {
+    const gatedStore = new GatedTokenStore();
+    await gatedStore.saveToken('slow-provider', makeToken());
+
+    server = new CredentialProxyServer({
+      tokenStore: gatedStore,
+      providerKeyStorage:
+        keyStorage as unknown as CredentialProxyServerOptions['providerKeyStorage'],
+    });
+    client = await startAndConnect(server);
+
+    // The store never answers, so only the per-op timer can settle this.
+    // A 150ms rejection proves the override is used, not the 30s default.
+    await expect(
+      client.request(
+        'get_token',
+        { provider: 'slow-provider' },
+        { timeoutMs: 150 },
+      ),
+    ).rejects.toThrow(/150ms/);
+    gatedStore.release();
+  }, 20000);
 });

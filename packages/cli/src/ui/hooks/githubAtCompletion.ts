@@ -37,10 +37,16 @@ export interface GitHubAtPattern {
 }
 
 /**
- * Recognises an `@issue-`/`@pr-` pattern, or returns null when the text is
+ * Recognises an `issue-`/`pr-` pattern, or returns null when the text is
  * something else entirely and no GitHub call should be made.
  *
- * Matching is deliberately strict: a bare `@i` must not trigger a network
+ * The argument is the completion pattern with the leading `@` ALREADY
+ * STRIPPED by the at-completion machinery, so it is `issue-123`, never
+ * `@issue-123`. The user-facing spelling is `@issue-`, which is why the
+ * feature is described that way in the docs; passing that literal form
+ * here would never match.
+ *
+ * Matching is deliberately strict: a bare `i` must not trigger a network
  * request, because at that point the user is far more likely to be typing a
  * filename.
  *
