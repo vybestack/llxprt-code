@@ -42,6 +42,16 @@ export const EARLY_PHASE_MS = 30_000;
 export const NO_CHECKS_GRACE_MS = 120_000;
 
 /**
+ * Consecutive failed polls tolerated before a watch gives up. Transient API
+ * or network errors should not end a wait whose checks are still running;
+ * a persistent fault should not be retried forever.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-010
+ */
+export const MAX_CONSECUTIVE_POLL_FAILURES = 3;
+
+/**
  * Returns the poll interval for a given elapsed time.
  *
  * @plan PLAN-20260731-GHBROKER.P13
@@ -179,6 +189,7 @@ export async function watchChecks(
 
   let checks: CheckRow[] = [];
   let polls = 0;
+  let consecutiveFailures = 0;
 
   const stop = (concluded: boolean, cancelled: boolean): WatchResult => ({
     checks,
@@ -196,7 +207,24 @@ export async function watchChecks(
 
     // gh exits non-zero while checks are failing or pending, so a non-zero
     // exit here is expected rather than an error.
-    checks = toCheckRows(await run(argv, { tolerateNonZeroExit: true }));
+    //
+    // A throw is different: a dropped network, a transient API error. Over
+    // a watch that can run for an hour, letting one bad poll end the whole
+    // wait would be worse than useless, because the checks it was waiting
+    // on carry on running. Tolerate a short run of consecutive failures and
+    // retry on the next tick; give up only when they persist, and surface
+    // the last cause rather than a bare timeout.
+    try {
+      checks = toCheckRows(await run(argv, { tolerateNonZeroExit: true }));
+      consecutiveFailures = 0;
+    } catch (err) {
+      consecutiveFailures += 1;
+      if (consecutiveFailures > MAX_CONSECUTIVE_POLL_FAILURES) throw err;
+      // No abort check here: `continue` re-enters at the top of the loop,
+      // which tests it before spending another request.
+      await sleep(pollIntervalFor(now() - started), signal);
+      continue;
+    }
     polls += 1;
 
     if (checksConcluded(checks)) return stop(true, false);

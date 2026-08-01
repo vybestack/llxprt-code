@@ -278,3 +278,60 @@ describe('bounds and shaping', () => {
     expect(typeof d.execute).toBe('function');
   });
 });
+
+/**
+ * A watch can run for an hour. Ending it because one poll failed would be
+ * worse than useless: the checks it was waiting on keep running, and the
+ * caller loses the wait for a fault that had already passed.
+ */
+describe('transient poll failures', () => {
+  /** Drives watchChecks where some polls throw before a real answer. */
+  function flakyHarness(script: Array<unknown | Error>) {
+    let clock = 0;
+    let i = 0;
+    const run = async (): Promise<unknown> => {
+      const next = script[Math.min(i++, script.length - 1)];
+      if (next instanceof Error) throw next;
+      return next;
+    };
+    const sleep = async (ms: number): Promise<void> => {
+      clock += ms;
+    };
+    return { run, sleep, now: () => clock };
+  }
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-010
+   */
+  it('recovers when a poll throws and the next succeeds', async () => {
+    const h = flakyHarness([new Error('network blip'), [row('a', 'pass')]]);
+    const out = await watchChecks(
+      ['pr', 'checks'],
+      h.run,
+      new AbortController().signal,
+      { now: h.now, sleep: h.sleep },
+    );
+    expect(out.concluded).toBe(true);
+    expect(out.summary.pass).toBe(1);
+    // The failed attempt is not counted as a completed poll.
+    expect(out.polls).toBe(1);
+  });
+
+  /**
+   * A persistent fault must still surface, and carry its own cause rather
+   * than being reported as an ordinary timeout.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-010
+   */
+  it('gives up and rethrows when failures persist', async () => {
+    const h = flakyHarness([new Error('gh is broken')]);
+    await expect(
+      watchChecks(['pr', 'checks'], h.run, new AbortController().signal, {
+        now: h.now,
+        sleep: h.sleep,
+      }),
+    ).rejects.toThrow('gh is broken');
+  });
+});
