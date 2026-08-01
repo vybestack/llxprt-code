@@ -203,12 +203,17 @@ function useNavigationActions(
   addItem: UseHistoryManagerReturn['addItem'],
   onExit: () => void,
   mountedRef: React.MutableRefObject<boolean>,
+  committingRef: React.MutableRefObject<boolean>,
 ): NavigationActions {
   const { setTargetPath, workingDirectory, targetPath, removeTrustRule } =
     trust;
   const { setView, setFormOrigin, pathDraft, setPathError } = viewState;
 
   const submitPath = useCallback((): void => {
+    // Every entry point that can change the active target takes the same
+    // in-flight lock, so a write can never land against a path the user has
+    // already navigated away from.
+    if (committingRef.current) return;
     const resolved = resolveTrustDirectory(pathDraft, workingDirectory);
     if (!resolved.ok) {
       setPathError(getTrustPathProblemMessage(resolved.problem));
@@ -225,15 +230,17 @@ function useNavigationActions(
     setTargetPath,
     setFormOrigin,
     setView,
+    committingRef,
   ]);
 
   const selectRule = useCallback(
     (rulePath: string): void => {
+      if (committingRef.current) return;
       setTargetPath(rulePath);
       setFormOrigin('rules');
       setView('form');
     },
-    [setTargetPath, setFormOrigin, setView],
+    [setTargetPath, setFormOrigin, setView, committingRef],
   );
 
   const removeRule = useCallback(async (): Promise<void> => {
@@ -496,7 +503,14 @@ export function usePermissionsTrustDialogFlow(
     mountedRef,
   });
   const { submitPath, selectRule, removeRule, handleEscape } =
-    useNavigationActions(trust, viewState, addItem, onExit, mountedRef);
+    useNavigationActions(
+      trust,
+      viewState,
+      addItem,
+      onExit,
+      mountedRef,
+      committingRef,
+    );
 
   const runLockedRemoval = useLockedRemoval({
     removeRule,

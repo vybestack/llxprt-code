@@ -255,27 +255,53 @@ describe('permissions dialog multi-folder flow', () => {
     expect(result.current.pathError).toBe('That path is not a folder.');
   });
 
-  it('C4: reports an unreadable folder distinctly from a missing one', async () => {
-    const blocked = path.join(tempRoot, 'blocked');
-    fs.mkdirSync(blocked);
-    const target = path.join(blocked, 'inner');
-    fs.mkdirSync(target);
-    fs.chmodSync(blocked, 0o000);
+  // Windows does not honour these mode bits, and root bypasses them entirely,
+  // so the folder would stay readable and the case under test would not arise.
+  const canTestUnreadable =
+    process.platform !== 'win32' &&
+    typeof process.getuid === 'function' &&
+    process.getuid() !== 0;
+
+  it.skipIf(!canTestUnreadable)(
+    'C4: reports an unreadable folder distinctly from a missing one',
+    async () => {
+      const blocked = path.join(tempRoot, 'blocked');
+      fs.mkdirSync(blocked);
+      const target = path.join(blocked, 'inner');
+      fs.mkdirSync(target);
+      fs.chmodSync(blocked, 0o000);
+      const { result } = renderFlow();
+
+      try {
+        await act(async () => {
+          await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
+        });
+        act(() => result.current.setPathDraft(target));
+        act(() => result.current.submitPath());
+
+        // Saying "does not exist" here would send the user looking for a folder
+        // that is in fact present but unreadable.
+        expect(result.current.pathError).toBe('That folder cannot be read.');
+      } finally {
+        fs.chmodSync(blocked, 0o700);
+      }
+    },
+  );
+
+  it('C4: reports a path whose parent component is a file as not a folder', async () => {
+    const filePath = path.join(tempRoot, 'parent-is-a-file.txt');
+    fs.writeFileSync(filePath, 'contents');
     const { result } = renderFlow();
 
-    try {
-      await act(async () => {
-        await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
-      });
-      act(() => result.current.setPathDraft(target));
-      act(() => result.current.submitPath());
+    await act(async () => {
+      await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
+    });
+    act(() => result.current.setPathDraft(path.join(filePath, 'inner')));
+    act(() => result.current.submitPath());
 
-      // Saying "does not exist" here would send the user looking for a folder
-      // that is in fact present but unreadable.
-      expect(result.current.pathError).toBe('That folder cannot be read.');
-    } finally {
-      fs.chmodSync(blocked, 0o700);
-    }
+    // The components do exist, so "does not exist" would be misleading; the
+    // path shape is what is wrong.
+    expect(result.current.pathError).toBe('That path is not a folder.');
   });
 
   it('C5: reports an empty submission and stays in the input', async () => {

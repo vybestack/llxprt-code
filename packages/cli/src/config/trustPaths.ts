@@ -81,6 +81,19 @@ export function getTrustPathProblemMessage(problem: TrustPathProblem): string {
   return TRUST_PATH_PROBLEM_MESSAGES[problem];
 }
 
+function describeAccessFailure(error: unknown): TrustPathProblem {
+  switch ((error as NodeJS.ErrnoException).code) {
+    case 'ENOENT':
+      return 'not-found';
+    // A component of the path exists but is a file, so the path shape is wrong
+    // rather than the folder missing.
+    case 'ENOTDIR':
+      return 'not-a-directory';
+    default:
+      return 'not-accessible';
+  }
+}
+
 /**
  * Normalizes raw user input and confirms it names an existing directory,
  * returning it under the same canonical identity the trust store uses.
@@ -106,16 +119,10 @@ export function resolveTrustDirectory(
     canonicalPath = fs.realpathSync(normalized.normalizedPath);
     stats = fs.statSync(canonicalPath);
   } catch (error) {
-    // A path that exists but cannot be read reports its own problem: telling
-    // the user it does not exist would send them looking for the wrong thing.
-    const code = (error as NodeJS.ErrnoException).code;
-    return {
-      ok: false,
-      problem:
-        code === 'ENOENT' || code === 'ENOTDIR'
-          ? 'not-found'
-          : 'not-accessible',
-    };
+    // Each failure reports its own problem: telling the user a folder does not
+    // exist would send them looking for the wrong thing when the real issue is
+    // that it is unreadable, or that a component of the path is a file.
+    return { ok: false, problem: describeAccessFailure(error) };
   }
   if (!stats.isDirectory()) {
     return { ok: false, problem: 'not-a-directory' };
