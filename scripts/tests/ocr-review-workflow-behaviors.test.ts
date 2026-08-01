@@ -174,19 +174,25 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
 
   it('reconciles ambiguous createComment by marker (Behavior 6)', () => {
     expectContainsAll(postScript, [
-      'async function createOrUpdateMarkerComment(summary)',
-      'async function reconcileMarkerComment(existingComments)',
-      "typeof c.body === 'string' && c.body.includes(MARKER)",
+      'async function createOrUpdateMarkerComment(summary, isAutomatic)',
+      'async function deleteDuplicateMarkerComments(comments, keepId)',
     ]);
+    // Issue #2860: the canonical snippet's trustedMarkerComments replaces
+    // the old inline filter; fetchMarkerComments now delegates to it.
+    const fetchMarkerSource = extractFunctionSource(
+      postScript,
+      'fetchMarkerComments',
+    );
+    expect(fetchMarkerSource).toContain('trustedMarkerComments(');
     const postFunctionSource = extractFunctionSource(
       postScript,
       'createOrUpdateMarkerComment',
     );
     expectContainsAll(postFunctionSource, [
-      'existing = await reconcileMarkerComment()',
+      'selectCanonicalMarker(reconciledComments)',
       'github.rest.issues.updateComment({',
       'github.rest.issues.createComment({',
-      'const reconciled = await reconcileMarkerComment(null)',
+      'deleteDuplicateMarkerComments(retryComments, reconciled.id)',
       'if (reconciled)',
     ]);
   });

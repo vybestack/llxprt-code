@@ -234,6 +234,55 @@ describe('setCommand runtime integration', () => {
     });
   });
 
+  // Issue #2896: a registered param with the wrong type used to be stored
+  // verbatim and put a malformed field on the wire — OpenRouter answers
+  // 400 "top_p: Invalid input: expected number, received string".
+  it('stores a leading-dot decimal model param as a number', async () => {
+    await setCommand.action!(context, 'modelparam top_p .95');
+
+    expect(mockRuntime.setActiveModelParam).toHaveBeenCalledWith('top_p', 0.95);
+  });
+
+  it.each(['abc', 'true', '{"a":1}', '1e400'])(
+    'rejects %j for a number-typed model param and stores nothing',
+    async (raw) => {
+      const result = await setCommand.action!(
+        context,
+        `modelparam top_p ${raw}`,
+      );
+
+      expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'error',
+      });
+      expect((result as { content: string }).content).toContain(
+        'must be a number',
+      );
+    },
+  );
+
+  it('validates through the registry alias, not just the canonical key', async () => {
+    const result = await setCommand.action!(
+      context,
+      'modelparam max-tokens abc',
+    );
+
+    expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
+    expect((result as { content: string }).content).toContain(
+      'must be a number',
+    );
+  });
+
+  it('still accepts an unregistered provider-specific param verbatim', async () => {
+    await setCommand.action!(context, 'modelparam parse_reasoning true');
+
+    expect(mockRuntime.setActiveModelParam).toHaveBeenCalledWith(
+      'parse_reasoning',
+      true,
+    );
+  });
+
   it('requires both key and value for modelparam', async () => {
     const result = await setCommand.action!(context, 'modelparam temperature');
 

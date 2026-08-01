@@ -86,6 +86,7 @@ const resetEnv = () => {
   delete process.env['WSL_INTEROP'];
   delete process.env['TERM'];
   delete process.env['WT_SESSION'];
+  delete process.env['SANDBOX'];
 };
 
 interface MockChildProcess extends EventEmitter {
@@ -246,6 +247,73 @@ describe('commandUtils', () => {
       expect(tty.write).toHaveBeenCalledTimes(1);
       expect(tty.write.mock.calls[0][0]).toBe(expected);
       expect(tty.end).toHaveBeenCalledTimes(1); // /dev/tty closed after write
+      expect(mockClipboardyWrite).not.toHaveBeenCalled();
+    });
+
+    it('writes OSC-52 to the terminal when inside a macOS seatbelt sandbox', async () => {
+      const testText = 'seatbelt-copy';
+      const tty = makeWritable({ isTTY: true });
+      mockFs.createWriteStream.mockImplementation(() => {
+        setTimeout(() => tty.emit('open'), 0);
+        return tty;
+      });
+
+      process.env['SANDBOX'] = 'sandbox-exec';
+
+      await copyToClipboard(testText);
+
+      const b64 = Buffer.from(testText, 'utf8').toString('base64');
+      const expected = `${ESC}]52;c;${b64}${BEL}`;
+
+      expect(tty.write).toHaveBeenCalledTimes(1);
+      expect(tty.write.mock.calls[0][0]).toBe(expected);
+      expect(tty.end).toHaveBeenCalledTimes(1);
+      expect(mockClipboardyWrite).not.toHaveBeenCalled();
+    });
+
+    it('writes OSC-52 to the terminal when inside a container sandbox', async () => {
+      const testText = 'container-copy';
+      const tty = makeWritable({ isTTY: true });
+      mockFs.createWriteStream.mockImplementation(() => {
+        setTimeout(() => tty.emit('open'), 0);
+        return tty;
+      });
+
+      process.env['SANDBOX'] = 'llxprt-code-sandbox';
+
+      await copyToClipboard(testText);
+
+      const b64 = Buffer.from(testText, 'utf8').toString('base64');
+      const expected = `${ESC}]52;c;${b64}${BEL}`;
+
+      expect(tty.write).toHaveBeenCalledTimes(1);
+      expect(tty.write.mock.calls[0][0]).toBe(expected);
+      expect(tty.end).toHaveBeenCalledTimes(1);
+      expect(mockClipboardyWrite).not.toHaveBeenCalled();
+    });
+
+    it('falls back to stderr when inside a sandbox and /dev/tty is unavailable', async () => {
+      const testText = 'sandbox-stderr';
+      const stderrStream = makeWritable({ isTTY: true });
+      Object.defineProperty(process, 'stderr', {
+        value: stderrStream,
+        configurable: true,
+      });
+
+      process.env['SANDBOX'] = 'sandbox-exec';
+
+      mockFs.createWriteStream.mockImplementation(() => {
+        const tty = makeWritable({ isTTY: true });
+        setTimeout(() => tty.emit('error', new Error('EACCES')), 0);
+        return tty;
+      });
+
+      await copyToClipboard(testText);
+
+      const b64 = Buffer.from(testText, 'utf8').toString('base64');
+      const expected = `${ESC}]52;c;${b64}${BEL}`;
+
+      expect(stderrStream.write).toHaveBeenCalledWith(expected);
       expect(mockClipboardyWrite).not.toHaveBeenCalled();
     });
 
