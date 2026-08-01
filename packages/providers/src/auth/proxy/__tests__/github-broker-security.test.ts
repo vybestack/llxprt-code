@@ -436,3 +436,45 @@ describe('audit log enforces its no-secrets claim', () => {
     expect(written.join('')).toContain('unserialisable');
   });
 });
+
+describe('production wiring', () => {
+  /**
+   * The broker exists only for the sandbox, and sandbox-proxy-lifecycle is
+   * the sole production construction of CredentialProxyServer. If it does
+   * not register the github handler, a sandboxed agent builds a proxy
+   * client, sends github ops over the socket, and gets UNKNOWN_OP - the
+   * broker fully present and completely unreachable.
+   *
+   * Every other test in this suite builds its own server WITH the handler,
+   * so none of them can catch that. This one asserts the production path.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-003
+   */
+  it('registers the github handler on the sandbox proxy server', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const url = await import('node:url');
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    const source = await fs.readFile(
+      path.resolve(here, '..', 'sandbox-proxy-lifecycle.ts'),
+      'utf8',
+    );
+    expect(source).toContain('createGitHubBrokerHandler');
+    expect(source).toMatch(/extraHandlers:\s*\{\s*github:/);
+  });
+
+  /**
+   * The registered value must be the handler function itself. The wrapper
+   * object is not callable, and the server rejects a non-function at
+   * construction, so passing the wrapper would break every sandbox start.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-003
+   */
+  it('registers a callable handler, not the wrapper object', async () => {
+    const { createGitHubBrokerHandler } = await import('../github-broker.js');
+    expect(typeof createGitHubBrokerHandler().handler).toBe('function');
+    expect(typeof createGitHubBrokerHandler()).not.toBe('function');
+  });
+});
