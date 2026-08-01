@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { JSP_BOUNDS, utf8ByteLength } from './jspBounds.js';
 
 const SCHEMA_VERSION = 1;
 const PROTOCOL = 'jsp/1';
@@ -36,12 +37,21 @@ export function err<T>(code: JspErrorCode, message: string): JspResult<T> {
 
 const opaqueIdRegex = /^[A-Za-z0-9._-]+$/;
 
+// The protocol contract bounds IDs by inclusive UTF-8 bytes, not UTF-16 code
+// units. agent_id is ASCII-constrained by the regex above so it is safe, but
+// registration_id has no such constraint and must be checked explicitly.
+function withinIdBytes(value: string): boolean {
+  return utf8ByteLength(value) <= JSP_BOUNDS.idBytes;
+}
+
 const BootstrapSchema = z
   .object({
     schema: z.literal(SCHEMA_VERSION),
     protocol: z.literal(PROTOCOL),
     endpoint: z.string().min(1),
-    registration_id: z.string().min(1).max(128),
+    registration_id: z.string().min(1).refine(withinIdBytes, {
+      message: 'registration_id exceeds the UTF-8 byte bound',
+    }),
     publisher_credential: z.string().min(1),
     agent_id: z.string().min(1).max(128).regex(opaqueIdRegex),
     lifecycle_generation: z.number().int().positive(),

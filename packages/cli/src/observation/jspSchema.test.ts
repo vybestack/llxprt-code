@@ -63,6 +63,15 @@ describe('parseBootstrap', () => {
     expect(errorCode(result)).toBe('JSP-E004');
   });
 
+  it('rejects a negative lifecycle generation', () => {
+    const result = parseBootstrap({
+      ...validBootstrap,
+      lifecycle_generation: -1,
+    });
+    expect(result.ok).toBe(false);
+    expect(errorCode(result)).toBe('JSP-E004');
+  });
+
   it('accepts https on loopback', () => {
     const result = parseBootstrap({
       ...validBootstrap,
@@ -129,5 +138,39 @@ describe('parseBootstrap', () => {
       });
       expect(result.ok).toBe(true);
     }
+  });
+
+  it('rejects a registration_id whose UTF-8 bytes exceed 128', () => {
+    // Each 'é' is 2 UTF-8 bytes. 64 of them = 128 bytes (at the limit, valid).
+    const atLimit = 'é'.repeat(64);
+    expect(
+      parseBootstrap({ ...validBootstrap, registration_id: atLimit }).ok,
+    ).toBe(true);
+    // 65 of them = 130 bytes (one byte over the limit, invalid).
+    const overLimit = 'é'.repeat(65);
+    expect(
+      parseBootstrap({ ...validBootstrap, registration_id: overLimit }).ok,
+    ).toBe(false);
+  });
+
+  it('rejects a registration_id whose UTF-8 bytes exceed 128 with a 4-byte char', () => {
+    // 31 'é' (2 bytes each = 62 bytes) + one '𝕏' (4 bytes) = 66 bytes, well
+    // under 128. This is just a sanity check that 4-byte chars are counted.
+    const valid = 'é'.repeat(31) + '𝕏';
+    expect(Buffer.byteLength(valid, 'utf8')).toBeLessThanOrEqual(128);
+    expect(
+      parseBootstrap({ ...validBootstrap, registration_id: valid }).ok,
+    ).toBe(true);
+    // 32 '𝕏' = 128 bytes (at the limit, valid).
+    const atLimit4 = '𝕏'.repeat(32);
+    expect(Buffer.byteLength(atLimit4, 'utf8')).toBe(128);
+    expect(
+      parseBootstrap({ ...validBootstrap, registration_id: atLimit4 }).ok,
+    ).toBe(true);
+    // 33 '𝕏' = 132 bytes (over the limit, invalid).
+    const overLimit4 = '𝕏'.repeat(33);
+    expect(
+      parseBootstrap({ ...validBootstrap, registration_id: overLimit4 }).ok,
+    ).toBe(false);
   });
 });
