@@ -238,6 +238,10 @@ describe('RenderInline URL linkification', () => {
 
     const flat = flattenText(node);
     expect(extractFirstOsc8Target(flat)).toBe(url);
+    // The wrapping parentheses and the period stay visible, with the ')' and
+    // '.' after the closing sequence rather than inside the link.
+    expect(flat.startsWith('(')).toBe(true);
+    expect(flat.endsWith(`${OSC8_PREFIX}\x07).`)).toBe(true);
   });
 
   it('renders a markdown [label](url) link with the label as an OSC 8 hyperlink and keeps the visible (url) fallback as a link (AC-2)', () => {
@@ -297,6 +301,8 @@ describe('RenderInline URL linkification', () => {
 
     const flat = flattenText(node);
     expect(extractFirstOsc8Target(flat)).toBe(url);
+    expect(flat.startsWith('(')).toBe(true);
+    expect(flat.endsWith(`${OSC8_PREFIX}\x07.)`)).toBe(true);
   });
 
   it('does not linkify a markdown link whose URL has an unbalanced ( (AC-2)', () => {
@@ -308,10 +314,11 @@ describe('RenderInline URL linkification', () => {
       text: 'See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) now.',
     });
 
-    const flat = flattenText(node);
-    expect(flat).not.toContain(OSC8_PREFIX);
-    expect(flat).toContain('wiki');
-    expect(flat).toContain('https://en.wikipedia.org/wiki/Foo_(bar');
+    // Asserted exactly, so the test distinguishes the truncated target from
+    // the complete one rather than matching a common prefix.
+    expect(flattenText(node)).toBe(
+      'See wiki (https://en.wikipedia.org/wiki/Foo_(bar)) now.',
+    );
   });
 
   it('does not linkify a URL inside an inline code span (AC-3)', () => {

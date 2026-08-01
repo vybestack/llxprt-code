@@ -249,6 +249,23 @@ describe('createUrlLink', () => {
     expect(stringWidth(link ?? '')).toBe('Click here'.length);
   });
 
+  it('rejects URLs carrying userinfo, which enables authority confusion (AC-3)', () => {
+    // The WHATWG parser reads the segment before '@' as a username, so the
+    // host here is evil.com even though a reader scanning the text sees
+    // example.com first.
+    expect(new URL('https://example.com@evil.com').hostname).toBe('evil.com');
+
+    expect(isLinkableHttpUrl('https://example.com@evil.com')).toBe(false);
+    expect(isLinkableHttpUrl('http://user:pw@evil.com/path')).toBe(false);
+    expect(createUrlLink('https://example.com@evil.com')).toBeNull();
+    expect(
+      createUrlLink('https://good.test@attacker.test/x', 'docs'),
+    ).toBeNull();
+
+    // A host that merely contains similar text is still linkable
+    expect(isLinkableHttpUrl('https://evil.com/example.com')).toBe(true);
+  });
+
   it('rejects a label containing control characters (AC-3)', () => {
     const url = 'https://example.com/some/path';
 

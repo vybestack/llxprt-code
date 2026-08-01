@@ -48,7 +48,13 @@ function hasControlCharacter(candidate: string): boolean {
 /**
  * Determine whether a candidate string is a safe-to-linkify HTTP(S) URL. The
  * candidate must parse via the WHATWG `URL` constructor, have a protocol of
- * exactly `http:` or `https:`, and contain no C0/C1 control characters.
+ * exactly `http:` or `https:`, contain no C0/C1 control characters, and carry
+ * no userinfo.
+ *
+ * Userinfo is rejected because it enables authority confusion: the WHATWG
+ * parser reads `https://example.com@evil.com` as user `example.com` on host
+ * `evil.com`, so a reader scanning the visible text sees a trusted name while
+ * the link navigates elsewhere.
  */
 export function isLinkableHttpUrl(candidate: string): boolean {
   if (candidate.length === 0 || hasControlCharacter(candidate)) {
@@ -60,7 +66,10 @@ export function isLinkableHttpUrl(candidate: string): boolean {
   } catch {
     return false;
   }
-  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+  return parsed.username === '' && parsed.password === '';
 }
 
 /**
