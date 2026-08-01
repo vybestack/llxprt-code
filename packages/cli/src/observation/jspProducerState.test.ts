@@ -59,11 +59,10 @@ describe('createProducerIdentity', () => {
 });
 
 describe('initProducerState', () => {
-  it('starts with sequence/cursor zero and idle activity', () => {
+  it('starts with sequence zero and idle activity', () => {
     const id = makeIdentity();
     const state = initProducerState(id, nativeSession);
     expect(state.sourceSequence).toBe(0);
-    expect(state.cursor).toBe(0);
     expect(state.activity).toBe('idle');
     expect(state.wait).toBeNull();
     expect(state.currentTurn).toBeNull();
@@ -300,7 +299,19 @@ describe('monotonic ordering', () => {
       () => 300,
     );
     expect(state.sourceSequence).toBe(2);
-    expect(state.cursor).toBe(2);
+  });
+
+  it('derives snapshot cursor from source_sequence so they cannot drift', () => {
+    const id = makeIdentity();
+    let state = initProducerState(id, nativeSession);
+    state = applyTransition(state, { type: 'turn.started' }, () => 200);
+    state = applyTransition(
+      state,
+      { type: 'activity.changed', state: 'acting' },
+      () => 300,
+    );
+    const snap = buildSnapshot(state, () => 400);
+    expect(snap.cursor).toBe(snap.source_sequence);
   });
 });
 

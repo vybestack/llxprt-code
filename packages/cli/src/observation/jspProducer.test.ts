@@ -374,4 +374,100 @@ describe('JspProducer', () => {
     expect(producer.snapshot().source_sequence).toBe(sequenceBefore);
     expect(published).toStrictEqual([]);
   });
+
+  it('is restart-safe: stop then start re-registers and re-establishes heartbeat', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    let heartbeatCount = 0;
+    const published: JspBoundDocument[] = [];
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: (snapshot) => {
+        registerCalls += 1;
+        published.push(snapshot);
+        return Promise.resolve(OK);
+      },
+      publish: (document) => {
+        published.push(document);
+        return Promise.resolve(OK);
+      },
+      heartbeat: () => {
+        heartbeatCount += 1;
+        return Promise.resolve(OK);
+      },
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+      heartbeatMs: 10,
+    });
+    producer.start();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+
+    // After stop, a restart must re-register and resume publishing events.
+    published.length = 0;
+    heartbeatCount = 0;
+    producer.start();
+    await producer.flush();
+    expect(registerCalls).toBe(2);
+    producer.observeTurnStarted();
+    await producer.flush();
+    expect(eventTypes(published)).toContain('turn.started');
+    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    expect(heartbeatCount).toBeGreaterThan(0);
+    producer.stop();
+  });
+
+  it('does not re-register on restart after a terminal 409 rejection', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => {
+        registerCalls += 1;
+        return Promise.resolve(REJECTED_409);
+      },
+      publish: () => Promise.resolve(OK),
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    // A terminal rejection must persist across stop/start so the producer
+    // does not silently re-register into a broker that has rejected it.
+    producer.stop();
+    producer.start();
+    producer.observeTurnStarted();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+  });
+
+  it('does not re-register on restart after a terminal 401 rejection', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => {
+        registerCalls += 1;
+        return Promise.resolve(REJECTED_401);
+      },
+      publish: () => Promise.resolve(OK),
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+    producer.start();
+    producer.observeTurnStarted();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+  });
 });

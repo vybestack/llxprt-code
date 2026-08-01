@@ -79,6 +79,20 @@ export class JspBoundedQueue {
     this.buffer.length = 0;
   }
 
+  /**
+   * Reset the queue to a fresh unstopped state so the owner can restart after
+   * a stop/start cycle. Overflow and recovery flags are cleared because the
+   * caller must re-register (publishing a fresh snapshot) before enqueuing
+   * events again.
+   */
+  restart(): void {
+    this.isStopped = false;
+    this.didOverflow = false;
+    this.snapshotRecoveryNeeded = false;
+    this.recoveryRequested = false;
+    this.buffer.length = 0;
+  }
+
   async flush(): Promise<void> {
     while (this.drainTask !== null) {
       await this.drainTask;

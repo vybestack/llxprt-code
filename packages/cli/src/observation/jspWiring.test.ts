@@ -55,11 +55,11 @@ async function writeTempFile(name: string, content: string): Promise<string> {
 describe('loadBootstrapFromEnv', () => {
   afterEach(async () => {
     // Each helper call creates a directory; without this they accumulate in
-    // the system temp directory on every run.
-    await Promise.all(
-      tempDirs
-        .splice(0)
-        .map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    // the system temp directory on every run. Use allSettled so a single
+    // rejection does not abandon cleanup of the remaining directories.
+    const dirs = tempDirs.splice(0);
+    await Promise.allSettled(
+      dirs.map((dir) => fs.rm(dir, { recursive: true, force: true })),
     );
   });
 

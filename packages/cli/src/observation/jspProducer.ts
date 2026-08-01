@@ -163,12 +163,26 @@ export class JspProducer {
     if (this.started) {
       return;
     }
+    // A restart after stop() requires resetting the queue, which was
+    // permanently stopped. Without this, events are silently dropped on
+    // the second lifecycle.
+    if (this.queue.stopped) {
+      this.queue.restart();
+    }
     this.started = true;
     this.ensureRegistered();
   }
 
   stop(): void {
     this.started = false;
+    // Reset registration bookkeeping so a later start() re-registers and
+    // re-establishes the heartbeat. Without this, restart runs with no
+    // registration and no heartbeat. registrationTerminal is intentionally
+    // NOT reset: a producer stopped because of a terminal 401/403/409/400
+    // rejection must not silently re-register.
+    this.registered = false;
+    this.registrationAttempts = 0;
+    this.lastRegistrationMs = 0;
     this.stopHeartbeat();
     this.queue.stop();
   }

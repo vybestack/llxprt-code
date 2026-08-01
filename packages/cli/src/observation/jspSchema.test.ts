@@ -117,6 +117,37 @@ describe('parseBootstrap', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts zero-padded loopback octets', () => {
+    for (const host of [
+      '127.0.0.01',
+      '127.0.00.1',
+      '127.00.0.1',
+      '127.000.000.000',
+      '127.010.020.001',
+    ]) {
+      const result = parseBootstrap({
+        ...validBootstrap,
+        endpoint: `http://${host}:9123/jsp/1`,
+      });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  it('rejects a non-loopback host with zero-padded-looking octets', () => {
+    for (const host of [
+      '128.0.0.01',
+      '126.000.000.000',
+      '10.0.0.01',
+      '192.168.001.001',
+    ]) {
+      const result = parseBootstrap({
+        ...validBootstrap,
+        endpoint: `http://${host}:9123/jsp/1`,
+      });
+      expect(result.ok).toBe(false);
+    }
+  });
+
   it('rejects a missing required credential', () => {
     const { publisher_credential: _omitted, ...rest } = validBootstrap;
     const result = parseBootstrap(rest);

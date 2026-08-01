@@ -76,7 +76,6 @@ export interface JspProducerState {
   readonly identity: JspProducerIdentity;
   readonly nativeSession: JspNativeSession;
   readonly sourceSequence: number;
-  readonly cursor: number;
   readonly activity: JspActivityState;
   readonly wait: JspWait | null;
   readonly currentTurn: JspTurnAnchor | null;
@@ -104,7 +103,6 @@ export function initProducerState(
     identity,
     nativeSession,
     sourceSequence: 0,
-    cursor: 0,
     activity: 'idle',
     wait: null,
     currentTurn: null,
@@ -120,12 +118,7 @@ function next(state: JspProducerState): JspProducerState {
   return {
     ...state,
     sourceSequence: state.sourceSequence + 1,
-    cursor: state.sourceSequence + 1,
   };
-}
-
-function turnEndedActivity(_outcome: JspTurnOutcome): JspActivityState {
-  return 'idle';
 }
 
 export function applyTransition(
@@ -144,7 +137,7 @@ export function applyTransition(
     case 'turn.ended': {
       return next({
         ...state,
-        activity: turnEndedActivity(transition.outcome),
+        activity: 'idle',
         currentTurn: null,
       });
     }
@@ -274,7 +267,7 @@ export function buildSnapshot(
     lifecycle_generation: identity.lifecycleGeneration,
     source_epoch: identity.sourceEpoch,
     source_sequence: state.sourceSequence,
-    cursor: state.cursor,
+    cursor: state.sourceSequence,
     bridge_observed_ms: now(),
     native_session: state.nativeSession,
     process_binding: knownField({

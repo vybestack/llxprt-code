@@ -182,4 +182,33 @@ describe('createObservationTap', () => {
       expect(calls).toContain(outcome);
     }
   });
+
+  it('maps every ToolUpdateStatus to the correct JSP tool phase', () => {
+    for (const [status, phase] of [
+      ['validating', 'proposed'],
+      ['scheduled', 'scheduled'],
+      ['awaiting-approval', 'awaiting_approval'],
+      ['executing', 'executing'],
+      ['success', 'succeeded'],
+      ['error', 'failed'],
+      ['cancelled', 'cancelled'],
+    ] as const) {
+      const calls: string[] = [];
+      const tap = createObservationTap({
+        ...noopTarget(calls),
+        onToolPhaseChanged: (label, p) => calls.push(`phase:${label}:${p}`),
+      });
+      tap.onTurnStarted();
+      tap.processEvent(toolCallEvent);
+      tap.processEvent({
+        type: 'tool-status',
+        update: {
+          id: 'tool-1',
+          name: 'read_file',
+          status,
+        },
+      } as AgentEvent);
+      expect(calls).toContain(`phase:read_file:${phase}`);
+    }
+  });
 });

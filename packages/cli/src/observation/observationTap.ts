@@ -79,8 +79,10 @@ function mapToolStatus(
       return 'cancelled';
     case 'validating':
       return 'proposed';
-    default:
-      return 'proposed';
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
   }
 }
 

@@ -90,7 +90,7 @@ function isLoopbackHost(hostname: string): boolean {
     lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower;
   if (host === '::1' || host === '0:0:0:0:0:0:0:1') return true;
   if (host === '127.0.0.1') return true;
-  const octet = '(?:25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)';
+  const octet = '(?:25[0-5]|2[0-4]\\d|1\\d{2}|0\\d{2}|\\d{1,2})';
   return new RegExp(`^127\\.${octet}\\.${octet}\\.${octet}$`).test(host);
 }
 
