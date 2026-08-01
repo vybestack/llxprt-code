@@ -268,7 +268,12 @@ function useNavigationActions(
     workingDirectory,
   ]);
 
-  const handleEscape = useEscapeHandler(trust, viewState, onExit);
+  const handleEscape = useEscapeHandler(
+    trust,
+    viewState,
+    onExit,
+    committingRef,
+  );
 
   return { submitPath, selectRule, removeRule, handleEscape };
 }
@@ -282,10 +287,15 @@ function useEscapeHandler(
   trust: UsePermissionsModifyTrustReturn,
   viewState: ViewState,
   onExit: () => void,
+  committingRef: React.MutableRefObject<boolean>,
 ): () => void {
   const { setTargetPath, workingDirectory, targetPath } = trust;
   const { view, formOrigin, setView, setFormOrigin } = viewState;
   return useCallback((): void => {
+    // Escape takes the in-flight lock like every other navigation, so a
+    // completing write cannot publish its view onto a screen the user stepped
+    // back from.
+    if (committingRef.current) return;
     if (view === 'path-entry' || view === 'rules') {
       setView('form');
       return;
@@ -310,6 +320,7 @@ function useEscapeHandler(
     setFormOrigin,
     setView,
     workingDirectory,
+    committingRef,
   ]);
 }
 

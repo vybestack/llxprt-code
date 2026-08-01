@@ -55,7 +55,11 @@ export const PermissionsTrustRulesList: React.FC<
       )}
     </Box>
     <Box marginLeft={1} marginTop={1}>
-      <Text color={Colors.Gray}>(Enter to select, Escape to go back)</Text>
+      <Text color={Colors.Gray}>
+        {rules.length === 0
+          ? '(Escape to go back)'
+          : '(Enter to select, Escape to go back)'}
+      </Text>
     </Box>
   </Box>
 );

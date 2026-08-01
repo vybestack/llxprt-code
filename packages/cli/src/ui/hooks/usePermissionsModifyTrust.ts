@@ -432,6 +432,10 @@ function useTrustSessionState(
   );
   const applyCommitSuccess = useCallback(
     (nextEffectiveTrust: boolean | undefined, nextLevel: TrustLevel): void => {
+      // This is the session's effective trust, and it is updated after every
+      // commit regardless of which folder was written: a rule on an ancestor of
+      // the working directory legitimately changes what the session may do, and
+      // scoping this to cwd-only commits would miss exactly that case.
       setEffectiveTrust(nextEffectiveTrust);
       setPendingTrustLevel(nextLevel);
       setCommittedLevel(nextLevel);
