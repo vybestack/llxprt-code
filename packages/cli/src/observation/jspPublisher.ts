@@ -26,7 +26,11 @@ export class JspHttpPublisher implements JspPublisher {
   private readonly registrationId: string;
 
   constructor(bootstrap: JspBootstrap) {
-    const endpoint = bootstrap.endpoint.replace(/\/$/, '');
+    // Trim trailing slashes without a backtracking-prone pattern.
+    let endpoint = bootstrap.endpoint;
+    while (endpoint.endsWith('/')) {
+      endpoint = endpoint.slice(0, -1);
+    }
     this.baseEndpoint = endpoint.endsWith('/jsp/1')
       ? endpoint
       : `${endpoint}/jsp/1`;

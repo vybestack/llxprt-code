@@ -23,6 +23,12 @@ export function redactAssistantContent(
 }
 
 export function truncateToByteBound(input: string, maxBytes: number): string {
+  // A negative bound would silently return the empty string; a negative entry
+  // cap would make Array.slice count from the end. Neither is a meaningful
+  // request, so fail rather than publish a quietly wrong document.
+  if (!Number.isInteger(maxBytes) || maxBytes < 0) {
+    throw new RangeError('maxBytes must be a non-negative integer');
+  }
   if (utf8ByteLength(input) <= maxBytes) return input;
   let lower = 0;
   let upper = input.length;
@@ -58,9 +64,32 @@ export function buildTodoItems(
   todos: readonly TodoLike[],
   bounds: TodoBounds,
 ): Array<{ text: string; completed: boolean }> {
+  if (!Number.isInteger(bounds.todoEntries) || bounds.todoEntries < 0) {
+    throw new RangeError('todoEntries must be a non-negative integer');
+  }
   const capped = todos.slice(0, bounds.todoEntries);
   return capped.map((todo) => ({
     text: truncateToByteBound(todo.content, bounds.todoTextBytes),
-    completed: todo.status === 'completed',
+    completed: mapTodoCompleted(todo.status),
   }));
+}
+
+/**
+ * Map a native task status to the published completion flag.
+ *
+ * The native status set is open, so an unrecognised value is published as not
+ * completed rather than guessed at. The known values are listed explicitly so
+ * that decision stays visible instead of being implied by a bare equality
+ * check against `'completed'`.
+ */
+function mapTodoCompleted(status: string): boolean {
+  switch (status) {
+    case 'completed':
+      return true;
+    case 'pending':
+    case 'in_progress':
+      return false;
+    default:
+      return false;
+  }
 }

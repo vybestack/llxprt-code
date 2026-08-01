@@ -214,6 +214,11 @@ function applyTodosReplaced(
   state: JspProducerState,
   transition: Extract<JspTransition, { type: 'todos.replaced' }>,
 ): JspProducerState {
+  // Revisions are positive and strictly increasing per epoch, including the
+  // first one: without this a leading zero or negative revision is accepted.
+  if (!Number.isInteger(transition.revision) || transition.revision < 1) {
+    return state;
+  }
   if (state.todos !== null && transition.revision <= state.todos.revision) {
     return state;
   }

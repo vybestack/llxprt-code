@@ -142,10 +142,18 @@ describe('createObservationTap', () => {
     tap.processEvent(confirmationEvent);
     tap.processEvent({ type: 'done', reason: 'aborted' });
 
+    // Abandoning the approval must resolve the wait rather than leave the
+    // observer showing one that can never complete.
+    expect(calls.filter((call) => call === 'wait.resolved')).toStrictEqual([
+      'wait.resolved',
+    ]);
+
     // The next turn must not inherit the abandoned approval.
     tap.onTurnStarted();
     tap.processEvent(executingEvent);
 
-    expect(calls).not.toContain('wait.resolved');
+    expect(calls.filter((call) => call === 'wait.resolved')).toStrictEqual([
+      'wait.resolved',
+    ]);
   });
 });

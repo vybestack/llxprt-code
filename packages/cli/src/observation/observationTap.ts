@@ -165,8 +165,14 @@ export function createObservationTap(
    * the session and leaking a stale wait into a later turn.
    */
   const resetTurnScopedState = (): void => {
+    // Discarding a pending approval without reporting it resolved would leave
+    // the observer showing a wait that can never complete.
+    const hadPendingApproval = scope.awaitingConfirmation.size > 0;
     scope.toolLabels.clear();
     scope.awaitingConfirmation.clear();
+    if (hadPendingApproval) {
+      target.onWaitResolved();
+    }
   };
 
   return {

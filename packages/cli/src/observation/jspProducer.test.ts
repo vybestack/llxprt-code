@@ -71,7 +71,7 @@ describe('heartbeat cadence', () => {
   it('heartbeats at least three times within the observer lease', async () => {
     const bootstrapped = makeHarness();
     const sent: number[] = [];
-    let clock = 0;
+    const clock = 0;
     const hooks: JspProducerHooks = {
       ...bootstrapped.hooks,
       now: () => clock,

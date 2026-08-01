@@ -72,6 +72,8 @@ function isLoopbackHost(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   if (lower === 'localhost') return true;
   if (lower === '127.0.0.1' || lower === '::1') return true;
+  // Node's URL parser preserves the uncompressed form verbatim.
+  if (lower === '0:0:0:0:0:0:0:1') return true;
   if (lower.endsWith('.localhost')) return true;
   const octet = '(?:25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)';
   return new RegExp(`^127\\.${octet}\\.${octet}\\.${octet}$`).test(lower);
