@@ -71,6 +71,7 @@ interface TestResult {
 
 function runTestFile(file: string): Promise<TestResult> {
   return new Promise((resolve) => {
+    let resolved = false;
     const child = spawn(
       process.execPath,
       ['test', '--preload', PRELOAD, file],
@@ -82,20 +83,34 @@ function runTestFile(file: string): Promise<TestResult> {
     );
 
     const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
       child.kill('SIGKILL');
       resolve({ file, passed: false, exitCode: null, timedOut: true });
     }, PER_FILE_TIMEOUT_MS);
 
     child.on('exit', (code) => {
+      if (resolved) return;
+      resolved = true;
       clearTimeout(timer);
       resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
     });
 
     child.on('error', () => {
+      if (resolved) return;
+      resolved = true;
       clearTimeout(timer);
       resolve({ file, passed: false, exitCode: -1, timedOut: false });
     });
   });
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function generateJUnit(
@@ -106,12 +121,15 @@ function generateJUnit(
   const newlines = '\n';
   const testCases = results
     .map((r) => {
-      const className = r.file.replace(/^src\//, '').replace(/\.test\.ts$/, '');
+      const className = escapeXml(
+        r.file.replace(/^src\//, '').replace(/\.test\.tsx?$/, ''),
+      );
+      const exitCode = r.exitCode ?? -1;
       const failureXml = r.passed
         ? ''
         : r.timedOut
           ? `<failure message="Timed out after ${PER_FILE_TIMEOUT_MS / 1000}s">TIMEOUT</failure>`
-          : `<failure message="Exit code ${r.exitCode}">FAILED</failure>`;
+          : `<failure message="Exit code ${exitCode}">FAILED</failure>`;
       const timeAttr = r.passed ? '' : ' time="0"';
       return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
     })
@@ -155,7 +173,9 @@ async function main(): Promise<void> {
         `TIMEOUT: ${result.file} (exceeded ${PER_FILE_TIMEOUT_MS / 1000}s)`,
       );
     } else {
-      console.error(`FAILED: ${result.file} (exit code ${result.exitCode})`);
+      console.error(
+        `FAILED: ${result.file} (exit code ${result.exitCode ?? -1})`,
+      );
     }
   }
 

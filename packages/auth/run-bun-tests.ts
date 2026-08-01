@@ -67,6 +67,14 @@ function runTestFile(file: string): Promise<TestResult> {
   });
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function generateJUnit(
   results: TestResult[],
   totalFiles: number,
@@ -75,10 +83,13 @@ function generateJUnit(
   const newlines = '\n';
   const testCases = results
     .map((r) => {
-      const className = r.file.replace(/^src\//, '').replace(/\.test\.ts$/, '');
+      const className = escapeXml(
+        r.file.replace(/^src\//, '').replace(/\.test\.tsx?$/, ''),
+      );
+      const exitCode = r.exitCode ?? -1;
       const failureXml = r.passed
         ? ''
-        : `<failure message="Exit code ${r.exitCode}">FAILED</failure>`;
+        : `<failure message="Exit code ${exitCode}">FAILED</failure>`;
       const timeAttr = r.passed ? '' : ' time="0"';
       return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
     })
@@ -117,7 +128,9 @@ async function main(): Promise<void> {
   const failed = results.filter((r) => !r.passed);
 
   for (const result of failed) {
-    console.error(`FAILED: ${result.file} (exit code ${result.exitCode})`);
+    console.error(
+      `FAILED: ${result.file} (exit code ${result.exitCode ?? -1})`,
+    );
   }
 
   console.log(
