@@ -29,6 +29,7 @@ const PANEL_HEIGHT_RATIO = 0.2;
 const COLLAPSED_PREVIEW_WIDTH_RATIO = 0.55;
 const FALLBACK_KEY_PREVIEW_LENGTH = 20;
 const MIN_EXPANDED_PANEL_HEIGHT = 3;
+const COLLAPSED_PANEL_HEIGHT = 2;
 const QUEUED_MESSAGES_KEY_HINT = getDefaultKeyBindingHint(
   Command.TOGGLE_QUEUED_MESSAGES,
 );
@@ -151,6 +152,15 @@ function calculatePanelHeight(rows: number): number {
   return Math.max(1, Math.floor(rows * PANEL_HEIGHT_RATIO));
 }
 
+function calculateAdaptivePanelHeight(
+  messageCount: number,
+  maxPanelHeight: number,
+): number {
+  // Layout: 1 row (top border) + 1 row (heading) + 1 row per message.
+  const neededHeight = 2 + messageCount;
+  return Math.min(neededHeight, maxPanelHeight);
+}
+
 function calculateAvailableRows(panelHeight: number): number {
   const borderRows = panelHeight > 1 ? 1 : 0;
   const headerRows = 1;
@@ -198,14 +208,18 @@ export function prepareQueuedMessagesPanelView({
     return { kind: 'empty' };
   }
 
-  const panelHeight = calculatePanelHeight(rows);
+  const maxPanelHeight = calculatePanelHeight(rows);
+  const expandedPanelHeight = calculateAdaptivePanelHeight(
+    messages.length,
+    maxPanelHeight,
+  );
   const boundedWidth = Math.max(1, Math.min(width, columns));
 
   if (collapsed) {
     return {
       kind: 'collapsed',
       width: boundedWidth,
-      panelHeight,
+      panelHeight: COLLAPSED_PANEL_HEIGHT,
       summary: queuedMessageSummary(messages.length),
       nextPreview: truncateEnd(
         extractPreviewText(messages[0].query),
@@ -214,7 +228,7 @@ export function prepareQueuedMessagesPanelView({
     };
   }
 
-  if (panelHeight < MIN_EXPANDED_PANEL_HEIGHT) {
+  if (expandedPanelHeight < MIN_EXPANDED_PANEL_HEIGHT) {
     return {
       kind: 'compact',
       width: boundedWidth,
@@ -223,7 +237,7 @@ export function prepareQueuedMessagesPanelView({
   }
 
   const maxVisibleItems = calculateMaxVisibleItems(
-    panelHeight,
+    expandedPanelHeight,
     messages.length,
   );
   const visibleMessages = messages.slice(0, maxVisibleItems);
@@ -232,7 +246,7 @@ export function prepareQueuedMessagesPanelView({
   return {
     kind: 'expanded',
     width: boundedWidth,
-    panelHeight,
+    panelHeight: expandedPanelHeight,
     heading: `Queued Messages (${messages.length})`,
     messages: visibleMessages.map((message, index) => {
       const preview = extractPreviewText(message.query);
@@ -312,7 +326,7 @@ function CollapsedQueuedMessagesPanel({
         )}
         <Text color={SemanticColors.text.secondary}>
           {' '}
-          • {QUEUED_MESSAGES_KEY_HINT} to expand
+          • Enter to send • Bksp to clear • {QUEUED_MESSAGES_KEY_HINT} to expand
         </Text>
       </Box>
     </QueuedMessagesPanelShell>
@@ -332,7 +346,8 @@ function ExpandedQueuedMessagesPanel({
         </Text>
         <Text color={SemanticColors.text.secondary}>
           {' '}
-          • {QUEUED_MESSAGES_KEY_HINT} to minimize
+          • Enter to send • Bksp to clear • {QUEUED_MESSAGES_KEY_HINT} to
+          minimize
         </Text>
       </Box>
       {view.messages.map((message) => (

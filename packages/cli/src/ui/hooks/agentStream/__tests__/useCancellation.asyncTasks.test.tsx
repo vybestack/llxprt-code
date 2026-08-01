@@ -10,7 +10,7 @@
  * cancelTask actually aborts the registered AbortController.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import React, { act } from 'react';
 import { renderHook } from '../../../../test-utils/render.js';
 import { useCancellation } from '../useAgentStreamLifecycle.js';
@@ -44,6 +44,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
     const turnCancelledRef = { current: false };
     const pendingHistoryItemRef = { current: null };
     const addedItems: HistoryItemWithoutId[] = [];
+    const setTurnCancelled = vi.fn();
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <KeypressProvider>{children}</KeypressProvider>
@@ -54,6 +55,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
         useCancellation(
           StreamingState.Responding,
           turnCancelledRef,
+          setTurnCancelled,
           abortControllerRef,
           () => {},
           pendingHistoryItemRef,
@@ -66,6 +68,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
           () => {}, // onCancelSubmit
           () => {}, // setIsResponding
           () => {}, // setShellInputFocused
+          { current: false }, // drainSuppressedRef
           cancelRunningAsyncTasks, // cancelRunningAsyncTasks
         ),
       { wrapper },
@@ -82,6 +85,10 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
 
     // The standard cancellation side effects still fire.
     expect(addedItems.some((i) => i.type === MessageType.INFO)).toBe(true);
+
+    // setTurnCancelled(true) must be invoked so useStreamingState returns Idle
+    // after cancel — this is what unblocks the queued-message drain (#2882).
+    expect(setTurnCancelled).toHaveBeenCalledWith(true);
   });
 
   it('cancels a task launched by a PRIOR (already-settled) turn (issue #2074)', async () => {
@@ -119,6 +126,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
     const turnCancelledRef = { current: false };
     const pendingHistoryItemRef = { current: null };
     const addedItems: HistoryItemWithoutId[] = [];
+    const setTurnCancelled = vi.fn();
 
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <KeypressProvider>{children}</KeypressProvider>
@@ -129,6 +137,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
         useCancellation(
           StreamingState.Responding,
           turnCancelledRef,
+          setTurnCancelled,
           newTurnAbortRef,
           () => {},
           pendingHistoryItemRef,
@@ -141,6 +150,7 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
           () => {}, // onCancelSubmit
           () => {}, // setIsResponding
           () => {}, // setShellInputFocused
+          { current: false }, // drainSuppressedRef
           cancelRunningAsyncTasks, // cancelRunningAsyncTasks
         ),
       { wrapper },
@@ -156,5 +166,9 @@ describe('useCancellation — cancels running async tasks on ESC', () => {
     expect(asyncTaskManager.getTask('cross-turn-async-agent')?.status).toBe(
       'cancelled',
     );
+
+    // setTurnCancelled(true) is invoked even for cross-turn cancellation,
+    // ensuring useStreamingState returns Idle and queued messages can drain.
+    expect(setTurnCancelled).toHaveBeenCalledWith(true);
   });
 });

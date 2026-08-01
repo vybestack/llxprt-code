@@ -62,6 +62,7 @@ export function buildAnthropicDumpMessages(
   settings?: unknown,
   config?: ToolOutputSettingsProvider,
   model?: string,
+  baseURL?: string,
 ): unknown[] {
   return convertToAnthropicMessages(history, {
     isOAuth: false,
@@ -78,6 +79,7 @@ export function buildAnthropicDumpMessages(
     reasoningEnabled: true,
     config,
     currentModel: model,
+    currentBaseURL: baseURL,
     unprefixToolName: (name) => name,
     logger: new DebugLogger('llxprt:providers:dumpConversion:anthropic'),
   });
@@ -130,6 +132,7 @@ export function buildProviderDumpBody(params: {
   settings?: unknown;
   config?: ToolOutputSettingsProvider;
   model?: string;
+  baseURL?: string;
 }): Record<string, unknown> {
   if (isOpenAICompatibleProvider(params.providerName)) {
     return withModel(
@@ -151,6 +154,7 @@ export function buildProviderDumpBody(params: {
           params.settings,
           params.config,
           params.model,
+          params.baseURL,
         ),
       },
       params.model,

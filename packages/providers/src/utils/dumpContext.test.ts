@@ -9,7 +9,12 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { dumpContext, redactSensitiveData, shouldDump } from './dumpContext.js';
+import {
+  dumpContext,
+  dumpRequestContext,
+  redactSensitiveData,
+  shouldDump,
+} from './dumpContext.js';
 
 // Sandbox the config home before Storage.getGlobalCacheDir() is evaluated,
 // so tests do not write to the real user data directory.
@@ -441,6 +446,90 @@ describe('dumpContext', () => {
       expect(dump.request.headers).toBeDefined();
       expect(dump.request.body).toBeDefined();
       expect(typeof dump.request.body).toBe('object');
+    });
+  });
+
+  describe('chronology sidecar (#1721)', () => {
+    const request = {
+      url: 'https://api.openai.com/v1/chat/completions',
+      method: 'POST',
+      body: { model: 'gpt-4', messages: [{ role: 'user', content: 'Test' }] },
+    };
+
+    const chronology = [
+      {
+        seq: 1,
+        userTurn: 1,
+        step: 1,
+        recordedAt: 1_759_000_000_000,
+        speaker: 'human' as const,
+        blockTypes: ['text'],
+        toolCallIds: [],
+        toolResponseIds: [],
+        isSummary: false,
+      },
+    ];
+
+    async function writeDumpWithChronology(): Promise<Record<string, unknown>> {
+      const result = await dumpRequestContext(
+        request,
+        'openai',
+        undefined,
+        chronology,
+      );
+      createdFiles.push(result.requestFilename);
+      const content = await fs.readFile(
+        path.join(testDumpDir, result.requestFilename),
+        'utf-8',
+      );
+      return JSON.parse(content) as Record<string, unknown>;
+    }
+
+    it('writes the trace at the top level of the dump file', async () => {
+      const dump = await writeDumpWithChronology();
+
+      expect(dump['chronology']).toStrictEqual(chronology);
+    });
+
+    it('leaves the dumped request structurally identical to the input', async () => {
+      // Structural equality rather than a substring scan: this fails if the
+      // trace is smuggled into the request under ANY key, not just one
+      // literally named "chronology". The expected value is rebuilt from a
+      // literal so an in-place mutation of the shared input cannot hide.
+      const dump = await writeDumpWithChronology();
+
+      expect(dump['request']).toStrictEqual({
+        url: 'https://api.openai.com/v1/chat/completions',
+        method: 'POST',
+        body: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Test' }],
+        },
+      });
+    });
+
+    it('does not mutate the caller request when writing the sidecar', async () => {
+      await writeDumpWithChronology();
+
+      expect(request).toStrictEqual({
+        url: 'https://api.openai.com/v1/chat/completions',
+        method: 'POST',
+        body: {
+          model: 'gpt-4',
+          messages: [{ role: 'user', content: 'Test' }],
+        },
+      });
+    });
+
+    it('omits the key entirely when no trace is supplied', async () => {
+      const result = await dumpRequestContext(request, 'openai');
+      createdFiles.push(result.requestFilename);
+      const content = await fs.readFile(
+        path.join(testDumpDir, result.requestFilename),
+        'utf-8',
+      );
+
+      expect(JSON.parse(content)).not.toHaveProperty('chronology');
     });
   });
 });

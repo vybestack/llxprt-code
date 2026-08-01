@@ -334,25 +334,16 @@ function buildUIStateParamsExtra(r: HookResults) {
   };
 }
 
-function buildUIActionsParams(r: HookResults) {
-  const { bootstrap: b, dialogs: d, input: i, layout: l } = r;
+function dialogActionsParams(d: HookResults['dialogs']) {
   return {
-    addItem: b.addItem,
-    clearItems: b.clearItems,
-    loadHistory: b.loadHistory,
     refreshStatic: d.refreshStatic,
-    handleUserInputSubmit: i.handleUserInputSubmit,
-    handleSteer: i.handleSteer,
-    handleClearScreen: l.handleClearScreen,
     openThemeDialog: d.openThemeDialog,
     handleThemeSelect: d.handleThemeSelect,
     handleThemeHighlight: d.handleThemeHighlight,
     openSettingsDialog: d.openSettingsDialog,
     closeSettingsDialog: d.closeSettingsDialog,
-    handleSettingsRestart: i.handleSettingsRestart,
     openAuthDialog: d.openAuthDialog,
     handleAuthSelect: d.handleAuthSelect,
-    handleAuthTimeout: i.handleAuthTimeout,
     openEditorDialog: d.openEditorDialog,
     handleEditorSelect: d.handleEditorSelect,
     exitEditorDialog: d.exitEditorDialog,
@@ -397,21 +388,39 @@ function buildUIActionsParams(r: HookResults) {
     onWorkspaceMigrationDialogClose: d.onWorkspaceMigrationDialogClose,
     openPrivacyNotice: d.openPrivacyNotice,
     handlePrivacyNoticeExit: d.handlePrivacyNoticeExit,
-    handleOAuthCodeDialogClose: i.handleOAuthCodeDialogClose,
-    handleOAuthCodeSubmit: i.handleOAuthCodeSubmit,
-    handleConfirmationSelect: l.handleConfirmationSelect,
-    handleIdePromptComplete: i.handleIdePromptComplete,
-    vimHandleInput: i.vimHandleInput,
-    toggleVimEnabled: i.toggleVimEnabled,
-    handleSlashCommand: i.handleSlashCommand,
     performMemoryRefresh: d.performMemoryRefresh,
     setShowErrorDetails: d.setShowErrorDetails,
     setShowToolDescriptions: d.setShowToolDescriptions,
     setConstrainHeight: d.setConstrainHeight,
     setShellModeActive: d.setShellModeActive,
     handleEscapePromptChange: d.handleEscapePromptChange,
-    cancelOngoingRequest: i.cancelOngoingRequest,
     setQueueErrorMessage: d.setQueueErrorMessage,
+  };
+}
+
+function buildUIActionsParams(r: HookResults) {
+  const { bootstrap: b, input: i, layout: l } = r;
+  return {
+    addItem: b.addItem,
+    clearItems: b.clearItems,
+    loadHistory: b.loadHistory,
+    handleUserInputSubmit: i.handleUserInputSubmit,
+    handleSteer: i.handleSteer,
+    handleClearScreen: l.handleClearScreen,
+    handleSettingsRestart: i.handleSettingsRestart,
+    handleAuthTimeout: i.handleAuthTimeout,
+    handleConfirmationSelect: l.handleConfirmationSelect,
+    handleIdePromptComplete: i.handleIdePromptComplete,
+    vimHandleInput: i.vimHandleInput,
+    toggleVimEnabled: i.toggleVimEnabled,
+    handleSlashCommand: i.handleSlashCommand,
+    handleOAuthCodeDialogClose: i.handleOAuthCodeDialogClose,
+    handleOAuthCodeSubmit: i.handleOAuthCodeSubmit,
+    cancelOngoingRequest: i.cancelOngoingRequest,
+    sendAllQueuedSubmissions: i.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: i.steerAllQueuedSubmissions,
+    clearQueuedSubmissions: i.clearQueuedSubmissions,
+    ...dialogActionsParams(r.dialogs),
   };
 }
 

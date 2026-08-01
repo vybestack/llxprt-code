@@ -92,6 +92,18 @@ export function blockToTokenFallbackString(block: ContentBlock): string {
   }
 }
 
+/**
+ * Serialize only the parts of an IContent that can reach a provider.
+ *
+ * `metadata` is deliberately excluded: no provider converter serializes it into
+ * a wire payload, so counting it inflates context estimates and makes
+ * compression fire early. This matters most for the client-side chronology
+ * marker (#1721), which is stamped on every history item.
+ */
+export function serializeWireContentForEstimate(content: IContent): string {
+  return JSON.stringify({ speaker: content.speaker, blocks: content.blocks });
+}
+
 /** Abstraction over HistoryService's tokenizer lookup. */
 export interface TokenizerProvider {
   getTokenizerForModel(modelName: string): ITokenizer;
@@ -235,7 +247,7 @@ export async function estimateTokensForContents(
 function fallbackEstimateForContent(content: IContent): number {
   let serialized = '';
   try {
-    serialized = JSON.stringify(content);
+    serialized = serializeWireContentForEstimate(content);
   } catch {
     // fall through to block-level fallback
   }
