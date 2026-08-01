@@ -393,7 +393,19 @@ export class JspProducer {
   }
 
   observeTurnEnded(outcome: JspTurnOutcome): void {
+    const activityBefore = this.state.activity;
     this.applyAndPublish({ type: 'turn.ended', outcome });
+    // Ending a turn also returns activity to idle, but the turn.ended event
+    // carries only the outcome, so an observer applying the event stream would
+    // keep whatever activity was last announced and report the agent as still
+    // working forever. Publish the resulting activity explicitly so the event
+    // stream reproduces the snapshot instead of diverging from it.
+    if (this.state.activity !== activityBefore) {
+      this.applyAndPublish({
+        type: 'activity.changed',
+        state: this.state.activity,
+      });
+    }
   }
 
   observeActivityChanged(state: JspActivityState): void {

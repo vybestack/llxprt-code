@@ -131,6 +131,10 @@ describe('JspProducer', () => {
       'tool_call.phase_changed',
       'assistant_message.displayed',
       'turn.ended',
+      // Ending the turn returns activity to idle. The turn.ended event carries
+      // only the outcome, so the resulting activity is announced explicitly or
+      // an observer replaying the stream would stay on the previous activity.
+      'activity.changed',
     ]);
     expect(JSON.stringify(published)).not.toContain('private draft');
     producer.stop();
@@ -633,6 +637,36 @@ describe('overflow recovery', () => {
     expect(published.some((document) => document.kind === 'snapshot')).toBe(
       true,
     );
+    producer.stop();
+  });
+});
+
+describe('event stream reproduces the snapshot', () => {
+  it('announces the return to idle when a turn ends', async () => {
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    published.length = 0;
+
+    producer.observeTurnStarted();
+    producer.observeActivityChanged('thinking');
+    producer.observeTurnEnded('completed');
+    await producer.flush();
+
+    // An observer applies events; it does not synthesize idle on turn end.
+    // Without an explicit activity event it would stay on "thinking" forever
+    // and report the agent as still working.
+    const events = published.filter((document) => document.kind === 'event');
+    const last = events.at(-1);
+    expect(last).toMatchObject({
+      event: { type: 'activity.changed', state: 'idle' },
+    });
+    // The snapshot and the event stream must agree.
+    expect(producer.snapshot().native_activity).toMatchObject({
+      availability: 'known',
+      value: { state: 'idle' },
+    });
     producer.stop();
   });
 });
