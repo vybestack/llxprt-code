@@ -56,7 +56,7 @@ export interface ReasoningSettings {
  */
 export type AppliedReasoning =
   | { key: 'thinking'; value: { type: 'enabled' | 'disabled' } }
-  | { key: 'reasoning'; value: Record<string, unknown> };
+  | { key: 'reasoning'; value: { effort: string } | { enabled: boolean } };
 
 /**
  * Resolve the reasoning dialect for a given endpoint base URL.
@@ -125,8 +125,9 @@ function applyOpenRouterDialect(
   if (settings.enabled === false) {
     return { key: 'reasoning', value: { enabled: false } };
   }
-  if (hasEffort(settings)) {
-    return { key: 'reasoning', value: { effort: settings.effort } };
+  const effort = resolveEffort(settings);
+  if (effort !== undefined) {
+    return { key: 'reasoning', value: { effort } };
   }
   if (settings.enabled === true) {
     return { key: 'reasoning', value: { enabled: true } };
@@ -143,14 +144,16 @@ function applyThinkingDialect(
   if (settings.enabled === false) {
     return { key: 'thinking', value: { type: 'disabled' } };
   }
-  if (settings.enabled === true || hasEffort(settings)) {
+  if (settings.enabled === true || resolveEffort(settings) !== undefined) {
     return { key: 'thinking', value: { type: 'enabled' } };
   }
   return null;
 }
 
-function hasEffort(settings: ReasoningSettings): boolean {
-  return typeof settings.effort === 'string' && settings.effort !== '';
+/** The configured effort level, or undefined when it is unset or blank. */
+function resolveEffort(settings: ReasoningSettings): string | undefined {
+  const { effort } = settings;
+  return typeof effort === 'string' && effort !== '' ? effort : undefined;
 }
 
 /**

@@ -106,7 +106,8 @@ describe('commitModelParam (issue #2896)', () => {
     expect(r.writes).toStrictEqual([]);
   });
 
-  // A6 — the remaining number-typed dialog fields keep their integer typing.
+  // A6 — the remaining number-typed dialog fields, integer and fractional
+  // alike, are written as numbers.
   it.each([
     ['max_tokens', '32000', 32000],
     ['top_k', '40', 40],

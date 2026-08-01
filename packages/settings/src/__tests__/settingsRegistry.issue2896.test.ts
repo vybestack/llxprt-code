@@ -74,6 +74,14 @@ describe('issue #2896: parseSetting keeps the same finite invariant as egress', 
     expect(parseSetting('max_tokens', '32000')).toBe(32000);
   });
 
+  it.each(['abc', '', 'Infinity', 'NaN', '0x10', '0o10', '1_000', ' 1 ', '1.'])(
+    'leaves %j alone at ingress, exactly as normalizeSetting does at egress',
+    (raw) => {
+      expect(parseSetting('top_p', raw)).toBe(raw);
+      expect(normalizeSetting('top_p', raw)).toBe(raw);
+    },
+  );
+
   it('does not admit an overflow literal as Infinity at ingress', () => {
     // Number('1e400') is Infinity, which JSON-serializes to null. Admitting it
     // here would bypass the egress guard, so a stored value never becomes an
@@ -119,4 +127,13 @@ describe('issue #2896 B2: unregistered sub-keys pass through', () => {
     const result = separateSettings({ reasoning: { exclude: true } }, 'openai');
     expect(result.modelParams.reasoning).toStrictEqual({ exclude: true });
   });
+
+  it.each([true, 'high', 42, null, ['high']])(
+    'does not throw when reasoning is the non-object value %j',
+    (value) => {
+      expect(() =>
+        separateSettings({ reasoning: value }, 'openai'),
+      ).not.toThrow();
+    },
+  );
 });

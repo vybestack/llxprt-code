@@ -193,6 +193,28 @@ function extractCustomHeaders(
  * from an explicit `/set modelparam reasoning {…}` or a profile's `modelParams`,
  * so it is preserved verbatim and reaches the request body unchanged.
  */
+/**
+ * Flatten the GLOBAL settings tree. Its containers are synthesized by
+ * `SettingsService.set` nesting dotted keys, so registered members are
+ * settings and are stripped from any retained container.
+ */
+function flattenGlobalSettings(
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  return flattenRegistryPrefixedObjects(source, true);
+}
+
+/**
+ * Flatten a PROVIDER settings tree. Its containers can only come from an
+ * explicit `/set modelparam <key> {…}` or a profile's `modelParams`, so they
+ * are preserved verbatim.
+ */
+function flattenProviderOverrides(
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  return flattenRegistryPrefixedObjects(source, false);
+}
+
 function flattenRegistryPrefixedObjects(
   source: Record<string, unknown>,
   stripSynthesizedContainers: boolean,
@@ -312,11 +334,8 @@ function mergeProviderSettings(
   mixed: Record<string, unknown>,
   providerOverrides: Record<string, unknown>,
 ): Record<string, unknown> {
-  const baseFlattened = flattenRegistryPrefixedObjects({ ...mixed }, true);
-  const overridesFlattened = flattenRegistryPrefixedObjects(
-    { ...providerOverrides },
-    false,
-  );
+  const baseFlattened = flattenGlobalSettings({ ...mixed });
+  const overridesFlattened = flattenProviderOverrides({ ...providerOverrides });
   return { ...baseFlattened, ...overridesFlattened };
 }
 
@@ -485,11 +504,16 @@ export function parseSetting(key: string, raw: string): unknown {
   // Only apply type coercion when spec explicitly indicates the type
   // This prevents converting enum/string values like "true" to boolean true
   if (spec?.type === 'number') {
-    // Finite-only, matching the egress guard in normalizeSetting: an overflow
-    // literal such as '1e400' becomes Infinity, which JSON-serializes to null
-    // and would reach the API as a dropped parameter (issue #2896). Return the
-    // raw text rather than falling through to JSON.parse, which would hand
-    // back the same Infinity.
+    // Ingress uses exactly the recognizer and finite guard that normalizeSetting
+    // applies at egress, so a value cannot be coerced on the way in and
+    // preserved on the way out (issue #2896). `Number()` alone would accept
+    // '0x10', '0o10', and padded input that egress rejects, and would turn the
+    // overflow literal '1e400' into Infinity, which JSON-serializes to null.
+    // Anything it will not take is returned as raw text rather than falling
+    // through to JSON.parse, which would hand back the same values.
+    if (!isStrictNumericString(raw)) {
+      return raw;
+    }
     const num = Number(raw);
     return Number.isFinite(num) ? num : raw;
   }

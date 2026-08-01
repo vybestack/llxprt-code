@@ -262,3 +262,17 @@ the PR.
 | R22 | The double cast `as unknown as NormalizedGenerateChatOptions` in the provider tests. | Reject | The literal does not structurally satisfy the interface, so a single cast does not compile, and building a full context per case would obscure the assertions. This matches the established harness in the neighbouring `issue1943` test file. The pipeline test exists precisely so the real, uncast object graph is also covered. |
 | R23 | PR body did not follow the repository pull-request template. | In-scope-Fix | Rewritten into the template sections. |
 | R24 | OCR warning: changed-file coverage 5/17 below its 90% threshold. | Reject | A property of the review tool's own file sampling, not of the change. |
+
+## 11. PR review round 2 (CI OpenCodeReview) — triage
+
+PR OCR budget is now exhausted (2 of 2).
+
+| # | Finding | Class | Action |
+|---|---|---|---|
+| R25 | The `stripSynthesizedContainers` boolean is a footgun: a future caller could pick the wrong value and silently undo the provenance split. | In-scope-Fix | Callers now go through two named wrappers, `flattenGlobalSettings` and `flattenProviderOverrides`; the boolean is no longer written at any call site. |
+| R26 | `parseSetting` and `normalizeSetting` disagreed on what a numeric string is: ingress used bare `Number(raw)` and so accepted `0x10`, `0o10`, and padded input that egress rejects. | In-scope-Fix | Ingress now uses the same `isStrictNumericString` + finite guard as egress, and returns the raw text for anything it will not take. New table test asserts both entry points agree on the same inputs. |
+| R27 | The `reasoning` branch of `AppliedReasoning` widened `value` to `Record<string, unknown>`, defeating the discriminated union. | In-scope-Fix | Narrowed to `{ effort: string } \| { enabled: boolean }`; `hasEffort` became `resolveEffort` so the effort value is typed at the point of use. |
+| R28 | No test for a non-object `reasoning` value reaching the container strip. | In-scope-Fix | Added `true`, `'high'`, `42`, `null`, `['high']`. |
+| R29 | B12 omitted the reported profile shape on the default provider path (canonical OpenAI, `enabled` + `effort`). | In-scope-Fix | Added. |
+| R30 | The A6 comment said "integer typing" while the cases include fractional values. | In-scope-Fix | Comment corrected. |
+| R31 | Two earlier inline findings about `+1.5` and `1.e5` in `isStrictNumericString`. | Reject | Self-retracted by the reviewer in the same comments: both are the documented, tested, intentional strictness. |

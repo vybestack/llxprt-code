@@ -417,6 +417,15 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
         modelBehavior: { 'reasoning.enabled': true },
       },
       {
+        // The exact profile shape from the issue, on the default provider
+        // path: this is what produced modelParams.reasoning = { effort }.
+        label: 'canonical openai (no base-url), reasoning enabled+effort',
+        modelBehavior: {
+          'reasoning.enabled': true,
+          'reasoning.effort': 'high',
+        },
+      },
+      {
         label: 'no reasoning settings at all',
         baseURL: 'https://openrouter.ai/api/v1',
       },
