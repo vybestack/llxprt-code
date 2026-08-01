@@ -129,6 +129,8 @@ describe('RetryOrchestrator - bucket failover backoff delay (issue #1564)', () =
     // Two throttle delays: one for the normal retry before failover
     // threshold, one for the backoff after the failover switch.
     expect(throttleCalls).toHaveLength(2);
+    expect(throttleCalls[0]).toBeGreaterThan(0);
+    expect(throttleCalls[1]).toBeGreaterThan(0);
   });
 
   it('applies backoff delay after Anthropic overloaded_error failover', async () => {
@@ -165,5 +167,43 @@ describe('RetryOrchestrator - bucket failover backoff delay (issue #1564)', () =
     expect(result).toHaveLength(1);
     expect(getCurrentBucket()).toBe('bucket2');
     expect(throttleCalls).toHaveLength(2);
+    expect(throttleCalls[0]).toBeGreaterThan(0);
+    expect(throttleCalls[1]).toBeGreaterThan(0);
+  });
+
+  it('throws when all buckets are exhausted without backoff delay', async () => {
+    const rateLimitError = createRateLimitError();
+    const throttleCalls: number[] = [];
+    // Single-bucket handler where tryFailover always returns false
+    // (no next bucket available).
+    const exhaustedHandler = {
+      getBuckets: () => ['bucket1'],
+      getCurrentBucket: () => 'bucket1',
+      tryFailover: async () => false,
+      isEnabled: () => true,
+    };
+
+    const provider = createTestProvider({
+      responses: [
+        { error: rateLimitError },
+        { error: rateLimitError }, // Trigger failover attempt
+      ],
+    });
+
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 5,
+      initialDelayMs: 10,
+      trackThrottleWaitTime: (ms: number) => throttleCalls.push(ms),
+    });
+
+    await expect(
+      consumeStream(
+        orchestrator.generateChatCompletion(makeOptions(exhaustedHandler)),
+      ),
+    ).rejects.toThrow(/exhaust/i);
+
+    // Only the normal retry delay before failover threshold — no
+    // backoff delay after an exhausted failover result.
+    expect(throttleCalls).toHaveLength(1);
   });
 });
