@@ -16,7 +16,7 @@
  */
 
 import type * as net from 'node:net';
-import type { ConnectionState } from './credential-proxy-server.js';
+import type { ConnectionState } from './credential-proxy-state.js';
 
 export type ProxyRequestHandlerFn = (
   socket: net.Socket,

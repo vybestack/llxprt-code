@@ -42,8 +42,13 @@ import {
   computeNegotiatedVersion,
   validateCapabilityToken,
 } from './handshake-helpers.js';
-import { buildHandlerMap, mergeExtraHandlers } from './extra-handler-merger.js';
+import {
+  buildHandlerMap,
+  mergeExtraHandlers,
+  resolveRegisteredHandler,
+} from './extra-handler-merger.js';
 import type { ProxyRequestHandlerFn } from './credential-proxy-handler-type.js';
+import type { ConnectionState } from './credential-proxy-state.js';
 
 export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
 export type { RequestHandler } from './github-broker-request-handler.js';
@@ -99,45 +104,6 @@ export interface CredentialProxyServerOptions {
 
 // ─── Per-Connection State ────────────────────────────────────────────────────
 
-export interface ConnectionState {
-  /** Unique incrementing ID assigned at connect time for audit-log correlation. */
-  id: number;
-  /**
-   * True when the connection presented a valid capability token. Sandbox
-   * connections have enumeration operations restricted (empty arrays returned)
-   * to prevent credential discovery.
-   */
-  isSandboxConnection: boolean;
-  /**
-   * Protocol version negotiated during handshake. A v1 client negotiates
-   * down to 1; a v2 client negotiates up to 2. Used to gate frame sizes:
-   * v1 clients must never receive a frame larger than 64 KiB.
-   *
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-006
-   * @pseudocode 002-frame-and-cancel.md lines 67-76
-   */
-  negotiatedVersion: number;
-  /**
-   * Registry of concurrently-dispatched operations, replacing the former
-   * inFlight serialization chain. Holds AbortControllers for abort-on-close.
-   *
-   * @plan PLAN-20260731-GHBROKER.P03
-   * @requirement REQ-005
-   * @pseudocode 001-concurrent-dispatch.md lines 1-9
-   */
-  pending: ConcurrentDispatchRegistry;
-  /**
-   * Version-aware response writer for this connection. Handles v1 frame-size
-   * guard (RESPONSE_TOO_LARGE) and the single-write invariant.
-   *
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-006
-   * @pseudocode 002-frame-and-cancel.md lines 67-76
-   */
-  writer: ResponseWriter;
-}
-
 // ─── Server ──────────────────────────────────────────────────────────────────
 
 export class CredentialProxyServer {
@@ -169,6 +135,7 @@ export class CredentialProxyServer {
     // Built once here, after extras are merged, so the table is fixed for
     // the lifetime of the server. See buildHandlerMap for why it is a Map.
     this.handlers = buildHandlerMap(this.requestHandlers);
+    this.handlerNames = [...this.handlers.keys()];
   }
 
   async start(): Promise<string> {
@@ -482,6 +449,8 @@ export class CredentialProxyServer {
    * @requirement REQ-002, REQ-015
    */
   private readonly handlers: Map<string, ProxyRequestHandlerFn>;
+  /** Registered operation names; the only strings used as dispatch keys. */
+  private readonly handlerNames: readonly string[];
 
   private readonly requestHandlers: Partial<
     Record<
@@ -617,7 +586,11 @@ export class CredentialProxyServer {
           return;
         }
       }
-      const handler = this.handlers.get(op);
+      const handler = resolveRegisteredHandler(
+        this.handlers,
+        this.handlerNames,
+        op,
+      );
       if (!handler) {
         this.sendError(
           socket,
@@ -1048,20 +1021,16 @@ export class CredentialProxyServer {
 
   /** @plan PLAN-20260731-GHBROKER.P05 @requirement REQ-006 */
   private sendOk = (
-    socket: net.Socket,
+    s: net.Socket,
     id: string,
     data: Record<string, unknown>,
-  ): void => {
-    this.connectionStates.get(socket)?.writer.sendOk(id, data);
-  };
+  ): void => this.connectionStates.get(s)?.writer.sendOk(id, data);
 
   /** @plan PLAN-20260731-GHBROKER.P05 @requirement REQ-006 */
   private sendError = (
-    socket: net.Socket,
+    s: net.Socket,
     id: string,
     code: string,
     error: string,
-  ): void => {
-    this.connectionStates.get(socket)?.writer.sendError(id, code, error);
-  };
+  ): void => this.connectionStates.get(s)?.writer.sendError(id, code, error);
 }

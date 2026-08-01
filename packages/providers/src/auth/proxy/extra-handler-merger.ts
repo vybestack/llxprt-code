@@ -86,3 +86,25 @@ export function buildHandlerMap<T>(
     ),
   );
 }
+
+/**
+ * Resolves a handler without ever using the caller-supplied string as a
+ * lookup key.
+ *
+ * The requested name arrives from the network. Rather than indexing with it,
+ * this finds the matching entry in the registered-name list and dispatches
+ * on THAT value, so the key used for dispatch provably originates from our
+ * own table rather than from the wire. An unregistered name yields undefined
+ * and the caller rejects the request.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002, REQ-015
+ */
+export function resolveRegisteredHandler<T>(
+  handlers: ReadonlyMap<string, T>,
+  registeredNames: readonly string[],
+  requested: string,
+): T | undefined {
+  const match = registeredNames.find((name) => name === requested);
+  return match === undefined ? undefined : handlers.get(match);
+}
