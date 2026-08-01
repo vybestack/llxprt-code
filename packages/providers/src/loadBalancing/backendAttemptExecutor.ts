@@ -6,8 +6,7 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { GenerateChatOptions } from '../IProvider.js';
-import type { ProviderManager } from '../ProviderManager.js';
+import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type {
   ResolvedSubProfile,
   LoadBalancerSubProfile,
@@ -34,7 +33,6 @@ import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 export interface BackendAttemptDeps {
   readonly logger: DebugLogger;
   readonly circuitBreaker: CircuitBreakerManager;
-  readonly providerManager: ProviderManager;
   markActiveSelection(name: string): void;
   buildResolvedOptions(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
@@ -47,6 +45,7 @@ export interface BackendAttemptDeps {
 export interface BackendAttemptParams {
   readonly subProfile: ResolvedSubProfile | LoadBalancerSubProfile;
   readonly options: GenerateChatOptions;
+  readonly delegateProvider: IProvider | undefined;
   readonly settings: FailoverSettings;
   readonly startTime: number;
   readonly chunksYielded: { value: boolean };
@@ -72,17 +71,13 @@ export interface BackendAttemptParams {
 function resolveBackendDelegate(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   options: GenerateChatOptions,
+  delegateProvider: IProvider | undefined,
   deps: BackendAttemptDeps,
 ): {
   resolvedOptions: GenerateChatOptions;
-  delegateProvider: NonNullable<
-    ReturnType<ProviderManager['getProviderByName']>
-  >;
+  delegateProvider: IProvider;
 } {
   const resolvedOptions = deps.buildResolvedOptions(subProfile, options);
-  const delegateProvider = deps.providerManager.getProviderByName(
-    subProfile.providerName,
-  );
   if (!delegateProvider) {
     throw new Error(`Provider "${subProfile.providerName}" not found`);
   }
@@ -96,9 +91,7 @@ function resolveBackendDelegate(
  * begins — lifecycle start must have already been emitted.
  */
 function startDelegateIterator(
-  delegateProvider: NonNullable<
-    ReturnType<ProviderManager['getProviderByName']>
-  >,
+  delegateProvider: IProvider,
   resolvedOptions: GenerateChatOptions,
   settings: FailoverSettings,
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
@@ -119,6 +112,23 @@ function startDelegateIterator(
   return { attempt, iterator };
 }
 
+function notifyIncompleteAttempt(
+  terminalEmitted: boolean,
+  lifecycleObserver: AttemptLifecycleObserver | undefined,
+  attemptCtx: BackendAttemptContext | null,
+  subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+): void {
+  if (!terminalEmitted) {
+    notifyBackendResult(
+      lifecycleObserver,
+      attemptCtx,
+      subProfile,
+      'aborted',
+      'consumer early close',
+    );
+  }
+}
+
 /**
  * Execute a single backend attempt within the failover loop, collecting
  * chunks, recording success/failure metrics, and emitting terminal
@@ -133,6 +143,7 @@ export async function* executeBackendAttempt(
   const {
     subProfile,
     options,
+    delegateProvider,
     settings,
     startTime,
     chunksYielded,
@@ -146,24 +157,25 @@ export async function* executeBackendAttempt(
   let attemptCtx: BackendAttemptContext | null = null;
   let terminalEmitted = false;
 
-  const { resolvedOptions, delegateProvider } = resolveBackendDelegate(
+  const prepared = resolveBackendDelegate(
     subProfile,
     options,
+    delegateProvider,
     deps,
   );
   attemptCtx = startBackendAttempt();
 
   try {
-    const prepared = startDelegateIterator(
-      delegateProvider,
-      resolvedOptions,
+    const delegate = startDelegateIterator(
+      prepared.delegateProvider,
+      prepared.resolvedOptions,
       settings,
       subProfile,
       deps,
     );
     for await (const chunk of cleanupDelegateAttempt(
-      prepared.attempt,
-      prepared.iterator,
+      delegate.attempt,
+      delegate.iterator,
     )) {
       chunksYielded.value = true;
       chunks.push(chunk);
@@ -198,14 +210,11 @@ export async function* executeBackendAttempt(
     terminalEmitted = true;
     throw error;
   } finally {
-    if (!terminalEmitted) {
-      notifyBackendResult(
-        lifecycleObserver,
-        attemptCtx,
-        subProfile,
-        'aborted',
-        'consumer early close',
-      );
-    }
+    notifyIncompleteAttempt(
+      terminalEmitted,
+      lifecycleObserver,
+      attemptCtx,
+      subProfile,
+    );
   }
 }
