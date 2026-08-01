@@ -127,3 +127,37 @@ and a scope expansion beyond this issue. File as follow-up.
 the checkpoint field is empty.**
 Pre-existing behavior in `Resolve review range`, unrelated to marker ownership.
 Follow-up.
+
+# Open Code Review round 1 — triage
+
+All nine findings accepted; none rejected, none deferred.
+
+- **O1 (Blocker-Fix)** `.github/workflows/ocr-review.yml:712-719` — suspension strips
+  every `ocr-checkpoint` tag from the preserved body at line 698, then the
+  `canonicalHasCheckpoint` guard suppresses re-appending exactly when the
+  canonical *had* one. A canonical checkpoint is therefore destroyed on every
+  suspension and the next run re-reviews the full diff. Regression introduced by
+  the B2 remediation. Fix: always append `mergedCheckpoint` when it exists.
+- **O2 (In-scope-Fix)** `ocr-trusted-marker-workflow.test.ts:343-372` — the
+  pagination test re-implements discovery with `Array.prototype.find` and never
+  drives a real script through `paginate`. It would pass if pagination returned
+  only page 1. Fix: implement real per-page slicing and assert through a real
+  script execution.
+- **O3 (In-scope-Fix)** `ocr-trusted-marker-test-helpers.ts:480-482` —
+  `executeAutoGate` hardcodes `context.payload.comment.id = 999` and omits the
+  login, so the `commentId` parameter is silently ignored.
+- **O4 (In-scope-Fix)** `ocr-auto-review-limit.test.ts:581` — fixture missing
+  `user`, so it now passes coincidentally rather than for the stated reason.
+  Same class as I5, missed in that pass.
+- **O5 (In-scope-Fix)** `ocr-review-workflow-features.test.ts:586-589` — coverage
+  weakened from asserting reconciliation on both the success and error paths to a
+  bare `.toContain()`; restore the both-paths guarantee.
+- **O6 (In-scope-Fix)** `ocr-trusted-marker-test-helpers.ts:177-180` — `perPage`
+  declared but never used; paired with O2.
+- **O7 (In-scope-Fix)** `ocr-trusted-marker-workflow-b.test.ts:354-367` — dead
+  `console` key overwritten on the next statement.
+- **O8 (In-scope-Fix)** `ocr-trusted-marker.test.ts:493-500` — the max-count test
+  puts the maximum on the first element, so a "return first" bug would pass.
+- **O9 (In-scope-Fix)** `ocr-trusted-marker-test-helpers.ts:616-635` — ~50 lines
+  duplicated between `loadFunctionsFromScript` and
+  `loadFunctionsFromScriptWithGithub`.

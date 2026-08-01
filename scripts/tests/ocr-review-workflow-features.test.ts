@@ -21,6 +21,15 @@ import {
   asVmFunction,
 } from './typed-test-helpers.ts';
 import type { WorkflowStep } from './typed-test-helpers.ts';
+import {
+  MARKER,
+  trustedBot,
+  createStore,
+  addToStore,
+  makePaginatingOctokit,
+  makeCore,
+  loadFunctionsFromScriptWithGithub,
+} from './ocr-trusted-marker-test-helpers.ts';
 
 /**
  * Extract a named function from the workflow script and load it into an
@@ -587,6 +596,70 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       // must re-fetch and delete duplicates.
       expect(createFnSource).toContain('fetchMarkerComments()');
       expect(createFnSource).toContain('deleteDuplicateMarkerComments');
+    });
+
+    it('O5: createOrUpdateMarkerComment reconciles on the failed-create retry path', async () => {
+      // The workflow performs reconciliation in three places inside
+      // createOrUpdateMarkerComment: the existing-update path, the
+      // post-create success path, and the failed-create retry path.
+      // This test exercises the failed-create retry path: when createComment
+      // throws, the catch block must re-fetch, select canonical, update it,
+      // and delete duplicates — proving reconciliation is not limited to
+      // the success path.
+      const store = createStore();
+      // Pre-existing marker on a different id — the retry path must find it
+      addToStore(store, {
+        id: 100,
+        body: `${MARKER}\nold\n<!-- ocr-auto-count:1 -->`,
+        user: trustedBot('github-actions[bot]'),
+      });
+      const warnings: string[] = [];
+      // Make createComment always fail so the retry path is taken
+      const github = makePaginatingOctokit(
+        store,
+        100,
+        warnings,
+        new Error('Resource not accessible by integration'),
+        null,
+      );
+      // Override createComment to throw
+      const issues = (github['rest'] as Record<string, unknown>)[
+        'issues'
+      ] as Record<string, unknown>;
+      issues['createComment'] = async (): Promise<never> => {
+        throw new Error('createComment failed');
+      };
+      const core = makeCore(warnings);
+      const context = { repo: { owner: 'test-owner', repo: 'test-repo' } };
+      const env: Record<string, string> = {
+        PR_NUMBER: '42',
+        IS_AUTOMATIC: 'false',
+      };
+      const fns = loadFunctionsFromScriptWithGithub(
+        postScript,
+        [
+          'fetchMarkerComments',
+          'selectCanonicalMarker',
+          'applyNonRegressingCount',
+          'resolveNonRegressingCount',
+          'deleteDuplicateMarkerComments',
+          'createOrUpdateMarkerComment',
+        ],
+        github,
+        core,
+        context,
+        env,
+        warnings,
+      );
+      const summary = `${MARKER}\n## Updated\n<!-- ocr-auto-count:2 -->`;
+      const result = asRecord(
+        await asVmFunction(fns['createOrUpdateMarkerComment'])(summary, false),
+      );
+      // The retry path returned the canonical surviving comment
+      expect(result['id']).toBe(100);
+      // The store's surviving comment was updated by the retry path
+      const surviving = store.comments.get(100);
+      expect(surviving?.body).toContain('<!-- ocr-auto-count:2 -->');
     });
   });
 });

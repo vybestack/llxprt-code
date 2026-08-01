@@ -169,7 +169,11 @@ async function executeAutoReviewGate({
       action: eventAction,
       issue: { number: Number(prNumber), pull_request: {} },
       comment: commentBody
-        ? { body: commentBody, user: { type: commentUserType }, id: 999 }
+        ? {
+            body: commentBody,
+            user: { type: commentUserType, login: commentUserLogin },
+            id: Number(commentId),
+          }
         : undefined,
       changes: changesFrom ? { body: { from: changesFrom } } : undefined,
     },
@@ -578,7 +582,13 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
       eventName: 'pull_request_target',
       eventAction: 'synchronize',
       autoReviewLimit: '2',
-      listComments: [{ id: 1, body: `${MARKER}\n## Review without state` }],
+      listComments: [
+        {
+          id: 1,
+          body: `${MARKER}\n## Review without state`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
+        },
+      ],
     });
     expect(result.outputs['current-count']).toBe('0');
     expect(result.outputs['auto-should-run']).toBe('true');

@@ -490,13 +490,22 @@ describe('ocr-trusted-marker.cjs — parseHiddenAutoCount', () => {
 });
 
 describe('ocr-trusted-marker.cjs — resolveHiddenAutoCount', () => {
-  it('takes the maximum count across duplicate trusted markers', () => {
+  it('takes the maximum count when it is on a later, higher-id comment', () => {
     const logins = mod.resolveTrustedMarkerLogins();
     const comments = [
-      markerComment(100, `${MARKER}<!-- ocr-auto-count:2 -->`),
+      markerComment(100, `${MARKER}<!-- ocr-auto-count:0 -->`),
+      markerComment(200, `${MARKER}<!-- ocr-auto-count:5 -->`),
+    ];
+    expect(mod.resolveHiddenAutoCount(comments, logins, MARKER)).toBe(5);
+  });
+
+  it('takes the maximum count when it is on the first, lower-id comment', () => {
+    const logins = mod.resolveTrustedMarkerLogins();
+    const comments = [
+      markerComment(100, `${MARKER}<!-- ocr-auto-count:5 -->`),
       markerComment(200, `${MARKER}<!-- ocr-auto-count:0 -->`),
     ];
-    expect(mod.resolveHiddenAutoCount(comments, logins, MARKER)).toBe(2);
+    expect(mod.resolveHiddenAutoCount(comments, logins, MARKER)).toBe(5);
   });
 
   it('returns 0 when no trusted markers carry a count', () => {

@@ -710,12 +710,7 @@ jobs:
                 finalBody += NEWLINE + '<!-- ocr-auto-count:' + mergedMaxCount + ' -->';
               }
               if (mergedCheckpoint) {
-                const canonicalHasCheckpoint = canonical
-                  ? /<!--\s*ocr-checkpoint:/.test(canonical.body || '')
-                  : false;
-                if (!canonicalHasCheckpoint) {
-                  finalBody += NEWLINE + mergedCheckpoint;
-                }
+                finalBody += NEWLINE + mergedCheckpoint;
               }
               if (canonical) {
                 await github.rest.issues.updateComment({

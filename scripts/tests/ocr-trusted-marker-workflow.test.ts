@@ -23,7 +23,6 @@ import {
   markerComment,
   readCanonicalSnippet,
   type FakeUser,
-  type StoreComment,
   loadScripts,
   scriptOf,
   createStore,
@@ -356,19 +355,36 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
         user: trustedBot('github-actions[bot]'),
       });
 
-      // The store holds all 101 comments. In production, the real paginate
-      // calls listComments per-page, but our fake listComments returns all
-      // at once and paginate unwraps .data — so the gate discovers the
-      // marker regardless of its position in the API response order.
-      const allComments = [...store.comments.values()].sort(
-        (a, b) => a.id - b.id,
+      // Drive the REAL auto-review gate script through the store-backed
+      // paginating octokit. The gate uses github.paginate(
+      // github.rest.issues.listComments, { per_page: 100 }). The marker is on
+      // page 2, so this only works if paginate walks beyond page 1.
+      const warnings: string[] = [];
+      const gateOutputs: Record<string, string> = {};
+      const github = makePaginatingOctokit(
+        store,
+        100,
+        warnings,
+        new Error('Resource not accessible by integration'),
+        null,
       );
-      expect(allComments.length).toBe(101);
-      const markerCommentFound = allComments.find((c: StoreComment) =>
-        c.body.includes(MARKER),
+      const core = makeCore(warnings, gateOutputs);
+      await runScript(
+        autoGateScript,
+        github,
+        core,
+        { repo: { owner: 'test-owner', repo: 'test-repo' } },
+        {
+          PR_NUMBER: '42',
+          OCR_AUTO_REVIEW_LIMIT: '2',
+          OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2',
+          OCR_BOT_LOGIN: '',
+          EVENT_NAME: 'pull_request_target',
+          EVENT_ACTION: 'synchronize',
+        },
+        warnings,
       );
-      expect(markerCommentFound).toBeDefined();
-      expect(markerCommentFound?.id).toBe(101);
+      expect(gateOutputs['current-count']).toBe('1');
     });
   });
 });

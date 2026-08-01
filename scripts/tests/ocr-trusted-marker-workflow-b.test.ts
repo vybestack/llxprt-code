@@ -288,6 +288,51 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
       // The max count (3) must be preserved
       expect(surviving?.body).toContain('<!-- ocr-auto-count:3 -->');
     });
+
+    it('O1: canonical marker carrying a checkpoint in its own body retains that exact checkpoint after suspension', async () => {
+      const checkpointComment = `<!-- ocr-checkpoint:${Buffer.from(
+        JSON.stringify({
+          schema: 1,
+          head_sha: FULL_HEAD_SHA,
+          base_sha: FULL_BASE_SHA,
+          completion_state: 'complete',
+        }),
+        'utf8',
+      ).toString('base64')} -->`;
+      const store = createStore();
+      addToStore(store, {
+        id: 100,
+        body: `${MARKER}\n## Review\n<!-- ocr-auto-count:2 -->\n${checkpointComment}`,
+        user: trustedBot('github-actions[bot]'),
+      });
+      const warnings: string[] = [];
+      const github = makePaginatingOctokit(
+        store,
+        100,
+        warnings,
+        new Error('Resource not accessible by integration'),
+        null,
+      );
+      const core = makeCore(warnings);
+      const context = { repo: { owner: 'test-owner', repo: 'test-repo' } };
+      const env: Record<string, string> = {
+        PR_NUMBER: '42',
+        CURRENT_COUNT: '2',
+        OCR_AUTO_REVIEW_LIMIT: '2',
+        OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2',
+        OCR_BOT_LOGIN: '',
+      };
+      await runScript(
+        postSuspensionScript,
+        github,
+        core,
+        context,
+        env,
+        warnings,
+      );
+      const surviving = store.comments.get(100);
+      expect(surviving?.body).toContain(checkpointComment);
+    });
   });
 
   // ---- AM9: checkpoint rediscovered, resolveReviewRange selects incremental ----
@@ -354,7 +399,6 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
       const sandbox: Record<string, unknown> = {
         ...sandboxGlobals([]),
         process: { env },
-        console: { log: (): void => {}, error: (): void => {} },
       };
       // The heredoc JS logs the result fields to stdout via console.log.
       // Capture them.

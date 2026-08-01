@@ -183,19 +183,45 @@ export function makePaginatingOctokit(
 ): Record<string, unknown> {
   return {
     paginate: async <T>(
-      fn: (options: unknown) => Promise<{ data: T }>,
+      fn: (options: unknown) => Promise<{ data: T[] }>,
       options: unknown,
-    ): Promise<T> => {
-      const result = await fn(options);
-      return result.data;
+    ): Promise<T[]> => {
+      const opts = asRecord(options);
+      const perPageNum = Math.max(
+        1,
+        Number(opts['per_page'] ?? perPage) || perPage,
+      );
+      const collected: T[] = [];
+      let currentPage = 1;
+      while (true) {
+        const result = await fn({
+          ...opts,
+          per_page: perPageNum,
+          page: currentPage,
+        });
+        const pageData = result.data;
+        collected.push(...pageData);
+        if (pageData.length < perPageNum) {
+          break;
+        }
+        currentPage += 1;
+      }
+      return collected;
     },
     rest: {
       issues: {
         listComments: async (
-          _opts: Record<string, unknown>,
+          opts: Record<string, unknown>,
         ): Promise<{ data: StoreComment[]; status: number }> => {
           const all = [...store.comments.values()].sort((a, b) => a.id - b.id);
-          return { data: all, status: 200 };
+          const pp = Math.max(
+            1,
+            Number(opts['per_page'] ?? perPage) || perPage,
+          );
+          const page = Math.max(1, Number(opts['page'] ?? 1) || 1);
+          const start = (page - 1) * pp;
+          const slice = all.slice(start, start + pp);
+          return { data: slice, status: 200 };
         },
         createComment: async (
           opts: Record<string, unknown>,
@@ -478,7 +504,11 @@ export async function executeAutoGate({
       action: eventAction,
       issue: { number: Number(prNumber), pull_request: {} },
       comment: commentBody
-        ? { body: commentBody, user: { type: commentUserType }, id: 999 }
+        ? {
+            body: commentBody,
+            user: { type: commentUserType, login: commentUserLogin },
+            id: Number(commentId),
+          }
         : undefined,
       changes: changesFrom ? { body: { from: changesFrom } } : undefined,
     },
@@ -609,10 +639,24 @@ export function extractLoadedFunctions(
   return result;
 }
 
-export function loadFunctionsFromScript(
+export interface SnippetContext {
+  snippetText: string;
+  requestedSnippetFuncs: string[];
+  extraFuncs: string[];
+  extraSources: string[];
+  allNames: string[];
+}
+
+/**
+ * Shared extraction of the canonical trusted-marker snippet text and
+ * the requested/extra function partitioning from a workflow script.
+ * Used by both loadFunctionsFromScript and loadFunctionsFromScriptWithGithub
+ * to avoid duplicating sentinel detection and source extraction.
+ */
+function loadSnippetContext(
   script: string,
   functionNames: string[],
-): LoadedFunctions {
+): SnippetContext {
   const snippetFuncNames = [
     'OCR_DEFAULT_TRUSTED_MARKER_LOGINS',
     'normalizeTrustedMarkerLogin',
@@ -643,6 +687,23 @@ export function loadFunctionsFromScript(
     extractFunctionSource(script, name),
   );
   const allNames = [...requestedSnippetFuncs, ...extraFuncs];
+  return {
+    snippetText,
+    requestedSnippetFuncs,
+    extraFuncs,
+    extraSources,
+    allNames,
+  };
+}
+
+export function loadFunctionsFromScript(
+  script: string,
+  functionNames: string[],
+): LoadedFunctions {
+  const { snippetText, extraSources, allNames } = loadSnippetContext(
+    script,
+    functionNames,
+  );
   const sandbox = sandboxGlobals([]);
   vm.runInNewContext(
     `${snippetText}\n${extraSources.join('\n')}\n__FUNCTIONS__ = { ${allNames.join(', ')} };`,
@@ -666,36 +727,10 @@ export function loadFunctionsFromScriptWithGithub(
   env: Record<string, string>,
   warnings: string[],
 ): LoadedFunctions {
-  const snippetFuncNames = [
-    'OCR_DEFAULT_TRUSTED_MARKER_LOGINS',
-    'normalizeTrustedMarkerLogin',
-    'resolveTrustedMarkerLogins',
-    'isTrustedMarkerAuthor',
-    'isTrustedMarkerComment',
-    'trustedMarkerComments',
-    'canonicalMarkerComment',
-    'newestTrustedMarkerMatching',
-    'parseHiddenAutoCount',
-    'resolveHiddenAutoCount',
-  ];
-  const beginLine = '// --- BEGIN OCR TRUSTED MARKER SNIPPET ---';
-  const endLine = '// --- END OCR TRUSTED MARKER SNIPPET ---';
-  const beginIdx = script.indexOf(beginLine);
-  const endIdx = script.indexOf(endLine);
-  const snippetText =
-    beginIdx >= 0 && endIdx >= 0
-      ? script.slice(beginIdx, endIdx + endLine.length)
-      : '';
-  const requestedSnippetFuncs = functionNames.filter((name) =>
-    snippetFuncNames.includes(name),
+  const { snippetText, extraSources, allNames } = loadSnippetContext(
+    script,
+    functionNames,
   );
-  const extraFuncs = functionNames.filter(
-    (name) => !snippetFuncNames.includes(name),
-  );
-  const extraSources = extraFuncs.map((name) =>
-    extractFunctionSource(script, name),
-  );
-  const allNames = [...requestedSnippetFuncs, ...extraFuncs];
   const globals = sandboxGlobals(warnings);
   const sandbox: Record<string, unknown> = {
     ...globals,
@@ -724,8 +759,6 @@ export function loadFunctionsFromScriptWithGithub(
       }),
     },
   };
-  // Define trustedLogins and module-level variables in the sandbox since
-  // the poster functions reference them as closure variables.
   const envPrNumber = env['PR_NUMBER'] || '42';
   const ctxOwner = (asRecord(context)['repo'] as Record<string, unknown>)?.[
     'owner'
@@ -733,7 +766,6 @@ export function loadFunctionsFromScriptWithGithub(
   const ctxRepo = (asRecord(context)['repo'] as Record<string, unknown>)?.[
     'repo'
   ] as string;
-  // Extract helper functions the poster functions depend on
   const helperFuncNames = [
     'escapeRegExp',
     'redactSecretDiagnostics',
