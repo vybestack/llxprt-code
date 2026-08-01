@@ -9,7 +9,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createFilePathLink, createOsc8Link } from './terminalLinks.js';
+import stringWidth from 'string-width';
+import {
+  createFilePathLink,
+  createOsc8Link,
+  createUrlLink,
+  isLinkableHttpUrl,
+} from './terminalLinks.js';
 
 const OSC8_OPEN = '\x1b]8;;';
 const BEL = '\x07';
@@ -128,5 +134,126 @@ describe('createFilePathLink', () => {
     // relative candidate, NOT the absolute resolved path.
     const label = extractOsc8Label(link ?? '');
     expect(label).toBe('src/index.ts');
+  });
+});
+
+describe('isLinkableHttpUrl', () => {
+  it.each([
+    ['http://example.com', true],
+    ['https://example.com', true],
+    ['https://claude.ai/oauth/authorize?client_id=abc&redirect_uri=xyz', true],
+    ['http://localhost:3000/path', true],
+    ['https://example.test/path_(disambiguation)', true],
+  ])('accepts %s as linkable', (candidate, expected) => {
+    expect(isLinkableHttpUrl(candidate)).toBe(expected);
+  });
+
+  it.each([
+    ['javascript:alert(1)'],
+    ['data:text/html,<script>'],
+    ['file:///etc/passwd'],
+    ['vbscript:msgbox'],
+    ['mailto:user@example.com'],
+    ['ftp://example.com/file'],
+    ['not a url'],
+    ['/relative/path'],
+    ['example.com'],
+    ['www.example.com'],
+    [''],
+  ])('rejects %s as not linkable', (candidate) => {
+    expect(isLinkableHttpUrl(candidate)).toBe(false);
+  });
+
+  it('rejects URLs containing ESC (\u001b) control characters', () => {
+    expect(isLinkableHttpUrl('https://example.com/\u001b[0m')).toBe(false);
+  });
+
+  it('rejects URLs containing BEL (\u0007) control characters', () => {
+    expect(isLinkableHttpUrl('https://example.com/\u0007')).toBe(false);
+  });
+
+  it('rejects URLs containing newline control characters', () => {
+    expect(isLinkableHttpUrl('https://example.com/\n')).toBe(false);
+  });
+
+  it('rejects URLs containing C1 control characters (0x7F-0x9F)', () => {
+    expect(isLinkableHttpUrl('https://example.com/\u0080')).toBe(false);
+  });
+});
+
+describe('createUrlLink', () => {
+  const LONG_OAUTH_URL =
+    'https://claude.ai/oauth/authorize?' +
+    'client_id=54d7a297-b7c2-4f57-9bcl-1234567890abcdef&' +
+    'redirect_uri=https%3A%2F%2Flocalhost%3A3000%2Fcallback&' +
+    'response_type=code&' +
+    'scope=openid%20profile%20email%20offline_access&' +
+    'state=abc123def456ghi789jkl012mno345pqr678stu901vwx234yz&' +
+    'code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&' +
+    'code_challenge_method=S256';
+
+  it('returns null for non-linkable URLs', () => {
+    expect(createUrlLink('javascript:alert(1)')).toBeNull();
+    expect(createUrlLink('not a url')).toBeNull();
+    expect(createUrlLink('')).toBeNull();
+  });
+
+  it('returns a BEL-terminated OSC 8 link for a linkable URL', () => {
+    const url = 'https://example.com/page';
+    const link = createUrlLink(url);
+
+    expect(link).not.toBeNull();
+    expect(link).toContain('\x1b]8;;' + url + '\x07');
+    // BEL-terminated, not ST (ESC backslash)
+    const ST = '\x1b' + '\\';
+    expect(link).not.toContain(ST);
+    // Ends with the closing OSC 8 sequence terminated by BEL
+    const closingOsc8 = '\x1b]8;;\x07';
+    expect(link?.endsWith(closingOsc8)).toBe(true);
+  });
+
+  it('contains the full URL as both the target and the default label', () => {
+    const url = 'https://example.com/path/to/resource';
+    const link = createUrlLink(url);
+
+    expect(link).not.toBeNull();
+    expect(link).toContain(url);
+    // The label (between first BEL and closing OSC 8) must be the URL
+    const label = extractOsc8Label(link ?? '');
+    expect(label).toBe(url);
+  });
+
+  it('uses a custom label when provided', () => {
+    const url = 'https://example.com/very/long/path';
+    const link = createUrlLink(url, 'Click here');
+
+    expect(link).not.toBeNull();
+    expect(link).toContain(url);
+    const label = extractOsc8Label(link ?? '');
+    expect(label).toBe('Click here');
+  });
+
+  it('produces a zero-width link for a long OAuth URL under string-width (AC-7)', () => {
+    expect(LONG_OAUTH_URL.length).toBeGreaterThan(300);
+    const link = createUrlLink(LONG_OAUTH_URL);
+
+    expect(link).not.toBeNull();
+    expect(stringWidth(link ?? '')).toBe(LONG_OAUTH_URL.length);
+  });
+
+  it('produces a zero-width link with a custom label under string-width (AC-7)', () => {
+    const url = 'https://example.com/some/path';
+    const link = createUrlLink(url, 'Click here');
+
+    expect(link).not.toBeNull();
+    expect(stringWidth(link ?? '')).toBe('Click here'.length);
+  });
+
+  it('rejects a label containing control characters (AC-3)', () => {
+    const url = 'https://example.com/some/path';
+
+    expect(createUrlLink(url, 'evil\u001b]8;;file:///etc/passwd')).toBeNull();
+    expect(createUrlLink(url, 'evil\u0007label')).toBeNull();
+    expect(createUrlLink(url, 'evil\u000alabel')).toBeNull();
   });
 });

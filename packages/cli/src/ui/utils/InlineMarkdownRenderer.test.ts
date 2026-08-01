@@ -108,9 +108,13 @@ describe('RenderInline', () => {
       text: 'See [docs](https://example.test/docs) and https://example.test/raw',
     });
 
-    expect(flattenText(node)).toBe(
-      'See docs (https://example.test/docs) and https://example.test/raw',
-    );
+    const flat = flattenText(node);
+    // URLs are now OSC 8 linkified, so assert on the visible substrings rather
+    // than an exact string match.
+    expect(flat).toContain('docs');
+    expect(flat).toContain('https://example.test/docs');
+    expect(flat).toContain('https://example.test/raw');
+    expect(flat).toContain(OSC8_PREFIX);
   });
 
   it('gives strong markers precedence over emphasis markers at the same position', () => {
@@ -126,6 +130,149 @@ describe('RenderInline', () => {
     expect(
       flattenText(renderInlineNode({ text: 'keep compile_time unchanged' })),
     ).toBe('keep compile_time unchanged');
+  });
+});
+
+/**
+ * Extract the link target (URL) from the first OSC 8 sequence in `text`.
+ * The format is: ESC ]8;;URL BEL ... ESC ]8;; BEL
+ */
+function extractFirstOsc8Target(text: string): string | null {
+  const prefix = '\x1b]8;;';
+  const start = text.indexOf(prefix);
+  if (start === -1) {
+    return null;
+  }
+  const urlStart = start + prefix.length;
+  const belIndex = text.indexOf('\x07', urlStart);
+  if (belIndex === -1) {
+    return null;
+  }
+  return text.slice(urlStart, belIndex);
+}
+
+/**
+ * Extract the visible label of the first OSC 8 sequence in `text`
+ * (between the opening BEL and the closing ESC ]8;;).
+ */
+function extractFirstOsc8Label(text: string): string | null {
+  const prefix = '\x1b]8;;';
+  const start = text.indexOf(prefix);
+  if (start === -1) {
+    return null;
+  }
+  const firstBel = text.indexOf('\x07', start + prefix.length);
+  if (firstBel === -1) {
+    return null;
+  }
+  const closeStart = text.indexOf(prefix, firstBel + 1);
+  if (closeStart === -1) {
+    return null;
+  }
+  return text.slice(firstBel + 1, closeStart);
+}
+
+describe('RenderInline URL linkification', () => {
+  it('renders a bare http URL as an OSC 8 hyperlink whose target and label are the URL (AC-1)', () => {
+    const url = 'https://example.com/docs';
+    const node = renderInlineNode({ text: `See ${url} for details.` });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+    expect(extractFirstOsc8Label(flat)).toBe(url);
+  });
+
+  it('renders a bare http URL (non-https) as an OSC 8 hyperlink (AC-1)', () => {
+    const url = 'http://example.com/page';
+    const node = renderInlineNode({ text: `Visit ${url} now.` });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+    expect(extractFirstOsc8Label(flat)).toBe(url);
+  });
+
+  it('excludes trailing punctuation from a bare URL link target but keeps it visible (AC-4)', () => {
+    const url = 'https://example.com/docs';
+    const node = renderInlineNode({ text: `See ${url}.` });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    // The link target must NOT contain the trailing period
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+    // The period must remain visible outside the closing OSC 8 sequence
+    expect(flat.endsWith(`${OSC8_PREFIX}\x07.`)).toBe(true);
+  });
+
+  it('excludes trailing comma from a bare URL link target (AC-4)', () => {
+    const url = 'https://example.com/docs';
+    const node = renderInlineNode({ text: `See ${url}, then.` });
+
+    const flat = flattenText(node);
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+    expect(flat).toContain(',');
+  });
+
+  it('excludes trailing semicolon, colon, exclamation, and question mark from a bare URL (AC-4)', () => {
+    const url = 'https://example.com/docs';
+    for (const punct of [';', ':', '!', '?'] as const) {
+      const node = renderInlineNode({ text: `${url}${punct}` });
+      const flat = flattenText(node);
+      expect(extractFirstOsc8Target(flat)).toBe(url);
+    }
+  });
+
+  it('keeps a trailing ) when the URL contains a ( so disambiguation URLs stay intact (AC-4)', () => {
+    const url = 'https://en.wikipedia.org/wiki/Foo_(disambiguation)';
+    const node = renderInlineNode({ text: `See ${url}.` });
+
+    const flat = flattenText(node);
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+  });
+
+  it('strips a trailing ) when the URL has no matching ( (AC-4)', () => {
+    const url = 'https://example.com/docs';
+    const node = renderInlineNode({ text: `(${url}).` });
+
+    const flat = flattenText(node);
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+  });
+
+  it('renders a markdown [label](url) link with the label as an OSC 8 hyperlink and keeps the visible (url) fallback as a link (AC-2)', () => {
+    const url = 'https://example.com/docs';
+    const node = renderInlineNode({
+      text: `See [documentation](${url}).`,
+    });
+
+    const flat = flattenText(node);
+    expect(flat).toContain(OSC8_PREFIX);
+    // The label should be a link to the URL
+    expect(flat).toContain('documentation');
+    // The visible (url) fallback should also be present and linkified
+    expect(flat).toContain(`(${url})`);
+
+    // There should be at least one OSC 8 link targeting the URL
+    expect(extractFirstOsc8Target(flat)).toBe(url);
+  });
+
+  it('does not linkify a markdown link with a javascript: scheme (AC-3)', () => {
+    const node = renderInlineNode({
+      text: 'See [xss](javascript:alert(1)).',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('javascript:alert(1)');
+  });
+
+  it('does not linkify a bare javascript: URL (AC-3)', () => {
+    const node = renderInlineNode({
+      text: 'javascript:alert(1)',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
   });
 });
 

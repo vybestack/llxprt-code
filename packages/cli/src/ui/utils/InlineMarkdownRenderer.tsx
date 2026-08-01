@@ -9,7 +9,7 @@ import { Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import stringWidth from 'string-width';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { createFilePathLink } from './terminalLinks.js';
+import { createFilePathLink, createUrlLink } from './terminalLinks.js';
 
 // Constants for Markdown parsing
 const BOLD_MARKER_LENGTH = 2; // For "**"
@@ -148,6 +148,16 @@ function renderLinkNode(
     const linkMatch = fullMatch.match(new RegExp(linkPattern));
     if (linkMatch) {
       const [, linkText, url] = linkMatch;
+      // Link the visible label and keep the raw `(url)` fallback, itself
+      // linked, so the target stays reachable in terminals without OSC 8.
+      const combinedLink = createUrlLink(url, `${linkText} (${url})`);
+      if (combinedLink !== null) {
+        return (
+          <Text key={key} color={theme.text.link}>
+            {combinedLink}
+          </Text>
+        );
+      }
       return (
         <Text key={key} color={baseColor}>
           {linkText}
@@ -178,6 +188,28 @@ function renderUnderlineNode(
   return null;
 }
 
+function renderBareUrlNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode | null {
+  const { url, trailing } = splitTrailingUrlPunctuation(fullMatch);
+  const urlLink = createUrlLink(url);
+  if (urlLink === null) {
+    return (
+      <Text key={key} color={theme.text.link}>
+        {fullMatch}
+      </Text>
+    );
+  }
+  return (
+    <Text key={key} color={baseColor}>
+      <Text color={theme.text.link}>{urlLink}</Text>
+      {trailing.length > 0 && <Text color={baseColor}>{trailing}</Text>}
+    </Text>
+  );
+}
+
 function renderMatchedNode(
   fullMatch: string,
   key: string,
@@ -206,11 +238,7 @@ function renderMatchedNode(
   if (underline !== null) return underline;
 
   if (fullMatch.match(/^https?:\/\//)) {
-    return (
-      <Text key={key} color={theme.text.link}>
-        {fullMatch}
-      </Text>
-    );
+    return renderBareUrlNode(fullMatch, key, baseColor);
   }
 
   return null;
@@ -241,6 +269,34 @@ const PATH_DELIMITERS = new Set([
   '!',
   '?',
 ]);
+
+/**
+ * Trailing sentence-punctuation characters that should be stripped from a bare
+ * URL link target so prose like "see https://example.com." does not include the
+ * period in the link.
+ */
+const URL_TRAILING_PUNCTUATION = new Set(['.', ',', ';', ':', '!', '?']);
+
+/**
+ * Split a bare URL token into the URL portion and any trailing punctuation
+ * that should be excluded from the link target. A trailing `)` is only stripped
+ * when the URL contains no `(`, so Wikipedia-style `..._(disambiguation)` URLs
+ * stay intact. Uses a character-set lookup instead of a regex to avoid
+ * backtracking-vulnerable patterns.
+ */
+function splitTrailingUrlPunctuation(token: string): {
+  url: string;
+  trailing: string;
+} {
+  let end = token.length;
+  while (end > 0 && URL_TRAILING_PUNCTUATION.has(token[end - 1])) {
+    end--;
+  }
+  if (end > 0 && token[end - 1] === ')' && !token.slice(0, end).includes('(')) {
+    end--;
+  }
+  return { url: token.slice(0, end), trailing: token.slice(end) };
+}
 
 function renderPlainSegment(
   textSlice: string,

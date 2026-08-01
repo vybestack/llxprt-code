@@ -7,7 +7,7 @@
 import type React from 'react';
 import { Text, Box } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
-import { createOsc8Link } from '../../utils/terminalLinks.js';
+import { createUrlLink } from '../../utils/terminalLinks.js';
 
 interface OAuthUrlMessageProps {
   text: string;
@@ -25,10 +25,13 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
   const provider = providerMatch ? providerMatch[1] : 'the service';
 
-  const osc8Link = createOsc8Link(
-    `Click here to authorize with ${provider}`,
-    url,
-  );
+  const clickHereLabel = `Click here to authorize with ${provider}`;
+  const clickHereLink = createUrlLink(url, clickHereLabel) ?? clickHereLabel;
+  // The full URL is the PRIMARY click target: both the OSC 8 target and the
+  // visible label are the complete URL. This makes the URL copyable and
+  // clickable even when OSC 8 metadata is unsupported or stripped, and Ink's
+  // wrapping re-emits the hyperlink on every wrapped row.
+  const urlLink = createUrlLink(url);
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -45,11 +48,14 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
 
       <Box flexDirection="column" paddingLeft={prefixWidth + 1}>
         <Box marginBottom={1}>
-          <Text color={SemanticColors.text.link}>{osc8Link}</Text>
+          <Text color={SemanticColors.text.link}>{clickHereLink}</Text>
         </Box>
         <Box>
-          <Text color={Colors.DimComment} wrap="wrap">
-            Or copy this URL: {url}
+          <Text color={Colors.DimComment}>Or copy this URL:</Text>
+        </Box>
+        <Box>
+          <Text color={SemanticColors.text.link} wrap="wrap">
+            {urlLink ?? url}
           </Text>
         </Box>
         <Box>
