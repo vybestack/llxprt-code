@@ -95,7 +95,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    expect(await projection.countProjectedTokens()).toBeGreaterThan(0);
+    expect(await projection.legacyEstimate()).toBeGreaterThan(0);
     expect(provider.promptAuthResolutions).toStrictEqual([]);
   });
 
@@ -114,7 +114,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
 
     expect(projection.protocol).toBe('openai-responses');
     expect(projection.method).toBe('responses/v1');
-    expect(projection.projectionRevision).toBe(2);
+    expect(projection.projectionRevision).toBe(3);
     expect(projection.model).toBe('gpt-4o');
   });
 
@@ -153,8 +153,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    const smallTokens = await small.countProjectedTokens();
-    const largeTokens = await large.countProjectedTokens();
+    const smallTokens = await small.legacyEstimate();
+    const largeTokens = await large.legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -187,8 +187,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    const withoutTokens = await withoutTools.countProjectedTokens();
-    const withTokens = await withTools.countProjectedTokens();
+    const withoutTokens = await withoutTools.legacyEstimate();
+    const withTokens = await withTools.legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -209,8 +209,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         'Always answer with extensive detail, follow every formatting rule, explain assumptions, and avoid unsupported speculation in every response.',
     });
 
-    const withoutTokens = await withoutInstruction.countProjectedTokens();
-    const withTokens = await withLongInstruction.countProjectedTokens();
+    const withoutTokens = await withoutInstruction.legacyEstimate();
+    const withTokens = await withLongInstruction.legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -342,9 +342,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const large = await project('A'.repeat(100_000));
 
     expect(small.unsupportedMedia[0]?.mediaType).toBe('audio');
-    expect(await large.countProjectedTokens()).toBe(
-      await small.countProjectedTokens(),
-    );
+    expect(await large.legacyEstimate()).toBe(await small.legacyEstimate());
   });
 
   it('surfaces disabled PDFs and all unsupported substitutions structurally', async () => {

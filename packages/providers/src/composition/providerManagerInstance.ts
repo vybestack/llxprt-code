@@ -27,6 +27,12 @@ import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
 import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
 import { AnthropicTokenizer } from '../tokenizers/AnthropicTokenizer.js';
+import {
+  DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
+  ModelPromptEstimatorRegistry,
+} from '../tokenizers/ModelPromptEstimatorRegistry.js';
+import { createGpt56RuntimeTokenizer } from '../tokenizers/Gpt56O200kPromptEstimator.js';
+import { isSanctionedGpt56Model } from '../openai/openaiModelPolicy.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
@@ -122,14 +128,26 @@ function matchesTokenizer(
 function createRuntimeTokenizerFactory(): RuntimeTokenizerFactory {
   const openaiTokenizer = new OpenAITokenizer();
   const anthropicTokenizer = new AnthropicTokenizer();
+  const estimatorRegistry = new ModelPromptEstimatorRegistry(
+    DEFAULT_MODEL_PROMPT_ESTIMATOR_REGISTRATIONS,
+  );
 
   return {
+    claimsModel: (canonicalModel) =>
+      estimatorRegistry.claimsModel(canonicalModel),
+    getEstimatorFamily: (canonicalModel) =>
+      estimatorRegistry.getEstimatorFamily(canonicalModel),
+    estimatePrompt: (request) => estimatorRegistry.estimatePrompt(request),
     getTokenizer(
       providerName: string,
       model?: string,
     ): RuntimeTokenizer | undefined {
+      const resolvedModel = model ?? providerName;
+      if (isSanctionedGpt56Model(resolvedModel)) {
+        return createGpt56RuntimeTokenizer(providerName, resolvedModel);
+      }
       const providerKey = providerName.toLowerCase();
-      const modelKey = (model ?? providerName).toLowerCase();
+      const modelKey = resolvedModel.toLowerCase();
       if (
         matchesTokenizer(providerKey, modelKey, ANTHROPIC_TOKENIZER_MATCHERS)
       ) {

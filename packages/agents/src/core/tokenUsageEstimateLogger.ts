@@ -21,7 +21,14 @@ const OPENAI_PROVIDERS = new Set([
 
 const ANTHROPIC_PROVIDERS = new Set(['anthropic']);
 
-export function resolveEstimatorType(providerName: string): TokenEstimatorType {
+export function resolveEstimatorType(
+  providerName: string,
+  estimatorMethod?: PromptEnvelopeEstimate['estimatorMethod'],
+  estimatorFamily?: string,
+): TokenEstimatorType {
+  if (estimatorMethod === 'exact' && estimatorFamily === 'openai-gpt-5.6') {
+    return 'openai-tiktoken';
+  }
   const normalizedProviderName = providerName.toLowerCase();
   if (OPENAI_PROVIDERS.has(normalizedProviderName)) return 'openai-tiktoken';
   if (ANTHROPIC_PROVIDERS.has(normalizedProviderName)) return 'anthropic-char';
@@ -32,17 +39,26 @@ export function recordFinalizedPromptEnvelopeEstimate(
   usageLogger: TokenUsageLogger | null | undefined,
   promptId: string,
   estimate: PromptEnvelopeEstimate | null,
-  providerName: string,
 ): void {
   if (estimate === null) return;
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
   try {
     usageLogger.refineEstimate(promptId, {
-      provider: providerName,
+      provider: estimate.activeProvider,
       model: estimate.model,
       estimatedTokens: estimate.estimatedPromptTokens,
-      estimator: resolveEstimatorType(providerName),
+      estimator: resolveEstimatorType(
+        estimate.activeProvider,
+        estimate.estimatorMethod,
+        estimate.estimatorFamily,
+      ),
+      estimatorMethod: estimate.estimatorMethod,
+      estimatorFamily: estimate.estimatorFamily,
+      estimatorVersion: estimate.estimatorVersion,
+      assetRevision: estimate.assetRevision,
+      projectionRevision: estimate.projectionRevision,
+      protocol: estimate.protocol,
     });
   } catch (error) {
     logger.error(

@@ -10,8 +10,15 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
-const PROJECTION_REVISION = 2;
+const PROJECTION_REVISION = 3;
 const BINARY_PAYLOAD_PLACEHOLDER = '[binary media bytes omitted]';
+
+export interface ProviderFinalizedPromptProjection {
+  readonly kind: 'llxprt-provider-prompt-v3';
+  readonly protocol: PromptEnvelopeProjection['protocol'];
+  readonly promptText: string;
+  readonly promptSegments?: readonly string[];
+}
 const EMPTY_TRANSPORT_TOKEN: object = Object.freeze({});
 const EMPTY_UNSUPPORTED_MEDIA: readonly UnsupportedMediaEntry[] = Object.freeze(
   [],
@@ -39,8 +46,18 @@ function buildProjection(
   options?: ProjectionOptions,
 ): PromptEnvelopeProjection {
   const promptText = serializePromptBearingStructure(requestBody, promptKeys);
-  const tokens = countPromptTokens(promptText);
+  const promptSegments = serializePromptSegments(requestBody, promptKeys);
+  const tokens = promptSegments.reduce(
+    (total, segment) => total + countPromptTokens(segment),
+    0,
+  );
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
+  const finalizedProjection: ProviderFinalizedPromptProjection = Object.freeze({
+    kind: 'llxprt-provider-prompt-v3',
+    protocol: identity.protocol,
+    promptText,
+    promptSegments,
+  });
   // PromptEnvelopeProjection declares every member readonly. Freezing enforces
   // that at runtime too, so a projection cached or replayed across retries
   // cannot be mutated out from under a later estimate (issue #2817).
@@ -51,7 +68,8 @@ function buildProjection(
     projectionRevision: identity.projectionRevision,
     unsupportedMedia,
     transportToken: options?.transportToken ?? EMPTY_TRANSPORT_TOKEN,
-    countProjectedTokens: () => Promise.resolve(tokens),
+    finalizedProjection,
+    legacyEstimate: () => Promise.resolve(tokens),
   });
 }
 
@@ -100,20 +118,41 @@ function extractModelOrThrow(
   );
 }
 
+function canonicalPromptEntries(
+  requestBody: unknown,
+  promptKeys: readonly string[],
+): ReadonlyArray<[string, unknown]> {
+  if (typeof requestBody !== 'object' || requestBody === null) return [];
+  const body = requestBody as Record<string, unknown>;
+  return promptKeys.flatMap((key) =>
+    body[key] === undefined
+      ? []
+      : [[key, canonicalizePromptValue(body[key], key)]],
+  );
+}
+
 function serializePromptBearingStructure(
   requestBody: unknown,
   promptKeys: readonly string[],
 ): string {
-  if (typeof requestBody !== 'object' || requestBody === null) return '';
-  const body = requestBody as Record<string, unknown>;
   const promptBody = Object.fromEntries(
-    promptKeys
-      .filter((key) => body[key] !== undefined)
-      .map((key) => [key, canonicalizePromptValue(body[key], key)]),
+    canonicalPromptEntries(requestBody, promptKeys),
   );
   return Object.keys(promptBody).length === 0 ? '' : JSON.stringify(promptBody);
 }
 
+function serializePromptSegments(
+  requestBody: unknown,
+  promptKeys: readonly string[],
+): readonly string[] {
+  return Object.freeze(
+    canonicalPromptEntries(requestBody, promptKeys).map(([, canonicalValue]) =>
+      typeof canonicalValue === 'string'
+        ? canonicalValue
+        : JSON.stringify(canonicalValue),
+    ),
+  );
+}
 function canonicalizePromptValue(value: unknown, key: string): unknown {
   if (typeof value === 'string') {
     return canonicalizePromptString(value);

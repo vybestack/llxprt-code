@@ -30,7 +30,6 @@ import type { DensityResult } from '../../core/compression/types.js';
 import {
   estimateContentTokens as estimateContentTokensImpl,
   estimateTokensForContents as estimateTokensForContentsImpl,
-  resolveModelName,
   simpleTokenEstimateForText,
   type TokenizerProvider,
 } from './historyTokenEstimation.js';
@@ -128,6 +127,8 @@ export class HistoryService
    * This eliminates the core→providers import dependency on the injection path.
    */
   private tokenizerFactory?: RuntimeTokenizerFactory;
+  private activeTokenizationModel = 'gpt-4.1';
+  private activeTokenizationProvider?: string;
 
   private static readonly COMPRESSION_QUEUE_HIGH_WATER = 4096;
   private isCompressing: boolean = false;
@@ -148,6 +149,14 @@ export class HistoryService
     this.tokenizerCache.clear();
   }
 
+  setActiveTokenizationTarget(
+    modelName: string,
+    activeProvider?: string,
+  ): void {
+    this.activeTokenizationModel = modelName;
+    this.activeTokenizationProvider = activeProvider;
+  }
+
   /**
    * Get or create tokenizer for a specific model.
    *
@@ -159,8 +168,11 @@ export class HistoryService
    * direct provider tokenizer construction. This removes the core→providers
    * dependency when using the injection path.
    */
-  private getTokenizerForModel(modelName: string): ITokenizer {
-    return getTokenizerForModel(modelName, {
+  private getTokenizerForModel(
+    modelName: string,
+    activeProvider?: string,
+  ): ITokenizer {
+    return getTokenizerForModel(activeProvider, modelName, {
       tokenizerCache: this.tokenizerCache,
       tokenizerFactory: this.tokenizerFactory,
     });
@@ -218,16 +230,22 @@ export class HistoryService
 
   async estimateTokensForText(
     text: string,
-    modelName: string = 'gpt-4.1',
+    modelName = this.activeTokenizationModel,
   ): Promise<number> {
     if (!text) {
       return 0;
     }
 
+    const tokenizer = this.getTokenizerForModel(
+      modelName,
+      this.activeTokenizationProvider,
+    );
     try {
-      const tokenizer = this.getTokenizerForModel(modelName);
       return await tokenizer.countTokens(text);
     } catch (error) {
+      if (tokenizer.fallbackPolicy === 'deny') {
+        throw error;
+      }
       this.logger.debug(
         'Error counting tokens for raw text, using fallback:',
         error,
@@ -505,7 +523,7 @@ export class HistoryService
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       // Always derive token counts from the stored content to avoid double counting
       // when providers attach aggregate usage metadata (which already includes prompt tokens).
-      const defaultModel = modelName ?? 'gpt-4.1';
+      const defaultModel = modelName ?? this.activeTokenizationModel;
       const contentTokens = await this.estimateContentTokens(
         content,
         defaultModel,
@@ -549,7 +567,7 @@ export class HistoryService
   private tokenizerProvider(): TokenizerProvider {
     return {
       getTokenizerForModel: (modelName: string) =>
-        this.getTokenizerForModel(modelName),
+        this.getTokenizerForModel(modelName, this.activeTokenizationProvider),
     };
   }
 
@@ -765,13 +783,24 @@ export class HistoryService
    * @requirement REQ-HD-003.6
    * @pseudocode history-service.md lines 90-120
    */
-  async recalculateTotalTokens(modelName?: string): Promise<void> {
+  async recalculateTotalTokens(
+    modelName = this.activeTokenizationModel,
+    activeProvider = this.activeTokenizationProvider,
+  ): Promise<void> {
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       let newTotal = 0;
-      const model = modelName && modelName.length > 0 ? modelName : 'gpt-4.1';
+      const tokenizerProvider: TokenizerProvider = {
+        getTokenizerForModel: (targetModel) =>
+          this.getTokenizerForModel(targetModel, activeProvider),
+      };
 
       for (const entry of this.history) {
-        const entryTokens = await this.estimateContentTokens(entry, model);
+        const entryTokens = await estimateContentTokensImpl(
+          entry,
+          modelName,
+          tokenizerProvider,
+          this.logger,
+        );
         newTotal += entryTokens;
       }
 
@@ -909,17 +938,14 @@ export class HistoryService
    * Recalculate total tokens from scratch
    * Use this when removing content or when token counts might be stale
    */
-  async recalculateTokens(defaultModel: string = 'gpt-4.1'): Promise<void> {
+  async recalculateTokens(
+    defaultModel = this.activeTokenizationModel,
+  ): Promise<void> {
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       let newTotal = 0;
 
       for (const content of this.history) {
-        // Use the model from content metadata, or fall back to provided default
-        const modelToUse = resolveModelName(
-          content.metadata?.model,
-          defaultModel,
-        );
-        newTotal += await this.estimateContentTokens(content, modelToUse);
+        newTotal += await this.estimateContentTokens(content, defaultModel);
       }
 
       const oldTotal = this.totalTokens;

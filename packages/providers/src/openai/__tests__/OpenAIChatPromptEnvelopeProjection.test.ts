@@ -103,7 +103,7 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
 
     expect(projection.protocol).toBe('openai-chat');
     expect(projection.method).toBe('chat/completions/v1');
-    expect(projection.projectionRevision).toBe(2);
+    expect(projection.projectionRevision).toBe(3);
     expect(projection.model).toBe('gpt-4o');
   });
 
@@ -142,8 +142,8 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       }),
     );
 
-    const smallTokens = await small.countProjectedTokens();
-    const largeTokens = await large.countProjectedTokens();
+    const smallTokens = await small.legacyEstimate();
+    const largeTokens = await large.legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -176,8 +176,8 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       }),
     );
 
-    const withoutTokens = await withoutTools.countProjectedTokens();
-    const withTokens = await withTools.countProjectedTokens();
+    const withoutTokens = await withoutTools.legacyEstimate();
+    const withTokens = await withTools.legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -222,8 +222,8 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
       }),
     );
 
-    const baselineTokens = await baseline.countProjectedTokens();
-    const controlledTokens = await withEphemeralControls.countProjectedTokens();
+    const baselineTokens = await baseline.legacyEstimate();
+    const controlledTokens = await withEphemeralControls.legacyEstimate();
     expect(controlledTokens).toBe(baselineTokens);
   });
 

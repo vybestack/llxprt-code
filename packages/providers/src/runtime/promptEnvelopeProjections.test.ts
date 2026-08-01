@@ -37,7 +37,13 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     expect(projection.protocol).toBe('anthropic-messages');
     expect(projection.method).toBe('messages/v1');
     expect(projection.model).toBe('claude-3-5-sonnet-20241022');
-    expect(projection.projectionRevision).toBe(2);
+    expect(projection.projectionRevision).toBe(3);
+    expect(projection.finalizedProjection).toMatchObject({
+      kind: 'llxprt-provider-prompt-v3',
+      protocol: 'anthropic-messages',
+      promptText: expect.any(String),
+    });
+    expect(Object.isFrozen(projection.finalizedProjection)).toBe(true);
   });
 
   it('counts more tokens for a larger prompt (messages+system+tools), not the full HTTP body', async () => {
@@ -61,9 +67,9 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     };
 
     const smallTokens =
-      await projectAnthropicPromptEnvelope(small).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(small).legacyEstimate();
     const largeTokens =
-      await projectAnthropicPromptEnvelope(large).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(large).legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -84,11 +90,10 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
       metadata: { user_id: 'abc123' },
     };
 
-    const a =
-      await projectAnthropicPromptEnvelope(promptOnly).countProjectedTokens();
+    const a = await projectAnthropicPromptEnvelope(promptOnly).legacyEstimate();
     const b = await projectAnthropicPromptEnvelope(
       withTransportControls,
-    ).countProjectedTokens();
+    ).legacyEstimate();
     // Adding transport controls must NOT change the estimate — only prompt
     // fields are counted.
     expect(b).toBe(a);
@@ -115,9 +120,9 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     };
 
     const withoutTokens =
-      await projectAnthropicPromptEnvelope(withoutTools).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(withoutTools).legacyEstimate();
     const withTokens =
-      await projectAnthropicPromptEnvelope(withTools).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(withTools).legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -147,11 +152,9 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     };
 
     const textTokens =
-      await projectAnthropicPromptEnvelope(textOnly).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(textOnly).legacyEstimate();
     const imageTokens =
-      await projectAnthropicPromptEnvelope(
-        withBase64Image,
-      ).countProjectedTokens();
+      await projectAnthropicPromptEnvelope(withBase64Image).legacyEstimate();
     // Base64 data should not dominate the count (finding #6: avoid raw base64
     // distortion). The image-bearing message has MORE text fields (the content
     // array wrapper), but the 100k base64 string must not inflate the count
@@ -172,10 +175,10 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
 
     const shortTokens = await projectAnthropicPromptEnvelope(
       build(300),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     const longTokens = await projectAnthropicPromptEnvelope(
       build(10_000),
-    ).countProjectedTokens();
+    ).legacyEstimate();
 
     expect(longTokens).toBeGreaterThan(shortTokens);
   });
@@ -193,7 +196,7 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
             ],
           },
         ],
-      }).countProjectedTokens();
+      }).legacyEstimate();
 
     const baselineTokens = await project(1_000);
     const inflatedTokens = await project(100_000);
@@ -212,7 +215,7 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
             content: `Embedded document: data:text/html;charset=utf-8;base64,${'A'.repeat(size)}`,
           },
         ],
-      }).countProjectedTokens();
+      }).legacyEstimate();
 
     const baselineTokens = await project(1_000);
     const inflatedTokens = await project(100_000);
@@ -233,10 +236,10 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
     });
     const small = await projectAnthropicPromptEnvelope(
       build(1_000),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     const large = await projectAnthropicPromptEnvelope(
       build(100_000),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     expect(small).toBeGreaterThan(0);
     expect(large).toBe(small);
   });
@@ -276,7 +279,7 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     expect(projection.protocol).toBe('openai-chat');
     expect(projection.method).toBe('chat/completions/v1');
     expect(projection.model).toBe('gpt-4o');
-    expect(projection.projectionRevision).toBe(2);
+    expect(projection.projectionRevision).toBe(3);
   });
 
   it('counts more tokens for a larger messages payload', async () => {
@@ -295,9 +298,9 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     };
 
     const smallTokens =
-      await projectOpenAIChatPromptEnvelope(small).countProjectedTokens();
+      await projectOpenAIChatPromptEnvelope(small).legacyEstimate();
     const largeTokens =
-      await projectOpenAIChatPromptEnvelope(large).countProjectedTokens();
+      await projectOpenAIChatPromptEnvelope(large).legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -316,10 +319,10 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     };
 
     const a =
-      await projectOpenAIChatPromptEnvelope(promptOnly).countProjectedTokens();
+      await projectOpenAIChatPromptEnvelope(promptOnly).legacyEstimate();
     const b = await projectOpenAIChatPromptEnvelope(
       withTransportControls,
-    ).countProjectedTokens();
+    ).legacyEstimate();
     expect(b).toBe(a);
   });
 
@@ -344,11 +347,9 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     };
 
     const withoutTokens =
-      await projectOpenAIChatPromptEnvelope(
-        withoutTools,
-      ).countProjectedTokens();
+      await projectOpenAIChatPromptEnvelope(withoutTools).legacyEstimate();
     const withTokens =
-      await projectOpenAIChatPromptEnvelope(withTools).countProjectedTokens();
+      await projectOpenAIChatPromptEnvelope(withTools).legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -380,11 +381,11 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     const shortTokens = await projectOpenAIChatPromptEnvelope({
       ...request,
       tools: [baseTool],
-    }).countProjectedTokens();
+    }).legacyEstimate();
     const longTokens = await projectOpenAIChatPromptEnvelope({
       ...request,
       tools: [withLongProperty],
-    }).countProjectedTokens();
+    }).legacyEstimate();
     expect(longTokens).toBeGreaterThan(shortTokens);
   });
 
@@ -406,10 +407,10 @@ describe('projectOpenAIChatPromptEnvelope (issue #2817)', () => {
     });
     const small = await projectOpenAIChatPromptEnvelope(
       build(512),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     const large = await projectOpenAIChatPromptEnvelope(
       build(100_000),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     expect(large).toBe(small);
   });
 });
@@ -426,7 +427,7 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     expect(projection.protocol).toBe('openai-responses');
     expect(projection.method).toBe('responses/v1');
     expect(projection.model).toBe('gpt-4o');
-    expect(projection.projectionRevision).toBe(2);
+    expect(projection.projectionRevision).toBe(3);
   });
 
   it('counts more tokens for a larger input payload', async () => {
@@ -446,9 +447,9 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     };
 
     const smallTokens =
-      await projectOpenAIResponsesPromptEnvelope(small).countProjectedTokens();
+      await projectOpenAIResponsesPromptEnvelope(small).legacyEstimate();
     const largeTokens =
-      await projectOpenAIResponsesPromptEnvelope(large).countProjectedTokens();
+      await projectOpenAIResponsesPromptEnvelope(large).legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -467,11 +468,11 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     const withoutTokens =
       await projectOpenAIResponsesPromptEnvelope(
         withoutInstructions,
-      ).countProjectedTokens();
+      ).legacyEstimate();
     const withTokens =
       await projectOpenAIResponsesPromptEnvelope(
         withInstructions,
-      ).countProjectedTokens();
+      ).legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -498,10 +499,10 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     });
     const small = await projectOpenAIResponsesPromptEnvelope(
       build(512),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     const large = await projectOpenAIResponsesPromptEnvelope(
       build(100_000),
-    ).countProjectedTokens();
+    ).legacyEstimate();
     expect(large).toBe(small);
   });
 
@@ -533,16 +534,12 @@ describe('projectOpenAIResponsesPromptEnvelope (issue #2817)', () => {
     };
 
     const baselineTokens =
-      await projectOpenAIResponsesPromptEnvelope(
-        promptOnly,
-      ).countProjectedTokens();
+      await projectOpenAIResponsesPromptEnvelope(promptOnly).legacyEstimate();
     const controlTokens = await projectOpenAIResponsesPromptEnvelope(
       withTransportControls,
-    ).countProjectedTokens();
+    ).legacyEstimate();
     const toolTokens =
-      await projectOpenAIResponsesPromptEnvelope(
-        withTools,
-      ).countProjectedTokens();
+      await projectOpenAIResponsesPromptEnvelope(withTools).legacyEstimate();
 
     expect(controlTokens).toBe(baselineTokens);
     expect(toolTokens).toBeGreaterThan(baselineTokens);
@@ -564,8 +561,8 @@ describe('projection token count consistency (issue #2817 A10)', () => {
 
       const first = buildRequestBody();
       const second = buildRequestBody();
-      const firstTokens = await project(first).countProjectedTokens();
-      const secondTokens = await project(second).countProjectedTokens();
+      const firstTokens = await project(first).legacyEstimate();
+      const secondTokens = await project(second).legacyEstimate();
 
       expect(firstTokens).toBe(secondTokens);
       expect(first).toStrictEqual(buildRequestBody());
@@ -584,7 +581,7 @@ describe('projection token count consistency (issue #2817 A10)', () => {
         model: 'test-model',
         [promptKey]: [{ role: 'user', content: 'x' }],
       };
-      const tokens = await project(requestBody).countProjectedTokens();
+      const tokens = await project(requestBody).legacyEstimate();
       expect(tokens).toBeGreaterThan(0);
     },
   );

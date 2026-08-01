@@ -26,7 +26,6 @@ import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
-import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
@@ -231,22 +230,12 @@ async function applySystemPromptTokenOffset(
   historyService: HistoryService,
   systemInstruction: string,
   model: string,
-  logger: DebugLogger,
 ): Promise<void> {
-  try {
-    const tokens = await historyService.estimateTokensForText(
-      systemInstruction,
-      model,
-    );
-    historyService.setBaseTokenOffset(tokens);
-  } catch {
-    // Token estimation failed - use fallback estimation
-    logger.debug(
-      () =>
-        `Failed to count system instruction tokens for model ${model}, using fallback`,
-    );
-    historyService.setBaseTokenOffset(estimateTextTokens(systemInstruction));
-  }
+  const tokens = await historyService.estimateTokensForText(
+    systemInstruction,
+    model,
+  );
+  historyService.setBaseTokenOffset(tokens);
 }
 
 /**
@@ -392,17 +381,13 @@ export async function createChatSession(
     model,
   );
 
+  historyService.setActiveTokenizationTarget(model, runtimeState.provider);
   if (reused) {
     historyService.resetTokenAccounting();
-    await historyService.recalculateTotalTokens(model);
+    await historyService.recalculateTotalTokens();
   }
 
-  await applySystemPromptTokenOffset(
-    historyService,
-    systemInstruction,
-    model,
-    logger,
-  );
+  await applySystemPromptTokenOffset(historyService, systemInstruction, model);
 
   logger.debug(
     () =>
