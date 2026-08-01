@@ -74,7 +74,10 @@ export function resolveReasoningDialect(
 
   let hostname: string;
   try {
-    hostname = new URL(baseUrl).hostname.toLowerCase();
+    // Base URLs arrive from user config and profiles, where stray surrounding
+    // whitespace is common; untrimmed input makes `URL` throw and would
+    // silently disable the dialect for a host that is in the table.
+    hostname = new URL(baseUrl.trim()).hostname.toLowerCase();
   } catch {
     return 'none';
   }

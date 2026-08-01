@@ -64,6 +64,12 @@ function createMockOptions(
       baseURL: overrides.baseURL,
       authToken: { token: 'test-token', type: 'api-key' },
     },
+    // The double assertion is load-bearing: `invocation` here is a minimal
+    // stand-in, not a real RuntimeInvocationContext (which carries runtimeId,
+    // settings, and nine more members plus its accessor methods). Narrowing it
+    // would mean constructing a full context per case and burying the
+    // assertions. openaiReasoningPipeline.test.ts covers the real, uncast
+    // object graph end to end.
   } as unknown as NormalizedGenerateChatOptions;
 }
 

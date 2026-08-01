@@ -80,6 +80,15 @@ describe('resolveReasoningDialect — host to dialect mapping', () => {
   it('resolves invalid URL string to none', () => {
     expect(resolveReasoningDialect('not a url')).toBe('none');
   });
+
+  it('tolerates stray whitespace around an otherwise known host', () => {
+    expect(resolveReasoningDialect('  https://openrouter.ai/api/v1  ')).toBe(
+      'openrouter',
+    );
+    expect(resolveReasoningDialect('\nhttps://api.z.ai/api/paas/v4\t')).toBe(
+      'thinking',
+    );
+  });
 });
 
 describe('applyReasoningDialect — wire-shape emission', () => {

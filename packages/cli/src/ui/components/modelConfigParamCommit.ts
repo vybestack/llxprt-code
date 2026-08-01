@@ -47,11 +47,14 @@ export function commitModelParam(
   raw: string,
   setActiveModelParam: (value: unknown) => void,
 ): CommitResult {
-  const parsed = parseValue(raw);
-  if (requiresNumber(key) && !isFiniteNumber(parsed)) {
-    return { success: false, message: NOT_A_NUMBER_MESSAGE };
-  }
+  // Parsing stays inside the guarded region, as it was before this logic was
+  // extracted from the dialog: an escaping throw would tear down the Ink UI
+  // instead of surfacing as the inline validation message.
   try {
+    const parsed = parseValue(raw);
+    if (requiresNumber(key) && !isFiniteNumber(parsed)) {
+      return { success: false, message: NOT_A_NUMBER_MESSAGE };
+    }
     setActiveModelParam(parsed);
     return { success: true };
   } catch (e) {

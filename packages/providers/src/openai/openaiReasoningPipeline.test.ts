@@ -66,9 +66,9 @@ function optionsFrom(
     resolved: {
       model: 'zai-org/GLM-5.2',
       baseURL,
-      authToken: { token: 'test-token', type: 'api-key' },
+      authToken: 'test-token',
     },
-  } as unknown as NormalizedGenerateChatOptions;
+  } satisfies NormalizedGenerateChatOptions;
 }
 
 async function bodyFor(
@@ -82,7 +82,9 @@ async function bodyFor(
     new DebugLogger('llxprt:provider:openai:test'),
     PROVIDER,
   );
-  return result.requestBody as Record<string, unknown>;
+  // Spread rather than cast: the body is a plain object, and this keeps the
+  // file free of type escapes so `satisfies` above does real checking.
+  return { ...result.requestBody };
 }
 
 function reasoningKeysIn(body: Record<string, unknown>): string[] {
