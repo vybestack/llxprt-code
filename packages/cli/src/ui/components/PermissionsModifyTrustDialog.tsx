@@ -194,6 +194,7 @@ export const PermissionsModifyTrustDialog: React.FC<
       <PermissionsTrustRulesList
         rules={flow.trustRules}
         onSelect={flow.selectRule}
+        isFocused={!flow.isCommitting}
       />
     );
   }

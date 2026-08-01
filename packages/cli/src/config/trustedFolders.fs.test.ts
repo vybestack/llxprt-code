@@ -335,6 +335,22 @@ describe('LoadedTrustedFolders.removeRule', () => {
     },
   );
 
+  it('removes a stale rule whose stored key is not lexically normalized', () => {
+    // A hand-edited trustedFolders.json can hold a key like /a/b/../c. Once the
+    // folder is gone realpath cannot resolve either side, so the fallback has
+    // to compare the paths lexically or the rule becomes unremovable.
+    const staleFolder = path.join(tempDir, 'gone');
+    // Built by concatenation: path.join would collapse the dot-dot segment and
+    // the key would already be normalized, which is not the case under test.
+    const unnormalizedKey = [tempDir, 'sibling', '..', 'gone'].join(path.sep);
+    userConfig[unnormalizedKey] = TrustLevel.TRUST_FOLDER;
+
+    load().removeRule(staleFolder);
+
+    expect(userConfig[unnormalizedKey]).toBeUndefined();
+    expect(readPersisted()[unnormalizedKey]).toBeUndefined();
+  });
+
   it('does not write anything when the key is absent', () => {
     const existing = path.join(tempDir, 'existing');
     userConfig[existing] = TrustLevel.TRUST_FOLDER;

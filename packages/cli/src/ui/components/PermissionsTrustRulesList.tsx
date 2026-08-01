@@ -15,6 +15,8 @@ import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 interface PermissionsTrustRulesListProps {
   rules: readonly TrustRule[];
   onSelect: (rulePath: string) => void;
+  /** The dialog owns focus, so that it can be withdrawn during a write. */
+  isFocused: boolean;
 }
 
 /**
@@ -23,7 +25,7 @@ interface PermissionsTrustRulesListProps {
  */
 export const PermissionsTrustRulesList: React.FC<
   PermissionsTrustRulesListProps
-> = ({ rules, onSelect }) => (
+> = ({ rules, onSelect, isFocused }) => (
   <Box flexDirection="column">
     <Box
       flexDirection="column"
@@ -49,7 +51,7 @@ export const PermissionsTrustRulesList: React.FC<
             items={buildTrustRuleOptions(rules)}
             initialIndex={0}
             onSelect={onSelect}
-            isFocused={true}
+            isFocused={isFocused}
           />
         </Box>
       )}

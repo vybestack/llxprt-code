@@ -188,6 +188,21 @@ export class LoadedTrustedFolders {
       : this.user.config[canonicalPath];
   }
 
+  /**
+   * Stored keys naming the same place as `location` by path alone.
+   *
+   * Used only once the folder is gone and realpath can no longer identify it.
+   * Comparing resolved paths rather than raw strings catches a key that was
+   * written without normalization, which would otherwise be unremovable. Keys
+   * that only realpath could tie together are genuinely unknowable here.
+   */
+  private lexicalMatchesFor(location: string): string[] {
+    const resolvedLocation = path.resolve(location);
+    return Object.keys(this.user.config).filter(
+      (rulePath) => path.resolve(rulePath) === resolvedLocation,
+    );
+  }
+
   private aliasesFor(canonicalPath: string): string[] {
     return Object.keys(this.user.config).filter(
       (rulePath) => resolveCanonicalPath(rulePath) === canonicalPath,
@@ -268,7 +283,7 @@ export class LoadedTrustedFolders {
     const canonicalPath = resolveCanonicalPath(location);
     const ruleKeys =
       canonicalPath === undefined
-        ? Object.keys(this.user.config).filter((key) => key === location)
+        ? this.lexicalMatchesFor(location)
         : this.aliasesFor(canonicalPath);
     if (ruleKeys.length === 0) {
       return;

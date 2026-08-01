@@ -699,6 +699,10 @@ describe('permissions dialog multi-folder flow', () => {
     );
     expect(result.current.view).toBe('form');
     expect(onExit).not.toHaveBeenCalled();
+    // A failed removal must leave the store exactly as it was.
+    expect(mockedTrustedConfig.value).toStrictEqual({
+      [cwd]: TrustLevel.TRUST_FOLDER,
+    });
   });
 
   it('C13: a commit failure is reported and the dialog stays open', async () => {
@@ -720,5 +724,7 @@ describe('permissions dialog multi-folder flow', () => {
     );
     expect(result.current.view).toBe('form');
     expect(onExit).not.toHaveBeenCalled();
+    // Nothing was persisted, so the store must still be empty.
+    expect(mockedTrustedConfig.value).toStrictEqual({});
   });
 });
