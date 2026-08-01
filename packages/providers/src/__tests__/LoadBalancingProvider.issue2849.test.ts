@@ -68,14 +68,14 @@ function throwStatus(
   message: string,
   status: number,
 ): () => AsyncGenerator<IContent> {
-  return function* (): AsyncGenerator<IContent> {
+  return async function* (): AsyncGenerator<IContent> {
     throw statusError(message, status);
     yield undefined as unknown as IContent; // eslint require-yield
   };
 }
 
 /** A generator that yields a single success chunk. */
-function* successChunk(): AsyncGenerator<IContent> {
+async function* successChunk(): AsyncGenerator<IContent> {
   yield { type: 'text' as const, content: 'ok' } as unknown as IContent;
 }
 
