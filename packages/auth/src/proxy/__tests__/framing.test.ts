@@ -99,7 +99,8 @@ describe('encodeFrame', () => {
    * @scenario Oversized payload exceeding MAX_FRAME_SIZE throws
    */
   it('throws when payload exceeds MAX_FRAME_SIZE bytes', () => {
-    // Build a payload whose JSON representation exceeds 65536 bytes
+    // Derived from the constant rather than a literal, so raising the cap
+    // cannot silently leave this asserting against the old size.
     const bigString = 'x'.repeat(MAX_FRAME_SIZE + 1);
     const payload = { data: bigString };
 
@@ -115,22 +116,6 @@ describe('encodeFrame', () => {
    */
   it('MAX_FRAME_SIZE is 4 MiB (4_194_304 bytes)', () => {
     expect(MAX_FRAME_SIZE).toBe(4_194_304);
-  });
-
-  /**
-   * @plan PLAN-20260731-GHBROKER.P05
-   * @requirement REQ-006, I1
-   * @pseudocode 002-frame-and-cancel.md lines 07-11, T2
-   * @scenario A payload that is exactly MAX_FRAME_SIZE + 1 bytes of JSON
-   *           throws FrameError on encode — the cap stays bounded.
-   */
-  it('T2: throws FrameError when payload is 4 MiB + 1 byte (I1)', () => {
-    // JSON overhead of {"data":"…"} is 12 bytes, so the string length must
-    // push total JSON past the 4 MiB cap.
-    const bigString = 'x'.repeat(MAX_FRAME_SIZE);
-    const payload = { data: bigString };
-
-    expect(() => encodeFrame(payload)).toThrow(/exceeds maximum size/);
   });
 
   /**

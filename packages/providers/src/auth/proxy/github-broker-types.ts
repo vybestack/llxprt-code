@@ -36,19 +36,6 @@ export interface ValidationError {
 }
 
 /**
- * The structured response data for a GitHub broker operation. The `data`
- * field is shaped per the operation descriptor; it is never raw gh JSON.
- *
- * @plan PLAN-20260731-GHBROKER.P08
- * @requirement REQ-013
- * @pseudocode 003-github-broker.md lines Contract/Outputs
- */
-export interface GitHubOpResponse {
-  data: unknown;
-  truncated?: { field: string; originalBytes: number };
-}
-
-/**
  * Specification for a single parameter accepted by an operation.
  *
  * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P11
