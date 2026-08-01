@@ -160,8 +160,11 @@ const makeParams = (): UIActionsParams => ({
   // Cancel ongoing request
   cancelOngoingRequest: vi.fn(),
 
-  // Queue error message
+  // Queue actions (issue #2882)
   setQueueErrorMessage: vi.fn(),
+  sendAllQueuedSubmissions: vi.fn(),
+  steerAllQueuedSubmissions: vi.fn(),
+  clearQueuedSubmissions: vi.fn(),
 });
 
 describe('buildUIActions', () => {
