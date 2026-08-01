@@ -24,9 +24,14 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   const prefixText = '[OAUTH] ';
   const prefixWidth = prefixText.length;
 
-  // Extract provider name from text if available
+  // Extract provider name from text if available. OAuth history items are
+  // exempt from the global ANSI escaping applied to other message types, so
+  // the extracted name is cleaned here before it reaches the heading, the
+  // link label, and the non-linkable fallback label.
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
-  const provider = providerMatch ? providerMatch[1] : 'the service';
+  const provider = stripControlCharacters(
+    providerMatch ? providerMatch[1] : 'the service',
+  );
 
   const clickHereLabel = `Click here to authorize with ${provider}`;
   const clickHereLink = createUrlLink(url, clickHereLabel) ?? clickHereLabel;

@@ -231,6 +231,20 @@ describe('<OAuthUrlMessage />', () => {
     expect(flat).toContain('Click here to authorize with Claude');
   });
 
+  it('never echoes raw control characters from the provider name (AC-6)', () => {
+    const element = renderOAuth({
+      text: 'Please authorize with Ev\u001b[2Jil\u0007Corp to continue',
+      url: LONG_OAUTH_URL,
+    });
+    const flat = flattenText(element);
+
+    expect(flat).toContain('OAuth Authentication Required for Ev[2JilCorp');
+    expect(flat).toContain('Click here to authorize with Ev[2JilCorp');
+    // The only ESC bytes present are the OSC 8 sequences the component emits
+    expect(flat).not.toContain('\u001b[2J');
+    expect(flat).not.toContain('Ev\u001b');
+  });
+
   it('keeps the copy guidance above the URL (AC-6)', () => {
     const element = renderOAuth({
       text: 'Please authorize with Claude to continue',
