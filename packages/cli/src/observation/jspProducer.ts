@@ -34,7 +34,21 @@ import { JspBoundedQueue, type JspQueueSink } from './jspQueue.js';
 
 const DEFAULT_AGENT_SCOPE = 'primary';
 const DEFAULT_QUEUE_CAPACITY = 512;
-const DEFAULT_HEARTBEAT_MS = 15_000;
+/**
+ * The observer lease defined by the JSP/1 specification. An observer marks
+ * observation health stale once this much time passes with no accepted
+ * document.
+ */
+export const OBSERVER_LEASE_MS = 15_000;
+/**
+ * Heartbeat interval.
+ *
+ * Must stay at or below a third of {@link OBSERVER_LEASE_MS} so two
+ * consecutive heartbeats can be lost before the observer declares the source
+ * stale. Setting it equal to the lease makes expiry a race against scheduling
+ * jitter, which shows up as an intermittently stale observation.
+ */
+const DEFAULT_HEARTBEAT_MS = 5_000;
 const REGISTRATION_RETRY_BACKOFF_MS = 5_000;
 const MAX_REGISTRATION_ATTEMPTS = 10;
 
@@ -93,6 +107,7 @@ export class JspProducer {
     this.state = initProducerState(this.identity, nativeSession);
     this.queue = new JspBoundedQueue(new ProducerQueueSink(hooks.publish), {
       capacity: options.capacity ?? DEFAULT_QUEUE_CAPACITY,
+      onRecoveryNeeded: () => this.publishRecoverySnapshot(),
     });
   }
 
@@ -177,11 +192,29 @@ export class JspProducer {
       });
   }
 
+  /**
+   * Re-establish the stream after a lost document by publishing a fresh
+   * snapshot, which is the only way an observer can resume after a gap.
+   */
+  private publishRecoverySnapshot(): void {
+    if (!this.started || !this.registered) {
+      return;
+    }
+    if (this.queue.enqueue(this.snapshot())) {
+      this.queue.markSnapshotRecoveryDone();
+    }
+  }
+
+  /** The interval at which this producer heartbeats, in milliseconds. */
+  heartbeatIntervalMs(): number {
+    return this.options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+  }
+
   private beginHeartbeat(): void {
     if (this.heartbeatTimer !== null) {
       return;
     }
-    const heartbeatMs = this.options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+    const heartbeatMs = this.heartbeatIntervalMs();
     this.heartbeatTimer = setInterval(() => {
       const document: JspHeartbeatDocument = {
         schema: 1,

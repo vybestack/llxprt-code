@@ -6,7 +6,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { JspBoundDocument } from './jspDocuments.js';
-import { JspProducer, type JspProducerHooks } from './jspProducer.js';
+import {
+  JspProducer,
+  OBSERVER_LEASE_MS,
+  type JspProducerHooks,
+} from './jspProducer.js';
 import type { JspBootstrap, JspProducerIdentity } from './jspSchema.js';
 
 const bootstrap: JspBootstrap = {
@@ -62,6 +66,32 @@ function eventTypes(documents: readonly JspBoundDocument[]): string[] {
     document.kind === 'event' ? [document.event.type] : [],
   );
 }
+
+describe('heartbeat cadence', () => {
+  it('heartbeats at least three times within the observer lease', async () => {
+    const bootstrapped = makeHarness();
+    const sent: number[] = [];
+    let clock = 0;
+    const hooks: JspProducerHooks = {
+      ...bootstrapped.hooks,
+      now: () => clock,
+      register: () => Promise.resolve(true),
+      publish: () => Promise.resolve(true),
+      heartbeat: () => {
+        sent.push(clock);
+        return Promise.resolve(true);
+      },
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    // A heartbeat interval equal to the lease makes expiry a race with
+    // scheduling jitter, so require headroom for two lost heartbeats.
+    const interval = producer.heartbeatIntervalMs();
+    expect(interval * 3).toBeLessThanOrEqual(OBSERVER_LEASE_MS);
+    producer.stop();
+  });
+});
 
 describe('JspProducer', () => {
   it('registers snapshot-first and emits contiguous native transitions', async () => {

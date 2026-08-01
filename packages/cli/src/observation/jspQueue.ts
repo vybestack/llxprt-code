@@ -12,6 +12,12 @@ export interface JspQueueSink {
 
 export interface JspQueueOptions {
   readonly capacity: number;
+  /**
+   * Invoked when a document was lost and the observer needs a fresh snapshot.
+   * The owner should enqueue one immediately; waiting for the next transition
+   * leaves a finished source gapped forever.
+   */
+  readonly onRecoveryNeeded?: () => void;
 }
 
 const DEFAULT_CAPACITY = 256;
@@ -24,6 +30,8 @@ export class JspBoundedQueue {
   private snapshotRecoveryNeeded = false;
   private isStopped = false;
   private drainTask: Promise<void> | null = null;
+  private recoveryRequested = false;
+  private readonly onRecoveryNeeded?: () => void;
 
   constructor(sink: JspQueueSink, options?: Partial<JspQueueOptions>) {
     this.sink = sink;
@@ -34,6 +42,7 @@ export class JspBoundedQueue {
       throw new RangeError('JSP queue capacity must be a positive integer');
     }
     this.capacity = requested;
+    this.onRecoveryNeeded = options?.onRecoveryNeeded;
   }
 
   enqueue(document: JspBoundDocument): boolean {
@@ -84,13 +93,35 @@ export class JspBoundedQueue {
   }
 
   private async send(document: JspBoundDocument): Promise<void> {
+    let delivered = false;
     try {
-      if (!(await this.sink.send(document))) {
-        this.snapshotRecoveryNeeded = true;
-      }
+      delivered = await this.sink.send(document);
     } catch {
-      this.snapshotRecoveryNeeded = true;
+      delivered = false;
     }
+    if (delivered) {
+      return;
+    }
+    // The document is gone, so the observer now has a sequence gap and will
+    // reject everything until a fresh snapshot arrives. Recovery cannot wait
+    // for the next transition: a source that has finished its work produces
+    // none, and the observation would stay gapped and stale forever.
+    this.snapshotRecoveryNeeded = true;
+    this.requestRecovery();
+  }
+
+  /** Ask the owner to enqueue a fresh snapshot, at most once per gap. */
+  private requestRecovery(): void {
+    if (this.recoveryRequested || this.isStopped) {
+      return;
+    }
+    this.recoveryRequested = true;
+    queueMicrotask(() => {
+      this.recoveryRequested = false;
+      if (!this.isStopped) {
+        this.onRecoveryNeeded?.();
+      }
+    });
   }
 
   private async drain(): Promise<void> {
