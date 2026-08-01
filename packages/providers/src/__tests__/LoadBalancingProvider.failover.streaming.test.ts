@@ -271,15 +271,15 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       expect(provider.getCurrentFailoverIndex()).toBe(1);
     });
 
-    it('should immediately failover on 429 without retrying current member', async () => {
+    it('retries 429 on the same backend before failing over (issue #2849)', async () => {
       let callCount = 0;
 
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
           callCount++;
-          // First call: throw 429
-          // Second call: succeed
+          // First call: throw 429 (retryable on same backend)
+          // Second call: succeed (same backend retry succeeds)
           if (callCount === 1) {
             const error = new Error('Rate limited') as Error & {
               status: number;
@@ -317,7 +317,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
           },
         ],
         lbProfileEphemeralSettings: {
-          failover_retry_count: 3, // Even with retry count, 429 should not retry
+          failover_retry_count: 3, // 429 is retried up to this many times
         },
       };
 
@@ -332,24 +332,23 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         results.push(chunk);
       }
 
-      // Backend1 throws 429, immediate failover to backend2
-      // So only 2 calls total (no retries on 429)
+      // Backend1 throws 429, retry on same backend succeeds.
+      // 2 calls total (no failover needed).
       expect(callCount).toBe(2);
     });
 
     it('should distinguish non-status errors from immediate failover errors (429)', async () => {
-      // This test verifies that errors without HTTP status are handled differently
-      // from 429/401/402/403. Non-status errors follow normal retry flow, while
-      // immediate failover errors (429, etc.) skip retry entirely.
+      // This test verifies that errors without HTTP status are handled
+      // similarly to 429 with failover_retry_count: 1. Both exhaust
+      // per-backend retries and fail over, but the difference is:
+      // - Non-status errors: never retry even if retryCount > 1 (no status
+      //   to classify as failover-eligible)
+      // - 429: retries on same backend when retryCount > 1 (issue #2849)
       //
-      // With failover_retry_count: 1 (default), a non-status error will:
+      // With failover_retry_count: 1 (pinned), a non-status error will:
       // 1. Try backend1, fail, exhaust retries (1 attempt)
       // 2. Move to backend2, succeed
       // Total: 2 calls
-      //
-      // This is the same as 429, but the key difference is:
-      // - 429: No retry attempt on same backend (immediate failover)
-      // - Non-status error: Would retry if failover_retry_count > 1
       let callCount = 0;
 
       const mockProvider: IProvider = {

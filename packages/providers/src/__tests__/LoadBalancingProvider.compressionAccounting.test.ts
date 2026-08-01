@@ -166,9 +166,8 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       strategy: 'failover',
       contextLimit: 4,
       lbProfileEphemeralSettings: {
-        'failover-retry-count': 1,
-        'failover-retry-delay-ms': 0,
         failover_retry_count: 1,
+        failover_retry_delay_ms: 0,
       },
       subProfiles: [
         createResolvedSubProfile({
@@ -489,9 +488,8 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       strategy: 'failover',
       contextLimit: 100000,
       lbProfileEphemeralSettings: {
-        'failover-retry-count': 1,
-        'failover-retry-delay-ms': 0,
         failover_retry_count: 1,
+        failover_retry_delay_ms: 0,
       },
       subProfiles: [
         createResolvedSubProfile({

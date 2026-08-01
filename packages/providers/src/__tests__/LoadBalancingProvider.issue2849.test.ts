@@ -39,10 +39,11 @@ import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 /** Build a fake delegate whose per-invocation behavior is supplied inline. */
 function makeFakeProvider(
   respond: (invocation: number) => AsyncGenerator<IContent>,
+  providerName = 'test-provider',
 ): { provider: IProvider; counter: { value: number } } {
   const counter = { value: 0 };
   const provider: IProvider = {
-    name: 'test-provider',
+    name: providerName,
     async *generateChatCompletion(): AsyncGenerator<IContent> {
       counter.value++;
       yield* respond(counter.value);
@@ -90,29 +91,39 @@ function makeOptions(): GenerateChatOptions {
  * makoraglm51 + ollamaglm51). Uses the DEFAULT failover_retry_count (now 2)
  * — no lbProfileEphemeralSettings override — so the test exercises the
  * production default behavior.
+ *
+ * Each sub-profile references a distinct providerName so individual backends
+ * can be configured with different failure modes (e.g., healthy vs exhausted).
  */
-function makeGlmConfig(profileName: string): LoadBalancingProviderConfig {
+function makeGlmConfig(
+  profileName: string,
+  providers: [string, string, string] = [
+    'zai-provider',
+    'makora-provider',
+    'ollama-provider',
+  ],
+): LoadBalancingProviderConfig {
   return {
     profileName,
     strategy: 'failover',
     subProfiles: [
       {
         name: 'zai',
-        providerName: 'test-provider',
+        providerName: providers[0],
         modelId: 'model1',
         baseURL: 'https://api.z.ai',
         authToken: 'token-1',
       },
       {
         name: 'makoraglm51',
-        providerName: 'test-provider',
+        providerName: providers[1],
         modelId: 'model2',
         baseURL: 'https://api.makora.ai',
         authToken: 'token-2',
       },
       {
         name: 'ollamaglm51',
-        providerName: 'test-provider',
+        providerName: providers[2],
         modelId: 'model3',
         baseURL: 'https://api.ollama.ai',
         authToken: 'token-3',
@@ -155,8 +166,19 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
         return throwStatus('rate limited', 429)();
       }
       return successChunk();
-    });
+    }, 'zai-provider');
     providerManager.registerProvider(provider);
+    // Other backends would fail if reached, but zai succeeds on retry.
+    const exhausted1 = makeFakeProvider(
+      () => throwStatus('rate limited', 429)(),
+      'makora-provider',
+    );
+    providerManager.registerProvider(exhausted1.provider);
+    const exhausted2 = makeFakeProvider(
+      () => throwStatus('rate limited', 429)(),
+      'ollama-provider',
+    );
+    providerManager.registerProvider(exhausted2.provider);
 
     const lb = new LoadBalancingProvider(
       makeGlmConfig('glm-transient-429'),
@@ -168,6 +190,9 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     expect(chunks).toHaveLength(1);
     // Both invocations hit zai (backend 0): first 429, second success.
     expect(counter.value).toBe(2);
+    // Other backends never reached.
+    expect(exhausted1.counter.value).toBe(0);
+    expect(exhausted2.counter.value).toBe(0);
     // Stayed on zai — no failover.
     expect(lb.getCurrentFailoverIndex()).toBe(0);
   });
@@ -179,15 +204,18 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
    * a chance to recover.
    */
   it('fails over to the next backend after exhausting per-backend retries on persistent 429', async () => {
-    const { provider, counter } = makeFakeProvider((invocation) => {
-      // zai attempts 1+2: both 429 (exhaust retryCount=2)
-      // makoraglm51 attempt 3: succeeds
-      if (invocation <= 2) {
-        return throwStatus('rate limited', 429)();
-      }
-      return successChunk();
-    });
-    providerManager.registerProvider(provider);
+    const zai = makeFakeProvider(
+      () => throwStatus('rate limited', 429)(),
+      'zai-provider',
+    );
+    providerManager.registerProvider(zai.provider);
+    const makora = makeFakeProvider(() => successChunk(), 'makora-provider');
+    providerManager.registerProvider(makora.provider);
+    const ollama = makeFakeProvider(
+      () => throwStatus('rate limited', 429)(),
+      'ollama-provider',
+    );
+    providerManager.registerProvider(ollama.provider);
 
     const lb = new LoadBalancingProvider(
       makeGlmConfig('glm-persistent-429-then-success'),
@@ -198,7 +226,10 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
 
     expect(chunks).toHaveLength(1);
     // zai tried twice (both 429), then makoraglm51 succeeded.
-    expect(counter.value).toBe(3);
+    expect(zai.counter.value).toBe(2);
+    expect(makora.counter.value).toBe(1);
+    // ollamaglm51 never reached.
+    expect(ollama.counter.value).toBe(0);
     // Failover index advanced to makoraglm51 (index 1).
     expect(lb.getCurrentFailoverIndex()).toBe(1);
   });
@@ -209,15 +240,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
    * backend is futile.
    */
   it('still immediately fails over on 401 auth errors without same-backend retry', async () => {
-    const { provider, counter } = makeFakeProvider((invocation) => {
-      // zai attempt 1: 401 (immediate failover)
-      // makoraglm51 attempt 2: succeeds
-      if (invocation === 1) {
-        return throwStatus('unauthorized', 401)();
-      }
-      return successChunk();
-    });
-    providerManager.registerProvider(provider);
+    const zai = makeFakeProvider(
+      () => throwStatus('unauthorized', 401)(),
+      'zai-provider',
+    );
+    providerManager.registerProvider(zai.provider);
+    const makora = makeFakeProvider(() => successChunk(), 'makora-provider');
+    providerManager.registerProvider(makora.provider);
 
     const lb = new LoadBalancingProvider(
       makeGlmConfig('glm-auth-failover'),
@@ -227,30 +256,39 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     const chunks = await consumeStream(lb, makeOptions());
 
     expect(chunks).toHaveLength(1);
-    // Only 2 invocations: zai 401 → immediate failover → makoraglm51 success.
-    expect(counter.value).toBe(2);
+    // Only 1 invocation on zai: 401 → immediate failover.
+    expect(zai.counter.value).toBe(1);
+    // makoraglm51 succeeded on first attempt.
+    expect(makora.counter.value).toBe(1);
     expect(lb.getCurrentFailoverIndex()).toBe(1);
   });
 
   /**
-   * Full reliability scenario: one backend is healthy (zai), two are
-   * persistently exhausted. The LB must succeed by retrying/failing-over
-   * through the rotation without burning the budget excessively. This is the
-   * scenario described in the issue: "zai is not exhausted, it sometimes
-   * throws minor errors" — a transient 429 on zai should recover on retry,
-   * not cause a loopbreak.
+   * Full reliability scenario from the issue: zai is healthy but sometimes
+   * throws a transient 429; makoraglm51 and ollamaglm51 are persistently
+   * exhausted. The LB must succeed by retrying zai's transient 429 on the
+   * same backend — NOT by failing over to the exhausted backends. This
+   * proves the LB is "as reliable as zai alone" even when the other backends
+   * are down.
    */
-  it('succeeds when the primary backend has a transient 429 and others are persistently exhausted', async () => {
-    const { provider, counter } = makeFakeProvider((invocation) => {
-      // zai attempt 1: transient 429
-      // zai attempt 2 (retry): success
-      // (makoraglm51 and ollamaglm51 never reached)
+  it('succeeds when zai has a transient 429 and other backends are persistently exhausted', async () => {
+    const zai = makeFakeProvider((invocation) => {
       if (invocation === 1) {
         return throwStatus('rate limited', 429)();
       }
       return successChunk();
-    });
-    providerManager.registerProvider(provider);
+    }, 'zai-provider');
+    providerManager.registerProvider(zai.provider);
+    const makora = makeFakeProvider(
+      () => throwStatus('rate limit exhausted', 429)(),
+      'makora-provider',
+    );
+    providerManager.registerProvider(makora.provider);
+    const ollama = makeFakeProvider(
+      () => throwStatus('rate limit exhausted', 429)(),
+      'ollama-provider',
+    );
+    providerManager.registerProvider(ollama.provider);
 
     const lb = new LoadBalancingProvider(
       makeGlmConfig('glm-zai-transient-others-exhausted'),
@@ -261,9 +299,11 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
 
     expect(chunks).toHaveLength(1);
     expect(chunks[0]).toStrictEqual({ type: 'text', content: 'ok' });
-    // Only 2 invocations: zai 429 → retry → zai success.
-    // The LB did NOT fail over to the exhausted backends.
-    expect(counter.value).toBe(2);
+    // zai: 429 then success on retry — never failed over.
+    expect(zai.counter.value).toBe(2);
+    // Exhausted backends never reached because zai succeeded on retry.
+    expect(makora.counter.value).toBe(0);
+    expect(ollama.counter.value).toBe(0);
     expect(lb.getCurrentFailoverIndex()).toBe(0);
   });
 
@@ -273,10 +313,15 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
    * default retryCount=2 and 3 backends, this is 6 delegate invocations.
    */
   it('throws a bounded aggregate error when all backends are persistently 429', async () => {
-    const { provider, counter } = makeFakeProvider(() =>
-      throwStatus('rate limited', 429)(),
-    );
-    providerManager.registerProvider(provider);
+    const counters: Array<{ value: number }> = [];
+    for (const name of ['zai-provider', 'makora-provider', 'ollama-provider']) {
+      const fake = makeFakeProvider(
+        () => throwStatus('rate limited', 429)(),
+        name,
+      );
+      counters.push(fake.counter);
+      providerManager.registerProvider(fake.provider);
+    }
 
     const lb = new LoadBalancingProvider(
       makeGlmConfig('glm-all-persistent-429'),
@@ -287,7 +332,8 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
       /Load balancer "glm-all-persistent-429"/,
     );
 
-    // 3 backends × 2 retries each = 6 bounded invocations.
-    expect(counter.value).toBe(6);
+    // Each backend tried 2 times (retryCount=2). 3 backends × 2 = 6 total.
+    const total = counters.reduce((sum, c) => sum + c.value, 0);
+    expect(total).toBe(6);
   });
 });
