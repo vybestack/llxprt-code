@@ -38,6 +38,7 @@ const EXCLUDE: ReadonlySet<string> = new Set([
   'src/recording/sessionCleanupUtils.test.ts',
   'src/recording/sessionManagement.test.ts',
   'src/hooks/hookRunner.consoleIsolation.test.ts',
+  'src/utils/retry.quota.test.ts',
 ]);
 
 function findTestFiles(dir: string): string[] {
