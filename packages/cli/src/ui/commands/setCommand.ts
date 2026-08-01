@@ -19,6 +19,7 @@ import {
 import {
   resolveAlias,
   isStrictNumericString,
+  validateSetting,
 } from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
 
@@ -59,7 +60,24 @@ function handleSetModelParam(parts: string[]): MessageActionReturn {
   const runtime = getRuntimeApi();
   const paramName = parts[1];
   const rawValue = parts.slice(2).join(' ');
-  const parsedParamValue = parseValue(rawValue);
+  const parsed = parseValue(rawValue);
+
+  // Type-check against the registry before storing. A registered param with
+  // the wrong type would otherwise be persisted verbatim and put a malformed
+  // field on the wire — OpenRouter answers 400 "top_p: Invalid input:
+  // expected number, received string" (issue #2896). Unregistered keys are
+  // still accepted so arbitrary provider-specific passthrough keeps working.
+  const validation = validateSetting(paramName, parsed);
+  if (!validation.success) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content:
+        validation.message ??
+        `Invalid value for model parameter '${paramName}'`,
+    };
+  }
+  const parsedParamValue = validation.value ?? parsed;
 
   try {
     runtime.setActiveModelParam(paramName, parsedParamValue);
