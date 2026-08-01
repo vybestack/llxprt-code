@@ -169,8 +169,9 @@ function renderLinkNode(
       // linked, so the target stays reachable in terminals without OSC 8.
       // The markdown-link pattern stops at the first `)`, so a URL containing
       // an unbalanced `(` was truncated by the tokenizer. Linking a truncated
-      // URL would send the user somewhere they did not ask for, so such links
-      // stay plain text.
+      // URL would send the user somewhere they did not ask for, so no
+      // hyperlink is emitted and the text renders exactly as it did before
+      // links were clickable.
       const combinedLink = hasUnbalancedOpenParen(url)
         ? null
         : createUrlLink(url, `${linkText} (${url})`);

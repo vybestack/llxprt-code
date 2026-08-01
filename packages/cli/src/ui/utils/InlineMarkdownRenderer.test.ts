@@ -138,12 +138,11 @@ describe('RenderInline', () => {
  * The format is: ESC ]8;;URL BEL ... ESC ]8;; BEL
  */
 function extractFirstOsc8Target(text: string): string | null {
-  const prefix = '\x1b]8;;';
-  const start = text.indexOf(prefix);
+  const start = text.indexOf(OSC8_PREFIX);
   if (start === -1) {
     return null;
   }
-  const urlStart = start + prefix.length;
+  const urlStart = start + OSC8_PREFIX.length;
   const belIndex = text.indexOf('\x07', urlStart);
   if (belIndex === -1) {
     return null;
@@ -156,16 +155,15 @@ function extractFirstOsc8Target(text: string): string | null {
  * (between the opening BEL and the closing ESC ]8;;).
  */
 function extractFirstOsc8Label(text: string): string | null {
-  const prefix = '\x1b]8;;';
-  const start = text.indexOf(prefix);
+  const start = text.indexOf(OSC8_PREFIX);
   if (start === -1) {
     return null;
   }
-  const firstBel = text.indexOf('\x07', start + prefix.length);
+  const firstBel = text.indexOf('\x07', start + OSC8_PREFIX.length);
   if (firstBel === -1) {
     return null;
   }
-  const closeStart = text.indexOf(prefix, firstBel + 1);
+  const closeStart = text.indexOf(OSC8_PREFIX, firstBel + 1);
   if (closeStart === -1) {
     return null;
   }
@@ -249,14 +247,10 @@ describe('RenderInline URL linkification', () => {
     });
 
     const flat = flattenText(node);
-    expect(flat).toContain(OSC8_PREFIX);
-    // The label should be a link to the URL
-    expect(flat).toContain('documentation');
-    // The visible (url) fallback should also be present and linkified
-    expect(flat).toContain(`(${url})`);
-
-    // There should be at least one OSC 8 link targeting the URL
     expect(extractFirstOsc8Target(flat)).toBe(url);
+    // Both the label and the visible (url) fallback sit inside the hyperlink,
+    // so the target is reachable in terminals without OSC 8 support too.
+    expect(extractFirstOsc8Label(flat)).toBe(`documentation (${url})`);
   });
 
   it('does not linkify a markdown link with a javascript: scheme (AC-3)', () => {
