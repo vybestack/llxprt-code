@@ -7,39 +7,18 @@
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
-import { StreamingState, ToolCallStatus } from '../../../types.js';
+import { StreamingState } from '../../../types.js';
 import { useSteer } from './useSteer.js';
 
-const executingTool = {
-  type: 'tool_group' as const,
-  tools: [
-    {
-      callId: 'call-1',
-      name: 'shell',
-      description: 'Shell tool',
-      resultDisplay: undefined,
-      status: ToolCallStatus.Executing,
-      confirmationDetails: undefined,
-    },
-  ],
-};
-
 describe('useSteer', () => {
-  it('injects sanitized text while a tool call is outstanding', () => {
+  it('injects sanitized text while streaming with a tool executing', () => {
     const injectSteer = vi.fn();
-    const addMessage = vi.fn();
     const sanitizeContent = vi.fn(() => ({
       text: 'sanitized steer',
       blocked: false,
     }));
     const { result } = renderHook(() =>
-      useSteer(
-        { injectSteer },
-        StreamingState.Responding,
-        sanitizeContent,
-        [executingTool],
-        addMessage,
-      ),
+      useSteer({ injectSteer }, StreamingState.Responding, sanitizeContent),
     );
 
     let consumed = false;
@@ -50,87 +29,60 @@ describe('useSteer', () => {
     expect(consumed).toBe(true);
     expect(sanitizeContent).toHaveBeenCalledWith('raw steer');
     expect(injectSteer).toHaveBeenCalledWith('sanitized steer');
-    expect(addMessage).not.toHaveBeenCalled();
   });
 
-  it('degrades to the normal queue during a final-answer stream', () => {
+  it('injects sanitized text while streaming without a tool executing', () => {
     const injectSteer = vi.fn();
-    const addMessage = vi.fn();
     const { result } = renderHook(() =>
-      useSteer(
-        { injectSteer },
-        StreamingState.Responding,
-        () => ({ text: 'queued steer', blocked: false }),
-        [],
-        addMessage,
-      ),
+      useSteer({ injectSteer }, StreamingState.Responding, () => ({
+        text: 'steer text',
+        blocked: false,
+      })),
     );
 
     let consumed = false;
     act(() => {
-      consumed = result.current('queued steer');
+      consumed = result.current('steer text');
     });
 
     expect(consumed).toBe(true);
-    expect(addMessage).toHaveBeenCalledWith('queued steer');
-    expect(injectSteer).not.toHaveBeenCalled();
+    expect(injectSteer).toHaveBeenCalledWith('steer text');
   });
 
   it('does not consume Ctrl+Enter outside an active response', () => {
     const injectSteer = vi.fn();
-    const addMessage = vi.fn();
     const sanitizeContent = vi.fn();
     const { result } = renderHook(() =>
-      useSteer(
-        { injectSteer },
-        StreamingState.Idle,
-        sanitizeContent,
-        [],
-        addMessage,
-      ),
+      useSteer({ injectSteer }, StreamingState.Idle, sanitizeContent),
     );
 
     expect(result.current('newline')).toBe(false);
     expect(sanitizeContent).not.toHaveBeenCalled();
     expect(injectSteer).not.toHaveBeenCalled();
-    expect(addMessage).not.toHaveBeenCalled();
   });
 
-  it('does not inject or queue blocked content', () => {
+  it('does not inject blocked content', () => {
     const injectSteer = vi.fn();
-    const addMessage = vi.fn();
     const { result } = renderHook(() =>
-      useSteer(
-        { injectSteer },
-        StreamingState.Responding,
-        () => ({ text: '', blocked: true }),
-        [executingTool],
-        addMessage,
-      ),
+      useSteer({ injectSteer }, StreamingState.Responding, () => ({
+        text: '',
+        blocked: true,
+      })),
     );
 
     expect(result.current('blocked')).toBe(false);
     expect(injectSteer).not.toHaveBeenCalled();
-    expect(addMessage).not.toHaveBeenCalled();
   });
 
-  it('does not crash the input handler when sanitization fails', () => {
+  it('does not crash when sanitization fails', () => {
     const injectSteer = vi.fn();
-    const addMessage = vi.fn();
     const { result } = renderHook(() =>
-      useSteer(
-        { injectSteer },
-        StreamingState.Responding,
-        () => {
-          throw new Error('sanitizer failure');
-        },
-        [executingTool],
-        addMessage,
-      ),
+      useSteer({ injectSteer }, StreamingState.Responding, () => {
+        throw new Error('sanitizer failure');
+      }),
     );
 
     expect(result.current('steer')).toBe(false);
     expect(injectSteer).not.toHaveBeenCalled();
-    expect(addMessage).not.toHaveBeenCalled();
   });
 });

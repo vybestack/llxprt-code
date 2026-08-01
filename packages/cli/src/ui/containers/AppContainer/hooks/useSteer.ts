@@ -5,8 +5,7 @@
  */
 
 import { useCallback } from 'react';
-import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
-import { isToolExecuting } from './useInputHandling.js';
+import { StreamingState } from '../../../types.js';
 
 interface SteerAgent {
   injectSteer(text: string): void;
@@ -22,8 +21,6 @@ export function useSteer(
   agent: SteerAgent,
   streamingState: StreamingState,
   sanitizeContent: (text: string) => SanitizedContent,
-  pendingHistoryItems: HistoryItemWithoutId[],
-  addMessage: (message: string) => void,
 ): (text: string) => boolean {
   return useCallback(
     (text: string): boolean => {
@@ -39,13 +36,12 @@ export function useSteer(
       if (sanitized.blocked || sanitized.text.length === 0) {
         return false;
       }
-      if (!isToolExecuting(pendingHistoryItems)) {
-        addMessage(sanitized.text);
-        return true;
-      }
+      // The AgenticLoop buffers steer text in pendingSteer and drains it at
+      // the next iteration boundary — works whether or not a tool is
+      // currently executing.
       agent.injectSteer(sanitized.text);
       return true;
     },
-    [streamingState, sanitizeContent, pendingHistoryItems, addMessage, agent],
+    [streamingState, sanitizeContent, agent],
   );
 }

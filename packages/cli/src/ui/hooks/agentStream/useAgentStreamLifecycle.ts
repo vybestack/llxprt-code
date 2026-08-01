@@ -34,16 +34,25 @@ import type { StreamRuntime } from '../../cliUiRuntime.js';
 export function useStreamingState(
   isResponding: boolean,
   toolCalls: TrackedToolCall[],
+  turnCancelled = false,
 ): StreamingState {
   return useMemo(() => {
     if (toolCalls.some((tc) => tc.status === 'awaiting_approval')) {
       return StreamingState.WaitingForConfirmation;
     }
-    if (isResponding || toolCalls.some(isOutstandingToolCall)) {
+    // When the user explicitly cancelled the turn, treat outstanding tool calls
+    // as already settled so streamingState returns to Idle. This unblocks the
+    // idle-queue-drain effect so queued messages are processed after cancel
+    // (issue #2882). Without this, cancelled-but-not-displayCleared tool calls
+    // keep streamingState stuck at Responding indefinitely.
+    if (
+      isResponding ||
+      (!turnCancelled && toolCalls.some(isOutstandingToolCall))
+    ) {
       return StreamingState.Responding;
     }
     return StreamingState.Idle;
-  }, [isResponding, toolCalls]);
+  }, [isResponding, toolCalls, turnCancelled]);
 }
 
 function isOutstandingToolCall(tc: TrackedToolCall): boolean {
@@ -209,6 +218,7 @@ export function useShellCommandSetup({
 export function useCancellation(
   streamingState: StreamingState,
   turnCancelledRef: React.MutableRefObject<boolean>,
+  setTurnCancelled: (value: boolean) => void,
   abortControllerRef: React.MutableRefObject<AbortController | null>,
   cancelAllToolCalls: () => void,
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>,
@@ -220,6 +230,7 @@ export function useCancellation(
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void,
   setIsResponding: React.Dispatch<React.SetStateAction<boolean>>,
   setShellInputFocused: (value: boolean) => void,
+  drainSuppressedRef: React.MutableRefObject<boolean>,
   cancelRunningAsyncTasks: () => void = () => {},
 ) {
   const cancelOngoingRequest = useCallback(() => {
@@ -230,7 +241,12 @@ export function useCancellation(
       return;
     }
     if (turnCancelledRef.current) return;
-    turnCancelledRef.current = true;
+    setTurnCancelled(true);
+    // Suppress automatic queue draining so queued messages stay in the drawer
+    // after cancel. The user can explicitly send them (Enter on empty input)
+    // or clear them (Backspace on empty input). Submitting a new message
+    // resumes normal drain (issue #2882).
+    drainSuppressedRef.current = true;
     abortControllerRef.current?.abort();
     cancelAllToolCalls();
     cancelRunningAsyncTasks();
@@ -243,6 +259,8 @@ export function useCancellation(
   }, [
     streamingState,
     turnCancelledRef,
+    setTurnCancelled,
+    drainSuppressedRef,
     abortControllerRef,
     cancelAllToolCalls,
     cancelRunningAsyncTasks,

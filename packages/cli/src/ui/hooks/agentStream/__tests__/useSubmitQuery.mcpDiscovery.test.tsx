@@ -146,6 +146,7 @@ function renderUseSubmitQuery(
     settings: {} as never,
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
+    setTurnCancelled: vi.fn(),
     onAuthError: deps.onAuthError,
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: vi.fn(),
@@ -156,6 +157,7 @@ function renderUseSubmitQuery(
     thinkingBlocksRef: { current: [] },
     turnCancelledRef: { current: false },
     queuedSubmissionsRef: { current: [] },
+    drainSuppressedRef: { current: false },
     enqueueSubmission: vi.fn((sub: QueuedSubmission) =>
       hookDeps.queuedSubmissionsRef.current.push(sub),
     ),
