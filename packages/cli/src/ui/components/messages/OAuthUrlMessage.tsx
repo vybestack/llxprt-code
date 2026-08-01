@@ -7,7 +7,10 @@
 import type React from 'react';
 import { Text, Box } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
-import { createUrlLink } from '../../utils/terminalLinks.js';
+import {
+  createUrlLink,
+  stripControlCharacters,
+} from '../../utils/terminalLinks.js';
 
 interface OAuthUrlMessageProps {
   text: string;
@@ -58,7 +61,7 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         </Box>
         <Box>
           <Text color={SemanticColors.text.link} wrap="wrap">
-            {urlLink ?? url}
+            {urlLink ?? stripControlCharacters(url)}
           </Text>
         </Box>
         <Box>

@@ -15,6 +15,7 @@ import {
   createOsc8Link,
   createUrlLink,
   isLinkableHttpUrl,
+  stripControlCharacters,
 } from './terminalLinks.js';
 
 const OSC8_OPEN = '\x1b]8;;';
@@ -264,6 +265,37 @@ describe('createUrlLink', () => {
 
     // A host that merely contains similar text is still linkable
     expect(isLinkableHttpUrl('https://evil.com/example.com')).toBe(true);
+  });
+
+  it('keeps percent-encoded control characters encoded rather than decoding them (AC-3)', () => {
+    // The WHATWG parser never decodes percent escapes, and the link embeds the
+    // candidate as given, so %1B cannot become a live ESC byte in the output.
+    const url = 'https://example.com/%1B]8;;evil%07';
+    expect(new URL(url).href).toBe(url);
+
+    const link = createUrlLink(url);
+    expect(link).not.toBeNull();
+    expect(link).toContain('%1B');
+    expect(link?.indexOf('\u001b')).toBe(0);
+    expect(link?.lastIndexOf('\u001b')).toBe(
+      (link?.length ?? 0) - `\u001b]8;;\u0007`.length,
+    );
+  });
+
+  it('strips control characters from text that failed validation', () => {
+    expect(stripControlCharacters('https://evil.test/\u001b[2Jx')).toBe(
+      'https://evil.test/[2Jx',
+    );
+    expect(stripControlCharacters('https://evil.test/\u0007')).toBe(
+      'https://evil.test/',
+    );
+    // Unchanged when there is nothing to strip
+    const clean = 'https://example.com/path?q=1';
+    expect(stripControlCharacters(clean)).toBe(clean);
+    // Non-ASCII text is preserved
+    expect(stripControlCharacters('https://例え.テスト/パス')).toBe(
+      'https://例え.テスト/パス',
+    );
   });
 
   it('rejects a label containing control characters (AC-3)', () => {

@@ -9,7 +9,11 @@ import { Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import stringWidth from 'string-width';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { createFilePathLink, createUrlLink } from './terminalLinks.js';
+import {
+  createFilePathLink,
+  createUrlLink,
+  stripControlCharacters,
+} from './terminalLinks.js';
 
 // Constants for Markdown parsing
 const BOLD_MARKER_LENGTH = 2; // For "**"
@@ -185,7 +189,7 @@ function renderLinkNode(
       return (
         <Text key={key} color={baseColor}>
           {linkText}
-          <Text color={theme.text.link}> ({url})</Text>
+          <Text color={theme.text.link}> ({stripControlCharacters(url)})</Text>
         </Text>
       );
     }
@@ -228,7 +232,9 @@ function renderBareUrlNode(
   const urlLink = createUrlLink(url);
   return (
     <Text key={key} color={baseColor}>
-      <Text color={theme.text.link}>{urlLink ?? url}</Text>
+      <Text color={theme.text.link}>
+        {urlLink ?? stripControlCharacters(url)}
+      </Text>
       {trailing.length > 0 && <Text color={baseColor}>{trailing}</Text>}
     </Text>
   );

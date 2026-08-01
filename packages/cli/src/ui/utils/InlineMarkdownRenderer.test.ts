@@ -331,6 +331,20 @@ describe('RenderInline URL linkification', () => {
     expect(flat).toContain('curl https://example.com/api');
   });
 
+  it('never prints raw control characters from a URL it refused to linkify (AC-3)', () => {
+    // The bare-URL pattern is \S+, which matches control bytes, so an escape
+    // sequence can ride inside a URL token. It must not reach the terminal.
+    const node = renderInlineNode({
+      text: 'See https://evil.test/\u001b[2J\u0007x now',
+    });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).not.toContain('\u001b');
+    expect(flat).not.toContain('\u0007');
+    expect(flat).toContain('https://evil.test/[2Jx');
+  });
+
   it('rejects dangerous schemes regardless of letter case (AC-3)', () => {
     for (const scheme of [
       'JavaScript:alert(1)',

@@ -73,6 +73,26 @@ export function isLinkableHttpUrl(candidate: string): boolean {
 }
 
 /**
+ * Remove C0/C1 control characters from text that is about to be printed
+ * verbatim. Used for URL text that failed `isLinkableHttpUrl`: refusing to
+ * hyperlink a candidate but then echoing its raw escape bytes to the terminal
+ * would defeat the check.
+ */
+export function stripControlCharacters(text: string): string {
+  if (!hasControlCharacter(text)) {
+    return text;
+  }
+  let result = '';
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code > 0x1f && !(code >= 0x7f && code <= 0x9f)) {
+      result += character;
+    }
+  }
+  return result;
+}
+
+/**
  * Create an OSC 8 hyperlink for the given URL. The visible label defaults to
  * the URL itself. Returns `null` when the URL is not a safe, linkable
  * HTTP(S) URL, or when the label contains control characters that would
