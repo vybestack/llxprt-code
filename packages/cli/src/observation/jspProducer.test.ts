@@ -11,7 +11,14 @@ import {
   OBSERVER_LEASE_MS,
   type JspProducerHooks,
 } from './jspProducer.js';
+import type { JspPostResult } from './jspPublisher.js';
 import type { JspBootstrap, JspProducerIdentity } from './jspSchema.js';
+
+const OK: JspPostResult = { kind: 'ok' };
+const REJECTED_409: JspPostResult = { kind: 'rejected', status: 409 };
+const REJECTED_401: JspPostResult = { kind: 'rejected', status: 401 };
+const REJECTED_403: JspPostResult = { kind: 'rejected', status: 403 };
+const TRANSPORT: JspPostResult = { kind: 'transport' };
 
 const bootstrap: JspBootstrap = {
   schema: 1,
@@ -50,13 +57,13 @@ function makeHarness(): {
       createIdentity: () => identity,
       register: (snapshot) => {
         published.push(snapshot);
-        return Promise.resolve(true);
+        return Promise.resolve(OK);
       },
       publish: (document) => {
         published.push(document);
-        return Promise.resolve(true);
+        return Promise.resolve(OK);
       },
-      heartbeat: () => Promise.resolve(true),
+      heartbeat: () => Promise.resolve(OK),
     },
   };
 }
@@ -75,11 +82,11 @@ describe('heartbeat cadence', () => {
     const hooks: JspProducerHooks = {
       ...bootstrapped.hooks,
       now: () => clock,
-      register: () => Promise.resolve(true),
-      publish: () => Promise.resolve(true),
+      register: () => Promise.resolve(OK),
+      publish: () => Promise.resolve(OK),
       heartbeat: () => {
         sent.push(clock);
-        return Promise.resolve(true);
+        return Promise.resolve(OK);
       },
     };
     const producer = new JspProducer(bootstrap, nativeSession, hooks);
@@ -198,9 +205,9 @@ describe('JspProducer', () => {
     const hooks: JspProducerHooks = {
       now: () => 100,
       createIdentity: () => identity,
-      register: () => Promise.resolve(false),
+      register: () => Promise.resolve(REJECTED_409),
       publish: () => Promise.reject(new Error('offline')),
-      heartbeat: () => Promise.resolve(false),
+      heartbeat: () => Promise.resolve(TRANSPORT),
     };
     const producer = new JspProducer(bootstrap, nativeSession, hooks, {
       capacity: 1,
@@ -212,5 +219,159 @@ describe('JspProducer', () => {
       producer.observeTurnEnded('completed');
     }).not.toThrow();
     producer.stop();
+  });
+
+  it('does not retry registration after a 409 (epoch conflict is terminal)', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => {
+        registerCalls += 1;
+        return Promise.resolve(REJECTED_409);
+      },
+      publish: () => Promise.resolve(OK),
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    // After the terminal rejection, subsequent foreground events must not
+    // trigger another registration attempt.
+    producer.observeTurnStarted();
+    producer.observeActivityChanged('acting');
+    producer.observeTurnEnded('completed');
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+  });
+
+  it('stops the producer permanently on a 401 (credential revoked)', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => {
+        registerCalls += 1;
+        return Promise.resolve(REJECTED_401);
+      },
+      publish: () => Promise.resolve(OK),
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    producer.observeTurnStarted();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+  });
+
+  it('stops the producer permanently on a 403 (credential forbidden)', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => {
+        registerCalls += 1;
+        return Promise.resolve(REJECTED_403);
+      },
+      publish: () => Promise.resolve(OK),
+      heartbeat: () => Promise.resolve(OK),
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    producer.observeTurnStarted();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    producer.stop();
+  });
+
+  it('retries registration after a transport failure and then succeeds', async () => {
+    let registerCalls = 0;
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    const published: JspBoundDocument[] = [];
+    let heartbeatStarted = false;
+    let clock = 0;
+    const hooks: JspProducerHooks = {
+      now: () => clock,
+      createIdentity: () => identity,
+      register: () => {
+        registerCalls += 1;
+        // First attempt: transport failure. Second attempt: succeed.
+        if (registerCalls === 1) {
+          return Promise.resolve(TRANSPORT);
+        }
+        return Promise.resolve(OK);
+      },
+      publish: (document) => {
+        published.push(document);
+        return Promise.resolve(OK);
+      },
+      heartbeat: () => {
+        heartbeatStarted = true;
+        return Promise.resolve(OK);
+      },
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+      heartbeatMs: 10,
+    });
+    producer.start();
+    await producer.flush();
+    expect(registerCalls).toBe(1);
+    expect(heartbeatStarted).toBe(false);
+    // Advance the clock past the backoff window, then trigger another event.
+    clock += 6_000;
+    producer.observeTurnStarted();
+    await producer.flush();
+    expect(registerCalls).toBe(2);
+    // Give the short heartbeat interval time to fire.
+    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    expect(heartbeatStarted).toBe(true);
+    producer.stop();
+  });
+
+  it('starts the heartbeat after a successful registration', async () => {
+    const identity = makeHarness().hooks.createIdentity(bootstrap);
+    let heartbeatCount = 0;
+    const hooks: JspProducerHooks = {
+      now: () => 5000,
+      createIdentity: () => identity,
+      register: () => Promise.resolve(OK),
+      publish: () => Promise.resolve(OK),
+      heartbeat: () => {
+        heartbeatCount += 1;
+        return Promise.resolve(OK);
+      },
+    };
+    const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+      heartbeatMs: 10,
+    });
+    producer.start();
+    await producer.flush();
+    // Wait long enough for at least one heartbeat interval to fire.
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    expect(heartbeatCount).toBeGreaterThan(0);
+    producer.stop();
+  });
+
+  it('does not mutate state after stop (stopped producer is inert)', async () => {
+    const { hooks, published } = makeHarness();
+    const producer = new JspProducer(bootstrap, nativeSession, hooks);
+    producer.start();
+    await producer.flush();
+    const sequenceBefore = producer.snapshot().source_sequence;
+    producer.stop();
+    published.length = 0;
+    producer.observeTurnStarted();
+    producer.observeActivityChanged('acting');
+    producer.observeTurnEnded('completed');
+    // State and published documents must be unchanged after stop.
+    expect(producer.snapshot().source_sequence).toBe(sequenceBefore);
+    expect(published).toStrictEqual([]);
   });
 });

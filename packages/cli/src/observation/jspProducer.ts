@@ -31,6 +31,7 @@ import {
   truncateToByteBound,
 } from './jspRedaction.js';
 import { JspBoundedQueue, type JspQueueSink } from './jspQueue.js';
+import type { JspPostResult } from './jspPublisher.js';
 
 const DEFAULT_AGENT_SCOPE = 'primary';
 const DEFAULT_QUEUE_CAPACITY = 512;
@@ -52,6 +53,46 @@ const DEFAULT_HEARTBEAT_MS = 5_000;
 const REGISTRATION_RETRY_BACKOFF_MS = 5_000;
 const MAX_REGISTRATION_ATTEMPTS = 10;
 
+/**
+ * How the producer should react to a broker outcome.
+ *
+ * - `accepted`: the document was delivered; proceed normally.
+ * - `retryable`: a transient failure (5xx or transport). Retry with bounded
+ *   backoff.
+ * - `terminal`: a permanent rejection (401/403/409/400). The producer must
+ *   stop rather than spin on a result that cannot change.
+ */
+type PostOutcomeClassification = 'accepted' | 'retryable' | 'terminal';
+
+function classifyPostResult(result: JspPostResult): PostOutcomeClassification {
+  if (result.kind === 'ok') {
+    return 'accepted';
+  }
+  if (result.kind === 'transport') {
+    return 'retryable';
+  }
+  // 401/403: credential unknown, revoked, or mis-bound. Retrying an identical
+  // request cannot succeed.
+  // 409: a different epoch owns this registration. This producer is stale.
+  // 400: malformed document/protocol. Retrying the identical snapshot cannot
+  // produce a different result.
+  if (
+    result.status === 401 ||
+    result.status === 403 ||
+    result.status === 409 ||
+    result.status === 400
+  ) {
+    return 'terminal';
+  }
+  // All other non-2xx (notably 5xx) are transient.
+  return 'retryable';
+}
+
+/** True when the status code means the credential is no longer valid. */
+function isCredentialFailure(result: JspPostResult): boolean {
+  return result.kind === 'rejected' && (result.status === 401 || result.status === 403);
+}
+
 interface NativeTodoLike {
   readonly content: string;
   readonly status: string;
@@ -60,9 +101,9 @@ interface NativeTodoLike {
 export interface JspProducerHooks {
   readonly now: () => number;
   readonly createIdentity: (bootstrap: JspBootstrap) => JspProducerIdentity;
-  readonly register: (snapshot: JspSnapshotDocument) => Promise<boolean>;
-  readonly publish: (document: JspBoundDocument) => Promise<boolean>;
-  readonly heartbeat: (document: JspHeartbeatDocument) => Promise<boolean>;
+  readonly register: (snapshot: JspSnapshotDocument) => Promise<JspPostResult>;
+  readonly publish: (document: JspBoundDocument) => Promise<JspPostResult>;
+  readonly heartbeat: (document: JspHeartbeatDocument) => Promise<JspPostResult>;
   readonly noContent?: boolean;
 }
 
@@ -73,11 +114,12 @@ export interface JspProducerOptions {
 
 class ProducerQueueSink implements JspQueueSink {
   constructor(
-    private readonly publish: (document: JspBoundDocument) => Promise<boolean>,
+    private readonly publish: (document: JspBoundDocument) => Promise<JspPostResult>,
   ) {}
 
-  send(document: JspBoundDocument): Promise<boolean> {
-    return this.publish(document);
+  async send(document: JspBoundDocument): Promise<boolean> {
+    const result = await this.publish(document);
+    return result.kind === 'ok';
   }
 }
 
@@ -91,6 +133,7 @@ export class JspProducer {
   private todoRevision = 0;
   private started = false;
   private registered = false;
+  private registrationTerminal = false;
   private registrationTask: Promise<void> | null = null;
   private registrationAttempts = 0;
   private lastRegistrationMs = 0;
@@ -136,7 +179,7 @@ export class JspProducer {
       this.observeSessionEnded();
       await this.flush();
       if (this.registered) {
-        await this.hooks.publish(this.snapshot()).catch(() => false);
+        await this.hooks.publish(this.snapshot()).catch(() => undefined);
       }
     }
     this.stop();
@@ -154,7 +197,12 @@ export class JspProducer {
   }
 
   private ensureRegistered(): void {
-    if (!this.started || this.registered || this.registrationTask !== null) {
+    if (
+      !this.started ||
+      this.registered ||
+      this.registrationTerminal ||
+      this.registrationTask !== null
+    ) {
       return;
     }
     // Registration is attempted from the foreground event path, so an
@@ -176,8 +224,19 @@ export class JspProducer {
     const initial = this.snapshot();
     this.registrationTask = this.hooks
       .register(initial)
-      .then((accepted) => {
-        if (!accepted || !this.started) {
+      .then((result) => {
+        const classification = classifyPostResult(result);
+        if (classification === 'terminal') {
+          // 401/403/409/400 are permanent: retrying the identical snapshot
+          // cannot succeed. Stop the producer so it does not spin or send
+          // heartbeats into a broker that has rejected the registration.
+          this.registrationTerminal = true;
+          this.stopHeartbeat();
+          return;
+        }
+        if (classification !== 'accepted' || !this.started) {
+          // Retryable: leave registered false so the next foreground event
+          // re-attempts within the backoff budget.
           return;
         }
         this.registered = true;
@@ -224,11 +283,24 @@ export class JspProducer {
         source_epoch: this.identity.sourceEpoch,
         bridge_observed_ms: this.hooks.now(),
       };
-      void this.hooks.heartbeat(document);
+      void this.hooks.heartbeat(document).then((result) => {
+        // A 401/403 on heartbeat means the credential is revoked or mis-bound.
+        // Stop the producer rather than sending heartbeats into a broker that
+        // no longer recognizes it.
+        if (isCredentialFailure(result)) {
+          this.stop();
+        }
+      });
     }, heartbeatMs);
   }
 
   private applyAndPublish(transition: JspTransition): void {
+    // After stop() the producer is no longer publishing. Allowing state to
+    // mutate here would let snapshot() report state that was never published,
+    // so a stopped producer must be inert.
+    if (!this.started) {
+      return;
+    }
     this.state = applyTransition(this.state, transition, this.hooks.now);
     if (!this.registered) {
       this.ensureRegistered();

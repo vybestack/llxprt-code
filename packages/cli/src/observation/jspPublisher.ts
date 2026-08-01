@@ -11,10 +11,22 @@ import type {
 } from './jspDocuments.js';
 import type { JspBootstrap } from './jspSchema.js';
 
+/**
+ * The outcome of a single HTTP exchange with the JSP/1 broker.
+ *
+ * The broker distinguishes a small set of failure classes that the producer
+ * must act on differently, so collapsing every non-2xx to a boolean loses the
+ * information needed to stop retrying a permanently-rejected registration.
+ */
+export type JspPostResult =
+  | { readonly kind: 'ok' }
+  | { readonly kind: 'rejected'; readonly status: number }
+  | { readonly kind: 'transport' };
+
 export interface JspPublisher {
-  register(snapshot: JspSnapshotDocument): Promise<boolean>;
-  publish(document: JspBoundDocument): Promise<boolean>;
-  heartbeat(document: JspHeartbeatDocument): Promise<boolean>;
+  register(snapshot: JspSnapshotDocument): Promise<JspPostResult>;
+  publish(document: JspBoundDocument): Promise<JspPostResult>;
+  heartbeat(document: JspHeartbeatDocument): Promise<JspPostResult>;
 }
 
 /** Bound each publish so a stalled broker cannot wedge the queue. */
@@ -38,19 +50,19 @@ export class JspHttpPublisher implements JspPublisher {
     this.registrationId = bootstrap.registrationId;
   }
 
-  register(snapshot: JspSnapshotDocument): Promise<boolean> {
+  register(snapshot: JspSnapshotDocument): Promise<JspPostResult> {
     return this.post('/register', snapshot);
   }
 
-  publish(document: JspBoundDocument): Promise<boolean> {
+  publish(document: JspBoundDocument): Promise<JspPostResult> {
     return this.post('/publish', document);
   }
 
-  heartbeat(document: JspHeartbeatDocument): Promise<boolean> {
+  heartbeat(document: JspHeartbeatDocument): Promise<JspPostResult> {
     return this.post('/heartbeat', document);
   }
 
-  private async post(path: string, body: unknown): Promise<boolean> {
+  private async post(path: string, body: unknown): Promise<JspPostResult> {
     // A broker that accepts the connection but never responds would otherwise
     // hang this request forever. The queue drains sequentially, so one hung
     // request stalls every later document and blocks shutdown. Bound it.
@@ -70,9 +82,12 @@ export class JspHttpPublisher implements JspPublisher {
       // Leaving the body unread can hold the connection open in undici, so
       // drain it before reporting the result.
       await response.arrayBuffer().catch(() => undefined);
-      return response.ok;
+      if (response.ok) {
+        return { kind: 'ok' };
+      }
+      return { kind: 'rejected', status: response.status };
     } catch {
-      return false;
+      return { kind: 'transport' };
     } finally {
       clearTimeout(timer);
     }

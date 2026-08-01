@@ -83,26 +83,51 @@ function bootstrap(port: number): JspBootstrap {
   };
 }
 
-function startServer(): Promise<{
+function headerValue(
+  value: string | string[] | undefined,
+): string {
+  if (value === undefined) {
+    return '';
+  }
+  return Array.isArray(value) ? value.join(',') : value;
+}
+
+interface CapturedRequest {
+  readonly method: string;
+  readonly url: string;
+  readonly contentType: string;
+  readonly registrationId: string;
+  readonly authorization: string;
+  readonly body: string;
+}
+
+interface ServerHandle {
   readonly server: Server;
-  readonly requests: string[];
-  readonly registrationIds: string[];
+  readonly requests: CapturedRequest[];
   readonly port: number;
-}> {
+  setStatus(status: number): void;
+}
+
+function startServer(): Promise<ServerHandle> {
+  const requests: CapturedRequest[] = [];
+  let status = 200;
   return new Promise((resolve, reject) => {
-    const requests: string[] = [];
-    const registrationIds: string[] = [];
     const server = createServer((request, response) => {
-      requests.push(request.url ?? '');
-      const registrationId = request.headers['jsp-registration-id'];
-      registrationIds.push(
-        Array.isArray(registrationId)
-          ? registrationId.join(',')
-          : (registrationId ?? ''),
-      );
-      request.resume();
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk;
+      });
       request.on('end', () => {
-        response.writeHead(200);
+        const headers = request.headers;
+        requests.push({
+          method: request.method ?? '',
+          url: request.url ?? '',
+          contentType: headerValue(headers['content-type']),
+          registrationId: headerValue(headers['jsp-registration-id']),
+          authorization: headerValue(headers['authorization']),
+          body,
+        });
+        response.writeHead(status);
         response.end();
       });
     });
@@ -113,7 +138,14 @@ function startServer(): Promise<{
         reject(new Error('loopback server did not bind a TCP port'));
         return;
       }
-      resolve({ server, requests, registrationIds, port: address.port });
+      resolve({
+        server,
+        requests,
+        port: address.port,
+        setStatus: (s: number) => {
+          status = s;
+        },
+      });
     });
   });
 }
@@ -127,20 +159,51 @@ describe('JSP transport', () => {
     }
   });
 
-  it('registers the initial snapshot and publishes through authenticated routes', async () => {
+  it('registers the initial snapshot and publishes through authenticated POST routes', async () => {
     const started = await startServer();
     servers.push(started.server);
     const publisher = new JspHttpPublisher(bootstrap(started.port));
-    expect(await publisher.register(snapshot)).toBe(true);
-    expect(await publisher.publish(snapshot)).toBe(true);
-    expect(started.requests).toStrictEqual([
+    expect(await publisher.register(snapshot)).toStrictEqual({ kind: 'ok' });
+    expect(await publisher.publish(snapshot)).toStrictEqual({ kind: 'ok' });
+    expect(started.requests.map((r) => r.url)).toStrictEqual([
       '/jsp/1/register',
       '/jsp/1/publish',
     ]);
-    expect(started.registrationIds).toStrictEqual([
-      'registration-a',
-      'registration-a',
-    ]);
+    // Every request must be POST with JSON content-type and auth header.
+    for (const req of started.requests) {
+      expect(req.method).toBe('POST');
+      expect(req.contentType).toBe('application/json');
+      expect(req.authorization).toBe('Bearer credential-a');
+      expect(req.registrationId).toBe('registration-a');
+    }
+    // Validate the JSON body shape of the registration document.
+    const registerBody = JSON.parse(started.requests[0].body) as Record<
+      string,
+      unknown
+    >;
+    expect(registerBody['kind']).toBe('snapshot');
+    expect(registerBody['schema']).toBe(1);
+    expect(registerBody['agent_id']).toBe('agent-a');
+    expect(registerBody['native_session']).toMatchObject({
+      repository: 'repo',
+      agent_kind: 'llxprt',
+    });
+  });
+
+  it('reports rejection instead of throwing when the broker answers non-2xx', async () => {
+    const started = await startServer();
+    servers.push(started.server);
+    started.setStatus(409);
+    const publisher = new JspHttpPublisher(bootstrap(started.port));
+    const result = await publisher.register(snapshot);
+    expect(result).toStrictEqual({ kind: 'rejected', status: 409 });
+  });
+
+  it('reports transport failure when the broker is unreachable', async () => {
+    // Point at a port that is guaranteed not to have a listener.
+    const publisher = new JspHttpPublisher(bootstrap(1));
+    const result = await publisher.register(snapshot);
+    expect(result).toStrictEqual({ kind: 'transport' });
   });
 
   it('bounds synchronous enqueue and marks snapshot-first recovery on overflow', () => {
