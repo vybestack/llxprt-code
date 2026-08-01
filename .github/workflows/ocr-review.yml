@@ -4472,7 +4472,23 @@ jobs:
                     await deleteDuplicateMarkerComments(postCreateComments, surviving.id);
                     return surviving;
                   }
-                  await deleteDuplicateMarkerComments(postCreateComments, created?.data?.id ?? null);
+                  // The created comment IS canonical here. A concurrently
+                  // posted duplicate may still carry a HIGHER count, and
+                  // deleting it would silently regress the counter — so merge
+                  // the maximum across the snapshot into the survivor first.
+                  const createdId = created?.data?.id ?? null;
+                  const highestCount = resolveHiddenAutoCount(postCreateComments, trustedLogins, MARKER);
+                  if (createdId !== null && highestCount > parseHiddenAutoCount(created?.data?.body)) {
+                    const mergedBody = applyNonRegressingCount(
+                      summary,
+                      '<!-- ocr-auto-count:' + highestCount + ' -->',
+                      false,
+                    );
+                    await github.rest.issues.updateComment({
+                      owner, repo, comment_id: createdId, body: mergedBody,
+                    });
+                  }
+                  await deleteDuplicateMarkerComments(postCreateComments, createdId);
                 } catch (reconcileErr) {
                   core.warning(redactSecretDiagnostics(`Post-create reconciliation failed; duplicate marker comments may remain: ${reconcileErr.message || reconcileErr}`));
                 }
