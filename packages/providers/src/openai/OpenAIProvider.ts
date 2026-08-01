@@ -836,13 +836,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
     const settings = this.resolveSettingsService();
-    const format = resolveToolFormat(
-      modelName,
-      this.name,
-      settings,
-      new DebugLogger('llxprt:provider:openai'),
-    );
     const logger = new DebugLogger('llxprt:provider:openai');
+    const format = resolveToolFormat(modelName, this.name, settings, logger);
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: this.getModel(),
@@ -971,7 +966,4 @@ function resolveAgentSettings(
  * Prevents re-uploading the same PDF across turns within a session.
  * Bounded via the wrapper to avoid unbounded memory growth.
  */
-const KIMI_FILE_UPLOAD_CACHE_CAPACITY = 100;
-const kimiFileUploadCache = createBoundedCache<string>(
-  KIMI_FILE_UPLOAD_CACHE_CAPACITY,
-);
+const kimiFileUploadCache = createBoundedCache<string>(100);

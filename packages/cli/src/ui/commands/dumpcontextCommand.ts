@@ -41,7 +41,10 @@ type ConfigWithMaybeAgentClient = NonNullable<
 
 type ProviderManagerWithActive = {
   getActiveProviderName?: () => string | undefined;
-  getActiveProvider?: () => { getCurrentModel?: () => string | undefined };
+  getActiveProvider?: () => {
+    getCurrentModel?: () => string | undefined;
+    baseURL?: string;
+  };
 };
 
 const historyUnavailableMessage =
@@ -84,17 +87,26 @@ function getHistoryService(
 
 function getProviderDumpMetadata(
   config: NonNullable<CommandContext['services']['config']>,
-): { providerName: string; activeModel: string | undefined } {
+): {
+  providerName: string;
+  activeModel: string | undefined;
+  activeBaseURL: string | undefined;
+} {
   const providerManager = config.getProviderManager() as
     | ProviderManagerWithActive
     | undefined;
   if (!providerManager) {
-    return { providerName: 'backend', activeModel: undefined };
+    return {
+      providerName: 'backend',
+      activeModel: undefined,
+      activeBaseURL: undefined,
+    };
   }
   const activeProvider = providerManager.getActiveProvider?.();
   return {
     providerName: providerManager.getActiveProviderName?.() ?? 'backend',
     activeModel: activeProvider?.getCurrentModel?.(),
+    activeBaseURL: activeProvider?.baseURL,
   };
 }
 
@@ -111,7 +123,8 @@ async function dumpImmediateContext(
     };
   }
   const history = historyService.getAll() as IContent[];
-  const { providerName, activeModel } = getProviderDumpMetadata(config);
+  const { providerName, activeModel, activeBaseURL } =
+    getProviderDumpMetadata(config);
   const request = {
     url: 'immediate-context-dump',
     method: 'DUMP',
@@ -121,6 +134,7 @@ async function dumpImmediateContext(
       settings: context.services.settings,
       config,
       model: activeModel,
+      baseURL: activeBaseURL,
     }),
   };
   const result = await dumpRequestContext(request, providerName);
