@@ -24,40 +24,7 @@ import type {
 } from './github-broker-types.js';
 import { validateParams } from './github-broker-validation.js';
 import { extractString } from './github-broker-shaping.js';
-
-/**
- * Appends `--repo owner/name` when a repo parameter is present.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-009
- * @pseudocode 003-github-broker.md lines 52-55
- */
-function appendRepo(argv: string[], params: Record<string, unknown>): void {
-  if (typeof params.repo === 'string') argv.push('--repo', params.repo);
-}
-
-/**
- * Appends each element of a repeatable string-array parameter as `flag value`.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-function appendRepeatable(argv: string[], flag: string, value: unknown): void {
-  if (!Array.isArray(value)) return;
-  for (const entry of value) {
-    if (typeof entry === 'string') argv.push(flag, entry);
-  }
-}
-
-/**
- * Appends `flag value` when the value is a non-empty string.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-function appendString(argv: string[], flag: string, value: unknown): void {
-  if (typeof value === 'string' && value.length > 0) argv.push(flag, value);
-}
+import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
 
 /**
  * Extracts the trimmed URL that gh create commands print on stdout, and the
@@ -119,8 +86,8 @@ export function buildIssueCreateArgv(
   const argv: string[] = ['issue', 'create'];
   appendString(argv, '--title', params.title);
   appendString(argv, '--body-file', params.body);
-  appendRepeatable(argv, '--label', params.label);
-  appendString(argv, '--assignee', params.assignee);
+  appendMulti(argv, '--label', params.label);
+  appendMulti(argv, '--assignee', params.assignee);
   appendString(argv, '--milestone', params.milestone);
   appendString(argv, '--project', params.project);
   appendRepo(argv, params);

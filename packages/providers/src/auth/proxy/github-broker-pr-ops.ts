@@ -20,6 +20,7 @@ import type {
 } from './github-broker-types.js';
 import { resolveLimit, validateParams } from './github-broker-validation.js';
 import { watchChecks } from './github-broker-watch.js';
+import { resolveOwnerName } from './github-broker-multistep-ops.js';
 import {
   assertNotPartialSuccess,
   extractAuthor,
@@ -604,12 +605,16 @@ const MAX_REVIEW_THREADS = 50;
  * @requirement REQ-002, REQ-009, REQ-013
  * @pseudocode 003-github-broker.md lines 46-55, 111-118
  */
-export function buildPrReviewsArgv(params: Record<string, unknown>): string[] {
+export function buildPrReviewsArgv(
+  params: Record<string, unknown>,
+  owner?: string,
+  name?: string,
+): string[] {
   const prNumber = String(params.number);
   const repoStr = typeof params.repo === 'string' ? params.repo : '';
-  const parts = repoStr.split('/');
-  const validOwner = parts[0] ?? '';
-  const validName = parts[1] ?? '';
+  const [repoOwner = '', repoName = ''] = repoStr.split('/');
+  const validOwner = owner ?? repoOwner;
+  const validName = name ?? repoName;
   const query = REVIEW_THREADS_QUERY.replace(/\s+/g, ' ').trim();
   const argv = [
     'api',
@@ -794,4 +799,24 @@ export const prReviewsDescriptor: OpDescriptor = {
   shape: (rawJson, params) =>
     shapePrReviews(rawJson, params.actionable === true),
   usesGraphql: true,
+  /**
+   * GraphQL cannot infer the repository the way `gh` infers it for --repo,
+   * so when repo is omitted the owner and name must be resolved first.
+   * Interpolating empty strings instead produced a baffling GraphQL error
+   * for the ordinary "current repo" case.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-009
+   */
+  execute: async (params, run) => {
+    let owner: string | undefined;
+    let name: string | undefined;
+    if (typeof params.repo !== 'string') {
+      const resolved = await resolveOwnerName(run, params);
+      owner = resolved.owner;
+      name = resolved.name;
+    }
+    const raw = await run(buildPrReviewsArgv(params, owner, name));
+    return shapePrReviews(raw, params.actionable === true);
+  },
 };

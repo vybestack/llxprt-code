@@ -27,6 +27,7 @@ import {
   brokerError,
   type BrokerErrorException,
 } from './github-broker-errors.js';
+import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
 
 /**
  * Raises an INVALID_PARAM failure for a caller-supplied value that cannot be
@@ -41,24 +42,6 @@ import {
  */
 function invalidParam(message: string): BrokerErrorException {
   return brokerError('INVALID_PARAM', message);
-}
-
-/** Appends `--repo owner/name` when present. */
-function appendRepo(argv: string[], params: Record<string, unknown>): void {
-  if (typeof params.repo === 'string') argv.push('--repo', params.repo);
-}
-
-/** Appends `flag value` for a non-empty string. */
-function appendString(argv: string[], flag: string, value: unknown): void {
-  if (typeof value === 'string' && value.length > 0) argv.push(flag, value);
-}
-
-/** Appends one `flag value` pair per array element. */
-function appendRepeatable(argv: string[], flag: string, value: unknown): void {
-  if (!Array.isArray(value)) return;
-  for (const entry of value) {
-    if (typeof entry === 'string') argv.push(flag, entry);
-  }
 }
 
 /** Reads a nested property path from parsed GraphQL output. */
@@ -102,12 +85,12 @@ export function buildIssueEditArgv(params: Record<string, unknown>): string[] {
   const argv: string[] = ['issue', 'edit', String(params.number)];
   appendString(argv, '--title', params.title);
   appendString(argv, '--body-file', params.body);
-  appendRepeatable(argv, '--add-label', params.addLabel);
-  appendRepeatable(argv, '--remove-label', params.removeLabel);
-  appendString(argv, '--add-assignee', params.addAssignee);
-  appendString(argv, '--remove-assignee', params.removeAssignee);
-  appendString(argv, '--add-project', params.addProject);
-  appendString(argv, '--remove-project', params.removeProject);
+  appendMulti(argv, '--add-label', params.addLabel);
+  appendMulti(argv, '--remove-label', params.removeLabel);
+  appendMulti(argv, '--add-assignee', params.addAssignee);
+  appendMulti(argv, '--remove-assignee', params.removeAssignee);
+  appendMulti(argv, '--add-project', params.addProject);
+  appendMulti(argv, '--remove-project', params.removeProject);
   appendString(argv, '--milestone', params.milestone);
   appendRepo(argv, params);
   return argv;
@@ -220,7 +203,7 @@ async function resolveIssueNodeId(
  * Determines the owner/name to target: the explicit repo parameter, or the
  * current repository resolved through gh.
  */
-async function resolveOwnerName(
+export async function resolveOwnerName(
   run: GhRunner,
   params: Record<string, unknown>,
 ): Promise<{ owner: string; name: string }> {

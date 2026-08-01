@@ -25,39 +25,7 @@ import type {
 import { validateParams } from './github-broker-validation.js';
 import { extractString } from './github-broker-shaping.js';
 import { shapeCreatedUrl } from './github-broker-issue-write-ops.js';
-
-/**
- * Appends `--repo owner/name` when a repo parameter is present.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-009
- */
-function appendRepo(argv: string[], params: Record<string, unknown>): void {
-  if (typeof params.repo === 'string') argv.push('--repo', params.repo);
-}
-
-/**
- * Appends `flag value` when the value is a non-empty string.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-function appendString(argv: string[], flag: string, value: unknown): void {
-  if (typeof value === 'string' && value.length > 0) argv.push(flag, value);
-}
-
-/**
- * Appends each element of a repeatable string-array parameter.
- *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002
- */
-function appendRepeatable(argv: string[], flag: string, value: unknown): void {
-  if (!Array.isArray(value)) return;
-  for (const entry of value) {
-    if (typeof entry === 'string') argv.push(flag, entry);
-  }
-}
+import { appendMulti, appendRepo, appendString } from './github-broker-argv.js';
 
 /**
  * Shapes a response carrying only the operated-on number.
@@ -206,9 +174,9 @@ export function buildPrEditArgv(params: Record<string, unknown>): string[] {
   const argv: string[] = ['pr', 'edit', String(params.number)];
   appendString(argv, '--title', params.title);
   appendString(argv, '--body-file', params.body);
-  appendRepeatable(argv, '--add-label', params.addLabel);
-  appendRepeatable(argv, '--remove-label', params.removeLabel);
-  appendString(argv, '--add-assignee', params.addAssignee);
+  appendMulti(argv, '--add-label', params.addLabel);
+  appendMulti(argv, '--remove-label', params.removeLabel);
+  appendMulti(argv, '--add-assignee', params.addAssignee);
   appendString(argv, '--milestone', params.milestone);
   appendRepo(argv, params);
   return argv;

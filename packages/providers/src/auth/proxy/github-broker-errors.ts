@@ -48,6 +48,12 @@ export function mapGraphQLErrorType(type: string | undefined): BrokerErrorCode {
       return 'PERMISSION_DENIED';
     case 'RATE_LIMITED':
       return 'RATE_LIMITED';
+    // GraphQL reports UNAUTHORIZED when the credential is missing or
+    // invalid. Letting it fall through to GITHUB_ERROR told the caller
+    // "something went wrong" when the actionable answer is "run gh auth
+    // login on the host" — the exact case HOST_AUTH_REQUIRED exists for.
+    case 'UNAUTHORIZED':
+      return 'HOST_AUTH_REQUIRED';
     default:
       return 'GITHUB_ERROR';
   }
