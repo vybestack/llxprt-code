@@ -484,6 +484,8 @@ const registerModuleMock = (
     .then((exports) => {
       if (typeof exports === 'object' && exports !== null) {
         mock.module(mockId, () => exports as object);
+      } else {
+        mock.module(mockId, () => ({ default: exports }));
       }
     })
     .catch(() => {
@@ -585,7 +587,10 @@ const viAugmentations = {
     // hoisted and needs eager evaluation to work around Bun's mock.module
     // async deadlock), vi.doMock is called at runtime and the factory should
     // only run when the module is actually imported.
-    const mockId = resolveModuleSpecifier(id);
+    //
+    // Use the original specifier (not the resolved path) because Bun's
+    // mock.module matches by the original import specifier.
+    const mockId = id;
     if (!factory) {
       const resolvedId = resolveActualId(id);
       const realModule = loadIsolatedModuleSync(resolvedId);

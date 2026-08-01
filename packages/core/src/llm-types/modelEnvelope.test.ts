@@ -550,6 +550,7 @@ describe('toModelStreamChunk property-based', () => {
         expect(typeof result.finishReason).toBe('string');
         expect(CANONICAL_FINISH_REASON_SET.has(result.finishReason)).toBe(true);
         expect(result.rawStopReason).toBe(raw);
+        return true;
       }),
     ));
 

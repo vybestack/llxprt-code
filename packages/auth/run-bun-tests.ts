@@ -18,12 +18,18 @@ import { availableParallelism } from 'node:os';
 
 const PRELOAD = './bun-preload.ts';
 const CONCURRENCY = Math.min(8, availableParallelism());
+const PER_FILE_TIMEOUT_MS = 60_000;
 
 function findTestFiles(dir: string): string[] {
   const results: string[] = [];
   for (const entry of readdirSync(dir)) {
     const fullPath = join(dir, entry);
-    if (entry === 'dist' || entry === 'node_modules' || entry === 'coverage') {
+    if (
+      entry === 'dist' ||
+      entry === 'node_modules' ||
+      entry === 'coverage' ||
+      entry.startsWith('.')
+    ) {
       continue;
     }
     const stat = statSync(fullPath);
@@ -43,10 +49,12 @@ interface TestResult {
   file: string;
   passed: boolean;
   exitCode: number | null;
+  timedOut: boolean;
 }
 
 function runTestFile(file: string): Promise<TestResult> {
   return new Promise((resolve) => {
+    let resolved = false;
     const child = spawn(
       process.execPath,
       ['test', '--preload', PRELOAD, file],
@@ -57,12 +65,26 @@ function runTestFile(file: string): Promise<TestResult> {
       },
     );
 
+    const timer = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      child.kill('SIGKILL');
+      resolve({ file, passed: false, exitCode: null, timedOut: true });
+    }, PER_FILE_TIMEOUT_MS);
+
     child.on('exit', (code) => {
-      resolve({ file, passed: code === 0, exitCode: code });
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
     });
 
-    child.on('error', () => {
-      resolve({ file, passed: false, exitCode: -1 });
+    child.on('error', (err: Error) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      console.error(`Error spawning test for ${file}: ${err.message}`);
+      resolve({ file, passed: false, exitCode: -1, timedOut: false });
     });
   });
 }
@@ -128,9 +150,10 @@ async function main(): Promise<void> {
   const failed = results.filter((r) => !r.passed);
 
   for (const result of failed) {
-    console.error(
-      `FAILED: ${result.file} (exit code ${result.exitCode ?? -1})`,
-    );
+    const reason = result.timedOut
+      ? `TIMEOUT after ${PER_FILE_TIMEOUT_MS}ms`
+      : `exit code ${result.exitCode ?? -1}`;
+    console.error(`FAILED: ${result.file} (${reason})`);
   }
 
   console.log(

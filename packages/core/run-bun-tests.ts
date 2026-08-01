@@ -45,7 +45,12 @@ function findTestFiles(dir: string): string[] {
   const results: string[] = [];
   for (const entry of readdirSync(dir)) {
     const fullPath = join(dir, entry);
-    if (entry === 'dist' || entry === 'node_modules' || entry === 'coverage') {
+    if (
+      entry === 'dist' ||
+      entry === 'node_modules' ||
+      entry === 'coverage' ||
+      entry.startsWith('.')
+    ) {
       continue;
     }
     const stat = statSync(fullPath);
@@ -96,10 +101,11 @@ function runTestFile(file: string): Promise<TestResult> {
       resolve({ file, passed: code === 0, exitCode: code, timedOut: false });
     });
 
-    child.on('error', () => {
+    child.on('error', (err: Error) => {
       if (resolved) return;
       resolved = true;
       clearTimeout(timer);
+      console.error(`Error spawning test for ${file}: ${err.message}`);
       resolve({ file, passed: false, exitCode: -1, timedOut: false });
     });
   });
