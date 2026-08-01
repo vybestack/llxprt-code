@@ -100,6 +100,7 @@ export class TurnProcessor {
   private sendPromise: Promise<void> = Promise.resolve();
   private lastPromptTokenCount: number | null = null;
   private eagerlyRecordedToolResponseCallIds = new Set<string>();
+  private stampingBaseUrl: string | undefined = undefined;
   private currentPromptEnvelopeEstimate: PromptEnvelopeEstimate | null = null;
 
   getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
@@ -157,6 +158,7 @@ export class TurnProcessor {
       prepared.userContents,
       params,
       prompt_id,
+      provider,
     );
 
     await this.sendPromise.catch(() => {
@@ -793,9 +795,13 @@ export class TurnProcessor {
     userContents: IContent[],
     _params: SendMessageParams,
     _prompt_id: string,
+    provider: IProvider,
   ): Promise<void> {
     try {
       const currentModel = this.runtimeContext.state.model;
+      // Re-resolve AFTER the response so LB sub-profile selection is
+      // reflected in stamping.
+      this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
       const afcHistory = response.afcHistory;
 
       const filteredAfcHistory =
@@ -823,12 +829,11 @@ export class TurnProcessor {
     const curatedHistory = this.historyService.getCurated();
     const index = curatedHistory.length;
     const newEntries = afcHistory.slice(index);
-    const baseURL = this.runtimeContext.state.baseUrl;
     for (const content of newEntries) {
       // AFC history is mixed user/model; stampAiTurnModel no-ops on non-ai
       // entries, so only freshly generated model turns get the origin stamp.
       this.historyService.add(
-        stampAiTurnModel(content, currentModel, baseURL),
+        stampAiTurnModel(content, currentModel, this.stampingBaseUrl),
         currentModel,
       );
     }
@@ -849,7 +854,7 @@ export class TurnProcessor {
     afcHistory: IContent[] | undefined,
   ): void {
     const outputContent = response.content;
-    const baseURL = this.runtimeContext.state.baseUrl;
+    const baseURL = this.stampingBaseUrl;
     if (outputContent.blocks.length > 0) {
       const includeThoughts =
         this.runtimeContext.ephemerals.reasoning.includeInContext();

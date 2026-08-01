@@ -680,6 +680,57 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
     expect(thinking).toBeDefined();
     expect(thinking?.signature).toBe('zai-sig');
   });
+
+  it('retains thinking when both turn and request use the Anthropic default URL', () => {
+    // Native Anthropic without explicit baseURL: stamping defaults to
+    // ANTHROPIC_URL and the strip path also defaults to ANTHROPIC_URL.
+    // Same model + same endpoint → thinking retained.
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      assistantWithModelAndBaseURL(
+        'claude-sonnet-4-5-20250929',
+        ANTHROPIC_URL,
+        'native-sig',
+      ),
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-sonnet-4-5-20250929',
+      currentBaseURL: ANTHROPIC_URL,
+      logger: noopLogger,
+    });
+
+    const blocks = flatAssistantBlocks(messages);
+    const thinking = blocks.find((b) => b.type === 'thinking') as
+      | { type: 'thinking'; signature?: string }
+      | undefined;
+    expect(thinking).toBeDefined();
+    expect(thinking?.signature).toBe('native-sig');
+  });
+
+  it('strips native Anthropic thinking when switching to z.ai endpoint', () => {
+    // Turn generated at native Anthropic (stamped with ANTHROPIC_URL),
+    // request sent to z.ai → endpoint mismatch → strip.
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      assistantWithModelAndBaseURL(
+        'claude-sonnet-4-5-20250929',
+        ANTHROPIC_URL,
+        'native-sig',
+      ),
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-sonnet-4-5-20250929',
+      currentBaseURL: ZAI_URL,
+      logger: noopLogger,
+    });
+
+    const blocks = flatAssistantBlocks(messages);
+    expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
+  });
 });
 
 /**

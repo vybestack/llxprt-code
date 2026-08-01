@@ -29,7 +29,10 @@ import {
   sortObjectKeys,
 } from './AnthropicRequestBuilder.js';
 import { getRetryConfig } from './AnthropicRateLimitHandler.js';
-import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
+import {
+  isAnthropicOAuthBaseURL,
+  ANTHROPIC_DEFAULT_BASE_URL,
+} from './AnthropicEndpointUtils.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
@@ -805,7 +808,8 @@ export async function prepareAnthropicRequest(
       reasoningSettings,
       config: configForMessages,
       currentModel: params.options.resolved.model,
-      currentBaseURL: params.options.resolved.baseURL,
+      currentBaseURL:
+        params.options.resolved.baseURL ?? ANTHROPIC_DEFAULT_BASE_URL,
       unprefixToolName: params.unprefixToolName,
       logger: params.logger,
     });

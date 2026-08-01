@@ -87,12 +87,20 @@ function getHistoryService(
 
 function getProviderDumpMetadata(
   config: NonNullable<CommandContext['services']['config']>,
-): { providerName: string; activeModel: string | undefined; activeBaseURL: string | undefined } {
+): {
+  providerName: string;
+  activeModel: string | undefined;
+  activeBaseURL: string | undefined;
+} {
   const providerManager = config.getProviderManager() as
     | ProviderManagerWithActive
     | undefined;
   if (!providerManager) {
-    return { providerName: 'backend', activeModel: undefined, activeBaseURL: undefined };
+    return {
+      providerName: 'backend',
+      activeModel: undefined,
+      activeBaseURL: undefined,
+    };
   }
   const activeProvider = providerManager.getActiveProvider?.();
   return {
