@@ -572,19 +572,7 @@ function createSeatbeltHarness(cwd: string = process.cwd()): SeatbeltHarness {
     );
     writeExecutable(
       path.join(fixtureDir, 'timeout'),
-      [
-        '#!/bin/sh',
-        'duration="$1"',
-        'shift',
-        '"$@" &',
-        'child=$!',
-        '( sleep "$duration"; kill -TERM "$child" 2>/dev/null ) >/dev/null 2>&1 &',
-        'watchdog=$!',
-        'wait "$child"',
-        'status=$?',
-        'kill -TERM "$watchdog" 2>/dev/null || true',
-        'exit "$status"',
-      ].join('\n'),
+      ['#!/bin/sh', 'shift', 'exec "$@"'].join('\n'),
     );
     writeExecutable(
       path.join(fixtureDir, 'curl'),

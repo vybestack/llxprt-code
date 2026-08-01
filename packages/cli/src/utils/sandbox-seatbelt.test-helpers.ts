@@ -99,10 +99,12 @@ export async function cleanupSeatbeltHarnessFixture(
 
 async function waitUntilStopped(pid: number): Promise<boolean> {
   const deadline = Date.now() + 2000;
-  while (Date.now() < deadline && runKill(['-0', String(pid)]) === 0) {
+  let status = runKill(['-0', String(pid)]);
+  while (status === 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 20));
+    status = runKill(['-0', String(pid)]);
   }
-  return runKill(['-0', String(pid)]) !== 0;
+  return status !== 0;
 }
 
 export async function assertSeatbeltProxyPortAvailable(): Promise<void> {

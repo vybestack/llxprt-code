@@ -76,7 +76,7 @@ function buildThenSetup(fixturePath: string): {
 
 describe.sequential('#1456 container network policy', () => {
   let environmentSnapshot: NodeJS.ProcessEnv;
-  let fixturePath: string;
+  let fixturePath = '';
 
   beforeEach(() => {
     environmentSnapshot = { ...process.env };
@@ -88,7 +88,9 @@ describe.sequential('#1456 container network policy', () => {
   afterEach(() => {
     process.env = environmentSnapshot;
     vi.restoreAllMocks();
-    fs.rmSync(fixturePath, { recursive: true, force: true });
+    if (fixturePath !== '') {
+      fs.rmSync(fixturePath, { recursive: true, force: true });
+    }
   });
 
   it.each([
@@ -177,8 +179,12 @@ describe.sequential('#1456 container network policy', () => {
       'HTTPS_PROXY=http://llxprt-code-sandbox-proxy:8877/',
     );
     expect(args).toContain('HTTP_PROXY=http://llxprt-code-sandbox-proxy:8877/');
-    expect(args).toContain('--network');
-    expect(args).toContain('llxprt-code-sandbox');
+    const networkIndex = args.indexOf('--network');
+    expect(args.filter((argument) => argument === '--network')).toHaveLength(1);
+    expect(args.slice(networkIndex, networkIndex + 2)).toStrictEqual([
+      '--network',
+      'llxprt-code-sandbox',
+    ]);
     expect(vi.mocked(childProcess.execSync)).toHaveBeenCalledWith(
       'docker network inspect llxprt-code-sandbox || docker network create --internal llxprt-code-sandbox',
     );
