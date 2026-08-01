@@ -18,6 +18,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   projectAnthropicPromptEnvelope,
   projectOpenAIChatPromptEnvelope,
@@ -583,6 +584,27 @@ describe('projection token count consistency (issue #2817 A10)', () => {
       };
       const tokens = await project(requestBody).legacyEstimate();
       expect(tokens).toBeGreaterThan(0);
+    },
+  );
+
+  it.each([
+    ['Anthropic', projectAnthropicPromptEnvelope, 'messages'],
+    ['OpenAI Chat', projectOpenAIChatPromptEnvelope, 'messages'],
+    ['OpenAI Responses', projectOpenAIResponsesPromptEnvelope, 'input'],
+  ] as const)(
+    'preserves the full structural %s estimate for legacy models',
+    async (_name, project, promptKey) => {
+      const projection = project({
+        model: 'legacy-model',
+        [promptKey]: [{ role: 'user', content: 'legacy prompt' }],
+      });
+      const finalized = projection.finalizedProjection as {
+        promptText: string;
+      };
+
+      expect(await projection.legacyEstimate()).toBe(
+        estimateTokens(finalized.promptText),
+      );
     },
   );
 });

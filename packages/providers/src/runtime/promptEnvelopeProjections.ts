@@ -47,10 +47,7 @@ function buildProjection(
 ): PromptEnvelopeProjection {
   const promptText = serializePromptBearingStructure(requestBody, promptKeys);
   const promptSegments = serializePromptSegments(requestBody, promptKeys);
-  const tokens = promptSegments.reduce(
-    (total, segment) => total + countPromptTokens(segment),
-    0,
-  );
+  const legacyTokens = countPromptTokens(promptText);
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
   const finalizedProjection: ProviderFinalizedPromptProjection = Object.freeze({
     kind: 'llxprt-provider-prompt-v3',
@@ -69,7 +66,7 @@ function buildProjection(
     unsupportedMedia,
     transportToken: options?.transportToken ?? EMPTY_TRANSPORT_TOKEN,
     finalizedProjection,
-    legacyEstimate: () => Promise.resolve(tokens),
+    legacyEstimate: () => Promise.resolve(legacyTokens),
   });
 }
 
