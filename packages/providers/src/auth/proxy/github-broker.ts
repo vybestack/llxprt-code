@@ -32,7 +32,6 @@ import type {
   RequestHandler,
   ValidationError,
   GitHubBrokerHandler,
-  OpDescriptor,
   GhRunner,
 } from './github-broker-types.js';
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
@@ -322,32 +321,49 @@ function makeBrokerErrorInstance(
 ): BrokerErrorException {
   return new BrokerErrorException(makeBrokerError(code, message));
 }
+// ─── Shared execution ────────────────────────────────────────────────────────
 
 /**
- * Runs a multi-step operation's `execute` and sends its shaped response.
+ * Executes one GitHub operation and returns the shaped response.
  *
- * The runner handed to `execute` resolves parsed output and throws a
- * BrokerErrorException on failure, so an op reads as straight-line code and
- * a failed step aborts the sequence instead of being silently skipped.
- * Body parameters are still materialised into temp files first, and removed
- * afterwards, exactly as for single-call ops.
+ * This is the single implementation used by BOTH callers: the socket
+ * handler that serves a sandbox, and the in-process path used when running
+ * on the host. Duplicating the dispatch for the two environments would let
+ * them drift, and the sandboxed path is the one that carries the security
+ * properties, so it must not be the rarely-exercised branch.
  *
- * @plan PLAN-20260731-GHBROKER.P11
- * @requirement REQ-002, REQ-013
+ * Throws a BrokerErrorException carrying a structured code; callers
+ * translate that into whatever their transport needs.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
+ * @requirement REQ-002, REQ-004, REQ-013
  * @pseudocode 003-github-broker.md lines 46-55
  */
-async function dispatchMultiStep(
-  descriptor: OpDescriptor,
+export async function executeGitHubOp(
+  op: string,
   opParams: Record<string, unknown>,
   signal: AbortSignal,
-  id: string,
-  state: {
-    writer: {
-      sendOk: (id: string, data: Record<string, unknown>) => void;
-      sendError: (id: string, code: string, error: string) => void;
-    };
-  },
-): Promise<void> {
+): Promise<Record<string, unknown>> {
+  if (!Object.prototype.hasOwnProperty.call(OP_REGISTRY, op)) {
+    throw makeBrokerErrorInstance('UNKNOWN_OP', `Unknown operation: ${op}`);
+  }
+  const descriptor = OP_REGISTRY[op];
+
+  const validationError: ValidationError | null = validateParams(
+    descriptor.params,
+    opParams,
+  );
+  if (validationError !== null) {
+    throw new BrokerErrorException(
+      makeBrokerError(
+        validationError.code as BrokerError['code'],
+        validationError.message,
+      ),
+    );
+  }
+
+  // Resolves parsed output and throws on failure, so multi-step ops read as
+  // straight-line code and a failed step aborts the sequence.
   const run: GhRunner = async (argv, options) => {
     const outcome = await runGh(argv, signal, options);
     if (outcome.kind === 'failure') {
@@ -357,39 +373,43 @@ async function dispatchMultiStep(
     return outcome.json;
   };
 
+  // Body text is materialised into mode-0600 temp files before argv is
+  // built, so it reaches gh as --body-file paths and never as argv text.
+  // The files are removed in a finally even when gh throws.
   const execute = descriptor.execute;
-  if (execute === undefined) return;
-
-  try {
-    // execute receives the temp-file-substituted params, exactly as
-    // buildArgv does for single-call ops.
+  if (execute !== undefined) {
     const shaped = await withBodyFiles(descriptor.bodyParams, opParams, (p) =>
       execute(p, run, signal),
     );
-    state.writer.sendOk(id, shaped as Record<string, unknown>);
-  } catch (err) {
-    if (err instanceof BrokerErrorException) {
-      state.writer.sendError(id, err.brokerError.code, err.brokerError.message);
-      return;
-    }
-    const message = err instanceof Error ? err.message : 'Operation failed';
-    state.writer.sendError(id, 'GITHUB_ERROR', redactTokenShaped(message));
+    return wrapShapedResult(shaped);
   }
+
+  const result = await withBodyFiles(descriptor.bodyParams, opParams, (p) =>
+    runGh(descriptor.buildArgv(p), signal, {
+      rawOutput: descriptor.rawOutput === true,
+      tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
+    }),
+  );
+  if (result.kind === 'failure') {
+    throw new BrokerErrorException(result.error);
+  }
+  if (descriptor.rawOutput !== true) assertNoPartialSuccess(result.json);
+
+  // `shape` receives the ORIGINAL params, never the temp-file paths.
+  return wrapShapedResult(descriptor.shape(result.json, opParams));
 }
 
 // ─── Handler factory ─────────────────────────────────────────────────────────
 
 /**
- * Creates the GitHub broker handler to register on the credential proxy
- * server as an extraHandler. The handler dispatches a GitHub op request,
- * validates parameters, builds argv, runs gh, shapes the result, and
- * sends the response.
+ * Creates the GitHub broker handler registered on the credential proxy
+ * server as an extraHandler. It is a thin translation of executeGitHubOp
+ * onto the socket writer.
  *
- * The handler signature matches RequestHandler and is registered under the
- * `github` op name. Requests reach it only after the capability-token
- * handshake gate (REQ-003, REQ-015).
+ * Requests reach it only after the capability-token handshake gate, so
+ * authentication applies to every GitHub operation with no extra code.
  *
- * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P10
+ * @plan PLAN-20260731-GHBROKER.P08, PLAN-20260731-GHBROKER.P15
  * @requirement REQ-002, REQ-003, REQ-004
  * @pseudocode 003-github-broker.md lines 01-11, 46-50
  */
@@ -402,96 +422,21 @@ export function createGitHubBrokerHandler(): GitHubBrokerHandler {
     signal,
   ): Promise<void> => {
     const op = typeof payload.op === 'string' ? payload.op : '';
-    const opParams = extractOpParams(payload);
-
-    // Look up the descriptor; unknown op → UNKNOWN_OP
-    if (!Object.prototype.hasOwnProperty.call(OP_REGISTRY, op)) {
-      state.writer.sendError(
-        id,
-        'UNKNOWN_OP',
-        redactTokenShaped(`Unknown operation: ${op}`),
-      );
-      return;
-    }
-    const descriptor = OP_REGISTRY[op];
-
-    // Validate params against the descriptor
-    const validationError: ValidationError | null = validateParams(
-      descriptor.params,
-      opParams,
-    );
-    if (validationError !== null) {
-      state.writer.sendError(
-        id,
-        validationError.code,
-        redactTokenShaped(validationError.message),
-      );
-      return;
-    }
-
-    // Ops needing more than one gh call supply `execute` and produce the
-    // shaped response themselves. The runner resolves parsed output and
-    // throws on failure, so a failed step aborts the sequence rather than
-    // being silently skipped.
-    if (descriptor.execute !== undefined) {
-      await dispatchMultiStep(descriptor, opParams, signal, id, state);
-      return;
-    }
-
-    // Materialise body text into mode-0600 temp files before building argv,
-    // so body values reach gh as --body-file paths and never as argv text.
-    // The files are removed in a finally even when gh throws.
-    // `shape` still receives the ORIGINAL params, never the temp paths.
-    const result = await withBodyFiles(
-      descriptor.bodyParams,
-      opParams,
-      (bodyParams) =>
-        runGh(descriptor.buildArgv(bodyParams), signal, {
-          rawOutput: descriptor.rawOutput === true,
-          tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
-        }),
-    );
-
-    if (result.kind === 'failure') {
-      state.writer.sendError(id, result.error.code, result.error.message);
-      return;
-    }
-
-    // Check for GraphQL partial success (data AND errors)
-    if (descriptor.rawOutput !== true) {
-      try {
-        assertNoPartialSuccess(result.json);
-      } catch (err) {
-        if (err instanceof BrokerErrorException) {
-          state.writer.sendError(
-            id,
-            err.brokerError.code,
-            err.brokerError.message,
-          );
-          return;
-        }
-        throw err;
-      }
-    }
-
-    // Shape the raw JSON/text into the contract, passing params for
-    // ops that need them (e.g. pr.reviews actionable filtering)
-    let shaped: unknown;
     try {
-      shaped = descriptor.shape(result.json, opParams);
+      const data = await executeGitHubOp(op, extractOpParams(payload), signal);
+      state.writer.sendOk(id, data);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to shape response';
+      if (err instanceof BrokerErrorException) {
+        state.writer.sendError(
+          id,
+          err.brokerError.code,
+          redactTokenShaped(err.brokerError.message),
+        );
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Operation failed';
       state.writer.sendError(id, 'GITHUB_ERROR', redactTokenShaped(message));
-      return;
     }
-
-    // Send the shaped response. If the shaped result is an array (e.g.
-    // issue.list), wrap it in an object so it conforms to the
-    // Record<string, unknown> contract of sendOk. The caller unwraps
-    // via response.data.items or response.data as appropriate.
-    const data = wrapShapedResult(shaped);
-    state.writer.sendOk(id, data);
   };
 
   return { handler };
