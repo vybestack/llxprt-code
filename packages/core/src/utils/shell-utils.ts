@@ -25,9 +25,10 @@
  *
  * Tree-sitter (`shell-parser.ts`) is the primary parser. The regex-based
  * functions in this file are best-effort fallbacks used only when the
- * tree-sitter WASM bundle failed to load at startup. The bypass risk from
- * regex imprecision is mitigated because `allowlist` mode hard-denies on
- * parse errors and tree-sitter is bundled (fallback activation is rare).
+ * tree-sitter WASM bundle failed to load at startup. Because those fallbacks
+ * cannot model multiline or heredoc semantics, `none` and `allowlist` modes
+ * fail closed for line breaks and heredoc operators while the parser is
+ * unavailable.
  */
 
 import type { AnyToolInvocation } from '../index.js';
@@ -471,11 +472,14 @@ export function detectCommandSubstitution(command: string): boolean {
   if (isParserAvailable()) {
     const tree = parseShellCommand(command);
     if (tree) {
-      return treeSitterHasCommandSubstitution(tree);
+      const detected = treeSitterHasCommandSubstitution(tree);
+      if (detected || !tree.rootNode.hasError) {
+        return detected;
+      }
     }
   }
 
-  // Fall back to regex-based detection
+  // Parser errors require conservative detection of malformed substitution starts.
   return detectCommandSubstitutionRegex(command);
 }
 
@@ -605,6 +609,57 @@ function resolveShellReplacementMode(
     | undefined;
   const configValue = config.getShellReplacement();
   return normalizeShellReplacement(ephemeralValue ?? configValue);
+}
+
+function hasHeredocOperator(command: string): boolean {
+  let inSingleQuotes = false;
+  let inDoubleQuotes = false;
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+    if (char === '\\' && !inSingleQuotes) {
+      index += 1;
+    } else if (char === "'" && !inDoubleQuotes) {
+      inSingleQuotes = !inSingleQuotes;
+    } else if (char === '"' && !inSingleQuotes) {
+      inDoubleQuotes = !inDoubleQuotes;
+    } else if (char === '<' && !inSingleQuotes && !inDoubleQuotes) {
+      // Measure the full contiguous run of '<' so that the Bash here-string
+      // '<<<' (3+) is not misclassified as a heredoc '<<'. Only an exact
+      // two-character run is a heredoc operator (<< or <<-).
+      let runLength = 1;
+      while (command[index + runLength] === '<') {
+        runLength += 1;
+      }
+      if (runLength === 2) {
+        return true;
+      }
+      // Skip the entire run so no later pair within it is reclassified.
+      index += runLength - 1;
+    }
+  }
+
+  return false;
+}
+
+function checkParserUnavailableBlock(
+  command: string,
+  shellReplacementMode: 'allowlist' | 'all' | 'none',
+): PermissionCheckResult | null {
+  if (
+    shellReplacementMode !== 'all' &&
+    !isParserAvailable() &&
+    (/\r|\n/u.test(command) || hasHeredocOperator(command))
+  ) {
+    return {
+      allAllowed: false,
+      disallowedCommands: [command],
+      blockReason:
+        'Command rejected because multiline and heredoc syntax requires the shell parser',
+      isHardDenial: true,
+    };
+  }
+  return null;
 }
 
 function checkShellReplacementBlock(
@@ -820,6 +875,12 @@ export function checkCommandPermissions(
       command: command.substring(0, 50) + (command.length > 50 ? '...' : ''),
     });
   }
+
+  const parserUnavailableBlock = checkParserUnavailableBlock(
+    command,
+    shellReplacementMode,
+  );
+  if (parserUnavailableBlock) return parserUnavailableBlock;
 
   const replacementBlock = checkShellReplacementBlock(
     command,

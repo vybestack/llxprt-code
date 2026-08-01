@@ -345,3 +345,13 @@ describe('runCleanupSteps', () => {
     expect(() => runCleanupSteps([])).not.toThrow();
   });
 });
+
+describe('sync factory pre-load fail-fast', () => {
+  it('throws when a sync factory targets a nonexistent module', () => {
+    expect(() =>
+      vi.mock('./nonexistent-preload-fixture.js', () => ({
+        mocked: true,
+      })),
+    ).toThrow();
+  });
+});

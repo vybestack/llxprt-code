@@ -30,6 +30,7 @@ export {
   REDACTED_VALUE,
   SETTINGS_REGISTRY,
 } from './settings/settingsRegistry.js';
+export { isStrictNumericString } from './settings/numericString.js';
 export type {
   ValidationResult,
   SettingSpec,

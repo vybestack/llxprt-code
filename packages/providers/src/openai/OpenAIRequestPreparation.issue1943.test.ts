@@ -303,13 +303,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     expect(result.detectedFormat).toBe('kimi'); // auto overrides → auto-detect
   });
 
-  it('sets thinking enabled on request body when reasoning.enabled is true', async () => {
+  it('sets thinking enabled on request body when reasoning.enabled is true (z.ai dialect)', async () => {
     const settings = new SettingsService();
     const options = createMockOptions(
       {
         settings,
         resolved: {
           model: 'gpt-4o',
+          baseURL: 'https://api.z.ai/api/paas/v4',
           authToken: { token: 'test-token', type: 'api-key' },
         },
       },
@@ -327,13 +328,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     expect(result.requestBody).toHaveProperty('thinking', { type: 'enabled' });
   });
 
-  it('sets thinking disabled on request body when reasoning.enabled is false', async () => {
+  it('sets thinking disabled on request body when reasoning.enabled is false (z.ai dialect)', async () => {
     const settings = new SettingsService();
     const options = createMockOptions(
       {
         settings,
         resolved: {
           model: 'gpt-4o',
+          baseURL: 'https://api.z.ai/api/paas/v4',
           authToken: { token: 'test-token', type: 'api-key' },
         },
       },
