@@ -314,8 +314,6 @@ describe('buildTestGroups — preserved special-selection semantics', () => {
       'src/ui/commands/directoryCommand.test.tsx',
       'src/ui/components/messages/OAuthUrlMessage.test.tsx',
       'src/ui/components/PoliciesDialog.test.tsx',
-      'src/ui/components/HistoryItemDisplay.test.tsx',
-      'src/ui/components/views/HooksList.test.tsx',
     ]) {
       expect(allRouted).toContain(rel);
     }

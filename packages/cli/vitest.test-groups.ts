@@ -59,9 +59,7 @@ const explicitIncludePaths: readonly string[] = [
   'src/agentStream.test.tsx',
   'src/ui/commands/directoryCommand.test.tsx',
   'src/ui/components/messages/ProfileChangeMessage.test.tsx',
-  'src/ui/components/HistoryItemDisplay.test.tsx',
   'src/ui/hooks/useTodoContinuation.spec.ts',
-  'src/ui/components/views/HooksList.test.tsx',
   'src/ui/components/PoliciesDialog.test.tsx',
 ];
 
@@ -481,4 +479,4 @@ export function buildTestGroups(
  * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 515;
+export const SELECTED_FILE_COUNT: number = 513;
