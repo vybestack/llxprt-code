@@ -28,8 +28,19 @@ const bunAvailable =
   spawnSync('bun', ['--version'], { encoding: 'utf8' }).status === 0;
 
 afterEach(() => {
+  const cleanupErrors: unknown[] = [];
   for (const directory of tempDirectories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
+    try {
+      rmSync(directory, { recursive: true, force: true });
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(
+      cleanupErrors,
+      'Failed to remove test directories',
+    );
   }
 });
 
