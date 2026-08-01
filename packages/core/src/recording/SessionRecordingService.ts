@@ -49,6 +49,30 @@ import { replaySession } from './ReplayEngine.js';
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
 /**
+ * Queue depth at which the writer is clearly not keeping up with production.
+ * Crossing it is reported once so the condition is diagnosable; records are
+ * never dropped, because the session file is the durable transcript.
+ */
+const QUEUE_HIGH_WATER_RECORDS = 4096;
+
+/**
+ * A record that has already been serialised. Serialising at enqueue time keeps
+ * byte accounting free and means each record — including large media payloads —
+ * is stringified exactly once instead of once for accounting and again for the
+ * write (issue #2852).
+ */
+interface PendingRecord {
+  readonly line: SessionRecordLine;
+  readonly json: string;
+  readonly bytes: number;
+}
+
+function toPendingRecord(line: SessionRecordLine): PendingRecord {
+  const json = JSON.stringify(line);
+  return { line, json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
+}
+
+/**
  * Core service for recording session events to a JSONL file.
  *
  * @plan PLAN-20260211-SESSIONRECORDING.P05
@@ -57,7 +81,9 @@ export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
  */
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
-  private queue: SessionRecordLine[] = [];
+  private queue: PendingRecord[] = [];
+  private queueBytes: number = 0;
+  private highWaterReported: boolean = false;
   private seq: number = 0;
   private filePath: string | null = null;
   private materialized: boolean = false;
@@ -67,7 +93,8 @@ export class SessionRecordingService {
   private readonly sessionId: string;
   private readonly projectHash: string;
   private readonly chatsDir: string;
-  private preContentBuffer: SessionRecordLine[] = [];
+  private preContentBuffer: PendingRecord[] = [];
+  private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
   private lockHandle: LockHandle | null = null;
@@ -134,7 +161,10 @@ export class SessionRecordingService {
       type,
       payload,
     };
-    this.preContentBuffer.push(line);
+    const record = toPendingRecord(line);
+    this.preContentBuffer.push(record);
+    this.preContentBytes += record.bytes;
+    this.reportHighWater();
   }
 
   /**
@@ -158,13 +188,17 @@ export class SessionRecordingService {
       for (const buffered of this.preContentBuffer) {
         this.queue.push(buffered);
       }
+      this.queueBytes += this.preContentBytes;
       this.preContentBuffer = [];
+      this.preContentBytes = 0;
       this.materialized = true;
     }
 
     if (!this.materialized && type !== 'content') {
       this.bufferPreContent(type, payload);
-      return this.preContentBuffer[this.preContentBuffer.length - 1] ?? null;
+      return (
+        this.preContentBuffer[this.preContentBuffer.length - 1]?.line ?? null
+      );
     }
 
     this.seq++;
@@ -175,9 +209,44 @@ export class SessionRecordingService {
       type,
       payload,
     };
-    this.queue.push(line);
+    const record = toPendingRecord(line);
+    this.queue.push(record);
+    this.queueBytes += record.bytes;
+    this.reportHighWater();
     this.scheduleDrain();
     return line;
+  }
+
+  /**
+   * Reports, once, that the writer has fallen far behind. Deliberately does not
+   * drop records: the JSONL file is the durable transcript, and the queue is
+   * bounded in practice by disk throughput, which far exceeds the rate at which
+   * a model can produce content.
+   */
+  private reportHighWater(): void {
+    if (
+      this.highWaterReported ||
+      this.queue.length + this.preContentBuffer.length <
+        QUEUE_HIGH_WATER_RECORDS
+    ) {
+      return;
+    }
+    this.highWaterReported = true;
+    debugLogger.error(
+      `[SessionRecording] pending queue exceeded ${QUEUE_HIGH_WATER_RECORDS} records ` +
+        `(${this.queueBytes + this.preContentBytes} bytes); the session file writer is behind. ` +
+        `No records are dropped.`,
+    );
+  }
+
+  /** Number of records waiting to be written. Zero once the queue has drained. */
+  getPendingRecordCount(): number {
+    return this.queue.length + this.preContentBuffer.length;
+  }
+
+  /** Bytes waiting to be written. Zero once the queue has drained. */
+  getPendingByteCount(): number {
+    return this.queueBytes + this.preContentBytes;
   }
 
   /**
@@ -234,6 +303,7 @@ export class SessionRecordingService {
         );
       }
       this.queue = [];
+      this.queueBytes = 0;
       this.chatsDirWatcher?.close();
       this.chatsDirWatcher = null;
       this.active = false;
@@ -252,8 +322,8 @@ export class SessionRecordingService {
       while (this.queue.length > 0) {
         const batch = [...this.queue];
         this.queue = [];
-        const lines =
-          batch.map((event) => JSON.stringify(event)).join('\n') + '\n';
+        this.queueBytes = 0;
+        const lines = batch.map((record) => record.json).join('\n') + '\n';
         const shouldContinue = await this.writeBatchToFile(lines);
         if (!shouldContinue) {
           return;
@@ -275,6 +345,7 @@ export class SessionRecordingService {
     } catch (error: unknown) {
       if (this.isDiskSpaceError(error)) {
         this.queue = [];
+        this.queueBytes = 0;
         this.chatsDirWatcher?.close();
         this.chatsDirWatcher = null;
         this.active = false;
@@ -382,6 +453,7 @@ export class SessionRecordingService {
     this.seq = lastSeq;
     this.materialized = true;
     this.preContentBuffer = [];
+    this.preContentBytes = 0;
     this.sessionTitle = title;
     this.startChatsDirWatcher();
   }
@@ -404,7 +476,9 @@ export class SessionRecordingService {
     }
     this.active = false;
     this.queue = [];
+    this.queueBytes = 0;
     this.preContentBuffer = [];
+    this.preContentBytes = 0;
     if (this.chatsDirWatcher) {
       try {
         this.chatsDirWatcher.close();

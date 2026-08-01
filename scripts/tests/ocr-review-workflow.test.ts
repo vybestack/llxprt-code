@@ -700,7 +700,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       '${{ needs.classify-ocr-run.outputs.classification }}',
     );
     expect(notifierWorkflowYml).toContain(
-      'ratchet:actions/download-artifact@v4',
+      'ratchet:actions/download-artifact@v8',
     );
     expectContainsAll(notifyRun, [
       'notify_ocr_infrastructure_failure() {',

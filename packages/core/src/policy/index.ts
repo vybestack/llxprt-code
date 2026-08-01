@@ -9,3 +9,15 @@ export {
   handlePolicyDenial,
   publishConfirmationRequest,
 } from './policy-helpers.js';
+export {
+  MANAGED_POLICY_FILE,
+  MAX_USER_PRIORITY,
+  MIN_USER_PRIORITY,
+  listEditableRules,
+  addEditableRule,
+  updateEditableRule,
+  deleteEditableRule,
+  duplicateEditableRule,
+  reloadUserPolicyRules,
+  type EditablePolicyRule,
+} from './userPolicyStore.js';

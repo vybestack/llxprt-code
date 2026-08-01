@@ -154,7 +154,7 @@ jobs:
     steps:
       - name: Decide auto-review limit
         id: auto-decide
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
           OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
@@ -314,7 +314,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Post OCR suspension message
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
           CURRENT_COUNT: ${{ needs.auto-review-gate.outputs.current-count }}
@@ -449,7 +449,7 @@ jobs:
       needs.auto-review-gate.outputs.auto-should-run == 'true'
     steps:
       - name: Resolve PR context
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         id: pr-context
         with:
           script: |
@@ -478,14 +478,14 @@ jobs:
       - name: Checkout trusted base
         # Fork-safety keystone: check out the trusted base branch (never the
         # PR head) so the working tree never reflects PR-supplied files.
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
         with:
           ref: ${{ steps.pr-context.outputs.trusted_base_sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
@@ -556,7 +556,7 @@ jobs:
 
       - name: Read OCR checkpoint
         id: read-checkpoint
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
@@ -1884,7 +1884,7 @@ jobs:
       - name: Post OCR results
         id: post-ocr-results
         if: always()
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
@@ -4018,7 +4018,7 @@ jobs:
 
       - name: Build OCR canary metrics
         if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           TRUSTED_BASE_SHA: ${{ env.TRUSTED_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
@@ -4929,7 +4929,7 @@ jobs:
       - name: Upload OCR telemetry
         id: upload-ocr-telemetry
         if: ${{ always() && steps.ocr-telemetry-validation.outputs.valid == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
         with:
           name: ocr-telemetry-${{ github.run_id }}-${{ github.run_attempt }}
           path: ocr-telemetry.json
@@ -4938,7 +4938,7 @@ jobs:
       - name: Upload OCR artifacts
         id: upload-ocr-artifacts
         if: ${{ always() && steps.redact-ocr-artifacts.outcome == 'success' && steps.ocr-telemetry-validation.outputs.valid == 'true' && steps.ocr-manifest-hashes.outputs.valid == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
         with:
           name: ocr-review-output
           path: |
@@ -5031,7 +5031,7 @@ jobs:
 
       - name: Upload OCR canary artifact
         if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
         with:
           name: ocr-concurrency-canary
           path: ocr-canary-metrics.json

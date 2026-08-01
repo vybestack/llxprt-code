@@ -8,6 +8,7 @@ import {
   CommandKind,
   type CommandContext,
   type MessageActionReturn,
+  type OpenDialogActionReturn,
   type SlashCommand,
 } from './types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
@@ -26,12 +27,14 @@ function formatDecision(decision: PolicyDecision): string {
 }
 
 function getTierBand(priority: number): string {
-  if (priority >= 2.0) {
+  if (priority >= 3.0) {
+    return 'Tier 3 (System / Admin)';
+  } else if (priority >= 2.0) {
     return 'Tier 2 (User-defined)';
   } else if (priority >= 1.0) {
     return 'Tier 1 (Defaults)';
   }
-  return 'Tier 0 (System)';
+  return 'Tier 0 (Base)';
 }
 
 interface PolicyRuleDisplay {
@@ -96,9 +99,10 @@ function formatPolicyOutput(
   }
 
   const tierOrder = [
+    'Tier 3 (System / Admin)',
     'Tier 2 (User-defined)',
     'Tier 1 (Defaults)',
-    'Tier 0 (System)',
+    'Tier 0 (Base)',
   ];
 
   for (const tier of tierOrder) {
@@ -121,7 +125,7 @@ function formatPolicyOutput(
       const source = rule.source ? ` [Source: ${rule.source}]` : '';
 
       lines.push(
-        `  Priority ${priority.toFixed(3)}: ${toolName} → ${decision}${argsPattern}${source}`,
+        `  Priority ${priority.toFixed(3)}: ${toolName} \u2192 ${decision}${argsPattern}${source}`,
       );
     }
 
@@ -130,7 +134,7 @@ function formatPolicyOutput(
 
   lines.push(`Default Decision: ${formatDecision(defaultDecision)}`);
   lines.push(
-    `Non-Interactive Mode: ${nonInteractive ? 'true (ASK_USER → DENY)' : 'false'}`,
+    `Non-Interactive Mode: ${nonInteractive ? 'true (ASK_USER \u2192 DENY)' : 'false'}`,
   );
 
   return {
@@ -140,31 +144,46 @@ function formatPolicyOutput(
   };
 }
 
-/**
- * Handle /policies command — displays configured policy rules.
- * Prefers the agent.policy facade; falls back to config.getPolicyEngine()
- * when the agent is null (tracked migration debt).
- */
-function handlePoliciesCommand(
-  context: CommandContext,
-  _args: string,
-): MessageActionReturn {
-  const agent = context.services.agent;
+interface PolicyInfo {
+  rules: PolicyRuleDisplay[];
+  defaultDecision: PolicyDecision;
+  nonInteractive: boolean;
+}
 
+function getPolicyInfo(context: CommandContext): PolicyInfo | null {
+  const agent = context.services.agent;
   if (agent) {
     const rules: PolicyRuleDisplay[] = agent.policy
       .getRules()
       .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern));
-    return formatPolicyOutput(
+    return {
       rules,
-      agent.policy.getDefaultDecision(),
-      agent.policy.isNonInteractive(),
-    );
+      defaultDecision: agent.policy.getDefaultDecision(),
+      nonInteractive: agent.policy.isNonInteractive(),
+    };
   }
 
-  // Fallback for command contexts that have not yet been bound to an Agent.
   const config = context.services.config;
-  if (!config) {
+  if (config) {
+    const engine = config.getPolicyEngine();
+    const rules: PolicyRuleDisplay[] = engine
+      .getRules()
+      .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern?.source));
+    return {
+      rules,
+      defaultDecision: engine.getDefaultDecision(),
+      nonInteractive: engine.isNonInteractive(),
+    };
+  }
+  return null;
+}
+
+/**
+ * /policies list — renders a read-only tier-grouped table of all active rules.
+ */
+function listAction(context: CommandContext): MessageActionReturn {
+  const info = getPolicyInfo(context);
+  if (!info) {
     return {
       type: 'message',
       messageType: 'error',
@@ -172,22 +191,66 @@ function handlePoliciesCommand(
     };
   }
 
-  const policyEngine = config.getPolicyEngine();
-  const rules: PolicyRuleDisplay[] = policyEngine
-    .getRules()
-    .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern?.source));
   return formatPolicyOutput(
-    rules,
-    policyEngine.getDefaultDecision(),
-    policyEngine.isNonInteractive(),
+    info.rules,
+    info.defaultDecision,
+    info.nonInteractive,
   );
 }
 
-export const policiesCommand: SlashCommand = {
-  name: 'policies',
-  description: 'display configured policy rules and their priorities',
+/**
+ * /policies menu — opens the interactive policy manager dialog.
+ */
+function menuAction(
+  context: CommandContext,
+): OpenDialogActionReturn | MessageActionReturn {
+  const info = getPolicyInfo(context);
+  if (!info) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Configuration not available',
+    };
+  }
+  return {
+    type: 'dialog',
+    dialog: 'policies',
+  };
+}
+
+const listCommand: SlashCommand = {
+  name: 'list',
+  description: 'display all policy rules in a read-only tier-grouped table',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
-  action: (context: CommandContext, args: string): MessageActionReturn | void =>
-    handlePoliciesCommand(context, args),
+  action: (context: CommandContext): MessageActionReturn => listAction(context),
+};
+
+const menuCommand: SlashCommand = {
+  name: 'menu',
+  description: 'open the interactive policy manager dialog',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  action: (
+    context: CommandContext,
+  ): OpenDialogActionReturn | MessageActionReturn => menuAction(context),
+};
+
+export const policiesCommand: SlashCommand = {
+  name: 'policies',
+  description: 'inspect and manage policy rules (list or interactive menu)',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  subCommands: [listCommand, menuCommand],
+  action: (
+    context: CommandContext,
+    args: string,
+  ): MessageActionReturn | OpenDialogActionReturn => {
+    const trimmed = args.trim();
+    if (trimmed === 'menu') {
+      return menuAction(context);
+    }
+    // Default to list for bare /policies or /policies list
+    return listAction(context);
+  },
 };

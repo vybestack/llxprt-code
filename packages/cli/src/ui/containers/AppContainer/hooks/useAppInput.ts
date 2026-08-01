@@ -71,6 +71,7 @@ export interface AppInputParams {
   openSubagentDialog: AppDialogsResult['openSubagentDialog'];
   openModelsDialog: AppDialogsResult['openModelsDialog'];
   openPermissionsDialog: AppDialogsResult['openPermissionsDialog'];
+  openPoliciesDialog: AppDialogsResult['openPoliciesDialog'];
   openProviderDialog: AppDialogsResult['openProviderDialog'];
   openLoadProfileDialog: AppDialogsResult['openLoadProfileDialog'];
   openCreateProfileDialog: AppDialogsResult['openCreateProfileDialog'];
@@ -153,6 +154,7 @@ function useSlashActions(
     openSubagentDialog: p.openSubagentDialog,
     openModelsDialog: p.openModelsDialog,
     openPermissionsDialog: p.openPermissionsDialog,
+    openPoliciesDialog: p.openPoliciesDialog,
     openProviderDialog: p.openProviderDialog,
     openLoadProfileDialog: p.openLoadProfileDialog,
     openCreateProfileDialog: p.openCreateProfileDialog,
@@ -399,18 +401,10 @@ function useInputStreamWiring(
     },
     [todos, updateTodos, handleFinalSubmit],
   );
-  const enqueueSteer = useCallback(
-    (message: string) => {
-      void submitQuery(message);
-    },
-    [submitQuery],
-  );
   const handleSteer = useSteer(
     p.agent,
     agentStreamResult.streamingState,
     agentStreamResult.sanitizeContent,
-    pendingHistoryItems,
-    enqueueSteer,
   );
   const {
     activeShellPtyId: _ptyIdFromStream,

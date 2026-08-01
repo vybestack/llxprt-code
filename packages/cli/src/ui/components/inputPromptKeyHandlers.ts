@@ -439,6 +439,13 @@ export type InputHandlerDeps = {
   cursorPosition: [number, number];
   nextPlaceholderIdRef: React.MutableRefObject<number>;
   pendingLargePastesRef: React.MutableRefObject<Map<string, string>>;
+  /** Number of queued messages in the drawer (for contextual Enter/Backspace). */
+  queuedSubmissionCount?: number;
+  /** Sends all queued messages when invoked (Enter on empty input). */
+  sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
+  /** Clears all queued messages when invoked (Backspace on empty input). */
+  clearQueuedSubmissions?: () => void;
 };
 
 const submitBufferInput = (
@@ -525,6 +532,17 @@ const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
   // key falls through to NEWLINE (which also matches Ctrl+Enter) for normal
   // multi-line input.
   if (deps.handleSteer && keyMatchers[Command.STEER](key)) {
+    // Ctrl+Enter on empty input while streaming with queued messages:
+    // inject all queued messages as steers (issue #2882).
+    if (
+      buffer.text.trim() === '' &&
+      (deps.queuedSubmissionCount ?? 0) > 0 &&
+      deps.steerAllQueuedSubmissions
+    ) {
+      deps.steerAllQueuedSubmissions();
+      resetCompletionState();
+      return true;
+    }
     const consumed = deps.handleSteer(buffer.text);
     if (consumed) {
       buffer.setText('');
@@ -533,6 +551,16 @@ const handleSubmitAndEditKeys = (key: Key, deps: InputHandlerDeps): boolean => {
     }
   }
   if (keyMatchers[Command.SUBMIT](key)) {
+    // When the input is empty and the drawer has queued messages, Enter
+    // sends all queued messages instead of being a no-op (issue #2882).
+    if (
+      buffer.text.trim() === '' &&
+      (deps.queuedSubmissionCount ?? 0) > 0 &&
+      deps.sendAllQueuedSubmissions
+    ) {
+      deps.sendAllQueuedSubmissions();
+      return true;
+    }
     submitBufferInput(buffer, handleSubmit);
     return true;
   }
@@ -581,12 +609,26 @@ const handleTextInputKey = (key: Key, deps: InputHandlerDeps): void => {
   }
 };
 
+/** Clear queued messages when Backspace is pressed on empty input (issue #2882). */
+const tryClearQueue = (deps: InputHandlerDeps): boolean => {
+  if (deps.buffer.text.trim() !== '') return false;
+  if ((deps.queuedSubmissionCount ?? 0) === 0) return false;
+  const fn = deps.clearQueuedSubmissions;
+  if (fn === undefined) return false;
+  fn();
+  return true;
+};
+
 export const handleInputKey = (key: Key, deps: InputHandlerDeps): void => {
   if (handleSpecialInputKey(key, deps)) return;
   if (handleModeAndEscapeKeys(key, deps)) return;
   if (handleNavigationInputKeys(key, deps)) return;
   if (handleSubmitAndEditKeys(key, deps)) return;
   if (handleExternalInputKeys(key, deps)) return;
+  // Clear queued messages on Backspace when input is empty (issue #2882).
+  if (keyMatchers[Command.DELETE_CHAR_LEFT](key) && tryClearQueue(deps)) {
+    return;
+  }
   handleTextInputKey(key, deps);
 };
 

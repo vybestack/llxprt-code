@@ -578,23 +578,8 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
   });
   describe('Ordering contract: thinking ownership on content split (#1272)', () => {
     it('should attach thinkingBlocks only to the first committed gemini item, not gemini_content', async () => {
-      // Override findLastSafeSplitPoint to force a split: split at first chunk boundary
-      const { findLastSafeSplitPoint } = await import(
-        '../utils/markdownUtilities.js'
-      );
-      const mockedSplitPoint = vi.mocked(findLastSafeSplitPoint);
-
-      // First call returns a split point (half the combined text), subsequent calls return full length
-      let callCount = 0;
-      mockedSplitPoint.mockImplementation((s: string) => {
-        callCount++;
-        // On the first content event, force a split mid-string
-        if (callCount === 1 && s.length > 5) {
-          return 5;
-        }
-        return s.length;
-      });
-
+      // A real paragraph break outside a code fence is what makes the
+      // streaming pipeline commit a segment and keep the rest pending.
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
@@ -606,7 +591,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           };
           yield {
             type: ServerEventType.Content,
-            value: 'Hello world, this is a long response',
+            value: 'Hello world.\n\nThis is a long response.',
           };
           yield {
             type: ServerEventType.Finished,
@@ -652,25 +637,10 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           item.thinkingBlocks && item.thinkingBlocks.length > 0;
         expect(hasThinking).toBeFalsy();
       }
-
-      // Restore mock
-      mockedSplitPoint.mockImplementation((s: string) => s.length);
     });
 
     it('should not duplicate thinkingBlocks across multiple committed content segments', async () => {
-      const { findLastSafeSplitPoint } = await import(
-        '../utils/markdownUtilities.js'
-      );
-      const mockedSplitPoint = vi.mocked(findLastSafeSplitPoint);
-
-      // Force a split on every call to generate multiple committed segments
-      mockedSplitPoint.mockImplementation((s: string) => {
-        if (s.length > 10) {
-          return 10;
-        }
-        return s.length;
-      });
-
+      // Several real paragraph breaks produce several committed segments.
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
@@ -683,11 +653,11 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           // Send enough content to trigger multiple splits
           yield {
             type: ServerEventType.Content,
-            value: 'First segment of content that is long enough. ',
+            value: 'First segment of content.\n\n',
           };
           yield {
             type: ServerEventType.Content,
-            value: 'Second segment of content that continues. ',
+            value: 'Second segment continues.\n\nThird segment ends.',
           };
           yield {
             type: ServerEventType.Finished,
@@ -727,24 +697,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       // Exactly one item should own thinkingBlocks
       expect(itemsWithThinking).toHaveLength(1);
       expect(itemsWithThinking[0].type).toBe('gemini');
-
-      // Restore mock
-      mockedSplitPoint.mockImplementation((s: string) => s.length);
     });
 
     it('should maintain thinking-above-content ordering on the first committed gemini item', async () => {
-      const { findLastSafeSplitPoint } = await import(
-        '../utils/markdownUtilities.js'
-      );
-      const mockedSplitPoint = vi.mocked(findLastSafeSplitPoint);
-
-      mockedSplitPoint.mockImplementation((s: string) => {
-        if (s.length > 8) {
-          return 8;
-        }
-        return s.length;
-      });
-
       mockSendMessageStream.mockReturnValue(
         (async function* () {
           yield {
@@ -756,7 +711,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           };
           yield {
             type: ServerEventType.Content,
-            value: 'Here is the detailed response text',
+            value: 'Here is the detailed.\n\nResponse text.',
           };
           yield {
             type: ServerEventType.Finished,
@@ -795,9 +750,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       expect(first.thinkingBlocks!.length).toBe(1);
       expect(first.thinkingBlocks![0].thought).toBe('Planning: the response');
       expect(first.text.length).toBeGreaterThan(0);
-
-      // Restore mock
-      mockedSplitPoint.mockImplementation((s: string) => s.length);
     });
   });
 });

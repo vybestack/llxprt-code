@@ -72,6 +72,7 @@ export function hasActiveDialog(uiState: UIState): boolean {
     uiState.isModelsDialogOpen,
     uiState.isSessionBrowserDialogOpen,
     uiState.isModelConfigDialogOpen,
+    uiState.isPoliciesDialogOpen,
     uiState.showPrivacyNotice,
   ];
   return dialogFlags.some(Boolean);

@@ -150,6 +150,10 @@ export interface UIActions {
   openModelConfigDialog: () => void;
   closeModelConfigDialog: () => void;
 
+  // Policies dialog
+  openPoliciesDialog: () => void;
+  closePoliciesDialog: () => void;
+
   /**
    * Session browser dialog
    * @plan PLAN-20260214-SESSIONBROWSER.P21
@@ -201,6 +205,11 @@ export interface UIActions {
 
   // Queue error message
   setQueueErrorMessage: (message: string | null) => void;
+
+  // Queued messages actions (issue #2882)
+  sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
+  clearQueuedSubmissions?: () => void;
 }
 
 const UIActionsContext = createContext<UIActions | undefined>(undefined);

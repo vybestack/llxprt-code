@@ -42,6 +42,7 @@ import {
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 export type SubmissionDisposition =
   | 'consumed'
   | 'requeue'
@@ -90,9 +91,12 @@ export interface UseSubmitQueryDeps {
     feedback?: string;
   };
   flushPendingHistoryItem: (timestamp: number) => void;
+  pendingResponse: PendingResponseBuffer;
   pendingHistoryItemRef: React.MutableRefObject<HistoryItemWithoutId | null>;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
   turnCancelledRef: React.MutableRefObject<boolean>;
+  drainSuppressedRef: React.MutableRefObject<boolean>;
+  setTurnCancelled: (value: boolean) => void;
   queuedSubmissionsRef: React.MutableRefObject<QueuedSubmission[]>;
   enqueueSubmission: (submission: QueuedSubmission) => void;
   requeueSubmission: (submission: QueuedSubmission) => void;
@@ -184,6 +188,7 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     onCancelSubmit: deps.onCancelSubmit,
     sanitizeContent: deps.sanitizeContent,
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
+    pendingResponse: deps.pendingResponse,
     pendingHistoryItemRef: deps.pendingHistoryItemRef,
     thinkingBlocksRef: deps.thinkingBlocksRef,
     turnCancelledRef: deps.turnCancelledRef,
@@ -465,6 +470,7 @@ function useScheduleNext(
     submitQueryRef,
     tryReserveDrain,
     releaseDrain,
+    drainSuppressedRef,
   } = deps;
   const drainTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -497,11 +503,15 @@ function useScheduleNext(
   );
 
   const schedule = useCallback(() => {
+    const queueEmpty = queuedSubmissionsRef.current.length === 0;
+    const busyOrNotIdle =
+      activeTurnRef.current ||
+      streamingStateRef.current !== StreamingState.Idle;
     const cannotDrain =
       !mountedRef.current ||
-      activeTurnRef.current ||
-      streamingStateRef.current !== StreamingState.Idle ||
-      queuedSubmissionsRef.current.length === 0;
+      busyOrNotIdle ||
+      queueEmpty ||
+      drainSuppressedRef.current;
     if (cannotDrain || !tryReserveDrain()) {
       return;
     }
@@ -527,6 +537,7 @@ function useScheduleNext(
     drainSubmission,
     tryReserveDrain,
     releaseDrain,
+    drainSuppressedRef,
   ]);
   scheduleRef.current = schedule;
   return schedule;
@@ -576,6 +587,11 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
       }
 
       current.activeTurnRef.current = true;
+      // Starting a fresh user-initiated turn resumes normal drain behavior.
+      // A cancel may have suppressed draining to keep queued messages in the
+      // drawer; the user explicitly submitting a new message signals intent
+      // to resume automatic processing.
+      current.drainSuppressedRef.current = false;
       try {
         const turn = initTurn(current, query, promptId, current.getPromptCount);
         if (shouldDisplayUserMessage(turn.trimmedStr)) {
@@ -681,7 +697,7 @@ function initTurn(
   const userMessageTimestamp = Date.now();
   deps.abortControllerRef.current = new AbortController();
   const abortSignal = deps.abortControllerRef.current.signal;
-  deps.turnCancelledRef.current = false;
+  deps.setTurnCancelled(false);
 
   const resolvedPromptId =
     promptId ??
