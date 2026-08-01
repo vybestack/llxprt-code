@@ -680,7 +680,7 @@ export class RetryOrchestrator implements IProvider {
       signal,
     );
     if (failoverResult === 'continue') {
-      const ms = getDelayDuration(error, (state.currentDelay = initialDelayMs));
+      const ms = getDelayDuration(error, state.currentDelay);
       await delay(ms, signal);
       this.config.trackThrottleWaitTime(ms);
       return { type: 'continue' };
