@@ -731,6 +731,58 @@ describe('convertToAnthropicMessages - cross-endpoint thinking strip (issue #146
     const blocks = flatAssistantBlocks(messages);
     expect(blocks.some((b) => b.type === 'thinking')).toBe(false);
   });
+
+  it('treats hostname case variants as the same endpoint (normalization)', () => {
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      assistantWithModelAndBaseURL(
+        'claude-sonnet-4-5-20250929',
+        'https://API.Z.AI/api/anthropic',
+        'zai-sig',
+      ),
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-sonnet-4-5-20250929',
+      currentBaseURL: ZAI_URL,
+      logger: noopLogger,
+    });
+
+    // Same endpoint (hostname casing difference only) → thinking retained.
+    const blocks = flatAssistantBlocks(messages);
+    const thinking = blocks.find((b) => b.type === 'thinking') as
+      | { type: 'thinking'; signature?: string }
+      | undefined;
+    expect(thinking).toBeDefined();
+    expect(thinking?.signature).toBe('zai-sig');
+  });
+
+  it('treats explicit default port as equivalent to implicit (normalization)', () => {
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      assistantWithModelAndBaseURL(
+        'claude-sonnet-4-5-20250929',
+        'https://api.z.ai:443/api/anthropic',
+        'zai-sig',
+      ),
+    ];
+
+    const messages = convertToAnthropicMessages(contents, {
+      ...baseOptions,
+      currentModel: 'claude-sonnet-4-5-20250929',
+      currentBaseURL: ZAI_URL,
+      logger: noopLogger,
+    });
+
+    // Same endpoint (explicit :443 vs implicit) → thinking retained.
+    const blocks = flatAssistantBlocks(messages);
+    const thinking = blocks.find((b) => b.type === 'thinking') as
+      | { type: 'thinking'; signature?: string }
+      | undefined;
+    expect(thinking).toBeDefined();
+    expect(thinking?.signature).toBe('zai-sig');
+  });
 });
 
 /**

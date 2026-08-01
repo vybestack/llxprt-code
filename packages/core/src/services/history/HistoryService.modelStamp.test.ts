@@ -333,4 +333,16 @@ describe('stampAiTurnModel baseURL stamping (issue #1469)', () => {
     expect(stamped.metadata?.providerBaseURL).toBeUndefined();
     expect(stamped.metadata?.model).toBe('claude-opus-4-8');
   });
+
+  it('returns no providerBaseURL when baseURL is whitespace only', () => {
+    const aiContent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello there.' }],
+    };
+
+    const stamped = stampAiTurnModel(aiContent, 'claude-opus-4-8', '   ');
+
+    expect(stamped.metadata?.providerBaseURL).toBeUndefined();
+    expect(stamped.metadata?.model).toBe('claude-opus-4-8');
+  });
 });

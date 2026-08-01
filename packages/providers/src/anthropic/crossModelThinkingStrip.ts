@@ -43,7 +43,7 @@ function normalizeBaseURL(url: string | undefined): string | undefined {
   try {
     const parsed = new URL(url);
     const hostname = parsed.hostname.toLowerCase();
-    const port = getDefaultPort(parsed);
+    const port = formatPortSuffix(parsed);
     const pathname = stripTrailingSlashes(parsed.pathname);
     return `${parsed.protocol}//${hostname}${port}${pathname}${parsed.search}`;
   } catch {
@@ -51,7 +51,7 @@ function normalizeBaseURL(url: string | undefined): string | undefined {
   }
 }
 
-function getDefaultPort(parsed: URL): string {
+function formatPortSuffix(parsed: URL): string {
   if (parsed.port === '') {
     return '';
   }
