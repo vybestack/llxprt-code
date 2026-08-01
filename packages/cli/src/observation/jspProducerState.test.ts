@@ -51,7 +51,7 @@ describe('createProducerIdentity', () => {
     expect(id.sourceEpoch.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('never self-selects the Jefe agent identity', () => {
+  it('takes its agent identity from the bootstrap rather than inventing one', () => {
     const id = makeIdentity();
     expect(id.agentId).toBe(bootstrap.agentId);
     expect(id.startedAtMs).toBe(1_000_000);
