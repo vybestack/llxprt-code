@@ -310,14 +310,13 @@ describe('required parameters', () => {
    * @requirement REQ-002
    */
   it('declares required params for every op that interpolates one', () => {
-    for (const [name, descriptor] of Object.entries(OP_REGISTRY)) {
-      const argv = descriptor.buildArgv({});
-      if (argv.includes('undefined')) {
-        expect(
-          descriptor.requiredParams ?? [],
-          `${name} interpolates a positional but declares no requiredParams`,
-        ).not.toStrictEqual([]);
-      }
-    }
+    const undeclared = Object.entries(OP_REGISTRY)
+      .filter(([, d]) => d.buildArgv({}).includes('undefined'))
+      .filter(([, d]) => (d.requiredParams ?? []).length === 0)
+      .map(([name]) => name);
+    expect(
+      undeclared,
+      'ops interpolate a positional but declare no requiredParams',
+    ).toStrictEqual([]);
   });
 });
