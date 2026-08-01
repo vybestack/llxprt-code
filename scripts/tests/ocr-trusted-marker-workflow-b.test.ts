@@ -7,7 +7,11 @@
 import { Buffer } from 'node:buffer';
 import vm from 'node:vm';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { commandText, stepNamed } from './ocr-review-workflow-helpers.ts';
+import {
+  commandText,
+  stepNamed,
+  extractHeredocBody,
+} from './ocr-review-workflow-helpers.ts';
 import {
   asArray,
   asNumber,
@@ -357,14 +361,16 @@ describe('.github/workflows/ocr-review.yml — OCR trusted marker ownership (iss
       });
 
       // Step 2: extract the heredoc JavaScript from the Resolve review range step
-      // The step uses `node <<'NODE' ... NODE` — extract the JS between markers.
-      const NL = String.fromCharCode(10);
-      const nodeStart = resolveRangeRun.indexOf("node <<'NODE'");
-      expect(nodeStart).toBeGreaterThanOrEqual(0);
-      const heredocStart = resolveRangeRun.indexOf(NL, nodeStart) + 1;
-      const nodeEnd = resolveRangeRun.indexOf(NL + 'NODE', heredocStart);
-      expect(nodeEnd).toBeGreaterThan(heredocStart);
-      const heredocJs = resolveRangeRun.slice(heredocStart, nodeEnd);
+      // using a robust heredoc extractor that tolerates quoting-style changes,
+      // variable whitespace, and different delimiters. The step contains
+      // multiple heredocs, so we specify the NODE delimiter to select the
+      // node-script heredoc unambiguously. Throws a clear error if the
+      // expected heredoc is missing or duplicated.
+      const heredocJs = extractHeredocBody(
+        resolveRangeRun,
+        'Resolve review range',
+        'NODE',
+      );
 
       // Step 3: execute the real heredoc JS with process.env populated
       // from the reader's outputs.
@@ -649,6 +655,121 @@ no checkpoint here`,
       // The coderabbitai[bot] comment is NOT in the dedup set
       const hasCoderabbit = [...keySet].some((k) => k.includes('src/file2.ts'));
       expect(hasCoderabbit).toBe(false);
+    });
+  });
+
+  // ---- P3: additive-allowlist contract pinned at the workflow level ----
+
+  describe('P3 — additive allowlist: API login and OCR_BOT_LOGIN are ADDED, not SUBSTITUTED', () => {
+    it('getAuthenticated succeeds returning some-app[bot], yet a github-actions[bot] marker is still discovered', async () => {
+      // If the implementation OVERWRITES the allowlist with the API login,
+      // the github-actions[bot] marker would no longer be trusted and the
+      // checkpoint reader would report CHECKPOINT_FOUND=false. This test
+      // proves the API login is ADDED alongside the built-in default.
+      // Uses the FULL checkpoint reader script so the real
+      // resolveTrustedMarkerLogins(apiLogin, ...) line executes end-to-end.
+      const result = await executeCheckpointReader({
+        script: readCheckpointScript,
+        getAuthenticatedLogin: 'some-app[bot]',
+        getAuthenticatedThrows: null,
+        ocrBotLogin: '',
+        listComments: [markerComment(100, checkpointMarkerBody(FULL_HEAD_SHA))],
+      });
+      // The github-actions[bot] marker must still be discovered despite
+      // getAuthenticated returning a different login.
+      expect(result.outputs['CHECKPOINT_FOUND']).toBe('true');
+      expect(result.outputs['CHECKPOINT_VALID']).toBe('true');
+      expect(result.outputs['CHECKPOINT_HEAD']).toBe(FULL_HEAD_SHA);
+    });
+
+    it('OCR_BOT_LOGIN set to a custom login trusts BOTH that login AND github-actions[bot]', async () => {
+      // If the implementation OVERWRITES the allowlist with OCR_BOT_LOGIN,
+      // only custom-app[bot] would be trusted and the github-actions[bot]
+      // marker (the only one carrying a checkpoint) would be ignored —
+      // yielding CHECKPOINT_FOUND=false. By placing the checkpoint ONLY on
+      // the github-actions[bot] marker, this test fails if the allowlist is
+      // overwritten instead of added to.
+      const result = await executeCheckpointReader({
+        script: readCheckpointScript,
+        getAuthenticatedThrows: new Error(
+          'Resource not accessible by integration',
+        ),
+        ocrBotLogin: 'custom-app[bot]',
+        listComments: [
+          markerComment(100, checkpointMarkerBody(FULL_HEAD_SHA)),
+          markerComment(
+            200,
+            `${MARKER}
+no checkpoint on this one`,
+            trustedBot('custom-app[bot]'),
+          ),
+        ],
+      });
+      // The github-actions[bot] marker (id 100) must be trusted despite
+      // OCR_BOT_LOGIN being set to a different login. If the allowlist were
+      // overwritten, only custom-app[bot] would be trusted and no checkpoint
+      // would be found.
+      expect(result.outputs['CHECKPOINT_FOUND']).toBe('true');
+      expect(result.outputs['CHECKPOINT_VALID']).toBe('true');
+      expect(result.outputs['CHECKPOINT_HEAD']).toBe(FULL_HEAD_SHA);
+    });
+  });
+
+  // ---- P4: robust heredoc extractor ----
+
+  describe('extractHeredocBody — robust heredoc extraction (P4)', () => {
+    it('extracts the body from a single-quoted heredoc', () => {
+      const source = [
+        "node <<'NODE'",
+        'const x = 1;',
+        'const y = 2;',
+        'NODE',
+      ].join('\n');
+      expect(extractHeredocBody(source, 'test-step')).toBe(
+        'const x = 1;\nconst y = 2;',
+      );
+    });
+
+    it('extracts the body from a double-quoted heredoc', () => {
+      const source = ['node <<"EOF"', 'echo hello', 'EOF'].join('\n');
+      expect(extractHeredocBody(source, 'test-step')).toBe('echo hello');
+    });
+
+    it('extracts the body from a bare (unquoted) heredoc', () => {
+      const source = ['node <<SCRIPT', 'const a = 1;', 'SCRIPT'].join('\n');
+      expect(extractHeredocBody(source, 'test-step')).toBe('const a = 1;');
+    });
+
+    it('tolerates variable whitespace between << and the delimiter', () => {
+      const source = ["node <<  'NODE'", 'const x = 1;', 'NODE'].join('\n');
+      expect(extractHeredocBody(source, 'test-step')).toBe('const x = 1;');
+    });
+
+    it('handles the <<- (strip-leading-tabs) operator', () => {
+      const source = ['node <<-HEREDOC', '\tconst x = 1;', '\tHEREDOC'].join(
+        '\n',
+      );
+      expect(extractHeredocBody(source, 'test-step')).toBe('\tconst x = 1;');
+    });
+
+    it('throws a clear error when no heredoc is found', () => {
+      expect(() => extractHeredocBody('echo hello', 'no-heredoc-step')).toThrow(
+        /expected exactly 1 heredoc in step "no-heredoc-step", found 0/,
+      );
+    });
+
+    it('throws a clear error when multiple heredocs are found', () => {
+      const source = [
+        "node <<'NODE'",
+        'const x = 1;',
+        'NODE',
+        "node <<'NODE2'",
+        'const y = 2;',
+        'NODE2',
+      ].join('\n');
+      expect(() => extractHeredocBody(source, 'multi-step')).toThrow(
+        /expected exactly 1 heredoc in step "multi-step", found 2/,
+      );
     });
   });
 });

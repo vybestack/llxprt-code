@@ -454,6 +454,8 @@ export interface AutoGateParams {
   commentUserLogin?: string;
   commentId?: string;
   listComments?: FakeComment[];
+  getAuthenticatedLogin?: string | null;
+  getAuthenticatedThrows?: Error | null;
 }
 
 export interface AutoGateResult {
@@ -476,6 +478,8 @@ export async function executeAutoGate({
   commentUserLogin = 'github-actions[bot]',
   commentId = '999',
   listComments = [],
+  getAuthenticatedLogin = null,
+  getAuthenticatedThrows = null,
 }: AutoGateParams): Promise<AutoGateResult> {
   const outputs: Record<string, string> = {};
   const warnings: string[] = [];
@@ -483,6 +487,13 @@ export async function executeAutoGate({
   const github = {
     paginate: makePaginate(),
     rest: {
+      users: {
+        getAuthenticated: async (): Promise<{ data: { login: string } }> => {
+          if (getAuthenticatedThrows instanceof Error)
+            throw getAuthenticatedThrows;
+          return { data: { login: getAuthenticatedLogin ?? '' } };
+        },
+      },
       issues: {
         listComments: async (): Promise<{ data: FakeComment[] }> => ({
           data: listComments,

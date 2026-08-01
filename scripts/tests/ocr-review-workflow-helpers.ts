@@ -293,6 +293,104 @@ export function extractFunctionSource(
   throw new Error(`Could not extract ${functionName} source`);
 }
 
+/**
+ * Extract the body of a bash heredoc from a step's run script.
+ *
+ * A bash heredoc has the form:
+ *   command <<DELIMITER
+ *   ...heredoc body...
+ *   DELIMITER
+ *
+ * The delimiter may be:
+ *   - quoted with single quotes: <<'NODE'  (no expansion)
+ *   - quoted with double quotes: <<"NODE"  (expansion, but delimiter text same)
+ *   - bare (unquoted):            <<NODE
+ *
+ * Whitespace is allowed between `<<`, the optional quote, and the delimiter
+ * word (e.g. `<<  'NODE'` or `<<NODE`).
+ *
+ * When `expectedDelimiter` is omitted, the function finds ALL heredocs and
+ * asserts exactly ONE is present. When `expectedDelimiter` is provided (e.g.
+ * `'NODE'`), only heredocs whose delimiter matches are counted, and the
+ * function asserts exactly one match among those.
+ *
+ * Either way, a workflow change that adds or removes a heredoc fails loudly
+ * with a clear, actionable error naming the step and the match count.
+ *
+ * Returns the heredoc body (text between the opening delimiter line and the
+ * closing terminator line), with no surrounding command or terminator.
+ */
+export function extractHeredocBody(
+  source: string,
+  stepName: string,
+  expectedDelimiter?: string,
+): string {
+  const allMatches = findAllHeredocs(source);
+  const matches =
+    expectedDelimiter !== undefined
+      ? allMatches.filter((m) => m.delimiter === expectedDelimiter)
+      : allMatches;
+  if (matches.length !== 1) {
+    const filterDesc =
+      expectedDelimiter !== undefined
+        ? ` with delimiter "${expectedDelimiter}"`
+        : '';
+    throw new Error(
+      `extractHeredocBody: expected exactly 1 heredoc${filterDesc} in step "${stepName}", ` +
+        `found ${matches.length}. ` +
+        'A workflow change may have added or removed a heredoc. ' +
+        'Inspect the step run script and update the test accordingly.',
+    );
+  }
+  return matches[0].body;
+}
+
+interface HeredocMatch {
+  body: string;
+  delimiter: string;
+}
+
+function findAllHeredocs(source: string): HeredocMatch[] {
+  const openerPattern = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+  const results: HeredocMatch[] = [];
+  const allMatches = source.matchAll(openerPattern);
+  for (const openerMatch of allMatches) {
+    const match = extractHeredocFromOpener(source, openerMatch);
+    if (match !== null) {
+      results.push(match);
+    }
+  }
+  return results;
+}
+
+function extractHeredocFromOpener(
+  source: string,
+  openerMatch: RegExpMatchArray,
+): HeredocMatch | null {
+  if (openerMatch.index === undefined) return null;
+  const delimiter = openerMatch[2];
+  const bodyStartIndex = source.indexOf('\n', openerMatch.index);
+  if (bodyStartIndex < 0) return null;
+  const searchFrom = bodyStartIndex + 1;
+  const terminatorPattern = new RegExp(
+    `^\\s*${escapeRegex(delimiter)}\\s*$`,
+    'm',
+  );
+  const terminatorMatch = terminatorPattern.exec(source.slice(searchFrom));
+  if (terminatorMatch === null) return null;
+  const bodyEndIndex = searchFrom + terminatorMatch.index;
+  const newline = String.fromCharCode(10);
+  const rawBody = source.slice(searchFrom, bodyEndIndex);
+  const body = rawBody.endsWith(newline)
+    ? rawBody.slice(0, rawBody.length - 1)
+    : rawBody;
+  return { body, delimiter };
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function makePostSanitizer(
   postScript: string,
   token: string,

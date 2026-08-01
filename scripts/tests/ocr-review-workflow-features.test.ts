@@ -30,6 +30,7 @@ import {
   makeCore,
   loadFunctionsFromScriptWithGithub,
 } from './ocr-trusted-marker-test-helpers.ts';
+import type { StoreComment } from './ocr-trusted-marker-test-helpers.ts';
 
 /**
  * Extract a named function from the workflow script and load it into an
@@ -599,22 +600,30 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
     });
 
     it('O5: createOrUpdateMarkerComment reconciles on the failed-create retry path', async () => {
-      // The workflow performs reconciliation in three places inside
-      // createOrUpdateMarkerComment: the existing-update path, the
-      // post-create success path, and the failed-create retry path.
-      // This test exercises the failed-create retry path: when createComment
-      // throws, the catch block must re-fetch, select canonical, update it,
-      // and delete duplicates — proving reconciliation is not limited to
-      // the success path.
+      // The failed-create retry path is reached when:
+      //   1. The initial fetch finds NO existing marker (existing is null)
+      //   2. createComment throws
+      //   3. The catch block re-fetches — and THIS time finds markers
+      //      (simulating a race where another process posted a marker
+      //      between the initial fetch and the create attempt)
+      // The retry path must then select the canonical, update it, and
+      // delete duplicates — proving reconciliation is not limited to the
+      // success path.
       const store = createStore();
-      // Pre-existing marker on a different id — the retry path must find it
-      addToStore(store, {
+      // Markers are added lazily — the first fetch returns empty, then
+      // they appear (simulating the race).
+      const canonicalMarker: StoreComment = {
         id: 100,
         body: `${MARKER}\nold\n<!-- ocr-auto-count:1 -->`,
         user: trustedBot('github-actions[bot]'),
-      });
+      };
+      const duplicateMarker: StoreComment = {
+        id: 200,
+        body: `${MARKER}\nduplicate\n<!-- ocr-auto-count:0 -->`,
+        user: trustedBot('github-actions[bot]'),
+      };
+      let raceTriggered = false;
       const warnings: string[] = [];
-      // Make createComment always fail so the retry path is taken
       const github = makePaginatingOctokit(
         store,
         100,
@@ -622,11 +631,31 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
         new Error('Resource not accessible by integration'),
         null,
       );
-      // Override createComment to throw
+      // Override listComments to return empty on the first call (no existing
+      // marker), then populate the store (simulating a concurrent create)
+      // before createComment throws. Subsequent fetches return the markers.
       const issues = (github['rest'] as Record<string, unknown>)[
         'issues'
       ] as Record<string, unknown>;
+      issues['listComments'] = async (
+        opts: Record<string, unknown>,
+      ): Promise<{ data: StoreComment[]; status: number }> => {
+        if (!raceTriggered) {
+          return { data: [], status: 200 };
+        }
+        // After the race is triggered, return the markers from the store
+        const all = [...store.comments.values()].sort((a, b) => a.id - b.id);
+        const pp = Math.max(1, Number(opts['per_page'] ?? 100) || 100);
+        const page = Math.max(1, Number(opts['page'] ?? 1) || 1);
+        const start = (page - 1) * pp;
+        return { data: all.slice(start, start + pp), status: 200 };
+      };
       issues['createComment'] = async (): Promise<never> => {
+        // Simulate a race: markers appear between the initial fetch and
+        // this create attempt. Then the create fails.
+        raceTriggered = true;
+        addToStore(store, canonicalMarker);
+        addToStore(store, duplicateMarker);
         throw new Error('createComment failed');
       };
       const core = makeCore(warnings);
@@ -660,6 +689,16 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       // The store's surviving comment was updated by the retry path
       const surviving = store.comments.get(100);
       expect(surviving?.body).toContain('<!-- ocr-auto-count:2 -->');
+      // The duplicate (id 200) must have been deleted by the retry path.
+      // This assertion fails if the retry path stops calling cleanup.
+      expect(store.deletedIds.has(200)).toBe(true);
+      expect(store.comments.has(200)).toBe(false);
+      // Only the canonical (id 100) survives
+      const survivingMarkers = [...store.comments.values()].filter((c) =>
+        c.body.includes(MARKER),
+      );
+      expect(survivingMarkers).toHaveLength(1);
+      expect(survivingMarkers[0]?.id).toBe(100);
     });
   });
 });

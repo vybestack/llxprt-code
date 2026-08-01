@@ -158,12 +158,14 @@ describe('ocr-trusted-marker.cjs — resolveTrustedMarkerLogins (AM4)', () => {
     const logins = mod.resolveTrustedMarkerLogins('a[bot]; b[bot]');
     expect(logins.has('a[bot]')).toBe(true);
     expect(logins.has('b[bot]')).toBe(true);
+    expect(logins.has('github-actions[bot]')).toBe(true);
   });
 
   it('splits a space-separated list', () => {
     const logins = mod.resolveTrustedMarkerLogins('a[bot] b[bot]');
     expect(logins.has('a[bot]')).toBe(true);
     expect(logins.has('b[bot]')).toBe(true);
+    expect(logins.has('github-actions[bot]')).toBe(true);
   });
 
   it('tolerates padding and mixed case', () => {
@@ -172,6 +174,7 @@ describe('ocr-trusted-marker.cjs — resolveTrustedMarkerLogins (AM4)', () => {
     );
     expect(logins.has('my-app[bot]')).toBe(true);
     expect(logins.has('other[bot]')).toBe(true);
+    expect(logins.has('github-actions[bot]')).toBe(true);
   });
 
   it('does not narrow the set for empty/undefined/null/number sources', () => {
@@ -193,6 +196,7 @@ describe('ocr-trusted-marker.cjs — resolveTrustedMarkerLogins (AM4)', () => {
     const logins = mod.resolveTrustedMarkerLogins(['A[Bot]', 'B[bot]']);
     expect(logins.has('a[bot]')).toBe(true);
     expect(logins.has('b[bot]')).toBe(true);
+    expect(logins.has('github-actions[bot]')).toBe(true);
   });
 
   it('drops empty tokens', () => {
