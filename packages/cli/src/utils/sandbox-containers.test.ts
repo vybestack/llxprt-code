@@ -126,7 +126,7 @@ describe.sequential('#1456 container network policy', () => {
     expect(vi.mocked(childProcess.execSync)).not.toHaveBeenCalled();
   });
 
-  it('keeps primary on authoritative over legacy proxied', () => {
+  it('keeps primary "on" authoritative over legacy proxied', () => {
     setNetworkEnvironment('on', 'proxied', undefined);
 
     const { args, proxyCommand } = buildThenSetup(fixturePath);
