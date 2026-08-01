@@ -197,11 +197,16 @@ export function applyTransition(
       });
     }
     case 'session.ended': {
-      // Record the terminal state. While the session is live, a known-null
-      // terminal state is a truthful authoritative claim, but once it ends the
-      // snapshot must stop reporting that the source has not terminated.
+      // Record the terminal state and produce a genuinely terminal snapshot:
+      // clear the in-flight turn (so elapsed_ms stops growing), clear any
+      // pending wait, and return activity to idle. Leaving these untouched
+      // would make buildSnapshot advertise a forever-growing elapsed_ms and
+      // a pending wait that can never complete after the session has ended.
       return next({
         ...state,
+        activity: 'idle',
+        wait: null,
+        currentTurn: null,
         terminalState: { summary: 'session ended', code: 'SESSION_ENDED' },
       });
     }

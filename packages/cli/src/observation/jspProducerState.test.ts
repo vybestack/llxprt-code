@@ -304,6 +304,39 @@ describe('monotonic ordering', () => {
   });
 });
 
+describe('session ended', () => {
+  it('produces a genuinely terminal snapshot: no turn, no wait, idle activity', () => {
+    const id = makeIdentity();
+    let state = initProducerState(id, nativeSession);
+    state = applyTransition(state, { type: 'turn.started' }, () => 200);
+    state = applyTransition(
+      state,
+      { type: 'wait.opened', reason: 'permission' },
+      () => 300,
+    );
+    state = applyTransition(state, { type: 'session.ended' }, () => 10_000);
+    // The session is terminal, so a snapshot taken long after the turn started
+    // must not report a growing elapsed_ms or a pending wait.
+    const snap = buildSnapshot(state, () => 100_000);
+    expect(snap.current_turn).toMatchObject({
+      availability: 'known',
+      value: null,
+    });
+    expect(snap.current_wait).toMatchObject({
+      availability: 'known',
+      value: null,
+    });
+    expect(snap.native_activity).toMatchObject({
+      availability: 'known',
+      value: { state: 'idle' },
+    });
+    expect(snap.source_terminal_state).toMatchObject({
+      availability: 'known',
+      value: { code: 'SESSION_ENDED' },
+    });
+  });
+});
+
 describe('buildSnapshot', () => {
   it('produces a valid current snapshot reflecting all effects through cursor', () => {
     const id = makeIdentity();
