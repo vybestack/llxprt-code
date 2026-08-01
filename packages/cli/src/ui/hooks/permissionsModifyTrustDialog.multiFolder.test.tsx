@@ -98,15 +98,16 @@ describe('permissions dialog multi-folder flow', () => {
     // rule written during a test is visible to the trust resolution that
     // follows it. Individual tests still override this for inherited cases.
     mockedResolvePathTrust.mockImplementation((folderPath: string) => {
+      if (!(folderPath in mockedTrustedConfig.value)) {
+        return undefined;
+      }
       const trustLevel = mockedTrustedConfig.value[folderPath];
-      return trustLevel === undefined
-        ? undefined
-        : {
-            rule: { path: folderPath, trustLevel },
-            effectivePath: folderPath,
-            trusted: trustLevel !== TrustLevel.DO_NOT_TRUST,
-            provenance: 'direct' as const,
-          };
+      return {
+        rule: { path: folderPath, trustLevel },
+        effectivePath: folderPath,
+        trusted: trustLevel !== TrustLevel.DO_NOT_TRUST,
+        provenance: 'direct' as const,
+      };
     });
 
     addItem = vi.fn();
