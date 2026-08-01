@@ -211,6 +211,7 @@ describe('RenderInline URL linkification', () => {
     expect(extractFirstOsc8Target(flat)).toBe(url);
     // The comma must sit after the closing sequence, not inside the label
     expect(flat).toContain(`${OSC8_PREFIX}\x07,`);
+    expect(extractFirstOsc8Label(flat)).toBe(url);
   });
 
   it('excludes trailing semicolon, colon, exclamation, and question mark from a bare URL (AC-4)', () => {
