@@ -21,7 +21,12 @@ import { describe, it, expect } from 'vitest';
 import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { OP_REGISTRY } from '../github-broker-ops.js';
-import { validateParams } from '../github-broker-validation.js';
+import {
+  validateParams,
+  resolveLimit,
+  MAX_LIMIT,
+  DEFAULT_LIMIT,
+} from '../github-broker-validation.js';
 import { truncateWithMarker } from '../github-broker-shaping.js';
 import { withBodyFiles } from '../github-broker-body-file.js';
 import {
@@ -358,5 +363,40 @@ describe('truncation is byte-accurate', () => {
     const out = truncateWithMarker('short', 'body', 1000);
     expect(out.truncated).toBeNull();
     expect(out.value).toBe('short');
+  });
+});
+
+describe('parameter edge cases from review', () => {
+  /**
+   * Short hex is what colour pickers and GitHub itself produce, so
+   * rejecting it turned a valid label colour into INVALID_PARAM.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002
+   */
+  it('accepts both 3- and 6-digit hex colours', () => {
+    const spec = OP_REGISTRY['label.create'].params;
+    for (const color of ['#FFF', 'FFF', '#ff00aa', 'ff00aa']) {
+      expect(
+        validateParams(spec, { name: 'bug', color }),
+        `${color} should be accepted`,
+      ).toBeNull();
+    }
+    expect(
+      validateParams(spec, { name: 'bug', color: 'nothex' }),
+    ).not.toBeNull();
+  });
+
+  /**
+   * resolveLimit is exported, so it must clamp rather than trust that a
+   * caller validated first.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('clamps an oversized limit instead of trusting the caller', () => {
+    expect(resolveLimit({ limit: 5000 })).toBe(MAX_LIMIT);
+    expect(resolveLimit({ limit: 5 })).toBe(5);
+    expect(resolveLimit({})).toBe(DEFAULT_LIMIT);
   });
 });

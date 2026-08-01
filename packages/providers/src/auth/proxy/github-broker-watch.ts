@@ -168,7 +168,11 @@ export async function watchChecks(
     maxDurationMs?: number;
   } = {},
 ): Promise<WatchResult> {
-  const now = options.now ?? (() => Date.now());
+  // Monotonic by default. Date.now() moves backwards across an NTP step or
+  // manual clock change, which would let elapsed time shrink and slip past
+  // both the grace period and the maximum duration — turning a bounded
+  // watch into an unbounded one. Tests inject their own clock.
+  const now = options.now ?? (() => performance.now());
   const sleep = options.sleep ?? interruptibleSleep;
   const maxDurationMs = options.maxDurationMs ?? 3_600_000;
   const started = now();

@@ -414,7 +414,11 @@ function validateLimitParam(
 export function resolveLimit(params: Record<string, unknown>): number {
   const limit = params.limit;
   if (typeof limit === 'number' && Number.isInteger(limit) && limit > 0) {
-    return limit;
+    // Clamp rather than trust the caller. This is exported and every call
+    // site currently validates first, but a future one that does not would
+    // otherwise let an unbounded page size through to gh and back into a
+    // response that has to fit the frame budget.
+    return Math.min(limit, MAX_LIMIT);
   }
   return DEFAULT_LIMIT;
 }
@@ -458,6 +462,14 @@ function validateCloseReasonParam(
  * @plan PLAN-20260731-GHBROKER.P11
  * @requirement REQ-002
  */
+/**
+ * Accepts both 6- and 3-digit hex, with or without a leading hash. GitHub
+ * and every colour picker people paste from accept the short form, so
+ * rejecting it turned a valid label colour into an INVALID_PARAM.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002
+ */
 function validateColorParam(
   key: string,
   value: unknown,
@@ -468,7 +480,7 @@ function validateColorParam(
       message: `Parameter ${key} must be a string`,
     };
   }
-  if (!/^#?[0-9A-Fa-f]{6}$/.test(value)) {
+  if (!/^#?(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(value)) {
     return {
       code: 'INVALID_PARAM',
       message: `Parameter ${key} must be a hex color like #RRGGBB`,

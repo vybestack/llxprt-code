@@ -180,7 +180,12 @@ function tryRecoverFromNonZeroExit(
     signal?: string;
   };
   if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null;
-  if (error.code === 'ABORT_ERR' || error.signal === 'SIGTERM') return null;
+  if (
+    error.code === 'ABORT_ERR' ||
+    error.signal === 'SIGTERM' ||
+    error.signal === 'SIGINT'
+  )
+    return null;
   const stdout = typeof error.stdout === 'string' ? error.stdout : '';
   if (stdout.length === 0) return null;
   const json = rawOutput ? stdout : tryParseJsonSafe(stdout);
@@ -245,7 +250,11 @@ function classifyExecError(err: unknown): GhFailure {
   }
 
   // Aborted via signal
-  if (error.code === 'ABORT_ERR' || error.signal === 'SIGTERM') {
+  if (
+    error.code === 'ABORT_ERR' ||
+    error.signal === 'SIGTERM' ||
+    error.signal === 'SIGINT'
+  ) {
     return {
       kind: 'failure',
       error: makeBrokerError('GITHUB_ERROR', 'Operation cancelled'),
