@@ -184,7 +184,7 @@ describe('isLinkableHttpUrl', () => {
 describe('createUrlLink', () => {
   const LONG_OAUTH_URL =
     'https://claude.ai/oauth/authorize?' +
-    'client_id=54d7a297-b7c2-4f57-9bcl-1234567890abcdef&' +
+    'client_id=54d7a297-b7c2-4f57-9bc1-1234567890abcdef&' +
     'redirect_uri=https%3A%2F%2Flocalhost%3A3000%2Fcallback&' +
     'response_type=code&' +
     'scope=openid%20profile%20email%20offline_access&' +

@@ -212,23 +212,23 @@ function renderUnderlineNode(
   return null;
 }
 
+/**
+ * Render a bare URL token. The URL keeps the link colour whether or not it can
+ * be hyperlinked — it is a URL either way — while trailing sentence
+ * punctuation stays in the surrounding text colour. A URL that cannot be
+ * linkified safely (unparseable, or carrying control characters) is shown
+ * without an OSC 8 escape.
+ */
 function renderBareUrlNode(
   fullMatch: string,
   key: string,
   baseColor: string,
-): React.ReactNode | null {
+): React.ReactNode {
   const { url, trailing } = splitTrailingUrlPunctuation(fullMatch);
   const urlLink = createUrlLink(url);
-  if (urlLink === null) {
-    return (
-      <Text key={key} color={theme.text.link}>
-        {fullMatch}
-      </Text>
-    );
-  }
   return (
     <Text key={key} color={baseColor}>
-      <Text color={theme.text.link}>{urlLink}</Text>
+      <Text color={theme.text.link}>{urlLink ?? url}</Text>
       {trailing.length > 0 && <Text color={baseColor}>{trailing}</Text>}
     </Text>
   );

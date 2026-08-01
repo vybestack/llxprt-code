@@ -263,6 +263,25 @@ describe('RenderInline URL linkification', () => {
     expect(flat).toContain('javascript:alert(1)');
   });
 
+  it('keeps trailing punctuation out of the link colour when the URL cannot be linkified (AC-3)', () => {
+    // A bare http token that the URL parser rejects: no OSC 8 escape is
+    // emitted, but the URL and the trailing period stay distinctly coloured
+    // exactly as they are for a URL that can be linkified.
+    const node = renderInlineNode({ text: 'See http://[bad. now' });
+
+    const flat = flattenText(node);
+    expect(flat).not.toContain(OSC8_PREFIX);
+    expect(flat).toContain('http://[bad. now');
+
+    // The URL and its trailing period occupy separate nodes, exactly as they
+    // do when the URL can be linkified, so they can be styled independently.
+    const rendered = collectElementProps(node).map((props) =>
+      flattenText(props.children),
+    );
+    expect(rendered).toContain('http://[bad');
+    expect(rendered).toContain('.');
+  });
+
   it('does not linkify a bare javascript: URL (AC-3)', () => {
     const node = renderInlineNode({
       text: 'javascript:alert(1)',
