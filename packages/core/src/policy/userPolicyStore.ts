@@ -58,13 +58,6 @@ interface TomlPolicyFile {
 /** Prefix used for rules loaded from user-tier TOML files (see toml-loader). */
 const USER_SOURCE_PREFIX = 'User:';
 
-/**
- * Prefix used for dynamically confirmed rules (see policy/config.ts). These
- * originate from user-tier decisions but are injected at runtime, so they must
- * be reconciled alongside persisted user rules during reload.
- */
-const DYNAMIC_CONFIRMED_SOURCE_PREFIX = 'Dynamic (Confirmed)';
-
 function getManagedFilePath(): string {
   return path.join(Storage.getUserPoliciesDir(), MANAGED_POLICY_FILE);
 }
@@ -258,10 +251,7 @@ export async function reloadUserPolicyRules(
 ): Promise<readonly PolicyRule[]> {
   const kept = engine.getRules().filter((rule) => {
     const source = rule.source ?? '';
-    return (
-      !source.startsWith(USER_SOURCE_PREFIX) &&
-      !source.startsWith(DYNAMIC_CONFIRMED_SOURCE_PREFIX)
-    );
+    return !source.startsWith(USER_SOURCE_PREFIX);
   });
 
   const userDir = Storage.getUserPoliciesDir();

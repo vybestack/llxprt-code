@@ -375,7 +375,7 @@ priority = 100
       expect(engine.getRules()).toHaveLength(1);
     });
 
-    it('removes Dynamic (Confirmed) rules during reload', async () => {
+    it('preserves Dynamic (Confirmed) rules during reload', async () => {
       const engine = new PolicyEngine({
         rules: [
           {
@@ -400,8 +400,8 @@ priority = 100
       const sources = rules.map((r) => r.source);
       // Default rule preserved
       expect(sources).toContain('Default: defaults.toml');
-      // Dynamic (Confirmed) rule removed
-      expect(sources).not.toContain('Dynamic (Confirmed)');
+      // Dynamic (Confirmed) rule preserved (not dropped)
+      expect(sources).toContain('Dynamic (Confirmed)');
     });
 
     it('throws when the user TOML is malformed', async () => {

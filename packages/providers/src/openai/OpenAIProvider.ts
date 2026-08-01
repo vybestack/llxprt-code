@@ -164,8 +164,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         throw new Error('Codex account ID not available for OpenAIProvider');
       },
       resolveAuthTokenForPrompt: async () => this.getAuthTokenForPrompt(),
-      generateSyntheticCallId: () =>
-        `call_synthetic_${Math.random().toString(36).substring(2, 10)}`,
+      generateSyntheticCallId: () => {
+        const randomSuffix = Math.random().toString(36).substring(2, 10);
+        return `call_synthetic_${randomSuffix}`;
+      },
       shouldRetryOnError: (error) => this.shouldRetryResponse(error),
       getDefaultModel: () => this.getDefaultModel(),
       getGlobalConfig: () => undefined,

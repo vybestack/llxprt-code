@@ -79,7 +79,7 @@ describe('compressCommand — agent surface', () => {
 });
 
 describe('policiesCommand — agent surface', () => {
-  it('opens the policies dialog when agent is available', () => {
+  it('renders the policy list when agent is available (bare /policies)', () => {
     const context = buildContextWithAgent({
       policy: {
         getRules: () => [],
@@ -89,6 +89,24 @@ describe('policiesCommand — agent surface', () => {
     });
 
     const result = policiesCommand.action!(context, '') as {
+      type: string;
+      messageType: string;
+    };
+
+    expect(result.type).toBe('message');
+    expect(result.messageType).toBe('info');
+  });
+
+  it('opens the policies dialog via /policies menu when agent is available', () => {
+    const context = buildContextWithAgent({
+      policy: {
+        getRules: () => [],
+        getDefaultDecision: () => PolicyDecision.ASK_USER,
+        isNonInteractive: () => false,
+      } as unknown as AgentPolicyControl,
+    });
+
+    const result = policiesCommand.action!(context, 'menu') as {
       type: string;
       dialog: string;
     };
