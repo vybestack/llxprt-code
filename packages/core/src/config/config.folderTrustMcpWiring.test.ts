@@ -114,7 +114,9 @@ describe('Config MCP wiring on folder trust change', () => {
 
     // Use `void` to discard the returned promise so Bun's .not.toThrow()
     // checks only the synchronous call, not the async resolution.
-    expect(() => { void config.setTrustedFolderLive(false); }).not.toThrow();
+    expect(() => {
+      void config.setTrustedFolderLive(false);
+    }).not.toThrow();
 
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     expect(instances[0].quarantineForTrustRevocation).toHaveBeenCalledOnce();
@@ -133,7 +135,9 @@ describe('Config MCP wiring on folder trust change', () => {
 
     // Use `void` to discard the returned promise so Bun's .not.toThrow()
     // checks only the synchronous call, not the async resolution.
-    expect(() => { void config.setTrustedFolderLive(false); }).not.toThrow();
+    expect(() => {
+      void config.setTrustedFolderLive(false);
+    }).not.toThrow();
 
     const settlement2 = config.whenTrustTransitionSettled();
     settlement2.catch(() => {});
