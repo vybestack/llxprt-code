@@ -16,7 +16,11 @@ import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import { resolveAlias } from '@vybestack/llxprt-code-settings';
+import {
+  resolveAlias,
+  isStrictNumericString,
+  validateSetting,
+} from '@vybestack/llxprt-code-settings';
 import { buildSetSchema } from './setCommandSchema.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
@@ -56,7 +60,24 @@ function handleSetModelParam(parts: string[]): MessageActionReturn {
   const runtime = getRuntimeApi();
   const paramName = parts[1];
   const rawValue = parts.slice(2).join(' ');
-  const parsedParamValue = parseValue(rawValue);
+  const parsed = parseValue(rawValue);
+
+  // Type-check against the registry before storing. A registered param with
+  // the wrong type would otherwise be persisted verbatim and put a malformed
+  // field on the wire — OpenRouter answers 400 "top_p: Invalid input:
+  // expected number, received string" (issue #2896). Unregistered keys are
+  // still accepted so arbitrary provider-specific passthrough keeps working.
+  const validation = validateSetting(paramName, parsed);
+  if (!validation.success) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content:
+        validation.message ??
+        `Invalid value for model parameter '${paramName}'`,
+    };
+  }
+  const parsedParamValue = validation.value ?? parsed;
 
   try {
     runtime.setActiveModelParam(paramName, parsedParamValue);
@@ -286,12 +307,13 @@ export const setCommand: SlashCommand = {
  * Handles numbers, booleans, and JSON objects/arrays.
  */
 export function parseValue(value: string): unknown {
-  // Try to parse as number
+  // Try to parse as number. An overflow literal such as '1e400' is
+  // syntactically numeric but evaluates to Infinity, which JSON-serializes to
+  // null; keep it as text so it never reaches a request body, matching the
+  // settings layer's ingress and egress guards (issue #2896).
   if (looksNumeric(value)) {
     const num = Number(value);
-    if (!isNaN(num)) {
-      return num;
-    }
+    return Number.isFinite(num) ? num : value;
   }
 
   // Try to parse as boolean
@@ -312,27 +334,6 @@ export function parseValue(value: string): unknown {
 }
 
 function looksNumeric(value: string): boolean {
-  let i = 0;
-  if (value[0] === '-') {
-    i = 1;
-  }
-  const digitsStart = i;
-  while (i < value.length && value[i] >= '0' && value[i] <= '9') {
-    i++;
-  }
-  const hasIntegerDigits = i > digitsStart;
-
-  if (i < value.length && value[i] === '.') {
-    i++;
-    const fractionStart = i;
-    while (i < value.length && value[i] >= '0' && value[i] <= '9') {
-      i++;
-    }
-    const hasFractionDigits = i > fractionStart;
-    // Dot must be followed by at least one digit
-    return hasIntegerDigits && hasFractionDigits && i === value.length;
-  }
-
-  return hasIntegerDigits && i === value.length;
+  return isStrictNumericString(value);
 }
 // Stryker restore all

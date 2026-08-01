@@ -32,6 +32,10 @@ import {
   isPositiveContextLimit,
 } from './profile-application/profileAccessors.js';
 import { maybeRegisterLoadBalancerProfile } from './profile-application/loadBalancerProfile.js';
+import {
+  collectProfileValueWarnings,
+  formatProfileValueWarnings,
+} from './profile-application/profileValueWarnings.js';
 
 export interface ProviderSelectionResult {
   providerName: string;
@@ -829,6 +833,20 @@ export async function applyProfileWithGuards(
     providerRecord,
     authDeps,
   } = context;
+
+  // Advisory only: report values whose type the registry already knows to be
+  // wrong, so a malformed profile is attributed to the profile rather than to
+  // the provider that rejects it (issue #2896). Unknown keys never warn and
+  // nothing is dropped or refused.
+  warnings.push(
+    ...formatProfileValueWarnings(
+      options.profileName ?? actualProfile.provider,
+      collectProfileValueWarnings(
+        getProfileModelParams(actualProfile),
+        getProfileEphemeralSettings(actualProfile),
+      ),
+    ),
+  );
 
   clearProfileEphemerals(config, sanitizedProfile);
   const authResult = await wireAuthBeforeSwitch(sanitizedProfile, authDeps);
