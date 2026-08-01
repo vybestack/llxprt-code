@@ -22,7 +22,7 @@
 
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { availableParallelism } from 'node:os';
 
 const PRELOAD = './bun-preload.ts';
@@ -54,7 +54,7 @@ function findTestFiles(dir: string): string[] {
     } else if (
       (entry.endsWith('.test.ts') || entry.endsWith('.test.tsx')) &&
       !entry.endsWith('.d.ts') &&
-      !EXCLUDE.has(fullPath)
+      !EXCLUDE.has(fullPath.split(sep).join('/'))
     ) {
       results.push(fullPath);
     }

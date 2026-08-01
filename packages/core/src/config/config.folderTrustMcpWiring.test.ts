@@ -112,12 +112,9 @@ describe('Config MCP wiring on folder trust change', () => {
       throw policyFailure;
     });
 
-    // Bun's expect().not.toThrow() treats promise rejections as throws,
-    // unlike Vitest. Call directly and verify no synchronous throw.
-    const liveResult = config.setTrustedFolderLive(false);
-    liveResult.catch(() => {});
-    expect(liveResult).toBeDefined();
-    expect(typeof liveResult.then).toBe('function');
+    // Use `void` to discard the returned promise so Bun's .not.toThrow()
+    // checks only the synchronous call, not the async resolution.
+    expect(() => { void config.setTrustedFolderLive(false); }).not.toThrow();
 
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
     expect(instances[0].quarantineForTrustRevocation).toHaveBeenCalledOnce();
@@ -134,12 +131,9 @@ describe('Config MCP wiring on folder trust change', () => {
       throw quarantineFailure;
     });
 
-    // Bun's expect().not.toThrow() treats promise rejections as throws,
-    // unlike Vitest. Call directly and verify no synchronous throw.
-    const liveResult2 = config.setTrustedFolderLive(false);
-    liveResult2.catch(() => {});
-    expect(liveResult2).toBeDefined();
-    expect(typeof liveResult2.then).toBe('function');
+    // Use `void` to discard the returned promise so Bun's .not.toThrow()
+    // checks only the synchronous call, not the async resolution.
+    expect(() => { void config.setTrustedFolderLive(false); }).not.toThrow();
 
     const settlement2 = config.whenTrustTransitionSettled();
     settlement2.catch(() => {});
