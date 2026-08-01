@@ -158,5 +158,10 @@ the host over the existing authenticated credential channel; outside one it runs
 in the same process. The operation set and the responses are the same, so there
 is no behaviour that only appears in one mode.
 
-Inside a sandbox this is the **only** way to reach GitHub, because no credential
-exists in the container for `gh` to use.
+Under Docker or Podman this is the **only** way to reach GitHub, because no
+credential exists in the container for `gh` to use.
+
+> **Seatbelt is different.** It runs on the host with your full keyring rather
+> than isolating credentials, so `gh` there is already authenticated and the
+> tool provides convenience and shaped output rather than a boundary. See
+> [Sandbox](../sandbox.md) for why Docker or Podman is recommended.

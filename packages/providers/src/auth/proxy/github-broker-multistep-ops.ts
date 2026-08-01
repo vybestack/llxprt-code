@@ -336,7 +336,7 @@ export const prResolveThreadDescriptor: OpDescriptor = {
  * @requirement REQ-002
  */
 export function validateIssueEditParams(params: Record<string, unknown>) {
-  return validateParams(ISSUE_EDIT_PARAMS, params);
+  return validateParams(ISSUE_EDIT_PARAMS, params, ['number']);
 }
 
 /**
@@ -346,5 +346,5 @@ export function validateIssueEditParams(params: Record<string, unknown>) {
  * @requirement REQ-002
  */
 export function validateResolveThreadParams(params: Record<string, unknown>) {
-  return validateParams(PR_RESOLVE_THREAD_PARAMS, params);
+  return validateParams(PR_RESOLVE_THREAD_PARAMS, params, ['threadId']);
 }
