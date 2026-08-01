@@ -26,6 +26,11 @@ import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
+import {
+  resolveReasoningDialect,
+  applyReasoningDialect,
+  hasExplicitReasoningField,
+} from './openaiReasoningDialect.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 export interface RequestContext {
@@ -143,24 +148,51 @@ type OpenAIInvocationRuntime = {
 
 type RequestBodyWithThinking = OpenAI.Chat.ChatCompletionCreateParams & {
   thinking?: { type: 'enabled' | 'disabled' };
+  reasoning?: Record<string, unknown>;
 };
 
 function resolveReasoningConfig(
   requestBody: OpenAI.Chat.ChatCompletionCreateParams,
   options: NormalizedGenerateChatOptions,
+  ephemeralSettings: Record<string, unknown>,
 ): void {
-  if ('thinking' in requestBody || 'reasoning_effort' in requestBody) {
+  const body = requestBody as RequestBodyWithThinking;
+
+  // Short-circuit: if the user already set a reasoning field explicitly (via
+  // modelParams, which are Object.assigned into the body just before this
+  // call), do not auto-inject anything — the user value wins and stays the
+  // only reasoning representation on the wire.
+  if (hasExplicitReasoningField(body)) {
     return;
   }
+
   const invocation = options.invocation as OpenAIInvocationRuntime;
   const reasoningEnabled = invocation.modelBehavior?.['reasoning.enabled'] as
     | boolean
     | undefined;
-  const body = requestBody as RequestBodyWithThinking;
-  if (reasoningEnabled === true) {
-    body.thinking = { type: 'enabled' };
-  } else if (reasoningEnabled === false) {
-    body.thinking = { type: 'disabled' };
+  const reasoningEffort = invocation.modelBehavior?.['reasoning.effort'] as
+    | string
+    | undefined;
+
+  const baseUrl =
+    options.resolved.baseURL ??
+    (typeof ephemeralSettings['base-url'] === 'string'
+      ? ephemeralSettings['base-url']
+      : undefined);
+
+  const dialect = resolveReasoningDialect(baseUrl);
+  const applied = applyReasoningDialect(dialect, {
+    enabled: reasoningEnabled,
+    effort: reasoningEffort,
+  });
+  if (applied === null) {
+    return;
+  }
+
+  if (applied.key === 'thinking') {
+    body.thinking = applied.value;
+  } else {
+    body.reasoning = applied.value;
   }
 }
 
@@ -195,7 +227,7 @@ function applyRequestBodyOverrides(
     }
   }
 
-  resolveReasoningConfig(requestBody, options);
+  resolveReasoningConfig(requestBody, options, ephemeralSettings);
 
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
     requestBody.max_tokens = maxTokens;

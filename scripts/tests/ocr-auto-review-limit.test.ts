@@ -72,7 +72,13 @@ interface AutoReviewGateParams {
   commentBody?: string;
   changesFrom?: string;
   commentUserType?: string;
-  listComments?: Array<{ id: number; body: string; user?: { type: string } }>;
+  commentUserLogin?: string;
+  commentId?: string;
+  listComments?: Array<{
+    id: number;
+    body: string;
+    user?: { type: string; login?: string };
+  }>;
   listCommentsError?: Error | null;
   updateCommentResult?: Error | { status: number } | null;
 }
@@ -98,6 +104,8 @@ async function executeAutoReviewGate({
   commentBody = '',
   changesFrom = '',
   commentUserType = 'Bot',
+  commentUserLogin = 'github-actions[bot]',
+  commentId = '999',
   listComments = [],
   listCommentsError = null,
   updateCommentResult = null,
@@ -161,7 +169,11 @@ async function executeAutoReviewGate({
       action: eventAction,
       issue: { number: Number(prNumber), pull_request: {} },
       comment: commentBody
-        ? { body: commentBody, user: { type: commentUserType }, id: 999 }
+        ? {
+            body: commentBody,
+            user: { type: commentUserType, login: commentUserLogin },
+            id: Number(commentId),
+          }
         : undefined,
       changes: changesFrom ? { body: { from: changesFrom } } : undefined,
     },
@@ -180,6 +192,8 @@ async function executeAutoReviewGate({
         EVENT_ACTION: eventAction,
         COMMENT_BODY: commentBody,
         COMMENT_USER_TYPE: commentUserType,
+        COMMENT_USER_LOGIN: commentUserLogin,
+        COMMENT_ID: commentId,
         CHANGES_FROM: changesFrom,
       },
     },
@@ -205,6 +219,7 @@ async function executeAutoReviewGate({
     Date,
     Array,
     Object,
+    Set,
     parseInt,
     RegExp,
   };
@@ -356,6 +371,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n## OpenCodeReview\n<!-- ocr-auto-count:0 --><!-- ocr-suspended:false -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -375,6 +391,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:1 --><!-- ocr-suspended:false -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -393,6 +410,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:2 --><!-- ocr-suspended:false -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -412,6 +430,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:5 --><!-- ocr-suspended:true -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -430,6 +449,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:2 --><!-- ocr-suspended:true -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -448,6 +468,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:2 --><!-- ocr-suspended:true -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -466,6 +487,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:2 --><!-- ocr-suspended:false -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -483,6 +505,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:2 --><!-- ocr-suspended:false -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -500,6 +523,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:2 -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -518,6 +542,7 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
         {
           id: 1,
           body: `${MARKER}\n<!-- ocr-auto-count:1 -->`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
         },
       ],
     });
@@ -557,7 +582,13 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
       eventName: 'pull_request_target',
       eventAction: 'synchronize',
       autoReviewLimit: '2',
-      listComments: [{ id: 1, body: `${MARKER}\n## Review without state` }],
+      listComments: [
+        {
+          id: 1,
+          body: `${MARKER}\n## Review without state`,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
+        },
+      ],
     });
     expect(result.outputs['current-count']).toBe('0');
     expect(result.outputs['auto-should-run']).toBe('true');
@@ -576,7 +607,13 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
       commentBody: newBody,
       changesFrom: oldBody,
       commentUserType: 'Bot',
-      listComments: [{ id: 999, body: newBody }],
+      listComments: [
+        {
+          id: 999,
+          body: newBody,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
+        },
+      ],
     });
     expect(result.outputs['auto-should-run']).toBe('true');
     expect(result.outputs['suspended']).toBe('false');
@@ -598,7 +635,13 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
       commentBody: body,
       changesFrom: body,
       commentUserType: 'Bot',
-      listComments: [{ id: 999, body }],
+      listComments: [
+        {
+          id: 999,
+          body,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
+        },
+      ],
     });
     expect(result.outputs['auto-should-run']).toBe('false');
     expect(result.outputs['suspended']).toBe('false');
@@ -616,7 +659,13 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
       commentBody: uncheckedBody,
       changesFrom: checkedBody,
       commentUserType: 'Bot',
-      listComments: [{ id: 999, body: uncheckedBody }],
+      listComments: [
+        {
+          id: 999,
+          body: uncheckedBody,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
+        },
+      ],
     });
     expect(result.outputs['auto-should-run']).toBe('false');
     expect(result.updateCalls).toHaveLength(0);
@@ -687,7 +736,13 @@ describe('.github/workflows/ocr-review.yml — auto-review limit (issue #2666)',
       commentBody: newBody,
       changesFrom: oldBody,
       commentUserType: 'Bot',
-      listComments: [{ id: 999, body: newBody }],
+      listComments: [
+        {
+          id: 999,
+          body: newBody,
+          user: { type: 'Bot', login: 'github-actions[bot]' },
+        },
+      ],
       updateCommentResult: writeError,
     });
     expect(result.outputs['auto-should-run']).toBe('false');

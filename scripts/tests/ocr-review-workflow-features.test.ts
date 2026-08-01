@@ -21,6 +21,16 @@ import {
   asVmFunction,
 } from './typed-test-helpers.ts';
 import type { WorkflowStep } from './typed-test-helpers.ts';
+import {
+  MARKER,
+  trustedBot,
+  createStore,
+  addToStore,
+  makePaginatingOctokit,
+  makeCore,
+  loadFunctionsFromScriptWithGithub,
+} from './ocr-trusted-marker-test-helpers.ts';
+import type { StoreComment } from './ocr-trusted-marker-test-helpers.ts';
 
 /**
  * Extract a named function from the workflow script and load it into an
@@ -389,48 +399,45 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
   // Feature 3 (cont.): bot identity validation
   // -----------------------------------------------------------------------
   describe('Feature 3: bot identity validation for history dedup (issue #2670)', () => {
-    it('resolves the authenticated bot login via getAuthenticated', () => {
+    it('feeds the authenticated login into the canonical trusted set as an additional source (issue #2860)', () => {
       expectContainsAll(postScript, [
         'github.rest.users.getAuthenticated',
-        'let botLogin',
-        'botLogin = botUser.login',
+        'let apiLogin',
+        'apiLogin = botUser.login',
+        'resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN)',
       ]);
     });
 
-    it('existingReviewCommentSpans filters by bot type and authenticated login', () => {
+    it('existingReviewCommentSpans filters by trusted canonical author rule (issue #2860)', () => {
       const source = extractFunctionSource(
         postScript,
         'existingReviewCommentSpans',
       );
-      // Must authenticate via bot identity (type === 'Bot'), the resolved
-      // botLogin, and require side === 'RIGHT'.
-      expect(source).toContain("comment.user.type === 'Bot'");
-      expect(source).toContain('botLogin');
+      // The canonical snippet's isTrustedMarkerComment replaces the old
+      // exact-login predicate. side === 'RIGHT' is still required.
+      expect(source).toContain('isTrustedMarkerComment(');
+      expect(source).toContain('trustedLogins');
+      expect(source).toContain('INLINE_MARKER');
       expect(source).toContain("comment.side === 'RIGHT'");
       // Must NOT restrict to the current head SHA (cross-revision dedup).
       expect(source).not.toContain('commit_id === headSha');
-      // Fail-closed: botLogin must be required (&&), not optional (||).
-      // If getAuthenticated fails, botLogin is '' and NO bot should match.
-      expect(source).toContain(
-        "botLogin !== '' && comment.user.login === botLogin",
-      );
-      expect(source).not.toContain("botLogin === '' ||");
+      // The old exact-login predicate must be gone.
+      expect(source).not.toContain('botLogin !==');
+      expect(source).not.toContain('comment.user.login === botLogin');
     });
 
-    it('existingInlineCommentKeys filters by bot type and authenticated login', () => {
+    it('existingInlineCommentKeys filters by trusted canonical author rule (issue #2860)', () => {
       const source = extractFunctionSource(
         postScript,
         'existingInlineCommentKeys',
       );
-      expect(source).toContain("comment.user.type === 'Bot'");
-      expect(source).toContain('botLogin');
+      expect(source).toContain('isTrustedMarkerComment(');
+      expect(source).toContain('trustedLogins');
+      expect(source).toContain('INLINE_MARKER');
       expect(source).toContain("comment.side === 'RIGHT'");
       expect(source).not.toContain('commit_id === headSha');
-      // Fail-closed: botLogin must be required (&&), not optional (||).
-      expect(source).toContain(
-        "botLogin !== '' && comment.user.login === botLogin",
-      );
-      expect(source).not.toContain("botLogin === '' ||");
+      expect(source).not.toContain('botLogin !==');
+      expect(source).not.toContain('comment.user.login === botLogin');
     });
 
     it('history dedup no longer depends on the current head SHA', () => {
@@ -548,19 +555,16 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
       );
     });
 
-    it('re-fetches marker comments in reconcileMarkerComment(null) (issue #2670)', () => {
-      // Issue 5: reconcileMarkerComment(null) must call fetchMarkerComments()
-      // instead of reusing the stale markerComments array.
+    it('re-fetches marker comments in fetchMarkerComments (issue #2670)', () => {
+      // Issue 5: fetchMarkerComments must paginate issues.listComments and
+      // delegate to trustedMarkerComments instead of reusing stale arrays.
       expect(postScript).toContain('function fetchMarkerComments()');
-      const reconcileSource = extractFunctionSource(
+      const fetchSource = extractFunctionSource(
         postScript,
-        'reconcileMarkerComment',
+        'fetchMarkerComments',
       );
-      expect(reconcileSource).toContain('fetchMarkerComments()');
-      // Must not simply reuse the stale markerComments array when existingComments is null.
-      expect(reconcileSource).not.toContain(
-        'const comments = existingComments || markerComments',
-      );
+      expect(fetchSource).toContain('github.paginate');
+      expect(fetchSource).toContain('trustedMarkerComments(');
     });
 
     it('counts rediscovered fallback duplicates as skipped, not posted (issue #2670)', () => {
@@ -584,20 +588,115 @@ describe('.github/workflows/ocr-review.yml — issue #2670 upstream features', (
     it('reconciles marker comments after successful create (issue #2670)', () => {
       // CodeRabbit: successful concurrent creates can leave duplicate sticky
       // summaries. The createComment success path must also re-fetch and
-      // reconcile.
+      // reconcile via deleteDuplicateMarkerComments.
       const createFnSource = extractFunctionSource(
         postScript,
         'createOrUpdateMarkerComment',
       );
-      // After createComment returns successfully, reconcileMarkerComment(null)
-      // must be called to clean up any concurrent duplicates.
-      expect(createFnSource).toContain('reconcileMarkerComment(null)');
-      // Count occurrences — should appear in both the catch path AND the
-      // success path now.
-      const reconcileCalls = createFnSource.match(
-        /reconcileMarkerComment\(null\)/g,
+      // After createComment returns successfully, post-create reconciliation
+      // must re-fetch and delete duplicates.
+      expect(createFnSource).toContain('fetchMarkerComments()');
+      expect(createFnSource).toContain('deleteDuplicateMarkerComments');
+    });
+
+    it('O5: createOrUpdateMarkerComment reconciles on the failed-create retry path', async () => {
+      // The failed-create retry path is reached when:
+      //   1. The initial fetch finds NO existing marker (existing is null)
+      //   2. createComment throws
+      //   3. The catch block re-fetches — and THIS time finds markers
+      //      (simulating a race where another process posted a marker
+      //      between the initial fetch and the create attempt)
+      // The retry path must then select the canonical, update it, and
+      // delete duplicates — proving reconciliation is not limited to the
+      // success path.
+      const store = createStore();
+      // Markers are added lazily — the first fetch returns empty, then
+      // they appear (simulating the race).
+      const canonicalMarker: StoreComment = {
+        id: 100,
+        body: `${MARKER}\nold\n<!-- ocr-auto-count:1 -->`,
+        user: trustedBot('github-actions[bot]'),
+      };
+      const duplicateMarker: StoreComment = {
+        id: 200,
+        body: `${MARKER}\nduplicate\n<!-- ocr-auto-count:0 -->`,
+        user: trustedBot('github-actions[bot]'),
+      };
+      let raceTriggered = false;
+      const warnings: string[] = [];
+      const github = makePaginatingOctokit(
+        store,
+        100,
+        warnings,
+        new Error('Resource not accessible by integration'),
+        null,
       );
-      expect(reconcileCalls?.length).toBeGreaterThanOrEqual(2);
+      // Override listComments to return empty on the first call (no existing
+      // marker), then populate the store (simulating a concurrent create)
+      // before createComment throws. Subsequent fetches return the markers.
+      const issues = asRecord(asRecord(asRecord(github)['rest'])['issues']);
+      issues['listComments'] = async (
+        opts: Record<string, unknown>,
+      ): Promise<{ data: StoreComment[]; status: number }> => {
+        if (!raceTriggered) {
+          return { data: [], status: 200 };
+        }
+        // After the race is triggered, return the markers from the store
+        const all = [...store.comments.values()].sort((a, b) => a.id - b.id);
+        const pp = Math.max(1, Number(opts['per_page'] ?? 100) || 100);
+        const page = Math.max(1, Number(opts['page'] ?? 1) || 1);
+        const start = (page - 1) * pp;
+        return { data: all.slice(start, start + pp), status: 200 };
+      };
+      issues['createComment'] = async (): Promise<never> => {
+        // Simulate a race: markers appear between the initial fetch and
+        // this create attempt. Then the create fails.
+        raceTriggered = true;
+        addToStore(store, canonicalMarker);
+        addToStore(store, duplicateMarker);
+        throw new Error('createComment failed');
+      };
+      const core = makeCore(warnings);
+      const context = { repo: { owner: 'test-owner', repo: 'test-repo' } };
+      const env: Record<string, string> = {
+        PR_NUMBER: '42',
+        IS_AUTOMATIC: 'false',
+      };
+      const fns = loadFunctionsFromScriptWithGithub(
+        postScript,
+        [
+          'fetchMarkerComments',
+          'selectCanonicalMarker',
+          'applyNonRegressingCount',
+          'resolveNonRegressingCount',
+          'deleteDuplicateMarkerComments',
+          'createOrUpdateMarkerComment',
+        ],
+        github,
+        core,
+        context,
+        env,
+        warnings,
+      );
+      const summary = `${MARKER}\n## Updated\n<!-- ocr-auto-count:2 -->`;
+      const result = asRecord(
+        await asVmFunction(fns['createOrUpdateMarkerComment'])(summary, false),
+      );
+      // The retry path returned the canonical surviving comment
+      expect(result['id']).toBe(100);
+      // The store's surviving comment was updated by the retry path
+      const surviving = store.comments.get(100);
+      expect(surviving?.body).toContain('<!-- ocr-auto-count:2 -->');
+      // The duplicate (id 200) must have been deleted by the retry path.
+      // This assertion fails if the retry path stops calling cleanup.
+      expect(store.deletedIds.has(200)).toBe(true);
+      expect(store.comments.has(200)).toBe(false);
+      // Only the canonical (id 100) survives
+      const survivingMarkers = [...store.comments.values()].filter((c) =>
+        c.body.includes(MARKER),
+      );
+      expect(survivingMarkers).toHaveLength(1);
+      expect(survivingMarkers[0]?.id).toBe(100);
     });
   });
 });

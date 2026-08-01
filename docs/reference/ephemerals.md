@@ -22,6 +22,33 @@ Control extended thinking / chain-of-thought. Most models need `reasoning.enable
 | `reasoning.summary`           | enum    | —                | yes     | OpenAI Responses API reasoning summary: `auto`, `concise`, `detailed`, `none`. Codex alias defaults to `auto`.                                                                                                                                                                                                                           |
 | `text.verbosity`              | enum    | —                | yes     | OpenAI Responses API text verbosity for thinking output: `low`, `medium`, `high`.                                                                                                                                                                                                                                                        |
 
+### Reasoning dialect on OpenAI-compatible endpoints
+
+`reasoning.enabled` and `reasoning.effort` are provider-neutral settings.
+Vendors disagree on how to express them on the wire, so on the OpenAI Chat
+Completions transport llxprt emits **at most one** vendor dialect, chosen from
+the endpoint's base URL:
+
+| Base URL host         | Emitted field                                 |
+| --------------------- | --------------------------------------------- |
+| `openrouter.ai`       | `reasoning: { effort }` (or `{ enabled }`)    |
+| `z.ai`, `bigmodel.cn` | `thinking: { type: "enabled" \| "disabled" }` |
+| anything else         | nothing                                       |
+
+llxprt cannot know an arbitrary OpenAI-compatible endpoint's dialect, and
+guessing gets requests rejected — Friendli answers `422 no such field:
+'reasoning'` and Crusoe answers `403 parameter 'reasoning' is not allowed`.
+So unlisted endpoints get no reasoning field at all and use the model's own
+default.
+
+To drive a reasoning field on an unlisted endpoint, set it as a model param;
+an explicit model param always wins over the automatic selection and nothing
+else is added alongside it:
+
+    /set modelparam thinking {"type":"enabled"}
+    /set modelparam reasoning_effort high
+    /set modelparam parse_reasoning true
+
 ## Context and Compression
 
 Control how much context the model sees and when/how history is compressed. These directly affect quality — too small and the model loses track; too large and it drowns in noise.
@@ -195,17 +222,17 @@ Settings for multi-endpoint load balancing. Only apply when using load-balanced 
 
 These are passed directly to the provider API as-is. LLxprt doesn't validate them. Set with `/set modelparam <name> <value>`.
 
-| Parameter           | Type     | Description                                                                     |
-| ------------------- | -------- | ------------------------------------------------------------------------------- |
-| `temperature`       | number   | Sampling temperature (0.0–2.0). Lower = more deterministic.                     |
-| `max_tokens`        | number   | Max tokens to generate (OpenAI/Anthropic). Alias: `maxTokens`.                  |
-| `max_output_tokens` | number   | Max output tokens (Gemini native param).                                        |
-| `top_p`             | number   | Nucleus sampling threshold.                                                     |
-| `top_k`             | number   | Top-k sampling.                                                                 |
-| `frequency_penalty` | number   | Penalize repeated tokens.                                                       |
-| `presence_penalty`  | number   | Penalize tokens that appeared at all.                                           |
-| `seed`              | number   | Random seed for deterministic output (OpenAI only).                             |
-| `stop`              | string[] | Stop sequences — model stops generating when it produces any of these.          |
-| `response_format`   | JSON     | Response format (e.g., `{"type": "json_object"}`).                              |
-| `logit_bias`        | JSON     | Per-token bias.                                                                 |
-| `reasoning`         | JSON     | OpenAI reasoning config object. Usually set via `reasoning.*` settings instead. |
+| Parameter           | Type     | Description                                                                                                                                                                                                                                       |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `temperature`       | number   | Sampling temperature (0.0–2.0). Lower = more deterministic.                                                                                                                                                                                       |
+| `max_tokens`        | number   | Max tokens to generate (OpenAI/Anthropic). Alias: `maxTokens`.                                                                                                                                                                                    |
+| `max_output_tokens` | number   | Max output tokens (Gemini native param).                                                                                                                                                                                                          |
+| `top_p`             | number   | Nucleus sampling threshold.                                                                                                                                                                                                                       |
+| `top_k`             | number   | Top-k sampling.                                                                                                                                                                                                                                   |
+| `frequency_penalty` | number   | Penalize repeated tokens.                                                                                                                                                                                                                         |
+| `presence_penalty`  | number   | Penalize tokens that appeared at all.                                                                                                                                                                                                             |
+| `seed`              | number   | Random seed for deterministic output (OpenAI only).                                                                                                                                                                                               |
+| `stop`              | string[] | Stop sequences — model stops generating when it produces any of these.                                                                                                                                                                            |
+| `response_format`   | JSON     | Response format (e.g., `{"type": "json_object"}`).                                                                                                                                                                                                |
+| `logit_bias`        | JSON     | Per-token bias.                                                                                                                                                                                                                                   |
+| `reasoning`         | JSON     | OpenAI reasoning config object. Keys that are also `reasoning.*` settings (`effort`, `enabled`, …) are handled by those settings and by the dialect selection above; only vendor-specific extras (e.g. OpenRouter's `exclude`) pass through here. |
