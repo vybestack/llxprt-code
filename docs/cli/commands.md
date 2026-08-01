@@ -144,6 +144,20 @@ Changing several folders in one session is supported: after you change a folder 
 
 Only the current working directory affects the running session's trust. Setting a rule for an unrelated folder saves that rule without changing what the current session is allowed to do; a rule on a parent of the current folder can still change it, because the session's trust is re-evaluated from the current folder after every change.
 
+### Trusting a folder is not the same as adding it to the workspace
+
+These are two separate gates, and file tools only check the second one:
+
+- **Trust** decides how much LLxprt is allowed to do in the folder it is running in — privileged approval modes, project hooks, extensions, project settings, and MCP trusted rules.
+- **Workspace directories** decide which paths the file tools will touch at all. A path outside them is rejected with "File path must be within one of the workspace directories", no matter how it is trusted.
+
+So trusting `/tmp` does not let the file tools write there. Trust is the _precondition_ for adding it:
+
+    /permissions TRUST_FOLDER /tmp
+    /directory add /tmp
+
+`/directory add` refuses an untrusted folder and points you back at `/permissions`, so run them in that order. Use `/directory show` to see the current workspace directories.
+
 To set a rule non-interactively, pass the level and path directly:
 
     /permissions TRUST_FOLDER ~/projects/my-app

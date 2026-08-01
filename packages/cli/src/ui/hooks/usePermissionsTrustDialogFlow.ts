@@ -83,6 +83,35 @@ interface CommitDeps {
   mountedRef: React.MutableRefObject<boolean>;
 }
 
+/**
+ * Reports what a successful commit did.
+ *
+ * A folder other than the working directory also gets the workspace step:
+ * trust is a precondition for reaching a folder, not a grant, since the file
+ * tools accept only paths inside the workspace whatever the trust level. Saying
+ * just "set to Trusted" reads as access that was not given.
+ */
+function reportCommitOutcome(
+  addItem: UseHistoryManagerReturn['addItem'],
+  targetPath: string,
+  level: TrustLevel,
+  changed: boolean,
+  isTargetCwd: boolean,
+): void {
+  reportInfo(
+    addItem,
+    changed
+      ? `Trust level for ${targetPath} set to ${getLocalTrustLevelDisplay(level)}.`
+      : `Trust level unchanged for ${targetPath}`,
+  );
+  if (!isTargetCwd) {
+    reportInfo(
+      addItem,
+      `${targetPath} is not in this workspace. Run "/directory add ${targetPath}" to let file tools read and write there.`,
+    );
+  }
+}
+
 function useCommitLevel({
   trust,
   addItem,
@@ -121,12 +150,7 @@ function useCommitLevel({
           return;
         }
         const changed = level !== pendingTrustLevel;
-        reportInfo(
-          addItem,
-          changed
-            ? `Trust level for ${targetPath} set to ${getLocalTrustLevelDisplay(level)}.`
-            : `Trust level unchanged for ${targetPath}`,
-        );
+        reportCommitOutcome(addItem, targetPath, level, changed, isTargetCwd);
         if (!isTargetCwd) {
           setTargetPath(workingDirectory);
           setFormOrigin('root');

@@ -521,6 +521,47 @@ describe('permissions dialog multi-folder flow', () => {
     ]);
   });
 
+  it('C9: trusting another folder points the user at /directory add', async () => {
+    const { result } = renderFlow();
+
+    await act(async () => {
+      await result.current.selectChoice(TrustFormAction.ADD_FOLDER);
+    });
+    act(() => result.current.setPathDraft(otherFolder));
+    act(() => result.current.submitPath());
+    await act(async () => {
+      await result.current.selectChoice(TrustLevel.TRUST_FOLDER);
+    });
+
+    // Trust is a precondition for /directory add, not a substitute for it: the
+    // file tools reject paths outside the workspace regardless of trust, so
+    // saying only "set to Trusted" reads as granting access that was not given.
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('/directory add'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('C9: trusting the working directory does not mention /directory add', async () => {
+    const { result } = renderFlow();
+
+    await act(async () => {
+      await result.current.selectChoice(TrustLevel.TRUST_FOLDER);
+    });
+
+    // The working directory is already in the workspace, so the hint would be
+    // noise here.
+    const mentionedWorkspaceStep = addItem.mock.calls.some((call) =>
+      String((call[0] as { text?: string }).text ?? '').includes(
+        '/directory add',
+      ),
+    );
+    expect(mentionedWorkspaceStep).toBe(false);
+  });
+
   it('C9: a non-cwd commit does not grant the session the target folder trust', async () => {
     const { result } = renderFlow();
 

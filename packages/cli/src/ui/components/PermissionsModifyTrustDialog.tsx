@@ -108,7 +108,10 @@ const TrustForm: React.FC<TrustFormProps> = ({
         </Box>
         {!isTargetCwd && (
           <Box>
-            <Text color={Colors.Gray}>(not the current folder)</Text>
+            <Text color={Colors.Gray}>
+              (not the current folder — trusting it does not add it to this
+              workspace)
+            </Text>
           </Box>
         )}
         <Box>
