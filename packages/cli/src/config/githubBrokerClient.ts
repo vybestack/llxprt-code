@@ -48,14 +48,23 @@ class ProxyGitHubBrokerClient implements GitHubBrokerClient {
     params: Record<string, unknown>,
     signal: AbortSignal,
   ): Promise<Record<string, unknown>> {
-    const response = await this.client.request(
-      'github',
-      { op, ...params },
-      { timeoutMs: GITHUB_OP_TIMEOUT_MS, signal },
-    );
+    let response;
+    try {
+      response = await this.client.request(
+        'github',
+        { op, ...params },
+        { timeoutMs: GITHUB_OP_TIMEOUT_MS, signal },
+      );
+    } catch (err) {
+      // Transport failures - timeout, cancellation, a dropped socket -
+      // arrive with no indication of which operation was in flight, which
+      // makes them near-useless in a log. Name the op and keep the cause.
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`github ${op} failed: ${reason}`, { cause: err });
+    }
     if (response.ok !== true) {
       throw new Error(
-        `${response.code ?? 'GITHUB_ERROR'}: ${response.error ?? 'Operation failed'}`,
+        `github ${op}: ${response.code ?? 'GITHUB_ERROR'}: ${response.error ?? 'Operation failed'}`,
       );
     }
     return response.data ?? {};

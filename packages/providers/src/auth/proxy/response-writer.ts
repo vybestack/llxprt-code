@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type { AuditLogFn } from './audit-log.js';
+import type { AuditLogFn } from './audit-log.js';
+
 /**
  * Version-aware response writer for the credential proxy server. Encodes
  * response frames as exactly one socket.write() call, enforcing the v1
@@ -29,12 +32,6 @@ import {
 /**
  * Callback type for the audit-log function passed from the server.
  */
-export type AuditLogFn = (
-  level: 'INFO' | 'WARN' | 'ERROR',
-  connectionId: number,
-  operation: string,
-  details?: Record<string, unknown>,
-) => void;
 
 /**
  * Provides version-negotiated frame writing for a single connection.

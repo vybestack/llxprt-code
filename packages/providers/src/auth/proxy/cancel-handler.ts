@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type { AuditLogFn } from './audit-log.js';
+import type { AuditLogFn } from './audit-log.js';
+
 /**
  * Cancel operation handler for the credential proxy server. Processes
  * `cancel` requests by aborting the target operation in the calling
@@ -22,12 +25,6 @@ import type { ResponseWriter } from './response-writer.js';
 import type { ConcurrentDispatchRegistry } from './concurrent-dispatch-registry.js';
 
 /** Callback type for the audit-log function. */
-export type AuditLogFn = (
-  level: 'INFO' | 'WARN' | 'ERROR',
-  connectionId: number,
-  operation: string,
-  details?: Record<string, unknown>,
-) => void;
 
 /**
  * Result of a cancel request, used to select the response.

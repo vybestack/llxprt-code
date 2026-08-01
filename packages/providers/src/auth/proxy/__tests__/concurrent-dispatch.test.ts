@@ -865,5 +865,19 @@ async function collectRawFrames(
     });
 
     socket.on('error', (err) => finish(() => reject(err)));
+
+    // Without this, an unexpected server close leaves the promise pending
+    // until the 5s timeout and reports a timeout rather than the real
+    // cause, which is a slow and misleading way to learn the connection
+    // dropped.
+    socket.on('close', () =>
+      finish(() =>
+        reject(
+          new Error(
+            `Connection closed after ${responses.length}/${requests.length} responses`,
+          ),
+        ),
+      ),
+    );
   });
 }

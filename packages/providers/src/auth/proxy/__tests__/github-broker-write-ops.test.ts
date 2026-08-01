@@ -191,12 +191,15 @@ describe('P11a write operations', () => {
 
     /**
      * The proxy client rejects arrays as response data, so no shape may
-     * return one. Guards the whole write family.
+     * return one. This covers the single-call writes only; the whole
+     * registry, including the multi-step issue.edit and pr.resolve-thread,
+     * is covered by the envelope invariant in
+     * github-broker-envelope.test.ts.
      *
      * @plan PLAN-20260731-GHBROKER.P11
      * @requirement REQ-013
      */
-    it('no write op shape returns an array', () => {
+    it('no single-call write op shape returns an array', () => {
       for (const name of SINGLE_CALL_WRITE_OPS) {
         const shaped = OP_REGISTRY[name].shape('', { number: 1, name: 'x' });
         expect(Array.isArray(shaped), `${name} returned an array`).toBe(false);
