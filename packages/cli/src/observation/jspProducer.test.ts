@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { JspBoundDocument } from './jspDocuments.js';
 import {
   JspProducer,
@@ -511,5 +511,89 @@ describe('construction and shutdown robustness', () => {
     const after = producer.snapshot().source_sequence;
     producer.observeTurnStarted();
     expect(producer.snapshot().source_sequence).toBe(after);
+  });
+});
+
+describe('heartbeat resilience', () => {
+  it('degrades telemetry only when a heartbeat rejects', async () => {
+    vi.useFakeTimers();
+    try {
+      const identity = makeHarness().hooks.createIdentity(bootstrap);
+      let heartbeats = 0;
+      const hooks: JspProducerHooks = {
+        now: () => 5000,
+        createIdentity: () => identity,
+        register: () => Promise.resolve(OK),
+        publish: () => Promise.resolve(OK),
+        heartbeat: () => {
+          heartbeats += 1;
+          // A transport may throw rather than resolve to a typed rejection.
+          return Promise.reject(new Error('transport blew up'));
+        },
+      };
+      const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+        heartbeatMs: 10,
+      });
+      producer.start();
+      await producer.flush();
+      await vi.advanceTimersByTimeAsync(35);
+
+      // Heartbeats keep being attempted and nothing escapes as an unhandled
+      // rejection; the producer is still usable.
+      expect(heartbeats).toBeGreaterThanOrEqual(3);
+      const before = producer.snapshot().source_sequence;
+      producer.observeTurnStarted();
+      expect(producer.snapshot().source_sequence).toBeGreaterThan(before);
+      producer.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a stale in-flight heartbeat cannot stop a restarted producer', async () => {
+    vi.useFakeTimers();
+    try {
+      const identity = makeHarness().hooks.createIdentity(bootstrap);
+      const pending: Array<(result: JspPostResult) => void> = [];
+      let stallHeartbeats = true;
+      const hooks: JspProducerHooks = {
+        now: () => 5000,
+        createIdentity: () => identity,
+        register: () => Promise.resolve(OK),
+        publish: () => Promise.resolve(OK),
+        heartbeat: () =>
+          stallHeartbeats
+            ? new Promise<JspPostResult>((resolve) => pending.push(resolve))
+            : Promise.resolve(OK),
+      };
+      const producer = new JspProducer(bootstrap, nativeSession, hooks, {
+        heartbeatMs: 10,
+      });
+
+      // First lifecycle: issue a heartbeat and leave it in flight.
+      producer.start();
+      await producer.flush();
+      await vi.advanceTimersByTimeAsync(15);
+      expect(pending.length).toBeGreaterThan(0);
+
+      // Restart, then let the stale heartbeat resolve with a credential
+      // failure. Without lifecycle binding this would stop the new lifecycle.
+      producer.stop();
+      stallHeartbeats = false;
+      producer.start();
+      await producer.flush();
+      for (const resolve of pending) {
+        resolve(REJECTED_401);
+      }
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The restarted producer is still live and still publishing.
+      const before = producer.snapshot().source_sequence;
+      producer.observeTurnStarted();
+      expect(producer.snapshot().source_sequence).toBeGreaterThan(before);
+      producer.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

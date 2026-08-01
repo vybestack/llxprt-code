@@ -145,6 +145,12 @@ export class JspProducer {
   private registrationAttempts = 0;
   private lastRegistrationMs = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * Bumped on every stop(). A heartbeat captures the value current when its
+   * interval was created and ignores its own result if the value has since
+   * moved on, so a stale in-flight heartbeat cannot stop a restarted producer.
+   */
+  private heartbeatLifecycle = 0;
 
   constructor(
     bootstrap: JspBootstrap,
@@ -192,6 +198,9 @@ export class JspProducer {
 
   stop(): void {
     this.started = false;
+    // Retire this heartbeat lifecycle so an in-flight heartbeat cannot act
+    // after a subsequent start() has established a new one.
+    this.heartbeatLifecycle += 1;
     // Reset registration bookkeeping so a later start() re-registers and
     // re-establishes the heartbeat. Without this, restart runs with no
     // registration and no heartbeat. registrationTerminal is intentionally
@@ -312,6 +321,10 @@ export class JspProducer {
       return;
     }
     const heartbeatMs = this.heartbeatIntervalMs();
+    // Each heartbeat records the lifecycle it belongs to. stop() bumps the
+    // counter, so a heartbeat still in flight across a stop()/start() cannot
+    // act on the lifecycle that replaced it.
+    const lifecycle = this.heartbeatLifecycle;
     this.heartbeatTimer = setInterval(() => {
       const document: JspHeartbeatDocument = {
         schema: 1,
@@ -321,14 +334,22 @@ export class JspProducer {
         source_epoch: this.identity.sourceEpoch,
         bridge_observed_ms: this.hooks.now(),
       };
-      void this.hooks.heartbeat(document).then((result) => {
-        // A 401/403 on heartbeat means the credential is revoked or mis-bound.
-        // Stop the producer rather than sending heartbeats into a broker that
-        // no longer recognizes it.
-        if (isCredentialFailure(result)) {
-          this.stop();
-        }
-      });
+      void this.hooks
+        .heartbeat(document)
+        .then((result) => {
+          if (lifecycle !== this.heartbeatLifecycle) {
+            return;
+          }
+          // A 401/403 on heartbeat means the credential is revoked or
+          // mis-bound. Stop the producer rather than sending heartbeats into a
+          // broker that no longer recognizes it.
+          if (isCredentialFailure(result)) {
+            this.stop();
+          }
+        })
+        // A transport may reject rather than resolve to a typed rejection.
+        // Telemetry degrades; an unhandled rejection here can be fatal.
+        .catch(() => undefined);
     }, heartbeatMs);
   }
 
