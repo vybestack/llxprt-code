@@ -82,6 +82,7 @@ export interface UIStateParams {
   isModelsDialogOpen: boolean;
   isSessionBrowserDialogOpen: boolean;
   isModelConfigDialogOpen: boolean;
+  isPoliciesDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
@@ -282,6 +283,7 @@ function buildDialogStates(p: UIStateParams) {
     isModelsDialogOpen: p.isModelsDialogOpen,
     isSessionBrowserDialogOpen: p.isSessionBrowserDialogOpen,
     isModelConfigDialogOpen: p.isModelConfigDialogOpen,
+    isPoliciesDialogOpen: p.isPoliciesDialogOpen,
   };
 }
 

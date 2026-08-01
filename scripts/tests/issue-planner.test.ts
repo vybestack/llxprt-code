@@ -612,9 +612,9 @@ describe('.github/workflows/issue-planner.yml', () => {
       .map((step: YamlStep) => step.uses)
       .filter((u: unknown): u is string => typeof u === 'string');
     expect(uses).toEqual([
-      'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8',
-      'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76',
-      'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b',
+      'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+      'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6',
+      'actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3',
     ]);
     expect(planJob.env).not.toHaveProperty('OPENAI_API_KEY');
     expect(planJob.env).not.toHaveProperty('COMMENT_BODY');

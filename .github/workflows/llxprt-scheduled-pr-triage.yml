@@ -20,12 +20,12 @@ jobs:
       prs_needing_comment: ${{ steps.run_triage.outputs.prs_needing_comment }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
 
       # Option 1: Use GitHub App Token (requires APP_ID and PRIVATE_KEY secrets)
       # - name: Generate GitHub App Token
       #   id: generate_token
-      #   uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2
+      #   uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
       #   with:
       #     app-id: ${{ secrets.APP_ID }}
       #     private-key: ${{ secrets.PRIVATE_KEY }}

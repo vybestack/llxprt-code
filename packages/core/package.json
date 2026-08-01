@@ -163,6 +163,10 @@
       "bun": "./src/services/history/historyProviderPipeline.ts",
       "import": "./dist/src/services/history/historyProviderPipeline.js"
     },
+    "./services/history/historyChronology.js": {
+      "bun": "./src/services/history/historyChronology.ts",
+      "import": "./dist/src/services/history/historyChronology.js"
+    },
     "./services/history/historyTokenEstimation.js": {
       "bun": "./src/services/history/historyTokenEstimation.ts",
       "import": "./dist/src/services/history/historyTokenEstimation.js"

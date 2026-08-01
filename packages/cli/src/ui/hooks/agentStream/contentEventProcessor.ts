@@ -22,10 +22,12 @@ import {
   MessageType,
 } from '../../types.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
-import { buildSplitContent, buildFullSplitItem } from './streamUtils.js';
+import { buildFullSplitItem } from './streamUtils.js';
+import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface ContentEventDeps {
   addItem: UseHistoryManagerReturn['addItem'];
+  pendingResponse: PendingResponseBuffer;
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -66,6 +68,19 @@ function ensureAiPendingItem(
         : {}),
     });
   }
+}
+
+function buildAfterItem(
+  text: string,
+  liveProfileName: string | null,
+  existingProfileName: string | null | undefined,
+): HistoryItemAiContent {
+  const profileName = liveProfileName ?? existingProfileName ?? null;
+  return {
+    type: 'gemini_content',
+    text,
+    ...(profileName != null ? { profileName } : {}),
+  };
 }
 
 function applySplitResult(
@@ -120,29 +135,13 @@ function getPendingAiType(
   return item?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
 }
 
-export function processContentEvent(
-  eventValue: ContentEvent['value'],
+function handleSanitizeFeedback(
+  feedback: string | undefined,
+  blocked: boolean,
   currentAiMessageBuffer: string,
   userMessageTimestamp: number,
   deps: ContentEventDeps,
-): string {
-  if (deps.turnCancelledRef.current) {
-    return '';
-  }
-
-  // Normalize empty/whitespace to null so downstream `!= null` checks treat
-  // it as absent — consistent with resolveContentPrefixIdentity's cleaned()
-  // behavior (issue #2263).
-  const rawIdentity = deps.getContentPrefixIdentity();
-  const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
-  const pendingType = getPendingAiType(deps.pendingHistoryItemRef.current);
-  const combined = currentAiMessageBuffer + eventValue;
-  const {
-    text: sanitizedCombined,
-    feedback,
-    blocked,
-  } = deps.sanitizeContent(combined);
-
+): string | null {
   if (blocked) {
     const buffer = processBlockedContent(
       currentAiMessageBuffer,
@@ -161,6 +160,38 @@ export function processContentEvent(
       { type: MessageType.INFO, text: feedback },
       userMessageTimestamp,
     );
+  return null;
+}
+
+export function processContentEvent(
+  eventValue: ContentEvent['value'],
+  currentAiMessageBuffer: string,
+  userMessageTimestamp: number,
+  deps: ContentEventDeps,
+): string {
+  if (deps.turnCancelledRef.current) {
+    return '';
+  }
+
+  // Normalize empty/whitespace to null so downstream `!= null` checks treat
+  // it as absent — consistent with resolveContentPrefixIdentity's cleaned()
+  // behavior (issue #2263).
+  const rawIdentity = deps.getContentPrefixIdentity();
+  const liveProfileIdentity = rawIdentity === '' ? null : rawIdentity;
+  const pendingType = getPendingAiType(deps.pendingHistoryItemRef.current);
+  const { feedback, blocked } = deps.pendingResponse.push(eventValue);
+
+  const blockedResult = handleSanitizeFeedback(
+    feedback,
+    blocked,
+    currentAiMessageBuffer,
+    userMessageTimestamp,
+    deps,
+  );
+  if (blockedResult !== null) {
+    deps.pendingResponse.reset();
+    return blockedResult;
+  }
 
   ensureAiPendingItem(
     deps.pendingHistoryItemRef,
@@ -177,25 +208,29 @@ export function processContentEvent(
       | HistoryItemAiContent
       | undefined
   )?.profileName;
-  const { splitPoint, beforeText, afterItem } = buildSplitContent(
-    sanitizedCombined,
-    liveProfileIdentity,
-    existingProfileName ?? null,
-    deps.thinkingBlocksRef.current,
-    pendingType,
-  );
+  const stableText = deps.pendingResponse.stableText;
+  const splitPoint = deps.pendingResponse.getSplitPoint();
 
-  if (splitPoint === sanitizedCombined.length) {
+  if (splitPoint === stableText.length) {
+    const displayText = deps.pendingResponse.displayText;
     deps.setPendingHistoryItem((item) =>
       buildFullSplitItem(
         item,
-        sanitizedCombined,
+        displayText,
         liveProfileIdentity,
         deps.thinkingBlocksRef.current,
       ),
     );
-    return sanitizedCombined;
+    return displayText;
   }
+
+  const beforeText = stableText.slice(0, splitPoint);
+  deps.pendingResponse.consume(splitPoint);
+  const afterItem = buildAfterItem(
+    deps.pendingResponse.displayText,
+    liveProfileIdentity,
+    existingProfileName ?? null,
+  );
 
   return applySplitResult(
     beforeText,

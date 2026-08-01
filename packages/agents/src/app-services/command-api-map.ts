@@ -254,6 +254,16 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
     'Policy inspection reads the active run policy engine',
   ),
   runtime(
+    '/policies list',
+    'agent.policy.getRules',
+    'Listing policy rules reads the active run policy engine',
+  ),
+  runtime(
+    '/policies menu',
+    'agent.policy.getRules',
+    'Interactive policy manager reads/writes the active run policy engine',
+  ),
+  runtime(
     '/task',
     'agent.tasks.list',
     'Async task list/inspect/cancel over the active run task manager',

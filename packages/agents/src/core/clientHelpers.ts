@@ -7,6 +7,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { serializeWireContentForEstimate } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');
@@ -29,7 +30,9 @@ export function findCompressSplitPoint(
     throw new Error('Fraction must be between 0 and 1');
   }
 
-  const charCounts = contents.map((content) => JSON.stringify(content).length);
+  const charCounts = contents.map(
+    (content) => serializeWireContentForEstimate(content).length,
+  );
   const totalCharCount = charCounts.reduce((sum, length) => sum + length, 0);
   const targetCharCount = totalCharCount * fraction;
 

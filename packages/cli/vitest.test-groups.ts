@@ -59,9 +59,8 @@ const explicitIncludePaths: readonly string[] = [
   'src/agentStream.test.tsx',
   'src/ui/commands/directoryCommand.test.tsx',
   'src/ui/components/messages/ProfileChangeMessage.test.tsx',
-  'src/ui/components/HistoryItemDisplay.test.tsx',
   'src/ui/hooks/useTodoContinuation.spec.ts',
-  'src/ui/components/views/HooksList.test.tsx',
+  'src/ui/components/PoliciesDialog.test.tsx',
 ];
 
 const baseExclude: readonly string[] = [
@@ -396,11 +395,14 @@ function discoverTestFiles(multiRuntime: boolean): readonly string[] {
     dot: false,
     ignore: ['**/node_modules/**', '**/dist/**'],
   });
-  // Explicit re-include entries behave exactly like additional glob patterns:
-  // they add candidate files, but the exclude filter still applies (matching
-  // Vitest's include-then-exclude semantics).
+  // Explicit re-include entries carve out specific files that would otherwise
+  // be excluded by baseExclude (e.g. `**/ui/components/*.test.tsx`). They
+  // bypass the exclude filter so the file is always discovered and routed.
+  const explicitSet = new Set(explicitIncludePaths);
   const candidates = [...globbed, ...explicitIncludePaths];
-  const filtered = candidates.filter((f) => !micromatch.isMatch(f, exclude));
+  const filtered = candidates.filter(
+    (f) => explicitSet.has(f) || !micromatch.isMatch(f, exclude),
+  );
   const existing = filtered.filter((f) =>
     existsSync(resolvePackageRelative(f)),
   );
@@ -477,4 +479,4 @@ export function buildTestGroups(
  * The expected total selected file count after integrating the v0.11.0 test set.
  * Exported for behavioral tests to assert against an independent oracle.
  */
-export const SELECTED_FILE_COUNT: number = 521;
+export const SELECTED_FILE_COUNT: number = 528;
