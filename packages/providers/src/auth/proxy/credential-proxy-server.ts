@@ -42,7 +42,8 @@ import {
   computeNegotiatedVersion,
   validateCapabilityToken,
 } from './handshake-helpers.js';
-import { mergeExtraHandlers, resolveHandler } from './extra-handler-merger.js';
+import { buildHandlerMap, mergeExtraHandlers } from './extra-handler-merger.js';
+import type { ProxyRequestHandlerFn } from './credential-proxy-handler-type.js';
 
 export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
 export type { RequestHandler } from './github-broker-request-handler.js';
@@ -165,6 +166,9 @@ export class CredentialProxyServer {
       ? crypto.createHash('sha256').update(options.capabilityToken).digest()
       : null;
     mergeExtraHandlers(this.requestHandlers, options.extraHandlers);
+    // Built once here, after extras are merged, so the table is fixed for
+    // the lifetime of the server. See buildHandlerMap for why it is a Map.
+    this.handlers = buildHandlerMap(this.requestHandlers);
   }
 
   async start(): Promise<string> {
@@ -470,6 +474,15 @@ export class CredentialProxyServer {
     return {};
   }
 
+  /**
+   * Prototype-safe dispatch table, built from requestHandlers after extras
+   * are merged. See the constructor for why this is a Map.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002, REQ-015
+   */
+  private readonly handlers: Map<string, ProxyRequestHandlerFn>;
+
   private readonly requestHandlers: Partial<
     Record<
       string,
@@ -604,7 +617,7 @@ export class CredentialProxyServer {
           return;
         }
       }
-      const handler = resolveHandler(this.requestHandlers, op);
+      const handler = this.handlers.get(op);
       if (!handler) {
         this.sendError(
           socket,

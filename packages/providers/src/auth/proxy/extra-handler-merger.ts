@@ -64,3 +64,25 @@ export function resolveHandler<T>(
     ? table[op]
     : undefined;
 }
+
+/**
+ * Builds a prototype-safe dispatch table from a handler object.
+ *
+ * Operation names arrive from the caller. Indexing an object with one
+ * reaches Object.prototype members, so an op named "toString" resolves to a
+ * function and is then invoked as a handler. Map keys are data rather than
+ * properties, so no prototype member is ever reachable. Lives beside the
+ * merge so both share one set of assumptions about that table.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002, REQ-015
+ */
+export function buildHandlerMap<T>(
+  table: Partial<Record<string, T>>,
+): Map<string, T> {
+  return new Map(
+    Object.entries(table).filter(
+      (entry): entry is [string, T] => entry[1] !== undefined,
+    ),
+  );
+}
