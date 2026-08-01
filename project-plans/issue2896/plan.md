@@ -250,3 +250,15 @@ Review (`ocr review --audience agent --timeout 20`, 16 files, 6 comments).
 
 Local OCR budget is now exhausted (2 of 2). Remaining review passes happen on
 the PR.
+
+## 10. PR review round 1 (CI OpenCodeReview + PR review bot) — triage
+
+| # | Finding | Class | Action |
+|---|---|---|---|
+| R18 | `parseSetting` coerced a number-typed setting with `Number(raw)` and no finite guard, so `/set modelparam top_p 1e400` stored `Infinity` in memory, bypassing the egress guard and reaching the API as JSON `null`. | In-scope-Fix | Ingress now matches egress: finite-only, and a non-finite literal returns the raw text instead of falling through to `JSON.parse`, which would hand back the same `Infinity`. Covered by a new `parseSetting` test. |
+| R19 | `CommitResult` was not a discriminated union — `message` was optional even though the failure path always supplies one. | In-scope-Fix | Converted to `{ success: true } \| { success: false; message: string }`; the two call sites drop their `?? 'Invalid value'` fallbacks and `commitEphemeral` now supplies the default. |
+| R20 | Four tests shared a `B9` prefix, making a failure hard to identify. | In-scope-Fix | Renamed to `B9a`–`B9d` (and `B11a`/`B11b`). |
+| R21 | A pipeline test named "Friendli-native parse_reasoning" runs against the z.ai base URL. | In-scope-Fix | Renamed to describe what it actually proves: an explicit `parse_reasoning` is the only representation on z.ai. |
+| R22 | The double cast `as unknown as NormalizedGenerateChatOptions` in the provider tests. | Reject | The literal does not structurally satisfy the interface, so a single cast does not compile, and building a full context per case would obscure the assertions. This matches the established harness in the neighbouring `issue1943` test file. The pipeline test exists precisely so the real, uncast object graph is also covered. |
+| R23 | PR body did not follow the repository pull-request template. | In-scope-Fix | Rewritten into the template sections. |
+| R24 | OCR warning: changed-file coverage 5/17 below its 90% threshold. | Reject | A property of the review tool's own file sampling, not of the change. |

@@ -132,7 +132,7 @@ describe('issue #2896 settings-to-request pipeline', () => {
   });
 
   describe('explicit model params survive the pipeline and win', () => {
-    it('keeps a Friendli-native parse_reasoning as the only representation', async () => {
+    it('keeps an explicit parse_reasoning as the only representation on z.ai', async () => {
       settings.set('reasoning.enabled', true);
       settings.set('reasoning.effort', 'high');
       settings.setProviderSetting(PROVIDER, 'parse_reasoning', true);

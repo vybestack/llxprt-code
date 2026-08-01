@@ -207,7 +207,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
   });
 
   // B9: user sets modelParams.thinking explicitly — user value wins
-  it('B9: explicit modelParams.thinking wins and is not overridden', async () => {
+  it('B9a: an explicit modelParams.thinking wins and is not overridden', async () => {
     const options = createMockOptions({
       baseURL: 'https://api.z.ai/api/paas/v4',
       modelBehavior: { 'reasoning.enabled': true },
@@ -233,7 +233,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
 
   // B9: Friendli-native parse_reasoning also stands down auto-selection —
   // this is the third field from the issue's reported fan-out.
-  it('B9: explicit modelParams.parse_reasoning suppresses the host dialect', async () => {
+  it('B9c: an explicit modelParams.parse_reasoning suppresses the thinking dialect', async () => {
     const options = createMockOptions({
       baseURL: 'https://api.z.ai/api/paas/v4',
       modelBehavior: { 'reasoning.enabled': true, 'reasoning.effort': 'high' },
@@ -255,7 +255,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
     expect(countReasoningKeys(body)).toBe(1);
   });
 
-  it('B9: explicit modelParams.parse_reasoning suppresses the openrouter dialect', async () => {
+  it('B9d: an explicit modelParams.parse_reasoning suppresses the openrouter dialect', async () => {
     const options = createMockOptions({
       baseURL: 'https://openrouter.ai/api/v1',
       modelBehavior: { 'reasoning.enabled': true, 'reasoning.effort': 'high' },
@@ -276,7 +276,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
     expect(countReasoningKeys(body)).toBe(1);
   });
 
-  it('B9: explicit modelParams.reasoning wins and no thinking is auto-injected', async () => {
+  it('B9b: an explicit modelParams.reasoning suppresses the thinking dialect', async () => {
     const options = createMockOptions({
       baseURL: 'https://api.z.ai/api/paas/v4',
       modelBehavior: { 'reasoning.enabled': true },
@@ -298,7 +298,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
   });
 
   // B10: user sets modelParams.reasoning_effort explicitly — user value wins
-  it('B10: explicit modelParams.reasoning_effort wins and no other dialect is injected', async () => {
+  it('B10: an explicit modelParams.reasoning_effort wins and no other dialect is injected', async () => {
     const options = createMockOptions({
       baseURL: 'https://api.z.ai/api/paas/v4',
       modelBehavior: { 'reasoning.enabled': true },
@@ -321,7 +321,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
   });
 
   // B11: no base-url (canonical OpenAI) — no thinking
-  it('B11: canonical OpenAI (no base-url) emits no thinking', async () => {
+  it('B11a: canonical OpenAI (no base-url) emits no thinking', async () => {
     const options = createMockOptions({
       modelBehavior: { 'reasoning.enabled': true },
     });
@@ -341,7 +341,7 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #2896)', () => {
   });
 
   // B11 variant: base-url from ephemeral 'base-url' (not resolved.baseURL)
-  it('B11: resolves base-url from ephemeral settings when resolved.baseURL is absent', async () => {
+  it('B11b: resolves base-url from ephemeral settings when resolved.baseURL is absent', async () => {
     const options = createMockOptions({
       ephemerals: { 'base-url': 'https://api.z.ai/api/paas/v4' },
       modelBehavior: { 'reasoning.enabled': true },

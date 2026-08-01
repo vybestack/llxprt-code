@@ -61,8 +61,10 @@ describe('commitModelParam (issue #2896)', () => {
     const r = recorder();
     const result = commitModelParam('top_p', 'abc', r.set);
 
-    expect(result.success).toBe(false);
-    expect(result.message).toBe(NOT_A_NUMBER_MESSAGE);
+    expect(result).toStrictEqual({
+      success: false,
+      message: NOT_A_NUMBER_MESSAGE,
+    });
     expect(r.writes).toStrictEqual([]);
   });
 
@@ -135,7 +137,9 @@ describe('commitModelParam (issue #2896)', () => {
       throw new Error('no active provider');
     });
 
-    expect(result.success).toBe(false);
-    expect(result.message).toBe('no active provider');
+    expect(result).toStrictEqual({
+      success: false,
+      message: 'no active provider',
+    });
   });
 });

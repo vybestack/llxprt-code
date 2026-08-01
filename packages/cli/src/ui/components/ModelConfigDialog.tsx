@@ -451,13 +451,13 @@ function applyFieldEdit(
     const result = commitModelParam(field.key, raw, (value) =>
       d.runtime.setActiveModelParam(field.key, value),
     );
-    return result.success ? null : (result.message ?? 'Invalid value');
+    return result.success ? null : result.message;
   }
 
   const result = commitEphemeral(field, raw, (value) =>
     d.runtime.setEphemeralSetting(field.key, value),
   );
-  return result.success ? null : (result.message ?? 'Invalid value');
+  return result.success ? null : result.message;
 }
 
 function commitEphemeral(

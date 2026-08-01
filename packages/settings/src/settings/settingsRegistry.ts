@@ -485,10 +485,13 @@ export function parseSetting(key: string, raw: string): unknown {
   // Only apply type coercion when spec explicitly indicates the type
   // This prevents converting enum/string values like "true" to boolean true
   if (spec?.type === 'number') {
+    // Finite-only, matching the egress guard in normalizeSetting: an overflow
+    // literal such as '1e400' becomes Infinity, which JSON-serializes to null
+    // and would reach the API as a dropped parameter (issue #2896). Return the
+    // raw text rather than falling through to JSON.parse, which would hand
+    // back the same Infinity.
     const num = Number(raw);
-    if (!Number.isNaN(num)) {
-      return num;
-    }
+    return Number.isFinite(num) ? num : raw;
   }
 
   if (spec?.type === 'boolean') {

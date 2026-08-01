@@ -24,10 +24,13 @@
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 import { parseValue } from '../commands/setCommand.js';
 
-export interface CommitResult {
-  success: boolean;
-  message?: string;
-}
+/**
+ * Discriminated so a caller cannot read `message` without first narrowing on
+ * the failure branch, and so the failure branch always carries one.
+ */
+export type CommitResult =
+  | { success: true }
+  | { success: false; message: string };
 
 export const NOT_A_NUMBER_MESSAGE = 'must be a number';
 

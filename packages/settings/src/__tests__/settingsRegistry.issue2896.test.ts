@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import {
   separateSettings,
   normalizeSetting,
+  parseSetting,
 } from '../settings/settingsRegistry.js';
 
 describe('issue #2896 A7: legacy-profile numeric repair at egress', () => {
@@ -64,6 +65,21 @@ describe('issue #2896 A8: non-numeric strings are not silently dropped', () => {
     // the provider rejects it visibly instead.
     expect(normalizeSetting('top_p', '1e400')).toBe('1e400');
     expect(normalizeSetting('temperature', '-1e400')).toBe('-1e400');
+  });
+});
+
+describe('issue #2896: parseSetting keeps the same finite invariant as egress', () => {
+  it('parses ordinary numeric input for a number-typed param', () => {
+    expect(parseSetting('top_p', '.95')).toBe(0.95);
+    expect(parseSetting('max_tokens', '32000')).toBe(32000);
+  });
+
+  it('does not admit an overflow literal as Infinity at ingress', () => {
+    // Number('1e400') is Infinity, which JSON-serializes to null. Admitting it
+    // here would bypass the egress guard, so a stored value never becomes an
+    // unusable request parameter.
+    expect(parseSetting('top_p', '1e400')).not.toBe(Number.POSITIVE_INFINITY);
+    expect(parseSetting('top_p', '-1e400')).not.toBe(Number.NEGATIVE_INFINITY);
   });
 });
 
