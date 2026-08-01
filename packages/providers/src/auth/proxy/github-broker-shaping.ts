@@ -147,7 +147,13 @@ export function assertNotPartialSuccess(rawJson: unknown): void {
     Array.isArray(raw.errors) &&
     raw.errors.length > 0
   ) {
-    const first = raw.errors[0] as Record<string, unknown>;
+    // The array contents come from GitHub, so treat entries as unknown
+    // shape. A null or non-object first element previously threw a
+    // TypeError here and replaced a useful GraphQL error with a crash.
+    const first =
+      typeof raw.errors[0] === 'object' && raw.errors[0] !== null
+        ? (raw.errors[0] as Record<string, unknown>)
+        : {};
     const type = typeof first.type === 'string' ? first.type : undefined;
     const message =
       typeof first.message === 'string' ? first.message : 'GraphQL error';

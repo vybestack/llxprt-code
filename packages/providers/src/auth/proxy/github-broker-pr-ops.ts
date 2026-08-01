@@ -75,11 +75,11 @@ export function buildPrListArgv(params: Record<string, unknown>): string[] {
     '--json',
     'number,title,state,labels,updatedAt',
   ];
-  if (typeof params.state === 'string') {
+  if (typeof params.state === 'string' && params.state.length > 0) {
     argv.push('--state', params.state);
   }
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
@@ -188,7 +188,7 @@ export function buildPrViewArgv(
     ? 'number,title,state,author,body,labels,isDraft,reviewDecision,headRefName,baseRefName,comments'
     : 'number,title,state,author,body,labels,isDraft,reviewDecision,headRefName,baseRefName';
   const argv = ['pr', 'view', number, '--json', fields];
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
@@ -305,7 +305,7 @@ export function validatePrDiffParams(
 export function buildPrDiffArgv(params: Record<string, unknown>): string[] {
   const number = String(params.number);
   const argv = ['pr', 'diff', number];
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
@@ -400,7 +400,7 @@ export function validatePrChecksParams(
 export function buildPrChecksArgv(params: Record<string, unknown>): string[] {
   const number = String(params.number);
   const argv = ['pr', 'checks', number, '--json', 'name,state,bucket,link'];
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
@@ -656,7 +656,8 @@ export interface ShapedReviewComment {
 export interface ShapedReviewThread {
   readonly id: string;
   readonly path: string;
-  readonly line: number;
+  /** Null for file-level threads, which GitHub reports with line: null. */
+  readonly line: number | null;
   readonly isResolved: boolean;
   readonly isOutdated: boolean;
   readonly viewerCanResolve: boolean;
@@ -756,7 +757,10 @@ function shapeThread(node: unknown): ShapedReviewThread {
   return {
     id: extractString(obj.id, ''),
     path: extractString(obj.path, ''),
-    line: extractNumber(obj.line),
+    // GitHub returns line: null for file-level threads. Coercing that to 0
+    // reports a real line number that does not exist, which is worse than
+    // saying there isn't one.
+    line: typeof obj.line === 'number' ? obj.line : null,
     isResolved: obj.isResolved === true,
     isOutdated: obj.isOutdated === true,
     viewerCanResolve: obj.viewerCanResolve === true,

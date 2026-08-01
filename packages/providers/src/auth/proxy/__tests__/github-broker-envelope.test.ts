@@ -24,6 +24,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { OP_REGISTRY } from '../github-broker-ops.js';
+import { assertNotPartialSuccess } from '../github-broker-shaping.js';
 
 /**
  * Raw payloads wide enough to drive each op's shape() without network access.
@@ -78,4 +79,53 @@ describe('broker response envelope', () => {
       ).toBe(true);
     });
   }
+});
+
+describe('shaping robustness for external payloads', () => {
+  /**
+   * GitHub reports file-level review threads with line: null. Coercing
+   * that to 0 reports a line number that does not exist.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('preserves a null line for file-level review threads', () => {
+    const shaped = OP_REGISTRY['pr.reviews'].shape(
+      {
+        data: {
+          repository: {
+            pullRequest: {
+              reviewThreads: {
+                nodes: [
+                  {
+                    id: 'T1',
+                    path: 'a.ts',
+                    line: null,
+                    isResolved: false,
+                    isOutdated: false,
+                    comments: { nodes: [] },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {},
+    ) as { threads: Array<{ line: number | null }> };
+    expect(shaped.threads[0].line).toBeNull();
+  });
+
+  /**
+   * The errors array comes from GitHub, so a null entry must not turn a
+   * reportable GraphQL error into a TypeError.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-013
+   */
+  it('handles a null entry in a GraphQL errors array', () => {
+    expect(() => assertNotPartialSuccess({ data: {}, errors: [null] })).toThrow(
+      /GraphQL error/,
+    );
+  });
 });

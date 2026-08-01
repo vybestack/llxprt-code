@@ -40,6 +40,15 @@ export function mergeExtraHandlers<T>(
     }
     const handler = extra[key];
     if (handler !== undefined) {
+      // `extra` is Record<string, unknown>, so confirm the value is callable
+      // before it joins the dispatch table. Casting blindly would defer the
+      // failure to invocation time, where it surfaces as an opaque crash on
+      // a request rather than a clear error at construction.
+      if (typeof handler !== 'function') {
+        throw new TypeError(
+          `extraHandler "${key}" must be a function, received ${typeof handler}`,
+        );
+      }
       builtIn[key] = handler as T;
     }
   }

@@ -81,7 +81,7 @@ export function buildIssueViewArgv(
     ? 'number,title,state,author,labels,body,comments'
     : 'number,title,state,author,labels,body';
   const argv = ['issue', 'view', number, '--json', fields];
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
@@ -194,15 +194,15 @@ export function buildIssueListArgv(params: Record<string, unknown>): string[] {
     '--json',
     'number,title,state,labels,updatedAt',
   ];
-  if (typeof params.search === 'string') {
+  if (typeof params.search === 'string' && params.search.length > 0) {
     argv.push('--search', params.search);
   }
-  if (typeof params.state === 'string') {
+  if (typeof params.state === 'string' && params.state.length > 0) {
     argv.push('--state', params.state);
   }
   appendLabelArgs(argv, params.label);
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;

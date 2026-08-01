@@ -58,7 +58,7 @@ export function validateLabelListParams(
 export function buildLabelListArgv(params: Record<string, unknown>): string[] {
   const argv: string[] = ['label', 'list', '--json', 'name,color,description'];
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;

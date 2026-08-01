@@ -70,7 +70,7 @@ export function buildSearchIssuesArgv(
   ];
   appendSearchQuery(argv, params);
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
@@ -212,7 +212,7 @@ export function buildSearchPrsArgv(params: Record<string, unknown>): string[] {
   ];
   appendSearchQuery(argv, params);
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;

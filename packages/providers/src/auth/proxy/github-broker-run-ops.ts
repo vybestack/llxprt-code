@@ -66,10 +66,10 @@ export function buildRunListArgv(params: Record<string, unknown>): string[] {
     'databaseId,name,status,conclusion,headBranch,createdAt',
   ];
   argv.push('--limit', String(resolveLimit(params)));
-  if (typeof params.branch === 'string') {
+  if (typeof params.branch === 'string' && params.branch.length > 0) {
     argv.push('--branch', params.branch);
   }
-  if (typeof params.repo === 'string') {
+  if (typeof params.repo === 'string' && params.repo.length > 0) {
     argv.push('--repo', params.repo);
   }
   return argv;
