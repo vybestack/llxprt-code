@@ -93,9 +93,13 @@ export function createObservationProducer(
     return null;
   }
   const publisher = new JspHttpPublisher(bootstrap);
+  // Resolve the clock before composing so an injected `now` also drives
+  // identity creation. Capturing `Date.now` here would leave the identity
+  // timestamps on a different time source from every other hook.
+  const now = hooksOverride?.now ?? Date.now;
   const hooks: JspProducerHooks = {
-    now: Date.now,
-    createIdentity: (material) => createProducerIdentity(material, Date.now),
+    now,
+    createIdentity: (material) => createProducerIdentity(material, now),
     register: (snapshot) => publisher.register(snapshot),
     publish: (document) => publisher.publish(document),
     heartbeat: (document) => publisher.heartbeat(document),

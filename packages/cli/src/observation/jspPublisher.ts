@@ -67,6 +67,9 @@ export class JspHttpPublisher implements JspPublisher {
         body: JSON.stringify(body),
         signal: abort.signal,
       });
+      // Leaving the body unread can hold the connection open in undici, so
+      // drain it before reporting the result.
+      await response.arrayBuffer().catch(() => undefined);
       return response.ok;
     } catch {
       return false;
