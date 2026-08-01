@@ -693,11 +693,13 @@ describe('ocr-trusted-marker.cjs — parseHiddenAutoCount', () => {
     expect(mod.parseHiddenAutoCount('no count here')).toBe(0);
   });
 
-  it('returns 0 for null/undefined/garbage (not NaN)', () => {
+  it('returns exactly 0 for null/undefined/garbage', () => {
     expect(mod.parseHiddenAutoCount(null)).toBe(0);
     expect(mod.parseHiddenAutoCount(undefined)).toBe(0);
     expect(mod.parseHiddenAutoCount(123)).toBe(0);
-    expect(Number.isNaN(mod.parseHiddenAutoCount('garbage'))).toBe(false);
+    // Assert the value, not merely that it is non-NaN: a not-NaN check would
+    // also accept Infinity or an arbitrary number.
+    expect(mod.parseHiddenAutoCount('garbage')).toBe(0);
   });
 
   it('handles whitespace around the number', () => {
