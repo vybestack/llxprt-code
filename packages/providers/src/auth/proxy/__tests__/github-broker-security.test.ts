@@ -27,6 +27,7 @@ import type { CredentialProxyServerOptions } from '../credential-proxy-server.js
 import { createGitHubBrokerHandler } from '../github-broker.js';
 import { encodeFrame, FrameDecoder } from '@vybestack/llxprt-code-auth';
 import { OP_REGISTRY } from '../github-broker-ops.js';
+import { validateParams } from '../github-broker-validation.js';
 
 const CAPABILITY = 'test-capability-token-with-plenty-of-entropy';
 /** A realistically shaped GitHub token; must never appear in any response. */
@@ -260,5 +261,54 @@ describe('GitHub broker security regressions (#1954)', () => {
     expect(source).toContain('shell: false');
     expect(source).not.toMatch(/\bexec\(/);
     expect(source).not.toMatch(/shell:\s*true/);
+  });
+});
+
+describe('flag-injection defense (array elements)', () => {
+  /**
+   * The generic leading-dash check sees only the array container, so the
+   * per-element check is what actually holds here. Array elements are
+   * pushed straight into the gh argv by the repeatable-flag helpers, so a
+   * gap would contradict the invariant the validation module documents.
+   *
+   * @plan PLAN-20260731-GHBROKER.P17
+   * @requirement REQ-002
+   */
+  it('rejects a dash-prefixed label array element', () => {
+    const error = validateParams(
+      { label: 'label' },
+      { label: ['--malicious-flag'] },
+    );
+    expect(error).not.toBeNull();
+    expect(error?.code).toBe('INVALID_PARAM');
+  });
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P17
+   * @requirement REQ-002
+   */
+  it('rejects a dash-prefixed assignee array element', () => {
+    const error = validateParams(
+      { addAssignee: 'assignee' },
+      { addAssignee: ['-x'] },
+    );
+    expect(error).not.toBeNull();
+    expect(error?.code).toBe('INVALID_PARAM');
+  });
+
+  /**
+   * @plan PLAN-20260731-GHBROKER.P17
+   * @requirement REQ-002
+   */
+  it('still accepts ordinary label and assignee arrays', () => {
+    expect(
+      validateParams({ label: 'label' }, { label: ['bug', 'security'] }),
+    ).toBeNull();
+    expect(
+      validateParams(
+        { addAssignee: 'assignee' },
+        { addAssignee: ['acoliver'] },
+      ),
+    ).toBeNull();
   });
 });

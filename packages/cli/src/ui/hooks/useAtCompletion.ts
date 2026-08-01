@@ -247,17 +247,18 @@ async function buildNonFileSuggestions(
   config: CliUiRuntime | undefined,
   signal: AbortSignal,
 ): Promise<{ github: Suggestion[]; rest: Suggestion[] }> {
-  const resourceSuggestions = await searchResourceCandidates(
-    pattern,
-    buildResourceCandidates(config),
-    signal,
-  );
-  const subagentSuggestions = await searchSubagentCandidates(
-    pattern,
-    await buildSubagentCandidates(config),
-    signal,
-  );
-  const github = await buildGitHubSuggestions(pattern, config, signal);
+  // Run concurrently: these sources are independent, and the GitHub one may
+  // make a network call. Awaiting them in sequence would let a slow GitHub
+  // response delay suggestions that are already computed locally.
+  // fetchGitHubSuggestions swallows its own errors, so no rejection here can
+  // short-circuit the others.
+  const [resourceSuggestions, subagentSuggestions, github] = await Promise.all([
+    searchResourceCandidates(pattern, buildResourceCandidates(config), signal),
+    buildSubagentCandidates(config).then((candidates) =>
+      searchSubagentCandidates(pattern, candidates, signal),
+    ),
+    buildGitHubSuggestions(pattern, config, signal),
+  ]);
   return { github, rest: [...resourceSuggestions, ...subagentSuggestions] };
 }
 

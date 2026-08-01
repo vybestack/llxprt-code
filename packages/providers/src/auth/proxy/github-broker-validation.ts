@@ -270,7 +270,14 @@ function validateLabelParam(
 }
 
 /**
- * Validates that every element of a label array is a string.
+ * Validates that every element of a label array is a string that cannot be
+ * read as a flag.
+ *
+ * The leading-dash check must be applied per ELEMENT, not just to the
+ * top-level value: array elements are pushed straight into the gh argv by
+ * the repeatable-flag helpers, so checking only the container would let
+ * `{ label: ['--some-flag'] }` through and silently contradict the
+ * flag-injection invariant this module documents.
  *
  * @plan PLAN-20260731-GHBROKER.P08
  * @requirement REQ-002
@@ -284,6 +291,12 @@ function validateLabelArray(
       return {
         code: 'INVALID_PARAM',
         message: `Parameter ${key} must be an array of strings`,
+      };
+    }
+    if (el.startsWith('-')) {
+      return {
+        code: 'INVALID_PARAM',
+        message: `Parameter ${key} may not contain a value beginning with '-'`,
       };
     }
   }
@@ -449,6 +462,14 @@ function validateAssigneeParam(
         return {
           code: 'INVALID_PARAM',
           message: `Parameter ${key} must be a string or array of strings`,
+        };
+      }
+      // Per-element, for the same reason as labels: the generic check at
+      // the top of validateParamValue only sees the array container.
+      if (el.startsWith('-')) {
+        return {
+          code: 'INVALID_PARAM',
+          message: `Parameter ${key} may not contain a value beginning with '-'`,
         };
       }
     }
