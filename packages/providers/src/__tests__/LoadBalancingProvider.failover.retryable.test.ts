@@ -107,6 +107,10 @@ function makeFailoverConfig(profileName: string): LoadBalancingProviderConfig {
         authToken: 'token-3',
       },
     ],
+    // Issue #2849 raised the LB default retry count to 2. These tests focus on
+    // aggregate-retryability classification, not per-backend retry count, so
+    // pin retryCount=1 to preserve each test's attempt-count assertions.
+    lbProfileEphemeralSettings: { failover_retry_count: 1 },
   };
 }
 

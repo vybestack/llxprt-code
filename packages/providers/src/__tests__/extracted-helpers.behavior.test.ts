@@ -99,7 +99,7 @@ describe('extracted provider helper behavior', () => {
   it('preserves load-balancer failover defaults and status classification', () => {
     const defaults = extractFailoverSettings(undefined);
 
-    expect(defaults.retryCount).toBe(1);
+    expect(defaults.retryCount).toBe(2);
     expect(defaults.retryDelayMs).toBe(0);
     expect(defaults.failoverOnNetworkErrors).toBe(true);
     expect(shouldFailover(statusError(502), defaults)).toBe(true);

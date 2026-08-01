@@ -483,6 +483,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-per-backend-msg',
         strategy: 'failover',
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
         subProfiles: [
           {
             name: 'zai',
@@ -552,6 +553,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       const lbConfig: LoadBalancingProviderConfig = {
         profileName: 'test-per-backend-status',
         strategy: 'failover',
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
         subProfiles: [
           {
             name: 'zai',
@@ -652,6 +654,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
               modelParams: {},
             },
           ],
+          lbProfileEphemeralSettings: { failover_retry_count: 1 },
           lbProfileModelParams: { topK: 40 },
         },
         providerManager,

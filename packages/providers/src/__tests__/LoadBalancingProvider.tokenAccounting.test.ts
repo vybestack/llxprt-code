@@ -681,6 +681,7 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
         lbProfileEphemeralSettings: {
           'failover-retry-count': 1,
           'failover-retry-delay-ms': 0,
+          failover_retry_count: 1,
         },
         subProfiles: [
           createResolvedSubProfile({

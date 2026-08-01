@@ -191,6 +191,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
             authToken: 'test-token-2',
           },
         ],
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
       };
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
@@ -253,6 +254,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
             authToken: 'test-token-2',
           },
         ],
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
       };
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
@@ -500,6 +502,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
             authToken: 'test-token-3',
           },
         ],
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
       };
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);

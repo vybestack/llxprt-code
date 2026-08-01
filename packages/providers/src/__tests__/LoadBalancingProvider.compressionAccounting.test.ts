@@ -168,6 +168,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       lbProfileEphemeralSettings: {
         'failover-retry-count': 1,
         'failover-retry-delay-ms': 0,
+        failover_retry_count: 1,
       },
       subProfiles: [
         createResolvedSubProfile({
@@ -490,6 +491,7 @@ describe('LoadBalancingProvider - compression accounting (issue #2207)', () => {
       lbProfileEphemeralSettings: {
         'failover-retry-count': 1,
         'failover-retry-delay-ms': 0,
+        failover_retry_count: 1,
       },
       subProfiles: [
         createResolvedSubProfile({
