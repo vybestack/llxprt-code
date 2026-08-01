@@ -156,4 +156,23 @@ describe('createObservationTap', () => {
       'wait.resolved',
     ]);
   });
+
+  it('reports a cut-short or declined turn as failed, never completed', () => {
+    for (const [reason, outcome] of [
+      ['stop', 'turn.ended:completed'],
+      ['aborted', 'turn.ended:cancelled'],
+      ['hook-stopped', 'turn.ended:cancelled'],
+      ['error', 'turn.ended:failed'],
+      ['context-overflow', 'turn.ended:failed'],
+      ['max-turns', 'turn.ended:failed'],
+      ['loop-detected', 'turn.ended:failed'],
+      ['refusal', 'turn.ended:failed'],
+    ] as const) {
+      const calls: string[] = [];
+      const tap = createObservationTap(noopTarget(calls));
+      tap.onTurnStarted();
+      tap.processEvent({ type: 'done', reason } as AgentEvent);
+      expect(calls).toContain(outcome);
+    }
+  });
 });

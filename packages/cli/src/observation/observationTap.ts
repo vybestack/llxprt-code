@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentEvent } from '@vybestack/llxprt-code-agents';
+import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
 import type {
   JspActivityState,
   JspToolPhase,
@@ -32,14 +32,33 @@ export interface ObservationTap {
   onFlushCommitted(content: string, committedMs: number): void;
 }
 
-function mapDoneReason(reason: string): JspTurnOutcome {
-  if (reason === 'aborted') {
-    return 'cancelled';
+/**
+ * Map a stream completion reason to a turn outcome.
+ *
+ * Exhaustive on purpose. A falling-through default reported `max-turns`,
+ * `loop-detected`, `hook-stopped` and `refusal` as completed, which claims a
+ * turn succeeded when it was cut short or declined. Typing the parameter means
+ * a reason added upstream fails this build instead of silently becoming a
+ * success.
+ */
+function mapDoneReason(reason: DoneReason): JspTurnOutcome {
+  switch (reason) {
+    case 'stop':
+      return 'completed';
+    case 'aborted':
+    case 'hook-stopped':
+      return 'cancelled';
+    case 'error':
+    case 'context-overflow':
+    case 'max-turns':
+    case 'loop-detected':
+    case 'refusal':
+      return 'failed';
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
   }
-  if (reason === 'error' || reason === 'context-overflow') {
-    return 'failed';
-  }
-  return 'completed';
 }
 
 function mapToolStatus(

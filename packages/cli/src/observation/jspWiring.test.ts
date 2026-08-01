@@ -33,18 +33,31 @@ const sessionContext: ObservationSessionContext = {
   displayName: 'main-worker',
 };
 
+const tempDirs: string[] = [];
+
 async function writeTempFile(name: string, content: string): Promise<string> {
   const dir = join(
     tmpdir(),
     `jsp-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
   await fs.mkdir(dir, { recursive: true });
+  tempDirs.push(dir);
   const filePath = join(dir, name);
   await fs.writeFile(filePath, content, 'utf8');
   return filePath;
 }
 
 describe('loadBootstrapFromEnv', () => {
+  afterEach(async () => {
+    // Each helper call creates a directory; without this they accumulate in
+    // the system temp directory on every run.
+    await Promise.all(
+      tempDirs
+        .splice(0)
+        .map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    );
+  });
+
   const origEnv = { ...process.env };
 
   beforeEach(() => {
