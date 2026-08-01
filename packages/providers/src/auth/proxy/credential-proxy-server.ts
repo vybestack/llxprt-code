@@ -34,12 +34,20 @@ import {
   type OAuthFlowInterface,
 } from './credential-proxy-oauth-handler.js';
 import type { RefreshCoordinator } from './refresh-coordinator.js';
+import { ConcurrentDispatchRegistry } from './concurrent-dispatch-registry.js';
+import { auditLog } from './audit-log.js';
+import { ResponseWriter } from './response-writer.js';
+import { handleCancel } from './cancel-handler.js';
+import {
+  computeNegotiatedVersion,
+  validateCapabilityToken,
+} from './handshake-helpers.js';
 
 export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 
 /** Max frames per chunk before a connection is considered flooding and destroyed. */
 const MAX_FRAMES_PER_CHUNK = 100;
@@ -83,8 +91,34 @@ export interface ConnectionState {
    * to prevent credential discovery.
    */
   isSandboxConnection: boolean;
-  /** Promise chain for serializing async dispatch on this connection. */
-  inFlight?: Promise<void>;
+  /**
+   * Protocol version negotiated during handshake. A v1 client negotiates
+   * down to 1; a v2 client negotiates up to 2. Used to gate frame sizes:
+   * v1 clients must never receive a frame larger than 64 KiB.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-006
+   * @pseudocode 002-frame-and-cancel.md lines 67-76
+   */
+  negotiatedVersion: number;
+  /**
+   * Registry of concurrently-dispatched operations, replacing the former
+   * inFlight serialization chain. Holds AbortControllers for abort-on-close.
+   *
+   * @plan PLAN-20260731-GHBROKER.P03
+   * @requirement REQ-005
+   * @pseudocode 001-concurrent-dispatch.md lines 1-9
+   */
+  pending: ConcurrentDispatchRegistry;
+  /**
+   * Version-aware response writer for this connection. Handles v1 frame-size
+   * guard (RESPONSE_TOO_LARGE) and the single-write invariant.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-006
+   * @pseudocode 002-frame-and-cancel.md lines 67-76
+   */
+  writer: ResponseWriter;
 }
 
 // ─── Server ──────────────────────────────────────────────────────────────────
@@ -218,6 +252,15 @@ export class CredentialProxyServer {
     const state: ConnectionState = {
       id: connectionId,
       isSandboxConnection: false,
+      negotiatedVersion: PROTOCOL_VERSION,
+      pending: new ConcurrentDispatchRegistry(),
+      writer: new ResponseWriter(
+        socket,
+        connectionId,
+        (level, connId, op, details) =>
+          this.auditLog(level, connId, op, details),
+        () => state.negotiatedVersion,
+      ),
     };
     this.connectionStates.set(socket, state);
     this.auditLog('INFO', connectionId, 'connect');
@@ -253,6 +296,7 @@ export class CredentialProxyServer {
     const cleanupConnection = (op: string): void => {
       if (connectionCleanedUp) return;
       connectionCleanedUp = true;
+      state.pending.abortAll();
       this.connections.delete(socket);
       this.connectionStates.delete(socket);
       this.auditLog('INFO', connectionId, op);
@@ -303,33 +347,23 @@ export class CredentialProxyServer {
       handshakeState.completed = true;
       return true;
     }
-    // Serialize dispatch per-connection to prevent overlapping socket.write()
-    // calls when multiple frames arrive in a single TCP chunk.
-    state.inFlight = (state.inFlight ?? Promise.resolve())
-      .then(() => {
-        if (socket.destroyed) return undefined;
-        return this.dispatchRequest(socket, frame, state);
-      })
-      .catch((err) => {
-        this.auditLog('ERROR', state.id, 'unhandled_dispatch', {
-          error: String(err),
-        });
-        if (!socket.destroyed) socket.destroy();
+    // Dispatch concurrently. Whole-buffer socket.write() calls are appended
+    // in call order and cannot interleave bytes mid-buffer (net.Socket is a
+    // stream.Duplex), so no serialization chain is needed. Frames from one
+    // chunk still START in arrival order because processFrames iterates
+    // synchronously; they may COMPLETE in any order, which is intended and
+    // correct because responses carry id.
+    //
+    // @plan PLAN-20260731-GHBROKER.P03
+    // @requirement REQ-005
+    // @pseudocode 001-concurrent-dispatch.md lines 8-22
+    void this.dispatchRequest(socket, frame, state).catch((err) => {
+      this.auditLog('ERROR', state.id, 'unhandled_dispatch', {
+        error: String(err),
       });
+      if (!socket.destroyed) socket.destroy();
+    });
     return true;
-  }
-
-  private isVersionCompatible(frame: Record<string, unknown>): boolean {
-    const v = frame.v as number | undefined;
-    if (v === PROTOCOL_VERSION) return true;
-    const payload = frame.payload as Record<string, unknown> | undefined;
-    if (!payload) return false;
-    const min = payload.minVersion as number | undefined;
-    const max = payload.maxVersion as number | undefined;
-    if (min !== undefined && max !== undefined) {
-      return PROTOCOL_VERSION >= min && PROTOCOL_VERSION <= max;
-    }
-    return false;
   }
 
   private handleHandshake(
@@ -337,9 +371,9 @@ export class CredentialProxyServer {
     frame: Record<string, unknown>,
     state: ConnectionState,
   ): boolean {
-    const compatible = this.isVersionCompatible(frame);
+    const negotiatedVersion = computeNegotiatedVersion(frame, PROTOCOL_VERSION);
 
-    if (!compatible) {
+    if (negotiatedVersion === undefined) {
       this.auditLog('WARN', state.id, 'handshake_rejected', {
         reason: 'version_mismatch',
       });
@@ -358,6 +392,7 @@ export class CredentialProxyServer {
       );
       return false;
     }
+    state.negotiatedVersion = negotiatedVersion;
 
     // Validate capability token if the server is configured with one.
     // Note: there is no rate limiting on failed handshake attempts — a
@@ -370,7 +405,7 @@ export class CredentialProxyServer {
       const presentedToken = payload.capabilityToken;
       if (
         typeof presentedToken !== 'string' ||
-        !this.validateCapabilityToken(presentedToken)
+        !validateCapabilityToken(presentedToken, this.expectedTokenHash)
       ) {
         this.auditLog('ERROR', state.id, 'handshake_unauthorized', {
           reason: 'invalid_capability_token',
@@ -395,75 +430,27 @@ export class CredentialProxyServer {
 
     this.auditLog('INFO', state.id, 'handshake_ok', {
       sandbox: state.isSandboxConnection,
+      version: state.negotiatedVersion,
     });
     socket.write(
       encodeFrame({
         v: PROTOCOL_VERSION,
         op: 'handshake',
         ok: true,
-        data: { version: PROTOCOL_VERSION },
+        data: { version: state.negotiatedVersion },
       }),
     );
     return true;
   }
 
-  /**
-   * Constant-time comparison of the presented capability token against the
-   * expected value. Both values are SHA-256 hashed first so the comparison
-   * buffers are always the same length, eliminating timing side-channels that
-   * could leak the token length.
-   */
-  private validateCapabilityToken(presentedToken: string): boolean {
-    if (!this.expectedTokenHash) return false;
-    const presentedHash = crypto
-      .createHash('sha256')
-      .update(presentedToken)
-      .digest();
-    return crypto.timingSafeEqual(presentedHash, this.expectedTokenHash);
-  }
-
-  /**
-   * Emits a structured JSON log line to stderr for security audit purposes.
-   * Never includes actual secrets — only operation names and non-sensitive
-   * identifiers. Wrapped in try/catch so a full or closed stderr buffer
-   * never crashes the proxy.
-   */
-  private auditLog(
-    level: 'INFO' | 'WARN' | 'ERROR',
-    connectionId: number,
-    operation: string,
-    details?: Record<string, unknown>,
-  ): void {
-    const entry: Record<string, unknown> = {
-      ts: new Date().toISOString(),
-      level,
-      component: 'credential-proxy',
-      conn: connectionId,
-      op: operation,
-    };
-    if (details) {
-      entry.details = details;
-    }
-    try {
-      if (!process.stderr.destroyed) {
-        // write() returns false when the internal buffer is full.
-        // We still write — backpressure is accepted over dropping audit entries.
-        process.stderr.write(JSON.stringify(entry) + '\n');
-      }
-    } catch {
-      // stderr may be closed or full — audit logging must never crash the proxy
-    }
-  }
+  /** Delegates to the standalone auditLog function (extracted for line count). */
+  private auditLog = auditLog;
 
   private asRecord(value: unknown): Record<string, unknown> {
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
       return value as Record<string, unknown>;
     }
     return {};
-  }
-
-  private hasStringValue(value: unknown): value is string {
-    return typeof value === 'string' && value.length > 0;
   }
 
   private readonly requestHandlers: Partial<
@@ -474,6 +461,7 @@ export class CredentialProxyServer {
         id: string,
         payload: Record<string, unknown>,
         state: ConnectionState,
+        signal: AbortSignal,
       ) => Promise<void> | void
     >
   > = {
@@ -495,89 +483,91 @@ export class CredentialProxyServer {
       this.handleListApiKeys(socket, id, state),
     has_api_key: (socket, id, payload, state) =>
       this.handleHasApiKey(socket, id, payload, state),
-    oauth_initiate: (socket, id, payload, state) => {
-      if (
-        this.rejectIfSandbox(
-          socket,
-          id,
-          state,
-          'oauth_initiate',
-          'Sandbox connections cannot initiate OAuth',
-        )
-      )
-        return undefined;
-      return this.oauthHandler.handleInitiate(socket, id, payload, state);
+    cancel: (_socket, id, payload, state) => {
+      handleCancel(
+        state.writer,
+        id,
+        payload,
+        state.id,
+        state.pending,
+        (level, connId, op, details) =>
+          this.auditLog(level, connId, op, details),
+      );
     },
-    oauth_exchange: (socket, id, payload, state) => {
-      if (
-        this.rejectIfSandbox(
-          socket,
-          id,
-          state,
-          'oauth_exchange',
-          'Sandbox connections cannot exchange OAuth tokens',
-        )
-      )
-        return undefined;
-      return this.oauthHandler.handleExchange(socket, id, payload, state);
-    },
-    oauth_poll: (socket, id, payload, state) => {
-      if (
-        this.rejectIfSandbox(
-          socket,
-          id,
-          state,
-          'oauth_poll',
-          'Sandbox connections cannot poll OAuth tokens',
-        )
-      )
-        return undefined;
-      return this.oauthHandler.handlePoll(socket, id, payload, state);
-    },
-    oauth_cancel: (socket, id, payload, state) => {
-      if (
-        this.rejectIfSandbox(
-          socket,
-          id,
-          state,
-          'oauth_cancel',
-          'Sandbox connections cannot cancel OAuth sessions',
-        )
-      )
-        return undefined;
-      return this.oauthHandler.handleCancel(socket, id, payload, state);
-    },
-    refresh_token: (socket, id, payload, state) => {
-      if (
-        this.rejectIfSandbox(
-          socket,
-          id,
-          state,
-          'refresh_token',
-          'Sandbox connections cannot refresh tokens',
-        )
-      )
-        return undefined;
-      return this.oauthHandler.handleRefreshToken(socket, id, payload, state);
-    },
+    oauth_initiate: (socket, id, payload, state) =>
+      this.sandboxGuardedOauth(
+        socket,
+        id,
+        payload,
+        state,
+        'oauth_initiate',
+        'Sandbox connections cannot initiate OAuth',
+        (s, i, p, st) => this.oauthHandler.handleInitiate(s, i, p, st),
+      ),
+    oauth_exchange: (socket, id, payload, state) =>
+      this.sandboxGuardedOauth(
+        socket,
+        id,
+        payload,
+        state,
+        'oauth_exchange',
+        'Sandbox connections cannot exchange OAuth tokens',
+        (s, i, p, st) => this.oauthHandler.handleExchange(s, i, p, st),
+      ),
+    oauth_poll: (socket, id, payload, state) =>
+      this.sandboxGuardedOauth(
+        socket,
+        id,
+        payload,
+        state,
+        'oauth_poll',
+        'Sandbox connections cannot poll OAuth tokens',
+        (s, i, p, st) => this.oauthHandler.handlePoll(s, i, p, st),
+      ),
+    oauth_cancel: (socket, id, payload, state) =>
+      this.sandboxGuardedOauth(
+        socket,
+        id,
+        payload,
+        state,
+        'oauth_cancel',
+        'Sandbox connections cannot cancel OAuth sessions',
+        (s, i, p, st) => this.oauthHandler.handleCancel(s, i, p, st),
+      ),
+    refresh_token: (socket, id, payload, state) =>
+      this.sandboxGuardedOauth(
+        socket,
+        id,
+        payload,
+        state,
+        'refresh_token',
+        'Sandbox connections cannot refresh tokens',
+        (s, i, p, st) => this.oauthHandler.handleRefreshToken(s, i, p, st),
+      ),
   };
 
+  /**
+   * Dispatches a single request frame concurrently. Enforces duplicate-id
+   * and concurrency-cap checks, registers the op for abort-on-close, and
+   * passes an AbortSignal to the handler. When a handler completes after
+   * being aborted (by cancel or socket close), settles the original request
+   * id with CANCELLED so the client's pending map does not leak.
+   *
+   * @plan PLAN-20260731-GHBROKER.P03, PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-005, REQ-007
+   * @pseudocode 001-concurrent-dispatch.md lines 23-38, 002-frame-and-cancel.md lines 60-65
+   */
   private async dispatchRequest(
     socket: net.Socket,
     frame: Record<string, unknown>,
     state: ConnectionState,
   ): Promise<void> {
     if (socket.destroyed || !socket.writable) return;
-    let id = 'unknown';
-    let op: unknown;
-
+    const id =
+      typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
+    const op = typeof frame.op === 'string' ? frame.op : '';
     try {
-      id =
-        typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
-      op = frame.op;
-      const payload = this.asRecord(frame.payload);
-
-      if (Boolean(frame.id) === false || !this.hasStringValue(op)) {
+      if (Boolean(frame.id) === false || op === '') {
         this.sendError(
           socket,
           id,
@@ -586,7 +576,11 @@ export class CredentialProxyServer {
         );
         return;
       }
-
+      const guard = state.pending.checkGuards(id);
+      if (guard) {
+        this.sendError(socket, id, guard.code, guard.message);
+        return;
+      }
       const handler = this.requestHandlers[op];
       if (!handler) {
         this.sendError(
@@ -597,17 +591,25 @@ export class CredentialProxyServer {
         );
         return;
       }
-
-      await handler(socket, id, payload, state);
+      const controller = state.pending.register(id, op);
+      const payload = this.asRecord(frame.payload);
+      try {
+        await handler(socket, id, payload, state, controller.signal);
+      } finally {
+        // If the handler was aborted (by cancel), settle the original
+        // request id with CANCELLED so the client's pending map does
+        // not leak. sendError is a no-op on a dead socket.
+        if (controller.signal.aborted) {
+          this.sendError(socket, id, 'CANCELLED', 'Operation cancelled');
+        }
+        state.pending.release(id);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.auditLog('ERROR', state.id, String(op ?? 'unknown'), {
+      this.auditLog('ERROR', state.id, op || 'unknown', {
         status: 'error',
         id,
       });
-      // sendError internally guards against destroyed/unwritable sockets.
-      // Wrap in try/catch because encodeFrame may throw FrameError if the
-      // error message itself exceeds MAX_FRAME_SIZE.
       try {
         this.sendError(socket, id, 'INTERNAL_ERROR', message);
       } catch {
@@ -660,6 +662,26 @@ export class CredentialProxyServer {
     this.auditLog('WARN', state.id, operation, { status: 'blocked_sandbox' });
     this.sendOk(socket, id, data);
     return true;
+  }
+
+  /** Guards an OAuth handler with a sandbox rejection check. */
+  private sandboxGuardedOauth(
+    socket: net.Socket,
+    id: string,
+    payload: Record<string, unknown>,
+    state: ConnectionState,
+    operation: string,
+    reason: string,
+    delegate: (
+      s: net.Socket,
+      i: string,
+      p: Record<string, unknown>,
+      st: ConnectionState,
+    ) => Promise<void> | void,
+  ): Promise<void> | void {
+    if (this.rejectIfSandbox(socket, id, state, operation, reason))
+      return undefined;
+    return delegate(socket, id, payload, state);
   }
 
   // Intentionally allowed for sandbox connections: the sandbox process needs
@@ -988,24 +1010,22 @@ export class CredentialProxyServer {
     socket.once('close', () => clearTimeout(timer));
   }
 
-  private sendOk(
+  /** @plan PLAN-20260731-GHBROKER.P05 @requirement REQ-006 */
+  private sendOk = (
     socket: net.Socket,
     id: string,
     data: Record<string, unknown>,
-  ): void {
-    if (socket.destroyed || !socket.writable) return;
-    const response = { id, ok: true, data };
-    socket.write(encodeFrame(response));
-  }
+  ): void => {
+    this.connectionStates.get(socket)?.writer.sendOk(id, data);
+  };
 
-  private sendError(
+  /** @plan PLAN-20260731-GHBROKER.P05 @requirement REQ-006 */
+  private sendError = (
     socket: net.Socket,
     id: string,
     code: string,
     error: string,
-  ): void {
-    if (socket.destroyed || !socket.writable) return;
-    const response = { id, ok: false, code, error };
-    socket.write(encodeFrame(response));
-  }
+  ): void => {
+    this.connectionStates.get(socket)?.writer.sendError(id, code, error);
+  };
 }

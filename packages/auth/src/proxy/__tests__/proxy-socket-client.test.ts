@@ -564,9 +564,9 @@ describe('ProxySocketClient', () => {
     const handshake = await result.handshake;
     const payload = handshake.payload as Record<string, unknown>;
     expect(payload.capabilityToken).toBe(capabilityToken);
-    // The client currently hardcodes minVersion/maxVersion to 1 (not PROTOCOL_VERSION)
+    // The client advertises support for versions [1, PROTOCOL_VERSION].
     expect(payload.minVersion).toBe(1);
-    expect(payload.maxVersion).toBe(1);
+    expect(payload.maxVersion).toBe(PROTOCOL_VERSION);
   });
 
   /**

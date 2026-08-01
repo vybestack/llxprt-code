@@ -7,9 +7,9 @@
 /**
  * Unix domain socket client for credential proxy protocol.
  *
- * @plan PLAN-20250214-CREDPROXY.P03
- * @requirement R6.1-R6.5, R24.1, R24.2
- * @pseudocode analysis/pseudocode/001-framing-protocol.md
+ * @plan PLAN-20260731-GHBROKER.P05
+ * @requirement REQ-006, REQ-007
+ * @pseudocode 002-frame-and-cancel.md lines 12-66
  */
 
 import * as net from 'node:net';
@@ -18,7 +18,7 @@ import { encodeFrame, FrameDecoder } from './framing.js';
 
 export const REQUEST_TIMEOUT_MS = 30000;
 export const IDLE_TIMEOUT_MS = 300000;
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export type ProxyResponse = {
   ok: boolean;
@@ -27,6 +27,20 @@ export type ProxyResponse = {
   code?: string;
   retryAfter?: number;
 };
+
+/**
+ * Per-request options controlling timeout and cancellation.
+ *
+ * @plan PLAN-20260731-GHBROKER.P05
+ * @requirement REQ-007
+ * @pseudocode 002-frame-and-cancel.md lines 12-32, Contract
+ */
+export interface RequestOptions {
+  /** Per-op timeout override (ms). Defaults to REQUEST_TIMEOUT_MS. */
+  timeoutMs?: number;
+  /** Caller-supplied abort signal (Ctrl+C). Sends a cancel frame on abort. */
+  signal?: AbortSignal;
+}
 
 /** Validates that a decoded frame has the shape of a ProxyResponse, guarding
  *  against adversarial or malformed server responses with unexpected types
@@ -65,6 +79,21 @@ export class ProxySocketClient {
   });
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private handshakeComplete: boolean = false;
+  /**
+   * Protocol version negotiated with the server during handshake. A v1
+   * server returns version 1; a v2 server returns 2. This is used to gate
+   * frame-size expectations on responses (v1 cannot receive >64 KiB).
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-006
+   * @pseudocode 002-frame-and-cancel.md lines 67-76
+   */
+  private _negotiatedVersion: number = PROTOCOL_VERSION;
+
+  /** The protocol version negotiated during handshake (read-only). */
+  get negotiatedVersion(): number {
+    return this._negotiatedVersion;
+  }
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private connectingPromise: Promise<void> | null = null;
   private handshakeResolver: {
@@ -98,36 +127,102 @@ export class ProxySocketClient {
     return this.socket !== null && this.handshakeComplete;
   }
 
+  /**
+   * Sends a request op with optional timeout override and cancellation
+   * signal. Resolves with the server response or rejects on timeout /
+   * cancellation / connection error.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-007
+   * @pseudocode 002-frame-and-cancel.md lines 12-32
+   */
   async request(
     op: string,
     payload: Record<string, unknown>,
+    options?: RequestOptions,
   ): Promise<ProxyResponse> {
     if (!this.isConnected()) {
       await this.ensureConnected();
     } else {
       this.resetIdleTimer();
     }
-    return this.sendRequest(op, payload);
+    return this.sendRequest(op, payload, options);
   }
 
+  /**
+   * Builds and sends a request frame, registering the pending entry with a
+   * per-op timeout. On timeout, sends a cancel frame before rejecting so
+   * host-side work is freed. If an abort signal is provided, wires the
+   * abort handler to cancel + reject.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-007
+   * @pseudocode 002-frame-and-cancel.md lines 14-20, 38-41
+   */
   private sendRequest(
     op: string,
     payload: Record<string, unknown>,
+    options?: RequestOptions,
   ): Promise<ProxyResponse> {
     const id = crypto.randomUUID();
     const frame = { v: PROTOCOL_VERSION, id, op, payload };
+    const timeoutMs = options?.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
     const promise = new Promise<ProxyResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`));
-      }, REQUEST_TIMEOUT_MS);
+        this.cancel(id);
+        reject(new Error(`Request timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
       this.pendingRequests.set(id, { resolve, reject, timer });
     });
+
+    // Wire abort signal: on abort, delete the pending entry, send a cancel
+    // frame, and reject with 'Request cancelled'.
+    if (options?.signal) {
+      const signal = options.signal;
+      if (signal.aborted) {
+        this.pendingRequests.delete(id);
+        // Cannot await here — fire-and-forget the cancel frame.
+        this.cancel(id);
+        return Promise.reject(new Error('Request cancelled'));
+      }
+      const abortHandler = (): void => {
+        const pending = this.pendingRequests.get(id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.pendingRequests.delete(id);
+          this.cancel(id);
+          pending.reject(new Error('Request cancelled'));
+          this.maybeArmIdleTimer();
+        }
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
+    }
 
     this.socket!.write(encodeFrame(frame));
     this.resetIdleTimer();
     return promise;
+  }
+
+  /**
+   * Sends a cancel frame for the given request id, asking the server to
+   * abort host-side work. Idempotent — if the connection is down it is a
+   * no-op.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-007
+   * @pseudocode 002-frame-and-cancel.md lines 33-36
+   */
+  cancel(id: string): void {
+    if (!this.isConnected()) return;
+    const cancelFrame = {
+      v: PROTOCOL_VERSION,
+      id: crypto.randomUUID(),
+      op: 'cancel',
+      payload: { targetId: id },
+    };
+    this.socket!.write(encodeFrame(cancelFrame));
   }
 
   close(): void {
@@ -187,8 +282,17 @@ export class ProxySocketClient {
     this.socket.unref();
   }
 
+  /**
+   * Performs the protocol handshake. Advertises support for versions 1-2
+   * so a v1 server negotiates down to v1 and a v2 server negotiates up.
+   * Records the negotiated version to gate frame-size expectations.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-006
+   * @pseudocode 002-frame-and-cancel.md lines 67-76
+   */
   private async handshake(): Promise<void> {
-    const payload: Record<string, unknown> = { minVersion: 1, maxVersion: 1 };
+    const payload: Record<string, unknown> = { minVersion: 1, maxVersion: 2 };
     if (this.capabilityToken) {
       payload.capabilityToken = this.capabilityToken;
     }
@@ -233,6 +337,10 @@ export class ProxySocketClient {
           (response.error ?? 'unknown error'),
       );
     }
+    // Record the negotiated version from the server's handshake_ack.
+    const serverVersion = response.data?.version as number | undefined;
+    this._negotiatedVersion =
+      typeof serverVersion === 'number' ? serverVersion : 1;
     this.handshakeComplete = true;
     this.resetIdleTimer();
   }
@@ -277,6 +385,15 @@ export class ProxySocketClient {
     }
   }
 
+  /**
+   * Resolves (or rejects) the pending request matching the response frame
+   * id. After deleting, re-arms the idle timer if no requests remain, so a
+   * genuinely idle connection still closes on schedule.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-007
+   * @pseudocode 002-frame-and-cancel.md lines 30-32
+   */
   private resolvePendingRequest(frame: Record<string, unknown>): void {
     const id = frame.id as string | undefined;
     if (!id) {
@@ -293,6 +410,7 @@ export class ProxySocketClient {
         this.destroy('Malformed response from proxy — connection reset');
         return;
       }
+      this.maybeArmIdleTimer();
     }
   }
 
@@ -336,8 +454,38 @@ export class ProxySocketClient {
     }
   }
 
+  /**
+   * Arms the idle timer only when no requests are outstanding. While work
+   * is pending, the timer is suppressed so a long silent operation is not
+   * killed by the idle-close logic. This fixes the concept: idle means
+   * "no work outstanding", not "no bytes moving".
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-007
+   * @pseudocode 002-frame-and-cancel.md lines 26-32
+   */
   private resetIdleTimer(): void {
     this.cancelIdleTimer();
+    if (this.pendingRequests.size > 0) return;
+    this.armIdleTimer();
+  }
+
+  /**
+   * Arms the idle timer if and only if no pending requests remain. Called
+   * after a request is resolved/deleted so a now-idle connection restarts
+   * its close countdown.
+   *
+   * @plan PLAN-20260731-GHBROKER.P05
+   * @requirement REQ-007
+   * @pseudocode 002-frame-and-cancel.md lines 30-32
+   */
+  private maybeArmIdleTimer(): void {
+    if (this.pendingRequests.size === 0 && this.idleTimer === null) {
+      this.armIdleTimer();
+    }
+  }
+
+  private armIdleTimer(): void {
     this.idleTimer = setTimeout(() => this.gracefulClose(), IDLE_TIMEOUT_MS);
     this.idleTimer.unref();
   }
