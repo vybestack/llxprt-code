@@ -83,9 +83,7 @@ function bootstrap(port: number): JspBootstrap {
   };
 }
 
-function headerValue(
-  value: string | string[] | undefined,
-): string {
+function headerValue(value: string | string[] | undefined): string {
   if (value === undefined) {
     return '';
   }

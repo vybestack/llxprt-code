@@ -90,7 +90,10 @@ function classifyPostResult(result: JspPostResult): PostOutcomeClassification {
 
 /** True when the status code means the credential is no longer valid. */
 function isCredentialFailure(result: JspPostResult): boolean {
-  return result.kind === 'rejected' && (result.status === 401 || result.status === 403);
+  return (
+    result.kind === 'rejected' &&
+    (result.status === 401 || result.status === 403)
+  );
 }
 
 interface NativeTodoLike {
@@ -103,7 +106,9 @@ export interface JspProducerHooks {
   readonly createIdentity: (bootstrap: JspBootstrap) => JspProducerIdentity;
   readonly register: (snapshot: JspSnapshotDocument) => Promise<JspPostResult>;
   readonly publish: (document: JspBoundDocument) => Promise<JspPostResult>;
-  readonly heartbeat: (document: JspHeartbeatDocument) => Promise<JspPostResult>;
+  readonly heartbeat: (
+    document: JspHeartbeatDocument,
+  ) => Promise<JspPostResult>;
   readonly noContent?: boolean;
 }
 
@@ -114,7 +119,9 @@ export interface JspProducerOptions {
 
 class ProducerQueueSink implements JspQueueSink {
   constructor(
-    private readonly publish: (document: JspBoundDocument) => Promise<JspPostResult>,
+    private readonly publish: (
+      document: JspBoundDocument,
+    ) => Promise<JspPostResult>,
   ) {}
 
   async send(document: JspBoundDocument): Promise<boolean> {

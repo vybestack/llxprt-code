@@ -195,9 +195,7 @@ describe('createObservationProducer', () => {
           (_doc: JspBoundDocument): Promise<JspPostResult> =>
             Promise.resolve(OK),
         ),
-        heartbeat: vi.fn(
-          (): Promise<JspPostResult> => Promise.resolve(OK),
-        ),
+        heartbeat: vi.fn((): Promise<JspPostResult> => Promise.resolve(OK)),
       },
     );
     expect(producer).not.toBeNull();
@@ -257,9 +255,9 @@ describe('createObservationProducer', () => {
           'assistant_message.displayed',
     );
     expect(messageDoc).toBeDefined();
-    expect(
-      (messageDoc as { event: { content: string } }).event.content,
-    ).toBe('');
+    expect((messageDoc as { event: { content: string } }).event.content).toBe(
+      '',
+    );
     expect(
       (messageDoc as { event: { committed_ms: number } }).event.committed_ms,
     ).toBe(9999);
