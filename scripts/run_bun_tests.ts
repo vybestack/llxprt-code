@@ -68,7 +68,7 @@ export function reapStaleBunTestProcesses(
 ): number {
   let output: string;
   try {
-    output = spawnSync(['ps', '-eo', 'pid=,ppid=,comm=']).stdout ?? '';
+    output = spawnSync(['ps', '-eo', 'pid=,ppid=,args=']).stdout ?? '';
   } catch {
     return 0;
   }
@@ -526,11 +526,16 @@ function main(): void {
   // in-flight child. For SIGKILL (OOM), the pre-run reaping guard above
   // is the protection mechanism.
   let terminating = false;
+  const signalExitCodes: Record<string, number> = {
+    SIGTERM: 143,
+    SIGINT: 130,
+    SIGHUP: 129,
+  };
   const handleSignal = (signal: string): void => {
     if (terminating) return;
     terminating = true;
     console.error(`[run_bun_tests] Received ${signal}, exiting.`);
-    process.exit(130);
+    process.exit(signalExitCodes[signal] ?? 130);
   };
   process.on('SIGTERM', () => handleSignal('SIGTERM'));
   process.on('SIGINT', () => handleSignal('SIGINT'));
