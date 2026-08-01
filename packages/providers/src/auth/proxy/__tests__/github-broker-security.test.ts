@@ -325,3 +325,45 @@ describe('flag-injection defense (array elements)', () => {
     ).toBeNull();
   });
 });
+
+describe('handler dispatch is not prototype-reachable', () => {
+  let server: CredentialProxyServer;
+  let socketPath: string;
+
+  beforeEach(async () => {
+    server = new CredentialProxyServer(options());
+    socketPath = await server.start();
+  });
+
+  afterEach(async () => {
+    await server.stop();
+  });
+
+  /**
+   * `op` is caller-controlled. A plain index into the handler table resolves
+   * inherited members, so "toString" or "constructor" would come back truthy
+   * and then be invoked as a request handler.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-002, REQ-015
+   */
+  it('rejects operations named after Object.prototype members', async () => {
+    for (const op of ['toString', 'constructor', 'valueOf', '__proto__']) {
+      const frames = await rawExchange(socketPath, [
+        {
+          v: 2,
+          op: 'handshake',
+          payload: {
+            minVersion: 1,
+            maxVersion: 2,
+            capabilityToken: CAPABILITY,
+          },
+        },
+        { v: 2, id: `p-${op}`, op, payload: {} },
+      ]);
+      const reply = frames.find((f) => f.id === `p-${op}`);
+      expect(reply?.ok, `${op} must not dispatch`).toBe(false);
+      expect(reply?.code).toBe('INVALID_REQUEST');
+    }
+  });
+});

@@ -42,7 +42,7 @@ import {
   computeNegotiatedVersion,
   validateCapabilityToken,
 } from './handshake-helpers.js';
-import { mergeExtraHandlers } from './extra-handler-merger.js';
+import { mergeExtraHandlers, resolveHandler } from './extra-handler-merger.js';
 
 export type { OAuthFlowInterface } from './credential-proxy-oauth-handler.js';
 export type { RequestHandler } from './github-broker-request-handler.js';
@@ -604,7 +604,7 @@ export class CredentialProxyServer {
           return;
         }
       }
-      const handler = this.requestHandlers[op];
+      const handler = resolveHandler(this.requestHandlers, op);
       if (!handler) {
         this.sendError(
           socket,

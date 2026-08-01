@@ -44,3 +44,23 @@ export function mergeExtraHandlers<T>(
     }
   }
 }
+
+/**
+ * Resolves a handler by caller-supplied name using an own-property check.
+ *
+ * A plain index would resolve inherited members, so an op named "toString"
+ * or "constructor" would come back truthy and then be invoked as a request
+ * handler. Lives here with the other handler-table logic so both the merge
+ * and the lookup share one set of assumptions about that table.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-002, REQ-015
+ */
+export function resolveHandler<T>(
+  table: Partial<Record<string, T>>,
+  op: string,
+): T | undefined {
+  return Object.prototype.hasOwnProperty.call(table, op)
+    ? table[op]
+    : undefined;
+}
