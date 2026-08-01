@@ -152,8 +152,14 @@ const isWindowsTerminal = (): boolean =>
 
 const isDumbTerm = (): boolean => (process.env['TERM'] ?? '') === 'dumb';
 
+// Inside a sandbox the local clipboard utility (pbcopy/xclip/wl-copy) is either
+// absent (container) or blocked by the seatbelt profile, so the OSC-52 terminal
+// escape path is used instead — the bytes flow through the sandbox PTY to the
+// host terminal emulator, which sets the host clipboard.
+const isInSandbox = (): boolean => Boolean(process.env['SANDBOX']);
+
 const hasOsc52Environment = (): boolean =>
-  isSSH() || isWSL() || isWindowsTerminal();
+  isSSH() || isWSL() || isWindowsTerminal() || isInSandbox();
 
 const shouldUseOsc52 = (tty: TtyTarget): tty is Exclude<TtyTarget, null> => {
   if (tty === null) {
