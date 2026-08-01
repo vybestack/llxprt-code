@@ -710,6 +710,40 @@ jobs:
               }
             }
 
+            // Build the suspension body from a specific snapshot of marker
+            // comments. Recomputed on the retry path so a marker posted
+            // concurrently between the two fetches cannot have its higher
+            // count or newer checkpoint overwritten by stale state.
+            function buildSuspensionBody(markerSnapshot) {
+              const snapshotCanonical = selectCanonicalMarker(markerSnapshot);
+              const mergedMaxCount = resolveMergedMaxCount(markerSnapshot);
+              const mergedCheckpoint = newestCheckpointFromMarkers(markerSnapshot);
+              let body = suspensionBlock;
+              if (snapshotCanonical && typeof snapshotCanonical.body === 'string') {
+                const preserved = snapshotCanonical.body
+                  .replace(MARKER, '')
+                  .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
+                  .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '')
+                  .replace(/<!--\s*ocr-checkpoint:[\s\S]*?-->/g, '')
+                  .replace(/## OpenCodeReview — automatic reviews suspended[\s\S]*$/, '')
+                  .trim();
+                if (preserved) {
+                  body = suspensionBlock + NEWLINE + NEWLINE + '---' + NEWLINE + NEWLINE + preserved;
+                }
+              }
+              if (mergedMaxCount > currentCount) {
+                body = body.replace(
+                  /<!--\s*ocr-auto-count:\s*\d+\s*-->/g,
+                  '',
+                );
+                body += NEWLINE + '<!-- ocr-auto-count:' + mergedMaxCount + ' -->';
+              }
+              if (mergedCheckpoint) {
+                body += NEWLINE + mergedCheckpoint;
+              }
+              return body;
+            }
+
             try {
               let markerComments = [];
               try {
@@ -718,32 +752,7 @@ jobs:
                 core.warning(`Failed to fetch marker comments for suspension: ${fetchErr.message || fetchErr}`);
               }
               const canonical = selectCanonicalMarker(markerComments);
-              const mergedMaxCount = resolveMergedMaxCount(markerComments);
-              const mergedCheckpoint = newestCheckpointFromMarkers(markerComments);
-
-              let finalBody = suspensionBlock;
-              if (canonical && typeof canonical.body === 'string') {
-                const preserved = canonical.body
-                  .replace(MARKER, '')
-                  .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
-                  .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '')
-                  .replace(/<!--\s*ocr-checkpoint:[\s\S]*?-->/g, '')
-                  .replace(/## OpenCodeReview — automatic reviews suspended[\s\S]*$/, '')
-                  .trim();
-                if (preserved) {
-                  finalBody = suspensionBlock + NEWLINE + NEWLINE + '---' + NEWLINE + NEWLINE + preserved;
-                }
-              }
-              if (mergedMaxCount > currentCount) {
-                finalBody = finalBody.replace(
-                  /<!--\s*ocr-auto-count:\s*\d+\s*-->/g,
-                  '',
-                );
-                finalBody += NEWLINE + '<!-- ocr-auto-count:' + mergedMaxCount + ' -->';
-              }
-              if (mergedCheckpoint) {
-                finalBody += NEWLINE + mergedCheckpoint;
-              }
+              const finalBody = buildSuspensionBody(markerComments);
               if (canonical) {
                 await github.rest.issues.updateComment({
                   owner, repo, comment_id: canonical.id, body: finalBody,
@@ -763,8 +772,11 @@ jobs:
                   }
                   const retryCanonical = selectCanonicalMarker(retryMarkers);
                   if (retryCanonical) {
+                    // Recompute from the fresh snapshot: a concurrent marker
+                    // may carry a higher count or newer checkpoint than the
+                    // body built before the create attempt.
                     await github.rest.issues.updateComment({
-                      owner, repo, comment_id: retryCanonical.id, body: finalBody,
+                      owner, repo, comment_id: retryCanonical.id, body: buildSuspensionBody(retryMarkers),
                     });
                     await deleteDuplicateMarkerComments(retryMarkers, retryCanonical.id);
                   } else {
@@ -4450,8 +4462,12 @@ jobs:
                   const postCreateComments = await fetchMarkerComments();
                   const surviving = selectCanonicalMarker(postCreateComments);
                   if (surviving && surviving.id !== (created?.data?.id ?? null)) {
+                    // Recompute against the surviving comment's own body: a
+                    // concurrent marker may carry a higher count than the one
+                    // used before the create attempt.
                     await github.rest.issues.updateComment({
-                      owner, repo, comment_id: surviving.id, body: nonRegressingSummary,
+                      owner, repo, comment_id: surviving.id,
+                      body: applyNonRegressingCount(summary, surviving.body, isAutomatic),
                     });
                     await deleteDuplicateMarkerComments(postCreateComments, surviving.id);
                     return surviving;
@@ -4473,8 +4489,11 @@ jobs:
                 }
                 const reconciled = selectCanonicalMarker(retryComments);
                 if (reconciled) {
+                  // Recompute against the re-fetched comment's own body so a
+                  // concurrently posted higher count is not overwritten.
                   const updated = await github.rest.issues.updateComment({
-                    owner, repo, comment_id: reconciled.id, body: nonRegressingSummary,
+                    owner, repo, comment_id: reconciled.id,
+                    body: applyNonRegressingCount(summary, reconciled.body, isAutomatic),
                   });
                   await deleteDuplicateMarkerComments(retryComments, reconciled.id);
                   return updated?.data || reconciled;

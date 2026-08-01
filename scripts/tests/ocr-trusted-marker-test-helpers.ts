@@ -144,6 +144,8 @@ export interface StoreComment {
   id: number;
   body: string;
   user: FakeUser;
+  /** Optional issue scope; when set, listComments filters on it. */
+  issueNumber?: number;
   path?: string;
   line?: number;
   original_line?: number;
@@ -213,7 +215,18 @@ export function makePaginatingOctokit(
         listComments: async (
           opts: Record<string, unknown>,
         ): Promise<{ data: StoreComment[]; status: number }> => {
-          const all = [...store.comments.values()].sort((a, b) => a.id - b.id);
+          // Mirror the real API, which scopes comments to one issue. Without
+          // this, comments belonging to another issue would leak into results
+          // if a test ever seeded more than one.
+          const requestedIssue = Number(opts['issue_number']);
+          const all = [...store.comments.values()]
+            .filter(
+              (comment) =>
+                comment.issueNumber === undefined ||
+                !Number.isFinite(requestedIssue) ||
+                comment.issueNumber === requestedIssue,
+            )
+            .sort((a, b) => a.id - b.id);
           const pp = Math.max(
             1,
             Number(opts['per_page'] ?? perPage) || perPage,
@@ -821,7 +834,7 @@ export function loadFunctionsFromScriptWithGithub(
       }),
     },
   };
-  const envPrNumber = env['PR_NUMBER'] || '42';
+  const envPrNumber = env['PR_NUMBER'] ?? '42';
   const ctxOwner = resolveRepoField(context, 'owner');
   const ctxRepo = resolveRepoField(context, 'repo');
   const helperFuncNames = [

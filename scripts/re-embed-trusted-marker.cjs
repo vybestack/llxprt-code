@@ -34,7 +34,8 @@ const INDENT = '            ';
 
 /**
  * Drop a trailing carriage return so sentinel comparisons succeed on a
- * CRLF checkout without rewriting the file's line endings.
+ * CRLF checkout. Note that reEmbed also normalizes the whole workflow to
+ * LF before writing, which matches the LF-only policy in .gitattributes.
  * @param {string} line - a single line, possibly CRLF-terminated
  * @returns {string} the line without a trailing carriage return
  */

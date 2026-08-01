@@ -118,4 +118,19 @@ describe('extractHeredocBody — robust heredoc extraction (P4)', () => {
       /expected exactly 1 heredoc in step "multi-step", found 2/,
     );
   });
+
+  it('does NOT accept a terminator line with trailing whitespace', () => {
+    // Bash requires the terminator line to be exactly the delimiter, so a
+    // delimiter followed by spaces is body content, not the terminator.
+    const source = [
+      "node <<'NODE'",
+      'const x = 1;',
+      'NODE  ',
+      'const y = 2;',
+      'NODE',
+    ].join('\n');
+    expect(extractHeredocBody(source, 'test-step')).toBe(
+      'const x = 1;\nNODE  \nconst y = 2;\n',
+    );
+  });
 });

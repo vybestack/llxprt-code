@@ -379,8 +379,10 @@ function extractHeredocFromOpener(
   //   Plain form (<<): terminator must be at column 0 (no leading whitespace).
   //   Dash form (<<-): terminator may be indented with TABS only (no spaces).
   const leadingPattern = isDashForm ? '\\t*' : '';
+  // Bash also rejects trailing whitespace on the terminator line: the line
+  // must be exactly the delimiter (after the permitted leading tabs).
   const terminatorPattern = new RegExp(
-    `^${leadingPattern}${escapeRegex(delimiter)}\\s*$`,
+    `^${leadingPattern}${escapeRegex(delimiter)}$`,
     'm',
   );
   const terminatorMatch = terminatorPattern.exec(source.slice(searchFrom));
