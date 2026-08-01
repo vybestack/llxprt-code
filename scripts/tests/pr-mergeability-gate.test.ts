@@ -220,11 +220,11 @@ describe('.github/workflows/_pr-mergeability-gate.yml — gate behavior', () => 
 
   it('uses the repository-pinned actions/github-script SHA', () => {
     expect(gate.scriptStep.uses).toBe(
-      'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b',
+      'actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3',
     );
     // The ratchet comment is stripped by YAML parsing; verify from raw source.
     expect(workflowSource).toContain(
-      'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7',
+      'actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9',
     );
   });
 

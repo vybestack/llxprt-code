@@ -91,10 +91,10 @@ describe('.github/workflows/assign.yml', () => {
     const steps = jobSteps(job);
     const checkout = steps.find((s) => s['name'] === 'Checkout repository');
     expect(checkout?.['uses']).toBe(
-      'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8',
+      'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
     );
     expect(source).toContain(
-      'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5',
+      'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7',
     );
 
     const runStep = steps.find((s) => s['name'] === 'Run assign-issue script');

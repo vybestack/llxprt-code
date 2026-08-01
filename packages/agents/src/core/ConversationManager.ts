@@ -107,15 +107,18 @@ export class ConversationManager {
   private readonly historyService: HistoryService;
   private readonly runtimeContext: AgentRuntimeContext;
   private readonly model: string;
+  private readonly baseURL: string | undefined;
 
   constructor(
     historyService: HistoryService,
     runtimeContext: AgentRuntimeContext,
     model: string,
+    baseURL?: string,
   ) {
     this.historyService = historyService;
     this.runtimeContext = runtimeContext;
     this.model = model;
+    this.baseURL = baseURL;
   }
 
   /**
@@ -303,7 +306,9 @@ export class ConversationManager {
       for (const content of automaticFunctionCallingHistory.slice(
         matchingPrefixLength,
       )) {
-        newHistoryEntries.push(stampAiTurnModel(content, this.model));
+        newHistoryEntries.push(
+          stampAiTurnModel(content, this.model, this.baseURL),
+        );
       }
     } else {
       const matcher = this.makePositionMatcher();
@@ -482,11 +487,14 @@ export class ConversationManager {
 
       mergeTurnMetadata(iContent, usageMetadata, options);
 
-      // Stamp the generating model so downstream consumers can detect
-      // cross-model turns (issue #2335). this.model is the model that produced
-      // this output; on a model switch the ChatSession/ConversationManager is
-      // rebuilt with the new model while HistoryService is reused.
-      newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
+      // Stamp the generating model and base URL so downstream consumers can
+      // detect cross-model and cross-endpoint turns (issues #2335, #1469).
+      // this.model/this.baseURL reflect the model/endpoint that produced this
+      // output; on a switch the ChatSession/ConversationManager is rebuilt with
+      // the new values while HistoryService is reused.
+      newHistoryEntries.push(
+        stampAiTurnModel(iContent, this.model, this.baseURL),
+      );
     }
 
     // If we have thinking blocks but nowhere to attach them, create standalone entry
@@ -498,7 +506,9 @@ export class ConversationManager {
         metadata: { turnId: turnKey },
       };
       mergeTurnMetadata(iContent, usageMetadata, options);
-      newHistoryEntries.push(stampAiTurnModel(iContent, this.model));
+      newHistoryEntries.push(
+        stampAiTurnModel(iContent, this.model, this.baseURL),
+      );
     }
   }
 

@@ -7,6 +7,7 @@
 import React from 'react';
 import { Text, Box } from 'ink';
 import { theme } from '../semantic-colors.js';
+import { appendCodeBlockLine } from './codeBlockAccumulator.js';
 import { colorizeCode } from './CodeColorizer.js';
 import { TableRenderer } from './TableRenderer.js';
 import { RenderInline } from './InlineMarkdownRenderer.js';
@@ -206,9 +207,15 @@ function handleCodeBlockLine(
       codeBlockFence: '',
     };
   }
+  appendCodeBlockLine(
+    codeBlockContent,
+    line,
+    isPending,
+    availableTerminalHeight,
+  );
   return {
     inCodeBlock: true,
-    codeBlockContent: [...codeBlockContent, line],
+    codeBlockContent,
     codeBlockLang,
     codeBlockFence,
   };
