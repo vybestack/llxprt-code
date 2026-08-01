@@ -931,4 +931,31 @@ describe('Frame capacity, per-op timeout, cancellation', () => {
     ).rejects.toThrow(/150ms/);
     gatedStore.release();
   }, 20000);
+
+  /**
+   * A signal that is already aborted must clean up exactly as the abort
+   * handler does. Previously the entry was dropped without clearing its
+   * timeout, leaving a timer armed against a request that no longer
+   * existed, and without re-arming the idle timer, so a connection whose
+   * last request was pre-aborted never idle-closed.
+   *
+   * @plan PLAN-20260731-GHBROKER.P19
+   * @requirement REQ-007
+   */
+  it('cleans up fully when the signal is already aborted', async () => {
+    server = createServer();
+    client = await startAndConnect(server);
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      client.request('list_providers', {}, { signal: controller.signal }),
+    ).rejects.toThrow(/cancelled/i);
+
+    // A subsequent request on the same connection must still work, which
+    // it would not if the stale timer had torn anything down.
+    const after = await client.request('list_providers', {});
+    expect(after.ok).toBe(true);
+  }, 20000);
 });

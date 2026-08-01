@@ -113,8 +113,16 @@ describe('github tool', () => {
       const tool = new GithubTool(stubClient());
       const reads = SUPPORTED_OPS.filter((op) => !MUTATING_OPS.has(op));
       expect(reads.length).toBeGreaterThan(0);
+      // Use parameters each op actually takes. Passing `number` to
+      // issue.list or search.issues exercised a shape those ops never
+      // receive, so the assertion held for the wrong reason.
+      const paramsFor = (op: string): Record<string, unknown> => {
+        if (op.startsWith('search.')) return { query: 'sandbox' };
+        if (op.endsWith('.list')) return { limit: 5 };
+        return { number: 1 };
+      };
       for (const op of reads) {
-        const invocation = tool.build({ op, number: 1 });
+        const invocation = tool.build({ op, ...paramsFor(op) });
         const confirmation = await invocation.shouldConfirmExecute(
           new AbortController().signal,
         );

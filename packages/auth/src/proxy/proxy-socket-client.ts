@@ -224,10 +224,18 @@ export class ProxySocketClient {
     if (options?.signal) {
       const signal = options.signal;
       if (signal.aborted) {
+        // Mirror the abort handler below exactly. Dropping the entry without
+        // clearing its timer left the timeout armed to fire against a
+        // request that no longer exists, and skipping maybeArmIdleTimer
+        // meant a connection whose last request was pre-aborted would never
+        // idle-close.
+        const pending = this.pendingRequests.get(id);
+        if (pending) clearTimeout(pending.timer);
         this.pendingRequests.delete(id);
         this.releaseAbortCleanup(id);
         // Cannot await here — fire-and-forget the cancel frame.
         this.cancel(id);
+        this.maybeArmIdleTimer();
         return Promise.reject(new Error('Request cancelled'));
       }
       const abortHandler = (): void => {
