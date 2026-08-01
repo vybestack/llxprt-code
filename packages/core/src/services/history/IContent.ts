@@ -40,6 +40,52 @@ export interface IContent {
 }
 
 /**
+ * The span of chronology sequence numbers that a summary entry replaced.
+ *
+ * Produced when compression destroys history items, so the surviving summary
+ * records which part of the conversation it stands in for.
+ *
+ * @issue #1721
+ */
+export interface ChronologyReplacedSpan {
+  /** Lowest chronology sequence number destroyed by the compression. */
+  readonly fromSeq: number;
+
+  /** Highest chronology sequence number destroyed by the compression. */
+  readonly toSeq: number;
+
+  /** How many history items the compression destroyed. */
+  readonly itemCount: number;
+}
+
+/**
+ * Client-side ordering marker stamped on every history item.
+ *
+ * This exists to make request/response ordering reconstructable across retries
+ * and tool round-trips. It is a debugging/tracing aid only and is NEVER
+ * serialized into a provider request payload — providers reject unknown fields
+ * on message objects with HTTP 400.
+ *
+ * @issue #1721
+ */
+export interface ChronologyMarker {
+  /**
+   * Monotonic 1-based insertion ordinal within a HistoryService instance.
+   * Sequence numbers are never reused, including across `clear()`.
+   */
+  readonly seq: number;
+
+  /** 0 before the first human turn, then 1-based per human turn. */
+  readonly userTurn: number;
+
+  /** 1-based ordinal of this item within its `userTurn`. */
+  readonly step: number;
+
+  /** Epoch milliseconds at the moment the item entered history. */
+  readonly recordedAt: number;
+}
+
+/**
  * Metadata associated with content
  */
 export interface ContentMetadata {
@@ -97,6 +143,20 @@ export interface ContentMetadata {
 
   /** Reason the response was incomplete (e.g., max_output_tokens) */
   incompleteReason?: string;
+
+  /**
+   * Client-side chronology marker. Stamped by HistoryService on insertion.
+   * NEVER serialized to a provider (#1721).
+   */
+  chronology?: ChronologyMarker;
+
+  /**
+   * On a summary entry, the span of chronology sequence numbers this summary
+   * replaced. Kept as a sibling of `chronology` because compression builds the
+   * summary before it has ever entered history and therefore before it has a
+   * marker. NEVER serialized to a provider (#1721).
+   */
+  chronologyReplaced?: ChronologyReplacedSpan;
 }
 
 export interface UsageStats {

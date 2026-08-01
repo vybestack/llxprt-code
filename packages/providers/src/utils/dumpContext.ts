@@ -8,6 +8,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ChronologyTraceEntry } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 const logger = new DebugLogger('llxprt:core:dumpContext');
 
@@ -32,6 +33,13 @@ export interface DumpData {
   request?: DumpRequest;
   response?: DumpResponse;
   relatedRequestFile?: string;
+  /**
+   * Client-side chronology trace for the history the request was built from
+   * (#1721). This is a SIBLING of `request` and is deliberately never placed
+   * inside `request.body`: the body must remain exactly what the provider
+   * receives, and providers reject unknown fields with HTTP 400.
+   */
+  chronology?: readonly ChronologyTraceEntry[];
 }
 
 /**
@@ -121,6 +129,7 @@ export async function dumpRequestContext(
   request: DumpRequest,
   provider: string,
   baseId?: string,
+  chronology?: readonly ChronologyTraceEntry[],
 ): Promise<DumpRequestResult> {
   const dumpDir = path.join(Storage.getGlobalCacheDir(), 'dumps');
   await fs.mkdir(dumpDir, { recursive: true });
@@ -131,10 +140,12 @@ export async function dumpRequestContext(
 
   const redactedRequest = redactSensitiveData(request);
 
-  const data = {
+  const data: DumpData = {
     provider,
     timestamp: new Date().toISOString(),
     request: redactedRequest,
+    // Sibling of `request`, never inside `request.body` (#1721).
+    ...(chronology ? { chronology } : {}),
   };
 
   await fs.writeFile(filepath, JSON.stringify(data, null, 2), 'utf-8');

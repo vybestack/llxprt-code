@@ -23,11 +23,17 @@ import {
   buildProviderDumpBody,
   dumpRequestContext,
 } from '@vybestack/llxprt-code-providers';
-import type { IContent } from '@vybestack/llxprt-code-core';
+import type {
+  IContent,
+  ChronologyTraceEntry,
+} from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 
-type HistoryService = { getAll: () => unknown };
+type HistoryService = {
+  getAll: () => unknown;
+  getChronologyTrace: () => readonly ChronologyTraceEntry[];
+};
 
 type AgentClientWithHistory = {
   getHistoryService?: () => HistoryService | null;
@@ -137,7 +143,14 @@ async function dumpImmediateContext(
       baseURL: activeBaseURL,
     }),
   };
-  const result = await dumpRequestContext(request, providerName);
+  // Chronology is written alongside the request, never inside request.body:
+  // the body must stay byte-for-byte what the provider would receive (#1721).
+  const result = await dumpRequestContext(
+    request,
+    providerName,
+    undefined,
+    historyService.getChronologyTrace(),
+  );
   return {
     type: 'message',
     messageType: 'info',

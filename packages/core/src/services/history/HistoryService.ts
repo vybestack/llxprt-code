@@ -62,6 +62,11 @@ import {
   getWithinTokenLimit as getWithinTokenLimitHelper,
   summarizeOldHistory as summarizeOldHistoryHelper,
 } from './historyContextWindow.js';
+import {
+  ChronologyStamper,
+  buildChronologyTrace,
+  type ChronologyTraceEntry,
+} from './historyChronology.js';
 
 // Preserve the CompressionConfig export from the same path for consumers.
 export type { CompressionConfig };
@@ -110,6 +115,8 @@ export class HistoryService
   private historyMutationInProgress = false;
   private historyMutationQueue: QueuedHistoryMutation[] = [];
   private logger = new DebugLogger('llxprt:history:service');
+
+  private chronology = new ChronologyStamper();
 
   /**
    * @plan:PLAN-20260603-ISSUE1584.P05
@@ -411,8 +418,6 @@ export class HistoryService
   }
 
   private addInternal(content: IContent, modelName?: string): void {
-    logContentAdded(this.logger, content, modelName);
-
     // Reject zero-block turns: a Content with no blocks corrupts provider-
     // facing history (notably z.ai rejects empty human turns with HTTP 400
     // error 1213, issue #2410). This is a systemic safety net — earlier
@@ -421,32 +426,46 @@ export class HistoryService
     const hasValidSpeaker = ['human', 'ai', 'tool'].includes(content.speaker);
     const hasBlocks =
       Array.isArray(content.blocks) && content.blocks.length > 0;
-    if (hasValidSpeaker && hasBlocks) {
-      const generation = this.syncGeneration;
-      this.history.push(content);
+    const accepted = hasValidSpeaker && hasBlocks;
 
+    if (accepted) {
+      // Stamp chronology only once the content is known to be accepted, so a
+      // rejected turn never consumes a sequence number (#1721).
+      this.chronology.stamp(content);
+    }
+
+    logContentAdded(this.logger, content, modelName);
+
+    if (!accepted) {
       this.logger.debug(
-        'Content added successfully, history length:',
-        this.history.length,
-      );
-
-      try {
-        this.emit('contentAdded', content);
-      } catch (error: unknown) {
-        this.history.pop();
-        throw error;
-      }
-
-      // Update token count asynchronously but atomically
-      void this.updateTokenCount(content, modelName, generation);
-    } else if (!hasValidSpeaker) {
-      this.logger.debug('Content rejected - invalid speaker:', content.speaker);
-    } else {
-      this.logger.debug(
-        'Content rejected - zero blocks (issue #2410):',
+        hasValidSpeaker
+          ? 'Content rejected - zero blocks (issue #2410):'
+          : 'Content rejected - invalid speaker:',
         content.speaker,
       );
+      return;
     }
+
+    const generation = this.syncGeneration;
+    this.history.push(content);
+
+    this.logger.debug(
+      'Content added successfully, history length:',
+      this.history.length,
+    );
+
+    try {
+      this.emit('contentAdded', content);
+    } catch (error: unknown) {
+      // Roll back the insertion. The consumed chronology sequence number is
+      // intentionally NOT reclaimed: sequence numbers are never reused, and
+      // the resulting gap truthfully records that an item was removed.
+      this.history.pop();
+      throw error;
+    }
+
+    // Update token count asynchronously but atomically
+    void this.updateTokenCount(content, modelName, generation);
   }
 
   /**
@@ -542,6 +561,11 @@ export class HistoryService
     const previousHistory = this.history;
     const previousTokens = this.totalTokens;
     this.invalidatePendingSyncs();
+    // Uphold the chronology invariant on this insertion path too: items that
+    // already carry a marker keep it, and anything new is stamped (#1721).
+    for (const content of accepted) {
+      this.chronology.stamp(content);
+    }
     this.history = [...accepted];
     this.totalTokens = replacementTokens;
     try {
@@ -589,6 +613,15 @@ export class HistoryService
    */
   async applyDensityResult(result: DensityResult): Promise<void> {
     validateDensityResult(result, this.history.length);
+    // Each density replacement takes over the chronology position of the item
+    // it replaces, so the surviving history keeps an unbroken sequence.
+    // densityValidation stays free of chronology knowledge.
+    for (const [index, replacement] of result.replacements) {
+      const replacedMarker = this.history[index].metadata?.chronology;
+      if (replacedMarker !== undefined) {
+        this.chronology.inherit(replacement, replacedMarker);
+      }
+    }
     applyDensityMutations(this.history, result);
 
     this.logger.debug('Density: applied result', {
@@ -760,6 +793,8 @@ export class HistoryService
     this.pendingOperations = [];
     this.tokenizerCache.clear();
     this.tokenizerLock = Promise.resolve();
+    // Chronology counters are intentionally NOT reset: seq must never be reused
+    // (NG8) so that items added after dispose() never collide with earlier ones.
   }
 
   /**
@@ -792,6 +827,8 @@ export class HistoryService
     const previousTokens = this.totalTokens;
     this.history = [];
     this.totalTokens = 0;
+    // Chronology counters are intentionally NOT reset on clear (NG8): seq must
+    // never be reused so items added after a clear never collide with earlier ones.
 
     // Emit event with reset count
     this.emit('tokensUpdated', {
@@ -936,16 +973,18 @@ export class HistoryService
     for (let i = 0; i < this.history.length; i++) {
       const missing = getMissingToolCalls(this.history[i], respondedCallIds);
       if (missing.length > 0) {
-        const syntheticToolMessage = createSyntheticToolMessage(missing);
+        const stampedSynthetic = this.chronology.stamp(
+          createSyntheticToolMessage(missing),
+        );
 
-        this.history.splice(i + 1, 0, syntheticToolMessage);
+        this.history.splice(i + 1, 0, stampedSynthetic);
         insertedCount += 1;
 
         for (const tc of missing) {
           respondedCallIds.add(tc.id);
         }
 
-        void this.updateTokenCount(syntheticToolMessage);
+        void this.updateTokenCount(stampedSynthetic);
         i += 1;
       }
     }
@@ -994,6 +1033,11 @@ export class HistoryService
       summarizeFn,
     );
     if (result) {
+      // Stamp every item: retained items already carry a marker and keep it,
+      // while the freshly generated summary gets a new one.
+      for (const item of result) {
+        this.chronology.stamp(item);
+      }
       this.history = result;
       await this.recalculateTotalTokens();
     }
@@ -1066,5 +1110,14 @@ export class HistoryService
    */
   getStatistics(): ConversationStatistics {
     return computeStatistics(this.history);
+  }
+
+  /**
+   * Get an ordered chronology trace: one compact, JSON-safe entry per history
+   * item carrying its marker fields and structural descriptors. No message
+   * text, tool parameters, or tool results appear in the trace.
+   */
+  getChronologyTrace(): ChronologyTraceEntry[] {
+    return buildChronologyTrace(this.history);
   }
 }
