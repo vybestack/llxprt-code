@@ -9,7 +9,11 @@ import { Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import stringWidth from 'string-width';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { createFilePathLink } from './terminalLinks.js';
+import {
+  createFilePathLink,
+  createUrlLink,
+  stripControlCharacters,
+} from './terminalLinks.js';
 
 // Constants for Markdown parsing
 const BOLD_MARKER_LENGTH = 2; // For "**"
@@ -131,6 +135,23 @@ function renderInlineCodeNode(
   return null;
 }
 
+/**
+ * Does the candidate contain more `(` than `)`? The markdown-link tokenizer
+ * terminates at the first `)`, so an unbalanced opening parenthesis means the
+ * captured URL was cut short.
+ */
+function hasUnbalancedOpenParen(candidate: string): boolean {
+  let depth = 0;
+  for (const character of candidate) {
+    if (character === '(') {
+      depth++;
+    } else if (character === ')') {
+      depth--;
+    }
+  }
+  return depth > 0;
+}
+
 function renderLinkNode(
   fullMatch: string,
   key: string,
@@ -148,10 +169,31 @@ function renderLinkNode(
     const linkMatch = fullMatch.match(new RegExp(linkPattern));
     if (linkMatch) {
       const [, linkText, url] = linkMatch;
+      // Both halves are cleaned up front so neither the hyperlink label nor
+      // the plain-text fallback can carry escape bytes to the terminal.
+      const safeText = stripControlCharacters(linkText);
+      const safeUrl = stripControlCharacters(url);
+      // Link the visible label and keep the raw `(url)` fallback, itself
+      // linked, so the target stays reachable in terminals without OSC 8.
+      // The markdown-link pattern stops at the first `)`, so a URL containing
+      // an unbalanced `(` was truncated by the tokenizer. Linking a truncated
+      // URL would send the user somewhere they did not ask for, so no
+      // hyperlink is emitted and the text renders exactly as it did before
+      // links were clickable.
+      const combinedLink = hasUnbalancedOpenParen(url)
+        ? null
+        : createUrlLink(url, `${safeText} (${safeUrl})`);
+      if (combinedLink !== null) {
+        return (
+          <Text key={key} color={theme.text.link}>
+            {combinedLink}
+          </Text>
+        );
+      }
       return (
         <Text key={key} color={baseColor}>
-          {linkText}
-          <Text color={theme.text.link}> ({url})</Text>
+          {safeText}
+          <Text color={theme.text.link}> ({safeUrl})</Text>
         </Text>
       );
     }
@@ -176,6 +218,30 @@ function renderUnderlineNode(
     );
   }
   return null;
+}
+
+/**
+ * Render a bare URL token. The URL keeps the link colour whether or not it can
+ * be hyperlinked — it is a URL either way — while trailing sentence
+ * punctuation stays in the surrounding text colour. A URL that cannot be
+ * linkified safely (unparseable, or carrying control characters) is shown
+ * without an OSC 8 escape.
+ */
+function renderBareUrlNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode {
+  const { url, trailing } = splitTrailingUrlPunctuation(fullMatch);
+  const urlLink = createUrlLink(url);
+  return (
+    <Text key={key} color={baseColor}>
+      <Text color={theme.text.link}>
+        {urlLink ?? stripControlCharacters(url)}
+      </Text>
+      {trailing.length > 0 && <Text color={baseColor}>{trailing}</Text>}
+    </Text>
+  );
 }
 
 function renderMatchedNode(
@@ -206,11 +272,7 @@ function renderMatchedNode(
   if (underline !== null) return underline;
 
   if (fullMatch.match(/^https?:\/\//)) {
-    return (
-      <Text key={key} color={theme.text.link}>
-        {fullMatch}
-      </Text>
-    );
+    return renderBareUrlNode(fullMatch, key, baseColor);
   }
 
   return null;
@@ -241,6 +303,44 @@ const PATH_DELIMITERS = new Set([
   '!',
   '?',
 ]);
+
+/**
+ * Trailing sentence-punctuation characters that should be stripped from a bare
+ * URL link target so prose like "see https://example.com." does not include the
+ * period in the link.
+ */
+const URL_TRAILING_PUNCTUATION = new Set(['.', ',', ';', ':', '!', '?']);
+
+/**
+ * Split a bare URL token into the URL portion and any trailing punctuation
+ * that should be excluded from the link target. A trailing `)` is only stripped
+ * when the URL contains no `(`, so Wikipedia-style `..._(disambiguation)` URLs
+ * stay intact. Uses a character-set lookup instead of a regex to avoid
+ * backtracking-vulnerable patterns.
+ */
+function splitTrailingUrlPunctuation(token: string): {
+  url: string;
+  trailing: string;
+} {
+  let end = token.length;
+  let trimmed = true;
+  while (trimmed && end > 0) {
+    trimmed = false;
+    while (end > 0 && URL_TRAILING_PUNCTUATION.has(token[end - 1])) {
+      end--;
+      trimmed = true;
+    }
+    if (
+      end > 0 &&
+      token[end - 1] === ')' &&
+      !token.slice(0, end).includes('(')
+    ) {
+      end--;
+      trimmed = true;
+    }
+  }
+  return { url: token.slice(0, end), trailing: token.slice(end) };
+}
 
 function renderPlainSegment(
   textSlice: string,
