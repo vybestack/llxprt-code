@@ -142,6 +142,16 @@ function validateByKind(
       return validateThreadIdParam(key, value);
     case 'limit':
       return validateLimitParam(key, value);
+    case 'closeReason':
+      return validateCloseReasonParam(key, value);
+    case 'color':
+      return validateColorParam(key, value);
+    case 'assignee':
+      return validateAssigneeParam(key, value);
+    case 'milestone':
+    case 'project':
+    case 'branch':
+      return validateStringParam(key, value);
     case 'body':
     case 'freetext':
       return validateStringParam(key, value);
@@ -362,4 +372,93 @@ export function resolveLimit(params: Record<string, unknown>): number {
     return limit;
   }
   return DEFAULT_LIMIT;
+}
+
+/**
+ * Allowed close-reason values for `gh issue close`.
+ *
+ * @plan PLAN-20260731-GHBROKER.P11
+ * @requirement REQ-002
+ */
+const CLOSE_REASONS = ['completed', 'not planned'] as const;
+
+/**
+ * Validates a closeReason parameter: must be one of the allowed values.
+ *
+ * @plan PLAN-20260731-GHBROKER.P11
+ * @requirement REQ-002
+ */
+function validateCloseReasonParam(
+  key: string,
+  value: unknown,
+): ValidationError | null {
+  if (typeof value !== 'string') {
+    return {
+      code: 'INVALID_PARAM',
+      message: `Parameter ${key} must be a string`,
+    };
+  }
+  if (!CLOSE_REASONS.includes(value as (typeof CLOSE_REASONS)[number])) {
+    return {
+      code: 'INVALID_PARAM',
+      message: `Parameter ${key} must be one of: ${CLOSE_REASONS.join(', ')}`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Validates a color parameter: must be a hex color like `#RRGGBB` or `RRGGBB`.
+ *
+ * @plan PLAN-20260731-GHBROKER.P11
+ * @requirement REQ-002
+ */
+function validateColorParam(
+  key: string,
+  value: unknown,
+): ValidationError | null {
+  if (typeof value !== 'string') {
+    return {
+      code: 'INVALID_PARAM',
+      message: `Parameter ${key} must be a string`,
+    };
+  }
+  if (!/^#?[0-9A-Fa-f]{6}$/.test(value)) {
+    return {
+      code: 'INVALID_PARAM',
+      message: `Parameter ${key} must be a hex color like #RRGGBB`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Validates an assignee parameter: must be a string or array of strings.
+ * Same validation as label, but semantically different.
+ *
+ * @plan PLAN-20260731-GHBROKER.P11
+ * @requirement REQ-002
+ */
+function validateAssigneeParam(
+  key: string,
+  value: unknown,
+): ValidationError | null {
+  if (Array.isArray(value)) {
+    for (const el of value) {
+      if (typeof el !== 'string') {
+        return {
+          code: 'INVALID_PARAM',
+          message: `Parameter ${key} must be a string or array of strings`,
+        };
+      }
+    }
+    return null;
+  }
+  if (typeof value !== 'string') {
+    return {
+      code: 'INVALID_PARAM',
+      message: `Parameter ${key} must be a string or array of strings`,
+    };
+  }
+  return null;
 }

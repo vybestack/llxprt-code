@@ -34,6 +34,7 @@ import type {
   GitHubBrokerHandler,
 } from './github-broker-types.js';
 import { OP_REGISTRY, validateParams } from './github-broker-ops.js';
+import { withBodyFiles } from './github-broker-body-file.js';
 import {
   classifyStderr,
   mapGraphQLErrorType,
@@ -372,12 +373,19 @@ export function createGitHubBrokerHandler(): GitHubBrokerHandler {
       return;
     }
 
-    // Build argv and run gh with the descriptor's output-mode flags
-    const argv = descriptor.buildArgv(opParams);
-    const result = await runGh(argv, signal, {
-      rawOutput: descriptor.rawOutput === true,
-      tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
-    });
+    // Materialise body text into mode-0600 temp files before building argv,
+    // so body values reach gh as --body-file paths and never as argv text.
+    // The files are removed in a finally even when gh throws.
+    // `shape` still receives the ORIGINAL params, never the temp paths.
+    const result = await withBodyFiles(
+      descriptor.bodyParams,
+      opParams,
+      (bodyParams) =>
+        runGh(descriptor.buildArgv(bodyParams), signal, {
+          rawOutput: descriptor.rawOutput === true,
+          tolerateNonZeroExit: descriptor.tolerateNonZeroExit === true,
+        }),
+    );
 
     if (result.kind === 'failure') {
       state.writer.sendError(id, result.error.code, result.error.message);

@@ -137,6 +137,18 @@ import {
 } from './github-broker-search-ops.js';
 import { runListDescriptor } from './github-broker-run-ops.js';
 import { labelListDescriptor } from './github-broker-label-ops.js';
+import {
+  issueCreateDescriptor,
+  issueCommentDescriptor,
+  issueCloseDescriptor,
+} from './github-broker-issue-write-ops.js';
+import {
+  prCreateDescriptor,
+  prCommentDescriptor,
+  prEditDescriptor,
+  prReadyDescriptor,
+  labelCreateDescriptor,
+} from './github-broker-pr-write-ops.js';
 
 /**
  * The registry of all operation descriptors. Unknown ops yield UNKNOWN_OP.
@@ -157,4 +169,12 @@ export const OP_REGISTRY: Readonly<Record<string, OpDescriptor>> = {
   'search.prs': searchPrsDescriptor,
   'run.list': runListDescriptor,
   'label.list': labelListDescriptor,
+  'issue.create': issueCreateDescriptor,
+  'issue.comment': issueCommentDescriptor,
+  'issue.close': issueCloseDescriptor,
+  'pr.create': prCreateDescriptor,
+  'pr.comment': prCommentDescriptor,
+  'pr.edit': prEditDescriptor,
+  'pr.ready': prReadyDescriptor,
+  'label.create': labelCreateDescriptor,
 };

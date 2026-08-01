@@ -48,9 +48,32 @@ import { OP_REGISTRY } from '../github-broker-ops.js';
  * @requirement REQ-002, REQ-009
  * @pseudocode 003-github-broker.md lines 38-55
  */
+/**
+ * The P10 read operations. Mutating operations were added in P11, so the
+ * non-mutating assertion is scoped to this set rather than the whole
+ * registry. Accepting `repo` remains a universal invariant (REQ-009).
+ */
+const P10_READ_OPS: readonly string[] = [
+  'issue.view',
+  'issue.list',
+  'pr.list',
+  'pr.view',
+  'pr.diff',
+  'pr.checks',
+  'pr.reviews',
+  'search.issues',
+  'search.prs',
+  'run.list',
+  'label.list',
+];
+
 function assertAllOpsNonMutating(): void {
-  for (const [name, desc] of Object.entries(OP_REGISTRY)) {
+  for (const name of P10_READ_OPS) {
+    const desc = OP_REGISTRY[name];
+    expect(desc, `${name} must be registered`).toBeDefined();
     expect(desc.mutating, `${name} must be non-mutating`).toBe(false);
+  }
+  for (const [name, desc] of Object.entries(OP_REGISTRY)) {
     expect('repo' in desc.params, `${name} must accept repo`).toBe(true);
   }
 }
