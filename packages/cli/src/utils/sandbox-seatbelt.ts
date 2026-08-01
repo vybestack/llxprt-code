@@ -304,6 +304,18 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
   return { sandboxEnv, proxyProcess, proxyCommand };
 }
 
+function signalSeatbeltProcessGroup(pid: number): void {
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch (error) {
+    if (
+      !(error instanceof Error && 'code' in error && error.code === 'ESRCH')
+    ) {
+      throw error;
+    }
+  }
+}
+
 function wireSeatbeltProxyCloseHandler(
   proxyProcess: ChildProcess | undefined,
   sandboxProcess: ChildProcess,
@@ -315,7 +327,7 @@ function wireSeatbeltProxyCloseHandler(
   proxyProcess.on('close', (code, signal) => {
     const sandboxPid = sandboxProcess.pid;
     if (sandboxPid !== undefined && sandboxPid !== 0) {
-      process.kill(-sandboxPid, 'SIGTERM');
+      signalSeatbeltProcessGroup(sandboxPid);
     }
     // Avoid throwing inside an event callback (uncaught async throw).
     // Log the failure and terminate the process group so the sandbox exits.

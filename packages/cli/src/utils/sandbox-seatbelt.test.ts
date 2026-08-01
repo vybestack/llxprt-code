@@ -582,7 +582,11 @@ function createSeatbeltHarness(cwd: string = process.cwd()): SeatbeltHarness {
 
     Object.defineProperty(process, 'kill', {
       configurable: true,
-      value: () => true,
+      value: () => {
+        const error = new Error('kill ESRCH');
+        Object.assign(error, { code: 'ESRCH' });
+        throw error;
+      },
       writable: true,
     });
     Object.defineProperty(process, 'exit', {
