@@ -30,6 +30,13 @@ describe('issue #2896 A7: legacy-profile numeric repair at egress', () => {
     expect(typeof result.modelParams.temperature).toBe('number');
   });
 
+  it('repairs number-typed settings outside the model-param category', () => {
+    // reasoning.maxTokens is a model-behavior number; a profile that stored it
+    // as text must still reach consumers as a number.
+    expect(normalizeSetting('reasoning.maxTokens', '4096')).toBe(4096);
+    expect(parseSetting('reasoning.maxTokens', '4096')).toBe(4096);
+  });
+
   it('coerces a leading-dot numeric string via normalizeSetting directly', () => {
     expect(normalizeSetting('top_p', '.95')).toBe(0.95);
     expect(normalizeSetting('temperature', '-0.5')).toBe(-0.5);

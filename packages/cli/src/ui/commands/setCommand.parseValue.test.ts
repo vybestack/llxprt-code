@@ -63,6 +63,10 @@ describe('parseValue numeric edge cases', () => {
     expect(parseValue('Infinity')).toBe('Infinity');
     expect(parseValue('NaN')).toBe('NaN');
     expect(parseValue('1_000')).toBe('1_000');
+    // Syntactically numeric but overflows to Infinity, which JSON-serializes
+    // to null — it must stay text, matching the settings layer.
+    expect(parseValue('1e400')).toBe('1e400');
+    expect(parseValue('-1e400')).toBe('-1e400');
     expect(parseValue('')).toBe('');
   });
 });

@@ -100,14 +100,14 @@ export function normalizeSetting(key: string, value: unknown): unknown {
   }
 
   // Registry-type-driven coercion: repair ALREADY-PERSISTED bad profiles at
-  // settings egress (issue #2896). A numeric string stored on disk for a
-  // number-type model-param is coerced to a number. Non-numeric strings are
-  // left untouched so the provider surfaces the error rather than silently
-  // dropping the value. Specs with their own `normalize` (handled above)
-  // always win and are not affected by this coercion.
+  // settings egress (issue #2896). A numeric string stored on disk for any
+  // number-typed spec is coerced to a number, matching what parseSetting does
+  // at ingress so a value cannot round-trip as two different types.
+  // Non-numeric strings are left untouched so the provider surfaces the error
+  // rather than silently dropping the value. Specs with their own `normalize`
+  // (handled above) always win and are not affected by this coercion.
   if (
-    spec?.category === 'model-param' &&
-    spec.type === 'number' &&
+    spec?.type === 'number' &&
     typeof value === 'string' &&
     isStrictNumericString(value)
   ) {

@@ -114,7 +114,7 @@ describe('commitModelParam (issue #2896)', () => {
     ['frequency_penalty', '0', 0],
     ['presence_penalty', '1.25', 1.25],
     ['temperature', '0.7', 0.7],
-  ])('A6: commits %s=%s as the number %d', (key, raw, expected) => {
+  ])('A6: commits %s=%s as the number %s', (key, raw, expected) => {
     const r = recorder();
     const result = commitModelParam(key, raw, r.set);
 

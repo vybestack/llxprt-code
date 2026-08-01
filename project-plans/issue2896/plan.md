@@ -276,3 +276,16 @@ PR OCR budget is now exhausted (2 of 2).
 | R29 | B12 omitted the reported profile shape on the default provider path (canonical OpenAI, `enabled` + `effort`). | In-scope-Fix | Added. |
 | R30 | The A6 comment said "integer typing" while the cases include fractional values. | In-scope-Fix | Comment corrected. |
 | R31 | Two earlier inline findings about `+1.5` and `1.e5` in `isStrictNumericString`. | Reject | Self-retracted by the reviewer in the same comments: both are the documented, tested, intentional strictness. |
+
+## 12. PR review round 3 (CI-generated) — triage
+
+The two launched OCR reviews are spent; these findings arrived from the
+automatic CI reviewer and are triaged, not solicited.
+
+| # | Finding | Class | Action |
+|---|---|---|---|
+| R32 | `parseValue` in `setCommand.ts` had no overflow guard: `1e400` passes the recognizer and `Number()` yields `Infinity`, which is not `NaN`, so `/set modelparam top_p 1e400` stored `Infinity`. Egress cannot repair it because the stored value is already a number. | In-scope-Fix | `parseValue` now returns the raw text for a non-finite result, matching both settings entry points. Covered in the rejection table. |
+| R33 | `normalizeSetting` repaired only `category: 'model-param'` numbers, so a number-typed model-behavior setting such as `reasoning.maxTokens` persisted as a string was never repaired, while `parseSetting` coerced every number spec at ingress. | In-scope-Fix | Egress now matches ingress: any `type: 'number'` spec is repaired. Covered by a `reasoning.maxTokens` test asserting both entry points. |
+| R34 | The A6 parameterized name used `%d`, truncating fractional expectations in the test title. | In-scope-Fix | Changed to `%s`. |
+| R35 | Claim that `applyReasoningDialect` emits a spurious field for a known host when both `enabled` and `effort` are absent. | Reject | Factually incorrect. Both appliers return `null` for empty settings: `applyThinkingDialect` requires `enabled === true` or a non-empty effort, and `applyOpenRouterDialect` requires `enabled === false`, a non-empty effort, or `enabled === true`. This is asserted directly (`applyReasoningDialect('thinking', {})` and `('openrouter', {})` both return `null`, plus the empty-string-effort cases) and through `prepareRequest` in the B12 row "z.ai, no reasoning settings at all". |
+| R36 | Repeat of the OCR changed-file coverage warning. | Reject | Same reason as R24 — a property of the tool's own sampling. |

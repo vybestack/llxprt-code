@@ -289,12 +289,13 @@ export const setCommand: SlashCommand = {
  * Handles numbers, booleans, and JSON objects/arrays.
  */
 export function parseValue(value: string): unknown {
-  // Try to parse as number
+  // Try to parse as number. An overflow literal such as '1e400' is
+  // syntactically numeric but evaluates to Infinity, which JSON-serializes to
+  // null; keep it as text so it never reaches a request body, matching the
+  // settings layer's ingress and egress guards (issue #2896).
   if (looksNumeric(value)) {
     const num = Number(value);
-    if (!isNaN(num)) {
-      return num;
-    }
+    return Number.isFinite(num) ? num : value;
   }
 
   // Try to parse as boolean
