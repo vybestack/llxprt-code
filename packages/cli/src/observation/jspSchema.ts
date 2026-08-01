@@ -71,12 +71,17 @@ export interface JspBootstrap {
 function isLoopbackHost(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   if (lower === 'localhost') return true;
-  if (lower === '127.0.0.1' || lower === '::1') return true;
-  // Node's URL parser preserves the uncompressed form verbatim.
-  if (lower === '0:0:0:0:0:0:0:1') return true;
   if (lower.endsWith('.localhost')) return true;
+  // URL parsing keeps an IPv6 literal wrapped in brackets, so comparing the
+  // hostname directly against "::1" never matches. It also compresses the
+  // long form, but both are handled here so the check does not depend on
+  // that normalisation.
+  const host =
+    lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower;
+  if (host === '::1' || host === '0:0:0:0:0:0:0:1') return true;
+  if (host === '127.0.0.1') return true;
   const octet = '(?:25[0-5]|2[0-4]\\d|1\\d{2}|[1-9]?\\d)';
-  return new RegExp(`^127\\.${octet}\\.${octet}\\.${octet}$`).test(lower);
+  return new RegExp(`^127\\.${octet}\\.${octet}\\.${octet}$`).test(host);
 }
 
 function classifyEndpoint(

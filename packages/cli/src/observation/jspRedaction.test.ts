@@ -92,4 +92,26 @@ describe('buildTodoItems', () => {
     });
     expect(items.length).toBe(256);
   });
+
+  it('rejects a negative byte bound instead of returning empty content', () => {
+    expect(() => redactAssistantContent('hello', -1)).toThrow(RangeError);
+  });
+
+  it('rejects a negative entry cap instead of slicing from the end', () => {
+    const todos = [
+      { content: 'a', status: 'pending' },
+      { content: 'b', status: 'completed' },
+    ];
+    expect(() =>
+      buildTodoItems(todos, { todoTextBytes: 64, todoEntries: -1 }),
+    ).toThrow(RangeError);
+  });
+
+  it('publishes an unrecognised native status as not completed', () => {
+    const items = buildTodoItems([{ content: 'x', status: 'cancelled' }], {
+      todoTextBytes: 64,
+      todoEntries: 8,
+    });
+    expect(items).toStrictEqual([{ text: 'x', completed: false }]);
+  });
 });

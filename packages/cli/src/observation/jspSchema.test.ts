@@ -113,4 +113,21 @@ describe('parseBootstrap', () => {
     const result = parseBootstrap(rest);
     expect(result.ok).toBe(false);
   });
+
+  it('accepts every loopback form the observer may hand back', () => {
+    for (const host of [
+      '127.0.0.1',
+      '127.255.255.254',
+      'localhost',
+      'app.localhost',
+      '[::1]',
+      '[0:0:0:0:0:0:0:1]',
+    ]) {
+      const result = parseBootstrap({
+        ...validBootstrap,
+        endpoint: `http://${host}:9123/jsp/1`,
+      });
+      expect(result.ok).toBe(true);
+    }
+  });
 });
