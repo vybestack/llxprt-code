@@ -593,10 +593,16 @@ export class CredentialProxyServer {
         );
         return;
       }
-      const guard = state.pending.checkGuards(id);
-      if (guard) {
-        this.sendError(socket, id, guard.code, guard.message);
-        return;
+      // `cancel` is exempt from the concurrency cap. It is the operation
+      // that RELIEVES saturation, so rejecting it at the cap would make a
+      // fully-loaded connection impossible to unwind — exactly when
+      // cancelling matters. It starts no host-side work of its own.
+      if (op !== 'cancel') {
+        const guard = state.pending.checkGuards(id);
+        if (guard) {
+          this.sendError(socket, id, guard.code, guard.message);
+          return;
+        }
       }
       const handler = this.requestHandlers[op];
       if (!handler) {

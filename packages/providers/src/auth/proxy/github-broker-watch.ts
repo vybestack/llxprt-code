@@ -32,6 +32,16 @@ export const STEADY_POLL_MS = 30_000;
 export const EARLY_PHASE_MS = 30_000;
 
 /**
+ * How long to wait for checks to appear before concluding a pull request has
+ * none. Long enough for a workflow to register after a push, short enough
+ * that a PR with no CI does not block for the full maximum duration.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-010
+ */
+export const NO_CHECKS_GRACE_MS = 120_000;
+
+/**
  * Returns the poll interval for a given elapsed time.
  *
  * @plan PLAN-20260731-GHBROKER.P13
@@ -186,6 +196,14 @@ export async function watchChecks(
     polls += 1;
 
     if (checksConcluded(checks)) return stop(true, false);
+
+    // A pull request with no checks configured never concludes, because an
+    // empty list is deliberately not a terminal state — checks that have not
+    // registered yet are not checks that finished. Give them a bounded grace
+    // period to appear, then stop rather than blocking for the full hour.
+    if (checks.length === 0 && now() - started >= NO_CHECKS_GRACE_MS) {
+      return stop(false, false);
+    }
 
     const elapsed = now() - started;
     if (elapsed >= maxDurationMs) return stop(false, false);

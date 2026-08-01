@@ -146,9 +146,9 @@ async function resolveIssueTypeId(
     'graphql',
     '-f',
     `query=${query}`,
-    '-F',
+    '-f',
     `owner=${owner}`,
-    '-F',
+    '-f',
     `name=${name}`,
   ]);
   const nodes = dig(raw, ['data', 'repository', 'issueTypes', 'nodes']);
@@ -185,9 +185,9 @@ async function resolveIssueNodeId(
     'graphql',
     '-f',
     `query=${query}`,
-    '-F',
+    '-f',
     `owner=${owner}`,
-    '-F',
+    '-f',
     `name=${name}`,
     '-F',
     `number=${number}`,
@@ -249,9 +249,9 @@ export async function executeIssueEdit(
       'graphql',
       '-f',
       `query=${mutation}`,
-      '-F',
+      '-f',
       `id=${issueId}`,
-      '-F',
+      '-f',
       `typeId=${issueTypeId}`,
     ]);
   }
@@ -306,7 +306,7 @@ export async function executeResolveThread(
     'graphql',
     '-f',
     `query=${mutation}`,
-    '-F',
+    '-f',
     `threadId=${threadId}`,
   ]);
   const resolved = dig(raw, [

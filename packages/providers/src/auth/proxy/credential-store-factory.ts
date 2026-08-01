@@ -392,6 +392,10 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
 export function resetFactorySingletons(): void {
   const oldProxyTokenStore = proxyTokenStore;
   const oldProxyKeyStorageClient = proxyKeyStorageClient;
+  const oldBrokerClient = brokerClient;
+  brokerClient = undefined;
+  brokerClientCapabilityToken = undefined;
+  brokerClientSocketPath = undefined;
   proxyTokenStore = undefined;
   proxyTokenStoreCapabilityToken = undefined;
   proxyTokenStoreSocketPath = undefined;
@@ -404,4 +408,5 @@ export function resetFactorySingletons(): void {
   cachedCapabilityToken = undefined;
   safeClose(() => oldProxyTokenStore?.getClient().close());
   safeClose(() => oldProxyKeyStorageClient?.close());
+  safeClose(() => oldBrokerClient?.close());
 }

@@ -66,9 +66,36 @@ const MAX_BUFFER = 8 * 1024 * 1024;
  */
 function buildMinimalEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  // Carry PATH and HOME so gh can find its binary and config.
-  if (process.env.PATH !== undefined) env.PATH = process.env.PATH;
-  if (process.env.HOME !== undefined) env.HOME = process.env.HOME;
+  // Variables gh needs to locate its binary, its config and its credential.
+  // GH_CONFIG_DIR and XDG_CONFIG_HOME matter: gh resolves hosts.yml through
+  // them, so dropping either sends an otherwise-authenticated host to a
+  // different config directory and the call fails as unauthenticated.
+  // GH_HOST and GH_ENTERPRISE_TOKEN carry enterprise targeting.
+  // Proxy variables are needed wherever egress is not direct.
+  const PASSTHROUGH = [
+    'PATH',
+    'HOME',
+    'GH_CONFIG_DIR',
+    'XDG_CONFIG_HOME',
+    'GH_HOST',
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
+    // Windows: gh and Node need these to resolve paths and the user profile.
+    'SYSTEMROOT',
+    'APPDATA',
+    'LOCALAPPDATA',
+    'USERPROFILE',
+    'TEMP',
+    'TMP',
+  ];
+  for (const key of PASSTHROUGH) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
   // Prevent gh from blocking on a TTY or prompting for updates.
   env.GH_PROMPT_DISABLED = '1';
   env.GH_NO_UPDATE_NOTIFIER = '1';
