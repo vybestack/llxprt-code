@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -229,17 +229,30 @@ describe('GitHub broker security regressions (#1954)', () => {
     );
     expect(brokerFiles.length).toBeGreaterThan(0);
 
+    // Match module specifiers across the whole file rather than filtering
+    // for lines that start with `import`. Prettier wraps long imports, which
+    // puts the specifier on a later line — so the line-based check silently
+    // passed for exactly the formatting this repo produces.
+    const offenders: string[] = [];
     for (const file of brokerFiles) {
       const source = await fs.readFile(path.join(dir, file), 'utf8');
-      const imports = source
-        .split('\n')
-        .filter((line) => line.trimStart().startsWith('import'));
-      for (const line of imports) {
-        expect(line, `${file} must not import credential storage`).not.toMatch(
-          /credential-store-factory|provider-key-storage|token-store/,
-        );
+      const specifiers = [...source.matchAll(/from\s+'([^']+)'/g)].map(
+        (m) => m[1],
+      );
+      for (const specifier of specifiers) {
+        if (
+          /credential-store-factory|provider-key-storage|token-store|llxprt-code-storage/.test(
+            specifier,
+          )
+        ) {
+          offenders.push(`${file} -> ${specifier}`);
+        }
       }
     }
+    expect(
+      offenders,
+      'broker modules must not import credential storage',
+    ).toStrictEqual([]);
   });
 
   /**

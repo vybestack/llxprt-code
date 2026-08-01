@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -56,8 +56,7 @@ import {
 const isWindows = process.platform === 'win32';
 
 // Set RUN_GH_NETWORK_TESTS=1 to enable tests that hit the live GitHub API.
-const RUN_NETWORK_TESTS =
-  process.env.RUN_GH_NETWORK_TESTS === '1' || process.env.CI !== undefined;
+const RUN_NETWORK_TESTS = process.env.RUN_GH_NETWORK_TESTS === '1';
 
 /**
  * Asserts the structural shape of a shaped comment object. Extracted so the

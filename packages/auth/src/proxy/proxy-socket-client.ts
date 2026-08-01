@@ -205,9 +205,12 @@ export class ProxySocketClient {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
         this.releaseAbortCleanup(id);
-        this.releaseAbortCleanup(id);
         this.cancel(id);
         reject(new Error(`Request timed out after ${timeoutMs}ms`));
+        // resetIdleTimer returned early while this request was pending, so
+        // without re-arming here a timed-out request leaves the connection
+        // with no idle timer at all and it never closes.
+        this.maybeArmIdleTimer();
       }, timeoutMs);
       this.pendingRequests.set(id, { resolve, reject, timer });
     });
@@ -219,7 +222,6 @@ export class ProxySocketClient {
       if (signal.aborted) {
         this.pendingRequests.delete(id);
         this.releaseAbortCleanup(id);
-        this.releaseAbortCleanup(id);
         // Cannot await here — fire-and-forget the cancel frame.
         this.cancel(id);
         return Promise.reject(new Error('Request cancelled'));
@@ -229,8 +231,6 @@ export class ProxySocketClient {
         if (pending) {
           clearTimeout(pending.timer);
           this.pendingRequests.delete(id);
-          this.releaseAbortCleanup(id);
-          this.releaseAbortCleanup(id);
           this.releaseAbortCleanup(id);
           this.cancel(id);
           pending.reject(new Error('Request cancelled'));
