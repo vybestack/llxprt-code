@@ -54,12 +54,12 @@ function makeMockContext(overrides?: {
       : new ImageCapabilityHolder();
   return {
     services: {
-      config: {
-        // Expose the capability holder directly so `getRunImageOperation` is a
-        // prototype method. The runtime forwards it via a wrapper that
-        // preserves `this`; extracting and calling it detached would break.
-        getRunImageOperation: capability.getRunImageOperation.bind(capability),
-      } as never,
+      // The holder INSTANCE is the config, so `getRunImageOperation` is reached
+      // through the prototype with the instance as receiver. It is deliberately
+      // NOT pre-bound: extracting the function and calling it detached loses
+      // `this`, cannot read `#runner`, and fails — which is exactly the
+      // regression this fixture must be able to catch.
+      config: capability as never,
       agent: null,
       settings: {} as never,
       git: undefined,

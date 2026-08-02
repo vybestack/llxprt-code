@@ -158,6 +158,26 @@ describe('completeImageCommand (real workspace filesystem)', () => {
     );
     expect(suggestions).toStrictEqual([]);
   });
+
+  it('returns no suggestions for a prefix under a different filesystem root', async () => {
+    // path.relative() between two roots that share no base returns an ABSOLUTE
+    // path (e.g. Windows 'C:\ws' -> 'D:\secrets' yields 'D:\secrets'), which
+    // does not start with '..'. Containment must reject that too. Exercised
+    // here via a real sibling temp directory outside the workspace.
+    const outsideDir = await fs.promises.realpath(
+      await fs.promises.mkdtemp(path.join(os.tmpdir(), 'llxprt-image-other-')),
+    );
+    try {
+      await fs.promises.writeFile(path.join(outsideDir, 'secret.png'), 'x');
+      const suggestions = await completeImageCommand(
+        `out.png ${outsideDir}${path.sep}`,
+        workspaceRoot,
+      );
+      expect(suggestions).toStrictEqual([]);
+    } finally {
+      await fs.promises.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 /**

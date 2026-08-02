@@ -167,8 +167,7 @@ async function listWorkspaceEntries(
   // workspace and must return no suggestions (no directory enumeration, no
   // `../…` suggestions emitted).
   const canonicalWorkspace = path.resolve(workspaceRoot);
-  const relativeToWorkspace = path.relative(canonicalWorkspace, dir);
-  if (relativeToWorkspace.startsWith('..')) {
+  if (escapesRoot(canonicalWorkspace, dir)) {
     return { dirs: [], images: [] };
   }
 
@@ -204,6 +203,19 @@ async function listWorkspaceEntries(
 }
 
 /**
+ * True when `candidate` lies outside `root`.
+ *
+ * An absolute relative-result means the two paths share no common base — on
+ * Windows `path.relative('C:\ws', 'D:\secrets')` returns `D:\secrets`, which
+ * does not start with `..` — so the absolute check is required in addition to
+ * the traversal check.
+ */
+function escapesRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative.startsWith('..') || path.isAbsolute(relative);
+}
+
+/**
  * Determine whether a partial prefix resolves outside the canonical workspace
  * root. An absolute prefix pointing elsewhere or a relative `../` traversal
  * escapes and must produce zero suggestions.
@@ -216,8 +228,7 @@ function prefixEscapesWorkspace(
   const resolvedDir = path.isAbsolute(prefix)
     ? path.dirname(prefix)
     : path.resolve(canonicalWorkspace, path.dirname(prefix) || '.');
-  const relativeDir = path.relative(canonicalWorkspace, resolvedDir);
-  if (relativeDir.startsWith('..')) {
+  if (escapesRoot(canonicalWorkspace, resolvedDir)) {
     return true;
   }
   // Also check the full prefix path (handles `../` where dirname is `.` but
@@ -225,8 +236,7 @@ function prefixEscapesWorkspace(
   const resolvedFull = path.isAbsolute(prefix)
     ? prefix
     : path.resolve(canonicalWorkspace, prefix);
-  const relativeFull = path.relative(canonicalWorkspace, resolvedFull);
-  return relativeFull.startsWith('..');
+  return escapesRoot(canonicalWorkspace, resolvedFull);
 }
 
 /**
