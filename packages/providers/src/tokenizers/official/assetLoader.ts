@@ -28,26 +28,11 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Candidate asset directories for dev, dist, and bundle modes:
-// 1. Dev:   packages/providers/src/tokenizers/official/assets/
-// 2. Dist:  packages/providers/dist/src/tokenizers/official/assets/ (when build
-//           copies assets alongside compiled JS)
-// 3. Bundle: <bundle-root>/tokenizers/official/assets/ (when __dirname is the
-//           bundle root)
-function resolveAssetsDir(): string {
-  const candidates = [
-    path.join(__dirname, 'assets'),
-    path.join(__dirname, 'tokenizers', 'official', 'assets'),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return candidates[0];
-}
-
-const ASSETS_DIR = resolveAssetsDir();
+// Resolved relative to this module in both layouts, because the package build
+// copies .bpe assets from src into dist alongside the compiled JS:
+//   dev:  packages/providers/src/tokenizers/official/assets/
+//   dist: packages/providers/dist/src/tokenizers/official/assets/
+const ASSETS_DIR = path.join(__dirname, 'assets');
 
 /**
  * Reads and verifies a pinned tokenizer BPE asset.
