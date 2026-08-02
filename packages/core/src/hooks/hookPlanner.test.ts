@@ -10,10 +10,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HookPlanner } from './hookPlanner.js';
 import type { HookRegistry, HookRegistryEntry } from './hookRegistry.js';
 import { HookEventName, HookType } from './types.js';
-import { ConfigSource } from './hookRegistry.js';
 
 // Mock DebugLogger using vi.hoisted
 const mockDebugLogger = vi.hoisted(() => ({
@@ -28,6 +26,12 @@ vi.mock('../debug/index.js', () => ({
     getLogger: vi.fn(() => mockDebugLogger),
   },
 }));
+
+// Dynamic import AFTER vi.mock calls so the mock is applied.
+const hookPlannerModule = await import('./hookPlanner.js');
+const HookPlanner = hookPlannerModule.HookPlanner;
+const hookRegistryModule = await import('./hookRegistry.js');
+const ConfigSource = hookRegistryModule.ConfigSource;
 
 describe('HookPlanner', () => {
   let hookPlanner: HookPlanner;

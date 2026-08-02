@@ -21,9 +21,9 @@ import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-tools', (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>();
+    importOriginal() as typeof import('@vybestack/llxprt-code-tools');
   const ToolRegistryMock = vi.fn().mockImplementation(() => {
     const tools: Array<{
       serverName?: string;
@@ -55,7 +55,7 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   return {
     ...actual,
     ToolRegistry: ToolRegistryMock,
-    MemoryTool: vi.fn(),
+    MemoryTool: class MemoryToolMock {},
     setLlxprtMdFilename: vi.fn(),
     getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
     DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
@@ -79,9 +79,9 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('../../core/contentGenerator.js', async (importOriginal) => {
+vi.mock('../../core/contentGenerator.js', (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../core/contentGenerator.js')>();
+    importOriginal() as typeof import('../../core/contentGenerator.js');
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -94,11 +94,9 @@ vi.mock('../../telemetry/index.js', () => ({
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) => {
   const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration');
   return {
     ...actual,
     IdeClient: {
@@ -127,21 +125,19 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
-  DiscoveredMCPTool: vi
-    .fn()
-    .mockImplementation(
-      (
-        _callableTool: unknown,
-        serverName: string,
-        serverToolName: string,
-        _description: string,
-        _inputSchema: unknown,
-      ) => ({
+  DiscoveredMCPTool: class DiscoveredMCPToolMock {
+    constructor(
+      _callableTool: unknown,
+      serverName: string,
+      serverToolName: string,
+    ) {
+      Object.assign(this, {
         serverName,
         serverToolName,
         name: `${serverName}__${serverToolName}`,
-      }),
-    ),
+      });
+    }
+  },
 }));
 
 vi.mock('../../utils/extensionLoader.js', () => ({
@@ -175,7 +171,7 @@ vi.mock('../../runtime/providerRuntimeContext.js', () => ({
   }),
 }));
 
-vi.mock('../@vybestack/llxprt-code-settings', () => ({
+vi.mock('@vybestack/llxprt-code-settings', () => ({
   getSettingsService: vi.fn().mockReturnValue({
     get: vi.fn(),
     set: vi.fn(),

@@ -27,7 +27,11 @@ import {
   type AuthLockRecoveryResult,
   type ForceRecoverOptions,
 } from './token-store.js';
-import { type IDebugLogger, type ISecureStore } from './interfaces/index.js';
+import {
+  type IDebugLogger,
+  type ISecureStore,
+  isRuntimeReplacedStoreError,
+} from './interfaces/index.js';
 import {
   buildCurrentProcessOwnerMetadata,
   parseOwnerMetadata,
@@ -553,6 +557,9 @@ export class KeyringTokenStore implements TokenStore {
     try {
       raw = await this.secureStore.get(key);
     } catch (error) {
+      if (isRuntimeReplacedStoreError(error)) {
+        throw error;
+      }
       if (isSecureStoreCorruptError(error)) {
         const msg = errorMessageOf(error);
         this.logger.warn(
@@ -597,6 +604,9 @@ export class KeyringTokenStore implements TokenStore {
     try {
       await this.secureStore.delete(key);
     } catch (error) {
+      if (isRuntimeReplacedStoreError(error)) {
+        throw error;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Failed to remove token for [${this.hashIdentifier(key)}]: ${msg}`,
@@ -617,6 +627,9 @@ export class KeyringTokenStore implements TokenStore {
       }
       return Array.from(providerSet).sort();
     } catch (error) {
+      if (isRuntimeReplacedStoreError(error)) {
+        throw error;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Failed to list providers: ${msg}`);
       return [];
@@ -637,6 +650,9 @@ export class KeyringTokenStore implements TokenStore {
       }
       return buckets.sort();
     } catch (error) {
+      if (isRuntimeReplacedStoreError(error)) {
+        throw error;
+      }
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Failed to list buckets for [${this.hashIdentifier(provider + ':')}]: ${msg}`,

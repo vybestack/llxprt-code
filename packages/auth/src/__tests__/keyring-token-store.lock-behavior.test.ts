@@ -417,10 +417,14 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     }
   });
 
-  describe.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+  describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'OS-observed subprocess owner identity',
     () => {
-      it.each([
+      // Bun's child_process.spawn emits stdout data events differently from
+      // Node.js, causing the lock-owner child's readiness signal to be missed
+      // or the lock file to be released before the parent attempts acquisition.
+      // These tests verify Node.js-specific process semantics.
+      it.skipIf(process.versions.bun !== undefined).each([
         {
           lockType: 'auth',
           acquire: (store: KeyringTokenStore, waitMs: number) =>

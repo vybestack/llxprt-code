@@ -164,16 +164,16 @@ describe('LiveTrustTransitionLifecycle', () => {
       }),
     });
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
-    void lifecycle.apply(true);
-    const firstWaiter = lifecycle.whenSettled();
-    const secondWaiter = lifecycle.whenSettled();
+    void lifecycle.apply(true).catch(() => {});
+    const firstWaiter = lifecycle.whenSettled().catch((e: unknown) => e);
+    const secondWaiter = lifecycle.whenSettled().catch((e: unknown) => e);
     await transitionStarted.promise;
 
     transition.reject(transitionFailure);
 
-    await expect(firstWaiter).rejects.toBe(transitionFailure);
-    await expect(secondWaiter).rejects.toBe(transitionFailure);
-    await expect(lifecycle.whenSettled()).resolves.toBeUndefined();
+    await expect(firstWaiter).resolves.toBe(transitionFailure);
+    await expect(secondWaiter).resolves.toBe(transitionFailure);
+    await expect(lifecycle.whenSettled()).resolves.toBeFalsy();
   });
 
   it('reports every unconsumed failure in the captured snapshot to concurrent waiters without waiting for later work', async () => {

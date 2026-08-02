@@ -72,7 +72,8 @@ function createMidStreamFailingProvider(): IProvider {
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken: Object.freeze({}),
-        countProjectedTokens: () => Promise.resolve(tokenCount),
+        finalizedProjection: Object.freeze({}),
+        legacyEstimate: () => Promise.resolve(tokenCount),
       };
     },
   };

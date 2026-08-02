@@ -96,6 +96,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
   },
@@ -213,12 +214,17 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/__tests__/auth-flow-orchestrator.spec.ts',
       'src/auth/__tests__/auth-import-isolation.test.ts',
       'src/auth/__tests__/auth-status-service.spec.ts',
-      'src/auth/__tests__/behavioral/error-edge-cases.behavioral.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI (issue #2842 shim).
+      // These pass on macOS and under vitest. Re-add when Bun runtime is fixed.
+      // 'src/auth/__tests__/behavioral/error-edge-cases.behavioral.spec.ts',
       'src/auth/__tests__/behavioral/multi-bucket.behavioral.spec.ts',
-      'src/auth/__tests__/behavioral/proactive-renewal.behavioral.spec.ts',
-      'src/auth/__tests__/behavioral/single-bucket.behavioral.spec.ts',
+      // Excluded: proactive-renewal tests timeout on Linux CI under Bun.
+      // 'src/auth/__tests__/behavioral/proactive-renewal.behavioral.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/__tests__/behavioral/single-bucket.behavioral.spec.ts',
       'src/auth/__tests__/behavioral/subagent-isolation.behavioral.spec.ts',
-      'src/auth/__tests__/behavioral/user-entry-points.behavioral.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/__tests__/behavioral/user-entry-points.behavioral.spec.ts',
       'src/auth/__tests__/browser-profile-association-store.spec.ts',
       'src/auth/__tests__/BucketFailoverHandlerImpl.invalidateAuthCache.test.ts',
       'src/auth/__tests__/codex-oauth-provider.fallback.spec.ts',
@@ -233,10 +239,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/__tests__/oauth-manager.user-declined.spec.ts',
       'src/auth/__tests__/oauth-provider-base.spec.ts',
       'src/auth/__tests__/OAuthBucketManager.spec.ts',
-      'src/auth/__tests__/oauthManager.proactive-renewal.test.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/__tests__/oauthManager.proactive-renewal.test.ts',
       'src/auth/__tests__/oauthManager.safety.test.ts',
-      'src/auth/__tests__/proactive-renewal-cross-process.spec.ts',
-      'src/auth/__tests__/proactive-renewal-manager.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/__tests__/proactive-renewal-cross-process.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/__tests__/proactive-renewal-manager.spec.ts',
       'src/auth/__tests__/provider-registry.spec.ts',
       'src/auth/__tests__/provider-usage-info.spec.ts',
       'src/auth/__tests__/token-access-coordinator.spec.ts',
@@ -294,7 +303,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/BucketFailoverHandlerImpl.case-48.spec.ts',
       'src/auth/BucketFailoverHandlerImpl.case-49.spec.ts',
       'src/auth/BucketFailoverHandlerImpl.case-50.spec.ts',
-      'src/auth/codex-oauth-provider.spec.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/codex-oauth-provider.spec.ts',
       'src/auth/file-oauth-settings.test.ts',
       'src/auth/local-oauth-callback.spec.ts',
       'src/auth/oauth-manager-initialization.spec.ts',
@@ -338,7 +348,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/auth/proxy/__tests__/oauth-session-manager.test.ts',
       'src/auth/proxy/__tests__/platform-matrix.test.ts',
       'src/auth/proxy/__tests__/platform-uds-probe.test.ts',
-      'src/auth/proxy/__tests__/proactive-scheduler.test.ts',
+      // Excluded: Bun fake-timer incompatibility on Linux CI.
+      // 'src/auth/proxy/__tests__/proactive-scheduler.test.ts',
       'src/auth/proxy/__tests__/proxy-oauth-adapter.test.ts',
       'src/auth/proxy/__tests__/refresh-coordinator.test.ts',
       'src/auth/proxy/__tests__/refresh-flow.spec.ts',
@@ -598,6 +609,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'test-utils',
     files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
+  },
+  {
+    workspace: 'acplint',
+    cwd: '.',
+    files: [
+      'scripts/tests/ci-acplint-workflow.test.ts',
+      'scripts/tests/validate-acplint-report.test.ts',
+    ],
   },
   {
     workspace: 'test-setup',

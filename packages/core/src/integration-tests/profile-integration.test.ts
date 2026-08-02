@@ -11,24 +11,19 @@ import {
   type Profile,
   getSettingsService,
 } from '@vybestack/llxprt-code-settings';
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
-// Mock file system and settings service instance
-vi.mock('fs/promises');
-vi.mock('os');
-vi.mock('path');
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  getSettingsService: vi.fn(),
-}));
+vi.mock('@vybestack/llxprt-code-settings', (importOriginal) => {
+  const actual =
+    importOriginal() as typeof import('@vybestack/llxprt-code-settings');
+  return {
+    ...actual,
+    getSettingsService: vi.fn(),
+  };
+});
 
-const mockFs = fs as vi.Mocked<typeof fs>;
-const mockOs = os as vi.Mocked<typeof os>;
-const mockPath = path as vi.Mocked<typeof path>;
 const mockGetSettingsService = getSettingsService as vi.MockedFunction<
   typeof getSettingsService
 >;
@@ -141,6 +136,7 @@ describe('Profile Integration Tests', () => {
   let profileManager: ProfileManager;
   let settingsService: MockSettingsService;
   let mockRepository: MockSettingsRepository;
+  let tempDir: string;
 
   const testProfile: Profile = {
     version: 1,
@@ -159,17 +155,10 @@ describe('Profile Integration Tests', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Setup path mocks
-    mockOs.homedir.mockReturnValue('/home/test');
-    mockPath.join.mockImplementation((...args: string[]) => args.join('/'));
-
-    // Mock file operations
-    mockFs.mkdir.mockResolvedValue(undefined);
-    mockFs.writeFile.mockResolvedValue();
-    mockFs.readFile.mockResolvedValue(JSON.stringify(testProfile));
-    mockFs.readdir.mockResolvedValue(['test-profile.json'] as never);
-
-    // SettingsService is always enabled in the new architecture
+    // Use a real temp directory so ProfileManager's file operations work
+    // without builtin mocking (Bun cannot mock node:fs across package
+    // boundaries). ProfileManager accepts a custom profilesDir for testing.
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-profile-test-'));
 
     // Create SettingsService with mock repository
     mockRepository = new MockSettingsRepository();
@@ -187,11 +176,15 @@ describe('Profile Integration Tests', () => {
       settingsService.on('initialized' as never, resolve);
     });
 
-    profileManager = new ProfileManager();
+    profileManager = new ProfileManager(tempDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.resetAllMocks();
+    // Clean up the temp directory
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('should save and load profile through SettingsService', async () => {
@@ -247,6 +240,9 @@ describe('Profile Integration Tests', () => {
       profileLoadedEvents.push(event);
     });
 
+    // Save a profile first so load can find it
+    await profileManager.saveProfile('test-profile', testProfile);
+
     // Load a profile
     await profileManager.load('test-profile', settingsService);
 
@@ -260,7 +256,7 @@ describe('Profile Integration Tests', () => {
 
   it('should work with SettingsService always enabled', async () => {
     // SettingsService is always available in the new architecture
-    const manager = new ProfileManager();
+    const manager = new ProfileManager(tempDir);
 
     // Set up mock repository with current settings
     await settingsService.updateSettings({
@@ -278,13 +274,8 @@ describe('Profile Integration Tests', () => {
     });
 
     // Both integrated and direct operations should work
-    await expect(
-      manager.save('test-profile', settingsService),
-    ).resolves.not.toThrow();
-
-    await expect(
-      manager.saveProfile('test-profile', testProfile),
-    ).resolves.not.toThrow();
+    await manager.save('test-profile', settingsService);
+    await manager.saveProfile('test-profile', testProfile);
     await expect(manager.loadProfile('test-profile')).resolves.toStrictEqual(
       testProfile,
     );
@@ -292,13 +283,13 @@ describe('Profile Integration Tests', () => {
 
   it('should maintain backward compatibility with existing profile format', async () => {
     // Create profile manager - SettingsService is always available
-    const legacyManager = new ProfileManager();
+    const legacyManager = new ProfileManager(tempDir);
 
     // Save using direct method
     await legacyManager.saveProfile('legacy-profile', testProfile);
 
     // Load using integrated method should still work
-    const loadedProfile = await profileManager.loadProfile('legacy-profile');
+    const loadedProfile = await legacyManager.loadProfile('legacy-profile');
     expect(loadedProfile).toStrictEqual(testProfile);
   });
 });

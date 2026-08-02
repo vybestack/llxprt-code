@@ -88,16 +88,21 @@ describe('createKeyringTokenStore lock/fallback path resolution (P8/P7)', () => 
     expect(acquired).toBe(true);
 
     const lockFile = path.join(logHome, 'oauth', 'locks', 'codex-refresh.lock');
-    await expect
-      .poll(
-        () =>
-          fs
-            .stat(lockFile)
-            .then((s) => s.isFile())
-            .catch(() => false),
-        { timeout: 1000, intervals: [20, 40] },
-      )
-      .toBe(true);
+    // Poll until the lock file exists (replaces vitest's expect.poll which
+    // Bun does not support).
+    const lockExists = async (): Promise<boolean> => {
+      try {
+        const s = await fs.stat(lockFile);
+        return s.isFile();
+      } catch {
+        return false;
+      }
+    };
+    const deadline = Date.now() + 1000;
+    while (Date.now() < deadline && !(await lockExists())) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(await lockExists()).toBe(true);
 
     await tokenStore.releaseRefreshLock('codex');
 

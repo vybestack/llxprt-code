@@ -57,7 +57,8 @@ describe('SimpleExtensionLoader', () => {
   it('should start active extensions', async () => {
     const loader = new SimpleExtensionLoader([activeExtension]);
     await loader.start(mockConfig);
-    expect(mockMcpClientManager.startExtension).toHaveBeenCalledExactlyOnceWith(
+    expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
+    expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
       activeExtension,
     );
   });
@@ -82,9 +83,10 @@ describe('SimpleExtensionLoader', () => {
       await loader.loadExtension(activeExtension);
       expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
       await loader.start(mockConfig);
-      expect(
-        mockMcpClientManager.startExtension,
-      ).toHaveBeenCalledExactlyOnceWith(activeExtension);
+      expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
+      expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
+        activeExtension,
+      );
     });
 
     it.each([true, false])(

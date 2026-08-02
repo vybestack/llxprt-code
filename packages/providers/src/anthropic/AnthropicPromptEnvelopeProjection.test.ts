@@ -98,7 +98,7 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
 
     expect(projection.protocol).toBe('anthropic-messages');
     expect(projection.method).toBe('messages/v1');
-    expect(projection.projectionRevision).toBe(2);
+    expect(projection.projectionRevision).toBe(3);
     expect(typeof projection.model).toBe('string');
     expect(projection.model.length).toBeGreaterThan(0);
   });
@@ -138,8 +138,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
       }),
     );
 
-    const smallTokens = await small.countProjectedTokens();
-    const largeTokens = await large.countProjectedTokens();
+    const smallTokens = await small.legacyEstimate();
+    const largeTokens = await large.legacyEstimate();
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -172,8 +172,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
       }),
     );
 
-    const withoutTokens = await withoutTools.countProjectedTokens();
-    const withTokens = await withTools.countProjectedTokens();
+    const withoutTokens = await withoutTools.legacyEstimate();
+    const withTokens = await withTools.legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -213,8 +213,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     expect(projection.model).toBe(normalizedProjection.model);
     expect(projection.protocol).toBe(normalizedProjection.protocol);
     expect(projection.method).toBe(normalizedProjection.method);
-    expect(await projection.countProjectedTokens()).toBe(
-      await normalizedProjection.countProjectedTokens(),
+    expect(await projection.legacyEstimate()).toBe(
+      await normalizedProjection.legacyEstimate(),
     );
   });
 
@@ -267,7 +267,7 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     );
 
     expect(projection.unsupportedMedia).toStrictEqual([]);
-    expect(await projection.countProjectedTokens()).toBeGreaterThan(0);
+    expect(await projection.legacyEstimate()).toBeGreaterThan(0);
   });
 
   it('counts a longer system instruction as more finalized system material', async () => {
@@ -287,8 +287,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
         'Always answer with extensive detail, follow every formatting rule, explain assumptions, and avoid unsupported speculation in every response.',
     });
 
-    const withoutTokens = await withoutInstruction.countProjectedTokens();
-    const withTokens = await withLongInstruction.countProjectedTokens();
+    const withoutTokens = await withoutInstruction.legacyEstimate();
+    const withTokens = await withLongInstruction.legacyEstimate();
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 

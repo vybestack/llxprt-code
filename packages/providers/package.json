@@ -235,7 +235,7 @@
     "@ai-sdk/openai": "^2.0.74",
     "@ai-sdk/provider-utils": "^2.0.6",
     "@anthropic-ai/sdk": "^0.55.1",
-    "@dqbd/tiktoken": "^1.0.21",
+    "@dqbd/tiktoken": "1.0.22",
     "@google/genai": "1.30.0",
     "@vybestack/llxprt-code-auth": "file:../auth",
     "@vybestack/llxprt-code-core": "file:../core",

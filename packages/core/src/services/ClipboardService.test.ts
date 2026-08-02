@@ -8,7 +8,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'child_process';
 import { ClipboardService } from './ClipboardService.js';
 
-vi.mock('child_process');
+vi.mock('child_process', (importOriginal) => {
+  const actual = importOriginal() as typeof import('child_process');
+  return {
+    ...actual,
+    spawn: vi.fn(),
+  };
+});
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P05

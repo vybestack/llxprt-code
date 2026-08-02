@@ -156,9 +156,12 @@ export function buildContainerRunArgs(
     process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
   if (networkMode === 'off') {
     args.push('--network', 'none');
-  } else if (networkMode === 'proxied') {
-    debugLogger.warn(
-      'Sandbox network mode "proxied" is not implemented yet; falling back to default networking.',
+  } else if (
+    networkMode === 'proxied' &&
+    !process.env.LLXPRT_SANDBOX_PROXY_COMMAND?.trim()
+  ) {
+    throw new FatalSandboxError(
+      'Sandbox network mode "proxied" requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
     );
   }
   if (shouldAllocateSandboxTty()) args.push('-t');
@@ -488,6 +491,20 @@ async function failOnMissingSocketPath(): Promise<Error> {
     : new AggregateError(errors, 'Credential proxy setup failed');
 }
 
+function assertSupportedCredentialNetwork(config: SandboxConfig): void {
+  const networkMode =
+    process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
+  if (
+    os.platform() === 'darwin' &&
+    (config.command === 'docker' || config.command === 'podman') &&
+    networkMode === 'off'
+  ) {
+    throw new FatalSandboxError(
+      'macOS credential bridge requires container networking; enable networking or use Linux for network-off sandboxing.',
+    );
+  }
+}
+
 export async function setupCredentialProxy(
   args: string[],
   config: SandboxConfig,
@@ -498,6 +515,8 @@ export async function setupCredentialProxy(
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: (() => void) | undefined;
 }> {
+  assertSupportedCredentialNetwork(config);
+
   let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   let credentialProxyBridgeCleanup: (() => void) | undefined;
   let envFileCleanup: (() => void) | undefined;
