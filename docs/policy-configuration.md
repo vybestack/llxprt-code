@@ -9,7 +9,7 @@
 > remaining examples below still use the old decimal form and have not yet been
 > converted; treat them as illustrative of intent only and write integers in
 > your own files. For the correct, current explanation see
-> [Controlling Tool Execution](message-bus.md). This page is being rewritten
+> [Controlling Tool Execution](tool-permissions.md). This page is being rewritten
 > (issue #2941).
 
 ## Overview
@@ -719,7 +719,7 @@ priority = 1.0
 
 ## Next Steps
 
-- See [Message Bus Guide](message-bus.md) for overview and architecture
+- See [Message Bus Guide](tool-permissions.md) for overview and architecture
 - See [Migration Guide](migration/approval-mode-to-policies.md) for migrating from legacy approval modes
 - Review the built-in policy files under `packages/core/src/policy/policies` in
   a repository checkout for worked examples

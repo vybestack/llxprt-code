@@ -128,8 +128,3 @@ in the output rather than crashing the session.
    root.
 4. **Path resolution issues**: Use absolute paths if relative paths are not
    resolving correctly.
-
-For internal implementation details — including the function and type
-signatures, import tree structure, debug mode internals, and a cross-product
-comparison — see
-[Memory Import Internals](../../dev-docs/core/memport-internals.md).

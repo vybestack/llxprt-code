@@ -23,6 +23,13 @@ llxprt --sandbox-profile-load dev "refactor this module"
 llxprt --sandbox-engine podman "review this code"
 ```
 
+> **Which engine should I use?** Prefer **Docker** or **Podman**. They run tool
+> execution inside an isolated Linux container with a separate process
+> namespace, enforced resource limits, and credential isolation. Seatbelt
+> (macOS `sandbox-exec`) is a much weaker fallback — it has no process
+> isolation, no resource limits, and no credential isolation — so use it only
+> when containers are unavailable. See [Choosing an engine](#choosing-an-engine).
+
 ## Threat model
 
 **What sandboxing is intended to protect against:**
@@ -35,19 +42,22 @@ llxprt --sandbox-engine podman "review this code"
   (`cpus`, `memory`, `pids`).
 - Exposure of the OS keyring and system token store to tool execution. In
   container mode (Docker or Podman), the OS keyring is not accessible from
-  inside the container. However, this does **not** mean no credentials cross the
-  boundary — API keys (`GEMINI_API_KEY`, `GOOGLE_API_KEY`), Google application
-  default credential files, and the `gcloud` configuration directory are all
-  deliberately forwarded or mounted. See
-  [Deliberate boundary crossings](#deliberate-boundary-crossings).
+  inside the container. However, API keys (`GEMINI_API_KEY`, `GOOGLE_API_KEY`),
+  Google application default credential files, and the `gcloud` configuration
+  directory currently leak into the container as a known defect — see
+  [Known credential leakage in containers](#known-credential-leakage-in-containers).
 
 **What sandboxing is NOT intended to protect against:**
 
 - A malicious, determined adversary who targets your specific machine.
 - Data already inside the project directory. The project directory is mounted
   read-write and is fully accessible to tool execution by design.
-- Secrets that are explicitly forwarded into the sandbox by design (see
-  [Deliberate boundary crossings](#deliberate-boundary-crossings)).
+- Credentials and configuration that are intentionally forwarded into the
+  sandbox to support development workflows (the credential proxy, SSH agent
+  forwarding, git config passthrough, and paths you explicitly mount) — see
+  [Intentional boundary crossings](#intentional-boundary-crossings). These are
+  opt-in or design choices, separate from the known credential leakage defect
+  described below.
 - Network exfiltration of data that networking is left enabled for. If
   `network` is `on`, outbound network access is available to tool execution.
 
@@ -60,14 +70,14 @@ isolation boundary.
 The boundary differs by engine. The table summarizes what each engine isolates
 by default. Detailed limitations follow.
 
-| Boundary          | Docker / Podman (container)                                                            | Seatbelt (macOS `sandbox-exec`)                            |
-| ----------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Filesystem writes | Restricted to mounted paths (project, temp)                                            | Restricted to allow-listed paths (project, temp, config)   |
-| Filesystem reads  | Restricted to mounted paths                                                            | Broader read access; writes are the primary restriction    |
-| Network           | Configurable (`on` / `off` / `proxied`)                                                | Configurable; selects a matching built-in Seatbelt profile |
-| Resource limits   | Enforced (`cpus`, `memory`, `pids`)                                                    | Not available                                              |
-| Process isolation | Separate container process namespace                                                   | Runs directly on your host                                 |
-| Stored secrets    | OS keyring not accessible; API keys and credential files **are** forwarded (see below) | Host keyring and token store are fully available           |
+| Boundary          | Docker / Podman (container)                                                                                               | Seatbelt (macOS `sandbox-exec`)                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Filesystem writes | Restricted to mounted paths (project, temp)                                                                               | Restricted to allow-listed paths (project, temp, config)   |
+| Filesystem reads  | Restricted to mounted paths                                                                                               | Broader read access; writes are the primary restriction    |
+| Network           | Configurable (`on` / `off` / `proxied`)                                                                                   | Configurable; selects a matching built-in Seatbelt profile |
+| Resource limits   | Enforced (`cpus`, `memory`, `pids`)                                                                                       | Not available                                              |
+| Process isolation | Separate container process namespace                                                                                      | Runs directly on your host                                 |
+| Stored secrets    | OS keyring not accessible; API keys and credential files currently **leak** into the container (known defect — see below) | Host keyring and token store are fully available           |
 
 ### Filesystem
 
@@ -83,10 +93,10 @@ Additional paths are conditionally mounted based on your host environment and
 profile configuration:
 
 - The `~/.config/gcloud` directory (read-only) if it exists — see
-  [Google credential file and gcloud mounting](#google-credential-file-and-gcloud-mounting).
+  [Known credential leakage in containers](#known-credential-leakage-in-containers).
 - The file pointed to by `GOOGLE_APPLICATION_CREDENTIALS` (read-only) if the
   variable is set and the file exists — see
-  [Google credential file and gcloud mounting](#google-credential-file-and-gcloud-mounting).
+  [Known credential leakage in containers](#known-credential-leakage-in-containers).
 - The SSH agent socket, if SSH agent forwarding is enabled — see
   [SSH agent forwarding](#ssh-agent-forwarding).
 - Any paths you add via `LLXPRT_SANDBOX_MOUNTS` / `SANDBOX_MOUNTS` or a profile
@@ -172,39 +182,82 @@ limitations:
 
 Seatbelt is a macOS-only fallback that uses Apple's `sandbox-exec` command. It
 runs directly on your host — there is no container and no separate process
-namespace.
+namespace. **Prefer Docker or Podman for meaningful isolation.** Seatbelt
+provides a substantially weaker boundary and should be used only when a
+container runtime is unavailable.
 
 Limitations:
 
-- **No resource limits** — CPU, memory, and process count cannot be capped.
+- **No process isolation** — the sandboxed process runs directly on your host
+  in the normal process namespace, not inside a container.
+- **No resource limits** — CPU, memory, and process count cannot be capped. A
+  runaway process can consume your machine's resources.
 - **No credential isolation** — the sandboxed process runs with your full host
   keyring and token store. The credential proxy is not used (the
   `LLXPRT_CREDENTIAL_SOCKET` variable is explicitly removed from the Seatbelt
-  child environment).
+  child environment), so tool execution has the same access to your stored
+  secrets as any process you launch.
+- **Write-path allow-lists only** — Seatbelt restricts writes to an allow-list
+  of paths but grants broad read access across your host.
 - **Network rules come from the profile file** — the `network` setting selects a
   built-in macOS profile (`permissive-closed`, `permissive-proxied`, or
-  `permissive-open`) rather than isolating a network namespace. The process
-  still runs directly on your host.
+  `permissive-open`) rather than isolating a network namespace. This is the one
+  control Seatbelt does honour.
 - **`sandbox-exec` is undocumented** — Apple has shipped `sandbox-exec` without
-  public documentation for many releases. Its profile format and future
-  availability are not guaranteed.
+  public documentation for many releases and has informally deprecated it since
+  macOS 10.15. Its profile format and future availability are not guaranteed.
 
 Seatbelt is auto-detected only on macOS when `sandbox-exec` is on your `PATH`.
 Use Docker or Podman when available.
 
-## Deliberate boundary crossings
+## Known credential leakage in containers
 
-The sandbox intentionally forwards certain credentials and configuration into
-the boundary so that development workflows (authentication, git operations)
-continue to work. These are deliberate holes in the boundary, and each carries
-a risk you should understand before enabling.
+Container mode (Docker or Podman) provides a separate process namespace and
+keeps the OS keyring out of the container. However, a **known defect** currently
+weakens that isolation: several Google-related credentials are forwarded or
+mounted into the container, where any process inside can read them. This is
+upstream Gemini/Vertex authentication plumbing that was never reconciled with
+the credential proxy. It is tracked as
+[issue #2946](https://github.com/vybestack/llxprt-code/issues/2946) and slated
+for the 0.11.0 milestone.
+
+What currently leaks:
+
+- **`GEMINI_API_KEY` and `GOOGLE_API_KEY`** — copied from your host environment
+  into the container's environment. These are your raw, stored API keys, not
+  short-lived tokens. Any process inside the container can read them.
+- **`~/.config/gcloud`** — the entire gcloud configuration directory is mounted
+  read-only if it exists. It can contain long-lived credentials, including
+  service-account keys and cached access tokens. Any process in the container
+  can read these files.
+- **The file named by `GOOGLE_APPLICATION_CREDENTIALS`** — if this variable
+  points to an existing file (typically a service-account JSON key), the file is
+  mounted read-only and the variable is set inside the container. Any process in
+  the container can read it.
+
+> **Consequence:** A process inside the container that reads these credentials
+> obtains the same standing as the corresponding service account or API key on
+> the host. This is a higher level of exposure than the credential proxy, which
+> only ever issues short-lived tokens. Until the defect is fixed, unset
+> `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GOOGLE_APPLICATION_CREDENTIALS`
+> before starting the sandbox if you do not want these credentials exposed, and
+> consider whether `~/.config/gcloud` contains secrets you do not want
+> forwarded.
+
+## Intentional boundary crossings
+
+The sandbox forwards certain credentials and configuration into the boundary so
+that development workflows (authentication, git operations) continue to work.
+These are intentional design choices that you opted into or that are part of the
+sandbox design, and each carries a risk you should understand before enabling.
+They are distinct from the credential leakage defect described above.
 
 ### Credential proxy (container mode only)
 
 In Docker or Podman mode, a host-side credential proxy runs over a Unix socket
 (the path is set via the `LLXPRT_CREDENTIAL_SOCKET` environment variable). This
-is a deliberate boundary crossing: it lets the container authenticate with your
-providers without receiving your stored secrets directly.
+is an intentional boundary crossing: it lets the container authenticate with
+your providers without receiving your stored secrets directly.
 
 What the proxy provides:
 
@@ -221,10 +274,11 @@ What the proxy blocks:
   container mode ("API key management is not available in sandbox mode"). Keys
   must be managed on the host.
 - **Your stored secrets are not mounted** — `~/.git-credentials` is
-  intentionally not mounted into the container. The credential proxy is one
-  source of access tokens, but it is **not** the only credential that crosses
-  the boundary. API keys and Google credential files are forwarded separately —
-  see the sections below.
+  intentionally not mounted into the container. The proxy is the intended way
+  for the container to obtain access tokens. (Note: API keys and Google
+  credential files currently leak into the container through a separate,
+  unintentional path — see
+  [Known credential leakage in containers](#known-credential-leakage-in-containers).)
 
 How the container proves it is authorised: a per-session capability token is
 passed to LLxprt Code through an inherited file descriptor, never through
@@ -237,7 +291,7 @@ sufficient by itself; a client without the consumed capability is rejected as
 > **Risk:** A compromised process inside the container that obtains the
 > capability token can authenticate as you for the lifetime of the session.
 > The transport above narrows how it could be obtained; it does not change the
-> fact that the boundary is deliberately crossed to enable authentication.
+> fact that this boundary is intentionally crossed to enable authentication.
 
 On Linux, `network: off` containers still reach the proxy over the mounted
 temp-directory socket. On macOS, the Docker and Podman credential bridges need
@@ -283,46 +337,6 @@ through the proxy, not through a plaintext credentials file.
 
 > **Risk:** The mounted files are read-only, but their contents (git identity,
 > known hosts) are visible to any process in the container.
-
-### API key forwarding
-
-The following environment variables are copied from your host environment into
-the container's environment so that the sandboxed session can authenticate
-directly:
-
-- `GEMINI_API_KEY`
-- `GOOGLE_API_KEY`
-
-These are **not** short-lived tokens. They are your stored API keys, forwarded
-as-is. Any process inside the container can read them from the environment.
-
-> **Risk:** If a process inside the container reads these environment variables,
-> it obtains your raw API key — the same key you use on the host. This is a
-> higher level of exposure than the credential proxy, which issues short-lived
-> tokens. If you do not want API keys forwarded into the container, unset these
-> variables before starting the sandbox.
-
-### Google credential file and gcloud mounting
-
-When the following are present on your host, they are mounted into the container
-read-only so that Google Cloud and Vertex AI authentication work:
-
-- **`GOOGLE_APPLICATION_CREDENTIALS`** — if this environment variable points to
-  an existing file (typically a service-account JSON key), the file is mounted
-  read-only and the variable is set inside the container to the corresponding
-  path.
-- **`~/.config/gcloud`** — the entire gcloud configuration directory is mounted
-  read-only if it exists on your host. This directory can contain
-  long-lived credentials, including service-account keys and cached access
-  tokens.
-
-> **Risk:** These mounts put long-lived Google credentials inside the container.
-> A service-account key file, in particular, is a persistent secret that can be
-> used to generate access tokens from anywhere. A process that reads the mounted
-> file obtains the same standing as the service account. If you do not need
-> Google Cloud or Vertex AI inside the sandbox, unset
-> `GOOGLE_APPLICATION_CREDENTIALS` and consider whether `~/.config/gcloud`
-> contains secrets before enabling the container.
 
 ### Custom mounts and environment variables
 
@@ -429,6 +443,18 @@ echo "$LLXPRT_CREDENTIAL_SOCKET"
 
 ## Choosing an engine
 
+**Prefer Docker or Podman.** Both run tool execution inside an isolated Linux
+container, which gives you a separate process namespace, enforceable resource
+limits, and a credential proxy that keeps your stored secrets on the host.
+
+**Use Seatbelt only when containers are unavailable.** Seatbelt is a macOS-only
+fallback with a substantially weaker boundary: it provides no process isolation
+(the sandboxed process runs directly on your host), no resource limits (CPU,
+memory, and process count cannot be capped), and no credential isolation (the
+process runs against your full keyring and token store). Its only effective
+control is a write-path allow-list, backed by Apple's `sandbox-exec`, which is
+undocumented and informally deprecated since macOS 10.15.
+
 | Engine       | Platform     | Resource limits | Credential proxy | Network control              |
 | ------------ | ------------ | --------------- | ---------------- | ---------------------------- |
 | **Docker**   | macOS, Linux | Yes             | Yes              | Yes (network namespace)      |
@@ -438,7 +464,9 @@ echo "$LLXPRT_CREDENTIAL_SOCKET"
 When `--sandbox` is used without an explicit engine, LLxprt Code auto-detects an
 available runtime. When `LLXPRT_SANDBOX=true` is set in the environment and no
 engine is specified, the detection order on macOS is Seatbelt, then Docker, then
-Podman; on Linux it is Docker, then Podman.
+Podman; on Linux it is Docker, then Podman. If you are on macOS and want the
+stronger container boundary, set `--sandbox-engine docker` (or `podman`)
+explicitly rather than relying on auto-detection, which prefers Seatbelt.
 
 ## Configuring sandboxing
 

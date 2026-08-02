@@ -263,7 +263,7 @@ agent.getApprovalMode(); // → ApprovalMode.AUTO_EDIT
 | `YOLO`      | Auto-approve all tools (no confirmation). Dangerous command blocking applies. |
 
 These mode meanings match the built-in policy stack described in
-[Controlling Tool Execution](message-bus.md). The `ApprovalMode` enum value
+[Controlling Tool Execution](tool-permissions.md). The `ApprovalMode` enum value
 itself only selects which mode-specific policy rules are active — it does not
 inject rules of its own.
 

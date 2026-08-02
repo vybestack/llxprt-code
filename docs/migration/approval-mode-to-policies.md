@@ -216,4 +216,4 @@ for anything the flags cannot express, but you are not required to migrate.
 For a deeper look at policy authoring — TOML syntax, priority bands, pattern
 matching, security best practices, and troubleshooting — see
 [Policy Configuration](../policy-configuration.md). For how the engine
-evaluates rules at runtime, see [Controlling Tool Execution](../message-bus.md).
+evaluates rules at runtime, see [Controlling Tool Execution](../tool-permissions.md).

@@ -85,6 +85,4 @@ and does not modify your saved profiles.
 
 The model interacts with the todo list through built-in tools (`todo_read`,
 `todo_write`, `todo_pause`). You never call these directly — they are part of
-the model's toolset. The behavioral details of how continuation detects
-complexity and decides when to prompt are documented in
-[Todo System Internals](../dev-docs/todo-system-internals.md).
+the model's toolset.

@@ -198,5 +198,3 @@ denied immediately rather than waiting.
   pattern-matching reference.
 - [Migration: Approval Mode to Policies](migration/approval-mode-to-policies.md)
   — how to move from legacy approval settings to policy files.
-- For internal architecture, component diagrams, and the message flow, see
-  `dev-docs/architecture/message-bus.md` in a repository checkout.

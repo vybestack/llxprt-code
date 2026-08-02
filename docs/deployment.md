@@ -81,6 +81,4 @@ npx https://github.com/vybestack/llxprt-code
 ## Contributing
 
 If you want to contribute to LLxprt Code — build from source, run tests, or
-prepare a pull request — see [CONTRIBUTING.md](../CONTRIBUTING.md). For the
-packaging layout, Bun runtime internals, and release workflow, see
-`dev-docs/npm.md` and `dev-docs/bun.md` in a repository checkout.
+prepare a pull request — see [CONTRIBUTING.md](../CONTRIBUTING.md).
