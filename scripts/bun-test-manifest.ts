@@ -627,6 +627,13 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'test-setup/stub-helpers.bun.test.ts',
     ],
   },
+  {
+    // Bun-native tests for the PR-review Mermaid sanitizer (issue #2944).
+    // Vitest skips `*.bun.test.ts`; these run under Bun's native runner only.
+    workspace: 'scripts-pr-review',
+    cwd: '.',
+    files: ['scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts'],
+  },
 ];
 
 /**
