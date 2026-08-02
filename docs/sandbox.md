@@ -98,8 +98,9 @@ is not accessible from inside the container unless you explicitly mount it.
 
 Seatbelt restricts **writes** to an allow-list of paths (project directory, temp
 directory, and canonical config/data/cache/log roots). It grants broader read
-access, including a read-only grant for the legacy `~/.llxprt` directory for
-migration.
+access, including a read-only grant for the legacy global directory that startup
+migration reads from — see
+[Application Directories](./reference/application-directories.md).
 
 ### Network
 
