@@ -134,7 +134,7 @@ describe('OpenAI Chat projection credential parity (issue #2817)', () => {
     );
 
     expect(projection.protocol).toBe('openai-chat');
-    expect(await projection.countProjectedTokens()).toBeGreaterThan(0);
+    expect(await projection.legacyEstimate()).toBeGreaterThan(0);
     expect(projection.transportToken).toBeDefined();
 
     // Projection needed a client (media-capable endpoint) and must have built

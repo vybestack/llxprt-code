@@ -29,7 +29,25 @@ vi.mock('node:os', () => ({
 }));
 
 // Mock external dependencies
-vi.mock('@vybestack/llxprt-code-mcp');
+vi.mock('@vybestack/llxprt-code-mcp', (importOriginal) => {
+  const actual =
+    importOriginal() as typeof import('@vybestack/llxprt-code-mcp');
+  class MockKeychainTokenStorage {
+    readToken = vi.fn();
+    writeToken = vi.fn();
+    deleteToken = vi.fn();
+    hasToken = vi.fn();
+    getCredentials = vi.fn();
+    setCredentials = vi.fn();
+    deleteCredentials = vi.fn();
+  }
+  return {
+    ...actual,
+    KeychainTokenStorage: vi
+      .fn()
+      .mockImplementation(() => new MockKeychainTokenStorage()),
+  };
+});
 vi.mock('node:fs', () => ({
   promises: {
     readFile: vi.fn(),

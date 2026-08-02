@@ -126,7 +126,7 @@ function createEstimatingProvider(
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken,
-        countProjectedTokens: () => Promise.resolve(tokenCount),
+        legacyEstimate: () => Promise.resolve(tokenCount),
       };
     },
   };
@@ -529,7 +529,7 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
           projectionRevision: 1,
           unsupportedMedia: [],
           transportToken,
-          countProjectedTokens: () => Promise.resolve(tokenCount),
+          legacyEstimate: () => Promise.resolve(tokenCount),
         };
       },
     };
@@ -663,7 +663,7 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
           projectionRevision: 1,
           unsupportedMedia: [],
           transportToken,
-          countProjectedTokens: () => Promise.resolve(tokenCount),
+          legacyEstimate: () => Promise.resolve(tokenCount),
         };
       },
     };

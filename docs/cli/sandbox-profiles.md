@@ -139,7 +139,11 @@ Type: `"on" | "off" | "proxied"`
 
 - `on`: default networking
 - `off`: launches container with network disabled
-- `proxied`: accepted by schema, but currently not implemented as a dedicated mode. Runtime logs a warning and falls back to default networking.
+- `proxied`: requires a non-whitespace `LLXPRT_SANDBOX_PROXY_COMMAND`. Docker and Podman use the existing isolated sandbox network plus proxy-container network; invalid configuration fails before setup or launch. Seatbelt selects its built-in permissive proxied profile unless a non-empty `SEATBELT_PROFILE` explicitly overrides profile selection.
+
+Network environment precedence is nullish: `LLXPRT_SANDBOX_NETWORK` wins when defined, including when it is an empty string; otherwise `SANDBOX_NETWORK` is used. In Seatbelt mode, `off`, `proxied`, and all other values map to `permissive-closed`, `permissive-proxied`, and `permissive-open`, respectively. A non-empty `SEATBELT_PROFILE` remains the exact explicit built-in or custom profile override. The built-in `permissive-proxied` and `restrictive-proxied` profiles still require the proxy command.
+
+On Linux, `off` remains compatible with the direct mounted Unix credential socket. On macOS, Docker and Podman credential bridges require networking, so `off` fails before credential proxy or container resources are started; enable networking or use Linux for network-off sandboxing.
 
 ### `sshAgent`
 
@@ -199,7 +203,7 @@ Podman runs in a VM on macOS, so there are extra constraints:
 
 - launchd SSH socket paths are often unusable in VM bridge paths
 - SSH and credential proxy bridges require `--network=host`
-- conflicting `--network` values can disable bridge setup
+- an existing non-host `--network` value causes optional SSH forwarding to warn and return before connection lookup or tunnel allocation; credential bridge conflicts remain fatal
 - VM memory must exceed the container `resources.memory` limit, or the process gets OOM-killed (exit code 137). See [Sandbox troubleshooting](../sandbox.md#podman-macos-oom-killed-with-exit-code-137).
 
 If SSH forwarding is unreliable, use a dedicated socket path (the location is your choice — this example uses a path in your home directory):

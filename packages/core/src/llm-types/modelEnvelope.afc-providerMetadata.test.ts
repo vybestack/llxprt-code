@@ -7,8 +7,7 @@
  * RED tests that fail via VALUE MISMATCH against the P03 stubs/current
  * implementation. P05 implements the real logic.
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import {
   emptyModelOutput,
@@ -127,24 +126,30 @@ describe('accumulateModelStreamChunk preserves afcHistory', () => {
 // ---------------------------------------------------------------------------
 
 describe('accumulateModelStreamChunk afcHistory property-based', () => {
-  it.prop([
-    fc.array(
-      fc.record({
-        type: fc.constant('text' as const),
-        text: fc.string({ minLength: 1, maxLength: 30 }),
-      }),
-      { minLength: 0, maxLength: 5 },
-    ),
-  ])('afcHistory from chunk always survives accumulation', (blockTexts) => {
-    const blocks: ContentBlock[] = blockTexts.map((b) => textBlock(b.text));
-    const afc: IContent[] = [{ speaker: 'tool', blocks }];
-    const chunk: ModelStreamChunk = {
-      content: { speaker: 'ai', blocks: [textBlock('x')] },
-      afcHistory: afc,
-    };
-    const result = accumulateModelStreamChunk(emptyModelOutput(), chunk);
-    expect(result.afcHistory).toStrictEqual(afc);
-  });
+  it('afcHistory from chunk always survives accumulation', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            type: fc.constant('text' as const),
+            text: fc.string({ minLength: 1, maxLength: 30 }),
+          }),
+          { minLength: 0, maxLength: 5 },
+        ),
+        (blockTexts) => {
+          const blocks: ContentBlock[] = blockTexts.map((b) =>
+            textBlock(b.text),
+          );
+          const afc: IContent[] = [{ speaker: 'tool', blocks }];
+          const chunk: ModelStreamChunk = {
+            content: { speaker: 'ai', blocks: [textBlock('x')] },
+            afcHistory: afc,
+          };
+          const result = accumulateModelStreamChunk(emptyModelOutput(), chunk);
+          expect(result.afcHistory).toStrictEqual(afc);
+        },
+      ),
+    ));
 });
 
 // ---------------------------------------------------------------------------
@@ -225,61 +230,65 @@ describe('toModelStreamChunk preserves providerMetadata', () => {
 // ---------------------------------------------------------------------------
 
 describe('toModelStreamChunk providerMetadata property-based', () => {
-  it.prop([
-    fc.dictionary(
-      fc.string({ minLength: 1, maxLength: 30 }),
-      fc.oneof(
-        fc.string({ maxLength: 20 }),
-        fc.nat({ max: 1000 }),
-        fc.boolean(),
-        fc.array(fc.string({ maxLength: 10 }), { maxLength: 5 }),
+  it('for ANY metadata.providerMetadata record, every key survives onto chunk.providerMetadata', () =>
+    fc.assert(
+      fc.property(
+        fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 30 }),
+          fc.oneof(
+            fc.string({ maxLength: 20 }),
+            fc.nat({ max: 1000 }),
+            fc.boolean(),
+            fc.array(fc.string({ maxLength: 10 }), { maxLength: 5 }),
+          ),
+        ),
+        (providerMeta) => {
+          const ic: IContent = {
+            speaker: 'ai',
+            blocks: [textBlock('x')],
+            metadata: { providerMetadata: providerMeta },
+          };
+          const chunk = toModelStreamChunk(ic);
+          expect(Object.entries(chunk.providerMetadata ?? {})).toStrictEqual(
+            Object.entries(providerMeta),
+          );
+        },
       ),
-    ),
-  ])(
-    'for ANY metadata.providerMetadata record, every key survives onto chunk.providerMetadata',
-    (providerMeta) => {
-      const ic: IContent = {
-        speaker: 'ai',
-        blocks: [textBlock('x')],
-        metadata: { providerMetadata: providerMeta },
-      };
-      const chunk = toModelStreamChunk(ic);
-      expect(Object.entries(chunk.providerMetadata ?? {})).toStrictEqual(
-        Object.entries(providerMeta),
-      );
-    },
-  );
+    ));
 
-  it.prop([fc.string({ minLength: 1, maxLength: 40 })])(
-    'metadata.id always becomes chunk.responseId',
-    (id) => {
-      const ic: IContent = {
-        speaker: 'ai',
-        blocks: [],
-        metadata: { id },
-      };
-      return toModelStreamChunk(ic).responseId === id;
-    },
-  );
+  it('metadata.id always becomes chunk.responseId', () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1, maxLength: 40 }), (id) => {
+        const ic: IContent = {
+          speaker: 'ai',
+          blocks: [],
+          metadata: { id },
+        };
+        return toModelStreamChunk(ic).responseId === id;
+      }),
+    ));
 
-  it.prop([
-    fc.record({
-      thought: fc.string({ minLength: 1, maxLength: 20 }),
-    }),
-  ])(
-    'block-level providerMetadata on a thinking block survives toModelStreamChunk',
-    ({ thought }) => {
-      const blockMeta = { 'anthropic.thinking': { redacted: true } };
-      const ic: IContent = {
-        speaker: 'ai',
-        blocks: [{ type: 'thinking', thought, providerMetadata: blockMeta }],
-      };
-      const chunk = toModelStreamChunk(ic);
-      const tb = chunk.content.blocks.find(
-        (b): b is { type: 'thinking'; providerMetadata?: unknown } =>
-          b.type === 'thinking',
-      );
-      expect(tb?.providerMetadata).toStrictEqual(blockMeta);
-    },
-  );
+  it('block-level providerMetadata on a thinking block survives toModelStreamChunk', () =>
+    fc.assert(
+      fc.property(
+        fc.record({
+          thought: fc.string({ minLength: 1, maxLength: 20 }),
+        }),
+        ({ thought }) => {
+          const blockMeta = { 'anthropic.thinking': { redacted: true } };
+          const ic: IContent = {
+            speaker: 'ai',
+            blocks: [
+              { type: 'thinking', thought, providerMetadata: blockMeta },
+            ],
+          };
+          const chunk = toModelStreamChunk(ic);
+          const tb = chunk.content.blocks.find(
+            (b): b is { type: 'thinking'; providerMetadata?: unknown } =>
+              b.type === 'thinking',
+          );
+          expect(tb?.providerMetadata).toStrictEqual(blockMeta);
+        },
+      ),
+    ));
 });

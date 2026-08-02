@@ -47,10 +47,9 @@ describe('retryWithBackoff onAuthError callback', () => {
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Unauthorized'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Unauthorized');
 
     // onAuthError should have been called for the 401
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
@@ -79,10 +78,9 @@ describe('retryWithBackoff onAuthError callback', () => {
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Forbidden'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Forbidden');
 
     // onAuthError should have been called for the 403
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
@@ -111,10 +109,9 @@ describe('retryWithBackoff onAuthError callback', () => {
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Rate limit'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Rate limit');
 
     expect(mockOnAuthError).not.toHaveBeenCalled();
   });
@@ -138,10 +135,9 @@ describe('retryWithBackoff onAuthError callback', () => {
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Server error'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Server error');
 
     expect(mockOnAuthError).not.toHaveBeenCalled();
   });
@@ -167,10 +163,9 @@ describe('retryWithBackoff onAuthError callback', () => {
       onAuthError: mockOnAuthError,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Unauthorized'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Unauthorized');
 
     expect(mockOnAuthError).toHaveBeenCalledTimes(1);
     expect(mockFn).toHaveBeenCalledTimes(2);

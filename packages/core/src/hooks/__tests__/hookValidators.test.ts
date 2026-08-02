@@ -8,7 +8,6 @@
  * All validators are type predicates that narrow TypeScript types.
  */
 import { describe, it, expect } from 'vitest';
-import { test } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 
 import {
@@ -269,126 +268,126 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  test.prop([
-    fc.string({ minLength: 1, maxLength: 64 }), // non-empty tool name
-    fc.record({
-      // shaped input record
-      path: fc.string({ minLength: 1 }),
-      encoding: fc.constantFrom('utf8', 'binary', 'base64'),
-    }),
-    fc.record({
-      // extra fields: scalar values
-      extra_flag: fc.boolean(),
-      extra_count: fc.integer({ min: 0, max: 999 }),
-    }),
-  ])(
-    'METAMORPHIC: validateBeforeToolInput(valid + extra) === validateBeforeToolInput(valid) @plan:PLAN-20250218-HOOKSYSTEM.P10',
-    (toolName, toolInput, extraFields) => {
-      const base = { tool_name: toolName, tool_input: toolInput };
-      const withExtra = { ...base, ...extraFields };
-      expect(validateBeforeToolInput(withExtra)).toBe(
-        validateBeforeToolInput(base),
-      );
-    },
-  );
-
+  it('METAMORPHIC: validateBeforeToolInput(valid + extra) === validateBeforeToolInput(valid) @plan:PLAN-20250218-HOOKSYSTEM.P10', () =>
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 64 }), // non-empty tool name
+        fc.record({
+          // shaped input record
+          path: fc.string({ minLength: 1 }),
+          encoding: fc.constantFrom('utf8', 'binary', 'base64'),
+        }),
+        fc.record({
+          // extra fields: scalar values
+          extra_flag: fc.boolean(),
+          extra_count: fc.integer({ min: 0, max: 999 }),
+        }),
+        (toolName, toolInput, extraFields) => {
+          const base = { tool_name: toolName, tool_input: toolInput };
+          const withExtra = { ...base, ...extraFields };
+          expect(validateBeforeToolInput(withExtra)).toBe(
+            validateBeforeToolInput(base),
+          );
+        },
+      ),
+    ));
   /**
    * METAMORPHIC INVARIANT 2: removing required field ALWAYS fails (monotone failure)
    * Domain entropy: wide range of non-empty tool names and shaped inputs
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  test.prop([
-    fc.string({ minLength: 1, maxLength: 64 }),
-    fc.record({ path: fc.string({ minLength: 1 }) }),
-  ])(
-    'METAMORPHIC: validateBeforeToolInput fails when tool_name removed @plan:PLAN-20250218-HOOKSYSTEM.P10',
-    (toolName, toolInput) => {
-      const valid = { tool_name: toolName, tool_input: toolInput };
-      const degraded = { tool_input: toolInput }; // required field removed
-      expect(validateBeforeToolInput(valid)).toBe(true); // valid baseline
-      expect(validateBeforeToolInput(degraded)).toBe(false); // degraded always fails
-    },
-  );
-
+  it('METAMORPHIC: validateBeforeToolInput fails when tool_name removed @plan:PLAN-20250218-HOOKSYSTEM.P10', () =>
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 64 }),
+        fc.record({ path: fc.string({ minLength: 1 }) }),
+        (toolName, toolInput) => {
+          const valid = { tool_name: toolName, tool_input: toolInput };
+          const degraded = { tool_input: toolInput }; // required field removed
+          expect(validateBeforeToolInput(valid)).toBe(true); // valid baseline
+          expect(validateBeforeToolInput(degraded)).toBe(false); // degraded always fails
+        },
+      ),
+    ));
   /**
    * METAMORPHIC INVARIANT 3: all validators uniformly reject non-object primitives
    * Domain entropy: wide sample of primitives including edge cases
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-005
    */
-  test.prop([
-    fc.oneof(
-      fc.constant(null),
-      fc.constant(undefined),
-      fc.integer(),
-      fc.boolean(),
-      fc.float(),
-      fc.string({ maxLength: 10 }), // strings are primitives, not objects
-    ),
-  ])(
-    'METAMORPHIC: all validators reject any primitive input @plan:PLAN-20250218-HOOKSYSTEM.P10',
-    (primitive) => {
-      expect(validateBeforeToolInput(primitive)).toBe(false);
-      expect(validateAfterToolInput(primitive)).toBe(false);
-      expect(validateBeforeModelInput(primitive)).toBe(false);
-      expect(validateNotificationInput(primitive)).toBe(false);
-    },
-  );
-
+  it('METAMORPHIC: all validators reject any primitive input @plan:PLAN-20250218-HOOKSYSTEM.P10', () =>
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.constant(null),
+          fc.constant(undefined),
+          fc.integer(),
+          fc.boolean(),
+          fc.float(),
+          fc.string({ maxLength: 10 }), // strings are primitives, not objects
+        ),
+        (primitive) => {
+          expect(validateBeforeToolInput(primitive)).toBe(false);
+          expect(validateAfterToolInput(primitive)).toBe(false);
+          expect(validateBeforeModelInput(primitive)).toBe(false);
+          expect(validateNotificationInput(primitive)).toBe(false);
+        },
+      ),
+    ));
   /**
    * METAMORPHIC INVARIANT 4: Notification validator accepts any non-empty string message
    * with any extra fields (toleration + positive path)
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  test.prop([
-    fc.string({ minLength: 1, maxLength: 200 }), // non-empty message
-    fc.record({
-      severity: fc.constantFrom('info', 'warn', 'error'),
-    }),
-  ])(
-    'METAMORPHIC: validateNotificationInput passes for valid notification @plan:PLAN-20250218-HOOKSYSTEM.P10',
-    (message, extra) => {
-      const payload = {
-        notification_type: NotificationType.ToolPermission,
-        message,
-        details: { ...extra },
-      };
-      expect(validateNotificationInput(payload)).toBe(true);
-    },
-  );
-
+  it('METAMORPHIC: validateNotificationInput passes for valid notification @plan:PLAN-20250218-HOOKSYSTEM.P10', () =>
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 200 }), // non-empty message
+        fc.record({
+          severity: fc.constantFrom('info', 'warn', 'error'),
+        }),
+        (message, extra) => {
+          const payload = {
+            notification_type: NotificationType.ToolPermission,
+            message,
+            details: { ...extra },
+          };
+          expect(validateNotificationInput(payload)).toBe(true);
+        },
+      ),
+    ));
   /**
    * METAMORPHIC INVARIANT 5: empty string is never a valid message for Notification
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  test.prop([
-    fc.record({
-      severity: fc.constantFrom('info', 'warn', 'error'),
-    }),
-  ])(
-    'METAMORPHIC: validateNotificationInput rejects empty string message @plan:PLAN-20250218-HOOKSYSTEM.P10',
-    (extra) => {
-      const payload = {
-        notification_type: NotificationType.ToolPermission,
-        message: '',
-        details: { ...extra },
-      };
-      expect(validateNotificationInput(payload)).toBe(false);
-    },
-  );
-
+  it('METAMORPHIC: validateNotificationInput rejects empty string message @plan:PLAN-20250218-HOOKSYSTEM.P10', () =>
+    fc.assert(
+      fc.property(
+        fc.record({
+          severity: fc.constantFrom('info', 'warn', 'error'),
+        }),
+        (extra) => {
+          const payload = {
+            notification_type: NotificationType.ToolPermission,
+            message: '',
+            details: { ...extra },
+          };
+          expect(validateNotificationInput(payload)).toBe(false);
+        },
+      ),
+    ));
   /**
    * METAMORPHIC INVARIANT 6: BeforeAgent with any non-empty prompt passes
    * @plan PLAN-20250218-HOOKSYSTEM.P10
    * @requirement DELTA-HPAY-001
    */
-  test.prop([fc.string({ minLength: 1, maxLength: 500 })])(
-    'METAMORPHIC: validateBeforeAgentInput passes for any non-empty prompt @plan:PLAN-20250218-HOOKSYSTEM.P10',
-    (prompt) => {
-      expect(validateBeforeAgentInput({ prompt })).toBe(true);
-    },
-  );
+  it('METAMORPHIC: validateBeforeAgentInput passes for any non-empty prompt @plan:PLAN-20250218-HOOKSYSTEM.P10', () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1, maxLength: 500 }), (prompt) => {
+        expect(validateBeforeAgentInput({ prompt })).toBe(true);
+      }),
+    ));
 });

@@ -35,38 +35,39 @@ import {
   clearMismatchedKeyringValue,
   verifyKeyringWrite,
 } from './keyring-write-verification.js';
+import {
+  assertRuntimeNotReplaced,
+  RUNTIME_REPLACED_REMEDIATION,
+} from './runtime-replaced-errors.js';
+import {
+  createDefaultKeyringAdapter,
+  setKeyringLogger,
+} from './default-keyring-adapter.js';
 
-let _moduleLogger: StorageLogger = new NullStorageLoggerImpl();
+export { createDefaultKeyringAdapter } from './default-keyring-adapter.js';
+export { resetRuntimeReplacedWarningForTesting } from './runtime-replaced-errors.js';
+export { hasRuntimeReplacedWarningBeenEmitted } from './runtime-replaced-errors.js';
+export {
+  forceRuntimeReplacedForTesting,
+  resetRuntimeIdentityForTesting,
+} from './runtime-identity.js';
 
-function setSecureStoreModuleLogger(logger: StorageLogger): void {
-  _moduleLogger = logger;
-}
+// ─── Error Type (re-exported from dependency-leaf module) ────────────────────
+//
+// SecureStoreError and SecureStoreErrorCode are defined in
+// secure-store-errors.ts (a dependency leaf) so that runtime-replaced
+// detection and error helpers can import them without creating a cycle back
+// into this module.
 
-// ─── Error Type ──────────────────────────────────────────────────────────────
+export {
+  SecureStoreError,
+  isSecureStoreError,
+  isRuntimeReplacedError,
+} from './secure-store-errors.js';
+export type { SecureStoreErrorCode } from './secure-store-errors.js';
 
-export type SecureStoreErrorCode =
-  | 'UNAVAILABLE'
-  | 'LOCKED'
-  | 'DENIED'
-  | 'CORRUPT'
-  | 'TIMEOUT'
-  | 'NOT_FOUND';
-
-export class SecureStoreError extends Error {
-  readonly code: SecureStoreErrorCode;
-  readonly remediation: string;
-
-  constructor(
-    message: string,
-    code: SecureStoreErrorCode,
-    remediation: string,
-  ) {
-    super(message);
-    this.name = 'SecureStoreError';
-    this.code = code;
-    this.remediation = remediation;
-  }
-}
+import { SecureStoreError } from './secure-store-errors.js';
+import type { SecureStoreErrorCode } from './secure-store-errors.js';
 
 // ─── Adapter Interface ───────────────────────────────────────────────────────
 
@@ -101,29 +102,7 @@ function isErrorWithCode(value: unknown): value is { code: string } {
     typeof value === 'object' &&
     value !== null &&
     'code' in value &&
-    typeof (value as Record<string, unknown>).code === 'string'
-  );
-}
-
-function isErrorWithMessage(value: unknown): value is { message: string } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'message' in value &&
-    typeof (value as Record<string, unknown>).message === 'string'
-  );
-}
-
-const KEYRING_MODULE_ERROR_CODES = new Set([
-  'ERR_MODULE_NOT_FOUND',
-  'MODULE_NOT_FOUND',
-  'ERR_DLOPEN_FAILED',
-]);
-
-function isKeyringModuleMissingError(error: unknown): boolean {
-  return (
-    (isErrorWithCode(error) && KEYRING_MODULE_ERROR_CODES.has(error.code)) ||
-    (isErrorWithMessage(error) && error.message.includes('@napi-rs/keyring'))
+    typeof value.code === 'string'
   );
 }
 
@@ -154,6 +133,8 @@ function getRemediation(code: SecureStoreErrorCode): string {
       return 'Retry, check system load';
     case 'NOT_FOUND':
       return 'Save the key first';
+    case 'RUNTIME_REPLACED':
+      return RUNTIME_REPLACED_REMEDIATION;
     default:
       return 'An unexpected error occurred';
   }
@@ -161,82 +142,6 @@ function getRemediation(code: SecureStoreErrorCode): string {
 
 function isTransientError(error: unknown): boolean {
   return classifyError(error) === 'TIMEOUT';
-}
-
-type FindCredentialsFunction = (
-  service: string,
-) => Promise<Array<{ account: string; password: string }>>;
-
-function withFindCredentials(
-  adapter: KeyringAdapter,
-  findCredentialsFn: FindCredentialsFunction | undefined,
-): KeyringAdapter {
-  if (findCredentialsFn !== undefined) {
-    adapter.findCredentials = async (service: string) => {
-      try {
-        return await findCredentialsFn(service);
-      } catch {
-        return [];
-      }
-    };
-  }
-
-  return adapter;
-}
-
-/**
- * Creates a default KeyringAdapter by loading @napi-rs/keyring.
- * Exported so that other modules can reuse this without duplicating
- * the @napi-rs/keyring import.
- *
- * @plan PLAN-20260211-SECURESTORE.P08
- */
-export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | null> {
-  try {
-    const module = await import('@napi-rs/keyring');
-    const keyring = (module as Record<string, unknown>).default ?? module;
-    const kr = keyring as {
-      AsyncEntry: new (
-        service: string,
-        account: string,
-      ) => {
-        getPassword(): Promise<string | null>;
-        setPassword(password: string): Promise<void>;
-        deleteCredential(): Promise<boolean>;
-      };
-      findCredentials?: FindCredentialsFunction;
-      findCredentialsAsync?: FindCredentialsFunction;
-    };
-    const findCredentialsFn = kr.findCredentials ?? kr.findCredentialsAsync;
-    const adapter: KeyringAdapter = {
-      getPassword: async (service: string, account: string) => {
-        const entry = new kr.AsyncEntry(service, account);
-        return entry.getPassword();
-      },
-      setPassword: async (
-        service: string,
-        account: string,
-        password: string,
-      ) => {
-        const entry = new kr.AsyncEntry(service, account);
-        await entry.setPassword(password);
-      },
-      deletePassword: async (service: string, account: string) => {
-        const entry = new kr.AsyncEntry(service, account);
-        return entry.deleteCredential();
-      },
-    };
-
-    return withFindCredentials(adapter, findCredentialsFn);
-  } catch (error) {
-    if (!isKeyringModuleMissingError(error) && process.env.DEBUG) {
-      const message = isErrorWithMessage(error) ? error.message : String(error);
-      _moduleLogger.warn(
-        `[SecureStore] Unexpected error loading @napi-rs/keyring: ${message}`,
-      );
-    }
-    return null;
-  }
 }
 
 // ─── SecureStore Class ───────────────────────────────────────────────────────
@@ -283,7 +188,7 @@ export class SecureStore {
     this.machineSecretLoaderFn =
       options?.machineSecretLoader ?? this.defaultMachineSecretLoader;
     this.machineSecretFilePath = options?.machineSecretPath;
-    setSecureStoreModuleLogger(this.logger);
+    setKeyringLogger(this.logger);
   }
 
   private defaultMachineSecretLoader = async (): Promise<Buffer | null> =>
@@ -377,6 +282,7 @@ export class SecureStore {
   // ─── Availability Probe ──────────────────────────────────────────────────
 
   async isKeychainAvailable(): Promise<boolean> {
+    assertRuntimeNotReplaced();
     if (this.probeCache !== null) {
       const elapsed = Date.now() - this.probeCache.timestamp;
       if (elapsed < this.PROBE_TTL_MS) {
@@ -504,6 +410,7 @@ export class SecureStore {
 
   async set(key: string, value: string): Promise<void> {
     this.validateKey(key);
+    assertRuntimeNotReplaced();
 
     const adapter = await this.getKeyring();
     let keyringWriteSucceeded = false;
@@ -572,6 +479,7 @@ export class SecureStore {
 
   async get(key: string): Promise<string | null> {
     this.validateKey(key);
+    assertRuntimeNotReplaced();
     const adapter = await this.getKeyring();
     if (adapter !== null) {
       try {
@@ -632,6 +540,7 @@ export class SecureStore {
 
   async delete(key: string): Promise<boolean> {
     this.validateKey(key);
+    assertRuntimeNotReplaced();
 
     let deletedFromKeyring = false;
     let deletedFromFile = false;
@@ -660,6 +569,7 @@ export class SecureStore {
   // ─── CRUD: list() ────────────────────────────────────────────────────────
 
   async list(): Promise<string[]> {
+    assertRuntimeNotReplaced();
     const keys = new Set<string>();
 
     const adapter = await this.getKeyring();
@@ -723,6 +633,7 @@ export class SecureStore {
 
   async has(key: string): Promise<boolean> {
     this.validateKey(key);
+    assertRuntimeNotReplaced();
 
     const adapter = await this.getKeyring();
     if (adapter !== null) {

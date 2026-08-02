@@ -23,8 +23,8 @@ import {
 import { transformModel } from '../../src/models/transformer.js';
 
 // Mock fs module
-vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof fs>('node:fs');
+vi.mock('node:fs', (importOriginal) => {
+  const actual = importOriginal() as typeof fs;
   return {
     ...actual,
     existsSync: vi.fn(),
@@ -39,39 +39,29 @@ vi.mock('node:fs', async () => {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+const registryState = vi.hoisted(() => ({
+  instance: null as ModelRegistry | null,
+}));
+
 // Reset singleton between tests
-vi.mock('../../src/models/registry.js', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../src/models/registry.js')
-  >('../../src/models/registry.js');
-  let instance: ModelRegistry | null = null;
+vi.mock('../../src/models/registry.js', (importOriginal) => {
+  const actual =
+    importOriginal() as typeof import('../../src/models/registry.js');
 
   return {
     ...actual,
     getModelRegistry: () => {
-      if (!instance) {
-        instance = new actual.ModelRegistry();
+      if (!registryState.instance) {
+        registryState.instance = new actual.ModelRegistry();
       }
-      return instance;
-    },
-    // Expose reset for tests
-    __resetRegistry: () => {
-      if (instance) {
-        instance.dispose();
-      }
-      instance = null;
+      return registryState.instance;
     },
   };
 });
 
-// Get reset function
-const resetRegistry = async () => {
-  const mod = (await import(
-    '../../src/models/registry.js'
-  )) as typeof import('../../src/models/registry.js') & {
-    __resetRegistry?: () => void;
-  };
-  mod.__resetRegistry?.();
+const resetRegistry = () => {
+  registryState.instance?.dispose();
+  registryState.instance = null;
 };
 
 describe('llxprtModelToIModel', () => {

@@ -348,23 +348,25 @@ describe('setupSshAgentPodmanMacOS', () => {
     expect(fakeProc.kill).toHaveBeenCalledTimes(1);
   }, 10000);
 
-  it('warns and skips when --network already set (conflict guard)', async () => {
-    mockValidPodmanConnection();
-    const fakeProc = mockTunnelProcess();
+  it('warns and returns empty before any resource lookup when network conflicts', async () => {
+    const reserveTunnelPort = vi.fn();
     const warnSpy = vi
       .spyOn(DebugLogger.prototype, 'warn')
       .mockImplementation(() => {});
-
-    // Pre-populate args with a conflicting network flag
     const args = ['--network', 'none'];
-    const result = await setupSshAgentPodmanMacOS(args, '/tmp/auth.sock');
+
+    const result = await setupSshAgentPodmanMacOS(args, '/tmp/auth.sock', 800, {
+      reserveTunnelPort,
+    });
 
     expect(result).toStrictEqual({});
+    expect(args).toStrictEqual(['--network', 'none']);
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('--network=none is already set'),
+      'Podman macOS SSH agent forwarding requires --network=host but --network=none is already set. Skipping SSH agent setup.',
     );
-    // Tunnel should be killed since we're bailing
-    expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(child_process.execSync).not.toHaveBeenCalled();
+    expect(reserveTunnelPort).not.toHaveBeenCalled();
+    expect(child_process.spawn).not.toHaveBeenCalled();
   }, 10000);
 
   it('throws FatalSandboxError when tunnel fails to start (R7.7)', async () => {
@@ -455,13 +457,10 @@ describe('setupSshAgentPodmanMacOS', () => {
     });
     const fakeProc = mockTunnelProcess();
 
-    try {
-      await setupSshAgentPodmanMacOS([], '/tmp/auth.sock', 800);
-    } catch {
-      // Expected to throw
-    }
+    await expect(
+      setupSshAgentPodmanMacOS([], '/tmp/auth.sock', 800),
+    ).rejects.toThrow(/SSH agent forwarding timed out/);
 
-    // Tunnel process should have been killed on timeout
     expect(fakeProc.kill).toHaveBeenCalledWith('SIGTERM');
   }, 10000);
 });

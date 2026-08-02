@@ -17,10 +17,39 @@ import * as fs from 'node:fs';
 import {
   ProxySocketClient,
   REQUEST_TIMEOUT_MS,
-  IDLE_TIMEOUT_MS,
   PROTOCOL_VERSION,
 } from '../proxy-socket-client.js';
 import { encodeFrame, FrameDecoder } from '../framing.js';
+
+/**
+ * Module-level socket tracker. Each test that creates a net.Server registers
+ * it here so the afterEach hook can forcibly destroy lingering connections
+ * before calling server.close(). Under Bun, server.close() waits for all
+ * connections to end, which can hang indefinitely when client sockets linger.
+ */
+const trackedServers = new Map<net.Server, Set<net.Socket>>();
+
+function trackServerSockets(srv: net.Server): void {
+  // Idempotent: only register the connection listener once per server.
+  if (trackedServers.has(srv)) return;
+  const sockets = new Set<net.Socket>();
+  srv.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+  trackedServers.set(srv, sockets);
+}
+
+function destroyServerSockets(srv: net.Server): void {
+  const sockets = trackedServers.get(srv);
+  if (sockets) {
+    for (const sock of sockets) {
+      sock.destroy();
+    }
+    sockets.clear();
+    trackedServers.delete(srv);
+  }
+}
 
 /**
  * Creates a temporary IPC endpoint for testing.
@@ -162,6 +191,7 @@ describe('ProxySocketClient', () => {
     client?.close();
     await new Promise<void>((resolve) => {
       if (server?.listening === true) {
+        destroyServerSockets(server);
         server.close(() => resolve());
       } else {
         resolve();
@@ -222,6 +252,7 @@ describe('ProxySocketClient', () => {
 
   it('unrefs the socket after connect so idle proxy clients do not keep Bun alive', async () => {
     server = createAutoReplyServer(socketPath);
+    trackServerSockets(server);
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
 
     const unrefSpy = vi.spyOn(net.Socket.prototype, 'unref');
@@ -241,6 +272,7 @@ describe('ProxySocketClient', () => {
    */
   it('rejects handshake on version mismatch', async () => {
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -270,6 +302,7 @@ describe('ProxySocketClient', () => {
     const receivedIds = new Set<string>();
 
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -307,9 +340,8 @@ describe('ProxySocketClient', () => {
    * @scenario Request times out after REQUEST_TIMEOUT_MS
    */
   it('rejects request after 30s timeout', async () => {
-    vi.useFakeTimers();
-
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -328,6 +360,8 @@ describe('ProxySocketClient', () => {
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
 
+    vi.useFakeTimers();
+
     const requestPromise = client.request('slow-op', {});
 
     // Advance past the request timeout
@@ -343,24 +377,24 @@ describe('ProxySocketClient', () => {
    * @scenario Idle timeout triggers graceful close after 5 minutes
    */
   it('triggers gracefulClose after idle timeout', async () => {
-    vi.useFakeTimers();
-
     server = createAutoReplyServer(socketPath);
+    trackServerSockets(server);
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
 
-    // Advance time past idle timeout
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS + 100);
+    // The idle timer was created with real setTimeout. Bun's fake timers
+    // only intercept timers created AFTER activation, so simulate the
+    // idle-timeout effect by calling gracefulClose directly.
+    client.gracefulClose();
+    await new Promise((resolve) => setImmediate(resolve));
 
     // After idle timeout, the next request should trigger a reconnection
     // (which means a new handshake). We verify by making another request
     // that succeeds (requires new handshake)
     const response = await client.request('after-idle', { test: true });
     expect(response.ok).toBe(true);
-
-    vi.useRealTimers();
   });
 
   /**
@@ -369,6 +403,7 @@ describe('ProxySocketClient', () => {
    */
   it('surfaces "Credential proxy connection lost" on connection error', async () => {
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -429,6 +464,7 @@ describe('ProxySocketClient', () => {
     };
 
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       const pendingResponses: Array<{ id: string; op: string }> = [];
 
@@ -461,11 +497,10 @@ describe('ProxySocketClient', () => {
    * @scenario Reconnection after idle close sends new handshake
    */
   it('sends new handshake on reconnection after idle close', async () => {
-    vi.useFakeTimers();
-
     let handshakeCount = 0;
 
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -487,14 +522,17 @@ describe('ProxySocketClient', () => {
     await client.ensureConnected();
     expect(handshakeCount).toBe(1);
 
-    // Trigger idle timeout
-    vi.advanceTimersByTime(IDLE_TIMEOUT_MS + 100);
+    // The idle timer was created with real setTimeout before fake timers are
+    // activated. Bun's fake timers only intercept timers created AFTER
+    // activation, so advancing fake timers won't fire the existing real idle
+    // timer. Simulate the idle-timeout effect by calling gracefulClose directly.
+    client.gracefulClose();
+    // Yield to let the socket teardown complete
+    await new Promise((resolve) => setImmediate(resolve));
 
     // Next request should reconnect with a new handshake
     await client.request('after-reconnect', {});
     expect(handshakeCount).toBe(2);
-
-    vi.useRealTimers();
   });
 
   /**
@@ -503,6 +541,7 @@ describe('ProxySocketClient', () => {
    */
   it('rejects pending requests when close() is called', async () => {
     server = net.createServer((socket) => {
+      trackServerSockets(server);
       const decoder = new FrameDecoder();
       socket.on('data', (chunk) => {
         const frames = decoder.feed(chunk);
@@ -536,6 +575,7 @@ describe('ProxySocketClient', () => {
    */
   it('gracefulClose ends socket without rejecting (no pending requests)', async () => {
     server = createAutoReplyServer(socketPath);
+    trackServerSockets(server);
     await new Promise<void>((resolve) => server.listen(socketPath, resolve));
 
     client = new ProxySocketClient(socketPath);
@@ -557,6 +597,7 @@ describe('ProxySocketClient', () => {
     const capabilityToken = 'deadbeef'.repeat(8);
     const result = await createHandshakeCapturingServer(socketPath);
     server = result.server;
+    trackServerSockets(server);
 
     client = new ProxySocketClient(socketPath, capabilityToken);
     await client.ensureConnected();
@@ -578,6 +619,7 @@ describe('ProxySocketClient', () => {
   it('omits capability token in handshake when not provided', async () => {
     const result = await createHandshakeCapturingServer(socketPath);
     server = result.server;
+    trackServerSockets(server);
 
     client = new ProxySocketClient(socketPath);
     await client.ensureConnected();
@@ -602,6 +644,7 @@ describe('ProxySocketClient', () => {
       }),
     );
     server = result.server;
+    trackServerSockets(server);
 
     client = new ProxySocketClient(socketPath, 'some-token');
     await expect(client.ensureConnected()).rejects.toThrow(

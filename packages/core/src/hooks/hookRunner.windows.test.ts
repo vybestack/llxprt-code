@@ -31,7 +31,7 @@ async function execute(command: string) {
   );
 }
 
-describe.runIf(process.platform === 'win32')(
+describe.skipIf(process.platform !== 'win32')(
   'HookRunner PowerShell exit propagation',
   () => {
     it('preserves a final native command exit code 2 under PowerShell', async () => {
