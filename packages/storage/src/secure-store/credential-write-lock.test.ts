@@ -422,6 +422,21 @@ describe('CredentialWriteLock', () => {
     );
   });
 
+  it('lock path is injective for control characters below 0x10 — escapes are zero-padded', () => {
+    const lock = new CredentialWriteLock({ lockDir: lockDir() });
+
+    // Without a zero pad, TAB (0x09) would encode as '%9' and absorb the
+    // following 'A', producing '%9A' — identical to U+009A's encoding. Two
+    // different services would then share one lock file, silently breaking
+    // cross-process write serialization.
+    const tabThenA = lock.lockFilePath('\u0009A', 'acct');
+    const singleU009A = lock.lockFilePath('\u009A', 'acct');
+    expect(tabThenA).not.toBe(singleU009A);
+
+    // Every escape must be exactly two hex digits.
+    expect(path.basename(tabThenA)).toContain('%09');
+  });
+
   it('lock path is filesystem-safe — path-unsafe characters are escaped and cannot escape the lock directory', () => {
     const ld = lockDir();
     const lock = new CredentialWriteLock({ lockDir: ld });

@@ -337,12 +337,18 @@ function isUnsafeChar(char: string): boolean {
  *
  * Non-ASCII characters are also encoded so the filename is deterministic
  * across UTF-8 normalization differences.
+ *
+ * Escape sequences are always two hex digits. Without the zero pad, a code
+ * below 0x10 would emit a single digit and could absorb the following
+ * character: `[0x09, 'A']` and `[0x9A]` would both encode to `%9A`, silently
+ * breaking injectivity and letting two different (service, account) pairs
+ * share one lock file.
  */
 function escapeComponent(component: string): string {
   let result = '';
   for (const char of component) {
     result += isUnsafeChar(char)
-      ? '%' + char.charCodeAt(0).toString(16).toUpperCase()
+      ? '%' + char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')
       : char;
   }
   return result;
