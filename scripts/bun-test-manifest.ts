@@ -570,6 +570,8 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/runtime/statelessHardening.spec.ts',
       'src/synthetic/usageInfo.test.ts',
       'src/tokenizer-behavior.test.ts',
+      'src/tokenizers/Gpt56O200kPromptEstimator.test.ts',
+      'src/tokenizers/Gpt56ProviderUsageParity.test.ts',
       'src/tokenizers/official/assetLoader.test.ts',
       'src/tokenizers/official/officialTokenizers.test.ts',
       'src/tokenizers/official/offlineAssets.test.ts',
