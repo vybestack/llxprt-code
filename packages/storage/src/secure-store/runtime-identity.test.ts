@@ -76,7 +76,10 @@ function installDetectorFor(filePath: string): void {
 describe('runtime-identity detector (pinned fd + nlink)', () => {
   const temp = useTempDir();
   beforeEach(temp.beforeEach);
-  afterEach(temp.afterEach);
+  afterEach(async () => {
+    await temp.afterEach();
+    resetRuntimeIdentityForTesting();
+  });
 
   it('is healthy at baseline', async () => {
     const filePath = path.join(temp.getDir(), 'binary');
@@ -169,16 +172,14 @@ describe('runtime-identity edge cases', () => {
     expect(isRuntimeReplaced()).toBe(false);
   });
 
-  it('non-darwin reports healthy (default detector always returns false)', () => {
-    // On non-darwin, the default detector is () => false.
-    // We simulate this by resetting to default and checking.
-    setRuntimeReplacedDetectorForTesting(null);
-    // The default detector respects platform; on darwin it would check the fd.
-    // On non-darwin it always returns false.
-    // We can't assert platform-specific behaviour here, but we can assert
-    // that calling it does not throw.
-    expect(typeof isRuntimeReplaced()).toBe('boolean');
-  });
+  it.skipIf(process.platform === 'darwin')(
+    'non-darwin reports healthy (default detector always returns false)',
+    () => {
+      setRuntimeReplacedDetectorForTesting(null);
+      // On non-darwin the default detector is `() => false`.
+      expect(isRuntimeReplaced()).toBe(false);
+    },
+  );
 });
 
 // ─── Terminal memoisation is genuinely exercised ─────────────────────────────
@@ -190,7 +191,10 @@ describe('runtime-identity edge cases', () => {
 describe('runtime-identity terminal memoisation', () => {
   const temp = useTempDir();
   beforeEach(temp.beforeEach);
-  afterEach(temp.afterEach);
+  afterEach(async () => {
+    await temp.afterEach();
+    resetRuntimeIdentityForTesting();
+  });
 
   it('once replaced, always replaced even if the detector would report healthy again', async () => {
     const filePath = path.join(temp.getDir(), 'binary');

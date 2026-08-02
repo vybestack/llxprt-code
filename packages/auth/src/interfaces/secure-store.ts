@@ -68,7 +68,9 @@ export interface ISecureStore {
  * @plan PLAN-20260801-ISSUE2926
  * @requirement R3
  */
-export function isRuntimeReplacedStoreError(error: unknown): boolean {
+export function isRuntimeReplacedStoreError(
+  error: unknown,
+): error is ISecureStoreError {
   return (
     typeof error === 'object' &&
     error !== null &&

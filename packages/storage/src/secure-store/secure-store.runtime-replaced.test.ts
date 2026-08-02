@@ -21,7 +21,7 @@
  * @plan PLAN-20260801-ISSUE2926
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -42,6 +42,7 @@ import {
 import {
   resetRuntimeReplacedWarningForTesting,
   hasRuntimeReplacedWarningBeenEmitted,
+  RUNTIME_REPLACED_REMEDIATION,
 } from './runtime-replaced-errors.js';
 
 // ─── Shared helpers (RULES.md: no copy-pasted setup) ────────────────────────
@@ -377,7 +378,10 @@ describe('SecureStore — cached adapter makes zero native calls after transitio
       }
     }
 
-    // The guarded adapter must have blocked all native calls.
+    // The recording adapter is injected via keyringLoader and is NOT wrapped
+    // by createGuardedAdapter. The zero-call guarantee comes from the
+    // SecureStore-level assertRuntimeNotReplaced() that fires before the
+    // keyring loader is even consulted.
     expect(calls.length).toBe(callsBeforeTransition);
   });
 });
@@ -400,6 +404,8 @@ describe('SecureStore — replaced-runtime notification via stderr', () => {
     forceRuntimeReplacedForTesting();
     expect(hasRuntimeReplacedWarningBeenEmitted()).toBe(false);
 
+    const stderrSpy = vi.spyOn(process.stderr, 'write');
+
     // Construct a store with NO injected logger (defaults to
     // NullStorageLoggerImpl which discards). The warning MUST still reach
     // stderr because it is routed through process.stderr.write.
@@ -418,6 +424,17 @@ describe('SecureStore — replaced-runtime notification via stderr', () => {
     // The once-per-process flag must be set (R4).
     expect(hasRuntimeReplacedWarningBeenEmitted()).toBe(true);
 
+    // The notice must have actually been written to stderr (not stdout, not
+    // swallowed). Assert it contains the remediation guidance.
+    const writes = stderrSpy.mock.calls.map((c) => String(c[0]));
+    const notice = writes.join('');
+    expect(notice).toContain('Restart LLxprt');
+    expect(notice).toContain(RUNTIME_REPLACED_REMEDIATION);
+    expect(notice).toContain('Always Allow');
+
+    // Record how many writes happened for the first operation.
+    const writesAfterFirst = stderrSpy.mock.calls.length;
+
     // Perform more operations — the warning must NOT be emitted again.
     for (let i = 0; i < 5; i++) {
       try {
@@ -426,7 +443,12 @@ describe('SecureStore — replaced-runtime notification via stderr', () => {
         // expected
       }
     }
+
+    // Exactly the same number of stderr writes — no additional notice.
+    expect(stderrSpy.mock.calls.length).toBe(writesAfterFirst);
     // Still true — emitted exactly once.
     expect(hasRuntimeReplacedWarningBeenEmitted()).toBe(true);
+
+    stderrSpy.mockRestore();
   });
 });

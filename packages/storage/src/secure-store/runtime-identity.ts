@@ -49,7 +49,7 @@
  * @requirement R1, R2, R5
  */
 
-import { openSync, fstatSync } from 'node:fs';
+import { openSync, fstatSync, closeSync } from 'node:fs';
 
 /**
  * Function type for the injectable "is the runtime replaced?" predicate.
@@ -111,7 +111,7 @@ function isPinnedFdUnlinked(fd: number): boolean {
 export function createPinnedFdDetector(
   execPath: string,
 ): RuntimeReplacedDetector {
-  const fd = openPinnedFd(execPath);
+  let fd = openPinnedFd(execPath);
   let memoised = false;
   return () => {
     if (memoised) {
@@ -121,6 +121,13 @@ export function createPinnedFdDetector(
       return false;
     }
     memoised = isPinnedFdUnlinked(fd);
+    if (memoised) {
+      // The inode is orphaned (terminal). The fd is no longer needed and
+      // must be released so repeated detector creation (tests, multiple
+      // SecureStore instances) cannot accumulate descriptors and hit EMFILE.
+      closeSync(fd);
+      fd = NO_PINNED_FD;
+    }
     return memoised;
   };
 }

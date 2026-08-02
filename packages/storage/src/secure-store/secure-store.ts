@@ -35,8 +35,10 @@ import {
   clearMismatchedKeyringValue,
   verifyKeyringWrite,
 } from './keyring-write-verification.js';
-import { assertRuntimeNotReplaced } from './runtime-replaced-errors.js';
-import { RUNTIME_REPLACED_REMEDIATION } from './runtime-replaced-errors.js';
+import {
+  assertRuntimeNotReplaced,
+  RUNTIME_REPLACED_REMEDIATION,
+} from './runtime-replaced-errors.js';
 import {
   createDefaultKeyringAdapter,
   setKeyringLogger,

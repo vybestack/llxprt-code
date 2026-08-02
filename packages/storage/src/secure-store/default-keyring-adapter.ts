@@ -65,19 +65,6 @@ function isKeyringModuleMissingError(error: unknown): boolean {
   );
 }
 
-/**
- * Type predicate for the shape of the @napi-rs/keyring dynamic import.
- * Avoids `as` casts by narrowing with runtime checks.
- *
- * @plan PLAN-20260801-ISSUE2926
- */
-function isKeyringModuleShape(value: unknown): value is KeyringModuleShape {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  return 'AsyncEntry' in value && typeof value.AsyncEntry === 'function';
-}
-
 interface KeyringEntry {
   getPassword(): Promise<string | null>;
   setPassword(password: string): Promise<void>;
@@ -88,6 +75,61 @@ interface KeyringModuleShape {
   AsyncEntry: new (service: string, account: string) => KeyringEntry;
   findCredentials?: FindCredentialsFunction;
   findCredentialsAsync?: FindCredentialsFunction;
+}
+
+/**
+ * Type predicate for the shape of the @napi-rs/keyring dynamic import.
+ * Avoids `as` casts by narrowing with runtime checks. Validates that every
+ * present callable member is actually a function, not just present.
+ *
+ * @plan PLAN-20260801-ISSUE2926
+ */
+function isKeyringModuleShape(value: unknown): value is KeyringModuleShape {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if (!('AsyncEntry' in value) || typeof value.AsyncEntry !== 'function') {
+    return false;
+  }
+  if (
+    'findCredentials' in value &&
+    typeof value.findCredentials !== 'function'
+  ) {
+    return false;
+  }
+  if (
+    'findCredentialsAsync' in value &&
+    typeof value.findCredentialsAsync !== 'function'
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Selects the keyring module from a dynamic import, robust to CJS/ESM
+ * interop differences. Under some module systems the useful export is the
+ * namespace object; under others it is on `.default`. Preferring the
+ * namespace first and falling back to `.default` is strictly more robust
+ * than either version alone.
+ *
+ * Uses type-predicate narrowing — no type assertions.
+ *
+ * @plan PLAN-20260801-ISSUE2926
+ */
+function resolveKeyringModule(namespace: unknown): KeyringModuleShape | null {
+  if (isKeyringModuleShape(namespace)) {
+    return namespace;
+  }
+  if (
+    typeof namespace === 'object' &&
+    namespace !== null &&
+    'default' in namespace &&
+    isKeyringModuleShape(namespace.default)
+  ) {
+    return namespace.default;
+  }
+  return null;
 }
 
 /**
@@ -179,8 +221,8 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   }
   try {
     const module = await import('@napi-rs/keyring');
-    const keyring: unknown = module;
-    if (!isKeyringModuleShape(keyring)) {
+    const keyring = resolveKeyringModule(module);
+    if (keyring === null) {
       return null;
     }
     const kr = keyring;
