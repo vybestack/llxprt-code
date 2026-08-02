@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  *
  * Behavioral tests for language-specific import extraction (issue #1746).
