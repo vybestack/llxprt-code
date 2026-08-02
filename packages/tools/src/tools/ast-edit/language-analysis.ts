@@ -32,9 +32,13 @@ export function detectLanguage(filePath: string): string {
 export function extractImports(content: string, language: string): Import[] {
   const imports: Import[] = [];
   const lines = content.split('\n');
+  // Go block imports span multiple lines; this tracks whether we are inside
+  // an `import ( ... )` block so continuation lines are collected correctly.
+  let inGoImportBlock = false;
 
   lines.forEach((line, index) => {
     const trimmed = line.trim();
+    const lineNum = index + 1;
     if (
       (language === 'typescript' || language === 'javascript') &&
       trimmed.startsWith(KEYWORDS.IMPORT)
@@ -42,7 +46,7 @@ export function extractImports(content: string, language: string): Import[] {
       imports.push({
         module: extractImportModule(trimmed),
         items: extractImportItems(trimmed),
-        line: index + 1,
+        line: lineNum,
       });
     } else if (
       language === 'python' &&
@@ -51,16 +55,25 @@ export function extractImports(content: string, language: string): Import[] {
       imports.push({
         module: extractPythonImportModule(trimmed),
         items: extractPythonImportItems(trimmed),
-        line: index + 1,
+        line: lineNum,
       });
     } else if (language === 'rust' && isRustUseDeclaration(trimmed)) {
       const parsed = parseRustUseDeclaration(trimmed);
       if (parsed) {
-        imports.push({ ...parsed, line: index + 1 });
+        imports.push({ ...parsed, line: lineNum });
       }
     } else if (language === 'c' && isCIncludeDirective(trimmed)) {
       const module = extractCIncludeModule(trimmed);
-      imports.push({ module, items: [], line: index + 1 });
+      imports.push({ module, items: [], line: lineNum });
+    } else if (language === 'go') {
+      const result = handleGoLine(trimmed, lineNum, inGoImportBlock);
+      inGoImportBlock = result.inBlock;
+      imports.push(...result.imports);
+    } else if (language === 'ruby' && isRubyRequire(trimmed)) {
+      const module = extractRubyRequirePath(trimmed);
+      if (module) {
+        imports.push({ module, items: [], line: lineNum });
+      }
     }
   });
 
@@ -350,4 +363,138 @@ function extractCIncludeModule(line: string): string {
     }
   }
   return 'unknown';
+}
+
+// ===== Go import helpers =====
+
+/**
+ * Parses a single Go line for import declarations, accounting for block state.
+ *
+ * Go imports come in two forms:
+ * - Single: `import "pkg"`, `import f "pkg"`, `import . "pkg"`, `import _ "pkg"`
+ * - Block:  `import ( ... )` spanning multiple lines
+ *
+ * Block imports require cross-line state: once `import (` is seen, subsequent
+ * lines are package paths until the closing `)`. This function is pure — it
+ * receives the current block state and returns the next state alongside any
+ * imports found on this line.
+ *
+ * @returns The imports found and whether the parser is inside a block after
+ *          processing this line.
+ */
+function handleGoLine(
+  line: string,
+  lineNum: number,
+  inBlock: boolean,
+): { imports: Import[]; inBlock: boolean } {
+  if (inBlock) {
+    // Inside a block: collect packages until the closing paren.
+    const closeParen = line.indexOf(')');
+    if (closeParen !== -1) {
+      const module = extractGoImportPath(line.slice(0, closeParen));
+      return {
+        imports: module ? [{ module, items: [], line: lineNum }] : [],
+        inBlock: false,
+      };
+    }
+    const module = extractGoImportPath(line);
+    return {
+      imports: module ? [{ module, items: [], line: lineNum }] : [],
+      inBlock: true,
+    };
+  }
+  if (isGoImportBlockStart(line)) {
+    const openParen = line.indexOf('(');
+    const closeParen = line.indexOf(')', openParen + 1);
+    // Single-line block: import ( "pkg" )
+    if (closeParen !== -1) {
+      const module = extractGoImportPath(line.slice(openParen + 1, closeParen));
+      return {
+        imports: module ? [{ module, items: [], line: lineNum }] : [],
+        inBlock: false,
+      };
+    }
+    return { imports: [], inBlock: true };
+  }
+  if (isGoSingleImport(line)) {
+    const module = extractGoImportPath(line.replace(/^import\s+/, ''));
+    return {
+      imports: module ? [{ module, items: [], line: lineNum }] : [],
+      inBlock: false,
+    };
+  }
+  return { imports: [], inBlock: false };
+}
+
+/**
+ * Detects a Go single-line import: `import "pkg"`, `import f "pkg"`,
+ * `import . "pkg"`, `import _ "pkg"`.
+ * Excludes block starts (`import (`), which are handled separately.
+ */
+function isGoSingleImport(line: string): boolean {
+  return /^import\s+/.test(line) && !isGoImportBlockStart(line);
+}
+
+/**
+ * Detects the start of a Go import block: `import (`.
+ */
+function isGoImportBlockStart(line: string): boolean {
+  return /^import\s*\(/.test(line);
+}
+
+/**
+ * Extracts the double-quoted package path from a Go import line.
+ * Strips line comments and ignores any alias/dot/underscore prefix.
+ * Returns null when no quoted path is present (e.g., blank lines).
+ *
+ * Handles: `"fmt"`, `f "fmt"`, `. "pkg"`, `_ "pkg"`, `"pkg" // comment`.
+ */
+function extractGoImportPath(line: string): string | null {
+  const commentIdx = line.indexOf('//');
+  const body =
+    commentIdx !== -1 ? line.slice(0, commentIdx).trim() : line.trim();
+  const quoteOpen = body.indexOf('"');
+  if (quoteOpen === -1) {
+    return null;
+  }
+  const quoteClose = body.indexOf('"', quoteOpen + 1);
+  if (quoteClose === -1) {
+    return null;
+  }
+  return body.slice(quoteOpen + 1, quoteClose);
+}
+
+// ===== Ruby require helpers =====
+
+/**
+ * Detects a Ruby require / require_relative directive.
+ * Handles both bare (`require 'json'`) and parenthesized
+ * (`require('json')`) forms with single or double quotes.
+ */
+function isRubyRequire(line: string): boolean {
+  return (
+    /^require\s+['"]/.test(line) ||
+    /^require_relative\s+['"]/.test(line) ||
+    /^require\s*\(\s*['"]/.test(line) ||
+    /^require_relative\s*\(\s*['"]/.test(line)
+  );
+}
+
+/**
+ * Extracts the quoted path from a Ruby require / require_relative directive.
+ * Finds the first quoted string in the line, so it works for both bare
+ * and parenthesized forms as well as single and double quotes.
+ * Returns null when no quoted path is found.
+ */
+function extractRubyRequirePath(line: string): string | null {
+  const quoteOpen = line.search(/['"]/);
+  if (quoteOpen === -1) {
+    return null;
+  }
+  const quoteChar = line[quoteOpen];
+  const quoteClose = line.indexOf(quoteChar, quoteOpen + 1);
+  if (quoteClose === -1) {
+    return null;
+  }
+  return line.slice(quoteOpen + 1, quoteClose);
 }
