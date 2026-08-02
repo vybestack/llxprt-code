@@ -400,6 +400,41 @@ describe('SecureStore — replaced-runtime notification via stderr', () => {
   beforeEach(runtime.beforeEach);
   afterEach(runtime.afterEach);
 
+  /**
+   * A broken stderr (EPIPE when piped into a command that exits early) must
+   * not replace the terminal error with a stream error: callers key their
+   * rethrow decision on RUNTIME_REPLACED, so losing it would let the very
+   * degradation this guard exists to prevent happen anyway.
+   *
+   * @plan PLAN-20260801-ISSUE2926
+   * @requirement R3, R4
+   */
+  it('still throws RUNTIME_REPLACED when writing the notice to stderr fails', async () => {
+    forceRuntimeReplacedForTesting();
+    const stderrSpy = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => {
+        throw new Error('EPIPE: broken pipe');
+      });
+
+    const store = new SecureStore('test-service', {
+      keyringLoader: async () => null,
+      fallbackDir: temp.getDir(),
+      fallbackPolicy: 'allow',
+    });
+
+    let caught: unknown;
+    try {
+      await store.get('any-key');
+    } catch (error) {
+      caught = error;
+    } finally {
+      stderrSpy.mockRestore();
+    }
+
+    expect(isRuntimeReplacedError(caught)).toBe(true);
+  });
+
   it('emits exactly one user-visible notice via stderr even when the store has a null logger', async () => {
     forceRuntimeReplacedForTesting();
     expect(hasRuntimeReplacedWarningBeenEmitted()).toBe(false);

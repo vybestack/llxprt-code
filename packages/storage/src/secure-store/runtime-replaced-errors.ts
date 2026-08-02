@@ -115,7 +115,14 @@ export function assertRuntimeNotReplaced(): void {
  * @requirement R4
  */
 function emitRuntimeReplacedWarning(): void {
-  process.stderr.write(
-    `\n${RUNTIME_REPLACED_MESSAGE} ${RUNTIME_REPLACED_REMEDIATION}\n\n`,
-  );
+  try {
+    process.stderr.write(
+      `\n${RUNTIME_REPLACED_MESSAGE} ${RUNTIME_REPLACED_REMEDIATION}\n\n`,
+    );
+  } catch {
+    // stderr can be closed or broken (EPIPE when piped into a command that
+    // exits early). Losing the notice is acceptable; losing the terminal
+    // RUNTIME_REPLACED error is not, because callers key their rethrow
+    // decision on it. Swallow here so the caller always sees the real error.
+  }
 }
