@@ -6,14 +6,14 @@
 
 import {
   ApprovalMode,
+  runImageOperation,
   STREAM_FIRST_RESPONSE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_CAMEL_CASE_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
+  type ImageOperationBackend,
 } from '@vybestack/llxprt-code-core';
-import { runImageOperation } from '@vybestack/llxprt-code-core/services/image/imageOperationDispatch.js';
-import type { ImageOperationBackend } from '@vybestack/llxprt-code-core/services/image/imageOperation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type {

@@ -33,9 +33,9 @@ import type {
   SubagentSchedulerFactory,
   TelemetrySettings,
   ToolRegistry,
+  ImageOperationRunner,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
-import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type {
   DiscoveredMCPPrompt,
   MCPDiscoveryState,
