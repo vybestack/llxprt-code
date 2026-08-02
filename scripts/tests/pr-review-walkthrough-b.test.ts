@@ -527,4 +527,17 @@ ${fence}`;
     expect(result).not.toContain('success; proceed');
     expect(result).not.toContain('handle; recover');
   });
+  it('escapes a bare semicolon in a block-header description that also contains a colon', () => {
+    // A block-header line whose free-text description includes a colon must not
+    // be misread as a message line and bypass escaping (issue surfaced by OCR).
+    const input = `${fence}mermaid
+sequenceDiagram
+  loop while status: pending; retry
+    A->>B: tick
+  end
+${fence}`;
+    const result = sanitizeSequenceDiagram(input);
+    expect(result).toContain('loop while status: pending#59; retry');
+    expect(result).not.toContain('pending; retry');
+  });
 });

@@ -400,16 +400,16 @@ export function gateSequenceDiagram(
  * avoid regex backtracking on adversarial input.
  */
 function escapeBareSemicolons(message: string): string {
-  let result = '';
+  const parts: string[] = [];
   for (let i = 0; i < message.length; i++) {
     const char = message.charAt(i);
     if (char === ';') {
-      result += terminatesMermaidEntity(message, i) ? ';' : '#59;';
+      parts.push(terminatesMermaidEntity(message, i) ? ';' : '#59;');
     } else {
-      result += char;
+      parts.push(char);
     }
   }
-  return result;
+  return parts.join('');
 }
 
 /**
@@ -540,12 +540,16 @@ export function sanitizeSequenceDiagram(diagram: string): string {
   const sanitized = inner
     .split('\n')
     .map((line) => {
+      const blockEscaped = escapeBlockHeaderSemicolons(line);
+      if (blockEscaped !== line) {
+        // Block-header lines (loop/alt/opt/par/...) carry a free-text
+        // description that may contain a colon, so they are handled before the
+        // message (arrow) branch; a bare `;` there breaks rendering too.
+        return blockEscaped;
+      }
       const colonIndex = line.indexOf(':');
       if (colonIndex === -1) {
-        // Block-header lines (loop/alt/opt/par/...) carry a free-text
-        // description with no colon; a bare `;` there breaks rendering just as
-        // it does in a message label.
-        return escapeBlockHeaderSemicolons(line);
+        return line;
       }
       const prefix = line.slice(0, colonIndex + 1);
       // Only message text (arrow interactions) and Note lines can carry the
