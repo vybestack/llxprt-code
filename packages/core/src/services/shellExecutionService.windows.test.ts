@@ -5,10 +5,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as os from 'os';
 import { spawn } from 'child_process';
 
-vi.mock('os');
+const mockPlatform = vi.hoisted(() => vi.fn(() => 'win32'));
+vi.mock('os', (importOriginal) => {
+  const actual = importOriginal() as typeof import('os');
+  return { ...actual, platform: mockPlatform };
+});
 
 // create a controllable fake child each time spawn is called
 type Listener = (...args: unknown[]) => void;
@@ -25,8 +28,8 @@ const fakeChildFactory = () => {
   return child;
 };
 
-vi.mock('child_process', async (orig) => {
-  const mod = await orig();
+vi.mock('child_process', (orig) => {
+  const mod = orig() as typeof import('child_process');
   return {
     ...mod,
     spawn: vi.fn(() => fakeChildFactory()),
@@ -48,15 +51,18 @@ function makeAbortSignal() {
   return c.signal;
 }
 
-describe.skipIf(process.platform !== 'win32')(
-  'ShellExecutionService (Windows behavior)',
-  () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-      vi.mocked(os.platform).mockReturnValue('win32');
-    });
+const isWindows = process.platform === 'win32';
 
-    it('uses PowerShell without shell: true on Windows', async () => {
+describe('ShellExecutionService (Windows behavior)', () => {
+  beforeEach(() => {
+    if (!isWindows) return;
+    vi.clearAllMocks();
+    mockPlatform.mockReturnValue('win32');
+  });
+
+  it.skipIf(!isWindows)(
+    'uses PowerShell without shell: true on Windows',
+    async () => {
       await ShellExecutionService.execute(
         'echo a & echo b',
         '.',
@@ -72,9 +78,12 @@ describe.skipIf(process.platform !== 'win32')(
           windowsVerbatimArguments: false,
         }),
       );
-    });
+    },
+  );
 
-    it('uses PowerShell without shell: true on Windows for simple commands', async () => {
+  it.skipIf(!isWindows)(
+    'uses PowerShell without shell: true on Windows for simple commands',
+    async () => {
       await ShellExecutionService.execute(
         'node -v',
         '.',
@@ -90,6 +99,6 @@ describe.skipIf(process.platform !== 'win32')(
           windowsVerbatimArguments: false,
         }),
       );
-    });
-  },
-);
+    },
+  );
+});

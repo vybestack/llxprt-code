@@ -8,18 +8,21 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SkillManager } from './skillManager.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { getBuiltinSkillsDir } from './skillLoader.js';
 
-vi.mock('./skillLoader.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./skillLoader.js')>();
+const mockGetBuiltinSkillsDir = vi.hoisted(() => vi.fn());
+
+vi.mock('./skillLoader.js', (importOriginal) => {
+  const actual = importOriginal() as typeof import('./skillLoader.js');
+  mockGetBuiltinSkillsDir.mockImplementation(actual.getBuiltinSkillsDir);
   return {
     ...actual,
-    loadSkillsFromDir: vi.fn(actual.loadSkillsFromDir),
-    getBuiltinSkillsDir: vi.fn(actual.getBuiltinSkillsDir),
+    loadSkillsFromDir: actual.loadSkillsFromDir,
+    getBuiltinSkillsDir: mockGetBuiltinSkillsDir,
   };
 });
+
+const { SkillManager } = await import('./skillManager.js');
 
 /**
  * Writes a SKILL.md file with valid YAML frontmatter into
@@ -54,7 +57,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
   afterEach(async () => {
     await fs.rm(testRootDir, { recursive: true, force: true });
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('discovers a skill placed only in the user .agents/skills dir with source "user"', async () => {
@@ -69,7 +72,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue('/non-existent');
     vi.spyOn(Storage, 'getUserAgentSkillsDir').mockReturnValue(userAgentDir);
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
@@ -103,7 +106,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue('/non-existent');
     vi.spyOn(Storage, 'getUserAgentSkillsDir').mockReturnValue('/non-existent');
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
@@ -134,7 +137,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userLlxprtDir);
     vi.spyOn(Storage, 'getUserAgentSkillsDir').mockReturnValue(userAgentDir);
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
@@ -179,7 +182,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userLlxprtDir);
     vi.spyOn(Storage, 'getUserAgentSkillsDir').mockReturnValue(userAgentDir);
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue(projectLlxprtDir);
@@ -223,7 +226,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue('/non-existent');
     vi.spyOn(Storage, 'getUserAgentSkillsDir').mockReturnValue(userAgentDir);
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue(projectLlxprtDir);
@@ -262,7 +265,7 @@ describe('SkillManager - .agents/skills alias discovery', () => {
 
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userLlxprtDir);
     vi.spyOn(Storage, 'getUserAgentSkillsDir').mockReturnValue('/non-existent');
-    vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+    mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const storage = new Storage('/dummy');
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');

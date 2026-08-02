@@ -65,9 +65,20 @@ function createMockBunSubprocess(
   };
 }
 
+/**
+ * Saves the original Bun.spawn so tests can restore it in afterEach.
+ * Bun is non-configurable on globalThis, so vi.stubGlobal('Bun') fails.
+ * Instead we directly overwrite Bun.spawn (which IS writable).
+ */
+const originalBunSpawn = Bun.spawn;
+
+function restoreBunSpawn(): void {
+  (Bun as unknown as { spawn: unknown }).spawn = originalBunSpawn;
+}
+
 function stubBunSpawn(subprocess: MockBunSubprocess): ReturnType<typeof vi.fn> {
   const spawn = vi.fn().mockReturnValue(subprocess);
-  vi.stubGlobal('Bun', { spawn });
+  (Bun as unknown as { spawn: unknown }).spawn = spawn;
   return spawn;
 }
 
@@ -81,7 +92,7 @@ function stubBunSpawnWithOptions(
       return subprocess;
     },
   );
-  vi.stubGlobal('Bun', { spawn });
+  (Bun as unknown as { spawn: unknown }).spawn = spawn;
   return {
     getOptions(): MockBunSpawnOptions {
       if (!capturedOptions) {
@@ -95,7 +106,7 @@ function stubBunSpawnWithOptions(
 describe('Bun PTY adapter spawn options', () => {
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
+    restoreBunSpawn();
   });
 
   it('passes cwd and sanitized environment to Bun.spawn', () => {

@@ -470,25 +470,22 @@ describe('policy config', () => {
   });
 
   it('should have default ASK_USER rule for discovered tools', async () => {
-    vi.resetModules();
-    vi.doUnmock('node:fs/promises');
-    const { createPolicyEngineConfig: createConfig } = await import(
-      './config.js'
-    );
-    // Re-mock Storage after resetModules because it was reloaded
-    const { Storage: FreshStorage } = await import(
+    const { Storage: StorageModule } = await import(
       '@vybestack/llxprt-code-settings'
     );
-    vi.spyOn(FreshStorage, 'getUserPoliciesDir').mockReturnValue(
+    vi.spyOn(StorageModule, 'getUserPoliciesDir').mockReturnValue(
       '/non/existent/user/policies',
     );
-    vi.spyOn(FreshStorage, 'getSystemPoliciesDir').mockReturnValue(
+    vi.spyOn(StorageModule, 'getSystemPoliciesDir').mockReturnValue(
       '/non/existent/system/policies',
     );
 
     const settings: PolicySettings = {};
     // Use default policy dir to load real discovered.toml
-    const config = await createConfig(settings, ApprovalMode.DEFAULT);
+    const config = await createPolicyEngineConfig(
+      settings,
+      ApprovalMode.DEFAULT,
+    );
 
     const discoveredRule = config.rules?.find(
       (r) =>

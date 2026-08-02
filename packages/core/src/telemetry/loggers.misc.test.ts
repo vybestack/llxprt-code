@@ -18,17 +18,6 @@ import {
   EVENT_EXTENSION_DISABLE,
 } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 import {
-  logHookCall,
-  logFileOperation,
-  logToolOutputTruncated,
-  logMalformedJsonResponse,
-  logModelRouting,
-  logExtensionInstallEvent,
-  logExtensionUninstall,
-  logExtensionEnable,
-  logExtensionDisable,
-} from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
-import {
   HookCallEvent,
   FileOperationEvent,
   ToolOutputTruncatedEvent,
@@ -40,10 +29,7 @@ import {
   ExtensionDisableEvent,
   FileOperation,
 } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
-import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
-import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { vi, describe, beforeEach, afterEach, it, expect } from 'vitest';
-import * as uiTelemetry from './uiTelemetry.js';
 
 // Mock ClearcutLogger to avoid import errors
 const mockClearcutLogger = {
@@ -60,6 +46,35 @@ const mockClearcutLogger = {
 (globalThis as { ClearcutLogger?: typeof mockClearcutLogger }).ClearcutLogger =
   mockClearcutLogger;
 
+const mockIsTelemetrySdkInitialized = vi.hoisted(() => vi.fn(() => true));
+vi.mock(
+  '@vybestack/llxprt-code-telemetry/telemetry/sdk.js',
+  (importOriginal) => {
+    const actual =
+      importOriginal() as typeof import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js');
+    return {
+      ...actual,
+      isTelemetrySdkInitialized: mockIsTelemetrySdkInitialized,
+    };
+  },
+);
+
+const {
+  logHookCall,
+  logFileOperation,
+  logToolOutputTruncated,
+  logMalformedJsonResponse,
+  logModelRouting,
+  logExtensionInstallEvent,
+  logExtensionUninstall,
+  logExtensionEnable,
+  logExtensionDisable,
+} = await import('@vybestack/llxprt-code-telemetry/telemetry/loggers.js');
+const metrics = await import(
+  '@vybestack/llxprt-code-telemetry/telemetry/metrics.js'
+);
+const uiTelemetry = await import('./uiTelemetry.js');
+
 describe('loggers', () => {
   const mockLogger = {
     emit: vi.fn(),
@@ -69,7 +84,8 @@ describe('loggers', () => {
   };
 
   beforeEach(() => {
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(true);
+    mockIsTelemetrySdkInitialized.mockReturnValue(true);
+    vi.clearAllTimers();
     vi.spyOn(logs, 'getLogger').mockReturnValue(mockLogger);
     vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
       mockUiEvent.addEvent,
@@ -281,8 +297,9 @@ describe('loggers', () => {
     });
 
     it('should not log if OTEL SDK is not initialized', () => {
-      mockLogger.emit.mockReset();
-      vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
+      mockLogger.emit.mockClear();
+      vi.mocked(metrics.recordModelRoutingMetrics).mockClear();
+      mockIsTelemetrySdkInitialized.mockReturnValue(false);
       const event = new ModelRoutingEvent(
         'gemini-pro',
         'default',

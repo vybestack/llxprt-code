@@ -9,7 +9,13 @@ import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 import { GoogleGenAI } from '@google/genai';
 import type { ModelGenerationRequest } from '../llm-types/modelRequest.js';
 
-vi.mock('@google/genai');
+vi.mock('@google/genai', (importOriginal) => {
+  const actual = importOriginal() as typeof import('@google/genai');
+  return {
+    ...actual,
+    GoogleGenAI: vi.fn(),
+  };
+});
 
 function makeModels() {
   const mockGenerateContent = vi.fn().mockResolvedValue({

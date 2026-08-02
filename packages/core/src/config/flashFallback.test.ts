@@ -10,7 +10,18 @@ import { DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
 
-vi.mock('node:fs');
+vi.mock('node:fs', (importOriginal) => {
+  const actual = importOriginal() as typeof import('node:fs');
+  const mockExistsSync = vi.fn();
+  const mockStatSync = vi.fn();
+  const mockExports = {
+    ...actual,
+    existsSync: mockExistsSync,
+    statSync: mockStatSync,
+  };
+  // Source uses `import fs from 'node:fs'` (default import)
+  return { ...mockExports, default: mockExports };
+});
 
 describe('Flash Model Fallback Configuration', () => {
   let config: Config;

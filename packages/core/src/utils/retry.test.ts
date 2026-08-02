@@ -12,6 +12,7 @@ import {
   isRetryableError,
 } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
+import * as delayModule from './delay.js';
 
 // Helper to create a mock function that fails a certain number of times
 const createFailingFunction = (
@@ -83,11 +84,10 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 10,
     });
 
-    // 2. Run timers and await expectation in parallel.
-    await Promise.all([
-      expect(promise).rejects.toThrow('Simulated error attempt 3'),
-      vi.runAllTimersAsync(),
-    ]);
+    // 2. Drain timers, then assert the rejection (sequential under Bun).
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Simulated error attempt 3');
 
     // 3. Finally, assert the number of calls.
     expect(mockFn).toHaveBeenCalledTimes(3);
@@ -100,10 +100,9 @@ describe('retryWithBackoff', () => {
     const promise = retryWithBackoff(mockFn);
 
     // Expect it to fail with the error from the 5th attempt.
-    await Promise.all([
-      expect(promise).rejects.toThrow('Simulated error attempt 5'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Simulated error attempt 5');
 
     expect(mockFn).toHaveBeenCalledTimes(5);
   });
@@ -115,10 +114,9 @@ describe('retryWithBackoff', () => {
     const promise = retryWithBackoff(mockFn, { maxAttempts: undefined });
 
     // Expect it to fail with the error from the 5th attempt.
-    await Promise.all([
-      expect(promise).rejects.toThrow('Simulated error attempt 5'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Simulated error attempt 5');
 
     expect(mockFn).toHaveBeenCalledTimes(5);
   });
@@ -163,10 +161,9 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 10,
     });
 
-    await Promise.all([
-      expect(promise).rejects.toThrow('Too Many Requests'),
-      vi.runAllTimersAsync(),
-    ]);
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Too Many Requests');
 
     expect(mockFn).toHaveBeenCalledTimes(2);
   });
@@ -199,11 +196,10 @@ describe('retryWithBackoff', () => {
       initialDelayMs: 10,
     });
 
-    // Run timers and await expectation in parallel.
-    await Promise.all([
-      expect(promise).rejects.toThrow('Too Many Requests'),
-      vi.runAllTimersAsync(),
-    ]);
+    // Run timers and await expectation (sequential under Bun).
+    promise.catch(() => {});
+    await vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow('Too Many Requests');
 
     expect(mockFn).toHaveBeenCalledTimes(2);
   });
@@ -225,7 +221,6 @@ describe('retryWithBackoff', () => {
   it('should respect maxDelayMs', async () => {
     const mockFn = createFailingFunction(3);
     const observedDelays: number[] = [];
-    const delayModule = await import('./delay.js');
 
     vi.spyOn(delayModule, 'delay').mockImplementation(async (ms: number) => {
       observedDelays.push(ms);
@@ -252,7 +247,6 @@ describe('retryWithBackoff', () => {
 
   it('should handle jitter correctly, ensuring varied delays', async () => {
     const observedDelays: number[] = [];
-    const delayModule = await import('./delay.js');
 
     vi.spyOn(delayModule, 'delay').mockImplementation(async (ms: number) => {
       observedDelays.push(ms);

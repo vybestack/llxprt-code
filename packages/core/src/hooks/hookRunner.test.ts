@@ -12,7 +12,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { HookRunner } from './hookRunner.js';
 import { HookEventName, HookType } from './types.js';
 import type { HookConfig } from './types.js';
 import type { Config } from '../config/config.js';
@@ -47,9 +46,9 @@ type MockChildProcessWithoutNullStreams = ChildProcessWithoutNullStreams & {
   mockProcessOn: ReturnType<typeof vi.fn>;
 };
 
-// Mock child_process with importOriginal for partial mocking
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal();
+// Mock child_process with sync importOriginal for partial mocking
+vi.mock('node:child_process', (importOriginal) => {
+  const actual = importOriginal() as typeof import('node:child_process');
   return {
     ...actual,
     spawn: vi.fn(),
@@ -84,6 +83,9 @@ const mockConsole = {
 };
 
 vi.stubGlobal('console', mockConsole);
+
+// Dynamic import AFTER vi.mock calls so mocks are applied.
+const { HookRunner } = await import('./hookRunner.js');
 
 describe('HookRunner', () => {
   let hookRunner: HookRunner;
@@ -372,11 +374,18 @@ describe('HookRunner', () => {
             mockInput,
           );
 
-          await vi.advanceTimersByTimeAsync(50);
+          // Let the async executeHook start and set up timers.
+          // Under fake timers, we need to flush microtasks for the async
+          // operation to proceed and register the setTimeout.
+          await vi.advanceTimersByTimeAsync(0);
+
+          // Advance timers to trigger SIGTERM (timeout=50ms)
+          vi.advanceTimersByTime(50);
           expect(signals).toStrictEqual(['SIGTERM']);
           expect(mockSpawn.killed).toBe(true);
 
-          await vi.advanceTimersByTimeAsync(5000);
+          // Advance timers to trigger SIGKILL escalation (5000ms after SIGTERM)
+          vi.advanceTimersByTime(5000);
           expect(signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
 
           const result = await resultPromise;
@@ -755,7 +764,7 @@ describe('HookRunner', () => {
       );
 
       expect(results).toHaveLength(2);
-      expect(results.every((r) => !r.success)).toBe(true);
+      expect(results.every((r) => r.success === false)).toBe(true);
 
       // Verify that both hooks received the same original input
       const firstHookInput = JSON.parse(

@@ -1347,6 +1347,11 @@ jobs:
           path: 'coverage_cli'
 
       - name: 'Download core coverage (core shard)'
+        # Core tests migrated to Bun's native runner (issue #2842) and no
+        # longer upload a Vitest coverage artifact.  Continue-on-error lets
+        # the post-coverage-comment action report "N/A" for core instead of
+        # failing the job.
+        continue-on-error: true
         uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: 'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}'

@@ -9,10 +9,8 @@ import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderWithRuntime } from '../test-utils/runtime.js';
 
 // Mock the settings service instance
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
+vi.mock('@vybestack/llxprt-code-settings', (importOriginal) => ({
+  ...(importOriginal() as typeof import('@vybestack/llxprt-code-settings')),
   getSettingsService: vi.fn(),
 }));
 
@@ -157,9 +155,15 @@ describe('Provider Settings Integration', () => {
     const provider = instantiateProvider('test-compat');
 
     // These should work with SettingsService integration
-    await expect(provider.getModelFromSettings()).resolves.not.toThrow();
-    await expect(provider.getApiKeyFromSettings()).resolves.not.toThrow();
-    await expect(provider.getBaseUrlFromSettings()).resolves.not.toThrow();
-    await expect(provider.getModelParamsFromSettings()).resolves.not.toThrow();
+    let error: unknown;
+    try {
+      await provider.getModelFromSettings();
+      await provider.getApiKeyFromSettings();
+      await provider.getBaseUrlFromSettings();
+      await provider.getModelParamsFromSettings();
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeUndefined();
   });
 });

@@ -142,12 +142,14 @@ describe('prompts', () => {
 
   describe('initializePromptSystem', () => {
     it('should initialize without errors', async () => {
-      await expect(initializePromptSystem()).resolves.not.toThrow();
+      expect.assertions(0);
+      await initializePromptSystem();
     });
 
     it('should allow multiple initializations', async () => {
-      await expect(initializePromptSystem()).resolves.not.toThrow();
-      await expect(initializePromptSystem()).resolves.not.toThrow();
+      expect.assertions(0);
+      await initializePromptSystem();
+      await initializePromptSystem();
     });
   });
 });

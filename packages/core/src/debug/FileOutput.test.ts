@@ -366,7 +366,7 @@ describe('FileOutput', () => {
     await fileOutput.write(logEntry);
 
     // Dispose should complete without errors
-    await expect(fileOutput.dispose()).resolves.not.toThrow();
+    await fileOutput.dispose();
 
     // Verify that appendFile was called during the write operation
     expect(fs.appendFile).toHaveBeenCalled();
@@ -450,7 +450,7 @@ describe('FileOutput', () => {
     };
 
     // Should not throw
-    await expect(fileOutput.write(logEntry)).resolves.not.toThrow();
+    await fileOutput.write(logEntry);
 
     // Should log error to console
     expect(consoleSpy).toHaveBeenCalledWith(

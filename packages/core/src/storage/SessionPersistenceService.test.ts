@@ -490,7 +490,7 @@ describe('SessionPersistenceService', () => {
 
       await expect(
         service.save([], undefined, undefined),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
 
     it('should handle large history arrays', async () => {
@@ -503,15 +503,14 @@ describe('SessionPersistenceService', () => {
         blocks: [{ type: 'text', text: `Message ${i}` }],
       }));
 
-      await expect(
-        service.save(
-          largeHistory as unknown as Array<
-            import('../services/history/IContent.js').IContent
-          >,
-          undefined,
-          undefined,
-        ),
-      ).resolves.not.toThrow();
+      await service.save(
+        largeHistory as unknown as Array<
+          import('../services/history/IContent.js').IContent
+        >,
+        undefined,
+        undefined,
+      );
+      expect(vi.mocked(fs.promises.writeFile)).toHaveBeenCalled();
     });
 
     it('should handle special characters in project path', () => {

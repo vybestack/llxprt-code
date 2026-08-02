@@ -556,7 +556,7 @@ describe('FileSearch', () => {
 
   it('should be cancellable via AbortSignal', async () => {
     const largeDir: Record<string, string> = {};
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 5000; i++) {
       largeDir[`file${i}.js`] = '';
     }
     tmpDir = await createTmpDir(largeDir);
@@ -580,7 +580,7 @@ describe('FileSearch', () => {
     });
 
     // Yield to allow the search to start before aborting.
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     controller.abort();
 

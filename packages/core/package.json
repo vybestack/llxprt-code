@@ -508,8 +508,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:ci": "vitest run",
+    "test": "bun run-bun-tests.ts",
+    "test:ci": "bun run-bun-tests.ts",
+    "test:vitest": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },

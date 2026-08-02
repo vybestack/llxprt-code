@@ -11,8 +11,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { HookSystem } from './hookSystem.js';
-import { HookSystemNotInitializedError } from './errors.js';
 import type { Config } from '../config/config.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 
@@ -41,6 +39,13 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   promises: {},
 }));
+
+// Dynamic imports AFTER vi.mock calls so mocks are applied.
+const hookSystemModule = await import('./hookSystem.js');
+const HookSystem = hookSystemModule.HookSystem;
+const errorsModule = await import('./errors.js');
+const HookSystemNotInitializedError =
+  errorsModule.HookSystemNotInitializedError;
 
 describe('HookSystem', () => {
   let hookSystem: HookSystem;
