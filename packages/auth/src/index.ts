@@ -115,6 +115,7 @@ export {
   FrameDecoder,
   FrameError,
   MAX_FRAME_SIZE,
+  V1_MAX_FRAME_SIZE,
   PARTIAL_FRAME_TIMEOUT_MS,
 } from './proxy/framing.js';
 export type { FrameDecoderOptions } from './proxy/framing.js';
@@ -125,7 +126,10 @@ export {
   IDLE_TIMEOUT_MS,
   PROTOCOL_VERSION,
 } from './proxy/proxy-socket-client.js';
-export type { ProxyResponse } from './proxy/proxy-socket-client.js';
+export type {
+  ProxyResponse,
+  RequestOptions,
+} from './proxy/proxy-socket-client.js';
 
 export { ProxyTokenStore } from './proxy/proxy-token-store.js';
 export { ProxyProviderKeyStorage } from './proxy/proxy-provider-key-storage.js';

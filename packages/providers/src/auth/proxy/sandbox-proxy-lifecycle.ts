@@ -31,6 +31,7 @@ import {
   type OAuthFlowInterface,
 } from './credential-proxy-server.js';
 import { RefreshCoordinator } from './refresh-coordinator.js';
+import { createGitHubBrokerHandler } from './github-broker.js';
 
 export interface SandboxProxyConfig {
   socketPath: string;
@@ -191,6 +192,14 @@ export async function createAndStartProxy(
       flowFactories,
       refreshCoordinator,
       capabilityToken: actualCapabilityToken,
+      // The GitHub broker only exists for the sandbox, so this is the one
+      // place that must register it. Without it a sandboxed agent builds a
+      // proxy client, sends github ops over this socket, and receives
+      // UNKNOWN_OP - the broker present and unreachable.
+      //
+      // @plan PLAN-20260731-GHBROKER.P15
+      // @requirement REQ-003
+      extraHandlers: { github: createGitHubBrokerHandler().handler },
     });
 
     actualSocketPath = await serverInstance.start();
