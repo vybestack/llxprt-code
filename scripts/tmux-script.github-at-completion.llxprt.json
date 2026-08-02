@@ -1,0 +1,85 @@
+{
+  "tmux": {
+    "cols": 110,
+    "rows": 28,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 8000
+  },
+  "yolo": false,
+  "steps": [
+    {
+      "type": "capture",
+      "label": "00-startup",
+      "scope": "screen"
+    },
+
+    {
+      "type": "line",
+      "text": "@issue-",
+      "submitKeys": [],
+      "postTypeMs": 4000
+    },
+    {
+      "type": "capture",
+      "label": "01-issue-prefix-suggestions",
+      "scope": "screen"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "issue-[0-9]+",
+      "timeoutMs": 25000
+    },
+
+    { "type": "key", "key": "C-c" },
+    { "type": "wait", "ms": 800 },
+
+    {
+      "type": "line",
+      "text": "@pr-",
+      "submitKeys": [],
+      "postTypeMs": 4000
+    },
+    {
+      "type": "capture",
+      "label": "02-pr-prefix-suggestions",
+      "scope": "screen"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "pr-[0-9]+",
+      "timeoutMs": 25000
+    },
+
+    { "type": "key", "key": "C-c" },
+    { "type": "wait", "ms": 800 },
+
+    {
+      "type": "line",
+      "text": "@src/ind",
+      "submitKeys": [],
+      "postTypeMs": 2500
+    },
+    {
+      "type": "capture",
+      "label": "03-file-completion-unaffected",
+      "scope": "screen"
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "regex": "issue-[0-9]+",
+      "timeoutMs": 3000
+    },
+
+    { "type": "key", "key": "C-c" },
+    { "type": "wait", "ms": 500 },
+    {
+      "type": "capture",
+      "label": "04-final",
+      "scope": "screen"
+    }
+  ]
+}

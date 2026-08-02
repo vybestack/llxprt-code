@@ -49,6 +49,7 @@ import {
 } from '../utils/extensionLoader.js';
 import { SkillManager } from '../skills/skillManager.js';
 import { setLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
+import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import { debugLogger } from '../utils/debugLogger.js';
 import { initializeTelemetry } from '../telemetry/index.js';
 import { OutputFormat } from '../utils/output-format.js';
@@ -157,6 +158,7 @@ export interface ConfigConstructorTarget {
   shellReplacement: ShellReplacementMode;
   trustedFolder: boolean | undefined;
   useRipgrep: boolean;
+  githubBrokerClient: GitHubBrokerClient | undefined;
   shouldUseNodePtyShell: boolean;
   allowPtyThemeOverride: boolean;
   ptyScrollbackLimit: number;
@@ -391,6 +393,8 @@ function applyBasicRuntimeFlags(
   config.shellReplacement = normalizeShellReplacement(params.shellReplacement);
   config.trustedFolder = params.trustedFolder;
   config.useRipgrep = params.useRipgrep ?? false;
+  // @plan PLAN-20260731-GHBROKER.P15
+  config.githubBrokerClient = params.githubBrokerClient;
 }
 
 function applyExtensionFlags(

@@ -1,26 +1,33 @@
 # Retry Settings Configuration
 
-LLxprt Code implements configurable exponential backoff retry logic for API calls to LLM providers. These settings help manage rate limits and transient errors effectively.
+LLxprt Code implements configurable exponential backoff retry logic for API
+calls to LLM providers. These settings help manage rate limits and transient
+errors effectively.
 
-## Ephemeral Settings
+## Ephemeral settings
 
-Retry configuration can be set as ephemeral settings, which means they can be changed during a session without modifying your saved profiles or configuration files.
+Retry configuration uses ephemeral settings, which means they can be changed
+during a session without modifying your saved profiles or configuration files.
 
-### Available Retry Settings
+### Available retry settings
 
 - **`retries`** (number):
-  - **Description:** Maximum number of retry attempts for API calls. LLxprt now uses a unified default across providers.
-  - **Default:** `6`
+  - **Description:** Maximum number of retry attempts for API calls.
+  - **Default:** `6` for most providers (OpenAI Responses API, Anthropic).
+    Some providers apply their own default — for example, the OpenAI Vercel
+    provider defaults to `2`.
   - **Example:** `/set retries 3`
 
 - **`retrywait`** (number):
-  - **Description:** Initial delay in milliseconds between retry attempts. The delay increases exponentially for subsequent retries.
+  - **Description:** Initial delay in milliseconds between retry attempts. The
+    delay increases exponentially for subsequent retries.
   - **Default:** `4000` ms
   - **Example:** `/set retrywait 10000`
 
-### How to Configure Retry Settings
+### How to configure retry settings
 
-Use the `/set` command within the LLxprt Code CLI to configure retry settings for your session:
+Use the `/set` command within the LLxprt Code CLI to configure retry settings
+for your session:
 
 ```bash
 # Set maximum retry attempts to 3
@@ -30,16 +37,17 @@ Use the `/set` command within the LLxprt Code CLI to configure retry settings fo
 /set retrywait 10000
 ```
 
-These settings will apply to all subsequent API calls during your session and can be overridden at any time.
+These settings apply to all subsequent API calls during your session and can be
+overridden at any time. To persist them, use `/profile save`.
 
-### Provider-Specific Retry Behavior
+### Provider-specific retry behavior
 
-The retry logic now uses the same baseline everywhere (6 attempts, 4-second initial delay) and includes:
+When you do not set these explicitly, each provider applies its own default.
+The retry logic includes:
 
-- Special handling for 429 (rate limit) errors (respecting `Retry-After` headers)
-- Automatic detection of transient network issues (socket resets, stream interruptions)
-- Integration with streaming pipelines so SSE disconnects are retried without user intervention
-
-### Technical Implementation
-
-The retry mechanism is implemented in `packages/core/src/utils/retry.ts` and uses exponential backoff with jitter. Provider implementations in `packages/core/src/providers/` have been updated to use these global settings.
+- Special handling for 429 (rate limit) errors, respecting `Retry-After`
+  headers.
+- Automatic detection of transient network issues (socket resets, stream
+  interruptions).
+- Integration with streaming pipelines so SSE disconnects are retried without
+  user intervention.

@@ -28,6 +28,10 @@ import {
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import { MAX_SUGGESTIONS_TO_SHOW } from '../components/SuggestionsDisplay.js';
 import { CommandKind } from '../commands/types.js';
+import {
+  fetchGitHubSuggestions,
+  parseGitHubAtPattern,
+} from './githubAtCompletion.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 150;
@@ -203,6 +207,77 @@ async function buildSubagentCandidates(
   }
 }
 
+/**
+ * Fetches GitHub suggestions when the pattern commits to an `@issue-`/`@pr-`
+ * prefix, and otherwise does nothing.
+ *
+ * GitHub candidates cannot be pre-computed the way files and subagents can,
+ * so this is the one source that may reach the network. Gating on the prefix
+ * keeps ordinary file completion request-free.
+ *
+ * @plan PLAN-20260731-GHBROKER.P16
+ * @requirement REQ-014
+ */
+async function buildGitHubSuggestions(
+  pattern: string,
+  config: CliUiRuntime | undefined,
+  signal: AbortSignal,
+): Promise<Suggestion[]> {
+  const parsed = parseGitHubAtPattern(pattern);
+  if (parsed === null) return [];
+  return fetchGitHubSuggestions(
+    config?.getGitHubBrokerClient(),
+    parsed,
+    signal,
+  );
+}
+
+/**
+ * Collects every suggestion source that is not the filesystem walk.
+ *
+ * GitHub suggestions are kept separate so they can be listed first: when the
+ * user has typed `@issue-`, an issue is what they meant, and burying it under
+ * fuzzy file matches would defeat the point.
+ *
+ * @plan PLAN-20260731-GHBROKER.P16
+ * @requirement REQ-014
+ */
+async function buildNonFileSuggestions(
+  pattern: string,
+  config: CliUiRuntime | undefined,
+  signal: AbortSignal,
+): Promise<{ github: Suggestion[]; rest: Suggestion[] }> {
+  // Run concurrently: these sources are independent, and the GitHub one may
+  // make a network call. Awaiting them in sequence would let a slow GitHub
+  // response delay suggestions that are already computed locally.
+  // fetchGitHubSuggestions swallows its own errors, so no rejection here can
+  // short-circuit the others.
+  // allSettled, not all: these sources are independent affordances, so one
+  // failing must not discard the others' results. Promise.all would reject
+  // the whole set and drop suggestions that had already been computed.
+  // Each source is also invoked inside its own thunk so a synchronous throw
+  // during construction cannot escape before the others start.
+  const settled = await Promise.allSettled([
+    (async () =>
+      searchResourceCandidates(
+        pattern,
+        buildResourceCandidates(config),
+        signal,
+      ))(),
+    (async () =>
+      searchSubagentCandidates(
+        pattern,
+        await buildSubagentCandidates(config),
+        signal,
+      ))(),
+    (async () => buildGitHubSuggestions(pattern, config, signal))(),
+  ]);
+  const [resources, subagents, github] = settled.map((r) =>
+    r.status === 'fulfilled' ? r.value : [],
+  );
+  return { github, rest: [...resources, ...subagents] };
+}
+
 async function searchResourceCandidates(
   pattern: string,
   candidates: ResourceSuggestionCandidate[],
@@ -346,17 +421,9 @@ async function performSearch(
       value: escapePath(p),
     }));
 
-    const resourceCandidates = buildResourceCandidates(config);
-    const resourceSuggestions = await searchResourceCandidates(
+    const nonFileSuggestions = await buildNonFileSuggestions(
       pattern,
-      resourceCandidates,
-      controller.signal,
-    );
-
-    const subagentCandidates = await buildSubagentCandidates(config);
-    const subagentSuggestions = await searchSubagentCandidates(
-      pattern,
-      subagentCandidates,
+      config,
       controller.signal,
     );
 
@@ -374,9 +441,9 @@ async function performSearch(
     dispatch({
       type: 'SEARCH_SUCCESS',
       payload: [
+        ...nonFileSuggestions.github,
         ...fileSuggestions,
-        ...resourceSuggestions,
-        ...subagentSuggestions,
+        ...nonFileSuggestions.rest,
       ],
     });
   } catch (error) {
