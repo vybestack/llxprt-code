@@ -12,8 +12,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
-vi.mock('node:child_process');
-vi.mock('node:fs/promises');
+// Only `spawn` is replaced, and the real module is spread rather than
+// automocked: automocking walks every export, which throws on ChildProcess's
+// private `#stdin` getter under Bun's native runner.
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  spawn: vi.fn(),
+}));
 
 import { setupSshAgentForwarding } from './sandbox.js';
 
@@ -258,6 +263,7 @@ describe('setupSshAgentForwarding SSH agent identity preflight', () => {
     const { args } = await runForwarding('podman', ['--network', 'none']);
 
     expect(args).toStrictEqual(['--network', 'none']);
+    expect(child_process.spawn).not.toHaveBeenCalled();
     expect(stderrText()).toBe('');
   });
 });
