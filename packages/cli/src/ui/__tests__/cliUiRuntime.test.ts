@@ -109,7 +109,8 @@ describe('buildSlashCommandRuntime image capability', () => {
    * configured" even when one is wired.
    */
   it('forwards getRunImageOperation through the flattened runtime', () => {
-    const runner = () => Promise.resolve({ absoluteOutputPath: '/tmp/out.png' });
+    const runner = () =>
+      Promise.resolve({ absoluteOutputPath: '/tmp/out.png' });
     const source = createProxySource({
       getRunImageOperation: () => runner,
     });
