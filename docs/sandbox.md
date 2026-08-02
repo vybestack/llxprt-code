@@ -65,6 +65,49 @@ The sandbox raises the bar for accidental damage and limits the blast radius of
 LLM-generated commands. It is a containment control, not a full security
 isolation boundary.
 
+## Using GitHub from a Sandbox
+
+> **Applies to Docker and Podman.** Seatbelt has no credential isolation — it
+> runs on the host with your full keyring — so nothing below describes a
+> boundary under Seatbelt. Use a container engine if this matters to you.
+
+With Docker or Podman, no GitHub credential is placed in the container, so `gh`
+inside the sandbox is not authenticated. Use the
+[`github` tool](./tools/github.md) instead: the model names an operation, the
+host runs `gh`, and shaped results come back. The credential stays on the host.
+
+This covers issues, pull requests, reviews, checks and labels, including
+blocking on CI with `pr.checks` and `watch: true`. The tool works the same way
+outside a sandbox, so there is no mode-specific behaviour to learn.
+
+### Why not just pass the token in?
+
+An obvious alternative is to inject the token as an environment variable and
+strip it out of command output. That does not work, and it is worth recording
+why so it is not proposed again:
+
+```bash
+echo ${GH_TOKEN:0:20}; echo ${GH_TOKEN:20}   # neither half matches a filter
+echo $GH_TOKEN | base64                      # or rev, or md5
+curl -H "Authorization: bearer $GH_TOKEN" example.com   # never touches stdout
+```
+
+Networking is on by default, so the last one alone defeats output filtering.
+Once a secret is in the environment of a shell the model controls, the model
+has the secret. Filtering output is useful hygiene against accidental leakage
+in logs, but it is not a boundary.
+
+The tool takes the other approach: the agent gets a **capability** — the set of
+operations the host is willing to perform — rather than the credential itself.
+
+### What this does and does not protect
+
+The sandbox exists to stop credential theft by a prompt-injected or over-eager
+agent. It does **not** try to prevent misuse of capabilities you deliberately
+granted: if the agent can comment on issues, it can post a bad comment. That is
+a consequence of granting the capability, which is why write operations ask for
+confirmation.
+
 ## What is isolated, and what is not
 
 The boundary differs by engine. The table summarizes what each engine isolates
