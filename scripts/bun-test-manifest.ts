@@ -189,6 +189,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.issue2411.test.ts',
       'src/anthropic/AnthropicProvider.issue276.test.ts',
       'src/anthropic/AnthropicProvider.mediaBlock.test.ts',
+      'src/anthropic/AnthropicProvider.multiBlock.test.ts',
       'src/anthropic/AnthropicProvider.messaging.test.ts',
       'src/anthropic/AnthropicProvider.modelParams.test.ts',
       'src/anthropic/AnthropicProvider.oauth.test.ts',
