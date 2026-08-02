@@ -415,7 +415,7 @@ describe('OCR mergeability gate wiring (.github/workflows/ocr-review.yml)', () =
     expect(codeReviewSteps?.some((s) => s.name === 'Resolve PR context')).toBe(
       true,
     );
-    expect(codeReviewJob?.['timeout-minutes']).toBe(60);
+    expect(codeReviewJob?.['timeout-minutes']).toBe(120);
   });
 
   it('the gate job has no checkout, no secrets, and no code execution', () => {

@@ -21,6 +21,7 @@ export type {
   ISecureStoreError,
   SecureStoreErrorCode,
 } from './secure-store.js';
+export { isRuntimeReplacedStoreError } from './secure-store.js';
 
 export type { ISettingsService } from './settings-service.js';
 

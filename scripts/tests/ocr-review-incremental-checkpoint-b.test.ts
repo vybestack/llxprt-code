@@ -491,7 +491,7 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       );
     });
 
-    it('reads only the authenticated bot marker comment through the GitHub API', () => {
+    it('selects the trusted marker comment through the canonical snippet (issue #2860)', () => {
       expect(readCheckpointScript).toContain('github.rest.issues.listComments');
       expect(readCheckpointScript).toContain(
         "const MARKER = '<!-- llxprt-code-ocr-review -->';",
@@ -499,27 +499,28 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
       expect(readCheckpointScript).toContain(
         'github.rest.users.getAuthenticated',
       );
-      expect(readCheckpointScript).toContain("comment.user.type === 'Bot'");
-      expect(readCheckpointScript).toContain('comment.user.login === botLogin');
+      expect(readCheckpointScript).toContain('newestTrustedMarkerMatching(');
+      expect(readCheckpointScript).toContain('canonicalMarkerComment(');
       const fetchMarkerSource = extractFunctionSource(
         Array.isArray(postScript) ? postScript.join('\n') : postScript,
         'fetchMarkerComments',
       );
-      expect(fetchMarkerSource).toContain("c.user.type === 'Bot'");
-      expect(fetchMarkerSource).toContain('c.user.login === botLogin');
+      expect(fetchMarkerSource).toContain('trustedMarkerComments(');
     });
 
-    it('handles getAuthenticated failure gracefully with OCR_BOT_LOGIN fallback', () => {
+    it('handles getAuthenticated failure without narrowing trust (issue #2860)', () => {
       expect(readCheckpointScript).toContain(
         'core.warning(`Could not resolve authenticated bot login',
       );
-      expect(readCheckpointScript).toContain("process.env.OCR_BOT_LOGIN || ''");
+      expect(readCheckpointScript).toContain(
+        'resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN)',
+      );
       const env = getEnv(readCheckpointStep);
       expect(env?.OCR_BOT_LOGIN).toBe('${{ vars.OCR_BOT_LOGIN }}');
     });
 
-    it('uses find() not findLast() for marker comment lookup (symmetric with reconcileMarkerComment)', () => {
-      expect(readCheckpointScript).toContain('comments.find(');
+    it('uses deterministic canonical selection for marker comment lookup (issue #2860)', () => {
+      expect(readCheckpointScript).not.toContain('comments.find(');
       expect(readCheckpointScript).not.toContain('findLast(');
     });
 
@@ -565,13 +566,13 @@ describe('.github/workflows/ocr-review.yml — incremental checkpoints (issue #2
     it('preserves the prior checkpoint while posting a failed-run summary', () => {
       expect(postScript).toContain('const summaryWithExistingCheckpoint');
       expect(postScript).toContain(
-        'createOrUpdateMarkerComment(summaryWithExistingCheckpoint)',
+        'createOrUpdateMarkerComment(summaryWithExistingCheckpoint, isAutomatic)',
       );
       expect(
         postScript.indexOf('const summaryWithExistingCheckpoint'),
       ).toBeLessThan(
         postScript.indexOf(
-          'createOrUpdateMarkerComment(summaryWithExistingCheckpoint)',
+          'createOrUpdateMarkerComment(summaryWithExistingCheckpoint, isAutomatic)',
         ),
       );
     });

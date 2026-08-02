@@ -163,6 +163,10 @@
       "bun": "./src/services/history/historyProviderPipeline.ts",
       "import": "./dist/src/services/history/historyProviderPipeline.js"
     },
+    "./services/history/historyChronology.js": {
+      "bun": "./src/services/history/historyChronology.ts",
+      "import": "./dist/src/services/history/historyChronology.js"
+    },
     "./services/history/historyTokenEstimation.js": {
       "bun": "./src/services/history/historyTokenEstimation.ts",
       "import": "./dist/src/services/history/historyTokenEstimation.js"
@@ -415,6 +419,18 @@
       "bun": "./src/runtime/contracts/RuntimeProviderChat.ts",
       "import": "./dist/src/runtime/contracts/RuntimeProviderChat.js"
     },
+    "./runtime/contracts/PromptEstimation.js": {
+      "bun": "./src/runtime/contracts/PromptEstimation.ts",
+      "import": "./dist/src/runtime/contracts/PromptEstimation.js"
+    },
+    "./runtime/contracts/RuntimeTokenizer.js": {
+      "bun": "./src/runtime/contracts/RuntimeTokenizer.ts",
+      "import": "./dist/src/runtime/contracts/RuntimeTokenizer.js"
+    },
+    "./runtime/contracts/RuntimeTokenizerFactory.js": {
+      "bun": "./src/runtime/contracts/RuntimeTokenizerFactory.ts",
+      "import": "./dist/src/runtime/contracts/RuntimeTokenizerFactory.js"
+    },
     "./runtime/runtimeStateFactory.js": {
       "bun": "./src/runtime/runtimeStateFactory.ts",
       "import": "./dist/src/runtime/runtimeStateFactory.js"
@@ -500,8 +516,9 @@
     "build": "bun ../../scripts/build_package.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "vitest run",
-    "test:ci": "vitest run",
+    "test": "bun run-bun-tests.ts",
+    "test:ci": "bun run-bun-tests.ts",
+    "test:vitest": "vitest run",
     "test:mutation": "stryker run stryker.conf.json",
     "typecheck": "tsc --noEmit"
   },
@@ -540,7 +557,7 @@
     "@ast-grep/lang-scala": "^0.0.6",
     "@ast-grep/lang-swift": "^0.0.7",
     "@ast-grep/napi": "^0.40.5",
-    "@dqbd/tiktoken": "^1.0.21",
+    "@dqbd/tiktoken": "1.0.22",
     "@google/genai": "1.30.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.2",

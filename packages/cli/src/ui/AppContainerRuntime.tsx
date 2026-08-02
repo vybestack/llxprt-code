@@ -83,6 +83,7 @@ function buildInputParams(
     agent: bootstrap.agent,
     settings: bootstrap.settings,
     runtime: bootstrap.runtime,
+    subagentManager: bootstrap.uiRuntime.app.getSubagentManager(),
     history: bootstrap.history,
     addItem: bootstrap.addItem,
     clearItems: bootstrap.clearItems,
@@ -107,6 +108,7 @@ function buildInputParams(
     openSubagentDialog: dialogs.openSubagentDialog,
     openModelsDialog: dialogs.openModelsDialog,
     openPermissionsDialog: dialogs.openPermissionsDialog,
+    openPoliciesDialog: dialogs.openPoliciesDialog,
     openProviderDialog: dialogs.openProviderDialog,
     openLoadProfileDialog: dialogs.openLoadProfileDialog,
     openCreateProfileDialog: dialogs.openCreateProfileDialog,
@@ -243,6 +245,7 @@ function buildUIStateParamsCore(
     isModelsDialogOpen: d.isModelsDialogOpen,
     isSessionBrowserDialogOpen: d.isSessionBrowserDialogOpen,
     isModelConfigDialogOpen: d.isModelConfigDialogOpen,
+    isPoliciesDialogOpen: d.isPoliciesDialogOpen,
     providerOptions: d.isCreateProfileDialogOpen
       ? d.createProfileProviders
       : d.providerOptions,
@@ -333,25 +336,25 @@ function buildUIStateParamsExtra(r: HookResults) {
   };
 }
 
-function buildUIActionsParams(r: HookResults) {
-  const { bootstrap: b, dialogs: d, input: i, layout: l } = r;
+function extraDialogActions(d: AppDialogsResult) {
   return {
-    addItem: b.addItem,
-    clearItems: b.clearItems,
-    loadHistory: b.loadHistory,
+    openModelConfigDialog: d.openModelConfigDialog,
+    closeModelConfigDialog: d.closeModelConfigDialog,
+    openPoliciesDialog: d.openPoliciesDialog,
+    closePoliciesDialog: d.closePoliciesDialog,
+  };
+}
+
+function dialogActionsParams(d: HookResults['dialogs']) {
+  return {
     refreshStatic: d.refreshStatic,
-    handleUserInputSubmit: i.handleUserInputSubmit,
-    handleSteer: i.handleSteer,
-    handleClearScreen: l.handleClearScreen,
     openThemeDialog: d.openThemeDialog,
     handleThemeSelect: d.handleThemeSelect,
     handleThemeHighlight: d.handleThemeHighlight,
     openSettingsDialog: d.openSettingsDialog,
     closeSettingsDialog: d.closeSettingsDialog,
-    handleSettingsRestart: i.handleSettingsRestart,
     openAuthDialog: d.openAuthDialog,
     handleAuthSelect: d.handleAuthSelect,
-    handleAuthTimeout: i.handleAuthTimeout,
     openEditorDialog: d.openEditorDialog,
     handleEditorSelect: d.handleEditorSelect,
     exitEditorDialog: d.exitEditorDialog,
@@ -388,29 +391,48 @@ function buildUIActionsParams(r: HookResults) {
     closeSubagentDialog: d.closeSubagentDialog,
     openModelsDialog: d.openModelsDialog,
     closeModelsDialog: d.closeModelsDialog,
-    openModelConfigDialog: d.openModelConfigDialog,
-    closeModelConfigDialog: d.closeModelConfigDialog,
+
+    ...extraDialogActions(d),
+
     openSessionBrowserDialog: d.openSessionBrowserDialog,
     closeSessionBrowserDialog: d.closeSessionBrowserDialog,
     onWorkspaceMigrationDialogOpen: d.onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose: d.onWorkspaceMigrationDialogClose,
     openPrivacyNotice: d.openPrivacyNotice,
     handlePrivacyNoticeExit: d.handlePrivacyNoticeExit,
-    handleOAuthCodeDialogClose: i.handleOAuthCodeDialogClose,
-    handleOAuthCodeSubmit: i.handleOAuthCodeSubmit,
-    handleConfirmationSelect: l.handleConfirmationSelect,
-    handleIdePromptComplete: i.handleIdePromptComplete,
-    vimHandleInput: i.vimHandleInput,
-    toggleVimEnabled: i.toggleVimEnabled,
-    handleSlashCommand: i.handleSlashCommand,
     performMemoryRefresh: d.performMemoryRefresh,
     setShowErrorDetails: d.setShowErrorDetails,
     setShowToolDescriptions: d.setShowToolDescriptions,
     setConstrainHeight: d.setConstrainHeight,
     setShellModeActive: d.setShellModeActive,
     handleEscapePromptChange: d.handleEscapePromptChange,
-    cancelOngoingRequest: i.cancelOngoingRequest,
     setQueueErrorMessage: d.setQueueErrorMessage,
+  };
+}
+
+function buildUIActionsParams(r: HookResults) {
+  const { bootstrap: b, input: i, layout: l } = r;
+  return {
+    addItem: b.addItem,
+    clearItems: b.clearItems,
+    loadHistory: b.loadHistory,
+    handleUserInputSubmit: i.handleUserInputSubmit,
+    handleSteer: i.handleSteer,
+    handleClearScreen: l.handleClearScreen,
+    handleSettingsRestart: i.handleSettingsRestart,
+    handleAuthTimeout: i.handleAuthTimeout,
+    handleConfirmationSelect: l.handleConfirmationSelect,
+    handleIdePromptComplete: i.handleIdePromptComplete,
+    vimHandleInput: i.vimHandleInput,
+    toggleVimEnabled: i.toggleVimEnabled,
+    handleSlashCommand: i.handleSlashCommand,
+    handleOAuthCodeDialogClose: i.handleOAuthCodeDialogClose,
+    handleOAuthCodeSubmit: i.handleOAuthCodeSubmit,
+    cancelOngoingRequest: i.cancelOngoingRequest,
+    sendAllQueuedSubmissions: i.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: i.steerAllQueuedSubmissions,
+    clearQueuedSubmissions: i.clearQueuedSubmissions,
+    ...dialogActionsParams(r.dialogs),
   };
 }
 

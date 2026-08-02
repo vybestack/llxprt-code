@@ -20,6 +20,12 @@ export interface PendingTokenEstimate {
   readonly model: string;
   readonly estimatedTokens: number;
   readonly estimator: TokenEstimatorType;
+  readonly estimatorMethod?: 'exact' | 'calibrated';
+  readonly estimatorFamily?: string;
+  readonly estimatorVersion?: string;
+  readonly assetRevision?: string;
+  readonly projectionRevision?: number;
+  readonly protocol?: string;
   readonly tiktokenTokens: number | null;
   readonly tiktokenEstimationFailed?: boolean;
 }
@@ -37,6 +43,12 @@ export interface SerializedTokenUsageRecord {
   readonly model: string;
   readonly estimated_tokens: number;
   readonly estimator: TokenEstimatorType;
+  readonly estimator_method?: 'exact' | 'calibrated';
+  readonly estimator_family?: string;
+  readonly estimator_version?: string;
+  readonly asset_revision?: string;
+  readonly projection_revision?: number;
+  readonly protocol?: string;
   readonly tiktoken_tokens: number | null;
   readonly tiktoken_estimation_failed: boolean;
   readonly actual_prompt_tokens: number;
@@ -59,6 +71,34 @@ export class TokenUsageLogger {
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Update the estimate for a prompt that already has a pending record,
+   * preserving the tiktoken comparison measured earlier in the turn. Used when
+   * a later stage (the finalized prompt envelope) produces a better token
+   * count but cannot re-measure tiktoken.
+   *
+   * When no pending record exists for the promptId the finalized estimate is
+   * still recorded, with a null tiktoken baseline: the finalized envelope is
+   * the authoritative estimate for the send, and dropping it would lose the
+   * estimate entirely. The null baseline records that no tiktoken comparison
+   * was measured for this prompt rather than borrowing another prompt's.
+   */
+  refineEstimate(
+    promptId: string,
+    data: Omit<
+      PendingTokenEstimate,
+      'ts' | 'promptId' | 'tiktokenTokens' | 'tiktokenEstimationFailed'
+    >,
+  ): void {
+    if (!this.enabled) return;
+    const existing = this.pending.get(promptId);
+    this.recordEstimate(promptId, {
+      ...data,
+      tiktokenTokens: existing?.tiktokenTokens ?? null,
+      tiktokenEstimationFailed: existing?.tiktokenEstimationFailed ?? false,
+    });
   }
 
   recordEstimate(
@@ -140,6 +180,22 @@ export class TokenUsageLogger {
       model: record.model,
       estimated_tokens: record.estimatedTokens,
       estimator: record.estimator,
+      ...(record.estimatorMethod !== undefined && {
+        estimator_method: record.estimatorMethod,
+      }),
+      ...(record.estimatorFamily !== undefined && {
+        estimator_family: record.estimatorFamily,
+      }),
+      ...(record.estimatorVersion !== undefined && {
+        estimator_version: record.estimatorVersion,
+      }),
+      ...(record.assetRevision !== undefined && {
+        asset_revision: record.assetRevision,
+      }),
+      ...(record.projectionRevision !== undefined && {
+        projection_revision: record.projectionRevision,
+      }),
+      ...(record.protocol !== undefined && { protocol: record.protocol }),
       tiktoken_tokens: record.tiktokenTokens,
       tiktoken_estimation_failed: record.tiktokenEstimationFailed ?? false,
       actual_prompt_tokens: record.actualPromptTokens,

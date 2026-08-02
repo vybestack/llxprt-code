@@ -5,32 +5,22 @@
  */
 
 import type React from 'react';
-import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
-import * as path from 'node:path';
 import { Colors } from '../colors.js';
 import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { usePermissionsModifyTrust } from '../hooks/usePermissionsModifyTrust.js';
-import { isTrustLevel, type TrustLevel } from '../../config/trustedFolders.js';
-import type { HistoryItemWithoutId } from '../types.js';
-import { MessageType } from '../types.js';
+import type { TrustLevel } from '../../config/trustedFolders.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type {
-  PermissionsTrustRuntime,
-  UsePermissionsModifyTrustReturn,
-} from '../hooks/usePermissionsModifyTrust.js';
+import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
+import { usePermissionsTrustDialogFlow } from '../hooks/usePermissionsTrustDialogFlow.js';
 import {
   getLocalTrustLevelDisplay,
-  getTrustLevelDisplay,
-  getWarningMessage,
-  getTrustUpdateDisplay,
-  getTrustCommitErrorMessage,
   shouldDismissTrustDialog,
-  buildTrustLevelOptions,
-  findInitialTrustOptionIndex,
+  type TrustFormChoice,
 } from '../trustDialogHelpers.js';
+import { PermissionsTrustPathInput } from './PermissionsTrustPathInput.js';
+import { PermissionsTrustRulesList } from './PermissionsTrustRulesList.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface PermissionsModifyTrustDialogProps {
@@ -76,18 +66,20 @@ const UpdatedPrompt: React.FC<UpdatedPromptProps> = ({
 );
 
 interface TrustFormProps {
-  workingDirectory: string;
+  targetPath: string;
+  isTargetCwd: boolean;
   currentTrustLevel: TrustLevel | undefined;
   getDisplayText: (level: TrustLevel | undefined) => string;
   warningMessage: string | null;
-  options: Array<RadioSelectItem<TrustLevel>>;
+  options: Array<RadioSelectItem<TrustFormChoice>>;
   initialIndex: number;
-  onSelect: (level: TrustLevel) => void | Promise<void>;
+  onSelect: (choice: TrustFormChoice) => void | Promise<void>;
   isCommitting: boolean;
 }
 
 const TrustForm: React.FC<TrustFormProps> = ({
-  workingDirectory,
+  targetPath,
+  isTargetCwd,
   currentTrustLevel,
   getDisplayText,
   warningMessage,
@@ -111,9 +103,17 @@ const TrustForm: React.FC<TrustFormProps> = ({
         </Text>
         <Box marginTop={1}>
           <Text color={Colors.Comment}>
-            Folder: <Text color={Colors.AccentBlue}>{workingDirectory}</Text>
+            Folder: <Text color={Colors.AccentBlue}>{targetPath}</Text>
           </Text>
         </Box>
+        {!isTargetCwd && (
+          <Box>
+            <Text color={Colors.Gray}>
+              (not the current folder — trusting it does not add it to this
+              workspace)
+            </Text>
+          </Box>
+        )}
         <Box>
           <Text color={Colors.Comment}>
             Current: {getDisplayText(currentTrustLevel)}
@@ -127,12 +127,12 @@ const TrustForm: React.FC<TrustFormProps> = ({
       )}
       <Box flexDirection="column">
         <Text color={Colors.Foreground}>Select trust level:</Text>
-        <RadioButtonSelect
+        <RadioButtonSelect<TrustFormChoice>
           items={options}
           initialIndex={initialIndex}
-          onSelect={(level) => {
-            if (isTrustLevel(level) && !isCommitting) {
-              void onSelect(level);
+          onSelect={(choice) => {
+            if (!isCommitting) {
+              void onSelect(choice);
             }
           }}
           isFocused={!isCommitting}
@@ -145,235 +145,71 @@ const TrustForm: React.FC<TrustFormProps> = ({
   </Box>
 );
 
-function useTrustFormOptions(
-  workingDirectory: string,
-  parentFolderName: string,
-  currentTrustLevel: TrustLevel | undefined,
-): { options: Array<RadioSelectItem<TrustLevel>>; initialIndex: number } {
-  const folderName = path.basename(workingDirectory);
-  const options = useMemo(
-    () => buildTrustLevelOptions(folderName, parentFolderName),
-    [parentFolderName, folderName],
-  );
-  const initialIndex = useMemo(
-    () => findInitialTrustOptionIndex(options, currentTrustLevel),
-    [currentTrustLevel, options],
-  );
-  return { options, initialIndex };
-}
-
-function recordTrustSelection(
-  addItem: UseHistoryManagerReturn['addItem'],
-  workingDirectory: string,
-  level: TrustLevel,
-  previousTrustLevel: TrustLevel | undefined,
-  displayText: string,
-): boolean {
-  const changed = level !== previousTrustLevel;
-  addItem(
-    {
-      type: MessageType.INFO,
-      text: changed
-        ? `Trust level for ${workingDirectory} set to ${displayText}.`
-        : `Trust level unchanged for ${workingDirectory}`,
-    } as HistoryItemWithoutId,
-    Date.now(),
-  );
-  return changed;
-}
-
-function useTrustSelectionHandler({
-  addItem,
-  commitTrustLevel,
-  onExit,
-  pendingTrustLevel,
-  setIsCommitting,
-  setShowUpdatedPrompt,
-  committingRef,
-  mountedRef,
-  workingDirectory,
-}: {
-  addItem: UseHistoryManagerReturn['addItem'];
-  commitTrustLevel: UsePermissionsModifyTrustReturn['commitTrustLevel'];
-  onExit: () => void;
-  pendingTrustLevel: TrustLevel | undefined;
-  setIsCommitting: React.Dispatch<React.SetStateAction<boolean>>;
-  setShowUpdatedPrompt: React.Dispatch<React.SetStateAction<boolean>>;
-  committingRef: React.MutableRefObject<boolean>;
-  mountedRef: React.MutableRefObject<boolean>;
-  workingDirectory: string;
-}) {
-  return useCallback(
-    async (level: TrustLevel) => {
-      if (committingRef.current) return;
-      committingRef.current = true;
-      setIsCommitting(true);
-      try {
-        const result = await commitTrustLevel(level);
-        if (!mountedRef.current) return;
-        if (!result.success) {
-          addItem(
-            {
-              type: MessageType.ERROR,
-              text: getTrustCommitErrorMessage(
-                result.phase,
-                result.error,
-                result.rollbackSucceeded,
-              ),
-            } as HistoryItemWithoutId,
-            Date.now(),
-          );
-          return;
-        }
-        const changed = recordTrustSelection(
-          addItem,
-          workingDirectory,
-          level,
-          pendingTrustLevel,
-          getLocalTrustLevelDisplay(level),
-        );
-        if (changed) setShowUpdatedPrompt(true);
-        else onExit();
-      } catch (error) {
-        if (!mountedRef.current) return;
-        addItem(
-          {
-            type: MessageType.ERROR,
-            text: getTrustCommitErrorMessage('live', error, false),
-          } as HistoryItemWithoutId,
-          Date.now(),
-        );
-      } finally {
-        committingRef.current = false;
-        if (mountedRef.current) setIsCommitting(false);
-      }
-    },
-    [
-      addItem,
-      commitTrustLevel,
-      committingRef,
-      mountedRef,
-      onExit,
-      pendingTrustLevel,
-      setIsCommitting,
-      setShowUpdatedPrompt,
-      workingDirectory,
-    ],
-  );
-}
-
-function useTrustDialogState(
-  onExit: () => void,
-  addItem: UseHistoryManagerReturn['addItem'],
-  config?: PermissionsTrustRuntime,
-) {
-  const trust = usePermissionsModifyTrust(config);
-  const {
-    pendingTrustLevel,
-    effectiveLocalTrustLevel,
-    isIdeTrusted,
-    isParentTrusted,
-    committedTrustLevel,
-    effectiveTrust,
-    workingDirectory,
-    parentFolderName,
-  } = trust;
-  const [showUpdatedPrompt, setShowUpdatedPrompt] = useState(false);
-  const [isCommitting, setIsCommitting] = useState(false);
-  const committingRef = useRef(false);
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-  const getDisplayText = useCallback(
-    (level: TrustLevel | undefined): string =>
-      getTrustLevelDisplay(level, isIdeTrusted, isParentTrusted),
-    [isIdeTrusted, isParentTrusted],
-  );
-  const { options, initialIndex } = useTrustFormOptions(
-    workingDirectory,
-    parentFolderName,
-    pendingTrustLevel ?? effectiveLocalTrustLevel,
-  );
-  const handleSelect = useTrustSelectionHandler({
-    addItem,
-    commitTrustLevel: trust.commitTrustLevel,
-    onExit,
-    pendingTrustLevel,
-    setIsCommitting,
-    setShowUpdatedPrompt,
-    committingRef,
-    mountedRef,
-    workingDirectory,
-  });
-
-  const warningMessage = getWarningMessage(
-    isIdeTrusted,
-    isParentTrusted,
-    effectiveLocalTrustLevel,
-  );
-  const trustUpdateDisplay = getTrustUpdateDisplay(
-    committedTrustLevel,
-    effectiveTrust,
-    isIdeTrusted,
-    isParentTrusted,
-  );
-
-  return {
-    effectiveLocalTrustLevel,
-    committedTrustLevel,
-    effectiveTrustDisplay: trustUpdateDisplay.effectiveNow,
-    showUpdatedPrompt,
-    isCommitting,
-    isCommitPending: () => committingRef.current,
-    getDisplayText,
-    options,
-    initialIndex,
-    handleSelect,
-    warningMessage,
-    workingDirectory,
-  };
-}
-
 export const PermissionsModifyTrustDialog: React.FC<
   PermissionsModifyTrustDialogProps
 > = ({ onExit, addItem, config }) => {
-  const state = useTrustDialogState(onExit, addItem, config);
+  const flow = usePermissionsTrustDialogFlow(onExit, addItem, config);
 
   useKeypress(
     (key) => {
-      if (state.isCommitPending()) {
+      if (flow.isCommitPending()) {
         return;
       }
-      if (shouldDismissTrustDialog(state.showUpdatedPrompt, key.name)) {
-        onExit();
+      if (flow.view === 'updated') {
+        if (shouldDismissTrustDialog(true, key.name)) {
+          onExit();
+        }
+        return;
+      }
+      if (key.name === 'escape') {
+        flow.handleEscape();
       }
     },
     { isActive: true },
   );
 
-  if (state.showUpdatedPrompt) {
+  if (flow.view === 'updated') {
     return (
       <UpdatedPrompt
-        committedTrustLevel={state.committedTrustLevel}
-        effectiveTrustDisplay={state.effectiveTrustDisplay}
+        committedTrustLevel={flow.committedTrustLevel}
+        effectiveTrustDisplay={flow.effectiveTrustDisplay}
+      />
+    );
+  }
+
+  if (flow.view === 'path-entry') {
+    return (
+      <PermissionsTrustPathInput
+        value={flow.pathDraft}
+        onChange={flow.setPathDraft}
+        onSubmit={flow.submitPath}
+        errorMessage={flow.pathError}
+        workingDirectory={flow.workingDirectory}
+      />
+    );
+  }
+
+  if (flow.view === 'rules') {
+    return (
+      <PermissionsTrustRulesList
+        rules={flow.trustRules}
+        onSelect={flow.selectRule}
+        isFocused={!flow.isCommitting}
       />
     );
   }
 
   return (
     <TrustForm
-      workingDirectory={state.workingDirectory}
-      currentTrustLevel={state.effectiveLocalTrustLevel}
-      getDisplayText={state.getDisplayText}
-      warningMessage={state.warningMessage}
-      options={state.options}
-      initialIndex={state.initialIndex}
-      onSelect={state.handleSelect}
-      isCommitting={state.isCommitting}
+      targetPath={flow.targetPath}
+      isTargetCwd={flow.isTargetCwd}
+      currentTrustLevel={flow.currentTrustLevel}
+      getDisplayText={flow.getDisplayText}
+      warningMessage={flow.warningMessage}
+      options={flow.options}
+      initialIndex={flow.initialIndex}
+      onSelect={flow.selectChoice}
+      isCommitting={flow.isCommitting}
     />
   );
 };

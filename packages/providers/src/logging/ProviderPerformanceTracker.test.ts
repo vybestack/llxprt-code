@@ -107,7 +107,7 @@ describe('ProviderPerformanceTracker', () => {
 
     // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    vi.useFakeTimers({ now: mockDate });
 
     tracker.recordError(500, 'Test error');
 
@@ -125,7 +125,7 @@ describe('ProviderPerformanceTracker', () => {
 
     // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    vi.useFakeTimers({ now: mockDate });
 
     // Record successful completion first
     tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
@@ -176,7 +176,7 @@ describe('ProviderPerformanceTracker', () => {
 
     // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    vi.useFakeTimers({ now: mockDate });
 
     // Record some metrics
     tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
@@ -205,7 +205,7 @@ describe('ProviderPerformanceTracker', () => {
 
     // Mock Date.now for consistent testing
     const mockDate = new Date('2025-01-01T00:00:00Z').getTime();
-    vi.setSystemTime(mockDate);
+    vi.useFakeTimers({ now: mockDate });
 
     // Record some metrics
     tracker.recordCompletion(1000, 200, 500, 250, 10, 1200);
@@ -220,8 +220,7 @@ describe('ProviderPerformanceTracker', () => {
   describe('Issue #1805: TPM numerator uses total tokens (input + output)', () => {
     it('should accumulate totalTokens as input + output for each completion', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
+      vi.useFakeTimers({ now: new Date('2025-01-01T00:00:00Z').getTime() });
 
       // Simulate: 100 input + 50 output = 150 total tokens
       tracker.recordCompletion(1000, null, 150, 50, 1);
@@ -234,9 +233,8 @@ describe('ProviderPerformanceTracker', () => {
 
     it('should compute TPM from total tokens (input+output), not just output tokens', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
-      vi.useFakeTimers();
       const now = new Date('2025-01-01T00:00:00Z').getTime();
-      vi.setSystemTime(now);
+      vi.useFakeTimers({ now });
 
       // 150 total tokens (input+output), not 50 output-only
       tracker.recordCompletion(1000, null, 150, 50, 1);

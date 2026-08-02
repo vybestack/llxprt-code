@@ -339,8 +339,16 @@ describe('bfsFileSearch', () => {
     // - Node.js async task queue depth variations
     // A regression would show consistently slow times (high avgDuration),
     // not just variance, so we use generous consistency thresholds.
+    // When avgDuration is ~0 (hot cache), consistency ratio is undefined
+    // (0/0=NaN). A zero-average run is inherently performant, so skip the
+    // consistency check in that case. When the average is measurable,
+    // verify the variance is within the threshold.
     const maxConsistencyRatio = process.env.CI ? 3.0 : 2.5;
-    expect(consistencyRatio).toBeLessThan(maxConsistencyRatio);
+    const consistencyIsMeasurable = avgDuration > 0.01;
+    const effectiveConsistencyRatio = consistencyIsMeasurable
+      ? consistencyRatio
+      : 0;
+    expect(effectiveConsistencyRatio).toBeLessThan(maxConsistencyRatio);
 
     process.stdout.write(
       `✅ Performance test passed: avg=${avgDuration.toFixed(2)}ms, consistency=${(consistencyRatio * 100).toFixed(1)}% (threshold: ${(maxConsistencyRatio * 100).toFixed(0)}%)`,

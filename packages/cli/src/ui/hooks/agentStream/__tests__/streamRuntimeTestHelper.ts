@@ -161,6 +161,8 @@ function makeSessionRuntime(
 ): StreamRuntime['session'] {
   return {
     getSessionId: () => call(source, 'getSessionId', 'test-session'),
+    adoptSessionId: (sessionId) =>
+      delegateVoid(source, 'adoptSessionId', sessionId),
     getTargetDir: () => call(source, 'getTargetDir', '/tmp'),
     getProjectRoot: () => call(source, 'getProjectRoot', '/tmp'),
     getWorkingDir: () => call(source, 'getWorkingDir', '/tmp'),

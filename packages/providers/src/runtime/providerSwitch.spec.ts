@@ -6,7 +6,6 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { DEFAULT_PRESERVE_EPHEMERALS } from './providerSwitch.js';
 
 vi.mock('./runtimeAccessors.js', () => {
   const mockConfig = {
@@ -92,8 +91,53 @@ vi.mock(
 );
 
 describe('providerSwitch', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { getCliRuntimeServices } = await import('./runtimeAccessors.js');
+    (
+      getCliRuntimeServices as unknown as ReturnType<typeof vi.fn>
+    ).mockImplementation(
+      () =>
+        ({
+          config: {
+            setEphemeralSetting: vi.fn(),
+            getEphemeralSetting: vi.fn(),
+            getEphemeralSettings: vi.fn(() => ({})),
+            setProviderManager: vi.fn(),
+            setProvider: vi.fn(),
+            setModel: vi.fn(),
+            getModel: vi.fn(() => 'gpt-4'),
+            setBucketFailoverHandler: vi.fn(),
+            setContentGeneratorConfig: vi.fn(),
+            getContentGeneratorConfig: vi.fn(),
+            get: vi.fn(),
+            set: vi.fn(),
+          },
+          settingsService: {
+            set: vi.fn(),
+            get: vi.fn((key: string) =>
+              key === 'currentProfile' ? null : 'openai',
+            ),
+            getProviderSetting: vi.fn(),
+            setProviderSetting: vi.fn(),
+            switchProvider: vi.fn(),
+            providerSettings: vi.fn(() => ({})),
+          },
+          providerManager: {
+            getActiveProviderName: vi.fn(() => 'openai'),
+            setActiveProvider: vi.fn(),
+            getActiveProvider: vi.fn(() => ({
+              name: 'openai',
+              getDefaultModel: vi.fn(() => 'gpt-4'),
+              getModels: vi.fn(() => []),
+            })),
+            getProviderByName: vi.fn(() => ({
+              name: 'gemini',
+              getDefaultModel: vi.fn(() => 'gemini-2.0-flash'),
+            })),
+          },
+        }) as ReturnType<typeof getCliRuntimeServices>,
+    );
   });
 
   afterEach(() => {
@@ -101,13 +145,19 @@ describe('providerSwitch', () => {
   });
 
   describe('DEFAULT_PRESERVE_EPHEMERALS', () => {
-    it('should include expected keys for context preservation', () => {
+    it('should include expected keys for context preservation', async () => {
+      const { DEFAULT_PRESERVE_EPHEMERALS } = await import(
+        './providerSwitch.js'
+      );
       expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('context-limit');
       expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('max_tokens');
       expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('streaming');
     });
 
-    it('should be a readonly array', () => {
+    it('should be a readonly array', async () => {
+      const { DEFAULT_PRESERVE_EPHEMERALS } = await import(
+        './providerSwitch.js'
+      );
       expect(Array.isArray(DEFAULT_PRESERVE_EPHEMERALS)).toBe(true);
     });
   });

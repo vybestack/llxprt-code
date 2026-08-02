@@ -15,12 +15,15 @@
  * `packages/a2a-server/dist/a2a-server.mjs` artifact.
  */
 
-import { readFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
+const require = createRequire(import.meta.url);
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
 
 /**
@@ -61,12 +64,15 @@ const EXTERNALS = [
   'chokidar',
 ];
 
+const tiktokenWasmSource = require.resolve('@dqbd/tiktoken/tiktoken_bg.wasm');
+
 // a2a-server bundle: packages/a2a-server/src/http/server.ts -> dist/a2a-server.mjs
 const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
   target: 'node',
   format: 'esm',
   conditions: ['production'],
   external: EXTERNALS,
+  plugins: [portableTiktokenPlugin],
   loader: { '.node': 'file' },
   minify: true,
   splitting: false,
@@ -108,7 +114,14 @@ if (a2aResult instanceof Error || a2aResult.success === false) {
   process.exit(1);
 }
 
+const tiktokenBundleAsset = join(
+  root,
+  'packages/a2a-server/dist/tiktoken_bg.wasm',
+);
+copyFileSync(tiktokenWasmSource, tiktokenBundleAsset);
+
 console.log(
   'bun build complete:',
   a2aResult.outputs.map((o) => `${o.path}=${o.size}`),
+  tiktokenBundleAsset,
 );

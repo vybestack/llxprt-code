@@ -46,6 +46,8 @@ export class SessionLockedError extends Error {
 
 /** @pseudocode concurrency-lifecycle.md lines 10-134 */
 export class SessionLockManager {
+  private static readonly ownedLockPaths = new Set<string>();
+
   /** @pseudocode concurrency-lifecycle.md lines 12-14 */
   static getLockPath(chatsDir: string, sessionId: string): string {
     return path.join(chatsDir, sessionId + '.lock');
@@ -70,6 +72,9 @@ export class SessionLockManager {
     sessionId: string,
   ): Promise<LockHandle> {
     const lockPath = SessionLockManager.getLockPath(chatsDir, sessionId);
+    if (SessionLockManager.ownedLockPaths.has(lockPath)) {
+      throw new SessionLockedError();
+    }
     const pid = process.pid;
     const lockContent = JSON.stringify({
       pid,
@@ -90,12 +95,14 @@ export class SessionLockManager {
       }
     }
 
+    SessionLockManager.ownedLockPaths.add(lockPath);
     let released = false;
     return {
       lockPath,
       release: async (): Promise<void> => {
         if (released) return;
         released = true;
+        SessionLockManager.ownedLockPaths.delete(lockPath);
         try {
           await fs.unlink(lockPath);
         } catch {
@@ -159,6 +166,12 @@ export class SessionLockManager {
       const lockData = JSON.parse(content) as { pid: number };
       const lockPid = lockData.pid;
 
+      if (
+        lockPid === process.pid &&
+        SessionLockManager.ownedLockPaths.has(lockPath)
+      ) {
+        return false;
+      }
       try {
         process.kill(lockPid, 0);
         return false;

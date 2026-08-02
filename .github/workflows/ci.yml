@@ -41,8 +41,8 @@ jobs:
       paths_result: ${{ steps.skip_check.outputs.paths_result }}
     steps:
       - id: skip_check
-        # ratchet:fkirc/skip-duplicate-actions@v5.3.1
-        uses: 'fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf'
+        # ratchet:fkirc/skip-duplicate-actions@v5.3.2
+        uses: 'fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578'
         with:
           concurrent_skipping: 'same_content'
           skip_after_successful_duplicate: 'true'
@@ -59,7 +59,7 @@ jobs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -173,13 +173,13 @@ jobs:
       lint_full_run_reason: '${{ steps.lint_select.outputs.lint_full_run_reason }}'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
 
@@ -261,7 +261,7 @@ jobs:
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -292,7 +292,7 @@ jobs:
             -ignore 'label ".+" is unknown'
 
       - name: 'Run ratchet'
-        uses: 'sethvargo/ratchet@8b4ca256dbed184350608a3023620f267f0a5253' # ratchet:sethvargo/ratchet@v0.11.4
+        uses: 'sethvargo/ratchet@9ca118155b0f79464185703a50da367e111107cd' # ratchet:sethvargo/ratchet@v0.12.0
         with:
           files: |-
             .github/workflows/*.yml
@@ -322,13 +322,13 @@ jobs:
     if: ${{ !cancelled() && needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
 
@@ -338,12 +338,12 @@ jobs:
       # lint:eslint-guard, build, bundle) are backed by bun scripts/*.ts and
       # require the Bun runtime to be on PATH.
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
       - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -455,7 +455,7 @@ jobs:
       - name: 'Restore ESLint cache'
         id: 'eslint_cache'
         if: ${{ needs.shard_selector.result == 'success' }}
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache@v6
         with:
           path: 'node_modules/.cache/eslint'
           key: ${{ runner.os }}-eslint-${{ hashFiles('packages/*/src/**', 'packages/*/package.json', 'packages/*/tsconfig.json', 'scripts/**', 'evals/**', 'integration-tests/**', 'eslint.config.js', 'eslint-rules/**', 'package.json', 'package-lock.json', 'bun.lock', 'tsconfig.json', 'tsconfig.scripts.json', '*.js', 'test-setup/**', '.github/workflows/**', '.github/scripts/**') }}
@@ -513,7 +513,7 @@ jobs:
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -588,12 +588,12 @@ jobs:
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: 'Setup Python'
-        uses: 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' # ratchet:actions/setup-python@v5
+        uses: 'actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97' # ratchet:actions/setup-python@v7
         with:
           python-version: '3'
 
@@ -647,7 +647,7 @@ jobs:
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           # This job runs `bun install`, which executes the lifecycle scripts of
           # trusted native dependencies. It performs no authenticated git
@@ -656,7 +656,7 @@ jobs:
           persist-credentials: false
 
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
@@ -691,18 +691,18 @@ jobs:
       contents: 'read'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
@@ -738,13 +738,13 @@ jobs:
       contents: 'read'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: 'Set up Node.js'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -752,7 +752,7 @@ jobs:
       - name: 'Setup Bun'
         # Must run before npm ci because lifecycle hooks and npm run build are
         # Bun-backed after issue 2242, even though dependencies stay npm-based.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
@@ -792,12 +792,12 @@ jobs:
       contents: 'read'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
@@ -829,7 +829,7 @@ jobs:
   bun_native_test_parity:
     name: 'Bun Native Test Compatibility'
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 15
+    timeout-minutes: 30
     needs:
       - 'skip_check'
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
@@ -837,17 +837,17 @@ jobs:
       contents: 'read'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
       - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -863,7 +863,7 @@ jobs:
           bun scripts/run_bun_tests.ts --timeout 30000
 
   #
-  # Test: Node (Linux and macOS - always run)
+  # Test: Node (Linux only — issue #2876)
   #
   # Stays on npm (not Bun) for S6 (#2243): Bun's hoisted linker non-
   # deterministically materializes incomplete copies of third-party packages
@@ -880,8 +880,9 @@ jobs:
   # critical path is max(shard) rather than sum(all workspaces). The shard map
   # lives in scripts/test-shards.ts and is enforced by
   # scripts/check-test-shards.ts (run below and via `lint:test-shards`). Each
-  # shard is a matrix leg over `os`; the `scripts` shard runs the root script
-  # harness instead of workspace tests.
+  # shard is a matrix leg; the `scripts` shard runs the root script harness
+  # instead of workspace tests. The selector emits ubuntu-only rows (issue
+  # #2876); macOS coverage moved to the nightly workflow.
   #
   # Issue #2709: the matrix is now dynamic — shard_selector outputs a JSON
   # matrix of only the shards that can observe the PR's changed files. When
@@ -910,30 +911,30 @@ jobs:
     strategy:
       fail-fast: false # So we can see all test failures
       # Dynamic matrix from shard_selector (issue #2709): only shards that can
-      # observe the changed files. The selector guarantees Linux+macOS for
-      # every selected shard, preserving cross-platform coverage. An empty
+      # observe the changed files. The selector emits ubuntu-only rows (issue
+      # #2876); macOS test coverage moved to the nightly workflow. An empty
       # matrix (no tests selected) combined with the has_tests gate above
       # skips all legs without making the required `Test` check red.
       matrix:
         include: ${{ fromJSON(needs.shard_selector.outputs.matrix) }}
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
 
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
       - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -1059,7 +1060,7 @@ jobs:
         # report files found" error.
         if: |-
           ${{ always() && matrix.shard != 'scripts' && (github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
+        uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
           name: 'Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }}, ${{ matrix.os }})'
           path: 'packages/*/junit.xml'
@@ -1069,7 +1070,7 @@ jobs:
       - name: 'Upload Test Results Artifact (for forks)'
         if: |-
           ${{ always() && matrix.shard != 'scripts' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: 'test-results-fork-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/junit.xml'
@@ -1081,7 +1082,7 @@ jobs:
         # would waste storage and compute.
         if: |-
           ${{ always() && (matrix.shard == 'cli' || matrix.shard == 'core') && matrix.os == 'ubuntu-latest' }}
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: 'coverage-${{ matrix.shard }}-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'packages/*/coverage'
@@ -1168,12 +1169,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Issue #2876: macOS keyring coverage moved to the nightly workflow.
+        # The PR matrix is ubuntu-only to reduce macOS runner contention.
         include:
           - os: 'ubuntu-latest'
-            node-version: '24.x'
-            secure-store-mode: 'keyring'
-            test-config: 'vitest.config.native-keyring.ts'
-          - os: 'macos-latest'
             node-version: '24.x'
             secure-store-mode: 'keyring'
             test-config: 'vitest.config.native-keyring.ts'
@@ -1183,22 +1182,22 @@ jobs:
             test-config: 'vitest.config.fallback-behavior.ts'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
 
       - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
       - name: 'Cache Bun dependencies'
-        uses: 'actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830' # ratchet:actions/cache@v4
+        uses: 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -1294,7 +1293,7 @@ jobs:
       - name: 'Publish SecureStore Test Report'
         if: |-
           ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: 'dorny/test-reporter@dc3a92680fcc15842eef52e8c4606ea7ce6bd3f3' # ratchet:dorny/test-reporter@v2
+        uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
           name: 'SecureStore Backend Results (Node ${{ matrix.node-version }}, ${{ matrix.os }}, ${{ matrix.secure-store-mode }})'
           path: 'packages/storage/junit.secure-store.xml'
@@ -1304,7 +1303,7 @@ jobs:
       - name: 'Upload SecureStore Test Results Artifact (for forks)'
         if: |-
           ${{ always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) }}
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: 'secure-store-results-fork-${{ matrix.node-version }}-${{ matrix.os }}-${{ matrix.secure-store-mode }}'
           path: 'packages/storage/junit.secure-store.xml'
@@ -1332,7 +1331,7 @@ jobs:
           - '24.x'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
 
       - name: 'Download CLI coverage (cli shard)'
         # Issue #2707: coverage is now per-shard. The composite action consumes
@@ -1342,13 +1341,18 @@ jobs:
         # will fail this step but not block PR merges. The job's own `if`
         # condition gates on needs.test.result == 'success', which means the
         # cli/core shards passed and their coverage artifacts exist.
-        uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: 'coverage-cli-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'coverage_cli'
 
       - name: 'Download core coverage (core shard)'
-        uses: 'actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0' # ratchet:actions/download-artifact@v5
+        # Core tests migrated to Bun's native runner (issue #2842) and no
+        # longer upload a Vitest coverage artifact.  Continue-on-error lets
+        # the post-coverage-comment action report "N/A" for core instead of
+        # failing the job.
+        continue-on-error: true
+        uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' # ratchet:actions/download-artifact@v8
         with:
           name: 'coverage-core-${{ matrix.node-version }}-${{ matrix.os }}'
           path: 'coverage_core'
@@ -1376,12 +1380,12 @@ jobs:
       security-events: 'write'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
 
       - name: 'Initialize CodeQL'
-        uses: 'github/codeql-action/init@df559355d593797519d70b90fc8edd5db049e7a2' # ratchet:github/codeql-action/init@v3
+        uses: 'github/codeql-action/init@bce182f857edf1feab116e9795a3393d21977282' # ratchet:github/codeql-action/init@v4
         with:
           languages: 'javascript'
 
       - name: 'Perform CodeQL Analysis'
-        uses: 'github/codeql-action/analyze@df559355d593797519d70b90fc8edd5db049e7a2' # ratchet:github/codeql-action/analyze@v3
+        uses: 'github/codeql-action/analyze@bce182f857edf1feab116e9795a3393d21977282' # ratchet:github/codeql-action/analyze@v4

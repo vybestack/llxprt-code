@@ -63,7 +63,18 @@ export class DebugLogger {
   private _fileOutput: FileOutput; // Line 14
   private _enabled: boolean; // Line 15
   private _level: string = 'debug';
-  private boundOnConfigChange: () => void; // Store bound reference for unsubscribe
+  /**
+   * Configuration version `_enabled` was computed against.
+   *
+   * Loggers used to subscribe a closure to the `ConfigurationManager`
+   * singleton so it could push the recomputed flag. The manager holds its
+   * subscribers strongly, and most loggers are constructed directly rather than
+   * through the `getLogger` registry, so nothing could ever unsubscribe them —
+   * every logger ever created stayed reachable for the life of the process
+   * (issue #2852). Polling a version counter gives the same value with no
+   * back-reference.
+   */
+  private _enabledVersion: number;
 
   /**
    * Factory method to get or create a DebugLogger for a namespace.
@@ -83,9 +94,6 @@ export class DebugLogger {
    * Call this in test cleanup or application shutdown.
    */
   static disposeAll(): void {
-    for (const logger of DebugLogger.instances.values()) {
-      logger._configManager.unsubscribe(logger.boundOnConfigChange);
-    }
     DebugLogger.instances.clear();
   }
 
@@ -107,9 +115,7 @@ export class DebugLogger {
     this._configManager = ConfigurationManager.getInstance(); // Line 20
     this._fileOutput = FileOutput.getInstance(); // Line 21
     this._enabled = this.checkEnabled(); // Line 22
-    // Store bound reference so we can unsubscribe later
-    this.boundOnConfigChange = () => this.onConfigChange();
-    this._configManager.subscribe(this.boundOnConfigChange);
+    this._enabledVersion = this._configManager.getConfigVersion();
   }
 
   get namespace(): string {
@@ -117,11 +123,25 @@ export class DebugLogger {
   }
 
   get enabled(): boolean {
+    this.refreshEnabled();
     return this._enabled;
   }
 
   set enabled(value: boolean) {
     this._enabled = value;
+    // An explicit override stands until the configuration actually changes,
+    // matching the previous push-based behaviour.
+    this._enabledVersion = this._configManager.getConfigVersion();
+  }
+
+  /** Recomputes `_enabled` if the effective configuration has changed. */
+  private refreshEnabled(): void {
+    const version = this._configManager.getConfigVersion();
+    if (version === this._enabledVersion) {
+      return;
+    }
+    this._enabledVersion = version;
+    this._enabled = this.checkEnabled();
   }
 
   get level(): string {
@@ -142,7 +162,7 @@ export class DebugLogger {
 
   log(messageOrFn: string | (() => string), ...args: unknown[]): void {
     // Lines 26-60: Main log method
-    if (!this._enabled) {
+    if (!this.enabled) {
       // Line 27-29
       return; // Zero overhead - no processing when disabled
     }
@@ -193,7 +213,7 @@ export class DebugLogger {
     }
 
     // Create modified log entry with debug level
-    if (!this._enabled) {
+    if (!this.enabled) {
       return;
     }
 
@@ -242,7 +262,7 @@ export class DebugLogger {
     messageOrFn: string | (() => string),
     ...args: unknown[]
   ): void {
-    if (!this._enabled) {
+    if (!this.enabled) {
       return;
     }
 
@@ -343,14 +363,7 @@ export class DebugLogger {
     return result; // Line 109
   }
 
-  private onConfigChange(): void {
-    // Lines 112-114
-    this._enabled = this.checkEnabled();
-  }
-
   async dispose(): Promise<void> {
-    // Unsubscribe using the bound reference
-    this._configManager.unsubscribe(this.boundOnConfigChange);
     // Remove from registry if present
     if (DebugLogger.instances.get(this._namespace) === this) {
       DebugLogger.instances.delete(this._namespace);

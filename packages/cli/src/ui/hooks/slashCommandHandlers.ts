@@ -287,6 +287,7 @@ function buildSimpleDialogActions(
     settings: () => actions.openSettingsDialog(),
     logging: (data) => openLoggingDialog(actions, data),
     permissions: () => actions.openPermissionsDialog(),
+    policies: () => actions.openPoliciesDialog(),
     provider: () => actions.openProviderDialog(),
     loadProfile: () => actions.openLoadProfileDialog(),
     createProfile: () => actions.openCreateProfileDialog(),
@@ -570,7 +571,6 @@ async function performSessionResume(
       timestamp: new Date(),
     });
   }
-  await deps.config.getAgentClient().restoreHistory(resumeResult.history);
   const uiHistory = iContentToHistoryItems(resumeResult.history);
   context.ui.clear();
   uiHistory.forEach((item, index) => {
@@ -591,6 +591,8 @@ function buildResumeContext(
     currentModel: config.getModel(),
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
     recordingCallbacks: deps.recordingSwapCallbacks!,
+    historyService: config.getAgentClient().getHistoryService(),
+    adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
     logger: deps.slashCommandLogger,
   };
 }

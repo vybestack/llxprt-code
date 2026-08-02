@@ -22,6 +22,7 @@ import {
   isMainModule,
   resolveTsconfigOverride,
   runBunTests,
+  reapStaleBunTestProcesses,
   type BunTestRunnerDependencies,
   type BunTestSpawnOptions,
   type ChildExitInfo,
@@ -45,14 +46,32 @@ describe('isChildSuccess', () => {
     expect(isChildSuccess(child)).toBe(false);
   });
 
-  it('returns false when signalCode is SIGTERM', () => {
+  it('returns true when signalCode is SIGTERM but exitCode is 0', () => {
     const child: ChildExitInfo = { exitCode: 0, signalCode: 'SIGTERM' };
+    expect(isChildSuccess(child)).toBe(true);
+  });
+
+  it('returns false when exitCode is null (killed by signal, no output)', () => {
+    const child: ChildExitInfo = { exitCode: null, signalCode: 'SIGTERM' };
     expect(isChildSuccess(child)).toBe(false);
   });
 
-  it('returns false when exitCode is null (killed by signal)', () => {
-    const child: ChildExitInfo = { exitCode: null, signalCode: 'SIGTERM' };
-    expect(isChildSuccess(child)).toBe(false);
+  it('returns true when killed by SIGTERM but output shows 0 fail', () => {
+    const child: ChildExitInfo = {
+      exitCode: null,
+      signalCode: 'SIGTERM',
+      stdout: '5 pass 0 fail ',
+    };
+    expect(isChildSuccess(child)).toBe(true);
+  });
+
+  it('returns true when killed by SIGTERM but output shows (pass) without (fail)', () => {
+    const child: ChildExitInfo = {
+      exitCode: null,
+      signalCode: 'SIGTERM',
+      stderr: '(pass) test name ',
+    };
+    expect(isChildSuccess(child)).toBe(true);
   });
 
   it('returns false when exitCode is null and signalCode is null', () => {
@@ -117,6 +136,93 @@ describe('isMainModule', () => {
   it('returns false when argv1 is undefined', () => {
     const moduleUrl = pathToFileURL('/some/path/script.ts').href;
     expect(isMainModule(undefined, moduleUrl)).toBe(false);
+  });
+});
+
+describe('reapStaleBunTestProcesses', () => {
+  it('kills orphaned bun test processes with PPID=1 using SIGTERM', () => {
+    const killedPids: number[] = [];
+    const receivedSignals: string[] = [];
+    const psOutput = [
+      '  100  1  bun test src/foo.test.ts',
+      '  200  1  node src/bar.spec.ts',
+      '  300  500  bun test src/baz.test.ts',
+      `  ${process.pid}  ${process.ppid}  bun scripts/run_bun_tests.ts`,
+    ].join('\n');
+
+    const result = reapStaleBunTestProcesses(
+      () => ({ stdout: psOutput }),
+      (pid, signal) => {
+        killedPids.push(pid);
+        receivedSignals.push(signal);
+      },
+      process.pid,
+    );
+
+    expect(result).toBe(2);
+    expect(killedPids).toContain(100);
+    expect(killedPids).toContain(200);
+    expect(killedPids).not.toContain(300);
+    expect(receivedSignals).toEqual(['SIGTERM', 'SIGTERM']);
+  });
+
+  it('does not kill the current process', () => {
+    const killedPids: number[] = [];
+    const ownPid = 12345;
+    const psOutput = `  ${ownPid}  1  bun test src/foo.test.ts`;
+
+    reapStaleBunTestProcesses(
+      () => ({ stdout: psOutput }),
+      (pid) => killedPids.push(pid),
+      ownPid,
+    );
+
+    expect(killedPids).not.toContain(ownPid);
+  });
+
+  it('does not kill non-test bun/node processes', () => {
+    const killedPids: number[] = [];
+    const psOutput = [
+      '  100  1  bun run build',
+      '  200  1  node server.js',
+      '  300  1  bun test src/real.test.ts',
+    ].join('\n');
+
+    const result = reapStaleBunTestProcesses(
+      () => ({ stdout: psOutput }),
+      (pid) => killedPids.push(pid),
+      99999,
+    );
+
+    expect(result).toBe(1);
+    expect(killedPids).toEqual([300]);
+  });
+
+  it('returns 0 when ps fails', () => {
+    const result = reapStaleBunTestProcesses(
+      () => {
+        throw new Error('ps not found');
+      },
+      () => {},
+      99999,
+    );
+
+    expect(result).toBe(0);
+  });
+
+  it('logs a warning when processes are reaped', () => {
+    const stderrMessages: string[] = [];
+    const psOutput = '  100  1  bun test src/foo.test.ts';
+
+    reapStaleBunTestProcesses(
+      () => ({ stdout: psOutput }),
+      () => {},
+      99999,
+      (msg) => stderrMessages.push(msg),
+    );
+
+    expect(stderrMessages).toHaveLength(1);
+    expect(stderrMessages[0]).toContain('Reaped 1 stale orphaned');
   });
 });
 
@@ -229,8 +335,9 @@ describe('runBunTests', () => {
           cwd: entry.cwd,
           env: environment,
           stdin: 'inherit',
-          stdout: 'inherit',
-          stderr: 'inherit',
+          stdout: 'pipe',
+          stderr: 'pipe',
+          timeout: 120_000,
         },
       })),
     );

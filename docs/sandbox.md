@@ -22,7 +22,7 @@ Container sandboxing (Docker or Podman) runs LLxprt's tool execution inside an i
 - **File isolation** — the LLM can only touch your project directory (mounted read-write) and temp files. It can't access `~/.ssh`, `~/.aws`, other repos, or anything else on your system.
 - **Credential isolation** — API keys, refresh tokens, and keyring data stay on the host. The container gets short-lived access tokens via a credential proxy over a Unix socket. The LLM never sees your stored secrets.
 - **Resource limits** — cap CPU, memory, and process count. No more black-screened laptops from `vitest --run` spawning 200 workers.
-- **Network control** — disable networking entirely for untrusted code, or leave it on for normal development.
+- **Network control** — disable networking for untrusted code, leave it on for normal development, or route container traffic through the configured sandbox proxy path.
 - **SSH agent forwarding** — git push/pull still works inside the sandbox via agent forwarding (no private keys copied in).
 
 ## Choosing an Engine
@@ -41,7 +41,7 @@ Seatbelt (`sandbox-exec`) runs directly on the host with macOS kernel restrictio
 
 - **No resource limits** — can't cap CPU, memory, or process count
 - **No credential isolation** — runs with your full keyring and token store
-- **No network isolation** — `network: off` is not enforced
+- **Profile-based network rules only** — `network: off` selects the closed built-in Seatbelt profile and `network: proxied` selects the proxied profile; Seatbelt still runs directly on the host
 - **Deprecated by Apple** — `sandbox-exec` has been informally deprecated since macOS 10.15
 
 Use Docker or Podman if at all possible. Seatbelt is a last resort.
@@ -107,10 +107,16 @@ Profiles are JSON files in `<config>/sandboxes/` (see [Application Directories](
 | `resources.cpus`   | number                                             | CPU core limit                                             |
 | `resources.memory` | string                                             | Memory limit (e.g., `4g`, `512m`)                          |
 | `resources.pids`   | number                                             | Max process count                                          |
-| `network`          | `on`, `off`                                        | Container networking (`off` = `--network none`)            |
+| `network`          | `on`, `off`, `proxied`                             | Sandbox network policy                                     |
 | `sshAgent`         | `auto`, `on`, `off`                                | SSH agent forwarding into container                        |
 | `mounts`           | array                                              | Extra mounts (`{from, to?, mode?}`); mode defaults to `ro` |
 | `env`              | object                                             | Additional environment variables                           |
+
+### Network Policy
+
+For Docker and Podman, `network: off` adds `--network none`. `network: proxied` requires a non-whitespace `LLXPRT_SANDBOX_PROXY_COMMAND`; invalid configuration stops before network setup or process launch. A valid command uses the existing isolated `llxprt-code-sandbox` network and proxy-container network instead of falling back to unrestricted networking.
+
+For Seatbelt, a non-empty `SEATBELT_PROFILE` remains an advanced explicit override. Otherwise `LLXPRT_SANDBOX_NETWORK` (or the legacy `SANDBOX_NETWORK` when the primary variable is undefined; a defined empty primary still wins) selects `permissive-closed` for `off`, `permissive-proxied` for `proxied`, and `permissive-open` for `on`, unset, or other values. The two built-in proxied profiles require `LLXPRT_SANDBOX_PROXY_COMMAND`; arbitrary custom profile names retain their existing lookup semantics.
 
 ### Creating Custom Profiles
 
@@ -145,6 +151,8 @@ In Docker/Podman mode, a host-side credential proxy runs over a Unix socket. The
 
 The socket path is set automatically via `LLXPRT_CREDENTIAL_SOCKET`.
 
+On Linux, network-off containers continue to use the credential proxy's Unix socket through the mounted temporary directory. On macOS, Docker and Podman credential bridges require container networking, so `network: off` fails before the proxy, bridge, or container starts. Enable networking or use Linux when container network-off credential isolation is required.
+
 The per-session capability token that authenticates the sandbox to the proxy is delivered through a **trusted entrypoint + inherited descriptor** transport, never via process arguments, the container environment, or a mounted file the sandbox can read:
 
 - The host writes the raw token to a mode-0600 env file in a fresh mode-0700 directory **outside every sandbox mount** and passes only that file's path to the runtime via `--env-file`. The token never appears in `docker run`/`podman run` argv, and the file is never mounted into the container.
@@ -175,6 +183,8 @@ export SSH_AUTH_SOCK=~/.llxprt/ssh-agent.sock
 ssh-add ~/.ssh/id_ed25519
 llxprt --sandbox-engine podman --sandbox-profile-load dev
 ```
+
+For Podman on macOS, an existing non-host `--network` setting remains authoritative. LLxprt warns and skips optional SSH-agent forwarding before connection discovery or tunnel allocation rather than replacing that network policy.
 
 ## Git Config in Containers
 

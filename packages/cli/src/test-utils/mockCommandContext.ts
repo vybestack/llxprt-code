@@ -41,10 +41,7 @@ const buildDefaultMocks = (): CommandContext => ({
     settings: { merged: {} } as LoadedSettings,
     git: undefined as GitService | undefined,
     logger: {
-      log: vi.fn(),
       logMessage: vi.fn(),
-      saveCheckpoint: vi.fn(),
-      loadCheckpoint: vi.fn().mockResolvedValue([]),
     } as unknown as Logger, // Cast because Logger is a class.
     // Follow-up (#1569): Add profileManager and subagentManager when CommandContext interface is updated.
     // @plan:PLAN-20250117-SUBAGENTCONFIG.P07

@@ -13,6 +13,7 @@ import type {
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -497,7 +498,9 @@ export class CompressionHandler {
     }
   }
 
-  private createProviderContentEnforcer(): ProviderContentEnforcer {
+  private createProviderContentEnforcer(
+    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
+  ): ProviderContentEnforcer {
     return new ProviderContentEnforcer({
       historyService: this.historyService,
       runtimeContext: this.runtimeContext,
@@ -507,6 +510,7 @@ export class CompressionHandler {
       ensureDensityOptimized: () => this.ensureDensityOptimized(),
       performCompression: (promptId, options) =>
         this.performCompression(promptId, options),
+      estimateFinalizedPromptTokens,
       performFallbackCompression: async (promptId, applyResult) => {
         this.pushSuppressDensityDirty();
         try {
@@ -542,8 +546,11 @@ export class CompressionHandler {
     envelope: ProviderContentEnvelope,
     promptId: string,
     provider?: IProvider,
+    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
   ): Promise<IContent[]> {
-    const enforcer = this.createProviderContentEnforcer();
+    const enforcer = this.createProviderContentEnforcer(
+      estimateFinalizedPromptTokens,
+    );
     try {
       this.attachCompressionCallback(
         provider,
@@ -662,9 +669,16 @@ export class CompressionHandler {
       compressionOutcome = await this.runCompressionWithRetryAndFallback(
         prompt_id,
         (newHistory, summary) => {
+          // Record which chronology span the summary stands in for BEFORE the
+          // write-back, so the destroyed seq range is still derivable (#1721).
+          // The subsequent add() calls stamp the summary's own marker.
+          const annotated = annotateCompressionSpan(
+            this.historyService.getRawHistory(),
+            newHistory,
+          );
           // Apply result: clear history, add each entry from newHistory
           this.historyService.clear();
-          for (const content of newHistory) {
+          for (const content of annotated) {
             this.historyService.add(content, this.runtimeContext.state.model);
           }
           this.lastPromptTokenCount = null;

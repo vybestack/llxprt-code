@@ -4,21 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { estimateRequestTokensStructured } from './clientHelpers.js';
 import type {
   TokenUsageLogger,
   TokenEstimatorType,
 } from './TokenUsageLogger.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
 const logger = new DebugLogger('llxprt:token-usage-estimate');
-
-export interface ChatTokenEstimator {
-  estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
-  convertPartListUnionToIContent?: (input: AgentMessageInput) => IContent;
-}
 
 const OPENAI_PROVIDERS = new Set([
   'openai',
@@ -28,80 +21,49 @@ const OPENAI_PROVIDERS = new Set([
 
 const ANTHROPIC_PROVIDERS = new Set(['anthropic']);
 
-export function resolveEstimatorType(providerName: string): TokenEstimatorType {
+export function resolveEstimatorType(
+  providerName: string,
+  estimatorMethod?: PromptEnvelopeEstimate['estimatorMethod'],
+  estimatorFamily?: string,
+): TokenEstimatorType {
+  if (estimatorMethod === 'exact' && estimatorFamily === 'openai-gpt-5.6') {
+    return 'openai-tiktoken';
+  }
   const normalizedProviderName = providerName.toLowerCase();
   if (OPENAI_PROVIDERS.has(normalizedProviderName)) return 'openai-tiktoken';
   if (ANTHROPIC_PROVIDERS.has(normalizedProviderName)) return 'anthropic-char';
   return 'core-fallback';
 }
 
-interface TokenUsageLoggerHolder {
-  getTokenUsageLogger?: () => TokenUsageLogger | undefined;
-}
-
-export function recordTokenEstimate(
-  holder: TokenUsageLoggerHolder | undefined,
+export function recordFinalizedPromptEnvelopeEstimate(
+  usageLogger: TokenUsageLogger | null | undefined,
   promptId: string,
-  request: AgentMessageInput,
-  estimatedTokens: number,
-  providerName: string,
-  model: string,
+  estimate: PromptEnvelopeEstimate | null,
 ): void {
-  const usageLogger = holder?.getTokenUsageLogger?.();
-  if (usageLogger === undefined) return;
+  if (estimate === null) return;
+  if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
-  const structuredEstimate = safeEstimateStructuredTokens(request);
   try {
-    usageLogger.recordEstimate(promptId, {
-      provider: providerName,
-      model,
-      estimatedTokens,
-      estimator: resolveEstimatorType(providerName),
-      tiktokenTokens: structuredEstimate.tokens,
-      tiktokenEstimationFailed: structuredEstimate.failed,
+    usageLogger.refineEstimate(promptId, {
+      provider: estimate.activeProvider,
+      model: estimate.model,
+      estimatedTokens: estimate.estimatedPromptTokens,
+      estimator: resolveEstimatorType(
+        estimate.activeProvider,
+        estimate.estimatorMethod,
+        estimate.estimatorFamily,
+      ),
+      estimatorMethod: estimate.estimatorMethod,
+      estimatorFamily: estimate.estimatorFamily,
+      estimatorVersion: estimate.estimatorVersion,
+      assetRevision: estimate.assetRevision,
+      projectionRevision: estimate.projectionRevision,
+      protocol: estimate.protocol,
     });
   } catch (error) {
     logger.error(
-      `Failed to record token estimate for prompt ${promptId}`,
+      `Failed to record finalized prompt-envelope estimate for prompt ${promptId}`,
       error,
     );
-  }
-}
-
-export function estimateStructuredTokensOrFallback(
-  request: AgentMessageInput,
-  fallback: number,
-): number {
-  return safeEstimateStructuredTokens(request).tokens ?? fallback;
-}
-
-export async function estimateRequestTokens(
-  chat: ChatTokenEstimator,
-  initialRequest: AgentMessageInput,
-  fallback: number,
-): Promise<number> {
-  const est = chat.estimatePendingTokens;
-  const conv = chat.convertPartListUnionToIContent;
-  if (typeof est !== 'function' || typeof conv !== 'function') {
-    return fallback;
-  }
-  try {
-    const content = conv.call(chat, initialRequest);
-    return await est.call(chat, [content]);
-  } catch (error) {
-    logger.debug('Token estimate failed, using fallback', error);
-    return fallback;
-  }
-}
-
-function safeEstimateStructuredTokens(request: AgentMessageInput): {
-  tokens: number | null;
-  failed: boolean;
-} {
-  try {
-    return { tokens: estimateRequestTokensStructured(request), failed: false };
-  } catch (error) {
-    logger.debug('Structured token estimate failed', error);
-    return { tokens: null, failed: true };
   }
 }

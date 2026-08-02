@@ -22,21 +22,20 @@ import type {
 } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
-import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 
 /**
- * Resolve the effective model name, preferring the content's model then the
- * provided default. Empty strings fall back (intentional falsy coalescing).
+ * Resolve the effective model name. An active target model always wins over
+ * historical origin metadata during current-request recomputation.
  */
 export function resolveModelName(
   contentModel: string | undefined,
   defaultModel: string | undefined,
 ): string {
-  if (contentModel && contentModel.length > 0) {
-    return contentModel;
-  }
   if (defaultModel && defaultModel.length > 0) {
     return defaultModel;
+  }
+  if (contentModel && contentModel.length > 0) {
+    return contentModel;
   }
   return 'gpt-4.1';
 }
@@ -92,6 +91,18 @@ export function blockToTokenFallbackString(block: ContentBlock): string {
   }
 }
 
+/**
+ * Serialize only the parts of an IContent that can reach a provider.
+ *
+ * `metadata` is deliberately excluded: no provider converter serializes it into
+ * a wire payload, so counting it inflates context estimates and makes
+ * compression fire early. This matters most for the client-side chronology
+ * marker (#1721), which is stamped on every history item.
+ */
+export function serializeWireContentForEstimate(content: IContent): string {
+  return JSON.stringify({ speaker: content.speaker, blocks: content.blocks });
+}
+
 /** Abstraction over HistoryService's tokenizer lookup. */
 export interface TokenizerProvider {
   getTokenizerForModel(modelName: string): ITokenizer;
@@ -118,6 +129,9 @@ export async function estimateContentTokens(
       const blockTokens = await tokenizer.countTokens(blockText);
       totalTokens += blockTokens;
     } catch (error) {
+      if (tokenizer.fallbackPolicy === 'deny') {
+        throw error;
+      }
       logger.debug('Error counting tokens for block, using fallback:', error);
       totalTokens += simpleTokenEstimateForText(blockText);
     }
@@ -212,40 +226,13 @@ export async function estimateTokensForContents(
   let total = 0;
   for (const content of contents) {
     const effectiveModel = resolveModelName(content.metadata?.model, modelName);
-    try {
-      total += await estimateContentTokens(
-        content,
-        effectiveModel,
-        tokenizerProvider,
-        logger,
-      );
-    } catch (error) {
-      logger.debug(
-        'Error estimating tokens for content, using fallback:',
-        error,
-      );
-      total += fallbackEstimateForContent(content);
-    }
+    total += await estimateContentTokens(
+      content,
+      effectiveModel,
+      tokenizerProvider,
+      logger,
+    );
   }
 
   return total;
-}
-
-/** Fallback token estimate when structured estimation fails. */
-function fallbackEstimateForContent(content: IContent): number {
-  let serialized = '';
-  try {
-    serialized = JSON.stringify(content);
-  } catch {
-    // fall through to block-level fallback
-  }
-
-  if (serialized) {
-    return estimateTextTokens(serialized);
-  }
-
-  const blockStrings = content.blocks
-    .map(blockToTokenFallbackString)
-    .join('\n');
-  return blockStrings ? estimateTextTokens(blockStrings) : 0;
 }

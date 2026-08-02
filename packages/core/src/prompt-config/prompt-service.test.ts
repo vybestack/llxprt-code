@@ -58,9 +58,9 @@ describe('PromptService', () => {
       const envGitFile = path.join(baseDir, 'env', 'git-repository.md');
       const toolsEditFile = path.join(baseDir, 'tools', 'edit.md');
 
-      await expect(fs.stat(coreFile)).resolves.toBeTruthy();
-      await expect(fs.stat(envGitFile)).resolves.toBeTruthy();
-      await expect(fs.stat(toolsEditFile)).resolves.toBeTruthy();
+      await fs.stat(coreFile);
+      await fs.stat(envGitFile);
+      await fs.stat(toolsEditFile);
     });
 
     it('should install default prompt files on first initialization', async () => {
@@ -140,7 +140,7 @@ describe('PromptService', () => {
         'Core content',
       );
 
-      await expect(service.initialize()).resolves.not.toThrow();
+      await expect(service.initialize()).resolves.toBeUndefined();
     });
 
     it('should surface installer notices once when defaults are newer than local prompts', async () => {
@@ -639,7 +639,7 @@ describe('PromptService', () => {
       const service = new PromptService({ baseDir });
 
       // Try to reload before initialization
-      await expect(service.reloadFiles()).resolves.not.toThrow();
+      await expect(service.reloadFiles()).resolves.toBeUndefined();
     });
   });
 

@@ -79,57 +79,40 @@ describe('compressCommand — agent surface', () => {
 });
 
 describe('policiesCommand — agent surface', () => {
-  it('reads rules from agent.policy when agent is available', async () => {
-    const getRules = vi.fn().mockReturnValue([
-      {
-        priority: 2.0,
-        toolName: 'shell',
-        decision: PolicyDecision.ALLOW,
-        source: 'user',
-      },
-    ]);
-    const getDefaultDecision = vi.fn().mockReturnValue(PolicyDecision.ASK_USER);
-    const isNonInteractive = vi.fn().mockReturnValue(false);
-
-    const context = buildContextWithAgent({
-      policy: {
-        getRules,
-        getDefaultDecision,
-        isNonInteractive,
-      } as unknown as AgentPolicyControl,
-    });
-
-    const result = (await policiesCommand.action!(context, '')) as {
-      messageType: string;
-      content: string;
-    };
-
-    expect(getRules).toHaveBeenCalledTimes(1);
-    expect(getDefaultDecision).toHaveBeenCalledTimes(1);
-    expect(isNonInteractive).toHaveBeenCalledTimes(1);
-    expect(result.messageType).toBe('info');
-    expect(result.content).toContain('shell');
-    expect(result.content).toContain('ALLOW');
-    expect(result.content).toContain('ASK_USER');
-    expect(result.content).toContain('false');
-  });
-
-  it('shows no-rules message when agent returns empty list', async () => {
+  it('renders the policy list when agent is available (bare /policies)', () => {
     const context = buildContextWithAgent({
       policy: {
         getRules: () => [],
-        getDefaultDecision: () => PolicyDecision.DENY,
-        isNonInteractive: () => true,
+        getDefaultDecision: () => PolicyDecision.ASK_USER,
+        isNonInteractive: () => false,
       } as unknown as AgentPolicyControl,
     });
 
-    const result = (await policiesCommand.action!(context, '')) as {
+    const result = policiesCommand.action!(context, '') as {
+      type: string;
       messageType: string;
-      content: string;
     };
 
+    expect(result.type).toBe('message');
     expect(result.messageType).toBe('info');
-    expect(result.content).toContain('No policy rules configured.');
+  });
+
+  it('opens the policies dialog via /policies menu when agent is available', () => {
+    const context = buildContextWithAgent({
+      policy: {
+        getRules: () => [],
+        getDefaultDecision: () => PolicyDecision.ASK_USER,
+        isNonInteractive: () => false,
+      } as unknown as AgentPolicyControl,
+    });
+
+    const result = policiesCommand.action!(context, 'menu') as {
+      type: string;
+      dialog: string;
+    };
+
+    expect(result.type).toBe('dialog');
+    expect(result.dialog).toBe('policies');
   });
 });
 

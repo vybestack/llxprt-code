@@ -24,3 +24,8 @@ export { KimiK3Tokenizer, KIMI_K3_MANIFEST } from './kimiK3Tokenizer.js';
 export type { KimiK3Segment } from './kimiK3Tokenizer.js';
 export { GlmTokenizer, GLM_MANIFEST } from './glmTokenizer.js';
 export { MinimaxTokenizer, MINIMAX_MANIFEST } from './minimaxTokenizer.js';
+export {
+  OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
+  createOfficialRuntimeTokenizer,
+  clearOfficialEstimatorCache,
+} from './officialPromptEstimators.js';

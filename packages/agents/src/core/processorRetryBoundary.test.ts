@@ -40,6 +40,11 @@ describe('agent processor retry boundaries', () => {
         providerRuntime: {},
         telemetry: { logApiError: () => undefined },
       },
+      providerRuntimeBuilder: () => ({
+        config: undefined,
+        settingsService: {},
+        metadata: {},
+      }),
       resolveProviderBaseUrl: () => undefined,
       generationConfig: {},
       _executeProviderCall: async () => {

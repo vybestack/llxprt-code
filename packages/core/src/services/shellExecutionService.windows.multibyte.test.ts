@@ -5,15 +5,23 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as os from 'os';
 import { spawn } from 'child_process';
 import EventEmitter from 'events';
 import type { Readable } from 'stream';
 import { ShellExecutionService } from './shellExecutionService.js';
 import type { ChildProcess } from 'child_process';
 
-vi.mock('os');
-vi.mock('child_process');
+const mockPlatform = vi.hoisted(() => vi.fn(() => 'win32'));
+const mockSpawn = vi.hoisted(() => vi.fn());
+
+vi.mock('os', (importOriginal) => {
+  const actual = importOriginal() as typeof import('os');
+  return { ...actual, platform: mockPlatform };
+});
+vi.mock('child_process', (importOriginal) => {
+  const actual = importOriginal() as typeof import('child_process');
+  return { ...actual, spawn: mockSpawn };
+});
 vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
 vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
 vi.mock('../utils/systemEncoding.js', () => ({
@@ -43,7 +51,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stubProcessPlatform('win32');
-    vi.mocked(os.platform).mockReturnValue('win32');
+    mockPlatform.mockReturnValue('win32');
 
     mockChildProcess = new EventEmitter() as EventEmitter &
       Partial<ChildProcess>;
@@ -56,7 +64,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       configurable: true,
     });
 
-    vi.mocked(spawn).mockReturnValue(mockChildProcess as ChildProcess);
+    mockSpawn.mockReturnValue(mockChildProcess as ChildProcess);
   });
 
   afterEach(() => {

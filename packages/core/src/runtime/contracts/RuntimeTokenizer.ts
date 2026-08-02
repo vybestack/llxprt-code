@@ -25,6 +25,9 @@
  * @plan:PLAN-20260603-ISSUE1584.P03
  * @requirement:REQ-DEP-001
  */
+export type RuntimeTokenizerFallbackPolicy = 'allow' | 'deny';
+
 export interface RuntimeTokenizer {
+  readonly fallbackPolicy?: RuntimeTokenizerFallbackPolicy;
   countTokens(content: unknown): number | Promise<number>;
 }

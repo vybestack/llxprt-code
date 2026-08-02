@@ -9,6 +9,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { serializeWireContentForEstimate } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 const logger = new DebugLogger('llxprt:gemini:compression-budgeting');
@@ -124,7 +125,7 @@ function estimateFallbackContentTokens(
   fallbackLogger: DebugLogger,
 ): number {
   try {
-    const serialized = JSON.stringify(content);
+    const serialized = serializeWireContentForEstimate(content);
     return estimateTextTokens(serialized);
   } catch (stringifyError) {
     fallbackLogger.debug(

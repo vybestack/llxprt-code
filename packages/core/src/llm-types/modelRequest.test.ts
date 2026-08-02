@@ -3,8 +3,7 @@
  * @requirement REQ-006.1, REQ-006.2, REQ-006.3
  * @pseudocode lines 60-64
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import type {
   ReasoningConfig,
@@ -161,141 +160,146 @@ describe('ModelGenerationSettings additive fields', () => {
 // ---------------------------------------------------------------------------
 
 describe('modelRequest property-based', () => {
-  it.prop([fc.nat({ max: 100000 })])(
-    'ReasoningConfig budgetTokens round-trips through JSON',
-    (budgetTokens: number) => {
-      const rc: ReasoningConfig = { budgetTokens };
-      const rt: ReasoningConfig = JSON.parse(JSON.stringify(rc));
-      return rt.budgetTokens === budgetTokens;
-    },
-  );
-
-  it.prop([
-    fc.record({
-      temperature: fc.float({ min: 0, max: 2, noNaN: true }),
-      maxOutputTokens: fc.nat({ max: 100000 }),
-      systemInstruction: fc.string({ maxLength: 100 }),
-      reasoning: fc.oneof(
-        fc.constant(undefined),
-        fc.record({ budgetTokens: fc.nat({ max: 100000 }) }),
-      ),
-      toolChoice: fc.oneof(
-        fc.constant(undefined),
-        fc.record({
-          mode: fc.constantFrom('auto', 'none', 'required'),
-          allowedToolNames: fc.oneof(
-            fc.constant(undefined),
-            fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
-              maxLength: 5,
-            }),
-          ),
-        }),
-      ),
-    }),
-  ])(
-    'ModelGenerationSettings round-trips through JSON preserving fields',
-    (fields) => {
-      const settings: ModelGenerationSettings = fields;
-      const rt: ModelGenerationSettings = JSON.parse(JSON.stringify(settings));
-      const coreMatches =
-        rt.temperature === fields.temperature &&
-        rt.maxOutputTokens === fields.maxOutputTokens &&
-        rt.systemInstruction === fields.systemInstruction;
-      return (
-        coreMatches &&
-        rt.reasoning?.budgetTokens === fields.reasoning?.budgetTokens &&
-        rt.toolChoice?.mode === fields.toolChoice?.mode &&
-        JSON.stringify(rt.toolChoice?.allowedToolNames) ===
-          JSON.stringify(fields.toolChoice?.allowedToolNames)
-      );
-    },
-  );
-
-  it.prop([
-    fc.array(
-      fc.record({
-        speaker: fc.constantFrom('human', 'ai', 'tool'),
-        blocks: fc.array(
-          fc.oneof(
-            fc.record({
-              type: fc.constant('text' as const),
-              text: fc.string({ minLength: 1, maxLength: 30 }),
-            }),
-            fc
-              .record({
-                type: fc.constant('tool_call' as const),
-                id: fc.string({ minLength: 1, maxLength: 10 }),
-                name: fc.string({ minLength: 1, maxLength: 15 }),
-                parameters: fc.dictionary(
-                  fc.string({ minLength: 1, maxLength: 5 }),
-                  fc.string({ maxLength: 10 }),
-                ),
-              })
-              .map((b): ToolCallBlock => b),
-            fc
-              .record({
-                type: fc.constant('thinking' as const),
-                thought: fc.string({ minLength: 1, maxLength: 30 }),
-                signature: fc.option(
-                  fc.string({ minLength: 1, maxLength: 20 }),
-                ),
-              })
-              .map((b): ThinkingBlock => b),
-          ),
-          { minLength: 1, maxLength: 3 },
-        ),
+  it('ReasoningConfig budgetTokens round-trips through JSON', () =>
+    fc.assert(
+      fc.property(fc.nat({ max: 100000 }), (budgetTokens: number) => {
+        const rc: ReasoningConfig = { budgetTokens };
+        const rt: ReasoningConfig = JSON.parse(JSON.stringify(rc));
+        return rt.budgetTokens === budgetTokens;
       }),
-      { minLength: 1, maxLength: 5 },
-    ),
-  ])(
-    'ModelGenerationRequest contents deep-equal after JSON round-trip',
-    (contents) => {
-      const req: ModelGenerationRequest = { contents };
-      const rt: ModelGenerationRequest = JSON.parse(JSON.stringify(req));
-      return JSON.stringify(rt.contents) === JSON.stringify(contents);
-    },
-  );
+    ));
 
-  it.prop([fc.constantFrom('low', 'medium', 'high')])(
-    'ReasoningConfig effort round-trips through JSON',
-    (effort) => {
-      const rc: ReasoningConfig = { effort };
-      const rt: ReasoningConfig = JSON.parse(JSON.stringify(rc));
-      return rt.effort === effort;
-    },
-  );
-
-  it.prop([fc.boolean()])(
-    'ReasoningConfig includeInOutput round-trips through JSON',
-    (includeInOutput) => {
-      const rc: ReasoningConfig = { includeInOutput };
-      const rt: ReasoningConfig = JSON.parse(JSON.stringify(rc));
-      return rt.includeInOutput === includeInOutput;
-    },
-  );
-
-  it.prop([
-    fc.record({
-      contents: fc.array(
+  it('ModelGenerationSettings round-trips through JSON preserving fields', () =>
+    fc.assert(
+      fc.property(
         fc.record({
-          speaker: fc.constantFrom('human', 'ai', 'tool'),
-          blocks: fc.array(
+          temperature: fc.float({ min: 0, max: 2, noNaN: true }),
+          maxOutputTokens: fc.nat({ max: 100000 }),
+          systemInstruction: fc.string({ maxLength: 100 }),
+          reasoning: fc.oneof(
+            fc.constant(undefined),
+            fc.record({ budgetTokens: fc.nat({ max: 100000 }) }),
+          ),
+          toolChoice: fc.oneof(
+            fc.constant(undefined),
             fc.record({
-              type: fc.constant('text' as const),
-              text: fc.string({ minLength: 1, maxLength: 20 }),
+              mode: fc.constantFrom('auto', 'none', 'required'),
+              allowedToolNames: fc.oneof(
+                fc.constant(undefined),
+                fc.array(fc.string({ minLength: 1, maxLength: 20 }), {
+                  maxLength: 5,
+                }),
+              ),
             }),
-            { minLength: 1, maxLength: 3 },
           ),
         }),
-        { minLength: 0, maxLength: 3 },
+        (fields) => {
+          const settings: ModelGenerationSettings = fields;
+          const rt: ModelGenerationSettings = JSON.parse(
+            JSON.stringify(settings),
+          );
+          const coreMatches =
+            rt.temperature === fields.temperature &&
+            rt.maxOutputTokens === fields.maxOutputTokens &&
+            rt.systemInstruction === fields.systemInstruction;
+          return (
+            coreMatches &&
+            rt.reasoning?.budgetTokens === fields.reasoning?.budgetTokens &&
+            rt.toolChoice?.mode === fields.toolChoice?.mode &&
+            JSON.stringify(rt.toolChoice?.allowedToolNames) ===
+              JSON.stringify(fields.toolChoice?.allowedToolNames)
+          );
+        },
       ),
-    }),
-  ])(
-    'ModelGenerationRequest with only contents deep-equal after JSON round-trip',
-    ({ contents }) => {
-      const req: ModelGenerationRequest = { contents };
-      const rt: ModelGenerationRequest = JSON.parse(JSON.stringify(req));
-      return JSON.stringify(rt.contents) === JSON.stringify(contents);
-    },
-  );
+    ));
+
+  it('ModelGenerationRequest contents deep-equal after JSON round-trip', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            speaker: fc.constantFrom('human', 'ai', 'tool'),
+            blocks: fc.array(
+              fc.oneof(
+                fc.record({
+                  type: fc.constant('text' as const),
+                  text: fc.string({ minLength: 1, maxLength: 30 }),
+                }),
+                fc
+                  .record({
+                    type: fc.constant('tool_call' as const),
+                    id: fc.string({ minLength: 1, maxLength: 10 }),
+                    name: fc.string({ minLength: 1, maxLength: 15 }),
+                    parameters: fc.dictionary(
+                      fc.string({ minLength: 1, maxLength: 5 }),
+                      fc.string({ maxLength: 10 }),
+                    ),
+                  })
+                  .map((b): ToolCallBlock => b),
+                fc
+                  .record({
+                    type: fc.constant('thinking' as const),
+                    thought: fc.string({ minLength: 1, maxLength: 30 }),
+                    signature: fc.option(
+                      fc.string({ minLength: 1, maxLength: 20 }),
+                    ),
+                  })
+                  .map((b): ThinkingBlock => b),
+              ),
+              { minLength: 1, maxLength: 3 },
+            ),
+          }),
+          { minLength: 1, maxLength: 5 },
+        ),
+        (contents) => {
+          const req: ModelGenerationRequest = { contents };
+          const rt: ModelGenerationRequest = JSON.parse(JSON.stringify(req));
+          return JSON.stringify(rt.contents) === JSON.stringify(contents);
+        },
+      ),
+    ));
+
+  it('ReasoningConfig effort round-trips through JSON', () =>
+    fc.assert(
+      fc.property(fc.constantFrom('low', 'medium', 'high'), (effort) => {
+        const rc: ReasoningConfig = { effort };
+        const rt: ReasoningConfig = JSON.parse(JSON.stringify(rc));
+        return rt.effort === effort;
+      }),
+    ));
+
+  it('ReasoningConfig includeInOutput round-trips through JSON', () =>
+    fc.assert(
+      fc.property(fc.boolean(), (includeInOutput) => {
+        const rc: ReasoningConfig = { includeInOutput };
+        const rt: ReasoningConfig = JSON.parse(JSON.stringify(rc));
+        return rt.includeInOutput === includeInOutput;
+      }),
+    ));
+
+  it('ModelGenerationRequest with only contents deep-equal after JSON round-trip', () =>
+    fc.assert(
+      fc.property(
+        fc.record({
+          contents: fc.array(
+            fc.record({
+              speaker: fc.constantFrom('human', 'ai', 'tool'),
+              blocks: fc.array(
+                fc.record({
+                  type: fc.constant('text' as const),
+                  text: fc.string({ minLength: 1, maxLength: 20 }),
+                }),
+                { minLength: 1, maxLength: 3 },
+              ),
+            }),
+            { minLength: 0, maxLength: 3 },
+          ),
+        }),
+        ({ contents }) => {
+          const req: ModelGenerationRequest = { contents };
+          const rt: ModelGenerationRequest = JSON.parse(JSON.stringify(req));
+          return JSON.stringify(rt.contents) === JSON.stringify(contents);
+        },
+      ),
+    ));
 });

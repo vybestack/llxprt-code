@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
+import { expect, describe, it, beforeEach, vi } from 'vitest';
 import { splitCommands } from './shell-utils.js';
 
 describe('splitCommands', () => {
@@ -118,7 +118,10 @@ describe('splitCommands', () => {
 });
 
 describe('splitCommands regex fallback', () => {
-  // Test the regex fallback path by mocking isParserAvailable to return false
+  // Test the regex fallback path by mocking isParserAvailable to return false.
+  // Bun's mock.module is process-wide and cannot be unmocked, so the mock
+  // persists for the rest of this file. This is safe because the top-level
+  // import already captured the real splitCommands before the mock registered.
   beforeEach(() => {
     vi.doMock('./shell-parser.js', () => ({
       isParserAvailable: () => false,
@@ -128,10 +131,6 @@ describe('splitCommands regex fallback', () => {
       splitCommandsWithTree: () => [],
       parseCommandDetails: () => null,
     }));
-  });
-
-  afterEach(() => {
-    vi.doUnmock('./shell-parser.js');
   });
 
   it('should keep 2>&1 redirection within a single command segment (regex path)', async () => {

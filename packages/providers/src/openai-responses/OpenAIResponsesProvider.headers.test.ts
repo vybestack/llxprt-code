@@ -1,4 +1,5 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -21,10 +22,10 @@ const parseResponsesStreamMock = vi.hoisted(() =>
 
 const fetchMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
     '@vybestack/llxprt-code-settings',
-  )),
+  ),
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));

@@ -26,8 +26,8 @@ const {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-providers', async () => {
-  const actual = await vi.importActual<
+vi.mock('@vybestack/llxprt-code-providers', () => {
+  const actual = importActualSync<
     typeof import('@vybestack/llxprt-code-providers')
   >('@vybestack/llxprt-code-providers');
   return {
@@ -38,10 +38,10 @@ vi.mock('@vybestack/llxprt-code-providers', async () => {
   };
 });
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual<
-    typeof import('@vybestack/llxprt-code-core')
-  >('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = importActualSync<typeof import('@vybestack/llxprt-code-core')>(
+    '@vybestack/llxprt-code-core',
+  );
   return {
     ...actual,
     getSettingsService: mockGetSettingsService,
@@ -58,6 +58,7 @@ import {
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from '../test-oauth-settings.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // ---------------------------------------------------------------------------
 // Helpers

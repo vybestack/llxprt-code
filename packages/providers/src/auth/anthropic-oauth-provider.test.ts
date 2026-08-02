@@ -20,26 +20,24 @@ import { ClipboardService } from './ClipboardService.js';
 
 // Register real runtime accessors via the bridge (no mock theater)
 import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 // Mock the device flow implementation
-vi.mock(
-  '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
-  async () => {
-    const actual = await vi.importActual(
-      '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
-    );
-    return {
-      ...actual,
-      // Mock shouldLaunchBrowser to return true for tests
-      shouldLaunchBrowser: vi.fn().mockReturnValue(true),
-      // Mock openBrowserSecurely to prevent actual browser opening
-      openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
-    };
-  },
-);
+vi.mock('@vybestack/llxprt-code-core/utils/secure-browser-launcher.js', () => {
+  const actual = importActualSync(
+    '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js',
+  );
+  return {
+    ...actual,
+    // Mock shouldLaunchBrowser to return true for tests
+    shouldLaunchBrowser: vi.fn().mockReturnValue(true),
+    // Mock openBrowserSecurely to prevent actual browser opening
+    openBrowserSecurely: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
-vi.mock('@vybestack/llxprt-code-auth', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-auth');
+vi.mock('@vybestack/llxprt-code-auth', () => {
+  const actual = importActualSync('@vybestack/llxprt-code-auth');
   return {
     ...actual,
     AnthropicDeviceFlow: vi.fn().mockImplementation(() => ({

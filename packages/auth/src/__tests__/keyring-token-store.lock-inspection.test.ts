@@ -81,7 +81,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(status.classification).toBe('absent');
   });
 
-  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+  it.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'reports current-schema lock with canonical owner identity',
     async () => {
       const store = createStore();
@@ -235,7 +235,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(token?.access_token).toBe('test-access-token');
   });
 
-  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+  it.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'recoverAuthLock refuses a verified-live owner',
     async () => {
       const store = createStore();
@@ -294,7 +294,7 @@ describe('KeyringTokenStore lock inspection API (issue #2819)', () => {
     expect(token).not.toBeNull();
   });
 
-  it.runIf(['darwin', 'linux', 'freebsd'].includes(process.platform))(
+  it.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'forceRecoverAuthLock refuses a verified-live owner even with acknowledgment',
     async () => {
       const store = createStore();

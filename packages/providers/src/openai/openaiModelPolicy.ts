@@ -37,6 +37,38 @@ export const OPENAI_TRANSPORT_SELECTOR_KEYS: ReadonlySet<string> = new Set([
   'openaiResponsesEnabled',
 ]);
 
+const OPENAI_PROVIDER_RESERVED_KEYS: ReadonlySet<string> = new Set([
+  'enabled',
+  'auth-key',
+  'apiKey',
+  'api-key',
+  'auth-keyfile',
+  'apiKeyfile',
+  'api-keyfile',
+  'base-url',
+  'model',
+  'toolFormat',
+  'tool-format',
+  'toolFormatOverride',
+  'tool-format-override',
+  'defaultModel',
+  ...OPENAI_TRANSPORT_SELECTOR_KEYS,
+]);
+
+export function extractOpenAIModelParams(
+  providerSettings: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const params = Object.fromEntries(
+    Object.entries(providerSettings).filter(
+      ([key, value]) =>
+        !OPENAI_PROVIDER_RESERVED_KEYS.has(key) &&
+        value !== undefined &&
+        value !== null,
+    ),
+  );
+  return Object.keys(params).length > 0 ? params : undefined;
+}
+
 /**
  * Pre-5.6 models that are known to work on the Responses API but do not
  * *require* it. They remain on Chat Completions unless the user explicitly
@@ -92,6 +124,9 @@ function parseGptModelId(model: string): ParsedGptId | null {
   const majorStr = rest.slice(0, dotIndex);
   const afterDot = rest.slice(dotIndex + 1);
 
+  if (majorStr.length > 1 && majorStr.startsWith('0')) {
+    return null;
+  }
   if (!/^\d+$/.test(majorStr)) return null;
   const major = Number(majorStr);
   if (!Number.isFinite(major) || major <= 0) return null;
@@ -102,6 +137,7 @@ function parseGptModelId(model: string): ParsedGptId | null {
   if (!minorMatch) return null;
 
   const minorStr = minorMatch[1];
+  if (minorStr.length > 1 && minorStr.startsWith('0')) return null;
   const minor = Number(minorStr);
   if (!Number.isFinite(minor)) return null;
 
@@ -137,6 +173,16 @@ function compareVersions(
 }
 
 const GPT_56 = { major: 5, minor: 6 };
+
+export function isSanctionedGpt56Model(model: string): boolean {
+  const parsed = parseGptModelId(model);
+  return (
+    parsed !== null &&
+    parsed.major === GPT_56.major &&
+    parsed.minor === GPT_56.minor &&
+    isValidQualifier(parsed.suffix)
+  );
+}
 
 /**
  * Validate that the suffix qualifier (the part after a bare alias or

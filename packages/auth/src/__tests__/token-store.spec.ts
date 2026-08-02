@@ -160,7 +160,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     it('should handle removal of non-existent tokens gracefully', async () => {
       await expect(
         tokenStore.removeToken('non-existent'),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
   });
 

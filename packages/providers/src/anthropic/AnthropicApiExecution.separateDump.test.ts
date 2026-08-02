@@ -228,11 +228,13 @@ describe('AnthropicApiExecution separate request/response dump', () => {
 
     const result = await executeAnthropicApiCall(params);
     const received: unknown[] = [];
-    await expect(async () => {
-      for await (const chunk of result.response as AsyncIterable<unknown>) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('Anthropic stream failed');
+    await expect(
+      (async () => {
+        for await (const chunk of result.response as AsyncIterable<unknown>) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('Anthropic stream failed');
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();

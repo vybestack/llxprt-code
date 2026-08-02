@@ -227,11 +227,7 @@ export const defaultRunner: CommandRunner = (
   env = process.env,
 ) => {
   try {
-    execSync(command, {
-      cwd,
-      stdio: 'inherit',
-      env,
-    });
+    execSync(command, { cwd, stdio: 'inherit', env });
     return { success: true, exitCode: 0 };
   } catch (error) {
     return { success: false, exitCode: extractExitCode(error) };

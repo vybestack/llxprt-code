@@ -63,7 +63,28 @@ export async function runSeatbeltSandbox(
     );
   }
 
-  const profile = (process.env.SEATBELT_PROFILE ??= 'permissive-open');
+  const explicitProfile = process.env.SEATBELT_PROFILE;
+  const networkMode =
+    process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
+  let automaticProfile = 'permissive-open';
+  if (networkMode === 'off') {
+    automaticProfile = 'permissive-closed';
+  } else if (networkMode === 'proxied') {
+    automaticProfile = 'permissive-proxied';
+  }
+  const profile =
+    explicitProfile !== undefined && explicitProfile.length > 0
+      ? explicitProfile
+      : automaticProfile;
+  process.env.SEATBELT_PROFILE = profile;
+  if (
+    (profile === 'permissive-proxied' || profile === 'restrictive-proxied') &&
+    !process.env.LLXPRT_SANDBOX_PROXY_COMMAND?.trim()
+  ) {
+    throw new FatalSandboxError(
+      'Seatbelt proxied profile requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
+    );
+  }
   let profileFile = fileURLToPath(
     new URL(`./sandbox-macos-${profile}.sb`, import.meta.url),
   );
@@ -283,6 +304,18 @@ async function setupSeatbeltProxy(): Promise<SeatbeltProxySetup> {
   return { sandboxEnv, proxyProcess, proxyCommand };
 }
 
+function signalSeatbeltProcessGroup(pid: number): void {
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch (error) {
+    if (
+      !(error instanceof Error && 'code' in error && error.code === 'ESRCH')
+    ) {
+      throw error;
+    }
+  }
+}
+
 function wireSeatbeltProxyCloseHandler(
   proxyProcess: ChildProcess | undefined,
   sandboxProcess: ChildProcess,
@@ -294,7 +327,7 @@ function wireSeatbeltProxyCloseHandler(
   proxyProcess.on('close', (code, signal) => {
     const sandboxPid = sandboxProcess.pid;
     if (sandboxPid !== undefined && sandboxPid !== 0) {
-      process.kill(-sandboxPid, 'SIGTERM');
+      signalSeatbeltProcessGroup(sandboxPid);
     }
     // Avoid throwing inside an event callback (uncaught async throw).
     // Log the failure and terminate the process group so the sandbox exits.

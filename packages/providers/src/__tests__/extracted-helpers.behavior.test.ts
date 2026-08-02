@@ -99,12 +99,17 @@ describe('extracted provider helper behavior', () => {
   it('preserves load-balancer failover defaults and status classification', () => {
     const defaults = extractFailoverSettings(undefined);
 
-    expect(defaults.retryCount).toBe(1);
+    expect(defaults.retryCount).toBe(2);
     expect(defaults.retryDelayMs).toBe(0);
     expect(defaults.failoverOnNetworkErrors).toBe(true);
     expect(shouldFailover(statusError(502), defaults)).toBe(true);
     expect(shouldFailover(statusError(404), defaults)).toBe(false);
     expect(isImmediateFailoverError(statusError(401))).toBe(true);
+    // Issue #2849: 429 is transient and must be retried on the same backend,
+    // not immediately failed over. Only auth/quota errors are immediate.
+    expect(isImmediateFailoverError(statusError(429))).toBe(false);
+    expect(isImmediateFailoverError(statusError(402))).toBe(true);
+    expect(isImmediateFailoverError(statusError(403))).toBe(true);
 
     const custom = extractFailoverSettings({
       failover_retry_count: 120,

@@ -345,11 +345,24 @@ export interface IdeStatus {
   readonly modeEnabled: boolean;
 }
 
-export interface SessionCheckpoint {
-  readonly id: string;
+export interface CheckpointInfo {
+  readonly checkpointId: string;
+  readonly name: string;
+  readonly sessionId: string;
+  readonly sequence: number;
   readonly createdAt: string;
-  readonly label?: string;
-  readonly messageCount: number;
+}
+
+export interface SessionInfo {
+  readonly id: string;
+  readonly name: string | null;
+  readonly title?: string | null;
+  readonly createdAt: string;
+  readonly modifiedAt: string;
+  readonly parentSessionId?: string;
+  readonly parentSequence?: number;
+  readonly checkpointId?: string;
+  readonly checkpointName?: string;
 }
 
 export interface SessionRecordingState {
@@ -670,9 +683,24 @@ export interface AgentSessionControl {
     target: 'latest' | string,
     options?: { readonly prefix?: boolean },
   ): Promise<readonly AgentHistoryItem[]>;
-  createCheckpoint(label?: string): Promise<SessionCheckpoint>;
-  restoreCheckpoint(id: string): Promise<void>;
-  listCheckpoints(): readonly SessionCheckpoint[];
+  /** Creates a durable branch point in the active recording. */
+  createCheckpoint(name: string): Promise<CheckpointInfo>;
+  /** Creates and activates a self-contained child session from a checkpoint. */
+  forkFromCheckpoint(ref: string): Promise<SessionInfo>;
+  /** Lists live recording-native checkpoints in the current project. */
+  listCheckpoints(): Promise<readonly CheckpointInfo[]>;
+  /** Renames a checkpoint reference while preserving its branch point. */
+  renameCheckpoint(ref: string, name: string): Promise<void>;
+  /** Tombstones a checkpoint reference without deleting existing children. */
+  deleteCheckpoint(ref: string): Promise<void>;
+  /** Assigns a project-unique name to the active living session. */
+  nameCurrentSession(name: string): Promise<void>;
+  /** Activates a living session or forks a child from a checkpoint. */
+  resumeSession(ref: string): Promise<SessionInfo>;
+  /** Lists living recording sessions in the current project. */
+  listSessions(): Promise<readonly SessionInfo[]>;
+  /** Deletes a non-active session when no live checkpoint references block it. */
+  deleteSession(ref: string): Promise<void>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
 }

@@ -27,6 +27,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import { MAX_SUGGESTIONS_TO_SHOW } from '../components/SuggestionsDisplay.js';
+import { CommandKind } from '../commands/types.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 150;
@@ -194,6 +195,7 @@ async function buildSubagentCandidates(
         label: name,
         value: name,
         description: 'subagent',
+        kind: CommandKind.SUBAGENT,
       },
     }));
   } catch {

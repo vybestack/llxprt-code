@@ -13,7 +13,11 @@
  * @pseudocode use-session-browser.md
  */
 
-import type { SessionSummary } from '@vybestack/llxprt-code-core';
+import type {
+  ContinueTarget,
+  SessionRecordingService,
+  SessionSummary,
+} from '@vybestack/llxprt-code-core';
 import type { PerformResumeResult } from '../../services/performResume.js';
 import type { Key } from './useKeypress.js';
 import { useSessionBrowserController } from './useSessionBrowserHelpers.js';
@@ -27,11 +31,17 @@ export type PreviewState = 'loading' | 'loaded' | 'none' | 'error';
  * Extended session summary with browser-specific enrichments.
  */
 export interface EnrichedSessionSummary extends SessionSummary {
-  /** First user message extracted from session, if available */
+  /** Unified session or checkpoint continuation target represented by this row. */
+  target: ContinueTarget;
+  /** Stable row identity; checkpoint rows do not alias their source session row. */
+  targetKey: string;
+  /** Checkpoint display name when this row represents a branch point. */
+  checkpointName?: string;
+  /** First user message extracted from the target's source session, if available. */
   firstUserMessage?: string;
   /** Current state of preview loading */
   previewState: PreviewState;
-  /** Whether this session is currently locked by another process */
+  /** Whether the target source is currently locked by another process */
   isLocked: boolean;
 }
 
@@ -45,8 +55,10 @@ export interface UseSessionBrowserProps {
   projectHash: string;
   /** ID of the currently active session (to exclude from list) */
   currentSessionId: string;
-  /** Callback to handle session selection/resume */
-  onSelect: (session: SessionSummary) => Promise<PerformResumeResult>;
+  /** Callback to handle unified target selection/resume */
+  onSelect: (target: ContinueTarget) => Promise<PerformResumeResult>;
+  /** Active recording, used to tombstone checkpoints in the current session. */
+  activeRecording?: SessionRecordingService | null;
   /** Callback to close the browser */
   onClose: () => void;
   /** Whether there's an active conversation that would be abandoned */

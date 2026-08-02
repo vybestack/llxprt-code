@@ -3,8 +3,7 @@
  * @requirement REQ-001.1, REQ-001.2, REQ-001.3, REQ-001.4, REQ-001.5
  * @pseudocode lines 10-26
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import {
   mapGeminiFinishReason,
@@ -350,130 +349,153 @@ describe('mapping tables export', () => {
 // ============================================================================
 
 describe('finishReasons property-based', () => {
-  it.prop([fc.string({ maxLength: 50 })])(
-    'for any string, mapGeminiFinishReason preserves rawStopReason and yields a canonical reason',
-    (raw: string) => {
-      const result = mapGeminiFinishReason(raw);
-      return (
-        result.rawStopReason === raw &&
-        ALL_CANONICAL.includes(result.finishReason)
-      );
-    },
-  );
+  it('for any string, mapGeminiFinishReason preserves rawStopReason and yields a canonical reason', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 50 }), (raw: string) => {
+        const result = mapGeminiFinishReason(raw);
+        return (
+          result.rawStopReason === raw &&
+          ALL_CANONICAL.includes(result.finishReason)
+        );
+      }),
+    ));
 
-  it.prop([fc.string({ maxLength: 50 })])(
-    'for any string, mapOpenAIFinishReason preserves rawStopReason and yields a canonical reason',
-    (raw: string) => {
-      const result = mapOpenAIFinishReason(raw);
-      return (
-        result.rawStopReason === raw &&
-        ALL_CANONICAL.includes(result.finishReason)
-      );
-    },
-  );
+  it('for any string, mapOpenAIFinishReason preserves rawStopReason and yields a canonical reason', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 50 }), (raw: string) => {
+        const result = mapOpenAIFinishReason(raw);
+        return (
+          result.rawStopReason === raw &&
+          ALL_CANONICAL.includes(result.finishReason)
+        );
+      }),
+    ));
 
-  it.prop([fc.string({ maxLength: 50 })])(
-    'for any string, mapAnthropicStopReason preserves rawStopReason and yields a canonical reason',
-    (raw: string) => {
-      const result = mapAnthropicStopReason(raw);
-      return (
-        result.rawStopReason === raw &&
-        ALL_CANONICAL.includes(result.finishReason)
-      );
-    },
-  );
+  it('for any string, mapAnthropicStopReason preserves rawStopReason and yields a canonical reason', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 50 }), (raw: string) => {
+        const result = mapAnthropicStopReason(raw);
+        return (
+          result.rawStopReason === raw &&
+          ALL_CANONICAL.includes(result.finishReason)
+        );
+      }),
+    ));
 
-  it.prop([
-    fc.oneof(
-      fc.constantFrom(...ALL_CANONICAL),
-      fc.string().filter((s) => !CANONICAL_STRINGS.includes(s)),
-      fc.integer(),
-      fc.boolean(),
-      fc.constant(null),
-    ),
-  ])(
-    'isCanonicalFinishReason is true iff value is in the union set',
-    (value: unknown) => {
-      const result = isCanonicalFinishReason(value);
-      const expected =
-        typeof value === 'string' && CANONICAL_STRINGS.includes(value);
-      return result === expected;
-    },
-  );
+  it('isCanonicalFinishReason is true iff value is in the union set', () =>
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.constantFrom(...ALL_CANONICAL),
+          fc.string().filter((s) => !CANONICAL_STRINGS.includes(s)),
+          fc.integer(),
+          fc.boolean(),
+          fc.constant(null),
+        ),
+        (value: unknown) => {
+          const result = isCanonicalFinishReason(value);
+          const expected =
+            typeof value === 'string' && CANONICAL_STRINGS.includes(value);
+          return result === expected;
+        },
+      ),
+    ));
 
-  it.prop([fc.constantFrom(...ALL_CANONICAL)])(
-    'every canonical finish reason is recognized by isCanonicalFinishReason',
-    (reason: CanonicalFinishReason) => isCanonicalFinishReason(reason) === true,
-  );
+  it('every canonical finish reason is recognized by isCanonicalFinishReason', () =>
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...ALL_CANONICAL),
+        (reason: CanonicalFinishReason) =>
+          isCanonicalFinishReason(reason) === true,
+      ),
+    ));
 
-  it.prop([fc.string({ maxLength: 30 })])(
-    'mapGeminiFinishReason is pure: same input always yields same output',
-    (raw) => {
-      const r1 = mapGeminiFinishReason(raw);
-      const r2 = mapGeminiFinishReason(raw);
-      return (
-        r1.finishReason === r2.finishReason &&
-        r1.rawStopReason === r2.rawStopReason
-      );
-    },
-  );
+  it('mapGeminiFinishReason is pure: same input always yields same output', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 30 }), (raw) => {
+        const r1 = mapGeminiFinishReason(raw);
+        const r2 = mapGeminiFinishReason(raw);
+        return (
+          r1.finishReason === r2.finishReason &&
+          r1.rawStopReason === r2.rawStopReason
+        );
+      }),
+    ));
 
-  it.prop([fc.string({ maxLength: 30 })])(
-    'mapOpenAIFinishReason is pure: same input always yields same output',
-    (raw) => {
-      const r1 = mapOpenAIFinishReason(raw);
-      const r2 = mapOpenAIFinishReason(raw);
-      return (
-        r1.finishReason === r2.finishReason &&
-        r1.rawStopReason === r2.rawStopReason
-      );
-    },
-  );
+  it('mapOpenAIFinishReason is pure: same input always yields same output', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 30 }), (raw) => {
+        const r1 = mapOpenAIFinishReason(raw);
+        const r2 = mapOpenAIFinishReason(raw);
+        return (
+          r1.finishReason === r2.finishReason &&
+          r1.rawStopReason === r2.rawStopReason
+        );
+      }),
+    ));
 
-  it.prop([fc.string({ maxLength: 30 })])(
-    'mapAnthropicStopReason is pure: same input always yields same output',
-    (raw) => {
-      const r1 = mapAnthropicStopReason(raw);
-      const r2 = mapAnthropicStopReason(raw);
-      return (
-        r1.finishReason === r2.finishReason &&
-        r1.rawStopReason === r2.rawStopReason
-      );
-    },
-  );
+  it('mapAnthropicStopReason is pure: same input always yields same output', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 30 }), (raw) => {
+        const r1 = mapAnthropicStopReason(raw);
+        const r2 = mapAnthropicStopReason(raw);
+        return (
+          r1.finishReason === r2.finishReason &&
+          r1.rawStopReason === r2.rawStopReason
+        );
+      }),
+    ));
 
-  it.prop([fc.constantFrom(...Object.keys(GEMINI_FINISH_MAP))])(
-    'every known Gemini FinishReason maps to a canonical value via GEMINI_FINISH_MAP',
-    (raw: string) => {
-      const result = mapGeminiFinishReason(raw);
-      const expected = GEMINI_FINISH_MAP[raw];
-      return result.finishReason === expected && result.rawStopReason === raw;
-    },
-  );
+  it('every known Gemini FinishReason maps to a canonical value via GEMINI_FINISH_MAP', () =>
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...Object.keys(GEMINI_FINISH_MAP)),
+        (raw: string) => {
+          const result = mapGeminiFinishReason(raw);
+          const expected = GEMINI_FINISH_MAP[raw];
+          return (
+            result.finishReason === expected && result.rawStopReason === raw
+          );
+        },
+      ),
+    ));
 
-  it.prop([fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP))])(
-    'every known OpenAI finish reason maps via OPENAI_FINISH_MAP',
-    (raw: string) => {
-      const result = mapOpenAIFinishReason(raw);
-      const expected = OPENAI_FINISH_MAP[raw];
-      return result.finishReason === expected && result.rawStopReason === raw;
-    },
-  );
+  it('every known OpenAI finish reason maps via OPENAI_FINISH_MAP', () =>
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...Object.keys(OPENAI_FINISH_MAP)),
+        (raw: string) => {
+          const result = mapOpenAIFinishReason(raw);
+          const expected = OPENAI_FINISH_MAP[raw];
+          return (
+            result.finishReason === expected && result.rawStopReason === raw
+          );
+        },
+      ),
+    ));
 
-  it.prop([fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP))])(
-    'every known Anthropic stop reason maps via ANTHROPIC_STOP_MAP',
-    (raw: string) => {
-      const result = mapAnthropicStopReason(raw);
-      const expected = ANTHROPIC_STOP_MAP[raw];
-      return result.finishReason === expected && result.rawStopReason === raw;
-    },
-  );
+  it('every known Anthropic stop reason maps via ANTHROPIC_STOP_MAP', () =>
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...Object.keys(ANTHROPIC_STOP_MAP)),
+        (raw: string) => {
+          const result = mapAnthropicStopReason(raw);
+          const expected = ANTHROPIC_STOP_MAP[raw];
+          return (
+            result.finishReason === expected && result.rawStopReason === raw
+          );
+        },
+      ),
+    ));
 
-  it.prop([fc.string({ maxLength: 1 })])(
-    'single-char strings never crash any mapper and always return canonical',
-    (raw: string) =>
-      ALL_CANONICAL.includes(mapGeminiFinishReason(raw).finishReason) &&
-      ALL_CANONICAL.includes(mapOpenAIFinishReason(raw).finishReason) &&
-      ALL_CANONICAL.includes(mapAnthropicStopReason(raw).finishReason),
-  );
+  it('single-char strings never crash any mapper and always return canonical', () =>
+    fc.assert(
+      fc.property(
+        fc.string({ maxLength: 1 }),
+        (raw: string) =>
+          ALL_CANONICAL.includes(mapGeminiFinishReason(raw).finishReason) &&
+          ALL_CANONICAL.includes(mapOpenAIFinishReason(raw).finishReason) &&
+          ALL_CANONICAL.includes(mapAnthropicStopReason(raw).finishReason),
+      ),
+    ));
 });

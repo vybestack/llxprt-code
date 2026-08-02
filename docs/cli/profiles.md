@@ -205,7 +205,7 @@ Configure before saving a load balancer profile with `/set`:
 
 | Setting                         | Default               | Description                               |
 | ------------------------------- | --------------------- | ----------------------------------------- |
-| `failover_retry_count`          | 1                     | Retries per backend before moving to next |
+| `failover_retry_count`          | 2                     | Retries per backend before moving to next |
 | `failover_retry_delay_ms`       | 0                     | Delay between retries (ms)                |
 | `failover_on_network_errors`    | true                  | Failover on TCP/network errors            |
 | `failover_status_codes`         | [429,500,502,503,504] | HTTP codes that trigger failover          |

@@ -79,6 +79,27 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 /**
+ * Narrow unknown to a Set<string> with runtime validation of every element.
+ * Throws a clear error if the value is not a Set or any element is not a
+ * string — no type assertions.
+ */
+export function asStringSet(value: unknown): Set<string> {
+  if (!(value instanceof Set)) {
+    throw new Error(
+      `expected Set, got ${value === null ? 'null' : typeof value}`,
+    );
+  }
+  const result: Set<string> = new Set();
+  for (const element of value) {
+    if (typeof element !== 'string') {
+      throw new Error('expected Set<string>, found non-string element');
+    }
+    result.add(element);
+  }
+  return result;
+}
+
+/**
  * Narrow unknown to an array without element-type validation. Returns an
  * empty array for non-array values. The element type is `unknown` — callers
  * must narrow elements themselves (e.g. via asRecord).

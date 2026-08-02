@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
+import { expect, describe, it, vi } from 'vitest';
 
 /**
  * Tests for detectCommandSubstitution through the REGEX FALLBACK path.
@@ -12,22 +12,18 @@ import { expect, describe, it, beforeEach, afterEach, vi } from 'vitest';
  * These tests mock shell-parser.js so isParserAvailable() returns false,
  * forcing detectCommandSubstitution to use detectCommandSubstitutionRegex.
  */
+
+// Hoisted mock: applies to all tests in this file.
+vi.mock('./shell-parser.js', () => ({
+  isParserAvailable: () => false,
+  parseShellCommand: () => null,
+  extractCommandNames: () => [],
+  hasCommandSubstitution: () => false,
+  splitCommandsWithTree: () => [],
+  parseCommandDetails: () => null,
+}));
+
 describe('detectCommandSubstitution regex fallback', () => {
-  beforeEach(() => {
-    vi.doMock('./shell-parser.js', () => ({
-      isParserAvailable: () => false,
-      parseShellCommand: () => null,
-      extractCommandNames: () => [],
-      hasCommandSubstitution: () => false,
-      splitCommandsWithTree: () => [],
-      parseCommandDetails: () => null,
-    }));
-  });
-
-  afterEach(() => {
-    vi.doUnmock('./shell-parser.js');
-  });
-
   // Extended timeout: the first dynamic import after vi.doMock re-transforms
   // the shell-utils module graph, which can exceed the default 5s timeout
   // under coverage instrumentation. Subsequent imports hit the module cache.

@@ -35,6 +35,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   SessionRecordingService,
+  type ContinueTarget,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -43,7 +44,6 @@ import { renderHook, waitFor } from '../../../test-utils/render.js';
 import {
   useSessionBrowser,
   type UseSessionBrowserProps,
-  type EnrichedSessionSummary,
 } from '../useSessionBrowser.js';
 import type { Key } from '../useKeypress.js';
 import type { PerformResumeResult } from '../../../services/performResume.js';
@@ -195,15 +195,19 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       const sessionId = 'resume-session';
       await createTestSession(chatsDir, { sessionId });
 
-      let resumedSession: EnrichedSessionSummary | null = null;
+      let resumedTarget: ContinueTarget | null = null;
       const props = makeHookProps(chatsDir, {
-        onSelect: async (session) => {
-          resumedSession = session as EnrichedSessionSummary;
+        onSelect: async (target) => {
+          resumedTarget = target;
+          const selectedSessionId =
+            target.kind === 'session'
+              ? target.session.sessionId
+              : target.source.sessionId;
           return {
             ok: true as const,
             history: [],
             metadata: {
-              sessionId: session.sessionId,
+              sessionId: selectedSessionId,
               projectHash: PROJECT_HASH,
               startTime: new Date().toISOString(),
               provider: 'anthropic',
@@ -223,12 +227,13 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('\r', makeKey('return'));
 
       await waitFor(() => {
-        expect(resumedSession).not.toBeNull();
+        expect(resumedTarget).not.toBeNull();
       });
 
-      expect((resumedSession as EnrichedSessionSummary | null)?.sessionId).toBe(
-        sessionId,
-      );
+      expect(resumedTarget).toStrictEqual({
+        kind: 'session',
+        session: expect.objectContaining({ sessionId }),
+      });
     });
 
     /**

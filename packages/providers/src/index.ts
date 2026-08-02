@@ -40,6 +40,7 @@ export type { CacheStatistics } from './tokenUsageTracker.js';
 // --- Provider implementations ---
 export { OpenAIProvider } from './openai/OpenAIProvider.js';
 export { AnthropicProvider } from './anthropic/AnthropicProvider.js';
+export { ANTHROPIC_DEFAULT_BASE_URL } from './anthropic/AnthropicEndpointUtils.js';
 export { GeminiProvider } from './gemini/GeminiProvider.js';
 export { OpenAIResponsesProvider } from './openai-responses/OpenAIResponsesProvider.js';
 export { OpenAIVercelProvider } from './openai-vercel/index.js';
@@ -79,14 +80,6 @@ export {
   type AssetManifest,
   type KimiK3Segment,
 } from './tokenizers/official/index.js';
-export {
-  getRegisteredTokenizer,
-  isRegisteredModel,
-  getRegisteredModelNames,
-  createRegisteredTokenizerFactory,
-  clearRegisteredTokenizerCache,
-} from './tokenizers/modelTokenizerRegistry.js';
-
 // --- Errors ---
 export {
   AuthenticationRequiredError,

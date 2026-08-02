@@ -58,6 +58,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-sticky-wraparound',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'backend-a',
@@ -164,6 +165,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-reset-on-all-fail',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'backend-a',
@@ -205,11 +207,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     phase = 'second';
     callLog.length = 0;
 
-    await expect(async () => {
-      for await (const _chunk of provider.generateChatCompletion(options)) {
-        // consume
-      }
-    }).rejects.toThrow(LoadBalancerFailoverError);
+    await expect(
+      (async () => {
+        for await (const _chunk of provider.generateChatCompletion(options)) {
+          // consume
+        }
+      })(),
+    ).rejects.toThrow(LoadBalancerFailoverError);
 
     expect(provider.getCurrentFailoverIndex()).toBe(0);
     expect(callLog).toStrictEqual(['model-c', 'model-a', 'model-b']);
@@ -240,6 +244,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-full-rotation-from-zero',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'backend-a',
@@ -273,11 +278,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     expect(provider.getCurrentFailoverIndex()).toBe(0);
 
-    await expect(async () => {
-      for await (const _chunk of provider.generateChatCompletion(options)) {
-        // consume
-      }
-    }).rejects.toThrow(LoadBalancerFailoverError);
+    await expect(
+      (async () => {
+        for await (const _chunk of provider.generateChatCompletion(options)) {
+          // consume
+        }
+      })(),
+    ).rejects.toThrow(LoadBalancerFailoverError);
 
     expect(callLog).toStrictEqual(['model-a', 'model-b', 'model-c']);
     expect(provider.getCurrentFailoverIndex()).toBe(0);
@@ -328,6 +335,7 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'test-not-pegged',
       strategy: 'failover',
+      lbProfileEphemeralSettings: { failover_retry_count: 1 },
       subProfiles: [
         {
           name: 'zai',

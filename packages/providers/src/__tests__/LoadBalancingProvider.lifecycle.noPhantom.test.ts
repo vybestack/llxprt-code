@@ -151,10 +151,13 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
     providerManager.registerProvider(successProvider);
 
     const provider = new LoadBalancingProvider(
-      makeFailoverConfig([
-        { name: 'primary', providerName: 'throw-provider' },
-        { name: 'secondary', providerName: 'success-provider' },
-      ]),
+      {
+        ...makeFailoverConfig([
+          { name: 'primary', providerName: 'throw-provider' },
+          { name: 'secondary', providerName: 'success-provider' },
+        ]),
+        lbProfileEphemeralSettings: { failover_retry_count: 1 },
+      },
       providerManager,
     );
 

@@ -41,6 +41,10 @@ export type {
   SecureStoreOptions,
 } from './secure-store/secure-store.js';
 export {
+  isSecureStoreError,
+  isRuntimeReplacedError,
+} from './secure-store/secure-store-errors.js';
+export {
   ProviderKeyStorage,
   KEY_NAME_REGEX,
   getProviderKeyStorage,

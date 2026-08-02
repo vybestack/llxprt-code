@@ -23,11 +23,17 @@ import {
   buildProviderDumpBody,
   dumpRequestContext,
 } from '@vybestack/llxprt-code-providers';
-import type { IContent } from '@vybestack/llxprt-code-core';
+import type {
+  IContent,
+  ChronologyTraceEntry,
+} from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 
-type HistoryService = { getAll: () => unknown };
+type HistoryService = {
+  getAll: () => unknown;
+  getChronologyTrace: () => readonly ChronologyTraceEntry[];
+};
 
 type AgentClientWithHistory = {
   getHistoryService?: () => HistoryService | null;
@@ -41,7 +47,10 @@ type ConfigWithMaybeAgentClient = NonNullable<
 
 type ProviderManagerWithActive = {
   getActiveProviderName?: () => string | undefined;
-  getActiveProvider?: () => { getCurrentModel?: () => string | undefined };
+  getActiveProvider?: () => {
+    getCurrentModel?: () => string | undefined;
+    baseURL?: string;
+  };
 };
 
 const historyUnavailableMessage =
@@ -84,17 +93,26 @@ function getHistoryService(
 
 function getProviderDumpMetadata(
   config: NonNullable<CommandContext['services']['config']>,
-): { providerName: string; activeModel: string | undefined } {
+): {
+  providerName: string;
+  activeModel: string | undefined;
+  activeBaseURL: string | undefined;
+} {
   const providerManager = config.getProviderManager() as
     | ProviderManagerWithActive
     | undefined;
   if (!providerManager) {
-    return { providerName: 'backend', activeModel: undefined };
+    return {
+      providerName: 'backend',
+      activeModel: undefined,
+      activeBaseURL: undefined,
+    };
   }
   const activeProvider = providerManager.getActiveProvider?.();
   return {
     providerName: providerManager.getActiveProviderName?.() ?? 'backend',
     activeModel: activeProvider?.getCurrentModel?.(),
+    activeBaseURL: activeProvider?.baseURL,
   };
 }
 
@@ -111,7 +129,8 @@ async function dumpImmediateContext(
     };
   }
   const history = historyService.getAll() as IContent[];
-  const { providerName, activeModel } = getProviderDumpMetadata(config);
+  const { providerName, activeModel, activeBaseURL } =
+    getProviderDumpMetadata(config);
   const request = {
     url: 'immediate-context-dump',
     method: 'DUMP',
@@ -121,9 +140,17 @@ async function dumpImmediateContext(
       settings: context.services.settings,
       config,
       model: activeModel,
+      baseURL: activeBaseURL,
     }),
   };
-  const result = await dumpRequestContext(request, providerName);
+  // Chronology is written alongside the request, never inside request.body:
+  // the body must stay byte-for-byte what the provider would receive (#1721).
+  const result = await dumpRequestContext(
+    request,
+    providerName,
+    undefined,
+    historyService.getChronologyTrace(),
+  );
   return {
     type: 'message',
     messageType: 'info',

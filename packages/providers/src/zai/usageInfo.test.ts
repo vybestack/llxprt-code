@@ -250,8 +250,7 @@ describe('usageInfo', () => {
 
   describe('formatZaiUsage', () => {
     beforeEach(() => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-02-10T10:00:00Z'));
+      vi.useFakeTimers({ now: new Date('2026-02-10T10:00:00Z') });
     });
 
     afterEach(() => {

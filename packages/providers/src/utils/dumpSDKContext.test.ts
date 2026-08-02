@@ -158,11 +158,13 @@ describe('wrapStreamWithDump', () => {
     );
     const received: unknown[] = [];
 
-    await expect(async () => {
-      for await (const chunk of wrapped) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('stream failed');
+    await expect(
+      (async () => {
+        for await (const chunk of wrapped) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('stream failed');
 
     expect(received).toStrictEqual([firstChunk]);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(
@@ -234,11 +236,13 @@ describe('wrapStreamWithDump', () => {
     );
     const received: unknown[] = [];
 
-    await expect(async () => {
-      for await (const chunk of wrapped) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('stream failed');
+    await expect(
+      (async () => {
+        for await (const chunk of wrapped) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('stream failed');
 
     expect(received).toStrictEqual([firstChunk]);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledExactlyOnceWith(
@@ -288,11 +292,13 @@ describe('wrapStreamWithDump', () => {
       dumpSDKResponseContextSpy,
     );
 
-    await expect(async () => {
-      for await (const _chunk of wrapped) {
-        // Exhaust stream.
-      }
-    }).rejects.toThrow('stream failed');
+    await expect(
+      (async () => {
+        for await (const _chunk of wrapped) {
+          // Exhaust stream.
+        }
+      })(),
+    ).rejects.toThrow('stream failed');
 
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledExactlyOnceWith(

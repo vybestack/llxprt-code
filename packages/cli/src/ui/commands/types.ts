@@ -212,7 +212,8 @@ export type DialogType =
   | 'profileDetail'
   | 'profileEditor'
   | 'welcome'
-  | 'sessionBrowser';
+  | 'sessionBrowser'
+  | 'policies';
 
 /** Map dialog types to their associated data types for type-safe access */
 export interface DialogDataMap {
@@ -298,6 +299,7 @@ export enum CommandKind {
   FILE = 'file',
   MCP_PROMPT = 'mcp-prompt',
   EXTENSION = 'extension',
+  SUBAGENT = 'subagent',
 }
 
 // The standardized contract for any command in the system.

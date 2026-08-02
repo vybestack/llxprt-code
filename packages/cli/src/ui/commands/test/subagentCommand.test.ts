@@ -98,8 +98,6 @@ const createTestContext = ({
   const logger = {
     log: vi.fn(),
     logMessage: vi.fn(),
-    saveCheckpoint: vi.fn(),
-    loadCheckpoint: vi.fn().mockResolvedValue([]),
   } as unknown as Logger;
 
   const metrics: SessionMetrics = {

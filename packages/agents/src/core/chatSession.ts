@@ -57,6 +57,7 @@ import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
@@ -76,6 +77,7 @@ import { TurnProcessor } from './TurnProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
+import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
 import * as nodePath from 'node:path';
 import {
   convertPartListUnionToIContent,
@@ -243,10 +245,21 @@ export class ChatSession {
     this.tokenUsageLogger = this._createTokenUsageLogger(view);
     this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
+    // Resolve the Anthropic default base URL at construction time so that
+    // streaming turns from native Anthropic are stamped with an explicit
+    // endpoint. Load balancer endpoints are resolved per-request in
+    // resolveProviderBaseUrl (see TurnProcessor._commitSendResult).
+    const initialBaseUrl =
+      this.runtimeState.baseUrl ??
+      (this.runtimeState.provider === 'anthropic'
+        ? ANTHROPIC_DEFAULT_BASE_URL
+        : undefined);
+
     this.conversationManager = new ConversationManager(
       this.historyService,
       view,
       model,
+      initialBaseUrl,
     );
 
     this.conversationManager.importInitialHistory(initialHistory, model);
@@ -463,7 +476,25 @@ export class ChatSession {
     );
   }
 
-  private resolveProviderBaseUrl(_provider: IProvider): string | undefined {
+  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
+    // Load balancers: use the last-selected sub-profile's base URL so that
+    // turns are stamped with the actual endpoint that generated them. This
+    // enables cross-endpoint thinking-block stripping when a load balancer
+    // rotates between Anthropic-compatible endpoints (e.g. z.ai and native
+    // Anthropic).
+    const lbProvider = provider as unknown as {
+      getLastSelectedBaseUrl?: () => string | undefined;
+    };
+    if (typeof lbProvider.getLastSelectedBaseUrl === 'function') {
+      const lbBaseUrl = lbProvider.getLastSelectedBaseUrl();
+      if (lbBaseUrl) return lbBaseUrl;
+    }
+    // Native Anthropic without an explicit base URL defaults to
+    // api.anthropic.com. Stamping turns with this default ensures they are
+    // distinguishable from z.ai turns and can be stripped when switching.
+    if (provider.name === 'anthropic') {
+      return this.runtimeState.baseUrl ?? ANTHROPIC_DEFAULT_BASE_URL;
+    }
     return this.runtimeState.baseUrl;
   }
 
@@ -565,6 +596,18 @@ export class ChatSession {
 
   getLastPromptTokenCount(): number {
     return this.compressionHandler.lastPromptTokenCount ?? 0;
+  }
+
+  /**
+   * Returns the most recent pre-send prompt-envelope estimate produced at the
+   * final per-attempt send seam (issue #2817). Checks both non-streaming and
+   * streaming processors for the latest estimate. Returns null when the
+   * provider does not implement projectPromptEnvelope.
+   */
+  getPromptEnvelopeEstimate(): PromptEnvelopeEstimate | null {
+    const fromTurn = this.turnProcessor.getPromptEnvelopeEstimate();
+    if (fromTurn !== null) return fromTurn;
+    return this.streamProcessor.getPromptEnvelopeEstimate();
   }
 
   getTokenUsageLogger(): TokenUsageLogger {

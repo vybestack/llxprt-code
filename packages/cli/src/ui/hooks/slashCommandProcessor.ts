@@ -36,6 +36,7 @@ export interface SlashCommandProcessorActions {
   ) => void;
   openModelsDialog: (data?: ModelsDialogData) => void;
   openPermissionsDialog: () => void;
+  openPoliciesDialog: () => void;
   openProviderDialog: () => void;
   openLoadProfileDialog: () => void;
   openCreateProfileDialog: () => void;

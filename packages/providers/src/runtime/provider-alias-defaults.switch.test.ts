@@ -5,6 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const { aliasEntries } = vi.hoisted(() => ({
@@ -176,13 +177,20 @@ const mockProviderManager = {
 let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
-vi.mock('../composition/providerAliases.js', () => ({
-  loadProviderAliasEntries: () => aliasEntries,
-}));
+vi.mock('../composition/providerAliases.js', () => {
+  const actual = importActualSync<
+    typeof import('../composition/providerAliases.js')
+  >('../composition/providerAliases.js');
+  return {
+    ...actual,
+    loadProviderAliasEntries: () => aliasEntries,
+  };
+});
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-settings')>();
+vi.mock('@vybestack/llxprt-code-core', () => {
+  const actual = importActualSync<
+    typeof import('@vybestack/llxprt-code-settings')
+  >('@vybestack/llxprt-code-core');
 
   let activeContext: {
     settingsService: StubSettingsServiceInstance;

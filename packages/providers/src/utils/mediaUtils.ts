@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
-import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  MediaBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 
 export type MediaCategory = 'image' | 'pdf' | 'audio' | 'video' | 'unknown';
 
@@ -25,6 +29,25 @@ export function classifyMediaBlock(media: MediaBlock): MediaCategory {
   if (mime.startsWith('audio/')) return 'audio';
   if (mime.startsWith('video/')) return 'video';
   return 'unknown';
+}
+export function collectUnsupportedMedia(
+  contents: readonly IContent[],
+  isSupported: (category: MediaCategory) => boolean,
+): readonly UnsupportedMediaEntry[] {
+  return contents.flatMap((content) =>
+    content.blocks.flatMap((block) => {
+      if (block.type !== 'media') return [];
+      const category = classifyMediaBlock(block);
+      if (isSupported(category)) return [];
+      return [
+        {
+          kind: 'unsupported' as const,
+          reason: `${category} input is not supported by this protocol and was replaced with a text placeholder`,
+          mediaType: category,
+        },
+      ];
+    }),
+  );
 }
 
 const PNG_SIGNATURE: readonly number[] = [0x89, 0x50, 0x4e, 0x47];

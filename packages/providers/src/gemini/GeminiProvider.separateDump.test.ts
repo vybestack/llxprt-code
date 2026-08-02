@@ -332,11 +332,13 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     );
 
     const received: unknown[] = [];
-    await expect(async () => {
-      for await (const chunk of result.stream as AsyncIterable<unknown>) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('Stream interrupted');
+    await expect(
+      (async () => {
+        for await (const chunk of result.stream as AsyncIterable<unknown>) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('Stream interrupted');
 
     // All chunks yielded before the error should pass through
     expect(received).toStrictEqual(chunks);
@@ -382,11 +384,13 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     );
 
     const received: unknown[] = [];
-    await expect(async () => {
-      for await (const chunk of result.stream as AsyncIterable<unknown>) {
-        received.push(chunk);
-      }
-    }).rejects.toThrow('Gemini stream failed');
+    await expect(
+      (async () => {
+        for await (const chunk of result.stream as AsyncIterable<unknown>) {
+          received.push(chunk);
+        }
+      })(),
+    ).rejects.toThrow('Gemini stream failed');
 
     expect(received).toStrictEqual(chunks);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();

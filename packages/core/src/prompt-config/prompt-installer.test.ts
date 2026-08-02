@@ -312,7 +312,7 @@ describe('PromptInstaller', () => {
       expect(fileMode).toBe(parseInt('644', 8));
     });
 
-    it.runIf(isWindows())(
+    it.skipIf(!isWindows())(
       'should handle permission errors gracefully on Windows',
       async () => {
         // On Windows, create a scenario that would fail (e.g., invalid path)
@@ -465,7 +465,7 @@ describe('PromptInstaller', () => {
       expect(result.missing).toHaveLength(0);
     });
 
-    it.runIf(isWindows())(
+    it.skipIf(!isWindows())(
       'should check directory permissions on Windows',
       async () => {
         // On Windows, just create a directory and verify it exists
@@ -586,7 +586,7 @@ describe('PromptInstaller', () => {
       expect(result.repaired).toHaveLength(0);
     });
 
-    it.runIf(isWindows())(
+    it.skipIf(!isWindows())(
       'should report errors that could not be repaired on Windows',
       async () => {
         // On Windows, try to create in an invalid location
@@ -1031,7 +1031,7 @@ describe('PromptInstaller', () => {
       expect(result.installed.length + result.skipped.length).toBe(2);
     });
 
-    it.runIf(isWindows())(
+    it.skipIf(!isWindows())(
       'should clean up temp files on write failure - Windows',
       async () => {
         const files = { 'test.md': 'content' };

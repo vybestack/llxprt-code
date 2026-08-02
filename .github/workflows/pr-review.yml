@@ -51,18 +51,18 @@ jobs:
       LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_STRONG_MODEL: '${{ vars.LLXPRT_STRONG_MODEL || vars.LLXPRT_DEFAULT_MODEL }}'
       LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-      LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '200000' }}"
+      LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '256000' }}"
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:
       - name: 'Checkout base revision'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           ref: '${{ github.event.pull_request.base.sha }}'
           fetch-depth: 0
 
       - name: 'Setup Bun'
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # ratchet:oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
         with:
           bun-version-file: '.bun-version'
 
@@ -346,7 +346,7 @@ jobs:
             "- **Title**: " + pr.title,
             "- **Author**: " + ((pr.author && pr.author.login) || "unknown"),
             "- **Branch**: " + pr.baseRefName + " ← " + pr.headRefName,
-            "- **Changes**: +" + pr.additions + " -" + pr.deletions + " across " + pr.changedFiles + " files (" + pr.commits + " commits)",
+            "- **Changes**: +" + pr.additions + " -" + pr.deletions + " across " + pr.changedFiles + " files (" + (Array.isArray(pr.commits) ? pr.commits.length : pr.commits) + " commits)",
             "- **CI Status**: " + (process.env.CI_STATUS || "unknown") + " / " + (process.env.CI_CONCLUSION || "unknown"),
             "- **CI Run**: " + (process.env.CI_RUN_URL || "N/A"),
             "- **Documentation-only**: " + (process.env.DOCS_ONLY || "unknown"),
@@ -394,7 +394,7 @@ jobs:
       - name: 'Upload walkthrough diagnostics'
         if: always()
         continue-on-error: true
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: 'walkthrough-diagnostics-${{ github.run_attempt }}'
           path: |
@@ -419,8 +419,57 @@ jobs:
       - name: 'Post walkthrough comment'
         if: always()
         continue-on-error: true
-        uses: 'thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b' # v3.0.1
+        # Find-or-update the walkthrough comment by its HTML marker so re-runs
+        # edit the existing comment instead of posting duplicates. Replaces the
+        # abandoned node20 thollander action (issue #2648).
+        uses: 'actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3' # ratchet:actions/github-script@v9
+        env:
+          COMMENT_FILE: 'review/comment.md'
+          COMMENT_MARKER: '<!-- llxprt-walkthrough -->'
         with:
-          file-path: 'review/comment.md'
-          comment-tag: 'llxprt-walkthrough'
           github-token: '${{ github.token }}'
+          script: |
+            const fs = require('fs');
+            const commentFile = process.env.COMMENT_FILE;
+            if (!fs.existsSync(commentFile)) {
+              core.info(`${commentFile} not found; skipping comment post.`);
+              return;
+            }
+            const body = fs.readFileSync(commentFile, 'utf8');
+            const marker = process.env.COMMENT_MARKER;
+            if (!marker) {
+              core.info('No comment marker set; skipping comment post.');
+              return;
+            }
+            const number = context.issue.number;
+            if (!number) {
+              core.info('No issue/PR number in context; skipping comment post.');
+              return;
+            }
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                per_page: 100,
+              },
+            );
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated comment ${existing.id}.`);
+            } else {
+              const { data: created } = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                body,
+              });
+              core.info(`Created comment ${created.id}.`);
+            }
