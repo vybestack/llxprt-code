@@ -38,6 +38,15 @@ function makeStubOAuthManager(
   } as unknown as NonNullable<CodexImageBackendResolverDeps['oauthManager']>;
 }
 
+/** Minimal successful Codex images response. */
+function makeImageResponse() {
+  return {
+    ok: true,
+    text: () =>
+      Promise.resolve(JSON.stringify({ data: [{ b64_json: 'aGVsbG8=' }] })),
+  };
+}
+
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const NON_CODEX_BASE_URL = 'https://api.openai.com/v1';
 const VALID_TOKEN: StubToken = {
@@ -48,20 +57,61 @@ const VALID_TOKEN: StubToken = {
 };
 
 describe('createCodexImageBackendResolver', () => {
-  it('returns null when there is no active provider', () => {
+  // Image generation is a Codex-backed capability that does NOT require the
+  // Codex provider to be active. A user chatting with any provider can still
+  // generate images with their Codex credentials, so neither an absent active
+  // provider nor a non-Codex one may suppress the backend.
+  it('returns a backend when there is no active provider', () => {
     const resolve = createCodexImageBackendResolver({
       oauthManager: makeStubOAuthManager(VALID_TOKEN),
       getActiveProvider: () => undefined,
     });
-    expect(resolve()).toBeNull();
+    expect(resolve()?.name).toBe('codex');
   });
 
-  it('returns null when the active provider is not Codex (non-Codex base URL)', () => {
+  it('returns a backend when the active provider is not Codex', () => {
     const resolve = createCodexImageBackendResolver({
       oauthManager: makeStubOAuthManager(VALID_TOKEN),
       getActiveProvider: () => makeStubProvider(NON_CODEX_BASE_URL),
     });
-    expect(resolve()).toBeNull();
+    expect(resolve()?.name).toBe('codex');
+  });
+
+  it('targets the canonical Codex endpoint when the active provider is not Codex', async () => {
+    const fetchImpl = vi.fn(async () => makeImageResponse());
+    const resolve = createCodexImageBackendResolver({
+      oauthManager: makeStubOAuthManager(VALID_TOKEN),
+      getActiveProvider: () => makeStubProvider(NON_CODEX_BASE_URL),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await resolve()?.generate(
+      { prompt: 'a cat' },
+      new AbortController().signal,
+    );
+
+    const url = String(fetchImpl.mock.calls[0]?.[0]);
+    expect(url.startsWith(CODEX_BASE_URL)).toBe(true);
+    expect(url.includes(NON_CODEX_BASE_URL)).toBe(false);
+  });
+
+  it('honours a custom Codex endpoint from the active provider', async () => {
+    const customCodex = 'https://proxy.internal/chatgpt.com/backend-api/codex';
+    const fetchImpl = vi.fn(async () => makeImageResponse());
+    const resolve = createCodexImageBackendResolver({
+      oauthManager: makeStubOAuthManager(VALID_TOKEN),
+      getActiveProvider: () => makeStubProvider(customCodex),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    await resolve()?.generate(
+      { prompt: 'a cat' },
+      new AbortController().signal,
+    );
+
+    expect(String(fetchImpl.mock.calls[0]?.[0]).startsWith(customCodex)).toBe(
+      true,
+    );
   });
 
   it('returns null when there is no OAuth manager', () => {

@@ -133,7 +133,9 @@ export async function runDirectImageModeAndExit(
   const runImageOperation = resolveRunImageOperation(config);
   if (runImageOperation === null) {
     writeToStderr(
-      'Image generation is unavailable: no image-capable backend is registered for the current profile.\n',
+      'Image generation is unavailable. It uses your Codex account and works ' +
+        'with any provider, so this usually means Codex OAuth is not set up. ' +
+        'Start llxprt and run "/auth codex enable" to sign in, then retry.\n',
     );
     return ExitCodes.FATAL_CONFIG_ERROR;
   }

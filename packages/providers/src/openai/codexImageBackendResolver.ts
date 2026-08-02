@@ -7,8 +7,12 @@
 /**
  * Factory that builds a lazy resolveBackend closure for GenerateImageTool.
  *
- * Returns a CodexImageBackend when the active provider's base URL is a Codex
- * URL and a Codex OAuth token is available; returns null otherwise.
+ * Returns a CodexImageBackend whenever an OAuth manager is available, and null
+ * otherwise. Image generation is NOT gated on the active conversational
+ * provider: it is a Codex-backed capability usable from any provider. Whether
+ * the user actually holds Codex credentials is resolved per operation, so a
+ * missing token produces an actionable authentication error rather than the
+ * capability appearing absent.
  *
  * The closure is deliberately lazy: it reads the active provider and OAuth
  * state at invocation time (when the model calls generate_image), NOT at
@@ -74,6 +78,12 @@ export interface CodexImageBackendResolverDeps {
   readonly fetchImpl?: typeof fetch;
 }
 
+/**
+ * Canonical Codex backend endpoint, used when the active provider is not a
+ * Codex provider (image generation does not require one — see the resolver).
+ */
+const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
+
 function isCodexBaseUrl(baseUrl: string | undefined): boolean {
   return baseUrl?.includes('chatgpt.com/backend-api/codex') ?? false;
 }
@@ -121,19 +131,24 @@ export function createCodexImageBackendResolver(
   deps: CodexImageBackendResolverDeps,
 ): () => ResolvedImageBackendLike | null {
   return () => {
-    const provider = deps.getActiveProvider();
-    if (provider === undefined) {
-      return null;
-    }
-
-    const baseUrl = getBaseUrlFromProvider(provider);
-    if (!isCodexBaseUrl(baseUrl)) {
-      return null;
-    }
-
     if (deps.oauthManager === undefined) {
       return null;
     }
+
+    // Image generation is a Codex-backed capability that is INDEPENDENT of the
+    // conversational provider. A user chatting with Anthropic (or any other
+    // provider) can still generate images with their Codex credentials, so the
+    // active provider is deliberately NOT a gate.
+    //
+    // The active provider's base URL is honoured only when it is already a
+    // Codex URL, so a custom Codex endpoint keeps working; otherwise the
+    // canonical endpoint is used.
+    const provider = deps.getActiveProvider();
+    const activeBaseUrl =
+      provider === undefined ? undefined : getBaseUrlFromProvider(provider);
+    const baseUrl = isCodexBaseUrl(activeBaseUrl)
+      ? (activeBaseUrl as string)
+      : DEFAULT_CODEX_BASE_URL;
 
     const oauthManager = deps.oauthManager;
     const backendDeps: CodexImageBackendDeps = {

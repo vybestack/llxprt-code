@@ -99,6 +99,35 @@ describe('buildSlashCommandRuntime', () => {
   });
 });
 
+describe('buildSlashCommandRuntime image capability', () => {
+  /**
+   * `/image` reaches the runner through `config.getRunImageOperation()` on the
+   * FLATTENED slash-command runtime. The flattening spreads
+   * `Object.values(capabilities)`, so a capability exposed as a bare function
+   * rather than inside a slice object contributes no own enumerable properties
+   * and disappears silently — the command then reports "no image backend
+   * configured" even when one is wired.
+   */
+  it('forwards getRunImageOperation through the flattened runtime', () => {
+    const runner = () => Promise.resolve({ absoluteOutputPath: '/tmp/out.png' });
+    const source = createProxySource({
+      getRunImageOperation: () => runner,
+    });
+
+    const adapter = buildSlashCommandRuntime(source);
+
+    expect(typeof adapter.getRunImageOperation).toBe('function');
+    expect(adapter.getRunImageOperation?.()).toBe(runner);
+  });
+
+  it('omits getRunImageOperation when the source does not expose it', () => {
+    const source = createProxySource({ getRunImageOperation: undefined });
+    const adapter = buildSlashCommandRuntime(source);
+
+    expect(adapter.getRunImageOperation).toBeUndefined();
+  });
+});
+
 describe('buildUiRuntimeFromSource', () => {
   it('uses the application event singleton when the source has no emitter', () => {
     const source = createProxySource({

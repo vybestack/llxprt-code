@@ -57,7 +57,11 @@ export const imageCommand: SlashCommand = {
       context.ui.addItem(
         {
           type: MessageType.ERROR,
-          text: 'Image generation is unavailable in this runtime (no image backend configured).',
+          text:
+            'Image generation is unavailable in this runtime. Image generation ' +
+            'uses your Codex account and works from any provider, so this ' +
+            'usually means Codex OAuth is not set up. Run "/auth codex enable" ' +
+            'and sign in, then try again.',
         },
         Date.now(),
       );

@@ -799,11 +799,21 @@ export type SlashCommandRuntime = CliUiRuntime;
 export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
 ): CliUiRuntime {
-  const { storage, ...capabilities } = buildUiRuntimeFromSource(source);
+  // Non-slice members must be destructured out and re-attached explicitly.
+  // The spread below only flattens capability SLICE OBJECTS; a member whose
+  // value is a bare function (or any non-object) contributes no own enumerable
+  // properties to Object.assign and would be dropped silently.
+  const { storage, getRunImageOperation, ...capabilities } =
+    buildUiRuntimeFromSource(source);
   // This flattening assumes every capability object exposes unique property
   // names. If a future capability overlaps an existing one, Object.assign will
   // keep the last value silently, so add an explicit test when adding slices.
-  return Object.assign({}, ...Object.values(capabilities), { storage });
+  return Object.assign(
+    {},
+    ...Object.values(capabilities),
+    { storage },
+    getRunImageOperation !== undefined ? { getRunImageOperation } : {},
+  );
 }
 
 /**
