@@ -230,6 +230,18 @@ describe.skipIf(!hasBash())(
       );
     });
 
+    it('classifies a multi-line provider error surfaced through the Error: prefix', () => {
+      // OCR surfaces provider failures through `fmt.Fprintf(os.Stderr,
+      // "Error: %v\n", err)`, so even a body containing braces never begins
+      // with a bare `{` at column 0 and is therefore never stripped.
+      expect(
+        classify(
+          'Error: review failed: POST "https://api.example/v1/messages": 429 Too Many Requests\n' +
+            '{"type":"error","error":{"type":"rate_limit_error"}}\n',
+        ),
+      ).toBe(RATE_LIMIT_REASON);
+    });
+
     it('classifies a digit-free "rate limit" message as a rate limit', () => {
       expect(classify('rate limit exceeded\n')).toBe(RATE_LIMIT_REASON);
     });

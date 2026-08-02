@@ -145,6 +145,17 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     expect(timeoutIndex).toBeGreaterThan(authIndex);
     expect(allFileIndex).toBeGreaterThan(timeoutIndex);
     expect(genericIndex).toBeGreaterThan(allFileIndex);
+    // Every branch must classify the stripped diagnostics, never the raw log:
+    // reverting to `grep -Eqi "..." ocr-stderr.log` would silently reinstate
+    // the usage-record false positives.
+    expect(reviewRun).not.toMatch(/grep\s+-Eqi\s+"[^"]*"\s+ocr-stderr\.log/);
+    expect(
+      reviewRun.split('grep -Eqi').length - 1,
+      'every classification branch greps the stripped diagnostics',
+    ).toBe(
+      reviewRun.split(`printf '%s\\n' "$ocr_diagnostics" | grep -Eqi`).length -
+        1,
+    );
   });
 
   it('redacts artifacts with an atomic temporary-file rename (Behavior 4)', () => {

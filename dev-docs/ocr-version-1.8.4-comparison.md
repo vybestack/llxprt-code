@@ -161,6 +161,13 @@ diagnostic of a different class that appears later in the same stderr.
    Single-line provider error payloads (`{"error":{"code":429,…}}`) are not
    affected because their braces are not alone on a line.
 
+   **Known bound of this rule:** it would also drop a provider error body that
+   was pretty-printed with a bare `{` at column 0. OCR never emits one — the
+   usage record is the only value it writes to stderr with `json.NewEncoder`,
+   and provider failures are surfaced through
+   `fmt.Fprintf(os.Stderr, "Error: %v\n", err)` in `main`, so their first line
+   always carries the `Error: ` prefix. Both shapes are pinned by tests.
+
 2. **Anchor the numeric alternatives at token boundaries** so a status code
    only matches when it is not embedded in a larger number or hex identifier:
 
