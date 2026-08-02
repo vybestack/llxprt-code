@@ -1110,12 +1110,115 @@ jobs:
   # it succeeded. Any other selector outcome (failed, skipped) makes `test`
   # red, because a skipped/failed selector means we cannot trust the skip and
   # must fail closed.
+  #
+  # ACP Conformance (issue #2564)
+  #
+  # Runs the pinned acplint v0.2.0 selected-category gate (initialization,
+  # session_lifecycle, schema_validation) against the real LLxprt ACP stdio
+  # launcher. The non-secret placeholder key initializes the provider without
+  # prompting a model or performing network inference. Captures raw status,
+  # log, and JSON report, validates the report with the committed single-purpose
+  # validator, and uploads diagnostics as an always-run artifact.
+  acp_conformance:
+    name: 'ACP Conformance'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 20
+    needs:
+      - 'skip_check'
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    permissions:
+      contents: 'read'
+    steps:
+      - name: 'Initialize diagnostics and LLXPRT homes'
+        run: |-
+          set -euo pipefail
+          diag_dir="${RUNNER_TEMP}/acplint/diagnostics"
+          log_dir="${diag_dir}/llxprt-logs"
+          config_home="${RUNNER_TEMP}/acplint/llxprt-config"
+          data_home="${RUNNER_TEMP}/acplint/llxprt-data"
+          mkdir -p "${diag_dir}" "${log_dir}" "${config_home}" "${data_home}"
+          printf 'not-run\n' > "${diag_dir}/status.txt"
+          printf 'acplint gate has not run yet (setup not complete)\n' \
+            > "${diag_dir}/acplint.log"
+          {
+            echo "ACPLINT_DIAG_DIR=${diag_dir}"
+            echo "LLXPRT_CONFIG_HOME=${config_home}"
+            echo "LLXPRT_DATA_HOME=${data_home}"
+            echo "LLXPRT_LOG_HOME=${log_dir}"
+          } >> "${GITHUB_ENV}"
+
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Set up Python'
+        uses: 'actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97' # ratchet:actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: 'Install dependencies'
+        run: |-
+          bun install
+
+      - name: 'Install acplint'
+        run: |-
+          python -m pip install "acplint @ git+https://github.com/rinadelph/acplint.git@e2f4e49b3ba825869a4ecab7e10076d4460f4dcd"
+
+      - name: 'Verify acplint version'
+        run: |-
+          [ "$(acplint --version)" = "acplint 0.2.0" ]
+
+      - name: 'Build project'
+        run: |-
+          npm run build
+
+      - name: 'Run acplint'
+        run: |-
+          set +e
+          acplint \
+            --agent "./packages/cli/bin/llxprt" \
+            --agent-args "--experimental-acp --provider openai --model gpt-4o --key acplint-ci" \
+            --categories initialization session_lifecycle schema_validation \
+            --output json \
+            --output-file "${ACPLINT_DIAG_DIR}/report.json" \
+            --cwd "${{ github.workspace }}" \
+            > "${ACPLINT_DIAG_DIR}/acplint.log" 2>&1
+          EXIT_CODE=$?
+          echo "$EXIT_CODE" > "${ACPLINT_DIAG_DIR}/status.txt"
+          echo "acplint raw exit status: $EXIT_CODE"
+          exit 0
+
+      - name: 'Validate acplint report'
+        run: |-
+          STATUS="$(cat "${ACPLINT_DIAG_DIR}/status.txt")"
+          node scripts/validate-acplint-report.ts "${ACPLINT_DIAG_DIR}/report.json" "$STATUS"
+
+      - name: 'Upload acplint diagnostics'
+        if: ${{ always() }}
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
+        with:
+          name: 'acplint-diagnostics'
+          path: ${{ runner.temp }}/acplint/diagnostics/
+          if-no-files-found: 'error'
+
   test:
     name: 'Test'
     needs:
       - 'test_shard'
       - 'shard_selector'
       - 'skip_check'
+      - 'acp_conformance'
     if: ${{ always() }}
     runs-on: 'ubuntu-latest'
     steps:
@@ -1125,6 +1228,7 @@ jobs:
           selector_result='${{ needs.shard_selector.result }}'
           has_tests='${{ needs.shard_selector.outputs.has_tests }}'
           shard_result='${{ needs.test_shard.result }}'
+          acp_result='${{ needs.acp_conformance.result }}'
 
           # Explicit duplicate-skip: skip_check said this run duplicates a
           # passing one, so every downstream job was intentionally skipped.
@@ -1142,15 +1246,21 @@ jobs:
 
           # Intentional no-test PR: selector succeeded and said has_tests=false.
           if [ "$has_tests" != "true" ]; then
-            echo "Shard selector reported no tests to run (has_tests=false). Test check is green by design."
-            exit 0
+            echo "Shard selector reported no tests to run (has_tests=false)."
+          else
+            # Normal case: all selected shards must succeed.
+            if [ "$shard_result" != "success" ]; then
+              echo "::error::Test shards did not all succeed (result: $shard_result)"
+              exit 1
+            fi
           fi
 
-          # Normal case: all selected shards must succeed.
-          if [ "$shard_result" != "success" ]; then
-            echo "::error::Test shards did not all succeed (result: $shard_result)"
+          # ACP conformance must succeed (issue #2564).
+          if [ "$acp_result" != "success" ]; then
+            echo "::error::ACP conformance job did not succeed (result: $acp_result)"
             exit 1
           fi
+
           echo 'All test shards finished!'
 
   secure_store_backend:

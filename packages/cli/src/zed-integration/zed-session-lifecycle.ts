@@ -37,6 +37,7 @@ interface RestoredSession {
 
 export class SessionLifecycle {
   private readonly queues = new Map<string, Promise<unknown>>();
+  private readonly knownClosedSessions = new Set<string>();
 
   constructor(
     private readonly config: Config,
@@ -71,7 +72,10 @@ export class SessionLifecycle {
 
   close(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     return this.runSerialized(params.sessionId, async () => {
-      await this.disposeLive(params.sessionId);
+      const wasLive = await this.disposeLive(params.sessionId);
+      if (wasLive) {
+        this.knownClosedSessions.add(params.sessionId);
+      }
       return {};
     });
   }
@@ -155,10 +159,16 @@ export class SessionLifecycle {
       });
     }
     if (result.ok) {
+      this.knownClosedSessions.delete(params.sessionId);
       return {};
     }
     if (result.error.startsWith(SESSION_NOT_FOUND_PREFIX)) {
-      if (hadLiveSession) {
+      // Capture and consume the known-closed marker independently of the live
+      // session so a coexistence of live + marker is fully resolved in one
+      // delete; otherwise the marker would persist and a second delete would
+      // erroneously succeed.
+      const hadKnownClosed = this.knownClosedSessions.delete(params.sessionId);
+      if (hadLiveSession || hadKnownClosed) {
         return {};
       }
       throw acp.RequestError.resourceNotFound(params.sessionId);
