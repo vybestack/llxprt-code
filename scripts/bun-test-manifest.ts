@@ -100,6 +100,16 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      // JSP/1 observation producer (issue #2779). Bun-native from the start:
+      // these are excluded from the Vitest selection so they run only here.
+      'src/observation/jspBounds.test.ts',
+      'src/observation/jspProducer.test.ts',
+      'src/observation/jspProducerState.test.ts',
+      'src/observation/jspRedaction.test.ts',
+      'src/observation/jspSchema.test.ts',
+      'src/observation/jspTransport.test.ts',
+      'src/observation/jspWiring.test.ts',
+      'src/observation/observationTap.test.ts',
       'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],

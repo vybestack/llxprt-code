@@ -65,6 +65,10 @@ const explicitIncludePaths: readonly string[] = [
 
 const baseExclude: readonly string[] = [
   '**/node_modules/**',
+  // JSP/1 observation producer tests are Bun-native and registered in
+  // scripts/bun-test-manifest.ts, so they run under `bun test` only and
+  // must not also be discovered by Vitest (issue #2779).
+  '**/src/observation/**/*.test.ts',
   '**/dist/**',
   '**/tmp/**',
   '**/cypress/**',
