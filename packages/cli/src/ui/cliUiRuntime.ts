@@ -44,6 +44,7 @@ import type {
   LspConfig,
   LspServiceClient,
 } from '@vybestack/llxprt-code-ide-integration';
+import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import type { EventEmitter } from 'node:events';
 import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
 
@@ -420,6 +421,15 @@ export interface AppStateRuntime {
   getEphemeralSettings(): Record<string, unknown>;
   setEphemeralSetting(key: string, value: unknown): void;
   getSubagentManager(): UiSubagentManager | undefined;
+  /**
+   * Transport for brokered GitHub operations, used by @issue and @pr
+   * completion. Undefined when no broker is wired, in which case those
+   * completions are simply not offered.
+   *
+   * @plan PLAN-20260731-GHBROKER.P16
+   * @requirement REQ-014
+   */
+  getGitHubBrokerClient(): GitHubBrokerClient | undefined;
   updateSystemInstructionIfInitialized(): void | Promise<void>;
 }
 
@@ -745,6 +755,8 @@ export function buildUiRuntimeFromSource(
       setEphemeralSetting: (key, value) =>
         source.setEphemeralSetting(key, value),
       getSubagentManager: () => source.getSubagentManager(),
+      // @plan PLAN-20260731-GHBROKER.P16
+      getGitHubBrokerClient: () => source.getGitHubBrokerClient(),
       updateSystemInstructionIfInitialized: () =>
         source.updateSystemInstructionIfInitialized(),
     },

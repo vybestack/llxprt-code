@@ -12,7 +12,7 @@ import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import { encodeFrame } from '@vybestack/llxprt-code-auth/proxy/framing.js';
 import { sanitizeTokenForProxy } from '@vybestack/llxprt-code-auth/token-sanitization.js';
 import { RefreshCoordinator } from './refresh-coordinator.js';
-import type { ConnectionState } from './credential-proxy-server.js';
+import type { ConnectionState } from './credential-proxy-state.js';
 
 /** Contract for an OAuth flow instance used by the credential proxy. */
 export interface OAuthFlowInterface {

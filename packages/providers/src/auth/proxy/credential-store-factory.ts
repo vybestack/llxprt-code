@@ -42,6 +42,15 @@ let proxyKeyStorage: ProxyProviderKeyStorage | undefined;
 let proxyKeyStorageClient: ProxySocketClient | undefined;
 let proxyKeyStorageCapabilityToken: string | undefined;
 let proxyKeyStorageSocketPath: string | undefined;
+/**
+ * Cached socket client for brokered GitHub operations.
+ *
+ * @plan PLAN-20260731-GHBROKER.P19
+ * @requirement REQ-003
+ */
+let brokerClient: ProxySocketClient | undefined;
+let brokerClientCapabilityToken: string | undefined;
+let brokerClientSocketPath: string | undefined;
 let directKeyStorage: ProviderKeyStorage | undefined;
 
 /**
@@ -247,6 +256,12 @@ function cleanupProxySingletons(): void {
     proxyTokenStoreCapabilityToken = undefined;
     proxyTokenStoreSocketPath = undefined;
   }
+  if (brokerClient !== undefined) {
+    safeClose(() => brokerClient?.close());
+    brokerClient = undefined;
+    brokerClientCapabilityToken = undefined;
+    brokerClientSocketPath = undefined;
+  }
   if (proxyKeyStorage !== undefined) {
     safeClose(() => proxyKeyStorageClient?.close());
     proxyKeyStorageClient = undefined;
@@ -310,6 +325,41 @@ export function createTokenStore(): TokenStore {
  *
  * @plan PLAN-20250214-CREDPROXY.P36
  */
+/**
+ * Returns a socket client for brokered GitHub operations when running in a
+ * sandbox, or null when running on the host.
+ *
+ * Capability resolution stays here rather than in the caller: #2784 confines
+ * the token to this module's private cache, and handing it out to build a
+ * client elsewhere would widen that boundary for no benefit.
+ *
+ * @plan PLAN-20260731-GHBROKER.P15
+ * @requirement REQ-003, REQ-015
+ */
+export function createGitHubBrokerSocketClient(): ProxySocketClient | null {
+  const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
+  if (!socketPath && process.env.LLXPRT_CAPABILITY_FD !== undefined) {
+    createTokenStore();
+  }
+  if (!socketPath) return null;
+  const capabilityToken = resolveCapabilityToken();
+  // Cached and torn down like the other proxy clients. Returning a fresh
+  // untracked client per call would leak a socket on every rebuild and
+  // survive resetFactorySingletons, which tests rely on to isolate.
+  if (
+    brokerClient === undefined ||
+    brokerClientCapabilityToken !== capabilityToken ||
+    brokerClientSocketPath !== socketPath
+  ) {
+    const oldClient = brokerClient;
+    brokerClient = new ProxySocketClient(socketPath, capabilityToken);
+    safeClose(() => oldClient?.close());
+    brokerClientCapabilityToken = capabilityToken;
+    brokerClientSocketPath = socketPath;
+  }
+  return brokerClient;
+}
+
 export function createProviderKeyStorage(): ProviderKeyStorageLike {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (!socketPath && process.env.LLXPRT_CAPABILITY_FD !== undefined) {
@@ -342,6 +392,10 @@ export function createProviderKeyStorage(): ProviderKeyStorageLike {
 export function resetFactorySingletons(): void {
   const oldProxyTokenStore = proxyTokenStore;
   const oldProxyKeyStorageClient = proxyKeyStorageClient;
+  const oldBrokerClient = brokerClient;
+  brokerClient = undefined;
+  brokerClientCapabilityToken = undefined;
+  brokerClientSocketPath = undefined;
   proxyTokenStore = undefined;
   proxyTokenStoreCapabilityToken = undefined;
   proxyTokenStoreSocketPath = undefined;
@@ -354,4 +408,5 @@ export function resetFactorySingletons(): void {
   cachedCapabilityToken = undefined;
   safeClose(() => oldProxyTokenStore?.getClient().close());
   safeClose(() => oldProxyKeyStorageClient?.close());
+  safeClose(() => oldBrokerClient?.close());
 }
