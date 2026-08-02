@@ -41,6 +41,8 @@ import {
   createDefaultKeyringAdapter,
   type KeyringAdapter,
 } from './secure-store.js';
+import { CredentialWriteLock } from './credential-write-lock.js';
+import { SecureStoreError } from './secure-store-errors.js';
 
 const MACHINE_SECRET_SERVICE = 'llxprt-code-machine-secret';
 const MACHINE_SECRET_ACCOUNT = 'default';
@@ -66,6 +68,12 @@ export interface MachineSecretOptions {
    * prior secret). Defaults to true.
    */
   generateIfMissing?: boolean;
+  /**
+   * Overrides the advisory write-lock directory for cross-process
+   * serialization of keyring persistence. Defaults to
+   * Storage.getCredentialLocksDir(). Exposed for deterministic tests.
+   */
+  lockDir?: string;
 }
 
 /**
@@ -188,59 +196,147 @@ export async function getMachineSecret(
 }
 
 /**
- * Resolves the secret for the given options. Handles the read → generate →
- * persist flow, and enforces that no caller returns a generated secret
- * unless that exact secret is durably persisted. Concurrent
- * callers for the same source share this in-flight promise; after it
- * completes, the winner is whatever was durably persisted.
+ * Resolves the secret for the given options.
+ *
+ * Read-only path (`generateIfMissing === false`): performs the keyring/file
+ * reads WITHOUT acquiring the cross-process write lock. A read must never be
+ * blocked by — or fail because of — write-lock contention. Returns the found
+ * secret, or null if none is resolvable. No mutation occurs.
+ *
+ * Generating path (`generateIfMissing !== false`): the entire
+ * read → decide → generate → persist → adopt-winner flow runs as ONE critical
+ * section under the machine-secret item lock so that two independent sources
+ * (distinct keyringLoader references) sharing one adapter and one lockDir
+ * converge on the SAME secret with exactly one durable value.
+ *
+ * H2: previously the lock wrapped only keyring.setPassword — the absence
+ * checks, random generation, post-write winner re-read, and file-fallback
+ * persistence all sat outside it, allowing two processes to generate
+ * different secrets and split the encryption root.
+ *
+ * F2: the read-only path must NOT take the lock — a decrypt that returns null
+ * because of lock contention causes readFallbackFileAtPath to throw CORRUPT.
+ * F3: the catch absorbs only lock-infrastructure failures (TIMEOUT,
+ * UNAVAILABLE) — legitimate external conditions — and lets unexpected errors
+ * from inside the critical section propagate rather than masquerading as a
+ * missing secret.
  */
 async function resolveAndPersist(
   options?: MachineSecretOptions,
 ): Promise<Buffer | null> {
   const filePath = options?.filePath ?? Storage.getMachineSecretPath();
   const keyringLoader = options?.keyringLoader ?? createDefaultKeyringAdapter;
-
   const keyring = await loadKeyring(keyringLoader);
 
-  // 1. Try the keyring (preferred durable store).
-  let keyringRead: SecretReadResult = { status: 'missing' };
+  // F2: read-only resolution (decrypt paths) performs NO mutation and must
+  // not be blocked by — or fail because of — write-lock contention. Read
+  // directly without acquiring the lock.
+  if (options?.generateIfMissing === false) {
+    return resolveReadOnly(keyring, filePath);
+  }
+
+  // Generating path: run the entire decide→generate→persist→adopt-winner
+  // flow under the lock so concurrent writers converge on one secret.
+  const lock = getLockForDir(options?.lockDir);
+  try {
+    return await lock.withLock(
+      MACHINE_SECRET_SERVICE,
+      MACHINE_SECRET_ACCOUNT,
+      async () => {
+        // Under the lock: re-read the keyring and file to adopt any
+        // existing valid secret that a concurrent writer may have just
+        // persisted.
+        let keyringRead: SecretReadResult = { status: 'missing' };
+        if (keyring !== null) {
+          keyringRead = await readFromKeyring(keyring);
+          if (keyringRead.status === 'found') {
+            return keyringRead.secret;
+          }
+        }
+
+        const fileRead = await readFromFile(filePath);
+        if (fileRead.status === 'found') {
+          return fileRead.secret;
+        }
+
+        // If either source is unusable (corrupt/unreadable), degrade.
+        if (
+          keyringRead.status === 'unusable' ||
+          fileRead.status === 'unusable'
+        ) {
+          return null;
+        }
+
+        // Nothing found — generate, persist, then re-read the winner.
+        // All under the lock.
+        return generatePersistAndRereadLocked(keyring, filePath);
+      },
+    );
+  } catch (error) {
+    // F3: absorb only lock-infrastructure failures — the legitimate, expected
+    // external conditions (lock acquisition TIMEOUT, or UNAVAILABLE when the
+    // lock directory cannot be created). These are not bugs; they mean we
+    // could not acquire serialization, so returning null (graceful
+    // degradation) is correct. Unexpected errors from inside the critical
+    // section propagate so genuine bugs are not hidden behind a silent "no
+    // machine secret" result.
+    if (isLockInfrastructureError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Type guard for lock-infrastructure errors that represent legitimate,
+ * expected external conditions (not bugs). Only TIMEOUT (lock acquisition
+ * timed out) and UNAVAILABLE (lock directory cannot be created) qualify.
+ *
+ * Exported so the narrowing invariant can be pinned by a direct unit test —
+ * the `throw error` branch it guards is unreachable in practice because
+ * every function inside the locked critical section is internally defensive,
+ * so the guard cannot be exercised through the observable getMachineSecret
+ * path alone.
+ */
+export function isLockInfrastructureError(error: unknown): boolean {
+  return (
+    error instanceof SecureStoreError &&
+    (error.code === 'TIMEOUT' || error.code === 'UNAVAILABLE')
+  );
+}
+
+/**
+ * Read-only resolution: reads the keyring and file without acquiring any
+ * lock. Returns the found secret, or null if none is resolvable or usable.
+ * Performs no mutation. Used by decrypt paths so reads are never blocked by
+ * write-lock contention.
+ */
+async function resolveReadOnly(
+  keyring: KeyringAdapter | null,
+  filePath: string,
+): Promise<Buffer | null> {
   if (keyring !== null) {
-    keyringRead = await readFromKeyring(keyring);
+    const keyringRead = await readFromKeyring(keyring);
     if (keyringRead.status === 'found') {
       return keyringRead.secret;
     }
   }
 
-  // 2. Try the file fallback.
   const fileRead = await readFromFile(filePath);
   if (fileRead.status === 'found') {
     return fileRead.secret;
   }
 
-  if (keyringRead.status === 'unusable' || fileRead.status === 'unusable') {
-    return null;
-  }
-
-  // Read-only resolution: no existing secret was found and the caller opted
-  // out of generation (e.g. a decrypt path). Fail closed with null rather than
-  // minting a new root of trust as a side effect of a read.
-  if (options?.generateIfMissing === false) {
-    return null;
-  }
-
-  // 3. Nothing found — generate, persist, then RE-READ the winner so every
-  //    concurrent caller converges on the durably persisted value.
-  return generatePersistAndReread(keyring, filePath);
+  // found → secret; unusable → null; missing → null.
+  return null;
 }
 
 /**
  * Generates a new secret, persists it, then re-reads whatever is now durably
- * persisted at the primary durable source. This guarantees that even under a
- * race (two callers both generating), every caller returns the persisted
- * winner rather than a transient in-memory value that may have lost the
- * durability race.
+ * persisted at the primary durable source. Called UNDER the lock so the
+ * read-back winner is authoritative.
  */
-async function generatePersistAndReread(
+async function generatePersistAndRereadLocked(
   keyring: KeyringAdapter | null,
   filePath: string,
 ): Promise<Buffer | null> {
@@ -248,15 +344,17 @@ async function generatePersistAndReread(
   const encoded = secret.toString('base64');
 
   if (keyring !== null) {
-    const persisted = await persistToKeyring(keyring, encoded);
+    const persisted = await persistToKeyringLocked(keyring, encoded);
     if (persisted) {
       // Re-read the keyring winner in case a concurrent writer persisted a
-      // different secret first.
+      // different secret first (both are under the lock, but the keyring
+      // itself may have a pre-existing value from before we acquired).
       const winner = await readFromKeyring(keyring);
       return winner.status === 'found' ? winner.secret : secret;
     }
   }
 
+  // File-fallback persistence is also under the lock.
   const filePersisted = await persistToFile(filePath, encoded);
   if (!filePersisted) {
     return null;
@@ -367,7 +465,28 @@ async function ensureSecureDirectory(dirPath: string): Promise<boolean> {
     return false;
   }
 }
-async function persistToKeyring(
+/**
+ * Cached credential write locks keyed by lock directory. Same-process callers
+ * for a given lock dir share one lock instance (and therefore one in-memory
+ * serialization chain), while distinct lock dirs stay isolated for tests.
+ */
+const lockCache = new Map<string, CredentialWriteLock>();
+
+function getLockForDir(lockDir?: string): CredentialWriteLock {
+  const dir = lockDir ?? Storage.getCredentialLocksDir();
+  let lock = lockCache.get(dir);
+  if (lock === undefined) {
+    lock = new CredentialWriteLock({ lockDir: dir });
+    lockCache.set(dir, lock);
+  }
+  return lock;
+}
+
+/**
+ * Persists the encoded secret to the keyring. Called UNDER the lock so no
+ * concurrent writer can interleave. Returns false if the write fails.
+ */
+async function persistToKeyringLocked(
   keyring: KeyringAdapter,
   encoded: string,
 ): Promise<boolean> {

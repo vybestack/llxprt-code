@@ -93,6 +93,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -125,6 +126,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -147,6 +149,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -179,6 +182,7 @@ describe('SecureStore — Keyring Access', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -231,6 +235,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -280,6 +285,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -348,6 +354,7 @@ describe('SecureStore — Probe Cache Invalidation', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -398,6 +405,7 @@ describe('SecureStore — Fault Injection', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -443,6 +451,7 @@ describe('SecureStore — Fault Injection', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => adapter,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -467,11 +476,13 @@ describe('SecureStore — Fault Injection', () => {
     const store1 = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     const store2 = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -485,6 +496,7 @@ describe('SecureStore — Fault Injection', () => {
     const readStore = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
     const result = await readStore.get('concurrent-key');
@@ -516,6 +528,7 @@ describe('SecureStore — Fallback Policy', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'deny',
     });
 
@@ -539,6 +552,7 @@ describe('SecureStore — Fallback Policy', () => {
     const store = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -569,12 +583,14 @@ describe('SecureStore — Cross-Instance Consistency', () => {
     const store1 = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
     const store2 = new SecureStore('test-service', {
       keyringLoader: async () => null,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
       fallbackPolicy: 'allow',
     });
 
@@ -592,10 +608,12 @@ describe('SecureStore — Cross-Instance Consistency', () => {
     const store1 = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
     const store2 = new SecureStore('test-service', {
       keyringLoader: async () => mockKeyring,
       fallbackDir: tempDir,
+      lockDir: path.join(tempDir, 'locks'),
     });
 
     await store1.set('cross-delete', 'to-be-deleted');

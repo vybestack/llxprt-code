@@ -25,8 +25,11 @@ import type { KeyringAdapter } from './secure-store.js';
 import {
   getMachineSecret,
   resetMachineSecretCache,
+  isLockInfrastructureError,
   type MachineSecretOptions,
 } from './machine-secret.js';
+import { CredentialWriteLock } from './credential-write-lock.js';
+import { SecureStoreError } from './secure-store-errors.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────────────────
 
@@ -712,5 +715,234 @@ describe('Machine Secret Provider — Permission repair', () => {
       expect(readHit).not.toBeNull();
       expect(Buffer.compare(readHit!, generated!)).toBe(0);
     });
+  });
+});
+
+// ─── F2: read-only resolution must not take the write lock ─────────────────
+
+describe('Machine Secret Provider — read-only not blocked by write lock (F2)', () => {
+  let tempFilePath: string;
+  let tempDir: string;
+  let lockDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'machine-secret-lock-free-'),
+    );
+    tempFilePath = path.join(tempDir, 'machine_secret');
+    lockDir = path.join(tempDir, 'locks');
+    resetMachineSecretCache();
+  });
+
+  afterEach(async () => {
+    resetMachineSecretCache();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('read-only resolution succeeds while another holder owns the machine-secret lock', async () => {
+    // Persist a real secret to the file so the read-only path can find it.
+    const existing = crypto.randomBytes(32);
+    await fs.mkdir(tempDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(tempFilePath, existing.toString('base64'), {
+      mode: 0o600,
+    });
+
+    // Acquire the machine-secret lock from an EXTERNAL holder (a separate
+    // CredentialWriteLock instance) and hold it open. This simulates another
+    // process writing.
+    const externalLock = new CredentialWriteLock({ lockDir });
+    const releaseGate: { promise: Promise<void>; resolve: () => void } =
+      (() => {
+        let resolveFn: () => void = () => undefined;
+        const promise = new Promise<void>((resolve) => {
+          resolveFn = resolve;
+        });
+        return { promise, resolve: resolveFn };
+      })();
+    let externalHoldsLock = false;
+    const externalOp = externalLock
+      .withLock('llxprt-code-machine-secret', 'default', async () => {
+        externalHoldsLock = true;
+        await releaseGate.promise;
+      })
+      .catch(() => undefined);
+
+    // Wait for the external holder to genuinely hold the lock file on disk.
+    const lockPath = externalLock.lockFilePath(
+      'llxprt-code-machine-secret',
+      'default',
+    );
+    for (let i = 0; i < 100; i++) {
+      try {
+        await fs.readFile(lockPath, 'utf8');
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    }
+    expect(externalHoldsLock).toBe(true);
+
+    // The read-only resolution must NOT be blocked by the external lock
+    // holder. It reads the file directly and returns the secret.
+    const secret = await getMachineSecret({
+      filePath: tempFilePath,
+      keyringLoader: async () => null,
+      generateIfMissing: false,
+      lockDir,
+    });
+
+    expect(secret).not.toBeNull();
+    expect(Buffer.compare(secret!, existing)).toBe(0);
+
+    // Release the external lock holder.
+    releaseGate.resolve();
+    await externalOp;
+  });
+});
+
+// ─── F3: narrowed error swallow in resolveAndPersist ───────────────────────
+
+describe('Machine Secret Provider — narrowed error handling (F3)', () => {
+  let tempFilePath: string;
+  let tempDir: string;
+  let lockDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'machine-secret-narrowed-err-'),
+    );
+    tempFilePath = path.join(tempDir, 'machine_secret');
+    lockDir = path.join(tempDir, 'locks');
+    resetMachineSecretCache();
+  });
+
+  afterEach(async () => {
+    resetMachineSecretCache();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns null on lock TIMEOUT (generating path fails closed gracefully)', async () => {
+    // Stall the machine-secret lock with a live owner so the generating path
+    // times out acquiring it.
+    const stallLock = new CredentialWriteLock({ lockDir });
+    const lockPath = stallLock.lockFilePath(
+      'llxprt-code-machine-secret',
+      'default',
+    );
+    const startTimeMs = Date.now() - process.uptime() * 1000;
+    await fs.mkdir(lockDir, { recursive: true });
+    await fs.writeFile(
+      lockPath,
+      JSON.stringify({
+        version: 1,
+        ownerToken: 'perpetual-stall-owner',
+        pid: process.pid,
+        hostname: os.hostname(),
+        startTimeMs,
+        startTimeSource: 'canonical',
+      }),
+      { mode: 0o600 },
+    );
+
+    // The generating path must TIMEOUT → return null, not throw.
+    const secret = await getMachineSecret({
+      filePath: tempFilePath,
+      keyringLoader: async () => null,
+      lockDir,
+    });
+
+    expect(secret).toBeNull();
+  });
+
+  it('returns null on lock UNAVAILABLE (lock dir cannot be created)', async () => {
+    // Point lockDir at a path whose parent is a regular file, so mkdir fails
+    // → SecureStoreError UNAVAILABLE.
+    const blocker = path.join(tempDir, 'blocker-file');
+    await fs.writeFile(blocker, 'x');
+    const badLockDir = path.join(blocker, 'locks');
+
+    const secret = await getMachineSecret({
+      filePath: tempFilePath,
+      keyringLoader: async () => null,
+      lockDir: badLockDir,
+    });
+
+    // UNAVAILABLE is a legitimate external condition → return null.
+    expect(secret).toBeNull();
+  });
+
+  it('returns null (graceful degradation) when inner sources are unusable but no lock-infrastructure error occurs', async () => {
+    // Inject a keyring whose getPassword throws a non-SecureStoreError.
+    // readFromKeyring catches this and returns 'unusable', so the generating
+    // path never sees a propagating error. With an unusable keyring and an
+    // impossible file path, persistence fails and the provider degrades to
+    // null. This confirms the narrowed catch's `throw error` branch is not
+    // needed here — the inner functions are already defensive — but it does
+    // NOT prove propagation because every inner function swallows errors.
+    const bombKeyring: KeyringAdapter = {
+      getPassword: async () => {
+        throw new Error('keyring internal failure');
+      },
+      setPassword: async () => {
+        throw new Error('unexpected internal failure');
+      },
+      deletePassword: async () => false,
+    };
+
+    // With an unusable keyring and no file, the generating path tries file
+    // persistence. Point filePath at an impossible path so it degrades to null.
+    const blocker = path.join(tempDir, 'blocker');
+    await fs.writeFile(blocker, 'x');
+    const impossiblePath = path.join(blocker, 'child', 'machine_secret');
+
+    const secret = await getMachineSecret({
+      filePath: impossiblePath,
+      keyringLoader: async () => bombKeyring,
+      lockDir,
+    });
+
+    // Graceful degradation: unusable keyring + impossible file path → null.
+    expect(secret).toBeNull();
+  });
+
+  // The `throw error` branch of the narrowed catch in resolveAndPersist is
+  // NOT reachable through any observable seam: every function inside the
+  // locked critical section (readFromKeyring, readFromFile,
+  // persistToKeyringLocked, persistToFile) catches all errors internally and
+  // returns a result sentinel. No non-lock-infrastructure error can escape
+  // the operation callback, so the `throw error` branch never fires.
+  // Instead of fabricating a test that pretends to exercise it, we pin the
+  // narrowing invariant directly: isLockInfrastructureError must return true
+  // for TIMEOUT/UNAVAILABLE (the codes that the catch absorbs) and false for
+  // everything else (the codes that the catch would rethrow).
+  it('isLockInfrastructureError narrows on TIMEOUT and UNAVAILABLE only', () => {
+    expect(
+      isLockInfrastructureError(
+        new SecureStoreError('lock timed out', 'TIMEOUT', 'retry'),
+      ),
+    ).toBe(true);
+    expect(
+      isLockInfrastructureError(
+        new SecureStoreError('lock dir gone', 'UNAVAILABLE', 'check perms'),
+      ),
+    ).toBe(true);
+
+    // Unrelated SecureStoreError codes must NOT be absorbed.
+    expect(
+      isLockInfrastructureError(
+        new SecureStoreError('write failed', 'CORRUPT', 're-save'),
+      ),
+    ).toBe(false);
+    expect(
+      isLockInfrastructureError(
+        new SecureStoreError('conflict', 'CONFLICT', 'retry'),
+      ),
+    ).toBe(false);
+
+    // Ordinary errors must NOT be absorbed.
+    expect(isLockInfrastructureError(new Error('boom'))).toBe(false);
+    expect(isLockInfrastructureError(null)).toBe(false);
+    expect(isLockInfrastructureError(undefined)).toBe(false);
+    expect(isLockInfrastructureError('string')).toBe(false);
   });
 });

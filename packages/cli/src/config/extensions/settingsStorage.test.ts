@@ -18,16 +18,53 @@ import type { ExtensionSetting } from './extensionSettings.js';
 // In-memory store used by the mock SecureStore instances
 const mockStore = new Map<string, string>();
 
+/**
+ * Failure injected into the mock SecureStore's write path.
+ *
+ * Lets a test make `set()` / `delete()` reject with a specific
+ * SecureStore-shaped error without reaching into ExtensionSettingsStorage's
+ * private `store` field. Cleared in `beforeEach`.
+ */
+let injectedWriteFailure: {
+  readonly code: string;
+  readonly message: string;
+} | null = null;
+
+function failWriteWith(code: string, message: string): void {
+  injectedWriteFailure = { code, message };
+}
+
+function throwInjectedWriteFailureIfAny(): void {
+  if (injectedWriteFailure === null) {
+    return;
+  }
+  throw {
+    name: 'SecureStoreError',
+    message: injectedWriteFailure.message,
+    code: injectedWriteFailure.code,
+    remediation: 'Retry the operation',
+  };
+}
+
 vi.mock('@vybestack/llxprt-code-storage', () => ({
   SecureStore: vi.fn().mockImplementation(() => ({
     get: vi.fn(async (key: string) => mockStore.get(key) ?? null),
     set: vi.fn(async (key: string, value: string) => {
+      throwInjectedWriteFailureIfAny();
       mockStore.set(key, value);
     }),
-    delete: vi.fn(async (key: string) => mockStore.delete(key)),
+    delete: vi.fn(async (key: string) => {
+      throwInjectedWriteFailureIfAny();
+      return mockStore.delete(key);
+    }),
     list: vi.fn(async () => Array.from(mockStore.keys())),
     has: vi.fn(async (key: string) => mockStore.has(key)),
   })),
+  isRuntimeReplacedError: (error: unknown): boolean =>
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'RUNTIME_REPLACED',
 }));
 
 describe('getSettingsEnvFilePath', () => {
@@ -99,6 +136,7 @@ describe('ExtensionSettingsStorage', () => {
 
   beforeEach(async () => {
     mockStore.clear();
+    injectedWriteFailure = null;
     tmpDir = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'ext-settings-test-'),
     );
@@ -301,6 +339,56 @@ describe('ExtensionSettingsStorage', () => {
     it('should return false if no settings exist', async () => {
       const result = await storage.hasSettings();
       expect(result).toBe(false);
+    });
+  });
+
+  describe('M1 — terminal write failures (CONFLICT/TIMEOUT) are rethrown, not swallowed', () => {
+    const sensitiveApiKey: ExtensionSetting[] = [
+      { name: 'apiKey', envVar: 'API_KEY', sensitive: true },
+    ];
+
+    const codeOf = (error: unknown): unknown =>
+      typeof error === 'object' && error !== null && 'code' in error
+        ? error.code
+        : undefined;
+
+    it('rethrows a CONFLICT error from SecureStore.set so saveSettings surfaces the failure', async () => {
+      failWriteWith('CONFLICT', 'conflicting value from another process');
+
+      const error = await storage
+        .saveSettings(sensitiveApiKey, { API_KEY: 'secret' })
+        .catch((e: unknown) => e);
+
+      expect(codeOf(error)).toBe('CONFLICT');
+    });
+
+    it('rethrows a TIMEOUT error from SecureStore.set so saveSettings surfaces the failure', async () => {
+      failWriteWith('TIMEOUT', 'Timed out waiting for lock');
+
+      const error = await storage
+        .saveSettings(sensitiveApiKey, { API_KEY: 'secret' })
+        .catch((e: unknown) => e);
+
+      expect(codeOf(error)).toBe('TIMEOUT');
+    });
+
+    it('still swallows non-terminal errors (UNAVAILABLE) for backward compatibility', async () => {
+      failWriteWith('UNAVAILABLE', 'keyring unavailable');
+
+      await expect(
+        storage.saveSettings(sensitiveApiKey, { API_KEY: 'secret' }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rethrows a CONFLICT error from SecureStore.delete when the value is undefined', async () => {
+      // An undefined value routes persistSensitiveSetting to store.delete().
+      failWriteWith('CONFLICT', 'conflicting value from another process');
+
+      const error = await storage
+        .saveSettings(sensitiveApiKey, { API_KEY: undefined })
+        .catch((e: unknown) => e);
+
+      expect(codeOf(error)).toBe('CONFLICT');
     });
   });
 

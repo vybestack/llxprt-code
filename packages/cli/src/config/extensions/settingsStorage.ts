@@ -27,6 +27,31 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 
 /**
+ * SecureStore error codes that represent terminal write failures — the
+ * secret was NOT saved and the user must be told. These must not be silently
+ * swallowed by the catch block in persistSensitiveSetting.
+ */
+const TERMINAL_WRITE_ERROR_CODES: ReadonlySet<string> = new Set([
+  'CONFLICT',
+  'TIMEOUT',
+]);
+
+/**
+ * Structurally detects a terminal SecureStore write failure (CONFLICT or
+ * TIMEOUT) using duck-typing on the `code` property, consistent with
+ * isRuntimeReplacedError. Does NOT use instanceof (two copies of the class
+ * may exist under bundling / duplicated dependency resolution).
+ */
+function isTerminalWriteError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+  return (
+    typeof error.code === 'string' && TERMINAL_WRITE_ERROR_CODES.has(error.code)
+  );
+}
+
+/**
  * Returns the path to the .env file for an extension.
  */
 export function getSettingsEnvFilePath(extensionDir: string): string {
@@ -210,6 +235,12 @@ export class ExtensionSettingsStorage {
       }
     } catch (error) {
       if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
+      // M1: CONFLICT and TIMEOUT are terminal write failures — the secret
+      // was NOT saved. Rethrow so the caller (settingsIntegration) reports
+      // the failure rather than claiming success.
+      if (isTerminalWriteError(error)) {
         throw error;
       }
       debugLogger.error(

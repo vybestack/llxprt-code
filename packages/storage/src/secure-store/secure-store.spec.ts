@@ -51,6 +51,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -68,6 +69,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       // Pre-seed a stale fallback file from a prior (unverified) write.
       const staleStore = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => null,
       });
@@ -86,6 +88,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -103,6 +106,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         const key = 'oauth:default';
         const staleStore = new SecureStore('test-service', {
           fallbackDir: tempDir,
+          lockDir: path.join(tempDir, 'locks'),
           fallbackPolicy: 'allow',
           keyringLoader: async () => null,
         });
@@ -121,6 +125,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         };
         store = new SecureStore('test-service', {
           fallbackDir: tempDir,
+          lockDir: path.join(tempDir, 'locks'),
           fallbackPolicy: 'allow',
           keyringLoader: async () => mockKeyring,
         });
@@ -138,6 +143,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         const key = 'oauth:default';
         const staleStore = new SecureStore('test-service', {
           fallbackDir: tempDir,
+          lockDir: path.join(tempDir, 'locks'),
           fallbackPolicy: 'allow',
           keyringLoader: async () => null,
         });
@@ -154,6 +160,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         };
         store = new SecureStore('test-service', {
           fallbackDir: tempDir,
+          lockDir: path.join(tempDir, 'locks'),
           fallbackPolicy: 'allow',
           keyringLoader: async () => mockKeyring,
         });
@@ -177,6 +184,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -190,46 +198,43 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       expect(await store.get('unreliable-key')).toBe('my-secret');
     });
 
-    it('should make fallback authoritative when keyring read-back returns a stale value', async () => {
-      let keyringValue: string | null = 'stale-wrong-value';
+    it('should reject with CONFLICT (non-destructive) when keyring read-back returns a foreign value', async () => {
+      // A foreign value on read-back means another process owns the keychain
+      // item. The new behavior (issue #2927) is non-destructive: the foreign
+      // value is left untouched, no fallback is written, and CONFLICT is
+      // thrown so the caller knows its write lost the race.
       const mockKeyring: KeyringAdapter = {
-        getPassword: async () => keyringValue,
+        getPassword: async () => 'foreign-winner-value',
         setPassword: async () => {
-          /* accepts but does not replace the stale value */
+          /* accepts but does not replace the foreign value */
         },
-        deletePassword: async () => {
-          keyringValue = null;
-          return true;
-        },
+        deletePassword: async () => true,
       };
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
-      await store.set('mismatch-key', 'correct-value');
 
-      const freshStore = new SecureStore('test-service', {
-        fallbackDir: tempDir,
-        fallbackPolicy: 'allow',
-        keyringLoader: async () => mockKeyring,
-      });
-      expect(await fallbackFileExists('mismatch-key')).toBe(true);
-      // The stale keyring value must have been cleared so it does not shadow
-      // the fallback on subsequent reads.
-      expect(keyringValue).toBeNull();
-      expect(await freshStore.get('mismatch-key')).toBe('correct-value');
+      const error = await store
+        .set('mismatch-key', 'correct-value')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('CONFLICT');
+      // No fallback file — the write lost the race.
+      expect(await fallbackFileExists('mismatch-key')).toBe(false);
     });
 
-    it('should throw UNAVAILABLE when keyring read-back returns a stale value and fallbackPolicy is deny', async () => {
-      // The deny path still clears the stale keyring value before throwing so
-      // the credential is not left in an unrecoverable state.
-      let keyringValue: string | null = 'stale-wrong-value';
+    it('should throw CONFLICT when keyring read-back returns a foreign value and fallbackPolicy is deny', async () => {
+      // On the deny path, a foreign value is still non-destructive: the
+      // foreign value is left untouched and CONFLICT is thrown.
+      let keyringValue: string | null = 'foreign-winner-value';
       const mockKeyring: KeyringAdapter = {
         getPassword: async () => keyringValue,
         setPassword: async () => {
-          /* accepts but does not replace the stale value */
+          /* accepts but does not replace the foreign value */
         },
         deletePassword: async () => {
           keyringValue = null;
@@ -239,6 +244,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'deny',
         keyringLoader: async () => mockKeyring,
       });
@@ -247,31 +253,26 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         .set('stale-denied-key', 'correct-value')
         .catch((e) => e);
       expect(error).toBeInstanceOf(SecureStoreError);
-      expect(error.code).toBe('UNAVAILABLE');
-      expect(error.message).toBe(
-        'Keyring write could not be verified and fallback is denied',
-      );
+      expect(error.code).toBe('CONFLICT');
       expect(await fallbackFileExists('stale-denied-key')).toBe(false);
-      // The stale value must have been cleared even though the write was
-      // rejected, so a retry can succeed.
-      expect(keyringValue).toBeNull();
+      // The foreign value must NOT be cleared — non-destructive.
+      expect(keyringValue).not.toBeNull();
     });
 
-    it('should reject without writing a fallback when a stale keyring value cannot be removed', async () => {
-      // The keyring reports a stale value on read-back and refuses deletion.
-      // The compensating transaction writes the fallback, then attempts to
-      // clear the stale keyring value. Since the clear fails, the fallback is
-      // rolled back (deleted) and UNAVAILABLE is thrown — no orphaned fallback
-      // artifact is left on disk.
+    it('should reject with CONFLICT (non-destructive) when the foreign value cannot be deleted', async () => {
+      // Even when deletePassword returns false, the new behavior is
+      // non-destructive: the foreign value is detected as a conflict and
+      // CONFLICT is thrown without writing a fallback or attempting a clear.
       const mockKeyring: KeyringAdapter = {
-        getPassword: async () => 'stale-wrong-value',
+        getPassword: async () => 'foreign-winner-value',
         setPassword: async () => {
-          /* accepts but does not replace the stale value */
+          /* accepts but does not replace the foreign value */
         },
         deletePassword: async () => false,
       };
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -280,19 +281,18 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         .set('stuck-key', 'correct-value')
         .catch((e) => e);
       expect(error).toBeInstanceOf(SecureStoreError);
-      expect(error.code).toBe('UNAVAILABLE');
-      expect(error.message).toBe(
-        'Mismatched keyring value could not be removed',
-      );
-      // No fallback artifact should be left on disk after a failed clear.
+      expect(error.code).toBe('CONFLICT');
+      // No fallback artifact should be left on disk.
       expect(await fallbackFileExists('stuck-key')).toBe(false);
     });
 
-    it('should reject without a fallback when deletePassword throws during stale clear', async () => {
+    it('should reject with CONFLICT (non-destructive) when deletePassword throws', async () => {
+      // The CONFLICT path never calls deletePassword. If it ever did, this
+      // adapter throws so the test fails loudly.
       const mockKeyring: KeyringAdapter = {
-        getPassword: async () => 'stale-wrong-value',
+        getPassword: async () => 'foreign-winner-value',
         setPassword: async () => {
-          /* accepts but does not replace the stale value */
+          /* accepts but does not replace the foreign value */
         },
         deletePassword: async () => {
           throw new Error('keyring delete error');
@@ -300,6 +300,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       };
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -308,7 +309,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
         .set('throw-delete-key', 'correct-value')
         .catch((e) => e);
       expect(error).toBeInstanceOf(SecureStoreError);
-      expect(error.code).toBe('UNAVAILABLE');
+      expect(error.code).toBe('CONFLICT');
       expect(await fallbackFileExists('throw-delete-key')).toBe(false);
     });
     it('should recover from fallback when keyring read-back throws', async () => {
@@ -324,6 +325,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -331,6 +333,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       const freshStore = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -343,6 +346,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
     it('should write fallback when policy is allow and keyring is unavailable', async () => {
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => null,
       });
@@ -356,6 +360,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
     it('should NOT write fallback and throw UNAVAILABLE when fallbackPolicy is deny and no keyring adapter is available', async () => {
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'deny',
         keyringLoader: async () => null,
       });
@@ -382,6 +387,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'deny',
         keyringLoader: async () => mockKeyring,
       });
@@ -408,6 +414,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: blockedFallbackDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -431,6 +438,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       };
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'deny',
         keyringLoader: async () => mockKeyring,
       });
@@ -457,6 +465,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
 
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => mockKeyring,
       });
@@ -464,6 +473,7 @@ describe('SecureStore — Keyring Write Verification and Fallback Policy', () =>
       // Seed a fallback-only value first (keyring absent).
       const fallbackStore = new SecureStore('test-service', {
         fallbackDir: tempDir,
+        lockDir: path.join(tempDir, 'locks'),
         fallbackPolicy: 'allow',
         keyringLoader: async () => null,
       });
