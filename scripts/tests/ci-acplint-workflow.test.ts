@@ -195,9 +195,14 @@ describe('Issue #2564: acp_conformance CI job', () => {
     if (categoriesLine === undefined) {
       throw new Error('Run acplint step is missing --categories');
     }
-    const categoriesPart = categoriesLine.split('--categories').at(1)?.trim();
+    const categoriesPart = categoriesLine
+      .split('--categories')
+      .at(1)
+      ?.trim()
+      .replace(/\\$/, '')
+      .trim();
     expect(categoriesPart).toBe(
-      'initialization session_lifecycle schema_validation \\',
+      'initialization session_lifecycle schema_validation',
     );
   });
 
@@ -205,6 +210,13 @@ describe('Issue #2564: acp_conformance CI job', () => {
     const runStep = stepNamed(acpJob, 'Run acplint');
     expect(runStep.run).toContain('EXIT_CODE');
     expect(runStep.run).toContain('status.txt');
+  });
+
+  it('prints the acplint log tail when the raw status is nonzero', () => {
+    const runStep = stepNamed(acpJob, 'Run acplint');
+    expect(runStep.run).toContain('if [ "$EXIT_CODE" -ne 0 ]; then');
+    expect(runStep.run).toContain('tail');
+    expect(runStep.run).toContain('acplint.log');
   });
 
   it('captures the acplint JSON output via --output-file', () => {

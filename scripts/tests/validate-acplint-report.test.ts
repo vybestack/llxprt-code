@@ -252,6 +252,7 @@ describe('acplint report validator (issue #2564)', () => {
     expect(result.error).toBeNull();
     expect(result.signal).toBeNull();
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain('acplint report validated successfully');
   });
 
   it('accepts a valid Partial report with status 1', () => {
@@ -259,6 +260,7 @@ describe('acplint report validator (issue #2564)', () => {
     expect(result.error).toBeNull();
     expect(result.signal).toBeNull();
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain('acplint report validated successfully');
   });
 
   it('rejects Full report with status 1 (status/level mismatch)', () => {

@@ -246,6 +246,53 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
     expect(stub.disposedCount()).toBe(1);
   });
 
+  it('preserves a retry marker when live-session deletion throws', async () => {
+    const stub = buildStubAgent({});
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const root = makeTmpRoot();
+    const zedAgent = await makeZedAgent(root);
+
+    const created = await zedAgent.newSession({
+      cwd: '/project',
+      mcpServers: [],
+    });
+    mockDeleteSessionById.mockRejectedValueOnce(
+      new Error('EIO: storage is unavailable'),
+    );
+
+    await expect(
+      zedAgent.deleteSession({ sessionId: created.sessionId }),
+    ).rejects.toMatchObject({ code: -32603 });
+    await expect(
+      zedAgent.deleteSession({ sessionId: created.sessionId }),
+    ).resolves.toStrictEqual({});
+    expect(stub.disposedCount()).toBe(1);
+  });
+
+  it('preserves a retry marker when live-session deletion returns an internal error', async () => {
+    const stub = buildStubAgent({});
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const root = makeTmpRoot();
+    const zedAgent = await makeZedAgent(root);
+
+    const created = await zedAgent.newSession({
+      cwd: '/project',
+      mcpServers: [],
+    });
+    mockDeleteSessionById.mockResolvedValueOnce({
+      ok: false,
+      error: 'Failed to lock session for deletion: deadlock',
+    });
+
+    await expect(
+      zedAgent.deleteSession({ sessionId: created.sessionId }),
+    ).rejects.toMatchObject({ code: -32603 });
+    await expect(
+      zedAgent.deleteSession({ sessionId: created.sessionId }),
+    ).resolves.toStrictEqual({});
+    expect(stub.disposedCount()).toBe(1);
+  });
+
   it('serializes concurrent close and delete for the same session id', async () => {
     let releaseDispose!: () => void;
     const disposeGate = new Promise<void>((resolve) => {

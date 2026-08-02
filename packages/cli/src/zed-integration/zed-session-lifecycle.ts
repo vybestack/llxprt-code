@@ -144,6 +144,9 @@ export class SessionLifecycle {
     params: DeleteSessionRequest,
   ): Promise<DeleteSessionResponse> {
     const hadLiveSession = await this.disposeLive(params.sessionId);
+    if (hadLiveSession) {
+      this.knownClosedSessions.add(params.sessionId);
+    }
     const projectRoot = this.config.getProjectRoot();
     let result: Awaited<ReturnType<typeof deleteSessionById>>;
     try {
@@ -163,12 +166,7 @@ export class SessionLifecycle {
       return {};
     }
     if (result.error.startsWith(SESSION_NOT_FOUND_PREFIX)) {
-      // Capture and consume the known-closed marker independently of the live
-      // session so a coexistence of live + marker is fully resolved in one
-      // delete; otherwise the marker would persist and a second delete would
-      // erroneously succeed.
-      const hadKnownClosed = this.knownClosedSessions.delete(params.sessionId);
-      if (hadLiveSession || hadKnownClosed) {
+      if (this.knownClosedSessions.delete(params.sessionId)) {
         return {};
       }
       throw acp.RequestError.resourceNotFound(params.sessionId);
