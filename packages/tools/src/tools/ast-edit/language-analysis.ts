@@ -52,11 +52,7 @@ export function extractImports(content: string, language: string): Import[] {
       language === 'python' &&
       (trimmed.startsWith(KEYWORDS.IMPORT) || trimmed.startsWith(KEYWORDS.FROM))
     ) {
-      imports.push({
-        module: extractPythonImportModule(trimmed),
-        items: extractPythonImportItems(trimmed),
-        line: lineNum,
-      });
+      imports.push(...parsePythonImportLine(trimmed, lineNum));
     } else if (language === 'rust' && isRustUseDeclaration(trimmed)) {
       const parsed = parseRustUseDeclaration(trimmed);
       if (parsed) {
@@ -129,24 +125,39 @@ function extractImportItems(line: string): string[] {
 }
 
 /**
- * Extracts the module path from a Python import statement.
- * Handles: `import os`, `from pathlib import Path`, `from os.path import join`
+ * Parses a one-line Python import statement into one or more Import records.
+ * Direct comma-separated imports produce one record per source module.
  */
-function extractPythonImportModule(line: string): string {
-  // Use token splitting instead of regex to avoid polynomial backtracking.
-  if (line.startsWith('from ')) {
-    const rest = line.slice(5).trimStart();
+function parsePythonImportLine(line: string, lineNum: number): Import[] {
+  const code = stripPythonComment(line);
+  if (code.startsWith('from ')) {
+    const rest = code.slice(5).trimStart();
     const importIdx = rest.indexOf(' import');
-    if (importIdx !== -1) {
-      return rest.slice(0, importIdx).trim();
+    if (importIdx === -1) {
+      return [];
     }
+    const module = rest.slice(0, importIdx).trim();
+    const items = extractPythonImportItems(code);
+    return [{ module, items, line: lineNum }];
   }
-  if (line.startsWith('import ')) {
-    const rest = line.slice(7).trimStart();
-    const spaceIdx = rest.search(/\s/);
-    return spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
+  if (code.startsWith('import ')) {
+    return code
+      .slice(7)
+      .split(',')
+      .map((target) => stripImportAlias(target.trim()))
+      .filter((module) => module.length > 0)
+      .map((module) => ({ module, items: [], line: lineNum }));
   }
-  return 'unknown';
+  return [];
+}
+
+/**
+ * Strips a trailing `#` comment from a Python import line. Import statements
+ * cannot contain string literals, so the first `#` always starts a comment.
+ */
+function stripPythonComment(line: string): string {
+  const commentIdx = line.indexOf('#');
+  return (commentIdx === -1 ? line : line.slice(0, commentIdx)).trimEnd();
 }
 
 /**
@@ -467,11 +478,16 @@ function extractGoImportPath(line: string): string | null {
   if (quoteOpen === -1) {
     return null;
   }
-  const quoteClose = body.indexOf('"', quoteOpen + 1);
-  if (quoteClose === -1) {
+  const alias = body.slice(0, quoteOpen).trim();
+  if (alias !== '' && alias !== '.' && !/^\w+$/.test(alias)) {
     return null;
   }
-  return body.slice(quoteOpen + 1, quoteClose);
+  const quoteClose = body.indexOf('"', quoteOpen + 1);
+  if (quoteClose === -1 || body.slice(quoteClose + 1).trim() !== '') {
+    return null;
+  }
+  const module = body.slice(quoteOpen + 1, quoteClose);
+  return module.length > 0 ? module : null;
 }
 
 // ===== Ruby require helpers =====
@@ -493,10 +509,9 @@ function isRubyRequire(line: string): boolean {
 }
 
 /**
- * Extracts the quoted path from a Ruby require / require_relative directive.
- * Finds the first quoted string in the line, so it works for both bare
- * and parenthesized forms as well as single and double quotes.
- * Returns null when no quoted path is found.
+ * Extracts one static string literal from a Ruby require directive.
+ * Preserves valid bare and parenthesized calls while rejecting interpolation,
+ * concatenation, multiple arguments, and other dynamic trailing expressions.
  */
 function extractRubyRequirePath(line: string): string | null {
   const quoteOpen = line.search(/['"]/);
@@ -504,9 +519,50 @@ function extractRubyRequirePath(line: string): string | null {
     return null;
   }
   const quoteChar = line[quoteOpen];
-  const quoteClose = line.indexOf(quoteChar, quoteOpen + 1);
+  const quoteClose = findRubyClosingQuote(line, quoteOpen, quoteChar);
   if (quoteClose === -1) {
     return null;
   }
-  return line.slice(quoteOpen + 1, quoteClose);
+  const module = line.slice(quoteOpen + 1, quoteClose);
+  if (quoteChar === '"' && hasRubyInterpolation(module)) {
+    return null;
+  }
+  const prefix = line.slice(0, quoteOpen);
+  let suffix = line.slice(quoteClose + 1).trim();
+  if (prefix.includes('(')) {
+    if (!suffix.startsWith(')')) {
+      return null;
+    }
+    suffix = suffix.slice(1).trim();
+  }
+  if (suffix !== '' && !suffix.startsWith('#')) {
+    return null;
+  }
+  return module.length > 0 ? module : null;
+}
+
+function hasRubyInterpolation(module: string): boolean {
+  let escaped = false;
+  for (let i = 0; i < module.length - 1; i++) {
+    if (module[i] === '#' && module[i + 1] === '{' && !escaped) {
+      return true;
+    }
+    escaped = module[i] === '\\' && !escaped;
+  }
+  return false;
+}
+
+function findRubyClosingQuote(
+  line: string,
+  quoteOpen: number,
+  quoteChar: string,
+): number {
+  let escaped = false;
+  for (let i = quoteOpen + 1; i < line.length; i++) {
+    if (line[i] === quoteChar && !escaped) {
+      return i;
+    }
+    escaped = line[i] === '\\' && !escaped;
+  }
+  return -1;
 }
