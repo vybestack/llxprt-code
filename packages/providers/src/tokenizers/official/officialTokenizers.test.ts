@@ -232,9 +232,37 @@ describe('Golden token-count fixtures (exact counts)', () => {
   });
 
   it('emoji/Unicode: exact counts match pinned BPE output', () => {
-    const text = 'Hello 👋 World 🌍 emoji test 😀🎉';
+    const text =
+      'Hello \u{1F44B} World \u{1F30D} emoji test \u{1F600}\u{1F389}';
     expect(kimi.countTokens(text)).toBe(13);
     expect(glm.countTokens(text)).toBe(11);
     expect(minimax.countTokens(text)).toBe(11);
+  });
+
+  /**
+   * Guards against every family silently resolving to the same BPE asset.
+   *
+   * Short ASCII converges across these vocabularies, so agreement there is
+   * expected and proves nothing. CJK and emoji exercise the parts of each
+   * vocabulary that genuinely differ, so at least one family must disagree.
+   */
+  it('distinct vocabularies produce distinct counts on CJK and emoji', () => {
+    const cjk = '人工智能正在改变世界，深度学习模型需要大量的计算资源。';
+    const cjkCounts = [
+      kimi.countTokens(cjk),
+      glm.countTokens(cjk),
+      minimax.countTokens(cjk),
+    ];
+    expect(new Set(cjkCounts).size).toBeGreaterThan(1);
+
+    // Escape sequences keep the astral-plane code points intact in source.
+    const emoji =
+      'Deploy \u{1F680} the model \u{1F916} now! \u{1F389}\u{1F389}\u{1F389}';
+    const emojiCounts = [
+      kimi.countTokens(emoji),
+      glm.countTokens(emoji),
+      minimax.countTokens(emoji),
+    ];
+    expect(new Set(emojiCounts).size).toBe(3);
   });
 });
