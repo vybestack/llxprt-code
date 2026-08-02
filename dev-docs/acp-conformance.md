@@ -111,7 +111,7 @@ Added to `.github/workflows/ci.yml`. The job:
    --categories initialization session_lifecycle schema_validation
    --output json
    --output-file acplint-diagnostics/report.json
-   --cwd "${{ github.workspace }}"
+   --cwd "${GITHUB_WORKSPACE}"
    ```
 
    The `--cwd` flag is set explicitly to the GitHub Actions workspace so the

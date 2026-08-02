@@ -184,7 +184,7 @@ describe('Issue #2564: acp_conformance CI job', () => {
 
   it('invokes acplint with explicit --cwd matching the workspace', () => {
     const runStep = stepNamed(acpJob, 'Run acplint');
-    expect(runStep.run).toContain('--cwd "${{ github.workspace }}"');
+    expect(runStep.run).toContain('--cwd "${GITHUB_WORKSPACE}"');
   });
 
   it('selects exactly initialization, session_lifecycle, schema_validation', () => {

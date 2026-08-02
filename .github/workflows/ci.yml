@@ -1192,7 +1192,7 @@ jobs:
             --categories initialization session_lifecycle schema_validation \
             --output json \
             --output-file "${ACPLINT_DIAG_DIR}/report.json" \
-            --cwd "${{ github.workspace }}" \
+            --cwd "${GITHUB_WORKSPACE}" \
             > "${ACPLINT_DIAG_DIR}/acplint.log" 2>&1
           EXIT_CODE=$?
           echo "$EXIT_CODE" > "${ACPLINT_DIAG_DIR}/status.txt"
