@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
+import { buildCodexImageGenerateEndpoint } from './codexImageBackend.js';
 import { createCodexImageBackendResolver } from './codexImageBackendResolver.js';
 import type { CodexImageBackendResolverDeps } from './codexImageBackendResolver.js';
 import type { IProvider } from '../IProvider.js';
@@ -90,13 +91,17 @@ describe('createCodexImageBackendResolver', () => {
       new AbortController().signal,
     );
 
-    const url = String(fetchImpl.mock.calls[0]?.[0]);
-    expect(url.startsWith(CODEX_BASE_URL)).toBe(true);
-    expect(url.includes(NON_CODEX_BASE_URL)).toBe(false);
+    // Assert the exact endpoint rather than matching a substring of the URL.
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      buildCodexImageGenerateEndpoint(CODEX_BASE_URL),
+    );
   });
 
   it('honours a custom Codex endpoint from the active provider', async () => {
-    const customCodex = 'https://proxy.internal/chatgpt.com/backend-api/codex';
+    // A custom deployment is recognised as Codex by carrying the Codex path
+    // marker, so a proxied host in front of it still resolves as Codex.
+    const customCodex =
+      'https://proxy.internal.example/chatgpt.com/backend-api/codex';
     const fetchImpl = vi.fn(async () => makeImageResponse());
     const resolve = createCodexImageBackendResolver({
       oauthManager: makeStubOAuthManager(VALID_TOKEN),
@@ -109,8 +114,8 @@ describe('createCodexImageBackendResolver', () => {
       new AbortController().signal,
     );
 
-    expect(String(fetchImpl.mock.calls[0]?.[0]).startsWith(customCodex)).toBe(
-      true,
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      buildCodexImageGenerateEndpoint(customCodex),
     );
   });
 
