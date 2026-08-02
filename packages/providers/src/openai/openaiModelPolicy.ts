@@ -124,10 +124,7 @@ function parseGptModelId(model: string): ParsedGptId | null {
   const majorStr = rest.slice(0, dotIndex);
   const afterDot = rest.slice(dotIndex + 1);
 
-  if (
-    (majorStr.length > 1 && majorStr.startsWith('0')) ||
-    (afterDot.length > 1 && afterDot.startsWith('0'))
-  ) {
+  if (majorStr.length > 1 && majorStr.startsWith('0')) {
     return null;
   }
   if (!/^\d+$/.test(majorStr)) return null;
@@ -140,6 +137,7 @@ function parseGptModelId(model: string): ParsedGptId | null {
   if (!minorMatch) return null;
 
   const minorStr = minorMatch[1];
+  if (minorStr.length > 1 && minorStr.startsWith('0')) return null;
   const minor = Number(minorStr);
   if (!Number.isFinite(minor)) return null;
 

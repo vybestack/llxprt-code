@@ -133,7 +133,7 @@ function createProjectedProvider(
       };
     },
     async *generateChatCompletion(options): AsyncGenerator<IContent> {
-      sentTokens.push(options.promptEnvelopeTransportToken!);
+      sentTokens.push(options.promptEnvelopeTransportToken);
       sendCount += 1;
       if (failFirstSend && sendCount === 1) {
         throw new Error('429 rate limited');

@@ -61,6 +61,8 @@ describe('parseOpenAIModelTransport', () => {
       'gpt-5.6-2026-00-15',
       'gpt-5.6-20261-01-15',
       'gpt-5.6-2026-1-15',
+      'gpt-5.06',
+      'gpt-05.6',
     ])(
       'rejects bare lookalikes so they do not get minimal→none mapping: %s',
       (model) => {
