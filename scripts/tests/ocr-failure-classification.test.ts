@@ -167,6 +167,12 @@ describe.skipIf(!hasBash())(
           { cause: error },
         );
       }
+      if (!fs.existsSync(artifactPath)) {
+        throw new Error(
+          'The classification block recorded no failure reason for input: ' +
+            JSON.stringify(stderrContent),
+        );
+      }
       const content = fs.readFileSync(artifactPath, 'utf8').trim();
       const reasonMatch = /reason=(.*)$/.exec(content);
       expect(
@@ -234,6 +240,18 @@ describe.skipIf(!hasBash())(
       expect(classify('{"error":{"code":429,"message":"quota"}}\n')).toBe(
         RATE_LIMIT_REASON,
       );
+    });
+
+    it('classifies a pretty-printed provider error payload at column 0', () => {
+      // A column-0 JSON object without the usage record's signature (both
+      // "summary" and "tool_calls") is replayed, not dropped, so its status
+      // code still classifies.
+      expect(
+        classify(
+          '{\n  "error": {\n    "type": "rate_limit_error",\n' +
+            '    "code": 429,\n    "message": "quota exceeded"\n  }\n}\n',
+        ),
+      ).toBe(RATE_LIMIT_REASON);
     });
 
     it('classifies a multi-line provider error surfaced through the Error: prefix', () => {

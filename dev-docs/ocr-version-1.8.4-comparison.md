@@ -158,18 +158,20 @@ diagnostic of a different class that appears later in the same stderr.
    ocr_diagnostics="$(awk '/^\{$/ { in_usage = 1 } in_usage != 1 { print } /^\}$/ { in_usage = 0 }' ocr-stderr.log)"
    ```
 
-   Single-line provider error payloads (`{"error":{"code":429,…}}`) are not
-   affected because their braces are not alone on a line.
-
-   **Known bound of this rule:** it would also drop a provider error body that
-   was pretty-printed with a bare `{` at column 0. OCR never emits one — the
-   usage record is the only value it writes to stderr with `json.NewEncoder`,
-   and provider failures are surfaced through
-   `fmt.Fprintf(os.Stderr, "Error: %v\n", err)` in `main`, so their first line
-   always carries the `Error: ` prefix. Both shapes are pinned by tests.
+   Only an object carrying the record's own signature is dropped: both the
+   `"summary"` and `"tool_calls"` members at the encoder's two-space indent,
+   which `emitFailureUsage` always sets. Any other column-0 JSON object is
+   buffered and replayed, so a pretty-printed provider error payload keeps its
+   status code and still classifies. Single-line payloads
+   (`{"error":{"code":429,…}}`) never enter the buffer at all because their
+   braces are not alone on a line. All three shapes are pinned by tests.
 
 2. **Anchor the numeric alternatives at token boundaries** so a status code
-   only matches when it is not embedded in a larger number or hex identifier:
+   only matches when it is not embedded in a larger number or hex identifier.
+   This applies to the four status-code patterns only; the phrase patterns
+   (`rate limit`, `overloaded`, `timeout`, `timed out`,
+   `all N file review(s) failed`) stay unanchored deliberately, since anchoring
+   them would reject real diagnostics such as `ReadTimeout`:
 
    ```bash
    (^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)

@@ -115,8 +115,12 @@ describe('.github/workflows/ocr-review.yml — issue #2576 hardening behaviors',
     );
     expectContainsAll(reviewRun, [
       // The structured usage record OCR >= 1.8.0 writes to stderr is dropped
-      // before classification so its counters are never read as HTTP statuses.
-      'ocr_diagnostics="$(awk \'/^\\{$/ { in_usage = 1 } in_usage != 1 { print } /^\\}$/ { in_usage = 0 }\' ocr-stderr.log)"',
+      // before classification so its counters are never read as HTTP statuses,
+      // and only an object carrying the record's own signature is dropped.
+      'ocr_diagnostics="$(awk \'',
+      'if ($0 ~ /^  "summary":/) { summary_seen = 1 }',
+      'if ($0 ~ /^  "tool_calls":/) { tools_seen = 1 }',
+      'if (summary_seen == 0 || tools_seen == 0) { print buffered }',
       'grep -Eqi "(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)|rate limit"',
       'OCR review failed: HTTP 429 rate limit',
       'grep -Eqi "(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)|overloaded"',

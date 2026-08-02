@@ -159,9 +159,23 @@ describe('.github/workflows/ocr-review.yml — preview parser (real OCR 1.8.4 pr
     ]);
   });
 
-  it('excludes all entries under Excluded from review in 1.8.4 output', () => {
+  it('excludes every entry under Excluded from review in 1.8.4 output', () => {
     const files = runPreviewParser(REAL_1_8_4_PREVIEW);
-    expect(files).not.toContain('project-plans/issue2860/PLAN.md');
-    expect(files).not.toContain('scripts/tests/ocr-trusted-marker.test.ts');
+    const excluded = [
+      'project-plans/issue2860/PLAN.md',
+      'project-plans/issue2860/REVIEW-TRIAGE.md',
+      'scripts/tests/ocr-auto-review-limit.test.ts',
+      'scripts/tests/ocr-heredoc-extraction.test.ts',
+      'scripts/tests/ocr-review-incremental-checkpoint-b.test.ts',
+      'scripts/tests/ocr-review-workflow-behaviors.test.ts',
+      'scripts/tests/ocr-review-workflow-features.test.ts',
+      'scripts/tests/ocr-trusted-marker-workflow-b.test.ts',
+      'scripts/tests/ocr-trusted-marker-workflow.test.ts',
+      'scripts/tests/ocr-trusted-marker.test.ts',
+      'scripts/tests/re-embed-trusted-marker.test.ts',
+    ];
+    for (const path of excluded) {
+      expect(files, `${path} must not be selected`).not.toContain(path);
+    }
   });
 });
