@@ -173,26 +173,24 @@ async function startPodmanReverseTunnel(
   return { tunnelPort, tunnelProcess };
 }
 
-function ensurePodmanHostNetworkForSshAgent(
-  args: string[],
-  tunnelProcess: ChildProcess,
-): boolean {
+function hasPodmanSshAgentNetworkConflict(args: string[]): boolean {
   const existingNetIdx = args.indexOf('--network');
-  if (existingNetIdx === -1) {
-    args.push('--network', 'host');
-    return true;
+  if (existingNetIdx === -1 || args[existingNetIdx + 1] === 'host') {
+    return false;
   }
 
   const existingNet = args[existingNetIdx + 1];
-  if (existingNet === 'host') {
-    return true;
-  }
   debugLogger.warn(
     `Podman macOS SSH agent forwarding requires --network=host but ` +
       `--network=${existingNet} is already set. Skipping SSH agent setup.`,
   );
-  tunnelProcess.kill('SIGTERM');
-  return false;
+  return true;
+}
+
+function addPodmanHostNetwork(args: string[]): void {
+  if (!args.includes('--network')) {
+    args.push('--network', 'host');
+  }
 }
 
 function buildPodmanSshAgentBridgeResult(
@@ -276,6 +274,10 @@ export async function setupSshAgentPodmanMacOS(
   pollTimeoutMs: number = SSH_TUNNEL_POLL_TIMEOUT_MS,
   options: PodmanTunnelOptions = {},
 ): Promise<SshAgentResult> {
+  if (hasPodmanSshAgentNetworkConflict(args)) {
+    return {};
+  }
+
   const { tunnelPort, tunnelProcess } = await startPodmanReverseTunnel(
     sshAuthSock,
     'SSH tunnel process failed to start for Podman macOS SSH agent forwarding. Ensure Podman machine is running: `podman machine start`. Check SSH connectivity: `podman machine ssh`.',
@@ -284,10 +286,7 @@ export async function setupSshAgentPodmanMacOS(
     options,
   );
 
-  if (!ensurePodmanHostNetworkForSshAgent(args, tunnelProcess)) {
-    return {};
-  }
-
+  addPodmanHostNetwork(args);
   return buildPodmanSshAgentBridgeResult(args, tunnelProcess, tunnelPort);
 }
 
