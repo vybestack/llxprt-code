@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { deepStrictEqual } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { get_encoding } from '@dqbd/tiktoken';
@@ -68,7 +69,9 @@ describe('GPT-5.6 o200k fixtures', () => {
       try {
         const tokens = [...encoder.encode(text, [], [])];
         expect(tokens).toHaveLength(fixture.count);
-        expect(tokens).toStrictEqual(fixture.tokens ?? tokens);
+        if (fixture.tokens !== undefined) {
+          deepStrictEqual(tokens, fixture.tokens);
+        }
       } finally {
         encoder.free();
       }

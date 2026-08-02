@@ -96,7 +96,7 @@ export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfile
 
 interface PreparedLoadBalancerTarget {
   readonly options: GenerateChatOptions;
-  readonly delegateProvider: IProvider | undefined;
+  readonly delegateProvider: IProvider;
 }
 
 function normalizeGenerateChatOptions(
@@ -210,7 +210,7 @@ export class LoadBalancingProvider implements IProvider {
   private async estimateForSubProfile(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     resolvedOptions: GenerateChatOptions,
-    delegateProvider: IProvider | undefined,
+    delegateProvider: IProvider,
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
     const result = await estimatePreparedPrompt(
@@ -232,7 +232,7 @@ export class LoadBalancingProvider implements IProvider {
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     result: EstimationResult,
     contextLimit: number,
-    delegateProvider: IProvider | undefined,
+    delegateProvider: IProvider,
   ): Promise<GenerateChatOptions | undefined> {
     if (this.compressionCallback === null) return undefined;
     this.logger.debug(
@@ -300,6 +300,11 @@ export class LoadBalancingProvider implements IProvider {
     const delegateProvider = this.providerManager.getProviderByName(
       subProfile.providerName,
     );
+    if (!delegateProvider) {
+      const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
+      this.logger.error(() => errorMsg);
+      throw new Error(errorMsg);
+    }
     const resolvedOptions = this.buildDelegateResolvedOptions(
       subProfile,
       options,
@@ -377,12 +382,6 @@ export class LoadBalancingProvider implements IProvider {
     this.incrementStats(subProfile.name);
     const startTime = this.metricsCollector.recordRequestStart(subProfile.name);
     const { delegateProvider } = preparedTarget;
-
-    if (!delegateProvider) {
-      const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
-      this.logger.error(() => errorMsg);
-      throw new Error(errorMsg);
-    }
 
     this.logger.debug(
       () =>
@@ -883,7 +882,7 @@ export class LoadBalancingProvider implements IProvider {
   private async *attemptBackendRequest(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
-    delegateProvider: IProvider | undefined,
+    delegateProvider: IProvider,
     settings: FailoverSettings,
     startTime: number,
     chunksYielded: { value: boolean },

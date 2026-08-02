@@ -100,6 +100,8 @@ describe('issue 2253 GPT-5.6 provider usage parity', () => {
         request(buildPrompt(observation.category, 5)),
       );
 
+      expect(control.count).toBe(observation.controlTokens);
+      expect(heldout.count).toBe(observation.heldoutTokens);
       expect(heldout.count - control.count).toBe(observation.providerDelta);
     },
   );

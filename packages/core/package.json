@@ -423,6 +423,14 @@
       "bun": "./src/runtime/contracts/PromptEstimation.ts",
       "import": "./dist/src/runtime/contracts/PromptEstimation.js"
     },
+    "./runtime/contracts/RuntimeTokenizer.js": {
+      "bun": "./src/runtime/contracts/RuntimeTokenizer.ts",
+      "import": "./dist/src/runtime/contracts/RuntimeTokenizer.js"
+    },
+    "./runtime/contracts/RuntimeTokenizerFactory.js": {
+      "bun": "./src/runtime/contracts/RuntimeTokenizerFactory.ts",
+      "import": "./dist/src/runtime/contracts/RuntimeTokenizerFactory.js"
+    },
     "./runtime/runtimeStateFactory.js": {
       "bun": "./src/runtime/runtimeStateFactory.ts",
       "import": "./dist/src/runtime/runtimeStateFactory.js"

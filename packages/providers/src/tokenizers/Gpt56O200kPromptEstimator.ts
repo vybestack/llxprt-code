@@ -10,7 +10,10 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import type * as Tiktoken from '@dqbd/tiktoken';
-import type { ProviderFinalizedPromptProjection } from '../runtime/promptEnvelopeProjections.js';
+import {
+  PROJECTION_REVISION,
+  type ProviderFinalizedPromptProjection,
+} from '../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
 
 export const GPT_56_ESTIMATOR_FAMILY = 'openai-gpt-5.6';
@@ -170,7 +173,7 @@ export function createGpt56RuntimeTokenizer(
           protocol: 'openai-responses',
           promptText,
         },
-        projectionRevision: 3,
+        projectionRevision: PROJECTION_REVISION,
         legacyEstimate: () =>
           Promise.reject(new Error('unreachable legacy estimate')),
       });

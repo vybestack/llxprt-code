@@ -282,6 +282,46 @@ describe('HistoryService - Token Accounting Reset (provider switch)', () => {
       await expect(
         service.recalculateTotalTokens('gpt-5.6-sol', 'codex-alias'),
       ).rejects.toBe(failure);
+
+      service.setTokenizerFactory({
+        ...factory,
+        getTokenizer: () => ({
+          fallbackPolicy: 'deny',
+          countTokens: () => Promise.resolve(7),
+        }),
+      });
+      await service.recalculateTotalTokens('gpt-5.6-sol', 'codex-alias');
+      expect(service.getTotalTokens()).toBe(7);
+    });
+
+    it('surfaces asynchronous add failures without poisoning later updates', async () => {
+      const failure = new Error('exact tokenizer unavailable');
+      let shouldFail = true;
+      service.setTokenizerFactory({
+        getTokenizer: () => ({
+          fallbackPolicy: 'deny',
+          countTokens: () =>
+            shouldFail ? Promise.reject(failure) : Promise.resolve(7),
+        }),
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
+
+      service.add(createUserMessage('history entry'), 'gpt-5.6-sol');
+      await expect(service.waitForTokenUpdates()).rejects.toBe(failure);
+
+      shouldFail = false;
+      await service.recalculateTotalTokens('gpt-5.6-sol', 'codex-alias');
+      expect(service.getTotalTokens()).toBe(7);
+      await expect(service.waitForTokenUpdates()).resolves.toBeUndefined();
     });
 
     it('rejects raw-text errors when the active tokenizer denies fallback', async () => {

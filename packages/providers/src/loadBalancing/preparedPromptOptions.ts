@@ -21,12 +21,12 @@ import { resolveSubProfileModel } from './subProfileHelpers.js';
 export async function estimatePreparedPrompt(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   options: GenerateChatOptions,
-  delegateProvider: IProvider | undefined,
+  delegateProvider: IProvider,
   tokenizerFactory: RuntimeTokenizerFactory | undefined,
 ): Promise<EstimationResult> {
   const model = resolveSubProfileModel(subProfile);
   const projected =
-    tokenizerFactory !== undefined && delegateProvider !== undefined
+    tokenizerFactory !== undefined
       ? await estimateSelectedProviderPrompt(
           delegateProvider,
           subProfile.providerName,

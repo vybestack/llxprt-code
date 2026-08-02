@@ -249,6 +249,7 @@ describe('LoadBalancingProvider', () => {
             }
           })(),
         ).rejects.toThrow(/Provider.*not found/);
+        expect(provider.getStats().totalRequests).toBe(0);
       } finally {
         providerManager.getProviderByName = originalGetProvider;
       }

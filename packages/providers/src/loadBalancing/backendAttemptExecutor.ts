@@ -45,25 +45,25 @@ export interface BackendAttemptDeps {
 export interface BackendAttemptParams {
   readonly subProfile: ResolvedSubProfile | LoadBalancerSubProfile;
   readonly options: GenerateChatOptions;
-  readonly delegateProvider: IProvider | undefined;
+  readonly delegateProvider: IProvider;
   readonly settings: FailoverSettings;
   readonly startTime: number;
   readonly chunksYielded: { value: boolean };
   readonly lifecycleObserver: AttemptLifecycleObserver | undefined;
   /** Factory that starts the backend attempt lifecycle. Called only
    * after setup checks pass, immediately before the actual delegate
-   * generateChatCompletion invocation — so setup failures (missing
-   * provider, exhausted transport budget) do NOT emit phantom lifecycle
-   * start events. Returns the context needed for the terminal record. */
+   * generateChatCompletion invocation — so exhausted transport budgets do
+   * NOT emit phantom lifecycle start events. Returns the context needed for
+   * the terminal record. */
   readonly startBackendAttempt: () => BackendAttemptContext | null;
   readonly deps: BackendAttemptDeps;
 }
 
 /**
- * Validate that the backend is ready for an attempt. May throw on setup
- * failure (missing provider or exhausted transport budget). Does NOT
- * emit lifecycle events or invoke the delegate — callers can safely
- * failover when this throws without leaving a phantom lifecycle record.
+ * Validate that the backend is ready for an attempt. May throw when the
+ * transport budget is exhausted. Does NOT emit lifecycle events or invoke
+ * the delegate — callers can safely failover when this throws without
+ * leaving a phantom lifecycle record.
  *
  * Returns the resolved options and delegate provider so the caller can
  * start the lifecycle and invoke the delegate immediately after.
@@ -71,16 +71,13 @@ export interface BackendAttemptParams {
 function resolveBackendDelegate(
   subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   options: GenerateChatOptions,
-  delegateProvider: IProvider | undefined,
+  delegateProvider: IProvider,
   deps: BackendAttemptDeps,
 ): {
   resolvedOptions: GenerateChatOptions;
   delegateProvider: IProvider;
 } {
   const resolvedOptions = deps.buildResolvedOptions(subProfile, options);
-  if (!delegateProvider) {
-    throw new Error(`Provider "${subProfile.providerName}" not found`);
-  }
   requireTransportAttempt(resolvedOptions);
   return { resolvedOptions, delegateProvider };
 }

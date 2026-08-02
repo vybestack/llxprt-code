@@ -10,7 +10,7 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
-const PROJECTION_REVISION = 3;
+export const PROJECTION_REVISION = 3;
 const BINARY_PAYLOAD_PLACEHOLDER = '[binary media bytes omitted]';
 
 export interface ProviderFinalizedPromptProjection {
@@ -47,7 +47,7 @@ function buildProjection(
 ): PromptEnvelopeProjection {
   const promptText = serializePromptBearingStructure(requestBody, promptKeys);
   const promptSegments = serializePromptSegments(requestBody, promptKeys);
-  const legacyTokens = countPromptTokens(promptText);
+  let legacyTokens: number | undefined;
   const unsupportedMedia = freezeUnsupportedMedia(options?.unsupportedMedia);
   const finalizedProjection: ProviderFinalizedPromptProjection = Object.freeze({
     kind: 'llxprt-provider-prompt-v3',
@@ -66,7 +66,10 @@ function buildProjection(
     unsupportedMedia,
     transportToken: options?.transportToken ?? EMPTY_TRANSPORT_TOKEN,
     finalizedProjection,
-    legacyEstimate: () => Promise.resolve(legacyTokens),
+    legacyEstimate: () => {
+      legacyTokens ??= countPromptTokens(promptText);
+      return Promise.resolve(legacyTokens);
+    },
   });
 }
 

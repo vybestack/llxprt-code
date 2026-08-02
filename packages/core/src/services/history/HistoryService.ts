@@ -110,6 +110,7 @@ export class HistoryService
   private baseTokenOffset: number = 0;
   private tokenizerCache = new Map<string, ITokenizer>();
   private tokenizerLock: Promise<void> = Promise.resolve();
+  private pendingTokenizerFailure: { error: unknown } | undefined;
   private syncGeneration: number = 0;
   private historyMutationInProgress = false;
   private historyMutationQueue: QueuedHistoryMutation[] = [];
@@ -295,24 +296,43 @@ export class HistoryService
 
     const normalized = Math.max(0, Math.floor(actualTotal));
     const generation = this.syncGeneration;
+    this.observeTokenizerOperation(
+      this.runSerializedTokenOperation(() => {
+        if (generation !== this.syncGeneration) return;
 
-    this.tokenizerLock = this.tokenizerLock.then(() => {
-      if (generation !== this.syncGeneration) return;
+        const currentTotal = this.getTotalTokens();
+        const drift = normalized - currentTotal;
 
-      const currentTotal = this.getTotalTokens();
-      const drift = normalized - currentTotal;
+        if (drift === 0) {
+          return;
+        }
 
-      if (drift === 0) {
-        return;
-      }
+        this.baseTokenOffset += drift;
 
-      this.baseTokenOffset += drift;
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: drift,
+          contentId: null,
+        });
+      }),
+    );
+  }
 
-      this.emit('tokensUpdated', {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: drift,
-        contentId: null,
-      });
+  private runSerializedTokenOperation<T>(
+    operation: () => T | Promise<T>,
+  ): Promise<T> {
+    const result = this.tokenizerLock.then(operation);
+    this.tokenizerLock = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private observeTokenizerOperation(operation: Promise<void>): void {
+    void operation.catch((error: unknown) => {
+      this.pendingTokenizerFailure ??= { error };
+      this.logger.error('Asynchronous token accounting failed', error);
     });
   }
 
@@ -508,19 +528,20 @@ export class HistoryService
     }
 
     // Update token count asynchronously but atomically
-    void this.updateTokenCount(content, modelName, generation);
+    this.observeTokenizerOperation(
+      this.updateTokenCount(content, modelName, generation),
+    );
   }
 
   /**
    * Atomically update token count for new content
    */
-  private async updateTokenCount(
+  private updateTokenCount(
     content: IContent,
     modelName?: string,
     generation = this.syncGeneration,
   ): Promise<void> {
-    // Use a lock to prevent race conditions
-    this.tokenizerLock = this.tokenizerLock.then(async () => {
+    return this.runSerializedTokenOperation(async () => {
       // Always derive token counts from the stored content to avoid double counting
       // when providers attach aggregate usage metadata (which already includes prompt tokens).
       const defaultModel = modelName ?? this.activeTokenizationModel;
@@ -544,8 +565,6 @@ export class HistoryService
 
       this.emit('tokensUpdated', eventData);
     });
-
-    return this.tokenizerLock;
   }
 
   /**
@@ -645,6 +664,9 @@ export class HistoryService
    */
   async waitForTokenUpdates(): Promise<void> {
     await this.tokenizerLock;
+    const failure = this.pendingTokenizerFailure;
+    this.pendingTokenizerFailure = undefined;
+    if (failure !== undefined) throw failure.error;
   }
 
   /**
@@ -783,11 +805,11 @@ export class HistoryService
    * @requirement REQ-HD-003.6
    * @pseudocode history-service.md lines 90-120
    */
-  async recalculateTotalTokens(
+  recalculateTotalTokens(
     modelName = this.activeTokenizationModel,
     activeProvider = this.activeTokenizationProvider,
   ): Promise<void> {
-    this.tokenizerLock = this.tokenizerLock.then(async () => {
+    return this.runSerializedTokenOperation(async () => {
       let newTotal = 0;
       const tokenizerProvider: TokenizerProvider = {
         getTokenizerForModel: (targetModel) =>
@@ -819,8 +841,6 @@ export class HistoryService
         contentId: null,
       });
     });
-
-    return this.tokenizerLock;
   }
 
   /** Get all history (shallow copy). */
@@ -847,6 +867,7 @@ export class HistoryService
     this.pendingOperations = [];
     this.tokenizerCache.clear();
     this.tokenizerLock = Promise.resolve();
+    this.pendingTokenizerFailure = undefined;
     // Chronology counters are intentionally NOT reset: seq must never be reused
     // (NG8) so that items added after dispose() never collide with earlier ones.
   }
@@ -929,7 +950,7 @@ export class HistoryService
     if (removed) {
       // Recalculate tokens since we removed content
       // This is less efficient but ensures accuracy
-      void this.recalculateTokens();
+      this.observeTokenizerOperation(this.recalculateTokens());
     }
     return removed;
   }
@@ -938,10 +959,10 @@ export class HistoryService
    * Recalculate total tokens from scratch
    * Use this when removing content or when token counts might be stale
    */
-  async recalculateTokens(
+  recalculateTokens(
     defaultModel = this.activeTokenizationModel,
   ): Promise<void> {
-    this.tokenizerLock = this.tokenizerLock.then(async () => {
+    return this.runSerializedTokenOperation(async () => {
       let newTotal = 0;
 
       for (const content of this.history) {
@@ -958,8 +979,6 @@ export class HistoryService
         contentId: null,
       });
     });
-
-    return this.tokenizerLock;
   }
 
   /**
@@ -1035,7 +1054,7 @@ export class HistoryService
           respondedCallIds.add(tc.id);
         }
 
-        void this.updateTokenCount(stampedSynthetic);
+        this.observeTokenizerOperation(this.updateTokenCount(stampedSynthetic));
         i += 1;
       }
     }

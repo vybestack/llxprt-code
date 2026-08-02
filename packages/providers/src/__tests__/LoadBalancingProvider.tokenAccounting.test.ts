@@ -103,7 +103,7 @@ function createTokenizerFactory(
 function createProjectedProvider(
   name: string,
   tokensForOptions: (options: GenerateChatOptions) => number,
-  sentTokens: object[],
+  sentTokens: Array<object | undefined>,
   failFirstSend = false,
 ): IProvider & { readonly projectionTokens: object[] } {
   const projectionTokens: object[] = [];
@@ -118,7 +118,7 @@ function createProjectedProvider(
       });
       projectionTokens.push(transportToken);
       return {
-        model: options.model ?? 'gpt-5.6-sol',
+        model: options.resolved?.model ?? 'gpt-5.6-sol',
         protocol: 'openai-responses',
         method: 'responses/v1',
         projectionRevision: 3,
@@ -414,7 +414,7 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
   });
 
   it('sends the exact round-robin projection token used for estimation', async () => {
-    const sentTokens: object[] = [];
+    const sentTokens: Array<object | undefined> = [];
     const delegate = createProjectedProvider('openai', () => 5, sentTokens);
     providerManager.setTokenizerFactory(createTokenizerFactory({}));
     providerManager.registerProvider(delegate);
@@ -438,10 +438,13 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
 
     expect(delegate.projectionTokens).toHaveLength(1);
     expect(sentTokens).toStrictEqual(delegate.projectionTokens);
+    expect(provider.getTokenAccountingDiagnostics().accountingSource).toBe(
+      'calibrated:legacy-unregistered:core-estimate-tokens-v1:none:projection-3',
+    );
   });
 
   it('uses a new matched projection token for each failover retry', async () => {
-    const sentTokens: object[] = [];
+    const sentTokens: Array<object | undefined> = [];
     const delegate = createProjectedProvider(
       'openai',
       () => 5,
@@ -482,7 +485,7 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
   });
 
   it('sends the compressed projection token after re-estimation', async () => {
-    const sentTokens: object[] = [];
+    const sentTokens: Array<object | undefined> = [];
     const delegate = createProjectedProvider(
       'openai',
       (options) =>
