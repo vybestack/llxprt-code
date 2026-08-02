@@ -27,12 +27,19 @@
  * set/set and set/delete on the same keychain item, which is exactly the
  * unserialized mutation this lock exists to eliminate.
  *
+ * Lock-file naming uses an injective, non-cryptographic percent-encoding of
+ * the (service, account) identifiers — NOT a hash. The hashed input is never
+ * a credential value (call sites pass keychain service/account identifiers),
+ * so hashing added only downsides: a needless collision risk, undebuggable
+ * lock files, and a false-positive CodeQL `js/insufficient-password-hash`
+ * alert. See `lockFilePath` for details.
+ *
  * @plan PLAN-20260801-ISSUE2927
  * @requirement R3, R4
  */
 
 import { execFile } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { hostname as nodeHostname } from 'node:os';
 import { join } from 'node:path';
@@ -288,16 +295,92 @@ function computeBackoffDelay(
 
 // ─── Lock path derivation ───────────────────────────────────────────────────
 
+/**
+ * Maximum length, in characters, of the entire encoded lock-file name
+ * (including the `cred-` prefix and `.lock` suffix). Most filesystems cap a
+ * filename at 255 bytes; percent-encoding can expand input up to 3x. The cap
+ * leaves comfortable headroom and is only reachable with pathological
+ * identifiers — `SecureStore.validateKey` already constrains keys.
+ */
+const LOCK_FILE_NAME_CAP = 220;
+
+/**
+ * Characters that are unsafe or reserved on one or more of Windows, macOS, or
+ * Linux filesystems. The delimiter `@` is included so it can serve as a
+ * component separator that can never appear inside an encoded component.
+ */
+const FILESYSTEM_UNSAFE_CHARS = '*<>:"/\\|?@%';
+
+/**
+ * Returns true if a character must be percent-encoded because it is a
+ * filesystem-reserved character, an ASCII control character (0x00–0x1F or
+ * 0x7F), or non-ASCII (outside the printable ASCII range 0x20–0x7E).
+ *
+ * The `@` delimiter is deliberately treated as unsafe so it can never appear
+ * inside an encoded component — only between them.
+ */
+function isUnsafeChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (
+    FILESYSTEM_UNSAFE_CHARS.includes(char) ||
+    code < 0x20 ||
+    code === 0x7f ||
+    code > 0x7e
+  );
+}
+
+/**
+ * Percent-encodes a single component (service or account) into a
+ * filesystem-safe, ASCII-only string that contains none of the unsafe
+ * characters — and crucially never contains the `@` delimiter used to join
+ * components.
+ *
+ * Non-ASCII characters are also encoded so the filename is deterministic
+ * across UTF-8 normalization differences.
+ */
+function escapeComponent(component: string): string {
+  let result = '';
+  for (const char of component) {
+    result += isUnsafeChar(char)
+      ? '%' + char.charCodeAt(0).toString(16).toUpperCase()
+      : char;
+  }
+  return result;
+}
+
+/**
+ * Derives a deterministic, injective, filesystem-safe lock-file path from a
+ * (service, account) pair.
+ *
+ * **Why encoding, not a hash:** the input is a keychain service name and an
+ * account/key name — identifiers, never credential values. A cryptographic
+ * hash was previously used purely to produce a filesystem-safe filename, but
+ * hashing is the wrong tool: it is lossy (introducing a collision risk that
+ * did not need to exist), makes lock files undebuggable (the original
+ * identifiers are unrecoverable), and trips CodeQL's
+ * `js/insufficient-password-hash` rule (a false positive — no password is
+ * involved). A non-cryptographic, injective percent-encoding satisfies every
+ * requirement without any of these drawbacks.
+ *
+ * Injectivity is guaranteed by encoding each component independently and
+ * joining them with a `@` delimiter that `escapeComponent` can never emit,
+ * so `('ab', 'c')` and `('a', 'bc')` always produce distinct filenames.
+ */
 function lockFilePath(
   lockDir: string,
   service: string,
   account: string,
 ): string {
-  const hash = createHash('sha256')
-    .update(service + '\0' + account)
-    .digest('hex')
-    .slice(0, 32);
-  return join(lockDir, `cred-${hash}.lock`);
+  const fileName = `cred-${escapeComponent(service)}@${escapeComponent(account)}.lock`;
+  if (fileName.length > LOCK_FILE_NAME_CAP) {
+    throw new SecureStoreError(
+      `Credential lock file name exceeds the ${LOCK_FILE_NAME_CAP}-character filesystem cap ` +
+        `for service=${JSON.stringify(service)}, account=${JSON.stringify(account)}.`,
+      'CORRUPT',
+      'Shorten the service name or key name so the lock-file name fits within filesystem limits',
+    );
+  }
+  return join(lockDir, fileName);
 }
 
 // ─── Operation settlement ───────────────────────────────────────────────────

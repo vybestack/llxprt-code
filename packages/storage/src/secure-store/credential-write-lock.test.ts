@@ -390,25 +390,108 @@ describe('CredentialWriteLock', () => {
     expect(lockFiles).toStrictEqual([]);
   });
 
-  it('lock path derivation is stable and does not embed raw service or account', async () => {
+  it('lock path is deterministic — same (service, account) always yields the same path across instances', async () => {
     const lockA = new CredentialWriteLock({ lockDir: lockDir() });
     const lockB = new CredentialWriteLock({ lockDir: lockDir() });
 
+    // Two independently constructed instances must derive the same path.
+    const pathA = lockA.lockFilePath('myservice', 'myaccount');
+    const pathB = lockB.lockFilePath('myservice', 'myaccount');
+    expect(pathA).toBe(pathB);
+
+    // The on-disk file name matches what lockFilePath predicts.
     let observedFileName = '';
     await lockA.withLock('myservice', 'myaccount', async () => {
       const files = await fs.readdir(lockDir());
       observedFileName = files.find((f) => f.endsWith('.lock')) ?? '';
     });
-
     expect(observedFileName).not.toBe('');
-    // The raw identifiers must not appear in the filename.
-    expect(observedFileName).not.toContain('myservice');
-    expect(observedFileName).not.toContain('myaccount');
+    expect(path.join(lockDir(), observedFileName)).toBe(pathA);
+  });
 
-    // Two instances derive the same path for the same pair.
-    const pathA = lockA.lockFilePath('myservice', 'myaccount');
-    const pathB = lockB.lockFilePath('myservice', 'myaccount');
-    expect(pathA).toBe(pathB);
+  it('lock path is injective — different component splits never collide across the delimiter boundary', () => {
+    const lock = new CredentialWriteLock({ lockDir: lockDir() });
+    // ('ab', 'c') and ('a', 'bc') must produce distinct paths.
+    const path1 = lock.lockFilePath('ab', 'c');
+    const path2 = lock.lockFilePath('a', 'bc');
+    expect(path1).not.toBe(path2);
+
+    // Completely different pairs must also never collide.
+    expect(lock.lockFilePath('svc-x', 'acct')).not.toBe(
+      lock.lockFilePath('svc-y', 'acct'),
+    );
+  });
+
+  it('lock path is filesystem-safe — path-unsafe characters are escaped and cannot escape the lock directory', () => {
+    const ld = lockDir();
+    const lock = new CredentialWriteLock({ lockDir: ld });
+
+    // Each pair contains at least one character that is path-unsafe.
+    const unsafePairs: ReadonlyArray<readonly [string, string]> = [
+      ['svc/with/slash', 'acct'],
+      ['svc', 'acct/with/slash'],
+      ['svc\\with\\backslash', 'acct'],
+      ['svc:with:colon', 'acct'],
+      ['../escape', 'acct'],
+      ['svc', '../../escape'],
+      ['svc\x00null', 'acct'],
+      ['svc\x1funit', 'acct'],
+      ['svc|pipe', 'acct'],
+      ['svc*star', 'acct'],
+      ['svc?question', 'acct'],
+      ['svc"quote', 'acct'],
+      ['svc<lt>gt', 'acct'],
+    ];
+
+    for (const [svc, acct] of unsafePairs) {
+      const resolved = lock.lockFilePath(svc, acct);
+      const base = path.basename(resolved);
+      // The encoded file name must never contain a raw path separator or
+      // null/control character — those are all percent-encoded.
+      expect(base).not.toContain('/');
+      expect(base).not.toContain('\\');
+      expect(base).not.toContain('\x00');
+      expect(base).not.toContain('\x1f');
+      // No path-traversal sequence can appear: all separators (`/` `\`) are
+      // encoded, so a literal `..` can never be adjacent to a separator.
+      expect(base).not.toMatch(/\.\.[/\\]/);
+      expect(base).not.toMatch(/[/\\]\.\./);
+      // The resolved path must stay inside the lock directory.
+      expect(resolved.startsWith(ld + path.sep)).toBe(true);
+    }
+  });
+
+  it('lock path escapes the @ delimiter so it cannot appear inside an encoded component', () => {
+    const lock = new CredentialWriteLock({ lockDir: lockDir() });
+    const resolved = lock.lockFilePath('svc@evil', 'acct');
+    const base = path.basename(resolved);
+    // The raw '@' from the service must be encoded as %40; only the single
+    // delimiter '@' between components may appear.
+    expect(base.match(/@/g)?.length).toBe(1);
+    expect(base).toContain('svc%40evil');
+  });
+
+  it('lock path escapes the % character so encoding cannot be ambiguous', () => {
+    const lock = new CredentialWriteLock({ lockDir: lockDir() });
+    const resolved = lock.lockFilePath('svc%2F', 'acct');
+    const base = path.basename(resolved);
+    // The literal '%' in the input must itself be percent-encoded as %25,
+    // so 'svc%2F' does not decode to a path separator.
+    expect(base).not.toContain('svc%2F');
+    expect(base).toContain('svc%252F');
+  });
+
+  it('lock path throws SecureStoreError when the encoded name exceeds the filesystem length cap', () => {
+    const lock = new CredentialWriteLock({ lockDir: lockDir() });
+    const longId = 'a'.repeat(200);
+    let caught: unknown = null;
+    try {
+      lock.lockFilePath(longId, longId);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(SecureStoreError);
+    expect(asSecureStoreError(caught).code).toBe('CORRUPT');
   });
 
   it('fails closed with TIMEOUT when the lock cannot be acquired within waitMs', async () => {
