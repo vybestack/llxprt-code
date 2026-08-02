@@ -37,6 +37,7 @@ interface RestoredSession {
 
 export class SessionLifecycle {
   private readonly queues = new Map<string, Promise<unknown>>();
+  private readonly knownClosedSessions = new Set<string>();
 
   constructor(
     private readonly config: Config,
@@ -71,7 +72,10 @@ export class SessionLifecycle {
 
   close(params: CloseSessionRequest): Promise<CloseSessionResponse> {
     return this.runSerialized(params.sessionId, async () => {
-      await this.disposeLive(params.sessionId);
+      const wasLive = await this.disposeLive(params.sessionId);
+      if (wasLive) {
+        this.knownClosedSessions.add(params.sessionId);
+      }
       return {};
     });
   }
@@ -140,6 +144,9 @@ export class SessionLifecycle {
     params: DeleteSessionRequest,
   ): Promise<DeleteSessionResponse> {
     const hadLiveSession = await this.disposeLive(params.sessionId);
+    if (hadLiveSession) {
+      this.knownClosedSessions.add(params.sessionId);
+    }
     const projectRoot = this.config.getProjectRoot();
     let result: Awaited<ReturnType<typeof deleteSessionById>>;
     try {
@@ -155,10 +162,11 @@ export class SessionLifecycle {
       });
     }
     if (result.ok) {
+      this.knownClosedSessions.delete(params.sessionId);
       return {};
     }
     if (result.error.startsWith(SESSION_NOT_FOUND_PREFIX)) {
-      if (hadLiveSession) {
+      if (this.knownClosedSessions.delete(params.sessionId)) {
         return {};
       }
       throw acp.RequestError.resourceNotFound(params.sessionId);
