@@ -19,7 +19,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'node:crypto';
 import type { ExtensionSetting } from './extensionSettings.js';
-import { SecureStore } from '@vybestack/llxprt-code-storage';
+import {
+  SecureStore,
+  isRuntimeReplacedError,
+} from '@vybestack/llxprt-code-storage';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 
@@ -206,6 +209,9 @@ export class ExtensionSettingsStorage {
         await this.store.delete(envVar);
       }
     } catch (error) {
+      if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
       debugLogger.error(
         `Failed to persist sensitive setting ${envVar} in keychain:`,
         error,
@@ -266,6 +272,9 @@ export class ExtensionSettingsStorage {
         const value = await this.store.get(setting.envVar);
         result[setting.envVar] = value ?? undefined;
       } catch (error) {
+        if (isRuntimeReplacedError(error)) {
+          throw error;
+        }
         debugLogger.error(
           `Failed to load sensitive setting ${setting.envVar} from keychain:`,
           error,
@@ -294,15 +303,29 @@ export class ExtensionSettingsStorage {
     // Delete all SecureStore entries for this service
     try {
       const keys = await this.store.list();
-      for (const key of keys) {
-        try {
-          await this.store.delete(key);
-        } catch (error) {
-          debugLogger.error(`Failed to delete keychain entry ${key}:`, error);
-        }
-      }
+      await this.deleteKeychainEntries(keys);
     } catch (error) {
+      if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
       debugLogger.error('Failed to delete keychain entries:', error);
+    }
+  }
+
+  /**
+   * Deletes each keychain entry, rethrowing RUNTIME_REPLACED errors.
+   * Extracted to keep deleteSettings within the nesting limit.
+   */
+  private async deleteKeychainEntries(keys: readonly string[]): Promise<void> {
+    for (const key of keys) {
+      try {
+        await this.store.delete(key);
+      } catch (error) {
+        if (isRuntimeReplacedError(error)) {
+          throw error;
+        }
+        debugLogger.error(`Failed to delete keychain entry ${key}:`, error);
+      }
     }
   }
 
@@ -321,6 +344,9 @@ export class ExtensionSettingsStorage {
       const keys = await this.store.list();
       return keys.length > 0;
     } catch (error) {
+      if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
       debugLogger.error('Failed to check keychain entries:', error);
     }
 
