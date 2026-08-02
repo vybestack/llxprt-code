@@ -51,6 +51,20 @@ interface OfficialFamilySpec {
 const OPENAI_CHAT_ONLY: ReadonlySet<PromptEnvelopeProtocol> =
   new Set<PromptEnvelopeProtocol>(['openai-chat']);
 
+/**
+ * GLM 5.2 is additionally served over an Anthropic-compatible endpoint.
+ *
+ * Claiming both protocols is sound because the finalized projection already
+ * captures the protocol-specific request body (anthropic-messages projects
+ * system/messages/tools, openai-chat projects messages/tools), while the BPE
+ * vocabulary is a property of the model rather than the wire format. Counting
+ * whichever text the projection produced is therefore exact either way, and
+ * the difference between the two counts is the framing that genuinely differs
+ * on the wire.
+ */
+const OPENAI_CHAT_AND_ANTHROPIC: ReadonlySet<PromptEnvelopeProtocol> =
+  new Set<PromptEnvelopeProtocol>(['openai-chat', 'anthropic-messages']);
+
 const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
   {
     family: 'moonshot-kimi-k3',
@@ -69,7 +83,7 @@ const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
     manifest: GLM_MANIFEST,
     claim: /^(?:[a-z0-9_.-]+\/)?glm-5\.2(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?glm-5\.2(?:-[a-z0-9.-]+)?$/i,
-    protocols: OPENAI_CHAT_ONLY,
+    protocols: OPENAI_CHAT_AND_ANTHROPIC,
     identityErrorHint:
       'use a canonical glm-5.2 model id, optionally with a vendor prefix or dated snapshot suffix',
     create: () => new GlmTokenizer(),

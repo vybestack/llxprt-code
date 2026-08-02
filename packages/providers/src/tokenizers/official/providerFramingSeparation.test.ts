@@ -150,13 +150,15 @@ describe('Provider framing separation (acceptance criterion 8)', () => {
   });
 
   it('fails fast on an unsupported wire protocol', async () => {
+    // Kimi K3 is only claimed for OpenAI-compatible chat completions, so an
+    // Anthropic projection must raise rather than report a count.
     const registry = new ModelPromptEstimatorRegistry(
       OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
     );
     await expect(
       registry.estimatePrompt({
-        activeProvider: 'zai',
-        canonicalModel: 'glm-5.2',
+        activeProvider: 'moonshot',
+        canonicalModel: 'kimi-k3',
         protocol: 'anthropic-messages',
         wireMethod: 'messages/v1',
         finalizedProjection: {
@@ -168,6 +170,38 @@ describe('Provider framing separation (acceptance criterion 8)', () => {
         legacyEstimate: () => Promise.reject(new Error('unreachable')),
       }),
     ).rejects.toBeInstanceOf(ModelPromptEstimatorError);
+  });
+
+  it('counts GLM exactly over an Anthropic-compatible projection', async () => {
+    // GLM 5.2 is also served over an Anthropic-compatible endpoint. The
+    // projection carries that protocol's request body, and the BPE belongs to
+    // the model rather than the wire format, so the count stays exact and
+    // matches counting the same projected text directly.
+    const registry = new ModelPromptEstimatorRegistry(
+      OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
+    );
+    const anthropicProjection = JSON.stringify({
+      system: 'You are helpful.',
+      messages: [{ role: 'user', content: SAMPLE_TEXT }],
+    });
+    const result = await registry.estimatePrompt({
+      activeProvider: 'zai',
+      canonicalModel: 'glm-5.2',
+      protocol: 'anthropic-messages',
+      wireMethod: 'messages/v1',
+      finalizedProjection: {
+        kind: 'llxprt-provider-prompt-v3',
+        protocol: 'anthropic-messages',
+        promptText: anthropicProjection,
+      },
+      projectionRevision: PROJECTION_REVISION,
+      legacyEstimate: () => Promise.reject(new Error('unreachable')),
+    });
+    expect(result.method).toBe('exact');
+    expect(result.family).toBe('zai-glm-5.2');
+    expect(result.count).toBe(glm.countTokens(anthropicProjection));
+    // The Anthropic body carries extra framing, so it must exceed the bare text.
+    expect(result.count).toBeGreaterThan(glm.countTokens(SAMPLE_TEXT));
   });
 
   it('falls back to legacy estimation for unclaimed models', async () => {

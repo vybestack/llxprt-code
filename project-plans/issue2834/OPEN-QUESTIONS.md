@@ -5,7 +5,47 @@ provisional choice on, and I don't want to bury them.
 
 ---
 
-## Question 1 — Which wire protocols should the tokenizers claim?
+## Question 1 — RESOLVED with evidence (no decision needed unless you disagree)
+
+I tested this instead of leaving it hanging. Result: my original caution was
+wrong, and I have corrected it.
+
+**What I measured.** I fed the GLM tokenizer an `anthropic-messages`
+projection and an `openai-chat` projection of the same conversation:
+
+    raw BPE, openai-chat projected text   : 20
+    raw BPE, anthropic-messages proj text : 26
+    estimatePrompt(openai-chat)        -> count=20 method=exact
+    estimatePrompt(anthropic-messages) -> THREW unsupported-protocol
+
+The BPE tokenizes the Anthropic projection perfectly well. The **only** thing
+that failed was my own `protocols` allowlist. The 20 vs 26 gap is simply the
+`system` field that genuinely is sent on that wire format — that is a correct
+larger number, not an error.
+
+**Why the original reasoning was wrong.** The projection already captures the
+protocol-specific request body (`anthropic-messages` projects
+system/messages/tools; `openai-chat` projects messages/tools). The BPE is a
+property of the *model*, not the wire format. So counting whichever text the
+projection produced is exact either way.
+
+**Precedent.** Main's own GPT-5.6 registration claims two protocols
+(`openai-chat` + `openai-responses`) on exactly this reasoning.
+
+**What I changed.** GLM 5.2 now claims `openai-chat` + `anthropic-messages`.
+Kimi K3 and MiniMax M3 stay `openai-chat` only, because I have no evidence of
+a real Anthropic-compatible deployment for those two. Added a test asserting
+the GLM Anthropic count is exact and matches counting the projected text
+directly; the "unsupported protocol" test now uses Kimi, which still rejects.
+
+This also fixes a real usability bug: GLM over the z.ai Anthropic endpoint
+previously hard-failed instead of returning a correct count.
+
+**Only tell me if you disagree** and want it reverted to `openai-chat` only.
+
+---
+
+## Original Question 1 (kept for context) — Which wire protocols should the tokenizers claim?
 
 ### Background
 
