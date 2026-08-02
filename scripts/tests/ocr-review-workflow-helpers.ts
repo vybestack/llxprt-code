@@ -42,6 +42,10 @@ export function hasPerl(): boolean {
   return hasCommand('perl', ['-e', '1']);
 }
 
+export function hasBash(): boolean {
+  return hasCommand('bash', ['-c', 'exit 0']);
+}
+
 export function hasBashAndPerl(): boolean {
   return hasCommand('bash', ['-c', 'perl -e 1']);
 }
@@ -514,4 +518,37 @@ export function runNotifySanitizer(
       { cause: error },
     );
   }
+}
+
+/**
+ * Extract a bash block verbatim from a step's run script. The block starts at
+ * the first line matching `startPattern` and ends at the first following line
+ * that is exactly `terminator` at the same indentation. Workflow run scripts
+ * are YAML block scalars with stable indentation, so the closing keyword is
+ * unambiguous.
+ *
+ * Used to execute the REAL review-failure classification block from the
+ * "Run OpenCodeReview" step instead of re-implementing it in a test.
+ */
+export function extractBashBlock(
+  source: string,
+  startPattern: RegExp,
+  terminator = 'fi',
+): string {
+  const lines = source.split('\n');
+  const startIndex = lines.findIndex((line) => startPattern.test(line));
+  if (startIndex < 0) {
+    throw new Error(
+      `no line matching ${String(startPattern)} in the run script`,
+    );
+  }
+  const indent = /^[ \t]*/.exec(lines[startIndex])?.[0] ?? '';
+  const closing = `${indent}${terminator}`;
+  const endIndex = lines.indexOf(closing, startIndex + 1);
+  if (endIndex < 0) {
+    throw new Error(
+      `unterminated bash block: no "${closing}" after line ${startIndex + 1}`,
+    );
+  }
+  return lines.slice(startIndex, endIndex + 1).join('\n');
 }
