@@ -93,9 +93,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'agents',
+    files: ['test-bun/subagentAnthropicTextSettings.issue1738.bun.ts'],
+  },
+  {
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
   },
@@ -189,6 +194,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.issue2411.test.ts',
       'src/anthropic/AnthropicProvider.issue276.test.ts',
       'src/anthropic/AnthropicProvider.mediaBlock.test.ts',
+      'src/anthropic/AnthropicProvider.multiBlock.test.ts',
       'src/anthropic/AnthropicProvider.messaging.test.ts',
       'src/anthropic/AnthropicProvider.modelParams.test.ts',
       'src/anthropic/AnthropicProvider.oauth.test.ts',
@@ -203,6 +209,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.toolFormatDetection.test.ts',
       'src/anthropic/AnthropicProvider.tools.test.ts',
       'src/anthropic/AnthropicRateLimitHandler.test.ts',
+      'test-bun/AnthropicRequestBuilder.issue1738.bun.ts',
       'src/anthropic/AnthropicRequestBuilder.modelParams.test.ts',
       'src/anthropic/AnthropicResponseParser.issue1844.test.ts',
       'src/anthropic/AnthropicStreamProcessor.retryOwnership.test.ts',
@@ -618,6 +625,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'test-utils',
     files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
+  },
+  {
+    workspace: 'acplint',
+    cwd: '.',
+    files: [
+      'scripts/tests/ci-acplint-workflow.test.ts',
+      'scripts/tests/validate-acplint-report.test.ts',
+    ],
   },
   {
     workspace: 'test-setup',
