@@ -14,15 +14,15 @@ LLxprt Code was started. There is no toggle to bypass it.
 
 ## What you can do
 
-| If you want to…                                     | Do this                                                                                    |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Auto-approve read-only tools, confirm writes        | Use the default approval mode (no configuration needed).                                   |
-| Auto-approve edits but still confirm shell commands | Use auto-edit mode: `--approval-mode auto_edit` or press `Ctrl+E` in the interactive UI.   |
-| Auto-approve everything                             | Use YOLO mode: `--approval-mode yolo` (or `--yolo`) or press `Ctrl+Y`.                     |
-| Allow a specific tool without confirmation          | Use `--allowed-tools <name>` on the command line, or write an allow rule in a policy file. |
-| Block a specific tool                               | Write a deny rule in a policy file, or exclude it via settings (`tools.exclude`).          |
-| Block dangerous shell commands automatically        | This happens by default — see [Dangerous command blocking](#dangerous-command-blocking).   |
-| Inspect which rules are active right now            | Run `/policies` (see [Inspecting active rules](#inspecting-active-rules)).                 |
+| If you want to…                                     | Do this                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Auto-approve read-only tools, confirm writes        | Use the default approval mode (no configuration needed).                                    |
+| Auto-approve edits but still confirm shell commands | Use auto-edit mode: `--approval-mode auto_edit` or press `Shift+Tab` in the interactive UI. |
+| Auto-approve everything                             | Use YOLO mode: `--approval-mode yolo` (or `--yolo`) or press `Ctrl+Y`.                      |
+| Allow a specific tool without confirmation          | Use `--allowed-tools <name>` on the command line, or write an allow rule in a policy file.  |
+| Block a specific tool                               | Write a deny rule in a policy file, or exclude it via settings (`tools.exclude`).           |
+| Block dangerous shell commands automatically        | This happens by default — see [Dangerous command blocking](#dangerous-command-blocking).    |
+| Inspect which rules are active right now            | Run `/policies` (see [Inspecting active rules](#inspecting-active-rules)).                  |
 
 ## How priorities work
 
@@ -36,8 +36,15 @@ so that your custom rules always override the built-in defaults:
 | User    | 2.000 – 2.999 | Your policy files, CLI flags, and interactive "Always Allow" choices | Custom allow/deny rules; `--allowed-tools`; trusted MCP servers. |
 | Admin   | 3.000 – 3.999 | System-level policy files                                            | Enterprise-wide blocks.                                          |
 
-Within a tier, higher numbers win. A custom rule at priority 2.5 overrides a
-default rule at 1.05, but a higher custom rule at 2.8 overrides it.
+Within a tier, higher numbers win. A custom rule at resolved priority 2.500
+overrides a default rule at 1.050, but a higher custom rule at 2.800 overrides
+it.
+
+In a TOML policy file you write an **integer** from 0 to 999 — not a decimal.
+The engine adds the tier base to produce the **resolved** priority it uses
+internally and shows in `/policies`. For example, `priority = 500` in a user
+policy file resolves to **2.500**; `priority = 800` resolves to **2.800**. The
+resolved decimal is what you compare when deciding which rule wins.
 
 ### Where each rule type lands
 
@@ -57,9 +64,12 @@ file.
 | 1.015    | Auto-edit override (active only in auto-edit mode)                  | Allow    |
 | 1.01     | Built-in write tools (replace, write_file, run_shell_command, etc.) | Ask      |
 
-Rules you write in a policy file always land in the user tier (2.000–2.999). To
-override a default, use any priority in that range; to override a CLI flag
-(priority 2.3), use 2.4 or higher.
+Rules you write in a policy file always land in the user tier (2.000–2.999).
+To override a default, use any priority integer in that range; to override a
+CLI flag (resolved priority 2.3), use an integer of 301 or higher. The values
+in the table above are **resolved** priorities — what the engine assigns
+internally and shows in `/policies`. In a TOML file you write the integer form
+(for example, `priority = 401` produces resolved priority 2.401).
 
 ## Dangerous command blocking
 
@@ -88,7 +98,7 @@ matching, so it cannot be bypassed by quoting tricks or variable splitting.
 
 Three approval modes control which built-in rules are active. You set the mode
 with `--approval-mode` (values: `default`, `auto_edit`, `yolo`) or switch at
-runtime with `Ctrl+E` (auto-edit) and `Ctrl+Y` (YOLO).
+runtime with `Shift+Tab` (auto-edit) and `Ctrl+Y` (YOLO).
 
 - **`default`** — read-only tools are allowed; write tools ask for confirmation.
 - **`auto_edit`** — edit tools (replace, write_file, insert_at_line,
@@ -159,8 +169,10 @@ each operating system). Files in that directory are loaded automatically at tier
 ### A policy rule is not taking effect
 
 1. Run `/policies` to confirm the rule appears in the list.
-2. Check that your rule's priority is higher than the rule you expect it to
-   override (use 2.5 or higher to beat defaults and CLI flags).
+2. Check that your rule's priority integer is high enough to override the rule
+   you expect it to beat. In a TOML file, use `priority = 301` or higher
+   (resolved priority 2.301+) to override a CLI flag at resolved 2.3, or any
+   integer above 0 to beat a default-tier rule.
 3. Restart LLxprt Code after adding a new policy file to the user directory.
 4. If the rule uses `argsPattern`, verify the regular expression is valid and
    matches the serialized arguments. Use `/policies` to see the resolved

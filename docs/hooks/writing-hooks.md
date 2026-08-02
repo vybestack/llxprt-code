@@ -125,7 +125,7 @@ Every hook is a command (typically a shell script) that receives JSON input on
 JSON output, LLxprt Code can block an operation, modify a tool input, inject
 context, or simply continue.
 
-### Exit codes
+### Exit codes and output streams
 
 | Exit code | Meaning                                              |
 | --------- | ---------------------------------------------------- |
@@ -133,9 +133,27 @@ context, or simply continue.
 | `1`       | Non-blocking error (warning) — execution continues.  |
 | `2`       | Blocking error — the operation is blocked or denied. |
 
-When stdout is not valid JSON, LLxprt Code converts the plain text to a
-structured output: exit 0 becomes `{ "decision": "allow", "systemMessage": ... }`,
-and exit 2 becomes `{ "decision": "deny", "reason": ... }`.
+The exit code and the output stream you choose **together** determine how
+LLxprt Code interprets your hook. There are two reliable ways to block an
+operation — pick one and use it consistently:
+
+1. **Structured decision (stdout + exit 0).** Write a JSON object such as
+   `{"decision":"deny","reason":"..."}` to **stdout** and exit `0`. When the
+   exit code is `0`, LLxprt Code parses stdout as JSON. Use this when you want
+   full control over every field of the decision.
+2. **Plain-text denial (stderr + exit 2).** Write a human-readable message to
+   **stderr** and exit `2`. When the exit code is `2`, LLxprt Code converts the
+   stderr text into `{"decision":"deny","reason":"<stderr text>"}`. Use this
+   for quick scripts that do not need structured output.
+
+> **Warning:** Do **not** write deny JSON to stdout and exit `2`. When the exit
+> code is non-zero, LLxprt Code ignores stdout entirely and reads only stderr.
+> If stderr is empty, the hook produces no decision at all and the tool call
+> is **allowed** — your hook silently fails open.
+
+When stdout is plain text (not JSON) and the exit code is `0`, LLxprt Code
+converts it to `{ "decision": "allow", "systemMessage": ... }`. This is useful
+for returning informational messages.
 
 ### The `$LLXPRT_PROJECT_DIR` variable
 
@@ -198,19 +216,15 @@ if [[ "$tool_name" != "write_file" && "$tool_name" != "replace" ]]; then
   exit 0
 fi
 
-# write_file uses "path"; replace uses "file_path"
-if [[ "$tool_name" == "write_file" ]]; then
-  target_path=$(echo "$input" | jq -r '.tool_input.path // empty')
-else
-  target_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
-fi
+# write_file and replace both use "absolute_path" as the primary path field
+target_path=$(echo "$input" | jq -r '.tool_input.absolute_path // .tool_input.file_path // empty')
 
 # Block writes to system directories
 sensitive_dirs=("/etc" "/var" "/usr" "/System" "/Library")
 for dir in "${sensitive_dirs[@]}"; do
   if [[ "$target_path" == "$dir"* ]]; then
     echo "{\"decision\": \"deny\", \"reason\": \"Writing to $dir is prohibited by security policy\"}"
-    exit 2
+    exit 0
   fi
 done
 
@@ -254,7 +268,7 @@ input=$(cat)
 content=$(echo "$input" | jq -r '.tool_input.content // .tool_input.new_string // ""')
 
 if echo "$content" | grep -qE 'api[_-]?key|password|secret'; then
-  echo '{"decision":"deny","reason":"Potential secret detected"}' >&2
+  echo 'Potential secret detected' >&2
   exit 2
 fi
 
@@ -495,7 +509,7 @@ def main():
             'continue': False,
             'stopReason': f'Rate limit exceeded. Please wait {wait_time} seconds.'
         }))
-        sys.exit(2)
+        sys.exit(0)
 
     state['calls'].append(now)
     save_state(state)
@@ -591,7 +605,7 @@ source file you just edited.
 #!/usr/bin/env bash
 input=$(cat)
 
-file_path=$(echo "$input" | jq -r '.tool_input.file_path')
+file_path=$(echo "$input" | jq -r '.tool_input.absolute_path // .tool_input.file_path // empty')
 
 # Only test .ts files
 if [[ ! "$file_path" =~ \.ts$ ]]; then
@@ -825,7 +839,7 @@ case "$tool_name" in
   run_shell_command)
     if is_dangerous_command "$command"; then
       echo '{"decision": "deny", "reason": "Dangerous command blocked"}'
-      exit 2
+      exit 0
     fi
     ;;
 esac
@@ -846,7 +860,7 @@ case "$tool_name" in
 esac
 
 echo '{"decision": "deny", "reason": "Tool not in allowlist"}'
-exit 2
+exit 0
 ```
 
 ## Security and limitations
@@ -857,11 +871,15 @@ exit 2
 
 Key security points to keep in mind:
 
-- **Project hooks** (in `.llxprt/settings.json`) are **untrusted by default**.
-  LLxprt Code warns you the first time it encounters a new project hook and
-  requires explicit trust before executing it. If a hook's `command` changes
-  (for example, after a `git pull`), LLxprt Code treats it as a new, untrusted
-  hook and warns again.
+- **Folder trust is the gate.** Project hooks (in `.llxprt/settings.json`) run
+  only when the project folder is trusted. When LLxprt Code first encounters a
+  new or changed project hook, it prints a warning listing the hook so you can
+  review it, but it does **not** block the hook or prompt for per-hook
+  approval. Once a folder is trusted, every project hook in it executes with
+  your privileges — including any hook added or modified by a collaborator
+  after a `git pull`. Treat a project hook the same way you would treat any
+  other script committed to the repository: review its `command` before you
+  trust the folder.
 - **Hooks inherit the environment** of the LLxprt Code process, which may
   include API keys. LLxprt Code attempts to sanitize sensitive variables, but
   you should avoid printing environment variables to stdout or stderr.

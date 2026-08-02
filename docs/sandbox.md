@@ -33,9 +33,13 @@ llxprt --sandbox-engine podman "review this code"
 - Unbounded resource consumption — a process spawning hundreds of workers or
   exhausting memory can be capped via profile resource limits
   (`cpus`, `memory`, `pids`).
-- Exposure of stored long-lived secrets to tool execution. In container mode
-  (Docker or Podman), the host keyring and token store are not mounted; the
-  container receives short-lived access tokens through a credential proxy.
+- Exposure of the OS keyring and system token store to tool execution. In
+  container mode (Docker or Podman), the OS keyring is not accessible from
+  inside the container. However, this does **not** mean no credentials cross the
+  boundary — API keys (`GEMINI_API_KEY`, `GOOGLE_API_KEY`), Google application
+  default credential files, and the `gcloud` configuration directory are all
+  deliberately forwarded or mounted. See
+  [Deliberate boundary crossings](#deliberate-boundary-crossings).
 
 **What sandboxing is NOT intended to protect against:**
 
@@ -56,18 +60,18 @@ isolation boundary.
 The boundary differs by engine. The table summarizes what each engine isolates
 by default. Detailed limitations follow.
 
-| Boundary          | Docker / Podman (container)                 | Seatbelt (macOS `sandbox-exec`)                            |
-| ----------------- | ------------------------------------------- | ---------------------------------------------------------- |
-| Filesystem writes | Restricted to mounted paths (project, temp) | Restricted to allow-listed paths (project, temp, config)   |
-| Filesystem reads  | Restricted to mounted paths                 | Broader read access; writes are the primary restriction    |
-| Network           | Configurable (`on` / `off` / `proxied`)     | Configurable; selects a matching built-in Seatbelt profile |
-| Resource limits   | Enforced (`cpus`, `memory`, `pids`)         | Not available                                              |
-| Process isolation | Separate container process namespace        | Runs directly on your host                                 |
-| Stored secrets    | Not mounted; accessed via credential proxy  | Host keyring and token store are fully available           |
+| Boundary          | Docker / Podman (container)                                                            | Seatbelt (macOS `sandbox-exec`)                            |
+| ----------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Filesystem writes | Restricted to mounted paths (project, temp)                                            | Restricted to allow-listed paths (project, temp, config)   |
+| Filesystem reads  | Restricted to mounted paths                                                            | Broader read access; writes are the primary restriction    |
+| Network           | Configurable (`on` / `off` / `proxied`)                                                | Configurable; selects a matching built-in Seatbelt profile |
+| Resource limits   | Enforced (`cpus`, `memory`, `pids`)                                                    | Not available                                              |
+| Process isolation | Separate container process namespace                                                   | Runs directly on your host                                 |
+| Stored secrets    | OS keyring not accessible; API keys and credential files **are** forwarded (see below) | Host keyring and token store are fully available           |
 
 ### Filesystem
 
-In container mode, only these paths are mounted into the container:
+In container mode, these paths are always mounted into the container:
 
 - Your project working directory (read-write)
 - The system temp directory (read-write)
@@ -75,8 +79,22 @@ In container mode, only these paths are mounted into the container:
 - Git configuration files, mounted read-only (see
   [Git config passthrough](#git-config-passthrough))
 
+Additional paths are conditionally mounted based on your host environment and
+profile configuration:
+
+- The `~/.config/gcloud` directory (read-only) if it exists — see
+  [Google credential file and gcloud mounting](#google-credential-file-and-gcloud-mounting).
+- The file pointed to by `GOOGLE_APPLICATION_CREDENTIALS` (read-only) if the
+  variable is set and the file exists — see
+  [Google credential file and gcloud mounting](#google-credential-file-and-gcloud-mounting).
+- The SSH agent socket, if SSH agent forwarding is enabled — see
+  [SSH agent forwarding](#ssh-agent-forwarding).
+- Any paths you add via `LLXPRT_SANDBOX_MOUNTS` / `SANDBOX_MOUNTS` or a profile
+  `mounts` array — see
+  [Custom mounts and environment variables](#custom-mounts-and-environment-variables).
+
 Everything else on your host (`~/.ssh` private keys, `~/.aws`, other projects)
-is not accessible from inside the container.
+is not accessible from inside the container unless you explicitly mount it.
 
 Seatbelt restricts **writes** to an allow-list of paths (project directory, temp
 directory, and canonical config/data/cache/log roots). It grants broader read
@@ -202,7 +220,10 @@ What the proxy blocks:
   container mode ("API key management is not available in sandbox mode"). Keys
   must be managed on the host.
 - **Your stored secrets are not mounted** — `~/.git-credentials` is
-  intentionally not mounted into the container.
+  intentionally not mounted into the container. The credential proxy is one
+  source of access tokens, but it is **not** the only credential that crosses
+  the boundary. API keys and Google credential files are forwarded separately —
+  see the sections below.
 
 How the container proves it is authorised: a per-session capability token is
 passed to LLxprt Code through an inherited file descriptor, never through
@@ -262,6 +283,67 @@ through the proxy, not through a plaintext credentials file.
 > **Risk:** The mounted files are read-only, but their contents (git identity,
 > known hosts) are visible to any process in the container.
 
+### API key forwarding
+
+The following environment variables are copied from your host environment into
+the container's environment so that the sandboxed session can authenticate
+directly:
+
+- `GEMINI_API_KEY`
+- `GOOGLE_API_KEY`
+
+These are **not** short-lived tokens. They are your stored API keys, forwarded
+as-is. Any process inside the container can read them from the environment.
+
+> **Risk:** If a process inside the container reads these environment variables,
+> it obtains your raw API key — the same key you use on the host. This is a
+> higher level of exposure than the credential proxy, which issues short-lived
+> tokens. If you do not want API keys forwarded into the container, unset these
+> variables before starting the sandbox.
+
+### Google credential file and gcloud mounting
+
+When the following are present on your host, they are mounted into the container
+read-only so that Google Cloud and Vertex AI authentication work:
+
+- **`GOOGLE_APPLICATION_CREDENTIALS`** — if this environment variable points to
+  an existing file (typically a service-account JSON key), the file is mounted
+  read-only and the variable is set inside the container to the corresponding
+  path.
+- **`~/.config/gcloud`** — the entire gcloud configuration directory is mounted
+  read-only if it exists on your host. This directory can contain
+  long-lived credentials, including service-account keys and cached access
+  tokens.
+
+> **Risk:** These mounts put long-lived Google credentials inside the container.
+> A service-account key file, in particular, is a persistent secret that can be
+> used to generate access tokens from anywhere. A process that reads the mounted
+> file obtains the same standing as the service account. If you do not need
+> Google Cloud or Vertex AI inside the sandbox, unset
+> `GOOGLE_APPLICATION_CREDENTIALS` and consider whether `~/.config/gcloud`
+> contains secrets before enabling the container.
+
+### Custom mounts and environment variables
+
+You can mount arbitrary host paths and forward arbitrary environment variables
+into the container. These are controlled by environment variables:
+
+- **`LLXPRT_SANDBOX_MOUNTS`** or **`SANDBOX_MOUNTS`** — a comma-separated list
+  of mount specifications. Each entry is `host-path:container-path:mode` where
+  `mode` is `ro` (read-only, the default if omitted) or `rw` (read-write). If
+  the container path is omitted, the host path is used as-is. Each host path
+  must be absolute and must exist. Sandbox profiles populate this variable
+  from their `mounts` array.
+- **`SANDBOX_ENV`** — a comma-separated list of `key=value` pairs that are
+  passed into the container as environment variables. Sandbox profiles populate
+  this from their `env` object.
+
+> **Risk:** Every path you add via these variables is accessible inside the
+> container (read-only or read-write, as specified). Every `key=value` pair you
+> add via `SANDBOX_ENV` is visible to any process inside the container. If you
+> mount a directory containing secrets, those secrets are exposed. Audit what
+> your profiles and environment variables forward before enabling the sandbox.
+
 ## Verifying the sandbox is active
 
 Run these commands from **inside** a sandboxed session to confirm the boundary
@@ -269,14 +351,38 @@ is where you expect.
 
 ### Confirm you are inside a container
 
-The `SANDBOX` environment variable is set to the container name when running
-under Docker or Podman, and to `sandbox-exec` under Seatbelt:
+Do **not** rely on the `SANDBOX` environment variable. LLxprt Code sets
+`SANDBOX` inside the sandboxed process to mark that it has already started one
+layer of containment, and a pre-existing `SANDBOX` value on your host causes
+sandbox startup to be skipped. That means the variable reports "sandboxed" on
+an unsandboxed host and is trivially forgeable — it cannot distinguish
+sandboxed from unsandboxed execution.
+
+Instead, check for an observable property of the container environment that a
+host process does not have:
 
 ```bash
-echo "$SANDBOX"
+# /.dockerenv exists only inside Docker containers
+test -f /.dockerenv && echo "inside a Docker container" || echo "not a Docker container"
+
+# /run/.containerenv exists only inside Podman containers
+test -f /run/.containerenv && echo "inside a Podman container" || echo "not a Podman container"
 ```
 
-A non-empty value confirms the sandbox is active.
+For Seatbelt, there is no equivalent filesystem marker — `sandbox-exec` applies
+kernel restrictions to a process running directly on your host. To confirm
+Seatbelt is active, check that the process is running under `sandbox-exec`:
+
+```bash
+# Shows sandbox-exec as the parent if Seatbelt is active (macOS only)
+ps -o comm= -p $PPID 2>/dev/null
+```
+
+> **Limitation:** These checks confirm the execution environment, not the
+> specific mount or network policy in effect. The `/.dockerenv` and
+> `/run/.containerenv` markers prove you are inside a container runtime, but
+> they do not tell you which paths are mounted or whether network access is
+> enabled — verify those separately with the checks below.
 
 ### Confirm the engine
 

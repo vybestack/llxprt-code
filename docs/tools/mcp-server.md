@@ -159,17 +159,52 @@ Google Cloud IAP-protected services.
 
 ### OAuth
 
-Remote servers that require OAuth are supported with an automatic flow. On
-first connect, LLxprt Code performs dynamic client registration (RFC 7591) with
-PKCE and a loopback redirect, then opens your browser for authorization. Tokens
-are stored and refreshed automatically — no `mcp-remote` bridge needed.
+Remote servers that require OAuth are supported through an authorization-code
+flow with PKCE and a loopback redirect. Whether OAuth activates, and when you
+must step in manually, depends on how the server is configured and how it
+responds at connect time.
 
-If `auth.noBrowser` is set, the flow falls back to a manual mode where you copy
-and paste the authorization URL yourself.
+**Pre-configured OAuth (`oauth.enabled: true`).** When a server entry sets
+`oauth.enabled` to `true`, LLxprt Code treats that server as OAuth-protected on
+every connect. It loads any stored access token; if none is stored (or the
+stored token is expired and cannot be refreshed), the connect fails with a
+message directing you to run `/mcp auth <server>`:
 
-You can pre-configure OAuth explicitly. All fields are optional — if omitted,
-LLxprt Code discovers them automatically via
-`/.well-known/oauth-authorization-server`:
+```text
+MCP server '<server>' requires OAuth authentication.
+Please authenticate using the /mcp auth command.
+```
+
+OAuth does **not** start automatically for a `oauth.enabled: true` server at
+connect time — you must complete the interactive flow once via `/mcp auth`.
+
+**Discovery-driven OAuth (no `oauth` block).** When a server has no explicit
+OAuth configuration, LLxprt Code first tries to connect directly. If the server
+responds with a `401` and supplies OAuth metadata (via a `WWW-Authenticate`
+header or `/.well-known/oauth-authorization-server`), LLxprt Code attempts the
+full flow automatically: discover the endpoints, register a client if needed,
+open the browser for authorization, and store the token. This automatic path
+only succeeds when the server's OAuth metadata is discoverable; if discovery or
+the flow fails, LLxprt Code reports that you must authenticate manually with
+`/mcp auth <server>`.
+
+**Dynamic client registration (RFC 7591) is conditional, not unconditional.**
+During the flow, registration is **skipped** when you already provide a
+`clientId` in the `oauth` block. When no `clientId` is configured, LLxprt Code
+looks for a registration endpoint in the server's authorization-server metadata.
+If the server exposes one, it registers dynamically; if the server exposes no
+registration endpoint and no `clientId` was supplied, registration fails with an
+error and the flow does not proceed.
+
+**Browser-based authorization.** The authorization step always opens a browser
+to the provider's consent page. The OAuth configuration displayed in the
+terminal includes the full authorization URL so you can copy and paste it
+manually if the browser does not launch on its own. There is no MCP-specific
+headless or manual-paste OAuth mode.
+
+You can pre-configure OAuth explicitly. Set `enabled: true` to activate OAuth
+for the server; the remaining fields are optional and, if omitted, are
+discovered automatically via `/.well-known/oauth-authorization-server`:
 
 ```json
 {
@@ -177,6 +212,7 @@ LLxprt Code discovers them automatically via
     "url": "https://mcp.example.com/mcp",
     "type": "http",
     "oauth": {
+      "enabled": true,
       "clientId": "your-client-id",
       "authorizationUrl": "https://auth.example.com/authorize",
       "tokenUrl": "https://auth.example.com/token",
@@ -186,7 +222,7 @@ LLxprt Code discovers them automatically via
 }
 ```
 
-If a server's OAuth discovery or registration does not conform to the automatic
+If a server's OAuth discovery or registration does not work with the built-in
 flow, fall back to the `mcp-remote` stdio bridge:
 
 ```json
@@ -207,7 +243,10 @@ To authenticate or re-authenticate a server during a session:
 /mcp auth <server-name>
 ```
 
-Running `/mcp auth` with no argument lists servers that require OAuth.
+This runs the interactive OAuth flow (discovery, optional registration, browser
+authorization, token storage) and then re-discovers that server's tools.
+Running `/mcp auth` with no argument lists the servers that are configured with
+OAuth or have reported an authentication requirement.
 
 ### Custom headers
 
@@ -616,7 +655,15 @@ the `mcp-remote` stdio bridge as shown in [Authenticate](#oauth).
 ### Environment variables not reaching the server
 
 - Variables in the `env` block are passed to the server process.
-- They do not inherit from your shell unless explicitly listed.
+- A stdio server **inherits the full parent environment** (the environment
+  LLxprt Code itself runs with). Entries in the `env` block are applied on top
+  of, and override, any inherited value with the same name.
+
+> **Security implication.** Because a stdio server inherits the parent
+> environment, the server process can see every variable in it — including API
+> keys, tokens, and other secrets. Only add a stdio server you trust, and prefer
+> passing only the specific variables a server needs through its `env` block
+> rather than relying on inherited values.
 
 ### Sandbox compatibility
 

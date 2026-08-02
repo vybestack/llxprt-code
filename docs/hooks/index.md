@@ -118,12 +118,15 @@ INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
 
 # Parse the path if it's a file operation
-PATH_VALUE=$(echo "$INPUT" | jq -r '.tool_input.path // empty')
+PATH_VALUE=$(echo "$INPUT" | jq -r '.tool_input.absolute_path // .tool_input.file_path // empty')
 
-# Block writes to /etc
+# Block writes to /etc.
+# A structured decision goes to stdout and MUST exit 0 — LLxprt Code only
+# parses stdout when the exit code is 0. Exiting non-zero here would discard
+# the decision and let the tool run.
 if [[ "$TOOL_NAME" == "write_file" && "$PATH_VALUE" == /etc* ]]; then
   echo '{"decision": "deny", "reason": "Writing to /etc is prohibited"}'
-  exit 2
+  exit 0
 fi
 
 # Allow everything else
@@ -178,7 +181,7 @@ Block operations on sensitive files or directories:
 # Deny writes to system directories
 if [[ "$PATH_VALUE" == /etc* || "$PATH_VALUE" == /var* ]]; then
   echo '{"decision": "deny", "reason": "System directory access denied"}'
-  exit 2
+  exit 0
 fi
 ```
 
@@ -225,11 +228,12 @@ estimated_tokens = total_chars // 4
 if estimated_tokens > 100000:
     print(json.dumps({
         "continue": False,
-        "reason": f"Request exceeds token limit (~{estimated_tokens} tokens)"
+        "stopReason": f"Request exceeds token limit (~{estimated_tokens} tokens)"
     }))
-    sys.exit(2)
+    sys.exit(0)
 
 print(json.dumps({"continue": True}))
+sys.exit(0)
 ```
 
 ### Project-Specific Rules
@@ -241,6 +245,6 @@ Apply rules based on working directory:
 CWD=$(echo "$INPUT" | jq -r '.cwd')
 if [[ "$CWD" == */production/* && "$TOOL_NAME" != "read_file" ]]; then
   echo '{"decision": "deny", "reason": "Only read operations allowed in production"}'
-  exit 2
+  exit 0
 fi
 ```

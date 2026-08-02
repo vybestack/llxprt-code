@@ -33,33 +33,38 @@ For providers without an alias, or custom endpoints:
 ## Built-in provider aliases
 
 LLxprt Code ships with these aliases. Use `/provider <alias>` to switch. The
-alias name is what you type after `/provider`.
+alias name is what you type after `/provider`. Default model names change over
+time and are kept in the dated
+[Provider Models and Limits](./models-and-limits.md#default-models-by-alias)
+page; the table below lists only the stable alias and authentication details.
 
-| Provider                   | Alias           | Default model                | Auth method                    |
-| -------------------------- | --------------- | ---------------------------- | ------------------------------ |
-| Anthropic (API key)        | `anthropic`     | `claude-opus-5`              | API key (`ANTHROPIC_API_KEY`)  |
-| Claude Code (subscription) | `claudecode`    | `claude-opus-5`              | OAuth                          |
-| Google Gemini              | `gemini`        | `gemini-2.5-pro`             | API key (`GEMINI_API_KEY`)     |
-| OpenAI (API)               | `openai`        | `gpt-5.5`                    | API key (`OPENAI_API_KEY`)     |
-| OpenAI Codex (ChatGPT sub) | `codex`         | `gpt-5.6-sol`                | OAuth                          |
-| Qwen (DashScope)           | `qwen`          | `qwen3-coder-plus`           | API key (`DASHSCOPE_API_KEY`)  |
-| Kimi                       | `kimi`          | `kimi-for-coding`            | API key                        |
-| xAI (Grok)                 | `xai`           | `grok-4`                     | API key (`XAI_API_KEY`)        |
-| DeepSeek                   | `deepseek`      | `deepseek-v4-flash`          | API key (`DEEPSEEK_API_KEY`)   |
-| Z.AI                       | `zai`           | `glm-5`                      | API key (`ZAI_API_KEY`)        |
-| Synthetic                  | `synthetic`     | `hf:zai-org/GLM-4.7`         | API key                        |
-| Chutes AI                  | `chutes-ai`     | `zai-org/GLM-5-TEE`          | API key (`CHUTES_API_KEY`)     |
-| Makora                     | `makora`        | `nvidia/Kimi-K2.6-NVFP4`     | API key (`MAKORA_API_KEY`)     |
-| Fireworks                  | `fireworks`     | `fireworks/minimax-m3`       | API key (`FIREWORKS_API_KEY`)  |
-| OpenRouter                 | `openrouter`    | `nvidia/nemotron-nano-9b-v2` | API key (`OPENROUTER_API_KEY`) |
-| Cerebras Code              | `cerebras-code` | `qwen-3-coder-480b`          | API key (`CEREBRAS_API_KEY`)   |
-| Mistral                    | `mistral`       | `mistral-large-latest`       | API key (`MISTRAL_API_KEY`)    |
-| LiteLLM (gateway)          | `litellm`       | `gpt-4o`                     | API key (`LITELLM_API_KEY`)    |
-| Ollama Cloud (hosted)      | `ollama-cloud`  | `kimi-k2.6`                  | API key (`OLLAMA_API_KEY`)     |
-| LM Studio (local)          | `lm-studio`     | `gemma-3b-it`                | None required                  |
-| llama.cpp (local)          | `llama-cpp`     | `local-model`                | None required                  |
+| Provider                   | Alias           | Auth method                    |
+| -------------------------- | --------------- | ------------------------------ |
+| Anthropic (API key)        | `anthropic`     | API key (`ANTHROPIC_API_KEY`)  |
+| Claude Code (subscription) | `claudecode`    | OAuth                          |
+| Google Gemini              | `gemini`        | API key (`GEMINI_API_KEY`)     |
+| OpenAI (API)               | `openai`        | API key (`OPENAI_API_KEY`)     |
+| OpenAI Codex (ChatGPT sub) | `codex`         | OAuth                          |
+| Qwen (DashScope)           | `qwen`          | API key (`DASHSCOPE_API_KEY`)  |
+| Kimi                       | `kimi`          | API key                        |
+| xAI (Grok)                 | `xai`           | API key (`XAI_API_KEY`)        |
+| DeepSeek                   | `deepseek`      | API key (`DEEPSEEK_API_KEY`)   |
+| Z.AI                       | `zai`           | API key (`ZAI_API_KEY`)        |
+| Synthetic                  | `synthetic`     | API key                        |
+| Chutes AI                  | `chutes-ai`     | API key (`CHUTES_API_KEY`)     |
+| Makora                     | `makora`        | API key (`MAKORA_API_KEY`)     |
+| Fireworks                  | `fireworks`     | API key (`FIREWORKS_API_KEY`)  |
+| OpenRouter                 | `openrouter`    | API key (`OPENROUTER_API_KEY`) |
+| Cerebras Code              | `cerebras-code` | API key (`CEREBRAS_API_KEY`)   |
+| Mistral                    | `mistral`       | API key (`MISTRAL_API_KEY`)    |
+| LiteLLM (gateway)          | `litellm`       | API key (`LITELLM_API_KEY`)    |
+| Ollama Cloud (hosted)      | `ollama-cloud`  | API key (`OLLAMA_API_KEY`)     |
+| LM Studio (local)          | `lm-studio`     | None required                  |
+| llama.cpp (local)          | `llama-cpp`     | None required                  |
 
-For model-specific setup details, context windows, and pricing, see
+For the current default model name each alias uses, see
+[Default models by alias](./models-and-limits.md#default-models-by-alias). For
+context windows and pricing, see
 [Provider Models and Limits](./models-and-limits.md).
 
 ## Subscription and OAuth providers
@@ -185,6 +190,38 @@ Or Claude Code OAuth (Claude.ai subscription):
 /keyfile ~/.openai_key
 /model gpt-5.5
 ```
+
+#### OpenAI transport selection (Responses vs. Chat Completions)
+
+OpenAI models can use two transports — the newer **Responses API** and the
+classic **Chat Completions API** — and LLxprt Code picks one automatically:
+
+- **GPT-5.6 and later** (bare model IDs like `gpt-5.6` and durable-tier IDs
+  like `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) use the **Responses
+  transport** when pointed at the canonical `api.openai.com` endpoint. Chat
+  Completions is not available for these on that endpoint.
+- **Custom OpenAI-compatible endpoints** (proxies, gateways, self-hosted
+  servers, or any non-`api.openai.com` base URL) **default to Chat
+  Completions**, even for GPT-5.6+.
+
+This matters when you point the `openai` alias at a custom endpoint: a
+Responses-only model may fail if the endpoint does not implement the Responses
+API. To force a specific transport, set one of these:
+
+```bash
+# Force Responses (useful on a custom endpoint that supports it)
+/set responses-mode responses
+
+# Force Chat Completions
+/set responses-mode chat
+```
+
+You can also set it permanently in a profile via the `apiMode` or
+`responsesMode` provider setting, or globally via the `responses-mode`
+ephemeral setting. When forced to `responses`, a custom endpoint uses Responses
+for models that support it; when forced to `chat`, Chat Completions is used
+unless the model requires Responses on canonical OpenAI (GPT-5.6+), where Chat
+is unavailable and the override is ignored.
 
 ### Qwen
 

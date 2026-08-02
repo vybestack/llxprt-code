@@ -14,6 +14,38 @@ configured in LLxprt Code's built-in provider aliases as of the date above.
 > data. LLxprt Code cannot guarantee that a provider has not changed a model
 > name, context window, or price since this page was last reviewed.
 
+## Default models by alias
+
+The default model each built-in alias uses when you run `/provider <alias>`
+without an explicit `/model`. Values reflect the alias configuration as of the
+date above. This is the canonical dated copy; the
+[Provider Setup Quick Reference](./quick-reference.md) links here rather than
+duplicating it.
+
+| Alias           | Default model                |
+| --------------- | ---------------------------- |
+| `anthropic`     | `claude-opus-5`              |
+| `claudecode`    | `claude-opus-5`              |
+| `gemini`        | `gemini-2.5-pro`             |
+| `openai`        | `gpt-5.5`                    |
+| `codex`         | `gpt-5.6-sol`                |
+| `qwen`          | `qwen3-coder-plus`           |
+| `kimi`          | `kimi-for-coding`            |
+| `xai`           | `grok-4`                     |
+| `deepseek`      | `deepseek-v4-flash`          |
+| `zai`           | `glm-5`                      |
+| `synthetic`     | `hf:zai-org/GLM-4.7`         |
+| `chutes-ai`     | `zai-org/GLM-5-TEE`          |
+| `makora`        | `nvidia/Kimi-K2.6-NVFP4`     |
+| `fireworks`     | `fireworks/minimax-m3`       |
+| `openrouter`    | `nvidia/nemotron-nano-9b-v2` |
+| `cerebras-code` | `qwen-3-coder-480b`          |
+| `mistral`       | `mistral-large-latest`       |
+| `litellm`       | `gpt-4o`                     |
+| `ollama-cloud`  | `kimi-k2.6`                  |
+| `lm-studio`     | `gemma-3b-it`                |
+| `llama-cpp`     | `local-model`                |
+
 ## How model limits are resolved
 
 Default model limits are data-driven and layered. Each layer takes precedence
@@ -35,24 +67,29 @@ You can override any limit at runtime:
 
 ## Model geometry and budgeting
 
-When you set a model, configure both `context-limit` (total request budget) and
-`max_tokens` (reserved for the response):
+`context-limit` and `max_tokens` describe a **single shared window**, not two
+independent budgets:
 
-- **`context-limit`** — the total tokens allowed for the entire request
-  (prompt + output).
-- **`max_tokens`** — the maximum tokens reserved for the model's response
-  (output only).
-- **Effective prompt budget** = `context-limit` − `max_tokens` − safety margin.
+- **`context-limit`** — the total token budget for the entire request
+  (prompt **plus** output). This is the ceiling the engine enforces.
+- **`max_tokens`** (also surfaced as `maxOutputTokens`) — the completion budget
+  **held inside** `context-limit`, reserved for the model's response. It is
+  subtracted from the context limit, not added to it.
+- **Effective prompt budget** ≈ `context-limit` − `max_tokens` − safety margin.
 
-You cannot set `context-limit` + `max_tokens` to exceed the model's actual
-context window. For example, if a model supports 200k total context, you cannot
-set `context-limit=200000` **and** `max_tokens=100000`.
+Because the completion budget sits inside the limit, `context-limit=200000`
+with `max_tokens=100000` is a valid configuration: it simply leaves roughly
+100,000 tokens of prompt budget before the safety margin is applied. The two
+values never add together to claim a larger window than `context-limit`.
 
-**Safety margin:** 256–2048 tokens (1,024 recommended) to avoid overflows from
-tool wrappers, the system prompt, and project memory files.
+The engine automatically applies a fixed safety margin of **1,000 tokens** plus
+a small percentage headroom (~0.5%) on top of the completion budget. You do not
+configure this margin; it exists to absorb overhead from tool wrappers, the
+system prompt, and project memory files.
 
 > **Tip:** If you see "would exceed the token context window" errors, lower
-> `max_tokens` first or reduce the size of your project memory files.
+> `max_tokens` first (to reclaim prompt budget) or reduce the size of your
+> project memory files.
 
 > **Auth-variant note:** Context windows can differ between API-key access and
 > OAuth/subscription access for the same model. When in doubt, start lower and
@@ -72,8 +109,12 @@ Configured context-limit for current-generation models (`claude-opus-5`,
 Max output tokens configured: **128,000**.
 
 Reasoning is enabled by default for `claude-(opus|sonnet|haiku|fable)` models,
-with `reasoning.effort` set to `high`. Temperature, `top_p`, and `top_k` are
-disallowed for these models (reasoning models manage sampling internally).
+with `reasoning.effort` set to **`high`** only for `claude-opus-5`,
+`claude-opus-4-8`, `claude-fable-5`, `claude-sonnet-4-6`, and `claude-sonnet-5`.
+Other matching models (for example, `claude-haiku-4-5`) get reasoning enabled
+without a default effort. Temperature, `top_p`, and `top_k` are disallowed for
+all `claude-(opus|sonnet|haiku|fable)` models (reasoning models manage sampling
+internally).
 
 Common models: `claude-opus-5`, `claude-sonnet-5`, `claude-sonnet-4-6`,
 `claude-haiku-4-5`.
@@ -330,24 +371,27 @@ current rates.
 
 ## Other API-key providers
 
-The following providers use the OpenAI-compatible protocol. LLxprt Code does not
-ship verified context windows or pricing for these — check the provider's
-documentation and start with a conservative `context-limit`:
+The following providers use the OpenAI-compatible protocol. Some ship a
+configured context window for their default model; others do not. Where a
+window is not configured, the core fallback catalog provides a default limit of
+**200,000 tokens**, and you should verify the true window against the provider's
+documentation.
 
-| Provider      | Alias           | Default model                |
-| ------------- | --------------- | ---------------------------- |
-| xAI (Grok)    | `xai`           | `grok-4`                     |
-| OpenRouter    | `openrouter`    | `nvidia/nemotron-nano-9b-v2` |
-| Fireworks     | `fireworks`     | `fireworks/minimax-m3`       |
-| Cerebras Code | `cerebras-code` | `qwen-3-coder-480b`          |
-| DeepSeek      | `deepseek`      | `deepseek-v4-flash`          |
-| Z.AI          | `zai`           | `glm-5`                      |
-| Makora        | `makora`        | `nvidia/Kimi-K2.6-NVFP4`     |
-| Synthetic     | `synthetic`     | `hf:zai-org/GLM-4.7`         |
-| Chutes AI     | `chutes-ai`     | `zai-org/GLM-5-TEE`          |
-| Mistral       | `mistral`       | `mistral-large-latest`       |
+| Provider      | Alias           | Default model                | Configured context window (as of the date above)                                                                                                   |
+| ------------- | --------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| xAI (Grok)    | `xai`           | `grok-4`                     | Not configured — 200,000 fallback applies. Check [xAI's docs](https://docs.x.ai/).                                                                 |
+| OpenRouter    | `openrouter`    | `nvidia/nemotron-nano-9b-v2` | Not configured — 200,000 fallback applies. Check [OpenRouter's model docs](https://openrouter.ai/models).                                          |
+| Fireworks     | `fireworks`     | `fireworks/minimax-m3`       | `minimax-m3`: **1,000,000** tokens, reasoning `high`.                                                                                              |
+| Cerebras Code | `cerebras-code` | `qwen-3-coder-480b`          | Not configured — 200,000 fallback applies. Check [Cerebras's docs](https://docs.cerebras.ai/).                                                     |
+| DeepSeek      | `deepseek`      | `deepseek-v4-flash`          | `deepseek-v4*`: **1,000,000** tokens, reasoning `high`.                                                                                            |
+| Z.AI          | `zai`           | `glm-5`                      | `glm-5.2`: **1,000,000** tokens, reasoning `high`. The default `glm-5` has reasoning `high` but no explicit window — it falls back to **200,000**. |
+| Makora        | `makora`        | `nvidia/Kimi-K2.6-NVFP4`     | Not configured — 200,000 fallback applies.                                                                                                         |
+| Synthetic     | `synthetic`     | `hf:zai-org/GLM-4.7`         | Not configured — 200,000 fallback applies.                                                                                                         |
+| Chutes AI     | `chutes-ai`     | `zai-org/GLM-5-TEE`          | Not configured — 200,000 fallback applies.                                                                                                         |
+| Mistral       | `mistral`       | `mistral-large-latest`       | Not configured — 200,000 fallback applies. Check [Mistral's docs](https://docs.mistral.ai/).                                                       |
 
-For these providers, start with a conservative limit and adjust:
+For providers without a configured window, start with a conservative limit and
+adjust based on the provider's documentation:
 
 ```bash
 /set context-limit 200000

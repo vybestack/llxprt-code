@@ -32,8 +32,16 @@ placeholder, so nothing is lost.
 
 Toggle the setting back on to restore the panel.
 
-You can also edit `.llxprt/settings.json` directly and set `showTodoPanel` to
-`false`.
+You can also edit `.llxprt/settings.json` directly. `showTodoPanel` lives under
+the `ui` section:
+
+```json
+{
+  "ui": {
+    "showTodoPanel": false
+  }
+}
+```
 
 ## Todo continuation
 

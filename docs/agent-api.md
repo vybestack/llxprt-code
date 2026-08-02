@@ -39,6 +39,20 @@ Install it like any other dependency:
 npm install @vybestack/llxprt-code-agents
 ```
 
+> **Tool-confirmation outcomes.** The `onApproval` handler returns a
+> `ToolConfirmationOutcome` value (for example `ProceedOnce` or `Cancel`). That
+> enum is defined in **`@vybestack/llxprt-code-tools`** — the agents package
+> depends on it and uses it in its own types, but does **not** re-export it. If
+> your code references `ToolConfirmationOutcome` directly (as the confirmation
+> examples below do), install the tools package as well:
+>
+> ```bash
+> npm install @vybestack/llxprt-code-tools
+> ```
+>
+> Consumers that never name `ToolConfirmationOutcome` directly (for example,
+> handlers that return a string literal the enum accepts) do not need it.
+
 Import the primary entry point:
 
 ```ts
@@ -576,6 +590,10 @@ if (handle) {
 
 ### Wiring tool confirmations
 
+This example references `ToolConfirmationOutcome`, which lives in the tools
+package — install `@vybestack/llxprt-code-tools` alongside the agents package
+to run it (see [Entry package and imports](#entry-package-and-imports)).
+
 ```ts
 import { createAgent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
@@ -641,7 +659,8 @@ console.log(agent.getRuntimeId());
 ```
 
 To drive turns that issue tool calls requiring confirmation, supply an
-`onApproval` handler:
+`onApproval` handler. As above, `ToolConfirmationOutcome` is exported from the
+tools package (`@vybestack/llxprt-code-tools`), not the agents package:
 
 ```ts
 import { fromConfig } from '@vybestack/llxprt-code-agents';
