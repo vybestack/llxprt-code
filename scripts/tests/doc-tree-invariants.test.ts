@@ -190,17 +190,18 @@ describe('doc-tree invariants (real repo state)', () => {
     });
 
     it('no relocated document remains at its old docs/ path', () => {
-      // docs/tool-parsing.md is deliberately absent from this list: its
-      // internals moved to dev-docs/providers/text-tool-call-parsing.md, but
-      // the docs/ path was reused for a new user-facing settings page rather
-      // than deleted. That case is covered by the test below.
+      // docs/tool-parsing.md and docs/agent-api.md are deliberately absent
+      // from this list. In both cases the internals moved under dev-docs/
+      // (dev-docs/providers/text-tool-call-parsing.md and
+      // dev-docs/agent-api.md), but the docs/ path was later reused for a new
+      // user-facing page rather than deleted. Those cases are covered by the
+      // retention tests below.
       const oldPaths = [
         'docs/architecture/message-bus-architecture.md',
         'docs/hooks/architecture.md',
         'docs/tool-output-format.md',
         'docs/merge-notes/batch21-25-skipped.md',
         'docs/plans/2026-01-03-welcome-onboarding.md',
-        'docs/agent-api.md',
       ];
       for (const p of oldPaths) {
         expect(fileExists(p)).toBe(false);
@@ -209,6 +210,13 @@ describe('doc-tree invariants (real repo state)', () => {
 
     it('docs/tool-parsing.md is retained as a user-facing page', () => {
       expect(fileExists('docs/tool-parsing.md')).toBe(true);
+    });
+
+    it('docs/agent-api.md is retained alongside its dev-docs counterpart', () => {
+      // The user-facing embedding guide and the internal reference coexist;
+      // losing either one silently would be a regression.
+      expect(fileExists('docs/agent-api.md')).toBe(true);
+      expect(fileExists('dev-docs/agent-api.md')).toBe(true);
     });
 
     it('obsolete user-facing records are removed rather than relocated', () => {
