@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, expect, it, afterAll } from 'vitest';
+import { describe, expect, it, afterAll } from 'bun:test';
 import { KimiK3Tokenizer } from './kimiK3Tokenizer.js';
 import { GlmTokenizer } from './glmTokenizer.js';
 import { MinimaxTokenizer } from './minimaxTokenizer.js';

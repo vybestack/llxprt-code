@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
