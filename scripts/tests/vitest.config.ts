@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import path from 'path';
 
 export default defineConfig({
@@ -12,6 +12,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['scripts/tests/**/*.test.{js,ts}'],
+    // `*.bun.test.ts` files are Bun-native tests run via
+    // scripts/bun-test-manifest.ts (issue #2475). Vitest must skip them so the
+    // scripts shard doesn't fail on the `bun:test` import specifier.
+    exclude: [...configDefaults.exclude, '**/*.bun.test.{js,ts}'],
     setupFiles: ['scripts/tests/test-setup.ts'],
     // Many script-harness tests spawn subprocesses (bash scripts, python
     // fake-gh, jq pipelines) and do filesystem work under temp directories.

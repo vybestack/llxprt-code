@@ -187,6 +187,7 @@ export function buildSynthesisPrompts(context: unknown): {
   const sequenceDiagram = [
     'You are drawing a runtime sequence diagram for a PR.',
     'If the themes involve inter-component runtime flow, produce one Mermaid sequenceDiagram showing the runtime interaction.',
+    'Never put a semicolon (";") in a message label or participant alias; Mermaid treats ";" as a statement separator and will fail to render. Use one interaction per line and prefer commas over semicolons.',
     '',
     ...untrustedData(themeData),
     '',
