@@ -243,6 +243,14 @@ describe('buildSynthesisPrompts', () => {
     );
   });
 
+  it('sequenceDiagram prompt forbids semicolons in labels (Mermaid statement-separator guard)', () => {
+    const prompt = buildSynthesisPrompts(context).sequenceDiagram;
+    // Belt-and-suspenders alongside the deterministic sanitizer: the prompt
+    // itself must steer the model away from the reserved character.
+    expect(prompt).toMatch(/semicolon/i);
+    expect(prompt).toMatch(/one interaction per line/i);
+  });
+
   it('related prompt asks for related issues and PRs with a why', () => {
     const r = buildSynthesisPrompts(context).related.toLowerCase();
     expect(r).toContain('issue');

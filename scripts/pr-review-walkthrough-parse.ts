@@ -391,3 +391,173 @@ export function gateSequenceDiagram(
   ).length;
   return runtimeLayerCount >= 2;
 }
+
+/**
+ * Re-encode every bare `;` in a Mermaid message as the `#59;` entity so the
+ * statement separator cannot break rendering. Existing entity escapes
+ * (`#59;`, `#9829;`, `&copy;`) are left intact — only a `;` that does not
+ * terminate such an entity is escaped. Scanned left-to-right in linear time to
+ * avoid regex backtracking on adversarial input.
+ */
+function escapeBareSemicolons(message: string): string {
+  let result = '';
+  for (let i = 0; i < message.length; i++) {
+    const char = message.charAt(i);
+    if (char === ';') {
+      result += terminatesMermaidEntity(message, i) ? ';' : '#59;';
+    } else {
+      result += char;
+    }
+  }
+  return result;
+}
+
+/**
+ * True when the `;` at `index` closes a Mermaid entity escape, i.e. it is
+ * preceded by `#` or `&` and one or more entity-body characters.
+ */
+function terminatesMermaidEntity(text: string, index: number): boolean {
+  let j = index - 1;
+  while (j >= 0 && /[a-zA-Z0-9]/.test(text.charAt(j))) {
+    j--;
+  }
+  if (j === index - 1 || j < 0) {
+    return false;
+  }
+  const sigil = text.charAt(j);
+  return sigil === '#' || sigil === '&';
+}
+
+/**
+ * True when `prefix` (the slice of a line up to and including the first colon)
+ * contains a Mermaid sequence arrow: a `-` immediately followed by `>`, `x`, or
+ * `)`. Scanned left-to-right in linear time to avoid regex backtracking.
+ */
+function isInteractionPrefix(prefix: string): boolean {
+  for (let i = 0; i < prefix.length; i++) {
+    if (prefix.charAt(i) !== '-') {
+      continue;
+    }
+    const next = prefix.charAt(i + 1);
+    if (next === '>' || next === 'x' || next === ')') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when `line` is a Mermaid `Note` directive (`Note over`, `Note left of`,
+ * ...), recognized by the trimmed line starting with the word `Note` followed by
+ * whitespace. Case-insensitive.
+ */
+function isNoteLine(line: string): boolean {
+  const trimmed = line.trimStart().toLowerCase();
+  if (!trimmed.startsWith('note')) {
+    return false;
+  }
+  const after = trimmed.charAt(4);
+  return after === ' ' || after === '	';
+}
+
+/**
+ * Mermaid sequence-diagram block headers whose trailing free-text description can
+ * contain a bare `;`. Keyword matching is case-insensitive.
+ */
+const BLOCK_HEADER_KEYWORDS = [
+  'loop',
+  'alt',
+  'opt',
+  'par',
+  'and',
+  'else',
+  'critical',
+  'option',
+  'rect',
+];
+
+/**
+ * Escape a bare `;` in the description of a Mermaid block-header line
+ * (`loop desc`, `alt desc`, ...). Lines that are not such a header are returned
+ * unchanged. The keyword (any case) and leading indentation are preserved; only
+ * the trailing description is re-encoded.
+ */
+function escapeBlockHeaderSemicolons(line: string): string {
+  const keywordStart = line.length - line.trimStart().length;
+  const rest = line.slice(keywordStart);
+  const lower = rest.toLowerCase();
+  for (const keyword of BLOCK_HEADER_KEYWORDS) {
+    if (!lower.startsWith(keyword)) {
+      continue;
+    }
+    const after = rest.charAt(keyword.length);
+    if (after === ' ' || after === '	') {
+      const keywordPart = rest.slice(0, keyword.length);
+      const description = rest.slice(keyword.length);
+      return (
+        line.slice(0, keywordStart) +
+        keywordPart +
+        escapeBareSemicolons(description)
+      );
+    }
+  }
+  return line;
+}
+
+/**
+ * Sanitize an LLM-generated Mermaid sequence diagram so a reserved character in
+ * a message label cannot break GitHub rendering. Mermaid treats `;` as a
+ * statement separator, so a label such as `A->>B: foo; bar` parses as two
+ * statements and fails to render. Mermaid's supported way to embed a literal
+ * semicolon in message text is the `#59;` entity, so each bare `;` in a message
+ * or Note label is re-encoded as `#59;` while existing entity escapes
+ * (`#9829;`, `&copy;`, ...) are preserved. Message (arrow) and `Note` labels
+ * and block-header descriptions (`loop`/`alt`/...) are rewritten; inline
+ * participant configuration and other structure lines are left untouched. Anything that is not a `sequenceDiagram` is dropped
+ * (returns '') rather than publishing markup that will not render.
+ */
+export function sanitizeSequenceDiagram(diagram: string): string {
+  const trimmed = diagram.trim();
+  if (trimmed === '') {
+    return '';
+  }
+  const fenceMatch = trimmed.match(
+    /^```(?:mermaid)?[^\S\n]*\n([\s\S]*?)\n```[^\S\n]*$/,
+  );
+  const inner = fenceMatch ? fenceMatch[1] : trimmed;
+  const directive = 'sequenceDiagram';
+  const isSequenceDiagram = inner.split('\n').some((line) => {
+    const stripped = line.trim();
+    if (!stripped.startsWith(directive)) {
+      return false;
+    }
+    const next = stripped[directive.length];
+    return next === undefined || /\s/.test(next);
+  });
+  if (!isSequenceDiagram) {
+    return '';
+  }
+  const sanitized = inner
+    .split('\n')
+    .map((line) => {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex === -1) {
+        // Block-header lines (loop/alt/opt/par/...) carry a free-text
+        // description with no colon; a bare `;` there breaks rendering just as
+        // it does in a message label.
+        return escapeBlockHeaderSemicolons(line);
+      }
+      const prefix = line.slice(0, colonIndex + 1);
+      // Only message text (arrow interactions) and Note lines can carry the
+      // statement separator; inline participant config and other colon-bearing
+      // structure lines are preserved verbatim.
+      const isMessage = isInteractionPrefix(prefix) || isNoteLine(line);
+      if (!isMessage) {
+        return line;
+      }
+      const message = escapeBareSemicolons(line.slice(colonIndex + 1));
+      return prefix + message;
+    })
+    .join('\n');
+  return '```mermaid\n' + sanitized + '\n```';
+}
