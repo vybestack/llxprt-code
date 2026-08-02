@@ -100,6 +100,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
+      'src/zed-integration/zed-session-lifecycle.test.ts',
       'test-utils/augment-bun-vi-cleanup.bun.ts',
     ],
   },
@@ -624,6 +625,14 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
   {
     workspace: 'test-utils',
     files: ['src/quota-guard.test.ts', 'src/util.test.ts'],
+  },
+  {
+    workspace: 'acplint',
+    cwd: '.',
+    files: [
+      'scripts/tests/ci-acplint-workflow.test.ts',
+      'scripts/tests/validate-acplint-report.test.ts',
+    ],
   },
   {
     workspace: 'test-setup',
