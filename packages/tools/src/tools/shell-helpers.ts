@@ -42,6 +42,16 @@ export function isShellToolHost(
 const WRAPPED_PREFIX = '{ ';
 const WRAPPED_SUFFIX = ' }; __code=$?; pgrep -g 0 >';
 
+/**
+ * Wraps a value in single quotes using POSIX-safe escaping so it can be
+ * interpolated into a bash command without word-splitting or command
+ * substitution. Every embedded single quote is escaped using the standard
+ * close-quote, escaped-quote, reopen-quote sequence.
+ */
+export function singleQuoteForShell(value: string): string {
+  return `'${value.split("'").join("'\\''")}'`;
+}
+
 function buildShellResultError(result: ShellResult): Error | null {
   const trimmedStderr = result.stderr.trim();
   if (trimmedStderr !== '') {
@@ -245,15 +255,46 @@ export function buildCommandToExecute(
   strippedCommand: string,
   isWindows: boolean,
   tempFilePath: string,
+  backgroundLogPath?: string,
 ): string {
   if (isWindows) {
     return strippedCommand;
   }
-  let command = strippedCommand.trim();
-  if (!command.endsWith('&')) {
-    command += ';';
+  const body = buildWrappedBody(
+    strippedCommand.trim(),
+    backgroundLogPath ?? null,
+  );
+  return `{ ${body} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+}
+
+/**
+ * Builds the body that sits between the wrapper's `{ ` prefix and its
+ * ` }; __code=$?; ...` suffix.
+ *
+ * A defined `backgroundLogPath` selects background wrapping. The protective
+ * group is essential: `trap '' HUP` makes the detached subshell (and, through
+ * inherited SIG_IGN, its descendants) survive the SIGHUP delivered when the
+ * PTY master closes; `>log 2>&1` releases the inherited stdout/stderr pipes
+ * immediately so they are not held for the job's lifetime and gives the model
+ * somewhere to read the output from; `</dev/null` stops the detached job from
+ * competing for terminal input.
+ */
+function buildWrappedBody(
+  trimmed: string,
+  backgroundLogPath: string | null,
+): string {
+  if (trimmed.endsWith('&')) {
+    return backgroundLogPath !== null
+      ? `{ trap '' HUP; ${trimmed} } >${singleQuoteForShell(backgroundLogPath)} 2>&1 </dev/null &`
+      : trimmed;
   }
-  return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+  const normalised = trimmed.endsWith(';')
+    ? trimmed.slice(0, -1).trimEnd()
+    : trimmed;
+  if (backgroundLogPath !== null) {
+    return `{ trap '' HUP; ${normalised}; } >${singleQuoteForShell(backgroundLogPath)} 2>&1 </dev/null &`;
+  }
+  return `${normalised};`;
 }
 
 export function parsePgrepFile(
@@ -280,21 +321,33 @@ export function parsePgrepFile(
   return pids;
 }
 
-export function prepareShellExecution(strippedCommand: string): {
+export function prepareShellExecution(
+  strippedCommand: string,
+  isBackground = false,
+): {
   tempFilePath: string;
   commandToExecute: string;
+  backgroundLogPath?: string;
 } {
   const isWindows = os.platform() === 'win32';
   const tempFileName = `shell_pgrep_${crypto
     .randomBytes(6)
     .toString('hex')}.tmp`;
   const tempFilePath = path.join(os.tmpdir(), tempFileName);
+  const backgroundLogPath =
+    isBackground && !isWindows
+      ? path.join(
+          os.tmpdir(),
+          `shell_bg_${crypto.randomBytes(6).toString('hex')}.log`,
+        )
+      : undefined;
   const commandToExecute = buildCommandToExecute(
     strippedCommand,
     isWindows,
     tempFilePath,
+    backgroundLogPath,
   );
-  return { tempFilePath, commandToExecute };
+  return { tempFilePath, commandToExecute, backgroundLogPath };
 }
 
 export function collectProcessInfo(
@@ -353,4 +406,54 @@ export function getCommandDescription(): string {
     'Exact bash command to execute as `bash -c <command>`' +
     cmd_substitution_warning
   );
+}
+
+/** Description for the `is_background` schema property (non-Windows only). */
+export function getBackgroundParamDescription(): string {
+  return 'When true, the command is started as a background job and the tool returns immediately without waiting for it to finish; use this for long-running processes instead of appending & to the command. The process output is written to a log file and is not returned in the tool result; the process can be stopped with kill -- -<PGID>. The log file is outside the workspace and must be read with a shell command rather than a file-reading tool.';
+}
+
+/** JSON Schema for the run_shell_command tool parameters. */
+export function buildShellSchema(): {
+  type: 'object';
+  properties: Record<string, { type: string; description: string }>;
+  required: string[];
+} {
+  const properties: Record<string, { type: string; description: string }> = {
+    command: {
+      type: 'string',
+      description: getCommandDescription(),
+    },
+    description: {
+      type: 'string',
+      description:
+        'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
+    },
+    dir_path: {
+      type: 'string',
+      description:
+        '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages"), a relative path (e.g., "src/utils"), or an absolute path within the workspace.',
+    },
+    directory: {
+      type: 'string',
+      description:
+        'Alternative parameter name for dir_path (for backward compatibility).',
+    },
+    timeout_seconds: {
+      type: 'number',
+      description:
+        '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
+    },
+  };
+  if (os.platform() !== 'win32') {
+    properties['is_background'] = {
+      type: 'boolean',
+      description: getBackgroundParamDescription(),
+    };
+  }
+  return {
+    type: 'object',
+    properties,
+    required: ['command'],
+  };
 }

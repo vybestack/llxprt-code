@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added an optional `is_background` parameter to the `run_shell_command` tool (non-Windows only). When `true`, the command is wrapped so it survives shell/PTY teardown (`trap '' HUP`, redirected to a log file, detached from stdin) and the tool returns immediately without waiting for it to finish. The result names the log file path and the `kill -- -<PGID>` termination command, providing a declarative, reliable alternative to appending `&` for long-running processes (#1995).
+
 ### Fixed
 
 - Restored the **`claude-opus-5`** and **`claude-opus-5-latest`** entries, and the `claude-opus-5` case-insensitive rule covering dated snapshots, to the core model-limits catalog (`packages/core/src/core/model-limits.json`). They were dropped during the `dev/0.11.0` → `main` integration, which took the dev branch's catalog wholesale rather than the union of both sides; the dev tip predated Opus 5's addition. Because the restored value (`200000`) equals the catalog `defaultLimit`, `tokenLimit('claude-opus-5')` still returned the correct number by fallthrough, making this a latent regression that would have surfaced only if the default changed. Opus 5's 200K subscription context window is now pinned explicitly again, matching the provider layer and `anthropic.config`, which were unaffected (#2737).

@@ -10,6 +10,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -37,18 +38,61 @@ import type {
 } from '../interfaces/IShellToolHost.js';
 import {
   applyOutputFilters,
+  buildShellSchema,
   collectProcessInfo,
   createShellToolHostFromExecutionService,
-  getCommandDescription,
   getShellToolDescription,
   isShellToolHost,
   prepareShellExecution,
+  singleQuoteForShell,
   validateGrepFlags,
   validatePositiveInteger,
 } from './shell-helpers.js';
 
 /** Throttle interval for shell output updates. */
 export const OUTPUT_UPDATE_INTERVAL_MS = 100;
+
+/** Windows validation error for is_background. */
+const BACKGROUND_WINDOWS_ERROR =
+  'is_background is not supported on Windows. Start independent background processes with Start-Process instead.';
+
+/**
+ * Builds the multi-line background notice block appended to llmContent.
+ *
+ * The log file lives in os.tmpdir(), outside the workspace, so it cannot be
+ * read with a workspace-scoped file-reading tool. The notice tells the model
+ * to read it with a shell command instead. When a terminate id is available
+ * it also gives a status check and a termination command.
+ */
+function buildBackgroundNoticeBlock(
+  backgroundLogPath: string,
+  terminateId: number | undefined,
+): string {
+  const quoted = singleQuoteForShell(backgroundLogPath);
+  const lines: string[] = [
+    'Background: command was started in the background and was not awaited.',
+    `Output: ${backgroundLogPath} (outside the workspace - read it with a shell command such as: tail -n 50 ${quoted})`,
+  ];
+  if (terminateId !== undefined) {
+    lines.push(`Status: pgrep -g ${terminateId}`);
+    lines.push(`Terminate: kill -- -${terminateId}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Builds the non-debug display message for a background launch. When no PGID
+ * or PID is known the parenthetical is omitted entirely so the display never
+ * shows a meaningless `PGID: (none)`.
+ */
+function formatBackgroundStartMessage(
+  terminateId: number | undefined,
+  backgroundLogPath: string,
+): string {
+  return terminateId !== undefined
+    ? `Started in background (PGID: ${terminateId}). Output: ${backgroundLogPath}`
+    : `Started in background. Output: ${backgroundLogPath}`;
+}
 
 export interface ShellToolParams {
   /** The shell command to execute. */
@@ -69,6 +113,8 @@ export interface ShellToolParams {
   grep_flags?: string[];
   /** Optional timeout in seconds (-1 for unlimited). */
   timeout_seconds?: number;
+  /** Start the command as a background job (non-Windows only). */
+  is_background?: boolean;
 }
 
 export class ShellToolInvocation extends BaseToolInvocation<
@@ -109,6 +155,9 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
     if (this.params.description) {
       description += ` (${this.params.description.replace(/\n/g, ' ')})`;
+    }
+    if (this.params.is_background === true) {
+      description += ' [background]';
     }
     return description;
   }
@@ -180,6 +229,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
       },
     };
 
+    if (this.params.is_background === true) {
+      confirmationDetails.isBackground = true;
+    }
+
     return confirmationDetails;
   }
 
@@ -248,8 +301,11 @@ export class ShellToolInvocation extends BaseToolInvocation<
   ): Promise<ToolResult> {
     const combinedSignal = timeoutController.signal;
     const cwd = this.resolveCwd();
-    const { tempFilePath, commandToExecute } =
-      prepareShellExecution(strippedCommand);
+    const { tempFilePath, commandToExecute, backgroundLogPath } =
+      prepareShellExecution(
+        strippedCommand,
+        this.params.is_background === true,
+      );
 
     try {
       const executionResult = await this.host.executeShellCommand(
@@ -260,6 +316,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       );
 
       const result = executionResult;
+      this.reclaimBackgroundLogIfNeeded(result, backgroundLogPath);
       const { backgroundPIDs, pgid } = collectProcessInfo(
         result,
         tempFilePath,
@@ -284,6 +341,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         timeoutTriggered,
         timeoutSeconds,
         defaultTimeoutSeconds,
+        backgroundLogPath,
       );
 
       const displayWithFilter = this.applyFilterDescription(
@@ -303,25 +361,36 @@ export class ShellToolInvocation extends BaseToolInvocation<
         signal,
       );
 
-      const limitedResult = this.host.limitOutputTokens(llmPayload);
-      if (limitedResult.wasTruncated) {
-        return {
-          llmContent: `${limitedResult.content}\n\n(output exceeded token limit)`,
-          returnDisplay: displayWithFilter,
-          ...executionError,
-        };
-      }
+      return this.buildToolResult(
+        llmPayload,
+        displayWithFilter,
+        executionError,
+      );
+    } finally {
+      fs.rmSync(tempFilePath, { force: true });
+    }
+  }
 
+  private buildToolResult(
+    llmPayload: string,
+    returnDisplay: string,
+    executionError:
+      | { error: { message: string; type: ToolErrorType } }
+      | Record<string, never>,
+  ): ToolResult {
+    const limitedResult = this.host.limitOutputTokens(llmPayload);
+    if (limitedResult.wasTruncated) {
       return {
-        llmContent: limitedResult.content,
-        returnDisplay: displayWithFilter,
+        llmContent: `${limitedResult.content}\n\n(output exceeded token limit)`,
+        returnDisplay,
         ...executionError,
       };
-    } finally {
-      if (fs.existsSync(tempFilePath)) {
-        fs.unlinkSync(tempFilePath);
-      }
     }
+    return {
+      llmContent: limitedResult.content,
+      returnDisplay,
+      ...executionError,
+    };
   }
 
   private async summarizeIfNeeded(
@@ -449,6 +518,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     timeoutTriggered: boolean,
     timeoutSeconds: number | undefined,
     defaultTimeoutSeconds: number,
+    backgroundLogPath: string | undefined,
   ): { llmContent: string; returnDisplayMessage: string } {
     let llmContent = '';
     let returnDisplayMessage = '';
@@ -481,38 +551,123 @@ export class ShellToolInvocation extends BaseToolInvocation<
         }
       }
     } else {
-      const finalError = result.error
-        ? result.error.message.replace(commandToExecute, this.params.command)
-        : '(none)';
-
-      llmContent = [
-        `Command: ${this.params.command}`,
-        `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
-        `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
-        `Stderr: (empty)`,
-        `Error: ${finalError}`,
-        `Exit Code: ${result.exitCode ?? '(none)'}`,
-        `Signal: ${result.signal ?? '(none)'}`,
-        `Background PIDs: ${
-          backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
-        }`,
-        `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
-      ].join('\n');
-
-      if (this.host.getDebugMode()) {
-        returnDisplayMessage = llmContent;
-      } else if (filteredOutput.trim() !== '') {
-        returnDisplayMessage = filteredOutput;
-      } else if (result.signal !== null) {
-        returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
-      } else if (result.error !== null) {
-        returnDisplayMessage = `Command failed: ${result.error.message}`;
-      } else if (result.exitCode !== null && result.exitCode !== 0) {
-        returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
-      }
+      ({ llmContent, returnDisplayMessage } = this.formatNormalOutput(
+        result,
+        filteredOutput,
+        commandToExecute,
+        backgroundPIDs,
+        pgid,
+        backgroundLogPath,
+      ));
     }
 
     return { llmContent, returnDisplayMessage };
+  }
+
+  private formatNormalOutput(
+    result: ShellExecutionResult,
+    filteredOutput: string,
+    commandToExecute: string,
+    backgroundPIDs: number[],
+    pgid: number | null,
+    backgroundLogPath: string | undefined,
+  ): { llmContent: string; returnDisplayMessage: string } {
+    const finalError = result.error
+      ? result.error.message.replace(commandToExecute, this.params.command)
+      : '(none)';
+
+    const llmContent = [
+      `Command: ${this.params.command}`,
+      `Directory: ${stringOrDefault(this.getDirPath(), '(root)')}`,
+      `Stdout: ${stringOrDefault(filteredOutput, '(empty)')}`,
+      `Stderr: (empty)`,
+      `Error: ${finalError}`,
+      `Exit Code: ${result.exitCode ?? '(none)'}`,
+      `Signal: ${result.signal ?? '(none)'}`,
+      `Background PIDs: ${
+        backgroundPIDs.length > 0 ? backgroundPIDs.join(', ') : '(none)'
+      }`,
+      `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
+    ].join('\n');
+
+    let returnDisplayMessage = '';
+    if (this.host.getDebugMode()) {
+      returnDisplayMessage = llmContent;
+    } else if (filteredOutput.trim() !== '') {
+      returnDisplayMessage = filteredOutput;
+    } else if (result.signal !== null) {
+      returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
+    } else if (result.error !== null) {
+      returnDisplayMessage = `Command failed: ${result.error.message}`;
+    } else if (result.exitCode !== null && result.exitCode !== 0) {
+      returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
+    }
+
+    return this.applyBackgroundNotice(
+      llmContent,
+      returnDisplayMessage,
+      result,
+      pgid,
+      backgroundLogPath,
+    );
+  }
+
+  // When the wrapper did not launch cleanly there is no surviving job, so the
+  // log file is garbage and must not be left behind. On a clean launch the
+  // detached job still owns the log and the model has been told its path, so
+  // it is retained.
+  private reclaimBackgroundLogIfNeeded(
+    result: ShellExecutionResult,
+    backgroundLogPath: string | undefined,
+  ): void {
+    if (
+      backgroundLogPath !== undefined &&
+      (result.aborted === true ||
+        !this.isCleanBackgroundLaunch(result, backgroundLogPath))
+    ) {
+      fs.rmSync(backgroundLogPath, { force: true });
+    }
+  }
+
+  // A background launch is "clean" only when the wrapper itself succeeded.
+  // The signal is intentionally NOT checked: node-pty reports signal 0 for a
+  // clean exit and CoreShellToolHostAdapter stringifies that to '0', which
+  // would make a `result.signal !== null` guard trip on every clean PTY
+  // result. A wrapper actually killed by a signal never has exitCode 0 on
+  // either backend, so gating on exitCode === 0 alone is both necessary and
+  // sufficient.
+  private isCleanBackgroundLaunch(
+    result: ShellExecutionResult,
+    backgroundLogPath: string | undefined,
+  ): boolean {
+    return (
+      this.params.is_background === true &&
+      backgroundLogPath !== undefined &&
+      result.exitCode === 0 &&
+      result.error === null
+    );
+  }
+
+  private applyBackgroundNotice(
+    llmContent: string,
+    returnDisplayMessage: string,
+    result: ShellExecutionResult,
+    pgid: number | null,
+    backgroundLogPath: string | undefined,
+  ): { llmContent: string; returnDisplayMessage: string } {
+    if (
+      backgroundLogPath === undefined ||
+      !this.isCleanBackgroundLaunch(result, backgroundLogPath)
+    ) {
+      return { llmContent, returnDisplayMessage };
+    }
+    const terminateId = pgid ?? result.pid;
+    const notice = buildBackgroundNoticeBlock(backgroundLogPath, terminateId);
+    const noticed = `${llmContent}\n${notice}`;
+    const display = this.host.getDebugMode()
+      ? noticed
+      : formatBackgroundStartMessage(terminateId, backgroundLogPath);
+    return { llmContent: noticed, returnDisplayMessage: display };
   }
 
   private applyFilterDescription(
@@ -618,36 +773,7 @@ export class ShellTool extends BaseDeclarativeTool<
       'Shell',
       getShellToolDescription(),
       Kind.Execute,
-      {
-        type: 'object',
-        properties: {
-          command: {
-            type: 'string',
-            description: getCommandDescription(),
-          },
-          description: {
-            type: 'string',
-            description:
-              'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
-          },
-          dir_path: {
-            type: 'string',
-            description:
-              '(OPTIONAL) Directory to run the command in. Provide a workspace directory name (e.g., "packages"), a relative path (e.g., "src/utils"), or an absolute path within the workspace.',
-          },
-          directory: {
-            type: 'string',
-            description:
-              'Alternative parameter name for dir_path (for backward compatibility).',
-          },
-          timeout_seconds: {
-            type: 'number',
-            description:
-              '(OPTIONAL) Timeout in seconds for command execution (-1 for unlimited).',
-          },
-        },
-        required: ['command'],
-      },
+      buildShellSchema(),
       false,
       true,
       messageBus,
@@ -662,6 +788,9 @@ export class ShellTool extends BaseDeclarativeTool<
   ): string | null {
     if (!params.command.trim()) {
       return 'Command cannot be empty.';
+    }
+    if (params.is_background === true && os.platform() === 'win32') {
+      return BACKGROUND_WINDOWS_ERROR;
     }
     const commandCheck = this.host.isCommandAllowed(params.command);
     if (!commandCheck.allowed) {
