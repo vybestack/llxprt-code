@@ -4,18 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'bun:test';
 import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   separateSettings,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
-import { DEFAULT_DISABLED_TOOLS } from '../subagentOrchestrator.js';
+import { DEFAULT_DISABLED_TOOLS } from '../src/core/subagentOrchestrator.js';
 import {
   normalizeDefaultToolSet,
   populatePostActivationSettings,
   populatePreActivationSettings,
-} from '../subagentSettingsPopulation.js';
+} from '../src/core/subagentSettingsPopulation.js';
 
 const defaultDisabledTools = normalizeDefaultToolSet(DEFAULT_DISABLED_TOOLS);
 

@@ -93,6 +93,10 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'agents',
+    files: ['test-bun/subagentAnthropicTextSettings.issue1738.bun.ts'],
+  },
+  {
     workspace: 'cli',
     files: [
       'src/__tests__/cliSessionDispatch.characterization.test.tsx',
@@ -203,7 +207,7 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
       'src/anthropic/AnthropicProvider.toolFormatDetection.test.ts',
       'src/anthropic/AnthropicProvider.tools.test.ts',
       'src/anthropic/AnthropicRateLimitHandler.test.ts',
-      'src/anthropic/AnthropicRequestBuilder.issue1738.test.ts',
+      'test-bun/AnthropicRequestBuilder.issue1738.bun.ts',
       'src/anthropic/AnthropicRequestBuilder.modelParams.test.ts',
       'src/anthropic/AnthropicResponseParser.issue1844.test.ts',
       'src/anthropic/AnthropicStreamProcessor.retryOwnership.test.ts',

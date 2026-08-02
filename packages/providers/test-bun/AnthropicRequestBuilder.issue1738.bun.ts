@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'vitest';
-import { buildAnthropicRequestBody } from './AnthropicRequestBuilder.js';
+import { describe, expect, it } from 'bun:test';
+import { buildAnthropicRequestBody } from '../src/anthropic/AnthropicRequestBuilder.js';
 
 describe('Anthropic request text settings (Issue #1738)', () => {
   it('omits OpenAI text settings while preserving Anthropic model parameters', () => {
