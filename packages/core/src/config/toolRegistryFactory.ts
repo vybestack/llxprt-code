@@ -32,6 +32,7 @@ import {
   ListSubagentsTool,
   CheckAsyncTasksTool,
   ExaWebSearchTool,
+  GithubTool,
   CodeSearchTool,
   DirectWebFetchTool,
   MemoryTool,
@@ -412,6 +413,14 @@ function registerStandardTools(
     messageBus: messageBusAdapter,
   });
   registerCoreTool(ExaWebSearchTool, { keyStorage: toolKeyStorageAdapter });
+  // Registered only when the CLI layer supplied a broker transport, so a
+  // host without the wiring does not advertise a tool it cannot serve.
+  // @plan PLAN-20260731-GHBROKER.P15
+  // @requirement REQ-003, REQ-008
+  const githubBrokerClient = config.getGitHubBrokerClient();
+  if (githubBrokerClient !== undefined) {
+    registerCoreTool(GithubTool, githubBrokerClient, messageBusAdapter);
+  }
   registerCoreTool(TodoWrite, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(TodoRead, todoServiceAdapter);
   registerCoreTool(TodoPause, todoServiceAdapter, toolHostAdapter);

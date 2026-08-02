@@ -25,7 +25,10 @@ import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type {
+  GitHubBrokerClient,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-tools';
 import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -181,6 +184,11 @@ export abstract class ConfigBaseCore {
   protected readonly interactive!: boolean;
   protected trustedFolder: boolean | undefined;
   protected readonly useRipgrep!: boolean;
+  /**
+   * @plan PLAN-20260731-GHBROKER.P15
+   * @requirement REQ-003
+   */
+  protected readonly githubBrokerClient?: GitHubBrokerClient;
   protected readonly shouldUseNodePtyShell!: boolean;
   protected readonly allowPtyThemeOverride!: boolean;
   protected readonly ptyScrollbackLimit!: number;
@@ -813,6 +821,17 @@ export abstract class ConfigBaseCore {
   }
   getUseRipgrep(): boolean {
     return this.useRipgrep;
+  }
+  /**
+   * The brokered-GitHub transport, or undefined when the CLI layer has not
+   * supplied one. The `github` tool is registered only when present, so a
+   * host without the wiring does not advertise a tool it cannot serve.
+   *
+   * @plan PLAN-20260731-GHBROKER.P15
+   * @requirement REQ-003, REQ-004
+   */
+  getGitHubBrokerClient(): GitHubBrokerClient | undefined {
+    return this.githubBrokerClient;
   }
   getShouldUseNodePtyShell(): boolean {
     return this.shouldUseNodePtyShell;

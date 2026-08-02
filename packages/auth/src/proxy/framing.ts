@@ -14,7 +14,29 @@
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const MAX_FRAME_SIZE = 65536;
+/**
+ * Maximum frame size. Raised to 4 MiB (REQ-006) so that fully-commented
+ * GitHub issues (~50 KB) and PRs with review threads fit in a single frame.
+ * The cap MUST stay bounded and enforced: FrameDecoder.feed accumulates into
+ * its buffer before validating length, so an unbounded cap is a
+ * memory-exhaustion vector from a hostile sandbox.
+ *
+ * @plan PLAN-20260731-GHBROKER.P05
+ * @requirement REQ-006
+ * @pseudocode 002-frame-and-cancel.md lines 01-11
+ */
+export const MAX_FRAME_SIZE = 4_194_304;
+
+/**
+ * Legacy v1 frame cap. A v2 server communicating with a v1 client MUST NOT
+ * emit frames exceeding this size; see RESPONSE_TOO_LARGE in the server.
+ *
+ * @plan PLAN-20260731-GHBROKER.P05
+ * @requirement REQ-006
+ * @pseudocode 002-frame-and-cancel.md lines 67-76
+ */
+export const V1_MAX_FRAME_SIZE = 65_536;
+
 export const PARTIAL_FRAME_TIMEOUT_MS = 5000;
 
 // ─── Errors ──────────────────────────────────────────────────────────────────

@@ -299,6 +299,14 @@ export {
 } from './tools/shell.js';
 export { buildCommandToExecute } from './tools/shell-helpers.js';
 export {
+  GithubTool,
+  GithubToolInvocation,
+  MUTATING_OPS,
+  SUPPORTED_OPS,
+  type GitHubBrokerClient,
+  type GithubToolParams,
+} from './tools/github.js';
+export {
   DISCOVERED_TOOL_PREFIX,
   ToolRegistry,
   DiscoveredTool,

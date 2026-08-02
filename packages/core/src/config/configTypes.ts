@@ -33,6 +33,7 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import type {
   AnyToolInvocation,
+  GitHubBrokerClient,
   ISkillService,
   ToolRegistry,
 } from '@vybestack/llxprt-code-tools';
@@ -367,6 +368,19 @@ export interface ConfigParameters {
   sessionId: string;
   embeddingModel?: string;
   sandbox?: SandboxConfig;
+  /**
+   * Transport for brokered GitHub operations, supplied by the CLI layer.
+   *
+   * core cannot import the broker directly: the broker lives in
+   * `packages/providers`, which core does not depend on. core therefore
+   * defines the port and the CLI provides the adapter. When absent, the
+   * `github` tool is not registered, so a host without the wiring simply
+   * does not advertise a tool it cannot serve.
+   *
+   * @plan PLAN-20260731-GHBROKER.P15
+   * @requirement REQ-003, REQ-004
+   */
+  githubBrokerClient?: GitHubBrokerClient;
   targetDir: string;
   debugMode: boolean;
   outputFormat?: OutputFormat;
