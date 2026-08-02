@@ -204,6 +204,23 @@ describe('ast_edit Go import extraction', () => {
     expect(imports[1].line).toBe(3);
   });
 
+  it('does not terminate a block on a closing paren inside a comment', () => {
+    const code = [
+      'import (',
+      '\t"fmt" // see issue ) for details',
+      '\t"os"',
+      ')',
+      '',
+    ].join('\n');
+    const imports = extractImports(code, 'go');
+
+    expect(imports).toHaveLength(2);
+    expect(imports[0].module).toBe('fmt');
+    expect(imports[0].line).toBe(2);
+    expect(imports[1].module).toBe('os');
+    expect(imports[1].line).toBe(3);
+  });
+
   it('ignores non-import lines', () => {
     const code = 'package main\n\nfunc main() {}\n';
     const imports = extractImports(code, 'go');
@@ -261,6 +278,22 @@ describe('ast_edit Ruby import extraction', () => {
 
   it('extracts parenthesized require_relative', () => {
     const code = "require_relative('lib/helper')\n";
+    const imports = extractImports(code, 'ruby');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('lib/helper');
+  });
+
+  it('extracts require without a space before the string', () => {
+    const code = "require'json'\n";
+    const imports = extractImports(code, 'ruby');
+
+    expect(imports).toHaveLength(1);
+    expect(imports[0].module).toBe('json');
+  });
+
+  it('extracts require_relative without a space before the string', () => {
+    const code = "require_relative'lib/helper'\n";
     const imports = extractImports(code, 'ruby');
 
     expect(imports).toHaveLength(1);

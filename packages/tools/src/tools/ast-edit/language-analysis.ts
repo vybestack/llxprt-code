@@ -388,8 +388,11 @@ function handleGoLine(
   inBlock: boolean,
 ): { imports: Import[]; inBlock: boolean } {
   if (inBlock) {
-    // Inside a block: collect packages until the closing paren.
-    const closeParen = line.indexOf(')');
+    // Strip line comments before scanning for the closing paren so a `)`
+    // inside a trailing comment (e.g. `// see issue ) for details`) does not
+    // terminate the block prematurely and silently drop later imports.
+    const codePart = stripGoLineComment(line);
+    const closeParen = codePart.indexOf(')');
     if (closeParen !== -1) {
       const module = extractGoImportPath(line.slice(0, closeParen));
       return {
@@ -405,7 +408,7 @@ function handleGoLine(
   }
   if (isGoImportBlockStart(line)) {
     const openParen = line.indexOf('(');
-    const closeParen = line.indexOf(')', openParen + 1);
+    const closeParen = stripGoLineComment(line).indexOf(')', openParen + 1);
     // Single-line block: import ( "pkg" )
     if (closeParen !== -1) {
       const module = extractGoImportPath(line.slice(openParen + 1, closeParen));
@@ -443,6 +446,15 @@ function isGoImportBlockStart(line: string): boolean {
 }
 
 /**
+ * Strips a trailing `//` line comment from a Go line, returning only the code
+ * portion. Ensures comment text (e.g., a stray `)`) does not affect parsing.
+ */
+function stripGoLineComment(line: string): string {
+  const commentIdx = line.indexOf('//');
+  return commentIdx !== -1 ? line.slice(0, commentIdx) : line;
+}
+
+/**
  * Extracts the double-quoted package path from a Go import line.
  * Strips line comments and ignores any alias/dot/underscore prefix.
  * Returns null when no quoted path is present (e.g., blank lines).
@@ -450,9 +462,7 @@ function isGoImportBlockStart(line: string): boolean {
  * Handles: `"fmt"`, `f "fmt"`, `. "pkg"`, `_ "pkg"`, `"pkg" // comment`.
  */
 function extractGoImportPath(line: string): string | null {
-  const commentIdx = line.indexOf('//');
-  const body =
-    commentIdx !== -1 ? line.slice(0, commentIdx).trim() : line.trim();
+  const body = stripGoLineComment(line).trim();
   const quoteOpen = body.indexOf('"');
   if (quoteOpen === -1) {
     return null;
@@ -468,13 +478,15 @@ function extractGoImportPath(line: string): string | null {
 
 /**
  * Detects a Ruby require / require_relative directive.
- * Handles both bare (`require 'json'`) and parenthesized
- * (`require('json')`) forms with single or double quotes.
+ * Handles both bare (`require 'json'`, `require'json'`) and parenthesized
+ * (`require('json')`) forms with single or double quotes. Whitespace is
+ * optional for the bare form because Ruby method-call syntax permits
+ * `require'json'` without a space before the string literal.
  */
 function isRubyRequire(line: string): boolean {
   return (
-    /^require\s+['"]/.test(line) ||
-    /^require_relative\s+['"]/.test(line) ||
+    /^require\s*['"]/.test(line) ||
+    /^require_relative\s*['"]/.test(line) ||
     /^require\s*\(\s*['"]/.test(line) ||
     /^require_relative\s*\(\s*['"]/.test(line)
   );
