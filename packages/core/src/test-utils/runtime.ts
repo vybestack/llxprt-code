@@ -7,6 +7,7 @@
 import type { Config } from '../config/config.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
+import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
 // Type-only import of vitest: erased at compile time, creates no runtime edge.
 // Required to obtain the precise `vi.fn()` Mock<T> return type.
 import type { vi as ViNamespace } from 'vitest';
@@ -244,6 +245,7 @@ interface ChatSessionConfigShape {
   setProvider: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getProviderManager: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  getTokenizerFactory: () => RuntimeTokenizerFactory | undefined;
 }
 
 interface ChatSessionRuntimeOptions {
@@ -312,6 +314,19 @@ export function createChatSessionRuntime(
     }
   });
 
+  const tokenizerFactory: RuntimeTokenizerFactory = {
+    getTokenizer: () => undefined,
+    async estimatePrompt(request) {
+      return {
+        count: await request.legacyEstimate(),
+        method: 'calibrated',
+        family: 'legacy-unregistered',
+        estimatorVersion: 'core-estimate-tokens-v1',
+        assetRevision: 'none',
+        projectionRevision: request.projectionRevision,
+      };
+    },
+  };
   const baseConfig: ChatSessionConfigShape = {
     getSessionId: () => 'test-session-id',
     getTelemetryLogPromptsEnabled: () => true,
@@ -331,6 +346,7 @@ export function createChatSessionRuntime(
     setProvider: setProviderSpy,
     getProviderManager: vi.fn().mockReturnValue(providerManager),
     getSettingsService: vi.fn().mockReturnValue(settingsService),
+    getTokenizerFactory: () => tokenizerFactory,
   };
 
   const config = {

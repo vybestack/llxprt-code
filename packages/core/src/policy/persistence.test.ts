@@ -22,13 +22,31 @@ import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as debugLoggerModule from '../utils/debugLogger.js';
 
-vi.mock('node:fs/promises');
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
-    '@vybestack/llxprt-code-settings',
-  )),
-  getSettingsService: vi.fn(),
-}));
+vi.mock('node:fs/promises', (importOriginal) => {
+  const actual = importOriginal() as typeof import('node:fs/promises');
+  const mockExports = {
+    ...actual,
+    mkdir: vi.fn(),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    rename: vi.fn(),
+    rm: vi.fn(),
+    readdir: vi.fn(),
+    access: vi.fn(),
+    stat: vi.fn(),
+    copyFile: vi.fn(),
+  };
+  // Source uses `import fs from 'node:fs/promises'` (default import)
+  return { ...mockExports, default: mockExports };
+});
+vi.mock('@vybestack/llxprt-code-settings', (importOriginal) => {
+  const actual =
+    importOriginal() as typeof import('@vybestack/llxprt-code-settings');
+  return {
+    ...actual,
+    getSettingsService: vi.fn(),
+  };
+});
 
 describe('createPolicyUpdater - TOML Persistence', () => {
   let policyEngine: PolicyEngine;

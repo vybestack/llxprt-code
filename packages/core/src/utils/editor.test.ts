@@ -24,7 +24,7 @@ import {
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { debugLogger } from './debugLogger.js';
 
-vi.mock('child_process', () => ({
+vi.mock('node:child_process', () => ({
   execSync: vi.fn(),
   spawn: vi.fn(),
   spawnSync: vi.fn(() => ({ error: null, status: 0 })),
@@ -43,7 +43,7 @@ describe('editor utils', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     vi.unstubAllEnvs();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
@@ -218,6 +218,7 @@ describe('editor utils', () => {
 
       it(`should fall back to last command "${commands[commands.length - 1]}" when none exist on non-windows`, () => {
         Object.defineProperty(process, 'platform', { value: 'linux' });
+        (execSync as Mock).mockReset();
         (execSync as Mock).mockImplementation(() => {
           throw new Error(); // all commands not found
         });

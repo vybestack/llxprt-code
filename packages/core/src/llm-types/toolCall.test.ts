@@ -3,8 +3,7 @@
  * @requirement REQ-004.1, REQ-004.2, REQ-004.3
  * @pseudocode lines 60-78
  */
-import { describe, expect } from 'vitest';
-import { it } from '@fast-check/vitest';
+import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import {
   toolResultContentFromLegacyPartListUnion,
@@ -160,8 +159,9 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
       },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('JSON-serializable');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('JSON-serializable');
     }
   });
 
@@ -173,8 +173,9 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
       },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('JSON-serializable');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('JSON-serializable');
     }
   });
 
@@ -186,8 +187,9 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
       },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('JSON-serializable');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('JSON-serializable');
     }
   });
 
@@ -199,8 +201,9 @@ describe('toolResultContentFromLegacyPartListUnion - single part object', () => 
     };
     const result = toolResultContentFromLegacyPartListUnion(input);
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('JSON-serializable');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('JSON-serializable');
     }
   });
 });
@@ -261,8 +264,9 @@ describe('toolResultContentFromLegacyPartListUnion - array input', () => {
       { executableCode: { code: 'print(1)' } },
     ]);
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.length).toBeGreaterThan(0);
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error.length).toBeGreaterThan(0);
     }
   });
 });
@@ -271,16 +275,18 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
   it('rejects null with descriptive error', () => {
     const result = toolResultContentFromLegacyPartListUnion(null);
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.length).toBeGreaterThan(0);
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error.length).toBeGreaterThan(0);
     }
   });
 
   it('rejects number with descriptive error', () => {
     const result = toolResultContentFromLegacyPartListUnion(42);
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.length).toBeGreaterThan(0);
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error.length).toBeGreaterThan(0);
     }
   });
 
@@ -289,16 +295,18 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       executableCode: { language: 'PYTHON', code: 'print(1)' },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.length).toBeGreaterThan(0);
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error.length).toBeGreaterThan(0);
     }
   });
 
   it('rejects empty object', () => {
     const result = toolResultContentFromLegacyPartListUnion({});
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.length).toBeGreaterThan(0);
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error.length).toBeGreaterThan(0);
     }
   });
 
@@ -307,8 +315,9 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       inlineData: { mimeType: 'image/png' },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('malformed inlineData');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('malformed inlineData');
     }
   });
 
@@ -317,8 +326,9 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       inlineData: { data: 'abc' },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('malformed inlineData');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('malformed inlineData');
     }
   });
 
@@ -327,8 +337,9 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       fileData: { mimeType: 'image/png' },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('malformed fileData');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('malformed fileData');
     }
   });
 
@@ -337,8 +348,9 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       functionResponse: { response: 'ok' },
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('malformed functionResponse');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('malformed functionResponse');
     }
   });
 
@@ -347,8 +359,9 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       functionResponse: 'not-a-record',
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('malformed functionResponse');
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
+      expect(errResult.error).toContain('malformed functionResponse');
     }
   });
 
@@ -357,9 +370,10 @@ describe('toolResultContentFromLegacyPartListUnion - unsupported shapes', () => 
       mysteryField: 42,
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    const errResult = result as Extract<typeof result, { ok: false }>;
+    {
       // The error should mention "unsupported" — the shape was NOT stringified
-      expect(result.error.toLowerCase()).toContain('unsupported');
+      expect(errResult.error.toLowerCase()).toContain('unsupported');
     }
   });
 });
@@ -383,158 +397,170 @@ describe('ToolCallRequest type usage', () => {
 // ============================================================================
 
 describe('toolCall property-based', () => {
-  it.prop([
-    fc.array(fc.record({ text: fc.string({ maxLength: 50 }) }), {
-      minLength: 0,
-      maxLength: 10,
-    }),
-  ])(
-    'array of {text: string} yields TextBlocks preserving order and content',
-    (parts) => {
-      const result = toolResultContentFromLegacyPartListUnion(parts);
-      if (!result.ok) return false;
-      if (!Array.isArray(result.value)) return false;
-      return (
-        result.value.length === parts.length &&
-        parts.every((p, i) => {
-          const block = result.value[i];
-          return block.type === 'text' && block.text === p.text;
-        })
-      );
-    },
-  );
-
-  it.prop([fc.string({ maxLength: 100 })])(
-    'any string input yields ok with value === input',
-    (s: string) => {
-      const result = toolResultContentFromLegacyPartListUnion(s);
-      return result.ok && result.value === s;
-    },
-  );
-
-  it.prop([
-    fc.oneof(
-      fc.constant(null),
-      fc.constant(undefined),
-      fc.integer(),
-      fc.constant({}),
-      fc.constant({ mystery: 42 }),
-      fc.record({ executableCode: fc.record({ code: fc.string() }) }),
-    ),
-  ])(
-    'unsupported shape always returns {ok:false} with non-empty error string',
-    (input: unknown) => {
-      const result = toolResultContentFromLegacyPartListUnion(input);
-      return !result.ok && result.error.length > 0;
-    },
-  );
-
-  it.prop([
-    fc.record({
-      inlineData: fc.record({
-        mimeType: fc.string({ minLength: 1, maxLength: 30 }),
-        data: fc.string({ minLength: 1, maxLength: 50 }),
-      }),
-    }),
-  ])(
-    'inlineData with string mimeType+data always yields MediaBlock base64',
-    (input) => {
-      const result = toolResultContentFromLegacyPartListUnion(input);
-      expect(result.ok).toBe(true);
-      if (!result.ok) return false;
-      expect(Array.isArray(result.value)).toBe(true);
-      if (!Array.isArray(result.value)) return false;
-      const block = result.value[0];
-      expect(block.type).toBe('media');
-      if (block.type !== 'media') return false;
-      expect(block.encoding).toBe('base64');
-      expect(block.mimeType).toBe(input.inlineData.mimeType);
-      expect(block.data).toBe(input.inlineData.data);
-      return true;
-    },
-  );
-
-  it.prop([
-    fc.record({
-      fileData: fc.record({
-        fileUri: fc.string({ minLength: 1, maxLength: 50 }),
-        mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
-      }),
-    }),
-  ])('fileData always yields MediaBlock url with correct mimeType', (input) => {
-    const result = toolResultContentFromLegacyPartListUnion(input);
-    if (!result.ok || !Array.isArray(result.value)) return false;
-    const block = result.value[0];
-    const expectedMime = input.fileData.mimeType ?? 'application/octet-stream';
-    return (
-      block.type === 'media' &&
-      block.encoding === 'url' &&
-      block.mimeType === expectedMime &&
-      block.data === input.fileData.fileUri
-    );
-  });
-
-  it.prop([
-    fc
-      .oneof(
-        // Case 1: response key present (fc.option → null or string)
-        fc.record({
-          name: fc.string({ minLength: 1, maxLength: 20 }),
-          id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
-          response: fc.option(fc.string({ maxLength: 30 })),
+  it('array of {text: string} yields TextBlocks preserving order and content', () =>
+    fc.assert(
+      fc.property(
+        fc.array(fc.record({ text: fc.string({ maxLength: 50 }) }), {
+          minLength: 0,
+          maxLength: 10,
         }),
-        // Case 2: response key is optional — fast-check will sometimes
-        // omit the 'response' key entirely, exercising the result:{} fallback.
-        // When present, it's always a string.
-        fc.record(
-          {
-            name: fc.string({ minLength: 1, maxLength: 20 }),
-            id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
-            response: fc.string({ maxLength: 30 }),
-          },
-          { requiredKeys: ['name'] },
-        ),
-      )
-      .map((fnResp) => ({ functionResponse: fnResp })),
-  ])(
-    'functionResponse always yields ToolResponseBlock with correct fields',
-    (input) => {
-      const result = toolResultContentFromLegacyPartListUnion(input);
-      if (!result.ok || !Array.isArray(result.value)) return false;
-      const block = result.value[0];
-      if (block.type !== 'tool_response') return false;
-      const fnResp = input.functionResponse;
-      const expectedResult = 'response' in fnResp ? fnResp['response'] : {};
-      expect(block.toolName).toBe(fnResp.name);
-      expect(block.callId).toBe(typeof fnResp.id === 'string' ? fnResp.id : '');
-      expect(block.result).toStrictEqual(expectedResult);
-      return true;
-    },
-  );
-
-  it.prop([
-    fc.array(
-      fc.oneof(
-        fc.record({ text: fc.string({ maxLength: 20 }) }),
-        fc.string({ maxLength: 15 }),
-      ),
-      { minLength: 0, maxLength: 5 },
-    ),
-  ])(
-    'array of text parts and strings always yields ok with TextBlocks',
-    (parts) => {
-      const result = toolResultContentFromLegacyPartListUnion(parts);
-      if (!result.ok || !Array.isArray(result.value)) return false;
-      return (
-        result.value.length === parts.length &&
-        parts.every((p, i) => {
-          const block = result.value[i];
+        (parts) => {
+          const result = toolResultContentFromLegacyPartListUnion(parts);
+          if (!result.ok) return false;
+          if (!Array.isArray(result.value)) return false;
           return (
-            block.type === 'text' &&
-            block.text === (typeof p === 'string' ? p : p.text)
+            result.value.length === parts.length &&
+            parts.every((p, i) => {
+              const block = result.value[i];
+              return block.type === 'text' && block.text === p.text;
+            })
           );
-        })
-      );
-    },
-  );
+        },
+      ),
+    ));
+
+  it('any string input yields ok with value === input', () =>
+    fc.assert(
+      fc.property(fc.string({ maxLength: 100 }), (s: string) => {
+        const result = toolResultContentFromLegacyPartListUnion(s);
+        return result.ok && result.value === s;
+      }),
+    ));
+
+  it('unsupported shape always returns {ok:false} with non-empty error string', () =>
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.constant(null),
+          fc.constant(undefined),
+          fc.integer(),
+          fc.constant({}),
+          fc.constant({ mystery: 42 }),
+          fc.record({ executableCode: fc.record({ code: fc.string() }) }),
+        ),
+        (input: unknown) => {
+          const result = toolResultContentFromLegacyPartListUnion(input);
+          return !result.ok && result.error.length > 0;
+        },
+      ),
+    ));
+
+  it('inlineData with string mimeType+data always yields MediaBlock base64', () =>
+    fc.assert(
+      fc.property(
+        fc.record({
+          inlineData: fc.record({
+            mimeType: fc.string({ minLength: 1, maxLength: 30 }),
+            data: fc.string({ minLength: 1, maxLength: 50 }),
+          }),
+        }),
+        (input) => {
+          const result = toolResultContentFromLegacyPartListUnion(input);
+          expect(result.ok).toBe(true);
+          if (!result.ok) return false;
+          expect(Array.isArray(result.value)).toBe(true);
+          if (!Array.isArray(result.value)) return false;
+          const block = result.value[0];
+          expect(block.type).toBe('media');
+          if (block.type !== 'media') return false;
+          expect(block.encoding).toBe('base64');
+          expect(block.mimeType).toBe(input.inlineData.mimeType);
+          expect(block.data).toBe(input.inlineData.data);
+          return true;
+        },
+      ),
+    ));
+
+  it('fileData always yields MediaBlock url with correct mimeType', () =>
+    fc.assert(
+      fc.property(
+        fc.record({
+          fileData: fc.record({
+            fileUri: fc.string({ minLength: 1, maxLength: 50 }),
+            mimeType: fc.option(fc.string({ minLength: 1, maxLength: 30 })),
+          }),
+        }),
+        (input) => {
+          const result = toolResultContentFromLegacyPartListUnion(input);
+          if (!result.ok || !Array.isArray(result.value)) return false;
+          const block = result.value[0];
+          const expectedMime =
+            input.fileData.mimeType ?? 'application/octet-stream';
+          return (
+            block.type === 'media' &&
+            block.encoding === 'url' &&
+            block.mimeType === expectedMime &&
+            block.data === input.fileData.fileUri
+          );
+        },
+      ),
+    ));
+
+  it('functionResponse always yields ToolResponseBlock with correct fields', () =>
+    fc.assert(
+      fc.property(
+        fc
+          .oneof(
+            // Case 1: response key present (fc.option → null or string)
+            fc.record({
+              name: fc.string({ minLength: 1, maxLength: 20 }),
+              id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
+              response: fc.option(fc.string({ maxLength: 30 })),
+            }),
+            // Case 2: response key is optional — fast-check will sometimes
+            // omit the 'response' key entirely, exercising the result:{} fallback.
+            // When present, it's always a string.
+            fc.record(
+              {
+                name: fc.string({ minLength: 1, maxLength: 20 }),
+                id: fc.option(fc.string({ minLength: 1, maxLength: 10 })),
+                response: fc.string({ maxLength: 30 }),
+              },
+              { requiredKeys: ['name'] },
+            ),
+          )
+          .map((fnResp) => ({ functionResponse: fnResp })),
+        (input) => {
+          const result = toolResultContentFromLegacyPartListUnion(input);
+          if (!result.ok || !Array.isArray(result.value)) return false;
+          const block = result.value[0];
+          if (block.type !== 'tool_response') return false;
+          const fnResp = input.functionResponse;
+          const expectedResult = 'response' in fnResp ? fnResp['response'] : {};
+          expect(block.toolName).toBe(fnResp.name);
+          expect(block.callId).toBe(
+            typeof fnResp.id === 'string' ? fnResp.id : '',
+          );
+          expect(block.result).toStrictEqual(expectedResult);
+          return true;
+        },
+      ),
+    ));
+
+  it('array of text parts and strings always yields ok with TextBlocks', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.oneof(
+            fc.record({ text: fc.string({ maxLength: 20 }) }),
+            fc.string({ maxLength: 15 }),
+          ),
+          { minLength: 0, maxLength: 5 },
+        ),
+        (parts) => {
+          const result = toolResultContentFromLegacyPartListUnion(parts);
+          if (!result.ok || !Array.isArray(result.value)) return false;
+          return (
+            result.value.length === parts.length &&
+            parts.every((p, i) => {
+              const block = result.value[i];
+              return (
+                block.type === 'text' &&
+                block.text === (typeof p === 'string' ? p : p.text)
+              );
+            })
+          );
+        },
+      ),
+    ));
 });

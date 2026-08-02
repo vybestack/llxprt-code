@@ -52,7 +52,8 @@ describe('fileUtils', () => {
   let directoryPath: string;
 
   beforeEach(() => {
-    vi.resetAllMocks(); // Reset all mocks, including mime.lookup
+    vi.resetAllMocks();
+    mockMimeLookup.mockReturnValue(false);
 
     tempRootDir = actualNodeFs.mkdtempSync(
       path.join(os.tmpdir(), 'fileUtils-test-'),

@@ -88,7 +88,7 @@ env:
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
-  OCR_VERSION: '1.7.17'
+  OCR_VERSION: '1.8.4'
   # Issue #2673: workflow_dispatch canaries select OCR concurrency (2, 3, or
   # 4). All other (automatic/comment) triggers resolve to the evidence-backed
   # default of 3 (canary 3 showed 43% speedup over 2 with zero 429s/retries).
@@ -2295,15 +2295,45 @@ jobs:
           printf '%s' "$ocr_status" > ocr-status.txt
           echo "$status" > ocr-exit-code.txt
           if [ "$status" -ne 0 ]; then
-            if grep -Eqi "429|rate limit" ocr-stderr.log; then
+            # OCR >= 1.8.0 writes a structured usage record (emitFailureUsage)
+            # to stderr whenever a --format json review fails: a pretty-printed
+            # top-level JSON object whose braces sit alone at column 0, holding
+            # token counters, tool-call tallies and a session id. Those numbers
+            # are accounting, not diagnostics, so drop the record before
+            # classifying — otherwise a counter that happens to equal 429, 529,
+            # 401 or 403 is read as an HTTP status.
+            #
+            # Only an object carrying the record's own signature (both the
+            # "summary" and "tool_calls" members at the encoder's two-space
+            # indent) is dropped; every other column-0 JSON object is buffered
+            # and replayed, so a pretty-printed provider error payload keeps
+            # its status code. The status-code patterns below are additionally
+            # matched at token boundaries so a long counter or a hex session id
+            # outside the record cannot match either.
+            ocr_diagnostics="$(awk '
+              /^\{$/ { buffered = $0; in_object = 1; summary_seen = 0; tools_seen = 0; next }
+              in_object == 1 {
+                buffered = buffered "\n" $0
+                if ($0 ~ /^  "summary":/) { summary_seen = 1 }
+                if ($0 ~ /^  "tool_calls":/) { tools_seen = 1 }
+                if ($0 ~ /^\}$/) {
+                  if (summary_seen == 0 || tools_seen == 0) { print buffered }
+                  in_object = 0
+                }
+                next
+              }
+              { print }
+              END { if (in_object == 1 && (summary_seen == 0 || tools_seen == 0)) { print buffered } }
+            ' ocr-stderr.log)"
+            if printf '%s\n' "$ocr_diagnostics" | grep -Eqi "(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)|rate limit"; then
               mark_infrastructure_failure "review" "OCR review failed: HTTP 429 rate limit"
-            elif grep -Eqi "529|overloaded" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)|overloaded"; then
               mark_infrastructure_failure "review" "OCR review failed: HTTP 529 provider overloaded"
-            elif grep -Eqi "401|403|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "(^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key"; then
               mark_infrastructure_failure "review" "OCR review failed: authentication or configuration error"
-            elif grep -Eqi "timeout|timed out" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "timeout|timed out"; then
               mark_infrastructure_failure "review" "OCR review failed: timeout"
-            elif grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed"; then
               mark_infrastructure_failure "review" "all OCR per-file reviews failed; likely LLM provider/config/auth failure"
             else
               mark_infrastructure_failure "review" "OCR review command failed"

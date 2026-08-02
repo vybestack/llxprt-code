@@ -54,10 +54,11 @@ import {
   LoadBalancerContextLimitError,
 } from './loadBalancing/contextLimitError.js';
 import { handleFailoverError as handleFailoverErrorFn } from './loadBalancing/failoverErrorHandler.js';
+import type { EstimationResult } from './loadBalancing/loadBalancerTokenEstimator.js';
 import {
-  estimateRequestTokens,
-  type EstimationResult,
-} from './loadBalancing/loadBalancerTokenEstimator.js';
+  estimatePreparedPrompt,
+  optionsWithPromptProjection,
+} from './loadBalancing/preparedPromptOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
   getMinMemberContextWindow,
@@ -92,6 +93,20 @@ export type {
 export { isResolvedSubProfile } from './loadBalancing/loadBalancerTypes.js';
 export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
 export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
+
+interface PreparedLoadBalancerTarget {
+  readonly options: GenerateChatOptions;
+  readonly delegateProvider: IProvider;
+}
+
+function normalizeGenerateChatOptions(
+  options: GenerateChatOptions,
+): GenerateChatOptions {
+  const runtimeOptions: Partial<GenerateChatOptions> = options;
+  return runtimeOptions.contents === undefined
+    ? { ...options, contents: [] }
+    : options;
+}
 
 /**
  * Load balancing provider that distributes requests across multiple sub-profiles
@@ -193,16 +208,16 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-2207-LB-TOKEN-ACCOUNTING
    */
   private async estimateForSubProfile(
-    contents: IContent[],
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    resolvedOptions: GenerateChatOptions,
+    delegateProvider: IProvider,
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
-    const factory = this.providerManager.getTokenizerFactory();
-    const result = await estimateRequestTokens(
-      contents,
-      subProfile.providerName,
-      model,
-      { tokenizerFactory: factory },
+    const result = await estimatePreparedPrompt(
+      subProfile,
+      resolvedOptions,
+      delegateProvider,
+      this.providerManager.getTokenizerFactory(),
     );
     this.accountingSource = result.source;
     this.lastEstimatedTokens = result.tokens;
@@ -210,6 +225,65 @@ export class LoadBalancingProvider implements IProvider {
     this.diagnosticsActiveProvider = subProfile.providerName;
     this.diagnosticsActiveModel = model || null;
     return result;
+  }
+
+  private async compressForContextLimit(
+    options: GenerateChatOptions,
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    result: EstimationResult,
+    contextLimit: number,
+    delegateProvider: IProvider,
+  ): Promise<GenerateChatOptions | undefined> {
+    if (this.compressionCallback === null) return undefined;
+    this.logger.debug(
+      () =>
+        `[LB:token-guard] Estimate ${result.tokens} exceeds limit ${contextLimit} for ${subProfile.name}, attempting compression`,
+    );
+    const clonedContents = this.cloneForCompression(
+      options.contents,
+      subProfile,
+      result,
+      contextLimit,
+    );
+    let compressed: IContent[];
+    try {
+      compressed = await this.compressionCallback(clonedContents);
+    } catch (error) {
+      throw new LoadBalancerCompressionCallbackError({
+        profileName: this.config.profileName,
+        subProfileName: subProfile.name,
+        cause: error instanceof Error ? error : new Error(String(error)),
+      });
+    }
+    const compressedOptions = { ...options, contents: compressed };
+    const compressedResult = await this.estimateForSubProfile(
+      subProfile,
+      this.buildDelegateResolvedOptions(subProfile, compressedOptions),
+      delegateProvider,
+    );
+    if (compressedResult.tokens <= contextLimit) {
+      return optionsWithPromptProjection(compressedOptions, compressedResult);
+    }
+    return undefined;
+  }
+
+  private cloneForCompression(
+    contents: IContent[],
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    result: EstimationResult,
+    contextLimit: number,
+  ): IContent[] {
+    try {
+      return cloneContentsForCompression(contents);
+    } catch (error) {
+      throw new LoadBalancerContextLimitError({
+        profileName: this.config.profileName,
+        subProfileName: subProfile.name,
+        tokens: result.tokens,
+        contextLimit,
+        cause: error instanceof Error ? error : new Error(String(error)),
+      });
+    }
   }
 
   /**
@@ -220,71 +294,41 @@ export class LoadBalancingProvider implements IProvider {
   private async enforceTokenLimitForTarget(
     options: GenerateChatOptions,
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-  ): Promise<GenerateChatOptions> {
+  ): Promise<PreparedLoadBalancerTarget> {
     const sharedLimit = this.getEffectiveContextLimit();
     const contextLimit = getTargetContextLimit(subProfile, sharedLimit);
-    if (contextLimit === undefined) {
-      return options;
+    const delegateProvider = this.providerManager.getProviderByName(
+      subProfile.providerName,
+    );
+    if (!delegateProvider) {
+      const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
+      this.logger.error(() => errorMsg);
+      throw new Error(errorMsg);
     }
-
-    let result = await this.estimateForSubProfile(options.contents, subProfile);
-    if (result.tokens <= contextLimit) {
-      return options;
-    }
-
-    if (this.compressionCallback) {
-      this.logger.debug(
-        () =>
-          `[LB:token-guard] Estimate ${result.tokens} exceeds limit ${contextLimit} for ${subProfile.name}, attempting compression`,
-      );
-      let clonedContents: IContent[];
-      try {
-        clonedContents = cloneContentsForCompression(options.contents);
-      } catch (cloneError) {
-        this.logger.debug(
-          () =>
-            `[LB:token-guard] Content clone failed for ${subProfile.name}: ${String(cloneError)}`,
-        );
-        throw new LoadBalancerContextLimitError({
-          profileName: this.config.profileName,
-          subProfileName: subProfile.name,
-          tokens: result.tokens,
-          contextLimit,
-          cause:
-            cloneError instanceof Error
-              ? cloneError
-              : new Error(String(cloneError)),
-        });
-      }
-      let compressed: IContent[];
-      try {
-        compressed = await this.compressionCallback(clonedContents);
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[LB:token-guard] Compression callback failed for ${subProfile.name}: ${String(error)}`,
-        );
-        throw new LoadBalancerCompressionCallbackError({
-          profileName: this.config.profileName,
-          subProfileName: subProfile.name,
-          cause: error instanceof Error ? error : new Error(String(error)),
-        });
-      }
-      const compressedOptions = {
-        ...options,
-        contents: compressed,
+    const resolvedOptions = this.buildDelegateResolvedOptions(
+      subProfile,
+      options,
+    );
+    const result = await this.estimateForSubProfile(
+      subProfile,
+      resolvedOptions,
+      delegateProvider,
+    );
+    if (contextLimit === undefined || result.tokens <= contextLimit) {
+      return {
+        options: optionsWithPromptProjection(options, result),
+        delegateProvider,
       };
-      result = await this.estimateForSubProfile(
-        compressedOptions.contents,
-        subProfile,
-      );
-      if (result.tokens <= contextLimit) {
-        this.logger.debug(
-          () =>
-            `[LB:token-guard] Compression reduced estimate to ${result.tokens} for ${subProfile.name}`,
-        );
-        return compressedOptions;
-      }
+    }
+    const compressed = await this.compressForContextLimit(
+      options,
+      subProfile,
+      result,
+      contextLimit,
+      delegateProvider,
+    );
+    if (compressed !== undefined) {
+      return { options: compressed, delegateProvider };
     }
 
     throw new LoadBalancerContextLimitError({
@@ -314,7 +358,7 @@ export class LoadBalancingProvider implements IProvider {
         tools,
       };
     } else {
-      options = optionsOrContent;
+      options = normalizeGenerateChatOptions(optionsOrContent);
     }
     this.resetTokenAccountingDiagnostics();
 
@@ -330,22 +374,14 @@ export class LoadBalancingProvider implements IProvider {
       () => `Selected sub-profile: ${subProfile.name} for request`,
     );
 
-    const enforcedOptions = await this.enforceTokenLimitForTarget(
+    const preparedTarget = await this.enforceTokenLimitForTarget(
       options,
       subProfile,
     );
 
     this.incrementStats(subProfile.name);
     const startTime = this.metricsCollector.recordRequestStart(subProfile.name);
-    const delegateProvider = this.providerManager.getProviderByName(
-      subProfile.providerName,
-    );
-
-    if (!delegateProvider) {
-      const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
-      this.logger.error(() => errorMsg);
-      throw new Error(errorMsg);
-    }
+    const { delegateProvider } = preparedTarget;
 
     this.logger.debug(
       () =>
@@ -354,7 +390,7 @@ export class LoadBalancingProvider implements IProvider {
 
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
       subProfile,
-      enforcedOptions,
+      preparedTarget.options,
     );
     requireTransportAttempt(resolvedOptions);
 
@@ -760,7 +796,7 @@ export class LoadBalancingProvider implements IProvider {
       let requestStarted = false;
       const chunksYielded = { value: false };
       try {
-        const enforcedOptions = await this.enforceTokenLimitForTarget(
+        const preparedTarget = await this.enforceTokenLimitForTarget(
           options,
           subProfile,
         );
@@ -768,7 +804,8 @@ export class LoadBalancingProvider implements IProvider {
         requestStarted = true;
         yield* this.attemptBackendRequest(
           subProfile,
-          enforcedOptions,
+          preparedTarget.options,
+          preparedTarget.delegateProvider,
           settings,
           startTime,
           chunksYielded,
@@ -845,6 +882,7 @@ export class LoadBalancingProvider implements IProvider {
   private async *attemptBackendRequest(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
+    delegateProvider: IProvider,
     settings: FailoverSettings,
     startTime: number,
     chunksYielded: { value: boolean },
@@ -860,6 +898,7 @@ export class LoadBalancingProvider implements IProvider {
     yield* executeBackendAttempt({
       subProfile,
       options,
+      delegateProvider,
       settings,
       startTime,
       chunksYielded,
@@ -876,7 +915,6 @@ export class LoadBalancingProvider implements IProvider {
       deps: {
         logger: this.logger,
         circuitBreaker: this.circuitBreaker,
-        providerManager: this.providerManager,
         markActiveSelection: (name) => this.markActiveSelection(name),
         buildResolvedOptions: (sp, opt) => this.buildResolvedOptions(sp, opt),
         getMetricsHooks: () => this.getMetricsHooks(),

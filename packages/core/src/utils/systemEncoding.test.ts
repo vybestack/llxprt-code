@@ -11,9 +11,26 @@ import { detect as chardetDetect } from 'chardet';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
-vi.mock('child_process');
-vi.mock('node:os');
-vi.mock('chardet');
+vi.mock('child_process', (importOriginal) => {
+  const actual = importOriginal() as typeof import('child_process');
+  return { ...actual, execSync: vi.fn() };
+});
+vi.mock('node:os', (importOriginal) => {
+  const actual = importOriginal() as typeof import('node:os');
+  const mockPlatform = vi.fn(() => actual.platform());
+  const mockHomedir = vi.fn(() => actual.homedir());
+  const mockExports = {
+    ...actual,
+    platform: mockPlatform,
+    homedir: mockHomedir,
+  };
+  // Source uses `import os from 'os'` (default import); provide default too
+  return { ...mockExports, default: mockExports };
+});
+vi.mock('chardet', (importOriginal) => {
+  const actual = importOriginal() as typeof import('chardet');
+  return { ...actual, detect: vi.fn() };
+});
 
 // Import the functions we want to test after refactoring
 import {
@@ -35,6 +52,9 @@ describe('Shell Command Processor - Encoding Functions', () => {
     mockedExecSync = vi.mocked(execSync);
     mockedOsPlatform = vi.mocked(os.platform);
     mockedChardetDetect = vi.mocked(chardetDetect);
+
+    // Clear mock call history and implementations from previous tests
+    vi.clearAllMocks();
 
     // Reset the encoding cache before each test
     resetEncodingCache();

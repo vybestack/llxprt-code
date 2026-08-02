@@ -37,6 +37,7 @@ const MAX_UNSERIALIZABLE_CHILDREN = 1_000;
 export interface EstimationResult {
   tokens: number;
   source: string;
+  transportToken?: object;
 }
 
 export interface LoadBalancerEstimatorDeps {
@@ -88,6 +89,9 @@ export async function estimateRequestTokens(
     try {
       return await estimateWithTokenizer(contents, modelName, tokenizer);
     } catch (error) {
+      if (tokenizer.fallbackPolicy === 'deny') {
+        throw error;
+      }
       tokenizerFailureModel = modelName;
       logger.debug(
         () =>

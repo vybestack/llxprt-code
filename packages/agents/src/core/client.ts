@@ -47,7 +47,6 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
-import { estimateTokens as estimateTextTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 export {
   isThinkingSupported,
@@ -361,18 +360,11 @@ export class AgentClient implements AgentClientContract {
 
     const historyService = this.getHistoryService();
     if (historyService) {
-      try {
-        const systemPromptTokens = await historyService.estimateTokensForText(
-          systemInstruction,
-          model,
-        );
-        historyService.setBaseTokenOffset(systemPromptTokens);
-      } catch {
-        // Token estimation failed - use fallback
-        historyService.setBaseTokenOffset(
-          estimateTextTokens(systemInstruction),
-        );
-      }
+      const systemPromptTokens = await historyService.estimateTokensForText(
+        systemInstruction,
+        model,
+      );
+      historyService.setBaseTokenOffset(systemPromptTokens);
     }
   }
 

@@ -27,6 +27,7 @@ import {
 import {
   SecureStore,
   SecureStoreError,
+  isRuntimeReplacedError,
   type KeyringAdapter,
 } from '../storage/secure-store.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -414,6 +415,9 @@ export class ToolKeyStorage {
       }
       return;
     } catch (error) {
+      if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
       if (error instanceof SecureStoreError && error.code === 'UNAVAILABLE') {
         await this.saveToFile(toolName, key);
         return;
@@ -428,6 +432,9 @@ export class ToolKeyStorage {
       const key = await this.secureStore.get(toolName);
       if (key !== null) return key;
     } catch (error) {
+      if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
       if (error instanceof SecureStoreError && error.code === 'UNAVAILABLE') {
         // Keyring unavailable — fall through to file
       } else {
@@ -442,6 +449,9 @@ export class ToolKeyStorage {
     try {
       await this.secureStore.delete(toolName);
     } catch (error) {
+      if (isRuntimeReplacedError(error)) {
+        throw error;
+      }
       if (error instanceof SecureStoreError && error.code === 'UNAVAILABLE') {
         // Keyring unavailable — continue to delete file
       } else {

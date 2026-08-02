@@ -11,7 +11,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { test } from '@fast-check/vitest';
 import * as fc from 'fast-check';
 import type { AggregatedHookResult } from '../hookAggregator.js';
 import type { HookOutput, HookExecutionResult, HookConfig } from '../types.js';
@@ -599,38 +598,39 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HRUN-002, DELTA-HAPP-001
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        hasStopReason: fc.boolean(),
-        stopReason: fc.string({ minLength: 1, maxLength: 50 }),
-        continueIsFalse: fc.boolean(),
-      }),
-      { minLength: 1, maxLength: 8 },
-    ),
-  ])(
-    'METAMORPHIC: shouldStop=true iff at least one hook has continue===false @plan:PLAN-20250218-HOOKSYSTEM.P13',
-    (outputShapes) => {
-      const outputs = outputShapes.map((s) => ({
-        stopReason: s.hasStopReason ? s.stopReason : undefined,
-        continue: !s.continueIsFalse,
-      }));
+  it('METAMORPHIC: shouldStop=true iff at least one hook has continue===false @plan:PLAN-20250218-HOOKSYSTEM.P13', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            hasStopReason: fc.boolean(),
+            stopReason: fc.string({ minLength: 1, maxLength: 50 }),
+            continueIsFalse: fc.boolean(),
+          }),
+          { minLength: 1, maxLength: 8 },
+        ),
+        (outputShapes) => {
+          const outputs = outputShapes.map((s) => ({
+            stopReason: s.hasStopReason ? s.stopReason : undefined,
+            continue: !s.continueIsFalse,
+          }));
 
-      const aggregated = buildAggregated(outputs);
-      const processMethod = (
-        eventHandler as unknown as {
-          processCommonHookOutputFields: (
-            agg: AggregatedHookResult,
-          ) => ProcessedHookResult;
-        }
-      ).processCommonHookOutputFields.bind(eventHandler);
-      const result: ProcessedHookResult = processMethod(aggregated);
+          const aggregated = buildAggregated(outputs);
+          const processMethod = (
+            eventHandler as unknown as {
+              processCommonHookOutputFields: (
+                agg: AggregatedHookResult,
+              ) => ProcessedHookResult;
+            }
+          ).processCommonHookOutputFields.bind(eventHandler);
+          const result: ProcessedHookResult = processMethod(aggregated);
 
-      // Invariant: shouldStop === outputs.some(o => o.continue === false)
-      const expectedStop = outputs.some((o) => o.continue === false);
-      expect(result.shouldStop).toBe(expectedStop);
-    },
-  );
+          // Invariant: shouldStop === outputs.some(o => o.continue === false)
+          const expectedStop = outputs.some((o) => o.continue === false);
+          expect(result.shouldStop).toBe(expectedStop);
+        },
+      ),
+    ));
 
   /**
    * METAMORPHIC INVARIANT 2: normalizeStopReason is trim-idempotent
@@ -639,34 +639,36 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HRUN-002
    */
-  test.prop([
-    fc.oneof(
-      fc.string({ minLength: 1, maxLength: 100 }),
-      fc.string({ minLength: 1, maxLength: 50 }).map((s) => `  ${s}  `),
-      fc.string({ minLength: 1, maxLength: 50 }).map((s) => `\t${s}\n`),
-    ),
-  ])(
-    'METAMORPHIC: stopReason output is trim-idempotent @plan:PLAN-20250218-HOOKSYSTEM.P13',
-    (reason) => {
-      const aggregated = buildAggregated([
-        { stopReason: reason, continue: false },
-      ]);
+  it('METAMORPHIC: stopReason output is trim-idempotent @plan:PLAN-20250218-HOOKSYSTEM.P13', () =>
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          fc.string({ minLength: 1, maxLength: 100 }),
+          fc.string({ minLength: 1, maxLength: 50 }).map((s) => `  ${s}  `),
+          fc.string({ minLength: 1, maxLength: 50 }).map((s) => `\t${s}\n`),
+        ),
+        (reason) => {
+          const aggregated = buildAggregated([
+            { stopReason: reason, continue: false },
+          ]);
 
-      const processMethod = (
-        eventHandler as unknown as {
-          processCommonHookOutputFields: (
-            agg: AggregatedHookResult,
-          ) => ProcessedHookResult;
-        }
-      ).processCommonHookOutputFields.bind(eventHandler);
-      const result: ProcessedHookResult = processMethod(aggregated);
+          const processMethod = (
+            eventHandler as unknown as {
+              processCommonHookOutputFields: (
+                agg: AggregatedHookResult,
+              ) => ProcessedHookResult;
+            }
+          ).processCommonHookOutputFields.bind(eventHandler);
+          const result: ProcessedHookResult = processMethod(aggregated);
 
-      // Invariant: if stopReason is present, it should already be trimmed
-      if (result.stopReason !== undefined) {
-        expect(result.stopReason).toBe(result.stopReason.trim());
-      }
-    },
-  );
+          // Invariant: if stopReason is present, it should already be trimmed
+          expect(
+            result.stopReason === undefined ||
+              result.stopReason === result.stopReason.trim(),
+          ).toBe(true);
+        },
+      ),
+    ));
 
   /**
    * METAMORPHIC INVARIANT 3: log record count >= hook count
@@ -675,51 +677,52 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HTEL-001
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        success: fc.boolean(),
-        durationMs: fc.integer({ min: 0, max: 5000 }),
-      }),
-      { minLength: 1, maxLength: 8 },
-    ),
-  ])(
-    'METAMORPHIC: emitPerHookLogs emits at least one record per hook result @plan:PLAN-20250218-HOOKSYSTEM.P13',
-    (hookResultShapes) => {
-      const mockDebugLogger = createMockDebugLogger();
-      const mockConfig = createMockConfig();
-      const mockRegistry = new HookRegistry();
-      const mockPlanner = new HookPlanner(mockRegistry);
-      const mockRunner = new HookRunner(mockConfig as Config);
-      const mockAggregator = new HookAggregator();
+  it('METAMORPHIC: emitPerHookLogs emits at least one record per hook result @plan:PLAN-20250218-HOOKSYSTEM.P13', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            success: fc.boolean(),
+            durationMs: fc.integer({ min: 0, max: 5000 }),
+          }),
+          { minLength: 1, maxLength: 8 },
+        ),
+        (hookResultShapes) => {
+          const mockDebugLogger = createMockDebugLogger();
+          const mockConfig = createMockConfig();
+          const mockRegistry = new HookRegistry();
+          const mockPlanner = new HookPlanner(mockRegistry);
+          const mockRunner = new HookRunner(mockConfig as Config);
+          const mockAggregator = new HookAggregator();
 
-      const handler = new HookEventHandler(
-        mockConfig as Config,
-        mockRegistry,
-        mockPlanner,
-        mockRunner,
-        mockAggregator,
-        undefined, // messageBus
-        mockDebugLogger as unknown as DebugLogger,
-      );
+          const handler = new HookEventHandler(
+            mockConfig as Config,
+            mockRegistry,
+            mockPlanner,
+            mockRunner,
+            mockAggregator,
+            undefined, // messageBus
+            mockDebugLogger as unknown as DebugLogger,
+          );
 
-      const hookResults = buildHookResults(hookResultShapes);
-      const emitMethod = (
-        handler as unknown as {
-          emitPerHookLogs: (
-            eventName: HookEventName,
-            results: HookExecutionResult[],
-          ) => void;
-        }
-      ).emitPerHookLogs.bind(handler);
-      emitMethod(HookEventName.BeforeTool, hookResults);
+          const hookResults = buildHookResults(hookResultShapes);
+          const emitMethod = (
+            handler as unknown as {
+              emitPerHookLogs: (
+                eventName: HookEventName,
+                results: HookExecutionResult[],
+              ) => void;
+            }
+          ).emitPerHookLogs.bind(handler);
+          emitMethod(HookEventName.BeforeTool, hookResults);
 
-      // Invariant: each hook gets at least one record
-      expect(mockDebugLogger.logRecords.length).toBeGreaterThanOrEqual(
-        hookResultShapes.length,
-      );
-    },
-  );
+          // Invariant: each hook gets at least one record
+          expect(mockDebugLogger.logRecords.length).toBeGreaterThanOrEqual(
+            hookResultShapes.length,
+          );
+        },
+      ),
+    ));
 
   /**
    * METAMORPHIC INVARIANT 4: batch summary counts are consistent
@@ -728,68 +731,73 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HTEL-002
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        success: fc.boolean(),
-        durationMs: fc.integer({ min: 0, max: 5000 }),
-      }),
-      { minLength: 1, maxLength: 10 },
-    ),
-  ])(
-    'METAMORPHIC: batch summary successCount + failureCount === hookCount @plan:PLAN-20250218-HOOKSYSTEM.P13',
-    (hookResultShapes) => {
-      const mockDebugLogger = createMockDebugLogger();
-      const mockConfig = createMockConfig();
-      const mockRegistry = new HookRegistry();
-      const mockPlanner = new HookPlanner(mockRegistry);
-      const mockRunner = new HookRunner(mockConfig as Config);
-      const mockAggregator = new HookAggregator();
+  it('METAMORPHIC: batch summary successCount + failureCount === hookCount @plan:PLAN-20250218-HOOKSYSTEM.P13', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            success: fc.boolean(),
+            durationMs: fc.integer({ min: 0, max: 5000 }),
+          }),
+          { minLength: 1, maxLength: 10 },
+        ),
+        (hookResultShapes) => {
+          const mockDebugLogger = createMockDebugLogger();
+          const mockConfig = createMockConfig();
+          const mockRegistry = new HookRegistry();
+          const mockPlanner = new HookPlanner(mockRegistry);
+          const mockRunner = new HookRunner(mockConfig as Config);
+          const mockAggregator = new HookAggregator();
 
-      const handler = new HookEventHandler(
-        mockConfig as Config,
-        mockRegistry,
-        mockPlanner,
-        mockRunner,
-        mockAggregator,
-        undefined, // messageBus
-        mockDebugLogger as unknown as DebugLogger,
-      );
+          const handler = new HookEventHandler(
+            mockConfig as Config,
+            mockRegistry,
+            mockPlanner,
+            mockRunner,
+            mockAggregator,
+            undefined, // messageBus
+            mockDebugLogger as unknown as DebugLogger,
+          );
 
-      const hookResults = buildHookResults(hookResultShapes);
-      const totalDuration = hookResultShapes.reduce(
-        (sum, r) => sum + r.durationMs,
-        0,
-      );
-      const emitMethod = (
-        handler as unknown as {
-          emitBatchSummary: (
-            eventName: HookEventName,
-            results: HookExecutionResult[],
-            totalDuration: number,
-          ) => void;
-        }
-      ).emitBatchSummary.bind(handler);
-      emitMethod(HookEventName.BeforeTool, hookResults, totalDuration);
+          const hookResults = buildHookResults(hookResultShapes);
+          const totalDuration = hookResultShapes.reduce(
+            (sum, r) => sum + r.durationMs,
+            0,
+          );
+          const emitMethod = (
+            handler as unknown as {
+              emitBatchSummary: (
+                eventName: HookEventName,
+                results: HookExecutionResult[],
+                totalDuration: number,
+              ) => void;
+            }
+          ).emitBatchSummary.bind(handler);
+          emitMethod(HookEventName.BeforeTool, hookResults, totalDuration);
 
-      const summaryLogs = mockDebugLogger.logRecords.filter(
-        (r) => r.channel === 'hook:batch_summary',
-      );
+          const summaryLogs = mockDebugLogger.logRecords.filter(
+            (r) => r.channel === 'hook:batch_summary',
+          );
 
-      // Stub is no-op - but when implemented:
-      // Invariant: successCount + failureCount === hookCount
-      if (summaryLogs.length > 0) {
-        const summary = summaryLogs[0].record as {
-          hookCount: number;
-          successCount: number;
-          failureCount: number;
-        };
-        expect(summary.successCount + summary.failureCount).toBe(
-          summary.hookCount,
-        );
-      }
-    },
-  );
+          // Stub is no-op - but when implemented:
+          // Invariant: successCount + failureCount === hookCount
+          expect(
+            summaryLogs.length === 0 ||
+              (() => {
+                const summary = summaryLogs[0].record as {
+                  hookCount: number;
+                  successCount: number;
+                  failureCount: number;
+                };
+                return (
+                  summary.successCount + summary.failureCount ===
+                  summary.hookCount
+                );
+              })(),
+          ).toBe(true);
+        },
+      ),
+    ));
 
   /**
    * METAMORPHIC INVARIANT 5: first systemMessage wins
@@ -798,38 +806,39 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
    * @plan PLAN-20250218-HOOKSYSTEM.P13
    * @requirement DELTA-HRUN-003
    */
-  test.prop([
-    fc.array(
-      fc.record({
-        hasSystemMessage: fc.boolean(),
-        systemMessage: fc.string({ minLength: 1, maxLength: 100 }),
-      }),
-      { minLength: 1, maxLength: 5 },
-    ),
-  ])(
-    'METAMORPHIC: first systemMessage in allOutputs is surfaced @plan:PLAN-20250218-HOOKSYSTEM.P13',
-    (outputShapes) => {
-      const outputs = outputShapes.map((s) => ({
-        systemMessage: s.hasSystemMessage ? s.systemMessage : undefined,
-      }));
+  it('METAMORPHIC: first systemMessage in allOutputs is surfaced @plan:PLAN-20250218-HOOKSYSTEM.P13', () =>
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            hasSystemMessage: fc.boolean(),
+            systemMessage: fc.string({ minLength: 1, maxLength: 100 }),
+          }),
+          { minLength: 1, maxLength: 5 },
+        ),
+        (outputShapes) => {
+          const outputs = outputShapes.map((s) => ({
+            systemMessage: s.hasSystemMessage ? s.systemMessage : undefined,
+          }));
 
-      const aggregated = buildAggregated(outputs);
-      const processMethod = (
-        eventHandler as unknown as {
-          processCommonHookOutputFields: (
-            agg: AggregatedHookResult,
-          ) => ProcessedHookResult;
-        }
-      ).processCommonHookOutputFields.bind(eventHandler);
-      const result: ProcessedHookResult = processMethod(aggregated);
+          const aggregated = buildAggregated(outputs);
+          const processMethod = (
+            eventHandler as unknown as {
+              processCommonHookOutputFields: (
+                agg: AggregatedHookResult,
+              ) => ProcessedHookResult;
+            }
+          ).processCommonHookOutputFields.bind(eventHandler);
+          const result: ProcessedHookResult = processMethod(aggregated);
 
-      // Find first non-undefined systemMessage in outputs
-      const firstSystemMessage = outputs.find(
-        (o) => o.systemMessage !== undefined,
-      )?.systemMessage;
+          // Find first non-undefined systemMessage in outputs
+          const firstSystemMessage = outputs.find(
+            (o) => o.systemMessage !== undefined,
+          )?.systemMessage;
 
-      // Invariant: result.systemMessage === first systemMessage in outputs
-      expect(result.systemMessage).toBe(firstSystemMessage);
-    },
-  );
+          // Invariant: result.systemMessage === first systemMessage in outputs
+          expect(result.systemMessage).toBe(firstSystemMessage);
+        },
+      ),
+    ));
 });

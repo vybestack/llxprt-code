@@ -143,6 +143,7 @@ function makeReusedHistoryService(): HistoryService & {
   resetTokenAccounting: ReturnType<typeof vi.fn>;
   recalculateTotalTokens: ReturnType<typeof vi.fn>;
   setTokenizerFactory: ReturnType<typeof vi.fn>;
+  setActiveTokenizationTarget: ReturnType<typeof vi.fn>;
 } {
   return {
     add: vi.fn(),
@@ -150,6 +151,7 @@ function makeReusedHistoryService(): HistoryService & {
     setBaseTokenOffset: vi.fn(),
     estimateTokensForText: vi.fn().mockResolvedValue(100),
     setTokenizerFactory: vi.fn(),
+    setActiveTokenizationTarget: vi.fn(),
     resetTokenAccounting: vi.fn(),
     recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
     getTotalTokens: vi.fn().mockReturnValue(0),
@@ -160,6 +162,7 @@ function makeReusedHistoryService(): HistoryService & {
     resetTokenAccounting: ReturnType<typeof vi.fn>;
     recalculateTotalTokens: ReturnType<typeof vi.fn>;
     setTokenizerFactory: ReturnType<typeof vi.fn>;
+    setActiveTokenizationTarget: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -190,9 +193,11 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
 
     expect(reusedHistory.resetTokenAccounting).toHaveBeenCalledTimes(1);
     expect(reusedHistory.recalculateTotalTokens).toHaveBeenCalledTimes(1);
-    expect(reusedHistory.recalculateTotalTokens).toHaveBeenCalledWith(
+    expect(reusedHistory.setActiveTokenizationTarget).toHaveBeenCalledWith(
       'claude-3-5-sonnet-20241022',
+      'anthropic',
     );
+    expect(reusedHistory.recalculateTotalTokens).toHaveBeenCalledWith();
   });
 
   it('does NOT reset token accounting when creating a new HistoryService', async () => {
@@ -204,6 +209,7 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       generateTurnKey: vi.fn().mockReturnValue('turn-1'),
       setBaseTokenOffset: vi.fn(),
       estimateTokensForText: vi.fn().mockResolvedValue(100),
+      setActiveTokenizationTarget: vi.fn(),
       setTokenizerFactory: vi.fn(),
       resetTokenAccounting: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),

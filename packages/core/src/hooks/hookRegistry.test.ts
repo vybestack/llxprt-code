@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import { HookRegistry, ConfigSource } from './hookRegistry.js';
 import type { Storage } from '@vybestack/llxprt-code-settings';
 import { HookEventName, HookType } from './types.js';
 import type { Config } from '../config/config.js';
@@ -14,7 +13,7 @@ import type { HookDefinition } from './types.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock fs
-vi.mock('fs', () => ({
+vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
 }));
@@ -44,13 +43,23 @@ vi.mock('./trustedHooks.js', () => ({
   TrustedHooksManager: vi.fn(() => mockTrustManager),
 }));
 
+// Dynamic import AFTER vi.mock calls so the mock is applied.
+// Under Bun, static imports are resolved before vi.mock runs, so the
+// source module captures the real DebugLogger. Dynamic import ensures
+// the mock is registered first.
+const hookRegistryModule = await import('./hookRegistry.js');
+const HookRegistry = hookRegistryModule.HookRegistry;
+const ConfigSource = hookRegistryModule.ConfigSource;
+
 describe('HookRegistry', () => {
   let hookRegistry: HookRegistry;
   let mockConfig: Config;
   let mockStorage: Storage;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
+    // Re-establish hoisted mock return values that vi.resetAllMocks would clear
+    mockTrustManager.getUntrustedHooks.mockReturnValue([]);
 
     mockStorage = {
       getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt'),

@@ -147,7 +147,7 @@
     "vitest": "^3.2.6"
   },
   "dependencies": {
-    "@dqbd/tiktoken": "^1.0.21",
+    "@dqbd/tiktoken": "1.0.22",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "cors": "^2.8.5",

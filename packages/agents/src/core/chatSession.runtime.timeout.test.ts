@@ -217,6 +217,19 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
       localConfig.setProviderManager(localManager);
+      localConfig.setTokenizerFactory({
+        getTokenizer: () => undefined,
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
       let transports = 0;
       let pendingReads = 0;
       let firstTransportSignal: AbortSignal | undefined;
@@ -271,7 +284,8 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
             projectionRevision: 2,
             unsupportedMedia: [],
             transportToken,
-            countProjectedTokens: () => Promise.resolve(10),
+            finalizedProjection: Object.freeze({}),
+            legacyEstimate: () => Promise.resolve(10),
           };
         },
         getServerTools: () => [],
@@ -356,6 +370,19 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
       localConfig.setProviderManager(localManager);
+      localConfig.setTokenizerFactory({
+        getTokenizer: () => undefined,
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
 
       const capturedSignals: AbortSignal[] = [];
       const pendingReadsBySession: Record<string, number> = {};
@@ -383,7 +410,8 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
             projectionRevision: 2,
             unsupportedMedia: [],
             transportToken,
-            countProjectedTokens: () => Promise.resolve(10),
+            finalizedProjection: Object.freeze({}),
+            legacyEstimate: () => Promise.resolve(10),
           };
         },
         getServerTools: () => [],
