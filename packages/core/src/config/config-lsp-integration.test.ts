@@ -27,8 +27,8 @@ function containsAllSubstrings(value: string, parts: string[]): boolean {
 }
 
 // Mock dependencies
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
+vi.mock('fs', (importOriginal) => {
+  const actual = importOriginal() as typeof import('fs');
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
@@ -65,7 +65,7 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
       getAllTools: vi.fn(() => [...tools]),
       removeMcpToolsByServer: vi.fn((serverName: string) => {
         for (let i = tools.length - 1; i >= 0; i -= 1) {
-          if (tools[i].serverName === serverName) {
+          if (tools[i]?.serverName === serverName) {
             tools.splice(i, 1);
           }
         }
@@ -75,7 +75,7 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   return {
     ...actual,
     ToolRegistry: ToolRegistryMock,
-    MemoryTool: vi.fn(),
+    MemoryTool: class MemoryToolMock {},
     setLlxprtMdFilename: vi.fn(),
     getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
     DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
@@ -99,9 +99,9 @@ vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
   };
 });
 
-vi.mock('../core/contentGenerator.js', async (importOriginal) => {
+vi.mock('../core/contentGenerator.js', (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../core/contentGenerator.js')>();
+    importOriginal() as typeof import('../core/contentGenerator.js');
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -110,17 +110,13 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
 
 vi.mock('../telemetry/index.js', () => ({
   initializeTelemetry: vi.fn(),
-  DEFAULT_TELEMETRY_TARGET: 'local',
-  DEFAULT_OTLP_ENDPOINT: 'http://localhost:4318',
   logCliConfiguration: vi.fn(),
   StartSessionEvent: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) => {
   const actual =
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >();
+    importOriginal() as typeof import('@vybestack/llxprt-code-ide-integration');
   return {
     ...actual,
     IdeClient: {
@@ -149,21 +145,19 @@ vi.mock('@vybestack/llxprt-code-mcp', () => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     getMcpInstructions: vi.fn().mockReturnValue(''),
   })),
-  DiscoveredMCPTool: vi
-    .fn()
-    .mockImplementation(
-      (
-        _callableTool: unknown,
-        serverName: string,
-        serverToolName: string,
-        _description: string,
-        _inputSchema: unknown,
-      ) => ({
+  DiscoveredMCPTool: class DiscoveredMCPToolMock {
+    constructor(
+      _callableTool: unknown,
+      serverName: string,
+      serverToolName: string,
+    ) {
+      Object.assign(this, {
         serverName,
         serverToolName,
         name: `${serverName}__${serverToolName}`,
-      }),
-    ),
+      });
+    }
+  },
 }));
 
 vi.mock('../utils/extensionLoader.js', () => ({
@@ -646,7 +640,7 @@ describe('Config LSP Integration (P33)', () => {
       const config = new Config(params);
 
       // Should not throw
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
+      await initializeTestConfig(config);
 
       // Service is created and start was attempted (empty servers is valid)
       const lspClient = config.getLspServiceClient();
@@ -732,6 +726,7 @@ describe('Config LSP Integration (P33)', () => {
 
   describe('Shutdown without initialization', () => {
     it('should handle shutdown gracefully when service was never started', async () => {
+      expect.assertions(0);
       const params = createBaseConfigParams({
         lsp: false,
       });
@@ -739,7 +734,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       // Should not throw even though no service exists
-      await expect(config.shutdownLspService()).resolves.toBeUndefined();
+      await config.shutdownLspService();
     });
   });
 

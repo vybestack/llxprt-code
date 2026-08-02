@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 import { GeminiProvider } from './GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -46,10 +47,10 @@ const mockSettingsService = vi.hoisted(() => ({
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
     '@vybestack/llxprt-code-settings',
-  )),
+  ),
   getSettingsService: vi.fn(() => mockSettingsService),
   SETTINGS_REGISTRY: [],
 }));

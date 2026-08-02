@@ -39,6 +39,13 @@ export class ConfigurationManager {
   private ephemeralConfig: Partial<DebugSettings> | null = null;
   private mergedConfig!: DebugSettings;
   private listeners: Set<() => void> = new Set();
+  /**
+   * Incremented on every configuration merge. Consumers that only need to know
+   * "has the configuration changed since I last looked" poll this instead of
+   * subscribing, so the manager does not retain a strong reference to them
+   * (issue #2852).
+   */
+  private configVersion: number = 0;
 
   // Line 21-26: Singleton getInstance()
   static getInstance(): ConfigurationManager {
@@ -60,6 +67,7 @@ export class ConfigurationManager {
       redactPatterns: ['apiKey', 'token', 'password'],
     };
     this.listeners = new Set();
+    this.configVersion = 0;
     this.loadConfigurations();
     this.mergeConfigurations();
   }
@@ -161,8 +169,18 @@ export class ConfigurationManager {
       {},
     ) as DebugSettings;
 
+    this.configVersion += 1;
+
     // Notify all listeners of configuration change
     this.listeners.forEach((listener) => listener());
+  }
+
+  /**
+   * Monotonic counter that changes whenever the effective configuration is
+   * recomputed. See {@link configVersion}.
+   */
+  getConfigVersion(): number {
+    return this.configVersion;
   }
 
   // Line 113-121: Set CLI and ephemeral configs

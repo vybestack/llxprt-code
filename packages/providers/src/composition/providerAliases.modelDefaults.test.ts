@@ -14,12 +14,19 @@ import * as os from 'os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 // This test needs real config files plus temp dirs, not the global mock
-vi.unmock('./providerAliases.js');
 
 import {
   loadProviderAliasEntries,
   type ModelDefaultRule,
 } from './providerAliases.js';
+
+function expectNoImageResizeDefaults(
+  defaults: Readonly<Record<string, unknown>>,
+): void {
+  expect(defaults).not.toHaveProperty('image-resize.maxLongEdge');
+  expect(defaults).not.toHaveProperty('image-resize.maxShortEdge');
+  expect(defaults).not.toHaveProperty('image-resize.maxPixels');
+}
 
 /**
  * Helper to load entries from a temp user alias dir via Storage mock.
@@ -625,6 +632,53 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['context-limit']).toBe(1000000);
   });
 
+  it.each(['anthropic', 'claudecode'])(
+    '%s applies image limits to Opus and Sonnet families only',
+    (alias) => {
+      const entry = loadProviderAliasEntries().find(
+        (candidate) =>
+          candidate.alias === alias && candidate.source === 'builtin',
+      );
+      expect(entry).toBeDefined();
+      const rules = entry?.config.modelDefaults ?? [];
+      for (const model of [
+        'claude-opus-4-5-20251101',
+        'claude-opus-5',
+        'claude-sonnet-4-20250514',
+        'claude-sonnet-5',
+      ]) {
+        expect(computeMatchedDefaults(model, rules)).toMatchObject({
+          'image-resize.maxLongEdge': 1568,
+          'image-resize.maxShortEdge': 1568,
+          'image-resize.maxPixels': 1_229_312,
+        });
+      }
+      expectNoImageResizeDefaults(
+        computeMatchedDefaults('claude-haiku-4-5', rules),
+      );
+      expectNoImageResizeDefaults(
+        computeMatchedDefaults('claude-fable-5', rules),
+      );
+    },
+  );
+
+  it.each(['openai', 'openai-responses', 'openai-vercel', 'codex'])(
+    '%s applies image limits to every gpt- family model',
+    (alias) => {
+      const entry = loadProviderAliasEntries().find(
+        (candidate) =>
+          candidate.alias === alias && candidate.source === 'builtin',
+      );
+      expect(entry).toBeDefined();
+      const rules = entry?.config.modelDefaults ?? [];
+      expect(computeMatchedDefaults('gpt-future-vision', rules)).toMatchObject({
+        'image-resize.maxLongEdge': 2048,
+        'image-resize.maxShortEdge': 2048,
+        'image-resize.maxPixels': 1_572_864,
+      });
+      expectNoImageResizeDefaults(computeMatchedDefaults('o4-mini', rules));
+    },
+  );
   it('user anthropic.config with different modelDefaults shadows the builtin', async () => {
     const { Storage } = await import('@vybestack/llxprt-code-settings');
     const fakeLlxprtDir = path.join(tmpDir, '.llxprt');

@@ -17,6 +17,7 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -38,13 +39,19 @@ import {
   getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
-import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
+import {
+  isAnthropicOAuthBaseURL,
+  ANTHROPIC_DEFAULT_BASE_URL,
+} from './AnthropicEndpointUtils.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import {
   buildAnthropicCustomHeaders,
   createAnthropicApiCall,
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
+import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
@@ -54,6 +61,16 @@ export class AnthropicProvider extends BaseProvider {
 
   // Rate limit state tracking - updated on each API response
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
+  private readonly preparedPromptEnvelopes = new WeakMap<
+    object,
+    {
+      readonly requestContext: Awaited<
+        ReturnType<typeof prepareAnthropicRequest>
+      >;
+      readonly isOAuth: boolean;
+      readonly authToken: string;
+    }
+  >();
 
   constructor(
     apiKey?: string,
@@ -164,6 +181,41 @@ export class AnthropicProvider extends BaseProvider {
     return new Anthropic(clientConfig as ClientOptions);
   }
 
+  private async resolveClientAuthToken(
+    options: NormalizedGenerateChatOptions,
+    preparedAuthToken: string | undefined,
+  ): Promise<string> {
+    if (preparedAuthToken !== undefined) {
+      return preparedAuthToken;
+    }
+
+    const runtimeAuthToken: unknown = options.resolved.authToken;
+    if (
+      typeof runtimeAuthToken === 'string' &&
+      runtimeAuthToken.trim() !== ''
+    ) {
+      return runtimeAuthToken;
+    }
+    if (!isRuntimeAuthTokenProvider(runtimeAuthToken)) {
+      return this.getAuthTokenForPrompt();
+    }
+
+    try {
+      const freshToken = await runtimeAuthToken.provide();
+      if (!freshToken) {
+        throw new Error(
+          `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+        );
+      }
+      this.getAuthLogger().debug(() => 'Refreshed OAuth token for call');
+      return freshToken;
+    } catch (error) {
+      throw new Error(
+        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003)."): ${error}`,
+      );
+    }
+  }
+
   /**
    * @plan PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement REQ-SP4-002
@@ -173,37 +225,13 @@ export class AnthropicProvider extends BaseProvider {
   private async buildProviderClient(
     options: NormalizedGenerateChatOptions,
     telemetry?: ProviderTelemetryContext,
+    preparedAuthToken?: string,
   ): Promise<{ client: Anthropic; authToken: string }> {
     const authLogger = this.getAuthLogger();
-    const runtimeAuthToken: unknown = options.resolved.authToken;
-    let authToken: string | undefined;
-
-    if (
-      typeof runtimeAuthToken === 'string' &&
-      runtimeAuthToken.trim() !== ''
-    ) {
-      authToken = runtimeAuthToken;
-    } else if (isRuntimeAuthTokenProvider(runtimeAuthToken)) {
-      try {
-        const freshToken = await runtimeAuthToken.provide();
-        if (!freshToken) {
-          throw new Error(
-            `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
-          );
-        }
-        authToken = freshToken;
-        authLogger.debug(() => 'Refreshed OAuth token for call');
-      } catch (error) {
-        throw new Error(
-          `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003)."): ${error}`,
-        );
-      }
-    }
-
-    if (authToken === undefined || authToken === '') {
-      authToken = await this.getAuthTokenForPrompt();
-    }
-
+    const authToken = await this.resolveClientAuthToken(
+      options,
+      preparedAuthToken,
+    );
     const baseURL = options.resolved.baseURL;
     if (authToken === '') {
       authLogger.debug(
@@ -552,14 +580,27 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    const prepared =
+      options.promptEnvelopeTransportToken === undefined
+        ? undefined
+        : this.preparedPromptEnvelopes.get(
+            options.promptEnvelopeTransportToken,
+          );
+    if (
+      options.promptEnvelopeTransportToken !== undefined &&
+      prepared === undefined
+    ) {
+      throw new Error('Unknown Anthropic prompt-envelope transport token');
+    }
     const { client: initialClient, authToken } = await this.buildProviderClient(
       options,
       options.resolved.telemetry,
+      prepared?.authToken,
     );
-    const isOAuth = this.classifyOAuthToken(authToken);
-
-    const requestContext = await this.prepareRequestContext(options, isOAuth);
+    const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
+    const requestContext =
+      prepared?.requestContext ??
+      (await this.prepareRequestContext(options, isOAuth));
 
     const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
 
@@ -617,6 +658,41 @@ export class AnthropicProvider extends BaseProvider {
     });
   }
 
+  /**
+   * Project the finalized Anthropic Messages envelope (issue #2817).
+   *
+   * Runs the SAME `prepareAnthropicRequest` path transport uses, so the
+   * estimate is derived from the exact `requestBody` that will be sent. Request
+   * preparation still resolves prompt-bearing inputs such as memory and tools,
+   * but no client is constructed and no credential is exchanged. The OAuth
+   * flavor only selects tool-name prefixing and cache formatting, so it is
+   * derived from the already-resolved token when one is present.
+   */
+  async projectPromptEnvelope(
+    options: GenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
+    const normalized = await this.normalizeOptionsForProjection(options);
+    const authToken = await this.resolveProjectionAuthToken(normalized);
+    const isOAuth = this.classifyOAuthToken(authToken);
+    const requestContext = await this.prepareRequestContext(
+      normalized,
+      isOAuth,
+    );
+    const transportToken = Object.freeze({});
+    this.preparedPromptEnvelopes.set(transportToken, {
+      requestContext,
+      isOAuth,
+      authToken,
+    });
+    return projectAnthropicPromptEnvelope(requestContext.requestBody, {
+      transportToken,
+      unsupportedMedia: collectUnsupportedMedia(
+        normalized.contents,
+        (category) => category === 'image' || category === 'pdf',
+      ),
+    });
+  }
+
   private buildCustomHeaders(
     requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
     isOAuth: boolean,
@@ -670,7 +746,7 @@ export class AnthropicProvider extends BaseProvider {
     const baseURL = firstTruthyString(
       options.resolved.baseURL,
       this.getBaseURL(),
-      'https://api.anthropic.com',
+      ANTHROPIC_DEFAULT_BASE_URL,
     );
 
     return executeAnthropicApiCall({

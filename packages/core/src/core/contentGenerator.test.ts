@@ -122,8 +122,6 @@ describe('createContentGeneratorConfig', () => {
   } as unknown as Config;
 
   beforeEach(() => {
-    // Reset modules to re-evaluate imports and environment variables
-    vi.resetModules();
     // Restore process.env before each test
     process.env = { ...originalEnv };
     vi.clearAllMocks();

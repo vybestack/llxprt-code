@@ -110,7 +110,7 @@ llxprt --sandbox-profile-load dev "run shell command: curl -I https://example.co
 llxprt --sandbox-profile-load safe "run shell command: curl -I https://example.com"
 ```
 
-The second command should fail due to disabled network.
+On Linux containers or Seatbelt, the second command runs under the disabled-network policy and `curl` should fail. On macOS with Docker or Podman, startup instead fails before the container launches because the mandatory credential bridge requires container networking; enable networking or use Linux for network-off sandboxing.
 
 ## Step 5: validate SSH passthrough for git workflows
 

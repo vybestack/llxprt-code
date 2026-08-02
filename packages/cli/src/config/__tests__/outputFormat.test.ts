@@ -44,8 +44,6 @@ const baseArgv: CliArgs = {
   approvalMode: undefined,
   telemetry: undefined,
   checkpointing: undefined,
-  telemetryTarget: undefined,
-  telemetryOtlpEndpoint: undefined,
   telemetryLogPrompts: undefined,
   telemetryOutfile: undefined,
   allowedMcpServerNames: undefined,

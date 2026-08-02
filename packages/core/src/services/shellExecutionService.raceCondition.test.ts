@@ -20,8 +20,8 @@ const mockGetPty = vi.hoisted(() => vi.fn());
 vi.mock('@lydell/node-pty', () => ({
   spawn: mockPtySpawn,
 }));
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal();
+vi.mock('child_process', (importOriginal) => {
+  const actual = importOriginal() as typeof import('child_process');
   return {
     ...actual,
     spawn: mockCpSpawn,
@@ -207,6 +207,8 @@ describe('ShellExecutionService - Issue #983 Race Condition Tests', () => {
 
       // Advance time past the finalization timeout
       await vi.advanceTimersByTimeAsync(1000);
+      // Drain any remaining pending microtasks/timers
+      await vi.runAllTimersAsync();
 
       // The result should be available (not hanging)
       const result = await handle.result;

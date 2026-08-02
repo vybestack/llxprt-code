@@ -136,7 +136,7 @@ forces).
 
 ## Windows native-module smoke
 
-The nightly workflow runs `scripts/bun-native-modules-smoke.mjs` in a dedicated
+The nightly workflow runs `scripts/bun-native-modules-smoke.ts` in a dedicated
 `windows-latest` job. The harness exercises `@ast-grep/napi`, constructs an
 `@napi-rs/keyring` entry without credential I/O, parses Bash with
 `web-tree-sitter` and `tree-sitter-bash`, and spawns a real ConPTY process with
@@ -367,7 +367,7 @@ A dedicated CI job, `bun_install_smoke` in
 acceptance criterion: that a clean checkout installs and links every workspace
 under Bun. It pins the toolchain via `.bun-version` (`bun-version-file`), runs
 `bun install`, then verifies with a Node-compatible JavaScript verifier
-(`scripts/verify-bun-workspace-links.mjs` — the workflow invokes it with `bun`
+(`scripts/verify-bun-workspace-links.ts` — the workflow invokes it with `bun`
 to avoid relying on a runner-provided Node) that every declared workspace
 package resolves to its **in-repo** directory (using `realpathSync` to prove the
 `node_modules/<name>` entry is a link to the local workspace, not some other
@@ -474,7 +474,7 @@ equivalent:
 Additionally, Bun's `bun run <script>` does **not** invoke npm lifecycle
 hooks (`pretest` / `posttest`) the way `npm run <script>` does. The agents
 package uses a `pretest` hook to run its API-surface guard
-(`scripts/check-agents-api-surface.mjs`); running tests via `bun run test`
+(`scripts/check-agents-api-surface.ts`); running tests via `bun run test`
 would silently skip it.
 
 ### The `test:bun` entry point
@@ -575,6 +575,8 @@ plugins. The shim at `test-setup/augment-bun-vi.ts` augments Bun's injected
   auto-advance fake timers under Bun (see `setWaitForScheduler` in
   `stub-helpers.ts`).
 - `vi.mock` / `vi.doMock` — overridden to pass `importOriginal` to factories
+- `vi.clearAllTimers` — guarded no-op when fake timers are not active
+  (Vitest treats this as a no-op; Bun throws "Fake timers are not active")
 
 The root `bunfig.toml` and migrated workspace configurations preload this
 shim. Workspace paths are relative to that workspace, for example:
@@ -622,8 +624,9 @@ explicitly listed in the manifest (`scripts/bun-test-manifest.ts`). Files
 that are not Bun-compatible are simply absent from the manifest rather than
 excluded at invocation time.
 
-Only `packages/a2a-server`, `packages/cli`, and `packages/providers` define a
-package-level `test:bun` script; each passes its exact manifest workspace name.
+Only `packages/a2a-server`, `packages/cli`, `packages/providers`,
+`packages/telemetry`, and `packages/test-utils` define a package-level
+`test:bun` script; each passes its exact manifest workspace name.
 The native `core` and `test-setup` entries are run through the root runner
 instead: `bun scripts/run_bun_tests.ts --workspace core` and
 `bun scripts/run_bun_tests.ts --workspace test-setup`. The root package's own

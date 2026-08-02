@@ -219,3 +219,20 @@ export function recordModelRoutingMetrics(
   // Placeholder implementation for model routing metrics
   // This would record metrics about model selection and routing decisions
 }
+
+/**
+ * Resets all module-level metric state. Called from `shutdownTelemetry` so
+ * that a subsequent re-initialization creates fresh instruments on a
+ * replacement provider. Also used between tests under Bun's single-module
+ * process model (Vitest used vi.resetModules() instead).
+ */
+export function resetMetricsState(): void {
+  cliMeter = undefined;
+  toolCallCounter = undefined;
+  toolCallLatencyHistogram = undefined;
+  apiRequestCounter = undefined;
+  apiRequestLatencyHistogram = undefined;
+  tokenUsageCounter = undefined;
+  fileOperationCounter = undefined;
+  isMetricsInitialized = false;
+}

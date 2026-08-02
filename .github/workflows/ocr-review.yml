@@ -88,7 +88,7 @@ env:
   # Disable colorized CLI output so text parsers (e.g. the changed-test
   # scope guard) always see plain text.
   NO_COLOR: '1'
-  OCR_VERSION: '1.7.17'
+  OCR_VERSION: '1.8.4'
   # Issue #2673: workflow_dispatch canaries select OCR concurrency (2, 3, or
   # 4). All other (automatic/comment) triggers resolve to the evidence-backed
   # default of 3 (canary 3 showed 43% speedup over 2 with zero 429s/retries).
@@ -154,15 +154,18 @@ jobs:
     steps:
       - name: Decide auto-review limit
         id: auto-decide
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
           OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
           OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2'
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_USER_TYPE: ${{ github.event.comment.user.type }}
+          COMMENT_USER_LOGIN: ${{ github.event.comment.user.login }}
+          COMMENT_ID: ${{ github.event.comment.id }}
           CHANGES_FROM: ${{ github.event.changes.body.from }}
         with:
           script: |
@@ -176,6 +179,8 @@ jobs:
             const eventAction = process.env.EVENT_ACTION || '';
             const commentBody = process.env.COMMENT_BODY || '';
             const commentUserType = process.env.COMMENT_USER_TYPE || '';
+            const commentUserLogin = process.env.COMMENT_USER_LOGIN || '';
+            const commentIdRaw = process.env.COMMENT_ID || '';
             const changesFrom = process.env.CHANGES_FROM || '';
             const limitRaw = process.env.OCR_AUTO_REVIEW_LIMIT ||
               process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2';
@@ -188,23 +193,166 @@ jobs:
               (eventName === 'issue_comment' && eventAction === 'created');
             const isEditedComment =
               eventName === 'issue_comment' && eventAction === 'edited';
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
+            // Issue #2860 Q1: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              apiLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+            }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
 
             // ----- Helpers -----
 
-            function parseHiddenCount(body) {
-              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(body || '');
-              return match ? Number(match[1]) : 0;
-            }
-
-            async function fetchMarkerComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, {
+            async function fetchCommentsOnce() {
+              return github.paginate(github.rest.issues.listComments, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: number,
                 per_page: 100,
               });
-              return comments.find((c) =>
-                typeof c.body === 'string' && c.body.includes(MARKER)) || null;
             }
 
             function replaceHiddenState(body, count) {
@@ -218,11 +366,13 @@ jobs:
             // ----- Checkbox-reset detection (issue_comment.edited) -----
 
             if (isEditedComment) {
-              // Only act on edits to a bot-authored OCR marker comment.
-              const containsMarker =
-                typeof commentBody === 'string' && commentBody.includes(MARKER);
-              const wasBot = commentUserType === 'Bot';
-              if (!containsMarker || !wasBot) {
+              const commentIdNum = Number(commentIdRaw);
+              const eventComment = {
+                id: commentIdNum,
+                body: commentBody,
+                user: { type: commentUserType, login: commentUserLogin },
+              };
+              if (!isTrustedMarkerComment(eventComment, trustedLogins, MARKER)) {
                 core.setOutput('auto-should-run', 'false');
                 core.setOutput('suspended', 'false');
                 core.setOutput('is-manual', 'false');
@@ -232,20 +382,26 @@ jobs:
               const wasUnchecked = /-\s*\[\s\]\s*Re-enable automatic reviews/.test(changesFrom);
               const nowChecked = /-\s*\[[xX]\]\s*Re-enable automatic reviews/.test(commentBody);
               if (wasUnchecked && nowChecked) {
-                // Reset the counter to 0 in the hidden state of the comment
-                // and immediately allow a review on the current head.
-                // If the reset write fails, do NOT proceed — otherwise the
-                // stale count in the comment would cause a premature
-                // suspension on the next automatic trigger.
                 let resetSucceeded = false;
                 try {
                   let marker = null;
+                  let editedIsTrustedMarker = false;
                   try {
-                    marker = await fetchMarkerComment();
+                    const resetComments = await fetchCommentsOnce();
+                    marker = canonicalMarkerComment(resetComments, trustedLogins, MARKER);
+                    // The edit must land on a trusted marker, but it need not
+                    // be the canonical one: duplicates can exist transiently
+                    // and the user checks whichever box they can see. Requiring
+                    // identity with the canonical comment would silently ignore
+                    // a legitimate re-enable. Trust still comes from
+                    // isTrustedMarkerComment above, so an unrelated bot editing
+                    // its own marker cannot reach here.
+                    editedIsTrustedMarker = trustedMarkerComments(resetComments, trustedLogins, MARKER)
+                      .some((candidate) => candidate.id === commentIdNum);
                   } catch (fetchErr) {
                     core.warning(`Failed to fetch marker comment for checkbox reset: ${fetchErr.message || fetchErr}`);
                   }
-                  if (marker) {
+                  if (marker && editedIsTrustedMarker) {
                     const resetBody = replaceHiddenState(marker.body, 0);
                     await github.rest.issues.updateComment({
                       owner: context.repo.owner,
@@ -275,10 +431,8 @@ jobs:
 
             let currentCount = 0;
             try {
-              const marker = await fetchMarkerComment();
-              if (marker && typeof marker.body === 'string') {
-                currentCount = parseHiddenCount(marker.body);
-              }
+              const countComments = await fetchCommentsOnce();
+              currentCount = resolveHiddenAutoCount(countComments, trustedLogins, MARKER);
             } catch (fetchErr) {
               core.warning(`Failed to read OCR sticky comment for auto-review state: ${fetchErr.message || fetchErr}`);
             }
@@ -314,12 +468,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Post OCR suspension message
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           PR_NUMBER: ${{ format('{0}', github.event.pull_request.number || github.event.issue.number || inputs.pr_number) }}
           CURRENT_COUNT: ${{ needs.auto-review-gate.outputs.current-count }}
           OCR_AUTO_REVIEW_LIMIT: ${{ vars.OCR_AUTO_REVIEW_LIMIT }}
           OCR_AUTO_REVIEW_LIMIT_DEFAULT: '2'
+          OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
         with:
           script: |
             const MARKER = '<!-- llxprt-code-ocr-review -->';
@@ -337,6 +492,156 @@ jobs:
               : Number(process.env.OCR_AUTO_REVIEW_LIMIT_DEFAULT || '2');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
+            // Issue #2860 Q1: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
+            try {
+              const { data: botUser } = await github.rest.users.getAuthenticated();
+              apiLogin = botUser.login || '';
+            } catch (e) {
+              core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
+            }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
 
             const NEWLINE = String.fromCharCode(10);
             const suspensionBlock = [
@@ -355,14 +660,45 @@ jobs:
               '<!-- ocr-auto-count:' + currentCount + ' -->',
             ].join(NEWLINE);
 
-            async function reconcileMarkerComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, {
+            async function fetchMarkerComments() {
+              const allComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              const markerComments = comments.filter((comment) =>
-                comment.body && comment.body.includes(MARKER));
-              const existing = markerComments[0];
-              for (const duplicate of markerComments.slice(1)) {
+              return trustedMarkerComments(allComments, trustedLogins, MARKER);
+            }
+
+            function selectCanonicalMarker(markerComments) {
+              return markerComments.length > 0 ? markerComments[0] : null;
+            }
+
+            function newestCheckpointFromMarkers(markerComments) {
+              const checkpointPattern = /<!--\s*ocr-checkpoint:\s*([\s\S]*?)\s*-->/;
+              let result = null;
+              for (const comment of markerComments) {
+                const match = checkpointPattern.exec(String(comment.body || ''));
+                if (match && match[1].trim()) {
+                  result = match[0];
+                }
+              }
+              return result;
+            }
+
+            function resolveMergedMaxCount(markerComments) {
+              let max = 0;
+              for (const comment of markerComments) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+
+            async function deleteDuplicateMarkerComments(markerComments, keepId) {
+              for (const duplicate of markerComments) {
+                if (duplicate.id === keepId) {
+                  continue;
+                }
                 try {
                   await github.rest.issues.deleteComment({
                     owner, repo, comment_id: duplicate.id,
@@ -372,45 +708,77 @@ jobs:
                   core.warning(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`);
                 }
               }
-              return existing || null;
             }
 
-            try {
-              let existing = null;
-              try {
-                existing = await reconcileMarkerComment();
-              } catch (reconcileErr) {
-                core.warning(`Reconciliation failed before suspension posting; attempting create: ${reconcileErr.message || reconcileErr}`);
-              }
-              // Preserve the previous review summary by appending the
-              // suspension notice to the existing body (minus old markers).
-              let finalBody = suspensionBlock;
-              if (existing && typeof existing.body === 'string') {
-                const preserved = existing.body
+            // Build the suspension body from a specific snapshot of marker
+            // comments. Recomputed on the retry path so a marker posted
+            // concurrently between the two fetches cannot have its higher
+            // count or newer checkpoint overwritten by stale state.
+            function buildSuspensionBody(markerSnapshot) {
+              const snapshotCanonical = selectCanonicalMarker(markerSnapshot);
+              const mergedMaxCount = resolveMergedMaxCount(markerSnapshot);
+              const mergedCheckpoint = newestCheckpointFromMarkers(markerSnapshot);
+              let body = suspensionBlock;
+              if (snapshotCanonical && typeof snapshotCanonical.body === 'string') {
+                const preserved = snapshotCanonical.body
                   .replace(MARKER, '')
                   .replace(/<!--\s*ocr-auto-count:\s*\d+\s*-->/g, '')
                   .replace(/<!--\s*ocr-suspended:\s*(?:true|false)\s*-->/g, '')
+                  .replace(/<!--\s*ocr-checkpoint:[\s\S]*?-->/g, '')
                   .replace(/## OpenCodeReview — automatic reviews suspended[\s\S]*$/, '')
                   .trim();
                 if (preserved) {
-                  finalBody = suspensionBlock + NEWLINE + NEWLINE + '---' + NEWLINE + NEWLINE + preserved;
+                  body = suspensionBlock + NEWLINE + NEWLINE + '---' + NEWLINE + NEWLINE + preserved;
                 }
               }
-              if (existing) {
+              if (mergedMaxCount > currentCount) {
+                body = body.replace(
+                  /<!--\s*ocr-auto-count:\s*\d+\s*-->/g,
+                  '',
+                );
+                body += NEWLINE + '<!-- ocr-auto-count:' + mergedMaxCount + ' -->';
+              }
+              if (mergedCheckpoint) {
+                body += NEWLINE + mergedCheckpoint;
+              }
+              return body;
+            }
+
+            try {
+              let markerComments = [];
+              try {
+                markerComments = await fetchMarkerComments();
+              } catch (fetchErr) {
+                core.warning(`Failed to fetch marker comments for suspension: ${fetchErr.message || fetchErr}`);
+              }
+              const canonical = selectCanonicalMarker(markerComments);
+              const finalBody = buildSuspensionBody(markerComments);
+              if (canonical) {
                 await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body: finalBody,
+                  owner, repo, comment_id: canonical.id, body: finalBody,
                 });
+                await deleteDuplicateMarkerComments(markerComments, canonical.id);
               } else {
                 try {
                   await github.rest.issues.createComment({
                     owner, repo, issue_number: number, body: finalBody,
                   });
                 } catch (createErr) {
-                  const reconciled = await reconcileMarkerComment();
-                  if (reconciled) {
+                  let retryMarkers = [];
+                  try {
+                    retryMarkers = await fetchMarkerComments();
+                  } catch (retryErr) {
+                    core.warning(`Post-create re-fetch failed: ${retryErr.message || retryErr}`);
+                  }
+                  const retryCanonical = selectCanonicalMarker(retryMarkers);
+                  if (retryCanonical) {
+                    // Recompute from the fresh snapshot: a concurrent marker
+                    // may carry a higher count or newer checkpoint than the
+                    // body built before the create attempt.
                     await github.rest.issues.updateComment({
-                      owner, repo, comment_id: reconciled.id, body: finalBody,
+                      owner, repo, comment_id: retryCanonical.id, body: buildSuspensionBody(retryMarkers),
                     });
+                    await deleteDuplicateMarkerComments(retryMarkers, retryCanonical.id);
                   } else {
                     throw createErr;
                   }
@@ -423,7 +791,7 @@ jobs:
   code-review:
     name: OpenCodeReview
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     # Infrastructure failures are intentionally non-blocking for PR checks, but
     # this output lets downstream jobs distinguish a completed OCR review from a
     # review that could not run because of provider, install, or script issues.
@@ -449,7 +817,7 @@ jobs:
       needs.auto-review-gate.outputs.auto-should-run == 'true'
     steps:
       - name: Resolve PR context
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         id: pr-context
         with:
           script: |
@@ -478,11 +846,16 @@ jobs:
       - name: Checkout trusted base
         # Fork-safety keystone: check out the trusted base branch (never the
         # PR head) so the working tree never reflects PR-supplied files.
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
         with:
           ref: ${{ steps.pr-context.outputs.trusted_base_sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
 
       - name: Fetch PR head and compute merge-base
         shell: bash
@@ -551,7 +924,7 @@ jobs:
 
       - name: Read OCR checkpoint
         id: read-checkpoint
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           PR_NUMBER: ${{ steps.pr-context.outputs.number }}
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
@@ -562,6 +935,144 @@ jobs:
             const number = Number(process.env.PR_NUMBER);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
 
             function deserializeCheckpoint(base64) {
               const normalized = typeof base64 === 'string' ? base64.trim() : '';
@@ -588,28 +1099,54 @@ jobs:
               return match ? deserializeCheckpoint(match[1]) : null;
             }
 
-            let botLogin = '';
+            // Issue #2860 I2: a checkpoint is "usable" only if it is
+            // structurally complete (schema 1, complete, 40-hex head/base).
+            // This is checkpoint-specific, so it is kept OUT of the canonical
+            // trusted-marker snippet.
+            const SHA_PATTERN = /^[0-9a-f]{40}$/i;
+            function isUsableCheckpoint(checkpoint) {
+              return Boolean(
+                checkpoint
+                  && typeof checkpoint === 'object'
+                  && checkpoint.schema === 1
+                  && checkpoint.completion_state === 'complete'
+                  && typeof checkpoint.head_sha === 'string'
+                  && SHA_PATTERN.test(checkpoint.head_sha)
+                  && typeof checkpoint.base_sha === 'string'
+                  && SHA_PATTERN.test(checkpoint.base_sha),
+              );
+            }
+
+            // Issue #2860: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
             try {
               const { data: botUser } = await github.rest.users.getAuthenticated();
-              botLogin = botUser.login || '';
+              apiLogin = botUser.login || '';
             } catch (e) {
               core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
-              botLogin = process.env.OCR_BOT_LOGIN || '';
             }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number: number, per_page: 100,
             });
-            const markerComment = comments.find((comment) =>
-              comment.user && comment.user.type === 'Bot'
-                && botLogin !== '' && comment.user.login === botLogin
-                && typeof comment.body === 'string' && comment.body.includes(MARKER));
+            // Issue #2860 I2: three-tier selection — prefer the newest trusted
+            // marker carrying a structurally usable checkpoint; else the newest
+            // trusted marker carrying any ocr-checkpoint comment; else the
+            // canonical (oldest) trusted marker.
+            const markerComment =
+              newestTrustedMarkerMatching(comments, trustedLogins, MARKER, (c) => isUsableCheckpoint(extractCheckpointFromComment(c.body))) ||
+              newestTrustedMarkerMatching(comments, trustedLogins, MARKER, (c) => checkpointPattern.test(String(c.body || ''))) ||
+              canonicalMarkerComment(comments, trustedLogins, MARKER);
             const encodedMatch = markerComment
               ? checkpointPattern.exec(markerComment.body)
               : null;
             const checkpoint = markerComment
               ? extractCheckpointFromComment(markerComment.body)
               : null;
-            const shaPattern = /^[0-9a-f]{40}$/i;
+            const shaPattern = SHA_PATTERN;
             core.setOutput('CHECKPOINT_FOUND', String(Boolean(encodedMatch)));
             core.setOutput('CHECKPOINT_VALID', String(Boolean(checkpoint)));
             core.setOutput('CHECKPOINT_SCHEMA', String(checkpoint?.schema ?? ''));
@@ -905,12 +1442,28 @@ jobs:
         # is written from this trusted workflow only (env-provided JSON); no
         # PR-supplied OCR rules are ever loaded.
         #
+        # The "rules" array carries generation-time prompt calibration (issue
+        # #2678): senior-engineer review priorities, severity calibration,
+        # JSDoc/documentation suppression, resource-leak emphasis, and the
+        # maintainability-nit / test-suggestion suppressions that reduce
+        # low-value noise. It explicitly protects bug/correctness/security
+        # findings from suppression. When this calibration text changes, bump
+        # the OCR_RULES_HASH repo variable so incremental-review checkpoints
+        # invalidate and the updated rules take effect.
+        #
         # Include patterns cover this TypeScript monorepo's test layout:
         # *.test.ts(x), *.spec.ts(x), *.test.js(x), *.spec.js(x),
         # *.test.mjs/cjs, *.spec.mjs/cjs, __tests__/**, tests/**, test/**.
         env:
           OCR_RULES_JSON: |
             {
+              "rules": [
+                {
+                  "path": "**/*",
+                  "merge_system_rule": true,
+                  "rule": "Perform a thorough, senior-engineer review. Prioritize, in order: (1) Correctness/logic bugs — trace control flow, off-by-one, inverted conditions, wrong operator, state/race conditions, resource leaks, missing error/exception handling paths (including async rejections and promises whose catch does not cover synchronous throws in arguments). (2) Contract/intent mismatches — where the code's behavior contradicts its comments, names, or documented intent. (3) Edge cases & boundary conditions — empty/null/undefined, negative numbers, very large inputs, concurrent/early-init scenarios. (4) Type safety — avoid erasing discriminated unions to Record<string,unknown> or any; prefer narrowing. (5) Security — injection, unvalidated input, secrets. (6) Maintainability — dead/unreachable code, duplication, non-idiomatic patterns. For test files specifically: scrutinize whether assertions test behavior vs. implementation details (mock/spy call-counts are weak), coverage of edge/error cases, and missing scenarios. Always report each finding with the exact file path and line range, a concrete root-cause explanation, and a minimal fix. Do not speculate without grounding in the shown code. Additionally, enforce lint/complexity policy invariance and treat any weakening of static-analysis guardrails as High priority: (a) new suppression directives anywhere — eslint-disable / eslint-disable-next-line / eslint-disable-line / eslint-enable, file-level /* eslint-disable */, or TypeScript @ts-ignore / @ts-expect-error / @ts-nocheck; (b) any ESLint rule severity downgrade (error->warn or error->off) or a new 'off' entry; (c) any INCREASE to a complexity/size threshold (complexity, max-lines, max-lines-per-function, max-statements, max-params, max-depth, sonarjs/cognitive-complexity, or a 'max:' object option); (d) additions to .eslintignore or a config 'ignores:' block that excludes source from linting. For each, require that the underlying issue be fixed rather than silenced or loosened.\n\nSeverity and noise calibration: Do NOT report JSDoc/comment/documentation-only issues unless the comment actively contradicts the code, is an API/user-facing contract likely to mislead future maintainers/agents, or hides a real behavior mismatch. Do not nitpick missing/extra blank lines, comment completeness, wording, or whether a helper is called pure unless that wording materially misleads a future implementer into unsafe changes. Prefer code-behavior findings over comment/style findings. Reserve 'high' severity for correctness/security defects that cause wrong behavior, data loss, or vulnerabilities. Use 'medium' for behavioral concerns with real impact (error handling gaps, resource leaks, race conditions). Use 'low' only for minor style/maintainability items that do not affect behavior.\n\nDo NOT create exhaustive test-wishlist churn. Report missing tests only when the missing scenario protects issue-critical behavior, a plausible regression, cleanup/retry/error paths, security/isolation boundaries, concurrency/race behavior, or previously observed failures. Avoid requesting tests for trivial implementation details when equivalent behavior is already covered.\n\nDo treat resource leaks, async/sync cleanup gaps, swallowed cleanup failures, orphaned processes/sockets/tempdirs, race windows, unhandled promise/synchronous-throw paths, and state reset after failed cleanup as real code-quality findings. Do not down-rank these as mere edge-case nits when they can leak resources, orphan processes, mask failures, or break recoverability. Classify plausible leaks/recoverability bugs at least Medium, High when they can corrupt state, lose access to resources, or affect unrelated sessions.\n\nMaintainability-nit suppression (issue #2678): Do NOT report the following low-value maintainability patterns: (1) Hardcoded constants that are build-time, configuration, or test-fixture values — these are intentional and not a code smell; do not flag a constant in a build script, config, or test fixture as something that should be extracted or parameterized. (2) Error/diagnostic verbosity — do not suggest adding more arguments or context to error messages or spawn/process diagnostics unless the current diagnostics are actively misleading or missing actionable information needed to diagnose a real failure. (3) Naming style — do not suggest that a variable, function, or parameter name 'could be more descriptive' unless the name is actively misleading about the value or behavior it represents. (4) Modularity refactors — do not suggest extracting code to a shared file or helper 'for future reuse' unless there is active duplication (three or more copies of the same logic) that hurts maintainability today. These are style preferences, not defects.\n\nTest-suggestion suppression (issue #2678): Do NOT suggest adding a test unless a specific untested code path has a plausible defect (not merely 'untested'). Do not suggest refactoring existing test structure or adding tests that would change behavior. The codebase has established test patterns (contract, behavioral, structural); respect them and do not propose test reorganization.\n\nSignal preservation: Do NOT suppress bug, correctness, or security findings at any severity. These categories are the primary signal and must always be reported regardless of the suppression guidance above. Only low-value maintainability style-nits and non-actionable test suggestions are being suppressed.\n\nBefore returning findings, deduplicate by factual root cause or invariant. When one root cause affects multiple locations, emit one representative finding at the best current-source location and explicitly list every additional affected path or symbol as members; do not emit semantically equivalent rephrasings. Keep identical prose about different symbols or distinct invariants separate. Immediately before emitting each finding, re-read the current source and verify the path, symbol, line range, and quoted existing code. Correct mismatches and omit claims not supported by current source, tests, or contracts. Treat every finding as a hypothesis, not authority."
+                }
+              ],
               "include": [
                 "**/*.test.{js,jsx,mjs,cjs,ts,tsx}",
                 "**/*.spec.{js,jsx,mjs,cjs,ts,tsx}",
@@ -1173,27 +1726,70 @@ jobs:
             mark_infrastructure_failure "preview" "OCR preview normalization failed"
             exit 0
           fi
-          if ! grep -Eq '^Will review[[:space:]]*\([0-9]+\):' ocr-preview.txt; then
+          if ! node <<'NODE'
+          const fs = require('fs');
+
+          function previewSelectionFromOutput(output) {
+            const lines = String(output).split(/\r?\n/);
+            const headingIndexes = [];
+            for (let index = 0; index < lines.length; index += 1) {
+              if (/^Will review\s*\(/.test(lines[index])) {
+                headingIndexes.push(index);
+              }
+            }
+            if (headingIndexes.length !== 1) {
+              throw new Error('OCR preview must contain exactly one Will review heading');
+            }
+            const headingIndex = headingIndexes[0];
+            const heading = /^Will review\s*\(([^)]*)\):\s*$/.exec(lines[headingIndex]);
+            if (!heading || !/^\d+$/.test(heading[1])) {
+              throw new Error('OCR preview Will review count is malformed');
+            }
+            const declaredCount = Number(heading[1]);
+            if (!Number.isSafeInteger(declaredCount) || declaredCount < 0) {
+              throw new Error('OCR preview Will review count is unsafe');
+            }
+            const selected = [];
+            const seen = new Set();
+            for (const rawLine of lines.slice(headingIndex + 1)) {
+              if (/^[A-Za-z][A-Za-z ]*\s*\(\d+\):\s*$/.test(rawLine)) {
+                break;
+              }
+              let path = rawLine.trim()
+                .replace(/^[-*]\s*/, '')
+                .replace(/^\[[^\]]*\]\s*/, '')
+                .replace(/\s+[-+]\d+(?:\s+[-+]\d+)?\s*$/, '')
+                .trim();
+              if ((path.startsWith('"') && path.endsWith('"'))
+                || (path.startsWith("'") && path.endsWith("'"))) {
+                path = path.slice(1, -1).trim();
+              }
+              if (path && !seen.has(path)) {
+                seen.add(path);
+                selected.push(path);
+              }
+            }
+            if (selected.length !== declaredCount) {
+              throw new Error(`OCR preview declared ${declaredCount} files but yielded ${selected.length} unique paths`);
+            }
+            return Object.freeze(selected);
+          }
+
+          const selected = previewSelectionFromOutput(
+            fs.readFileSync('ocr-preview.txt', 'utf8'),
+          );
+          fs.writeFileSync(
+            'ocr-selected-files.txt',
+            selected.length > 0 ? `${selected.join('\n')}\n` : '',
+          );
+          NODE
+          then
             echo "1" > ocr-exit-code.txt
-            mark_infrastructure_failure "preview" "OCR preview output was malformed"
+            mark_infrastructure_failure "preview" "OCR preview extraction or cardinality validation failed"
             exit 0
           fi
           echo "true" > ocr-preview-succeeded.txt
-          reviewed="$(awk '
-            BEGIN { IGNORECASE = 1; in_section = 0 }
-            /^Will review[[:space:]]*\(/ { in_section = 1; next }
-            /^[[:alpha:] ]+[[:space:]]*\([0-9]+\):/ { in_section = 0 }
-            in_section { print }
-          ' ocr-preview.txt || true)"
-          printf '%s\n' "$reviewed" | sed -e 's/^[[:space:]]*//' \
-            -e 's/^[-*][[:space:]]*//' \
-            -e 's/^\[[^]]*\][[:space:]]*//' \
-            -e 's/^"\(.*\)"$/\1/' \
-            -e "s/^'\(.*\)'$/\1/" \
-            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
-            -e 's/[[:space:]]\{1,\}[-+][0-9]*[[:space:]]*$//' \
-            | grep -v '^[[:space:]]*$' \
-            | awk '!seen[$0]++' > ocr-selected-files.txt || true
+          reviewed="$(cat ocr-selected-files.txt)"
           if [ -n "$changed_tests" ]; then
             echo "Changed test/spec files detected that must be reviewed:"
             echo "$changed_tests"
@@ -1699,15 +2295,45 @@ jobs:
           printf '%s' "$ocr_status" > ocr-status.txt
           echo "$status" > ocr-exit-code.txt
           if [ "$status" -ne 0 ]; then
-            if grep -Eqi "429|rate limit" ocr-stderr.log; then
+            # OCR >= 1.8.0 writes a structured usage record (emitFailureUsage)
+            # to stderr whenever a --format json review fails: a pretty-printed
+            # top-level JSON object whose braces sit alone at column 0, holding
+            # token counters, tool-call tallies and a session id. Those numbers
+            # are accounting, not diagnostics, so drop the record before
+            # classifying — otherwise a counter that happens to equal 429, 529,
+            # 401 or 403 is read as an HTTP status.
+            #
+            # Only an object carrying the record's own signature (both the
+            # "summary" and "tool_calls" members at the encoder's two-space
+            # indent) is dropped; every other column-0 JSON object is buffered
+            # and replayed, so a pretty-printed provider error payload keeps
+            # its status code. The status-code patterns below are additionally
+            # matched at token boundaries so a long counter or a hex session id
+            # outside the record cannot match either.
+            ocr_diagnostics="$(awk '
+              /^\{$/ { buffered = $0; in_object = 1; summary_seen = 0; tools_seen = 0; next }
+              in_object == 1 {
+                buffered = buffered "\n" $0
+                if ($0 ~ /^  "summary":/) { summary_seen = 1 }
+                if ($0 ~ /^  "tool_calls":/) { tools_seen = 1 }
+                if ($0 ~ /^\}$/) {
+                  if (summary_seen == 0 || tools_seen == 0) { print buffered }
+                  in_object = 0
+                }
+                next
+              }
+              { print }
+              END { if (in_object == 1 && (summary_seen == 0 || tools_seen == 0)) { print buffered } }
+            ' ocr-stderr.log)"
+            if printf '%s\n' "$ocr_diagnostics" | grep -Eqi "(^|[^0-9A-Za-z_-])429([^0-9A-Za-z_-]|$)|rate limit"; then
               mark_infrastructure_failure "review" "OCR review failed: HTTP 429 rate limit"
-            elif grep -Eqi "529|overloaded" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "(^|[^0-9A-Za-z_-])529([^0-9A-Za-z_-]|$)|overloaded"; then
               mark_infrastructure_failure "review" "OCR review failed: HTTP 529 provider overloaded"
-            elif grep -Eqi "401|403|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "(^|[^0-9A-Za-z_-])(401|403)([^0-9A-Za-z_-]|$)|auth|unauthorized|forbidden|invalid api key|invalid_api_key|api key"; then
               mark_infrastructure_failure "review" "OCR review failed: authentication or configuration error"
-            elif grep -Eqi "timeout|timed out" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "timeout|timed out"; then
               mark_infrastructure_failure "review" "OCR review failed: timeout"
-            elif grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed" ocr-stderr.log; then
+            elif printf '%s\n' "$ocr_diagnostics" | grep -Eqi "all [0-9]+ file review(\(s\)|s)? failed"; then
               mark_infrastructure_failure "review" "all OCR per-file reviews failed; likely LLM provider/config/auth failure"
             else
               mark_infrastructure_failure "review" "OCR review command failed"
@@ -1820,7 +2446,7 @@ jobs:
       - name: Post OCR results
         id: post-ocr-results
         if: always()
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           BASE_SHA: ${{ env.MERGE_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
@@ -1861,7 +2487,7 @@ jobs:
           # excess of this number are routed to the sticky summary rather than
           # waiting for a large batch to fail. Default 50.
           OCR_INLINE_COMMENT_CAP: ${{ vars.OCR_INLINE_COMMENT_CAP }}
-          # Fallback bot login for dedup when getAuthenticated() fails.
+          # Additional trust source for comment dedup when OCR_BOT_LOGIN is set.
           OCR_BOT_LOGIN: ${{ vars.OCR_BOT_LOGIN }}
           # Issue #2675: configurable coverage threshold (0..100, default 90).
           OCR_COVERAGE_THRESHOLD: ${{ vars.OCR_COVERAGE_THRESHOLD }}
@@ -1892,24 +2518,160 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            // --- BEGIN OCR TRUSTED MARKER SNIPPET ---
+            const OCR_DEFAULT_TRUSTED_MARKER_LOGINS = ['github-actions[bot]'];
+            function normalizeTrustedMarkerLogin(value) {
+              return typeof value === 'string' ? value.trim().toLowerCase() : '';
+            }
+            function resolveTrustedMarkerLogins(...sources) {
+              const logins = new Set();
+              for (const login of OCR_DEFAULT_TRUSTED_MARKER_LOGINS) {
+                logins.add(login);
+              }
+              for (const source of sources) {
+                if (typeof source === 'string') {
+                  const tokens = source.split(/[\s,;]+/);
+                  for (const token of tokens) {
+                    const normalized = normalizeTrustedMarkerLogin(token);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                } else if (Array.isArray(source)) {
+                  for (const element of source) {
+                    const normalized = normalizeTrustedMarkerLogin(element);
+                    if (normalized) {
+                      logins.add(normalized);
+                    }
+                  }
+                }
+              }
+              return logins;
+            }
+            function isTrustedMarkerAuthor(user, trustedLogins) {
+              if (user === null || typeof user !== 'object' || Array.isArray(user)) {
+                return false;
+              }
+              if (user.type !== 'Bot') {
+                return false;
+              }
+              const login = normalizeTrustedMarkerLogin(user.login);
+              if (!login) {
+                return false;
+              }
+              if (!(trustedLogins instanceof Set)) {
+                return false;
+              }
+              return trustedLogins.has(login);
+            }
+            function isTrustedMarkerComment(comment, trustedLogins, marker) {
+              if (
+                comment === null ||
+                typeof comment !== 'object' ||
+                Array.isArray(comment)
+              ) {
+                return false;
+              }
+              if (typeof comment.body !== 'string') {
+                return false;
+              }
+              if (typeof marker !== 'string' || marker.length === 0) {
+                return false;
+              }
+              if (!comment.body.includes(marker)) {
+                return false;
+              }
+              return isTrustedMarkerAuthor(comment.user, trustedLogins);
+            }
+            // Duplicate-id deduplication rule: if two trusted markers share the same
+            // id (concurrent/reattempted API payloads), only the first encountered is
+            // retained. This guarantees deleteDuplicateMarkerComments never receives an
+            // id list containing the canonical comment's own id.
+            function trustedMarkerComments(comments, trustedLogins, marker) {
+              if (!Array.isArray(comments)) {
+                return [];
+              }
+              const trusted = comments.filter(function (c) {
+                return isTrustedMarkerComment(c, trustedLogins, marker);
+              });
+              const seenIds = new Set();
+              const deduped = [];
+              for (const comment of trusted) {
+                if (!Number.isSafeInteger(comment.id) || comment.id <= 0) {
+                  continue;
+                }
+                if (!seenIds.has(comment.id)) {
+                  seenIds.add(comment.id);
+                  deduped.push(comment);
+                }
+              }
+              return deduped.sort(function (a, b) {
+                return a.id - b.id;
+              });
+            }
+            function canonicalMarkerComment(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              return trusted.length > 0 ? trusted[0] : null;
+            }
+            function newestTrustedMarkerMatching(
+              comments,
+              trustedLogins,
+              marker,
+              predicate,
+            ) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              const pred =
+                typeof predicate === 'function'
+                  ? predicate
+                  : function () {
+                      return true;
+                    };
+              let result = null;
+              for (const comment of trusted) {
+                if (pred(comment)) {
+                  result = comment;
+                }
+              }
+              return result;
+            }
+            function parseHiddenAutoCount(body) {
+              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(
+                String(body === null || body === undefined ? '' : body),
+              );
+              if (!match) {
+                return 0;
+              }
+              const parsed = Number(match[1]);
+              return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+            }
+            function resolveHiddenAutoCount(comments, trustedLogins, marker) {
+              const trusted = trustedMarkerComments(comments, trustedLogins, marker);
+              let max = 0;
+              for (const comment of trusted) {
+                const count = parseHiddenAutoCount(comment.body);
+                if (count > max) {
+                  max = count;
+                }
+              }
+              return max;
+            }
+            // --- END OCR TRUSTED MARKER SNIPPET ---
 
-            // Issue 1 (#2670): resolve the authenticated bot login ONCE so
-            // historical review-comment dedup can be scoped to this bot.
-            // Without this, a fork contributor could post an inline review
-            // comment containing the INLINE_MARKER and suppress real findings.
-            let botLogin = '';
+            // Issue 1 (#2670): scope historical review-comment dedup to this
+            // bot so a fork contributor cannot post an inline review comment
+            // containing the INLINE_MARKER and suppress real findings.
+            // Issue #2860: the authenticated-user endpoint is only an
+            // ADDITIONAL trust source. It returns 403 for the production
+            // workflow token, so failure must never narrow trust below the
+            // built-in github-actions[bot] default.
+            let apiLogin = '';
             try {
               const { data: botUser } = await github.rest.users.getAuthenticated();
-              botLogin = botUser.login || '';
+              apiLogin = botUser.login || '';
             } catch (e) {
               core.warning(`Could not resolve authenticated bot login: ${e.message || e}`);
-              // Fall back to a configurable bot login so dedup remains
-              // functional when the authenticated-user API is unavailable.
-              botLogin = process.env.OCR_BOT_LOGIN || '';
-              if (botLogin) {
-                core.info(`Using fallback bot login from OCR_BOT_LOGIN: ${botLogin}`);
-              }
             }
+            const trustedLogins = resolveTrustedMarkerLogins(apiLogin, process.env.OCR_BOT_LOGIN);
 
             function readTrimmed(fileName, fallback = '') {
               try {
@@ -1981,16 +2743,46 @@ jobs:
                 || decision.policyFailure
                 || decision.failedFindings !== 0
                 || decision.completionState !== 'complete'
+                || decision.manifestCompleteness !== 'complete'
                 || decision.publicationState !== 'complete'
+                || decision.previewValidated !== true
+                || decision.completedFilesValid !== true
                 || decision.resultSource === 'synthesized') {
                 return false;
               }
-              const selected = Number(decision.selectedFiles);
-              const completed = Number(decision.completedFiles);
-              if (!Number.isFinite(selected) || selected <= 0) {
+              const selected = decision.selectedFiles;
+              const completed = decision.completedFiles;
+              const ocrCompleted = decision.ocrCompletedFiles;
+              if (!Number.isSafeInteger(selected) || selected <= 0
+                || !Number.isSafeInteger(completed) || completed < 0
+                || !Number.isSafeInteger(ocrCompleted) || ocrCompleted < 0) {
                 return false;
               }
-              return completed >= selected;
+              return completed === selected && ocrCompleted === selected;
+            }
+
+            function buildCheckpoint(data) {
+              const eligibleFiles = Object.freeze([...data.eligibleFiles]);
+              return Object.freeze({
+                schema: 1,
+                pr_number: data.prNumber,
+                head_sha: data.headSha,
+                base_sha: data.baseSha,
+                merge_base: data.mergeBase,
+                reviewed_at: data.reviewedAt,
+                run_url: data.runUrl,
+                ocr_version: data.ocrVersion,
+                ocr_model: data.ocrModel,
+                rules_hash: data.rulesHash,
+                policy_hash: data.policyHash,
+                workflow_schema_hash: data.workflowSchemaHash,
+                completion_state: 'complete',
+                range_mode: data.rangeMode,
+                selected_files: eligibleFiles.length,
+                completed_files: data.completedFiles,
+                eligible_files: eligibleFiles,
+                publication_state: data.publicationState,
+              });
             }
 
             function completionStateForResult(status, resultSource) {
@@ -2008,11 +2800,16 @@ jobs:
                 : {};
               const cacheRead = Number(summary.cache_read_tokens || 0);
               const cacheWrite = Number(summary.cache_write_tokens || 0);
+              const rawCompletedFiles = summary.files_reviewed;
+              const completedFilesValid = typeof rawCompletedFiles === 'number'
+                && Number.isSafeInteger(rawCompletedFiles)
+                && rawCompletedFiles >= 0;
               const resultSource = result && typeof result === 'object'
                 ? (result.resultSource || 'parsed')
                 : 'parsed';
               return {
-                completed_files: Number(summary.files_reviewed || 0),
+                completed_files: completedFilesValid ? rawCompletedFiles : 0,
+                completed_files_valid: completedFilesValid,
                 elapsed: String(summary.elapsed || 'unknown'),
                 tokens: {
                   input: Number(summary.input_tokens || 0),
@@ -2525,11 +3322,8 @@ jobs:
                 owner, repo, pull_number: number, per_page: 100,
               });
               return comments
-                .filter((comment) => comment.user && comment.user.type === 'Bot'
-                  && botLogin !== '' && comment.user.login === botLogin
-                  && (comment.side === undefined || comment.side === 'RIGHT')
-                  && typeof comment.body === 'string'
-                  && comment.body.includes(INLINE_MARKER))
+                .filter((comment) => isTrustedMarkerComment(comment, trustedLogins, INLINE_MARKER)
+                  && (comment.side === undefined || comment.side === 'RIGHT'))
                 .map((comment) => ({
                   path: comment.path,
                   span: lineSpan({
@@ -2556,11 +3350,8 @@ jobs:
                 owner, repo, pull_number: number, per_page: 100,
               });
               return new Set(comments
-                .filter((comment) => comment.user && comment.user.type === 'Bot'
-                  && botLogin !== '' && comment.user.login === botLogin
-                  && (comment.side === undefined || comment.side === 'RIGHT')
-                  && typeof comment.body === 'string'
-                  && comment.body.includes(INLINE_MARKER))
+                .filter((comment) => isTrustedMarkerComment(comment, trustedLogins, INLINE_MARKER)
+                  && (comment.side === undefined || comment.side === 'RIGHT'))
                 .map((comment) => inlineCommentKey({
                   path: comment.path,
                   line: comment.line || comment.original_line,
@@ -2811,6 +3602,24 @@ jobs:
                 }
               }
               return result;
+            }
+
+            function eligibleCompletedFilesForReview(params) {
+              const eligibleFiles = Array.isArray(params.eligibleFiles)
+                ? params.eligibleFiles
+                : [];
+              const validStatus = params.ocrStatus === 'success'
+                || params.ocrStatus === 'completed';
+              const exactCount = params.completedFilesValid === true
+                && Number.isSafeInteger(params.completedFiles)
+                && params.completedFiles === eligibleFiles.length;
+              return params.ran === true
+                && params.exitCode === 0
+                && params.previewValidated === true
+                && validStatus
+                && exactCount
+                ? Object.freeze([...eligibleFiles])
+                : Object.freeze([]);
             }
 
             function evidencedPathsFromResult(result) {
@@ -3346,18 +4155,21 @@ jobs:
             // tracking. The manifest records selected/completed/failed/waived
             // file sets and a terminal completeness state.
             const ocrStatusValue = readTrimmed('ocr-status.txt', '') || '';
+            const previewValidated = readTrimmed('ocr-preview-succeeded.txt', '') === 'true';
             const selectedFilesContent = readTrimmed('ocr-selected-files.txt', '');
-            const selectedFilesList = selectedFilesContent
-              ? selectedFilesContent.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0)
-              : [];
-            // C2: completedFiles must only be set to all selected files when
-            // the OCR status is a recognized success AND exit code is 0.
-            // For completed_with_errors we do not know which files actually
-            // completed, so leave completedFiles empty (conservative).
-            const manifestCompletedFiles =
-              ran && (ocrStatusValue === 'success' || ocrStatusValue === 'completed') && exitCode === 0
-                ? selectedFilesList
-                : [];
+            const eligibleFiles = Object.freeze(normalizeFilePaths(
+              selectedFilesContent.split(String.fromCharCode(10)),
+            ));
+            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
+            const eligibleCompletedFiles = eligibleCompletedFilesForReview({
+              ran,
+              exitCode,
+              ocrStatus: ocrStatusValue,
+              previewValidated,
+              eligibleFiles,
+              completedFiles: ocrObservation.completed_files,
+              completedFilesValid: ocrObservation.completed_files_valid,
+            });
             const manifestFailedFiles = failedFilesFromResult(parsedOcrResult);
             const readFailureFiles = manifestFailedFiles.filter((filePath) => {
               const warnings = Array.isArray(parsedOcrResult?.warnings)
@@ -3375,16 +4187,16 @@ jobs:
             const manifestCompleteness = resolveCompleteness({
               ocrExitCode: exitCode,
               ocrStatus: ocrStatusValue || null,
-              selectedFiles: selectedFilesList,
-              completedFiles: manifestCompletedFiles,
+              selectedFiles: eligibleFiles,
+              completedFiles: eligibleCompletedFiles,
               failedFiles: manifestFailedFiles,
               reusedFiles: [],
               waivedFiles: [],
               skipped: false,
             });
             const manifestCoverage = computeCoverage({
-              completed: manifestCompletedFiles.length,
-              selected: selectedFilesList.length,
+              completed: eligibleCompletedFiles.length,
+              selected: eligibleFiles.length,
             });
             const statusLine = process.env.RANGE_MODE === 'noop'
               ? 'Same head; no new changes to review.'
@@ -3415,7 +4227,6 @@ jobs:
                     lines: { additions: 0, deletions: 0, total: 0 },
                   },
                 };
-            const ocrObservation = ocrObservabilityFromResult(parsedOcrResult);
             let body = [
               MARKER,
               `## OpenCodeReview — PR #${number}`,
@@ -3515,28 +4326,16 @@ jobs:
 
             // Read the current auto-review count from the existing sticky
             // comment so it can be incremented (issue #2666). Manual triggers
-            // do not increment the counter. Fetch the comment list once and
-            // reuse it for both count parsing and reconciliation below.
-            let markerComments = [];
+            // do not increment the counter.
+            let preFetchAllComments = [];
             try {
-              const allComments = await github.paginate(github.rest.issues.listComments, {
+              preFetchAllComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              markerComments = allComments.filter((c) =>
-                c.user && c.user.type === 'Bot'
-                  && botLogin !== '' && c.user.login === botLogin
-                  && typeof c.body === 'string' && c.body.includes(MARKER));
             } catch (preFetchErr) {
               core.warning(redactSecretDiagnostics(`Could not list OCR comments for auto-review count: ${preFetchErr.message || preFetchErr}`));
             }
-            let autoReviewCount = 0;
-            const preMarker = markerComments[0];
-            if (preMarker) {
-              const match = /<!--\s*ocr-auto-count:\s*(\d+)\s*-->/.exec(preMarker.body);
-              if (match) {
-                autoReviewCount = Number(match[1]);
-              }
-            }
+            let autoReviewCount = resolveHiddenAutoCount(preFetchAllComments, trustedLogins, MARKER);
             if (isAutomatic) {
               autoReviewCount += 1;
             }
@@ -3575,7 +4374,7 @@ jobs:
                 ...structuredFailures,
               ]);
               coverageReport = buildCoverageReport({
-                previewFiles: selectedFilesList,
+                previewFiles: eligibleFiles,
                 evidencedFiles,
                 readFailureFiles,
                 thresholdPercentage: coverageThreshold,
@@ -3616,26 +4415,38 @@ jobs:
               const allComments = await github.paginate(github.rest.issues.listComments, {
                 owner, repo, issue_number: number, per_page: 100,
               });
-              return allComments.filter((c) =>
-                c.user && c.user.type === 'Bot'
-                  && botLogin !== '' && c.user.login === botLogin
-                  && typeof c.body === 'string' && c.body.includes(MARKER));
+              return trustedMarkerComments(allComments, trustedLogins, MARKER);
             }
 
-            async function reconcileMarkerComment(existingComments) {
-              let comments;
-              if (existingComments) {
-                comments = existingComments;
-              } else {
-                try {
-                  comments = await fetchMarkerComments();
-                } catch (fetchErr) {
-                  core.warning(redactSecretDiagnostics(`Could not re-fetch OCR marker comments: ${fetchErr.message || fetchErr}`));
-                  comments = [];
-                }
+            function selectCanonicalMarker(comments) {
+              return comments.length > 0 ? comments[0] : null;
+            }
+
+            function resolveNonRegressingCount(existingBody, candidateCount, isAutomatic) {
+              const existingCount = parseHiddenAutoCount(existingBody);
+              const minRequired = existingCount + (isAutomatic ? 1 : 0);
+              return candidateCount >= minRequired ? candidateCount : minRequired;
+            }
+
+            function applyNonRegressingCount(summary, existingBody, isAutomatic) {
+              const summaryCount = parseHiddenAutoCount(summary);
+              const minRequired = resolveNonRegressingCount(existingBody, summaryCount, isAutomatic);
+              if (summaryCount >= minRequired) {
+                return summary;
               }
-              const existing = comments[0];
-              for (const duplicate of comments.slice(1)) {
+              const NEWLINE = String.fromCharCode(10);
+              const withoutCount = String(summary).replace(
+                /<!--\s*ocr-auto-count:\s*\d+\s*-->/g,
+                '',
+              );
+              return withoutCount + NEWLINE + '<!-- ocr-auto-count:' + minRequired + ' -->';
+            }
+
+            async function deleteDuplicateMarkerComments(comments, keepId) {
+              for (const duplicate of comments) {
+                if (duplicate.id === keepId) {
+                  continue;
+                }
                 try {
                   await github.rest.issues.deleteComment({
                     owner, repo, comment_id: duplicate.id,
@@ -3645,31 +4456,69 @@ jobs:
                   core.warning(redactSecretDiagnostics(`Failed to delete duplicate OCR marker comment ${duplicate.id}: ${duplicateError.message || duplicateError}`));
                 }
               }
-              return existing || null;
             }
 
-            async function createOrUpdateMarkerComment(summary) {
+            async function createOrUpdateMarkerComment(summary, isAutomatic) {
               let existing = null;
+              let reconciledComments = [];
               try {
-                existing = await reconcileMarkerComment();
-              } catch (reconcileErr) {
-                core.warning(redactSecretDiagnostics(`Reconciliation failed before summary posting; attempting create: ${reconcileErr.message || reconcileErr}`));
+                reconciledComments = await fetchMarkerComments();
+              } catch (fetchErr) {
+                core.warning(redactSecretDiagnostics(`Could not re-fetch OCR marker comments: ${fetchErr.message || fetchErr}`));
               }
+              existing = selectCanonicalMarker(reconciledComments);
+              const nonRegressingSummary = existing
+                ? applyNonRegressingCount(summary, existing.body, isAutomatic)
+                : summary;
               if (existing) {
                 const updated = await github.rest.issues.updateComment({
-                  owner, repo, comment_id: existing.id, body: summary,
+                  owner, repo, comment_id: existing.id, body: nonRegressingSummary,
                 });
+                await deleteDuplicateMarkerComments(reconciledComments, existing.id);
                 return updated?.data || existing;
               }
               try {
                 const created = await github.rest.issues.createComment({
-                  owner, repo, issue_number: number, body: summary,
+                  owner, repo, issue_number: number, body: nonRegressingSummary,
                 });
                 // Re-fetch to reconcile any concurrent duplicate marker
                 // comments that may have been posted between the initial
-                // pre-fetch and this create.
+                // pre-fetch and this create. If the just-created comment is
+                // not the canonical one (a concurrent lower-id marker exists),
+                // update the surviving canonical and return IT — never return
+                // a comment that was deleted, because the checkpoint-advancement
+                // step updates the returned comment's id.
                 try {
-                  await reconcileMarkerComment(null);
+                  const postCreateComments = await fetchMarkerComments();
+                  const surviving = selectCanonicalMarker(postCreateComments);
+                  if (surviving && surviving.id !== (created?.data?.id ?? null)) {
+                    // Recompute against the surviving comment's own body: a
+                    // concurrent marker may carry a higher count than the one
+                    // used before the create attempt.
+                    await github.rest.issues.updateComment({
+                      owner, repo, comment_id: surviving.id,
+                      body: applyNonRegressingCount(summary, surviving.body, isAutomatic),
+                    });
+                    await deleteDuplicateMarkerComments(postCreateComments, surviving.id);
+                    return surviving;
+                  }
+                  // The created comment IS canonical here. A concurrently
+                  // posted duplicate may still carry a HIGHER count, and
+                  // deleting it would silently regress the counter — so merge
+                  // the maximum across the snapshot into the survivor first.
+                  const createdId = created?.data?.id ?? null;
+                  const highestCount = resolveHiddenAutoCount(postCreateComments, trustedLogins, MARKER);
+                  if (createdId !== null && highestCount > parseHiddenAutoCount(created?.data?.body)) {
+                    const mergedBody = applyNonRegressingCount(
+                      summary,
+                      '<!-- ocr-auto-count:' + highestCount + ' -->',
+                      false,
+                    );
+                    await github.rest.issues.updateComment({
+                      owner, repo, comment_id: createdId, body: mergedBody,
+                    });
+                  }
+                  await deleteDuplicateMarkerComments(postCreateComments, createdId);
                 } catch (reconcileErr) {
                   core.warning(redactSecretDiagnostics(`Post-create reconciliation failed; duplicate marker comments may remain: ${reconcileErr.message || reconcileErr}`));
                 }
@@ -3678,11 +4527,21 @@ jobs:
                 // After a failed create (e.g. a race where a marker was just
                 // posted), re-list comments fresh to reconcile, since the
                 // pre-fetched list is stale at this point.
-                const reconciled = await reconcileMarkerComment(null);
+                let retryComments = [];
+                try {
+                  retryComments = await fetchMarkerComments();
+                } catch (retryErr) {
+                  core.warning(redactSecretDiagnostics(`Post-failure re-fetch failed: ${retryErr.message || retryErr}`));
+                }
+                const reconciled = selectCanonicalMarker(retryComments);
                 if (reconciled) {
+                  // Recompute against the re-fetched comment's own body so a
+                  // concurrently posted higher count is not overwritten.
                   const updated = await github.rest.issues.updateComment({
-                    owner, repo, comment_id: reconciled.id, body: summary,
+                    owner, repo, comment_id: reconciled.id,
+                    body: applyNonRegressingCount(summary, reconciled.body, isAutomatic),
                   });
+                  await deleteDuplicateMarkerComments(retryComments, reconciled.id);
                   return updated?.data || reconciled;
                 } else {
                   throw createErr;
@@ -3699,7 +4558,7 @@ jobs:
             let summaryComment = null;
             let summaryCommentUrl = '';
             try {
-              summaryComment = await createOrUpdateMarkerComment(summaryWithExistingCheckpoint);
+              summaryComment = await createOrUpdateMarkerComment(summaryWithExistingCheckpoint, isAutomatic);
               summaryCommentUrl = (summaryComment && summaryComment.html_url) || '';
               if (batchPublicationAmbiguous) {
                 publicationState = 'ambiguous';
@@ -3728,8 +4587,8 @@ jobs:
               providerModel: readTrimmed('ocr-preflight.txt', '').split(String.fromCharCode(10))[0] || '',
               concurrency: Number(process.env.OCR_CONCURRENCY) || 0,
               ruleConfigHash: process.env.OCR_RULE_CONFIG_HASH || '',
-              selectedFiles: selectedFilesList,
-              completedFiles: manifestCompletedFiles,
+              selectedFiles: eligibleFiles,
+              completedFiles: eligibleCompletedFiles,
               failedFiles: manifestFailedFiles,
               reusedFiles: [],
               waivedFiles: [],
@@ -3752,16 +4611,21 @@ jobs:
               fs.writeFileSync(INFRA_FAILURE_FILE, infraMessage);
               fs.writeFileSync('ocr-phase.txt', 'manifest\n');
             }
+            const checkpointInfrastructureFailure = readTrimmed(INFRA_FAILURE_FILE, '');
             const checkpointDecision = {
               ran,
               exitCode,
-              infrastructureFailure,
+              infrastructureFailure: checkpointInfrastructureFailure,
               policyFailure,
               failedFindings: failedInline,
               completionState: ocrObservation.completion_state,
+              manifestCompleteness,
               publicationState,
-              selectedFiles: rangeMetadata.selected.files,
-              completedFiles: ocrObservation.completed_files,
+              previewValidated,
+              selectedFiles: eligibleFiles.length,
+              completedFiles: eligibleCompletedFiles.length,
+              ocrCompletedFiles: ocrObservation.completed_files,
+              completedFilesValid: ocrObservation.completed_files_valid,
               resultSource: ocrObservation.result_source,
             };
 
@@ -3808,25 +4672,23 @@ jobs:
             // If any of those fail, checkpointAfter remains checkpointBefore
             // and the durable checkpoint is not corrupted.
             if (shouldAdvanceCheckpoint(checkpointDecision) && summaryComment && summaryComment.id) {
-              checkpointAfter = {
-                schema: 1,
-                pr_number: number,
-                head_sha: headSha,
-                base_sha: process.env.API_BASE_SHA,
-                merge_base: process.env.BASE_SHA,
-                reviewed_at: new Date().toISOString(),
-                run_url: runUrl,
-                ocr_version: process.env.OCR_VERSION,
-                ocr_model: process.env.OCR_MODEL || 'unknown',
-                rules_hash: process.env.OCR_RULES_HASH || '',
-                policy_hash: process.env.OCR_POLICY_HASH || '',
-                workflow_schema_hash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
-                completion_state: 'complete',
-                range_mode: process.env.RANGE_MODE,
-                selected_files: rangeMetadata.selected.files,
-                completed_files: ocrObservation.completed_files,
-                publication_state: publicationState,
-              };
+              checkpointAfter = buildCheckpoint({
+                prNumber: number,
+                headSha,
+                baseSha: process.env.API_BASE_SHA,
+                mergeBase: process.env.BASE_SHA,
+                reviewedAt: new Date().toISOString(),
+                runUrl,
+                ocrVersion: process.env.OCR_VERSION,
+                ocrModel: process.env.OCR_MODEL || 'unknown',
+                rulesHash: process.env.OCR_RULES_HASH || '',
+                policyHash: process.env.OCR_POLICY_HASH || '',
+                workflowSchemaHash: process.env.OCR_WORKFLOW_SCHEMA_HASH || '',
+                rangeMode: process.env.RANGE_MODE,
+                eligibleFiles,
+                completedFiles: eligibleCompletedFiles.length,
+                publicationState,
+              });
               const checkpointSummary = embedCheckpointInBody(summary, checkpointAfter);
               try {
                 await github.rest.issues.updateComment({
@@ -3896,7 +4758,7 @@ jobs:
 
       - name: Build OCR canary metrics
         if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # ratchet:actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # ratchet:actions/github-script@v9
         env:
           TRUSTED_BASE_SHA: ${{ env.TRUSTED_BASE_SHA }}
           MERGE_BASE_SHA: ${{ env.MERGE_BASE_SHA }}
@@ -4650,12 +5512,12 @@ jobs:
         run: |
           set -euo pipefail
           export GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-$RUNNER_TEMP/ocr-step-summary.md}"
-          if node scripts/ocr-telemetry.js; then
+          if bun scripts/ocr-telemetry.ts; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "phase=telemetry; reason=OCR telemetry producer failed" >> ocr-infrastructure-failure.txt
-          if node scripts/ocr-telemetry.js --failure "OCR telemetry producer failed"; then
+          if bun scripts/ocr-telemetry.ts --failure "OCR telemetry producer failed"; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -4727,12 +5589,12 @@ jobs:
           OCR_TELEMETRY_STATE: failed
         run: |
           set -euo pipefail
-          if ! node scripts/ocr-telemetry.js --redact ocr-telemetry.json || \
-             ! node scripts/ocr-telemetry.js --validate ocr-telemetry.json; then
+          if ! bun scripts/ocr-telemetry.ts --redact ocr-telemetry.json || \
+             ! bun scripts/ocr-telemetry.ts --validate ocr-telemetry.json; then
             echo "phase=telemetry; reason=post-redaction telemetry validation failed" >> ocr-infrastructure-failure.txt
-            node scripts/ocr-telemetry.js --failure "post-redaction telemetry validation failed"
-            node scripts/ocr-telemetry.js --redact ocr-telemetry.json
-            node scripts/ocr-telemetry.js --validate ocr-telemetry.json
+            bun scripts/ocr-telemetry.ts --failure "post-redaction telemetry validation failed"
+            bun scripts/ocr-telemetry.ts --redact ocr-telemetry.json
+            bun scripts/ocr-telemetry.ts --validate ocr-telemetry.json
           fi
           echo "valid=true" >> "$GITHUB_OUTPUT"
 
@@ -4807,7 +5669,7 @@ jobs:
       - name: Upload OCR telemetry
         id: upload-ocr-telemetry
         if: ${{ always() && steps.ocr-telemetry-validation.outputs.valid == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
         with:
           name: ocr-telemetry-${{ github.run_id }}-${{ github.run_attempt }}
           path: ocr-telemetry.json
@@ -4816,7 +5678,7 @@ jobs:
       - name: Upload OCR artifacts
         id: upload-ocr-artifacts
         if: ${{ always() && steps.redact-ocr-artifacts.outcome == 'success' && steps.ocr-telemetry-validation.outputs.valid == 'true' && steps.ocr-manifest-hashes.outputs.valid == 'true' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
         with:
           name: ocr-review-output
           path: |
@@ -4909,7 +5771,7 @@ jobs:
 
       - name: Upload OCR canary artifact
         if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v7
         with:
           name: ocr-concurrency-canary
           path: ocr-canary-metrics.json

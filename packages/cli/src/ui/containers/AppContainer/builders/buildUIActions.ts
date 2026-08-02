@@ -135,6 +135,10 @@ export interface UIActionsParams {
   openModelConfigDialog: () => void;
   closeModelConfigDialog: () => void;
 
+  // Policies dialog
+  openPoliciesDialog: () => void;
+  closePoliciesDialog: () => void;
+
   // Session browser dialog
   openSessionBrowserDialog: () => void;
   closeSessionBrowserDialog: () => void;
@@ -183,6 +187,27 @@ export interface UIActionsParams {
 
   // Queue error message
   setQueueErrorMessage: (message: string | null) => void;
+
+  // Queued messages actions (issue #2882)
+  sendAllQueuedSubmissions?: () => void;
+  steerAllQueuedSubmissions?: () => void;
+  clearQueuedSubmissions?: () => void;
+}
+
+function queueActions(p: UIActionsParams) {
+  return {
+    setQueueErrorMessage: p.setQueueErrorMessage,
+    sendAllQueuedSubmissions: p.sendAllQueuedSubmissions,
+    steerAllQueuedSubmissions: p.steerAllQueuedSubmissions,
+    clearQueuedSubmissions: p.clearQueuedSubmissions,
+  };
+}
+
+function policiesActions(p: UIActionsParams) {
+  return {
+    openPoliciesDialog: p.openPoliciesDialog,
+    closePoliciesDialog: p.closePoliciesDialog,
+  };
 }
 
 /**
@@ -285,6 +310,8 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     openModelConfigDialog: params.openModelConfigDialog,
     closeModelConfigDialog: params.closeModelConfigDialog,
 
+    ...policiesActions(params),
+
     // Session browser dialog
     openSessionBrowserDialog: params.openSessionBrowserDialog,
     closeSessionBrowserDialog: params.closeSessionBrowserDialog,
@@ -331,7 +358,6 @@ export function buildUIActions(params: UIActionsParams): UIActions {
     // Cancel ongoing request
     cancelOngoingRequest: params.cancelOngoingRequest,
 
-    // Queue error message
-    setQueueErrorMessage: params.setQueueErrorMessage,
+    ...queueActions(params),
   };
 }

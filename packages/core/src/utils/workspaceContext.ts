@@ -164,7 +164,34 @@ export class WorkspaceContext {
         !this.isFileSymlink(e.path)
       ) {
         // If it doesn't exist, e.path contains the fully resolved path.
-        return e.path;
+        // Under Bun, e.path may still contain unresolved symlinks in
+        // parent directories. Walk the existing parent directories and
+        // resolve any symlinks found.
+        return this.resolveSymlinksInPath(e.path);
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Resolves symlinks in the existing parent directories of a path.
+   * Needed because Bun's realpathSync does not resolve symlinks in e.path
+   * on ENOENT errors (unlike Node).
+   */
+  private resolveSymlinksInPath(inputPath: string): string {
+    const dir = path.dirname(inputPath);
+    const base = path.basename(inputPath);
+    try {
+      const resolvedDir = fs.realpathSync(dir);
+      return path.join(resolvedDir, base);
+    } catch (e: unknown) {
+      // Parent directory also doesn't exist (ENOENT); try resolving
+      // recursively. Rethrow any other error (EACCES, ELOOP, etc.).
+      if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
+        if (dir !== inputPath && dir !== path.dirname(dir)) {
+          return path.join(this.resolveSymlinksInPath(dir), base);
+        }
+        return inputPath;
       }
       throw e;
     }

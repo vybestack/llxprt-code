@@ -40,6 +40,52 @@ export interface IContent {
 }
 
 /**
+ * The span of chronology sequence numbers that a summary entry replaced.
+ *
+ * Produced when compression destroys history items, so the surviving summary
+ * records which part of the conversation it stands in for.
+ *
+ * @issue #1721
+ */
+export interface ChronologyReplacedSpan {
+  /** Lowest chronology sequence number destroyed by the compression. */
+  readonly fromSeq: number;
+
+  /** Highest chronology sequence number destroyed by the compression. */
+  readonly toSeq: number;
+
+  /** How many history items the compression destroyed. */
+  readonly itemCount: number;
+}
+
+/**
+ * Client-side ordering marker stamped on every history item.
+ *
+ * This exists to make request/response ordering reconstructable across retries
+ * and tool round-trips. It is a debugging/tracing aid only and is NEVER
+ * serialized into a provider request payload — providers reject unknown fields
+ * on message objects with HTTP 400.
+ *
+ * @issue #1721
+ */
+export interface ChronologyMarker {
+  /**
+   * Monotonic 1-based insertion ordinal within a HistoryService instance.
+   * Sequence numbers are never reused, including across `clear()`.
+   */
+  readonly seq: number;
+
+  /** 0 before the first human turn, then 1-based per human turn. */
+  readonly userTurn: number;
+
+  /** 1-based ordinal of this item within its `userTurn`. */
+  readonly step: number;
+
+  /** Epoch milliseconds at the moment the item entered history. */
+  readonly recordedAt: number;
+}
+
+/**
  * Metadata associated with content
  */
 export interface ContentMetadata {
@@ -48,6 +94,15 @@ export interface ContentMetadata {
 
   /** Which model generated this (for AI responses) */
   model?: string;
+
+  /**
+   * Base URL of the provider endpoint that generated this AI turn.
+   * Used to detect cross-endpoint thinking-block signature mismatches
+   * (e.g. z.ai vs native Anthropic serving the same model name).
+   *
+   * @issue #1469
+   */
+  providerBaseURL?: string;
 
   /** Token usage statistics */
   usage?: UsageStats;
@@ -88,6 +143,20 @@ export interface ContentMetadata {
 
   /** Reason the response was incomplete (e.g., max_output_tokens) */
   incompleteReason?: string;
+
+  /**
+   * Client-side chronology marker. Stamped by HistoryService on insertion.
+   * NEVER serialized to a provider (#1721).
+   */
+  chronology?: ChronologyMarker;
+
+  /**
+   * On a summary entry, the span of chronology sequence numbers this summary
+   * replaced. Kept as a sibling of `chronology` because compression builds the
+   * summary before it has ever entered history and therefore before it has a
+   * marker. NEVER serialized to a provider (#1721).
+   */
+  chronologyReplaced?: ChronologyReplacedSpan;
 }
 
 export interface UsageStats {
@@ -376,39 +445,52 @@ export function createToolResponse(
 }
 
 /**
- * Stamp the originating model onto a freshly generated AI turn's metadata.
+ * Stamp the originating model and provider base URL onto a freshly generated
+ * AI turn's metadata.
  *
  * This MUST only be called at generation-recording boundaries (where an AI
  * turn that was JUST produced by the model is converted to IContent). It must
  * NOT be applied to imported, restored, or rebuilt history, whose true origin
  * model may differ from the current session model. Leaving such turns unstamped
  * lets downstream consumers (e.g. the Anthropic cross-model thinking strip)
- * treat them as unknown and leave them untouched.
+ * treat them as unknown and apply conservative stripping.
  *
- * The function is pure: it returns the input unchanged when:
- *  - the speaker is not 'ai',
- *  - `model` is undefined or empty, or
- *  - `metadata.model` is already set (never overwrite a known origin).
- * Otherwise it returns a shallow copy with the model merged into metadata
- * without mutating the caller's object.
+ * The function is pure: it returns the input unchanged when the speaker is not
+ * 'ai' or when there is nothing new to stamp. Existing stamps are never
+ * overwritten — if `metadata.model` or `metadata.providerBaseURL` is already
+ * set, that value is preserved. This allows a turn that was stamped with a
+ * model (pre-#1469) to still receive a `providerBaseURL` stamp on a later
+ * recording boundary without losing the original model origin.
  *
- * @issue #2335
+ * @issue #2335 — model stamping for cross-model thinking strip
+ * @issue #1469 — base URL stamping for cross-endpoint thinking strip
  */
 export function stampAiTurnModel(
   content: IContent,
   model: string | undefined,
+  baseURL?: string,
 ): IContent {
-  if (
-    content.speaker !== 'ai' ||
-    model === undefined ||
-    model.length === 0 ||
-    content.metadata?.model
-  ) {
+  if (content.speaker !== 'ai') {
     return content;
   }
 
-  return {
-    ...content,
-    metadata: { ...content.metadata, model },
-  };
+  const hasModel = content.metadata?.model !== undefined;
+  const hasBaseURL = content.metadata?.providerBaseURL !== undefined;
+  const shouldStampModel = !hasModel && model !== undefined && model.length > 0;
+  const shouldStampBaseURL =
+    !hasBaseURL && baseURL !== undefined && baseURL.trim().length > 0;
+
+  if (!shouldStampModel && !shouldStampBaseURL) {
+    return content;
+  }
+
+  const metadata = { ...content.metadata };
+  if (shouldStampModel) {
+    metadata.model = model;
+  }
+  if (shouldStampBaseURL) {
+    metadata.providerBaseURL = baseURL;
+  }
+
+  return { ...content, metadata };
 }

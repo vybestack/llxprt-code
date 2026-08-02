@@ -25,6 +25,12 @@ import { mergeSystemInstruction } from '../utils/systemInstructionMerge.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
+import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
+import {
+  resolveReasoningDialect,
+  applyReasoningDialect,
+  hasExplicitReasoningField,
+} from './openaiReasoningDialect.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 export interface RequestContext {
@@ -142,24 +148,51 @@ type OpenAIInvocationRuntime = {
 
 type RequestBodyWithThinking = OpenAI.Chat.ChatCompletionCreateParams & {
   thinking?: { type: 'enabled' | 'disabled' };
+  reasoning?: Record<string, unknown>;
 };
 
 function resolveReasoningConfig(
   requestBody: OpenAI.Chat.ChatCompletionCreateParams,
   options: NormalizedGenerateChatOptions,
+  ephemeralSettings: Record<string, unknown>,
 ): void {
-  if ('thinking' in requestBody || 'reasoning_effort' in requestBody) {
+  const body = requestBody as RequestBodyWithThinking;
+
+  // Short-circuit: if the user already set a reasoning field explicitly (via
+  // modelParams, which are Object.assigned into the body just before this
+  // call), do not auto-inject anything — the user value wins and stays the
+  // only reasoning representation on the wire.
+  if (hasExplicitReasoningField(body)) {
     return;
   }
+
   const invocation = options.invocation as OpenAIInvocationRuntime;
   const reasoningEnabled = invocation.modelBehavior?.['reasoning.enabled'] as
     | boolean
     | undefined;
-  const body = requestBody as RequestBodyWithThinking;
-  if (reasoningEnabled === true) {
-    body.thinking = { type: 'enabled' };
-  } else if (reasoningEnabled === false) {
-    body.thinking = { type: 'disabled' };
+  const reasoningEffort = invocation.modelBehavior?.['reasoning.effort'] as
+    | string
+    | undefined;
+
+  const baseUrl =
+    options.resolved.baseURL ??
+    (typeof ephemeralSettings['base-url'] === 'string'
+      ? ephemeralSettings['base-url']
+      : undefined);
+
+  const dialect = resolveReasoningDialect(baseUrl);
+  const applied = applyReasoningDialect(dialect, {
+    enabled: reasoningEnabled,
+    effort: reasoningEffort,
+  });
+  if (applied === null) {
+    return;
+  }
+
+  if (applied.key === 'thinking') {
+    body.thinking = applied.value;
+  } else {
+    body.reasoning = applied.value;
   }
 }
 
@@ -174,18 +207,27 @@ function applyRequestBodyOverrides(
   streamingEnabled: boolean,
   logger: DebugLogger,
 ): void {
-  // Apply request overrides
+  // Apply request overrides, sanitizing prompt_cache_key at the transport
+  // boundary so an overlong value (e.g. a subagent runtimeId) never reaches
+  // the API (issue #2853). Non-string or empty cache keys are dropped.
+  // All other model params are forwarded unchanged.
   const requestOverrides = extractModelParamsFromOptions(options);
   if (requestOverrides) {
-    if (logger.enabled) {
+    const sanitizedOverrides = sanitizeOverridesCacheKey(
+      requestOverrides,
+      logger,
+    );
+    if (logger.enabled && sanitizedOverrides) {
       logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
-        overrideKeys: Object.keys(requestOverrides),
+        overrideKeys: Object.keys(sanitizedOverrides),
       });
     }
-    Object.assign(requestBody, requestOverrides);
+    if (sanitizedOverrides) {
+      Object.assign(requestBody, sanitizedOverrides);
+    }
   }
 
-  resolveReasoningConfig(requestBody, options);
+  resolveReasoningConfig(requestBody, options, ephemeralSettings);
 
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
     requestBody.max_tokens = maxTokens;
@@ -199,6 +241,35 @@ function applyRequestBodyOverrides(
   if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
   }
+}
+
+/**
+ * Sanitize a single extracted model-params record, clamping/dropping only
+ * the `prompt_cache_key` field (issue #2853). All other keys are preserved
+ * verbatim so that provider-specific extensions and canonical Chat
+ * Completions fields (service_tier, store, verbosity, etc.) continue to
+ * pass through. Returns undefined when the cache key was the only entry
+ * and it was dropped.
+ */
+function sanitizeOverridesCacheKey(
+  overrides: Record<string, unknown>,
+  logger: DebugLogger,
+): Record<string, unknown> | undefined {
+  const value = overrides['prompt_cache_key'];
+  if (value === undefined) {
+    return overrides;
+  }
+  const result: Record<string, unknown> = { ...overrides };
+  if (typeof value === 'string' && value.trim() !== '') {
+    result['prompt_cache_key'] = sanitizePromptCacheKey(value);
+  } else {
+    delete result['prompt_cache_key'];
+    logger.debug(
+      () =>
+        `Dropping invalid prompt_cache_key from modelParams (type=${typeof value})`,
+    );
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 /**

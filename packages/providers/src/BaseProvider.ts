@@ -242,6 +242,25 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
+   * Resolve the effective base URL from EXPLICIT per-call options rather than
+   * ambient runtime state (issue #2817).
+   *
+   * `getBaseURL()` only sees `resolved.baseURL` while `activeCallContext` is
+   * set, which happens exclusively inside `generateChatCompletion`. Prompt-
+   * envelope projection runs before that context exists, so it must resolve
+   * the endpoint from the caller's own options to prepare the request the
+   * subsequent send will actually transmit.
+   */
+  protected resolveEffectiveBaseURL(
+    options?: NormalizedGenerateChatOptions,
+  ): string | undefined {
+    if (options === undefined) {
+      return this.getBaseURL();
+    }
+    return options.resolved.baseURL ?? this.computeBaseURL(options.settings);
+  }
+
+  /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 2-3
@@ -668,6 +687,49 @@ export abstract class BaseProvider implements IProvider {
   ): AsyncIterableIterator<IContent>;
 
   /**
+   * Normalize caller-supplied chat options for prompt-envelope projection
+   * (issue #2817).
+   *
+   * The agent send seam builds the same un-normalized `GenerateChatOptions`
+   * it passes to `generateChatCompletion`, which normalizes internally. A
+   * projection must therefore normalize identically, otherwise it would read
+   * `resolved.model` / `invocation` fields that only exist post-normalization.
+   *
+   * Unlike the transport path this does NOT swap the ambient runtime context
+   * or clear the resolved auth token, because projection is a pure read.
+   */
+  protected async normalizeOptionsForProjection(
+    options: GenerateChatOptions,
+  ): Promise<NormalizedGenerateChatOptions> {
+    return this.normalizeGenerateChatOptions(options, options.tools, false);
+  }
+
+  /**
+   * Resolve the credential a projection must use, applying the SAME precedence
+   * transport applies: an explicitly resolved runtime token first, then the
+   * ambient prompt credential (issue #2817).
+   *
+   * `normalizeOptionsForProjection` keeps normalization a pure read, so
+   * `resolved.authToken` is empty unless the caller already resolved one.
+   * Projection paths that must build a real client therefore resolve the
+   * credential here rather than failing on the empty value, which would reject
+   * a request transport can send.
+   */
+  protected async resolveProjectionAuthToken(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<string> {
+    const runtimeToken = await resolveRuntimeAuthToken(
+      options.resolved.authToken,
+    );
+    if (runtimeToken !== undefined && runtimeToken !== '') {
+      return runtimeToken;
+    }
+    return this.activeCallContext.run(options, () =>
+      this.getAuthTokenForPrompt(),
+    );
+  }
+
+  /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
@@ -744,6 +806,7 @@ export abstract class BaseProvider implements IProvider {
   private async normalizeGenerateChatOptions(
     contentsOrOptions: IContent[] | GenerateChatOptions,
     maybeTools?: ProviderToolset,
+    resolveAuthentication: boolean = true,
   ): Promise<NormalizedGenerateChatOptions> {
     const providedOptions: GenerateChatOptions = Array.isArray(
       contentsOrOptions,
@@ -760,13 +823,14 @@ export abstract class BaseProvider implements IProvider {
         | ProviderSettings
         | undefined) ?? ({} as ProviderSettings);
     const resolvedBaseURL = this.computeBaseURL(settings);
-    const resolvedAuth =
-      (await this.authResolver.resolveAuthentication({
-        settingsService: settings,
-        includeOAuth: this.isOAuthEligible(
-          providedOptions.resolved?.baseURL ?? resolvedBaseURL,
-        ),
-      })) ?? '';
+    const resolvedAuth = resolveAuthentication
+      ? ((await this.authResolver.resolveAuthentication({
+          settingsService: settings,
+          includeOAuth: this.isOAuthEligible(
+            providedOptions.resolved?.baseURL ?? resolvedBaseURL,
+          ),
+        })) ?? '')
+      : (providedOptions.resolved?.authToken ?? '');
 
     return normalizeProviderGenerateChatOptions(this, providedOptions, {
       providerName: this.name,

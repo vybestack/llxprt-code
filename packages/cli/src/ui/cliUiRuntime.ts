@@ -146,6 +146,7 @@ export interface AgentClientSource {
  */
 export interface SessionIdentity {
   getSessionId(): string;
+  adoptSessionId(sessionId: string): void;
   getTargetDir(): string;
   getProjectRoot(): string;
   getWorkingDir(): string;
@@ -266,16 +267,11 @@ export interface SettingsTelemetryState {
   getSettingsService(): SettingsService;
   getProxy(): string | undefined;
   getBugCommand(): UiBugCommandSettings | undefined;
-  getTelemetrySettings(): TelemetrySettings & {
-    remoteConsentGiven?: boolean;
-    [key: string]: unknown;
-  };
+  getTelemetrySettings(): TelemetrySettings;
   updateTelemetrySettings(settings: Partial<TelemetrySettings>): void;
   getTelemetryLogPromptsEnabled(): boolean;
   getTelemetryEnabled(): boolean;
   getTelemetryOutfile(): string | undefined;
-  getTelemetryTarget(): string;
-  getTelemetryOtlpEndpoint(): string;
   getConversationLoggingEnabled(): boolean;
   getEmbeddingModel(): string | undefined;
   getSandbox(): SandboxConfig | undefined;
@@ -541,6 +537,7 @@ export interface UiRuntimeBareSource
 function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
   return {
     getSessionId: () => source.getSessionId(),
+    adoptSessionId: (sessionId) => source.adoptSessionId(sessionId),
     getTargetDir: () => source.getTargetDir(),
     getProjectRoot: () => source.getProjectRoot(),
     getWorkingDir: () => source.getWorkingDir(),
@@ -671,8 +668,6 @@ function buildSettingsRuntime(
     getTelemetryLogPromptsEnabled: () => source.getTelemetryLogPromptsEnabled(),
     getTelemetryEnabled: () => source.getTelemetryEnabled(),
     getTelemetryOutfile: () => source.getTelemetryOutfile(),
-    getTelemetryTarget: () => source.getTelemetryTarget(),
-    getTelemetryOtlpEndpoint: () => source.getTelemetryOtlpEndpoint(),
     getConversationLoggingEnabled: () => source.getConversationLoggingEnabled(),
     getEmbeddingModel: () => source.getEmbeddingModel(),
     getSandbox: () => source.getSandbox(),

@@ -110,6 +110,8 @@ describe('DebugLogger', () => {
 
     // Secondary timing check: generous budget for CI runner variance.
     // The previous 3 ms bound was routinely exceeded on shared GitHub runners.
+    // Bun's test runner adds slightly more per-call overhead than Vitest,
+    // so the budget is set to 15 ms to avoid false flakes.
     const start = performance.now();
     for (let i = 0; i < 1000; i++) {
       logger.log('test message');
@@ -117,7 +119,7 @@ describe('DebugLogger', () => {
     const duration = performance.now() - start;
 
     expect(writeSpy).not.toHaveBeenCalled();
-    expect(duration).toBeLessThan(10);
+    expect(duration).toBeLessThan(15);
   });
 
   /**
@@ -473,6 +475,7 @@ describe('DebugLogger', () => {
         // Verify that when disabled, no write operation occurs
         expect(writeSpy).not.toHaveBeenCalled();
         expect(logger.enabled).toBe(false);
+        writeSpy.mockRestore();
       }),
     );
   });
@@ -498,6 +501,7 @@ describe('DebugLogger', () => {
         expect(logEntry).toHaveProperty('timestamp');
         expect(logEntry).toHaveProperty('runId');
         expect(logEntry).toHaveProperty('pid');
+        writeSpy.mockRestore();
       }),
     );
   });
@@ -555,6 +559,7 @@ describe('DebugLogger', () => {
           // Since minLength: 1, we know args always has elements
           expect(logEntry).toHaveProperty('args');
           expect(logEntry.args).toStrictEqual(args);
+          writeSpy.mockRestore();
         },
       ),
     );
@@ -614,6 +619,7 @@ describe('DebugLogger', () => {
           expect(logEntry).toHaveProperty('message', message);
           expect(logEntry).toHaveProperty('runId');
           expect(logEntry).toHaveProperty('pid');
+          writeSpy.mockRestore();
         },
       ),
     );
@@ -675,6 +681,7 @@ describe('DebugLogger', () => {
         // Verify write was called if enabled
         const writeCallCount = writeSpy.mock.calls.length;
         expect(writeCallCount > 0).toBe(enabled);
+        writeSpy.mockRestore();
       }),
     );
   });
@@ -822,8 +829,9 @@ describe('DebugLogger Factory', () => {
     const finalListenerCount = (
       configManager as unknown as { listeners: Set<() => void> }
     ).listeners.size;
-    // Should only have 1 new listener, not 100
-    expect(finalListenerCount - initialListenerCount).toBe(1);
+    // Loggers poll a configuration version instead of subscribing, so the
+    // manager never retains a reference to them (issue #2852).
+    expect(finalListenerCount - initialListenerCount).toBe(0);
   });
 
   it('should allow dispose() to remove instance from registry', async () => {
@@ -835,7 +843,7 @@ describe('DebugLogger Factory', () => {
     expect(logger).not.toBe(logger2);
   });
 
-  it('should remove subscription on dispose()', async () => {
+  it('should never register a configuration subscription for a logger', async () => {
     const configManager = ConfigurationManager.getInstance();
     DebugLogger.disposeAll(); // Clean up first
 
@@ -847,13 +855,17 @@ describe('DebugLogger Factory', () => {
       configManager as unknown as { listeners: Set<() => void> }
     ).listeners.size;
 
-    expect(afterCreateListenerCount - initialListenerCount).toBe(1);
-
     await logger.dispose();
     const afterDisposeListenerCount = (
       configManager as unknown as { listeners: Set<() => void> }
     ).listeners.size;
 
-    expect(afterDisposeListenerCount).toBe(initialListenerCount);
+    expect({
+      afterCreate: afterCreateListenerCount,
+      afterDispose: afterDisposeListenerCount,
+    }).toStrictEqual({
+      afterCreate: initialListenerCount,
+      afterDispose: initialListenerCount,
+    });
   });
 });

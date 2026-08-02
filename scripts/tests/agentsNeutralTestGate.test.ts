@@ -33,9 +33,10 @@ import { findStructuralOffenders } from '../agents-neutral-test-gate.ts';
  */
 function scanForOffenses(
   source: string,
+  extension = 'ts',
 ): ReturnType<typeof findStructuralOffenders> {
   const tempDir = mkdtempSync(join(tmpdir(), 'test-gate-'));
-  const tempFile = join(tempDir, 'fixture.test.ts');
+  const tempFile = join(tempDir, `fixture.test.${extension}`);
   writeFileSync(tempFile, source);
   try {
     return findStructuralOffenders([tempFile], tempDir, []);
@@ -151,6 +152,19 @@ describe('rejects malformed legacy entries', () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it.each(['mts', 'cts'])(
+    'FLAGS structural offenses in .%s tests',
+    (extension) => {
+      const source = `
+it('test', () => {
+  const history = [{ role: 'user', parts: [{ text: 'hello' }] }];
+  expect(history).toHaveLength(1);
+});
+`;
+      expect(scanForOffenses(source, extension)).toHaveLength(1);
+    },
+  );
 
   it('FLAGS functionResponse fixture when NO allow-list entry matches (keyword exemption gone)', () => {
     // Without keyword auto-exemption AND without a matching allow-list

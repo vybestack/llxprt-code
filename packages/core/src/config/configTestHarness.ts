@@ -23,6 +23,7 @@
 
 import { vi } from 'vitest';
 import type { Mock } from 'vitest';
+import { createRequire } from 'node:module';
 import type { ConfigParameters, SandboxConfig } from './config.js';
 import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -75,27 +76,29 @@ export function buildFsMockBody(actual: unknown) {
 
 export function buildToolsMockBody(actual: typeof ToolsModule) {
   const registerToolMock = vi.fn();
-  const ToolRegistryMock = vi.fn().mockImplementation(() => ({
-    registerTool: registerToolMock,
-    unregisterTool: vi.fn(),
-    discoverAllTools: vi.fn(),
-    sortTools: vi.fn(),
-    getAllTools: vi.fn(() => []),
-    getTool: vi.fn(),
-    getFunctionDeclarations: vi.fn(() => []),
-    listDeferredMcpServers: vi.fn(() => []),
-  }));
-  ToolRegistryMock.prototype.registerTool = registerToolMock;
-  ToolRegistryMock.prototype.unregisterTool = vi.fn();
-  ToolRegistryMock.prototype.discoverAllTools = vi.fn();
-  ToolRegistryMock.prototype.sortTools = vi.fn();
-  ToolRegistryMock.prototype.getAllTools = vi.fn(() => []);
-  ToolRegistryMock.prototype.getTool = vi.fn();
-  ToolRegistryMock.prototype.getFunctionDeclarations = vi.fn(() => []);
-  ToolRegistryMock.prototype.listDeferredMcpServers = vi.fn(() => []);
+  const unregisterToolMock = vi.fn();
+  const discoverAllToolsMock = vi.fn();
+  const sortToolsMock = vi.fn();
+  const getAllToolsMock = vi.fn(() => []);
+  const getToolMock = vi.fn();
+  const getFunctionDeclarationsMock = vi.fn(() => []);
+  const listDeferredMcpServersMock = vi.fn(() => []);
+
+  // Use a real class so that .prototype exists (Bun's vi.fn() has no
+  // .prototype property, unlike Vitest's mock functions).
+  class ToolRegistryMock {
+    registerTool = registerToolMock;
+    unregisterTool = unregisterToolMock;
+    discoverAllTools = discoverAllToolsMock;
+    sortTools = sortToolsMock;
+    getAllTools = getAllToolsMock;
+    getTool = getToolMock;
+    getFunctionDeclarations = getFunctionDeclarationsMock;
+    listDeferredMcpServers = listDeferredMcpServersMock;
+  }
   return {
     ...actual,
-    ToolRegistry: ToolRegistryMock,
+    ToolRegistry: vi.fn().mockImplementation(() => new ToolRegistryMock()),
     MemoryTool: vi.fn(),
     setLlxprtMdFilename: vi.fn(),
     getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'),
@@ -139,22 +142,31 @@ export function buildTelemetryMockBody() {
     initializeTelemetry: vi.fn(),
     logCliConfiguration: vi.fn(),
     StartSessionEvent: MockStartSessionEvent,
-    DEFAULT_TELEMETRY_TARGET: 'local',
-    DEFAULT_OTLP_ENDPOINT: 'http://localhost:4317',
-    TelemetryTarget: { GCP: 'gcp', LOCAL: 'local' },
   };
 }
 
 export function buildGitServiceMockBody() {
-  const GitServiceMock = vi.fn();
-  GitServiceMock.prototype.initialize = vi.fn();
+  const initializeMock = vi.fn();
+  class GitServiceMock {
+    initialize() {
+      return initializeMock();
+    }
+  }
+  // Assign the mock fn directly on the prototype so test code can do
+  // GitService.prototype.initialize.mockRejectedValue(...)
+  GitServiceMock.prototype.initialize = initializeMock as unknown as () => void;
   return { GitService: GitServiceMock };
 }
 
-export async function buildSettingsMockBody() {
-  const actual = await vi.importActual<typeof SettingsModule>(
+export function buildSettingsMockBody() {
+  // Under Bun's mock.module, factory functions cannot be async (the
+  // microtask queue is not drained inside mock evaluation). Use require()
+  // instead of vi.importActual to load the real module synchronously.
+  // Under Vitest, vi.importActual works normally via the hoisting system.
+  const localRequire = createRequire(import.meta.url);
+  const actual = localRequire(
     '@vybestack/llxprt-code-settings',
-  );
+  ) as typeof SettingsModule;
   const mockSettingsService = {
     get: vi.fn(),
     set: vi.fn(),

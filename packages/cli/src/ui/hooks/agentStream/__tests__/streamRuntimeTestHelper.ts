@@ -161,6 +161,8 @@ function makeSessionRuntime(
 ): StreamRuntime['session'] {
   return {
     getSessionId: () => call(source, 'getSessionId', 'test-session'),
+    adoptSessionId: (sessionId) =>
+      delegateVoid(source, 'adoptSessionId', sessionId),
     getTargetDir: () => call(source, 'getTargetDir', '/tmp'),
     getProjectRoot: () => call(source, 'getProjectRoot', '/tmp'),
     getWorkingDir: () => call(source, 'getWorkingDir', '/tmp'),
@@ -364,9 +366,6 @@ function makeSettingsRuntime(
     getTelemetryEnabled: () => call(source, 'getTelemetryEnabled', false),
     getTelemetryOutfile: () =>
       call(source, 'getTelemetryOutfile', undefined as string | undefined),
-    getTelemetryTarget: () => call(source, 'getTelemetryTarget', 'local'),
-    getTelemetryOtlpEndpoint: () =>
-      call(source, 'getTelemetryOtlpEndpoint', ''),
     getConversationLoggingEnabled: () =>
       call(source, 'getConversationLoggingEnabled', false),
     getEmbeddingModel: () =>

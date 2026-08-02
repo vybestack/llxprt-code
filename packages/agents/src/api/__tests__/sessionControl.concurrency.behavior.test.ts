@@ -32,7 +32,10 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import {
+  replaySession,
+  SessionRecordingService,
+} from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -86,25 +89,32 @@ function buildFakeConfig(projectRoot: string): FakeConfig {
 }
 
 /**
- * Honest fake client: exposes a swappable HistoryService and records
- * restoreHistory calls. getHistory() returns whatever seed was configured (as
+ * Honest fake client: exposes a swappable HistoryService and records history
+ * replacement calls. getHistory() returns whatever seed was configured (as
  * Gemini-ish content the ContentConverters bridge accepts). This is a genuine
  * collaborator, not a call-spy assertion target.
  */
 interface FakeClient {
   contract: AgentClientContract;
   setHistoryService: (hs: HistoryService | null) => void;
-  restoreCount: () => number;
+  replacementCount: () => number;
 }
 
 function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   let historyService: HistoryService | null = new HistoryService();
-  let restoreCalls = 0;
+  let history = [...seed];
+  let replacementCalls = 0;
   const contract = {
-    getHistory: async () => [...seed],
+    getHistory: async () => [...history],
     getHistoryService: () => historyService,
-    restoreHistory: async () => {
-      restoreCalls += 1;
+    setHistory: async (nextHistory: IContent[]) => {
+      history = [...nextHistory];
+      replacementCalls += 1;
+    },
+    resetChat: async () => undefined,
+    restoreHistory: async (nextHistory: IContent[]) => {
+      history = [...nextHistory];
+      replacementCalls += 1;
     },
   } as unknown as AgentClientContract;
   return {
@@ -112,7 +122,7 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
     setHistoryService: (hs) => {
       historyService = hs;
     },
-    restoreCount: () => restoreCalls,
+    replacementCount: () => replacementCalls,
   };
 }
 
@@ -209,7 +219,8 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       );
 
       const config = buildFakeConfig(projectRoot);
-      const client = buildFakeClient([humanText('live turn')]);
+      const liveHistory = [humanText('live turn')];
+      const client = buildFakeClient(liveHistory);
       const control = new SessionControl(
         buildDeps(config, client.contract, sessionId),
       );
@@ -236,7 +247,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       // result's value without a conditional expect.
       const resumeValue = unwrapFulfilled(resumeOutcome);
       expect(resumeValue.length).toBeGreaterThanOrEqual(1);
-      expect(client.restoreCount()).toBe(1);
+      expect(client.replacementCount()).toBe(1);
 
       // LAST-submitted op wins: stop ran AFTER resume fully committed, so the
       // final state is cleanly DISABLED — recording off, Config cleared, and the
@@ -309,7 +320,8 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       );
 
       const config = buildFakeConfig(projectRoot);
-      const client = buildFakeClient([humanText('live turn')]);
+      const liveHistory = [humanText('live turn')];
+      const client = buildFakeClient(liveHistory);
 
       // A HistoryService whose 'on' throws so the post-restore integration
       // subscribe fails DURING resume (after the resumed recording + lock were
@@ -337,18 +349,105 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       // resume MUST reject with the subscribe failure (not silently half-enable).
       await expect(control.resume('latest')).rejects.toThrow('subscribe boom');
 
-      // FINDING A2: Config was NOT left pointing at the resumed recording
-      // service — half-enabled recording (turns silently dropped) cannot occur.
       expect(config.getSessionRecordingService()).toBeUndefined();
-
-      // getRecording reflects cleanly disabled state.
       expect(control.getRecording().enabled).toBe(false);
+      expect(await client.contract.getHistory()).toStrictEqual(liveHistory);
 
       // The adopted session lock was released: NO lock file remains on disk.
       expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
 
       // Dispose is a clean no-op (nothing to release) — does not throw.
       await expect(control.dispose()).resolves.toBeUndefined();
+    });
+  });
+
+  it('reports both a live clear failure and recording resubscription failure', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const sessionId = 'clear-dual-failure';
+      const config = buildFakeConfig(projectRoot);
+      const client = buildFakeClient([
+        humanText('initial turn'),
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
+      ]);
+      const liveHistory = new HistoryService();
+      client.setHistoryService(liveHistory);
+      const control = new SessionControl(
+        buildDeps(config, client.contract, sessionId),
+      );
+      await control.setRecording({ enabled: true });
+
+      client.contract.resetChat = async () => {
+        throw new Error('clear failed');
+      };
+      const originalOn = liveHistory.on.bind(liveHistory);
+      liveHistory.on = ((
+        event: string,
+        listener: (...args: never[]) => void,
+      ) => {
+        if (event === 'contentAdded') {
+          throw new Error('resubscribe failed');
+        }
+        return originalOn(
+          event as Parameters<typeof originalOn>[0],
+          listener as Parameters<typeof originalOn>[1],
+        );
+      }) as HistoryService['on'];
+
+      let thrown: unknown;
+      try {
+        await control.clearHistory();
+      } catch (error: unknown) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect(
+        (thrown as AggregateError).errors.map((error) =>
+          error instanceof Error ? error.message : String(error),
+        ),
+      ).toStrictEqual(['clear failed', 'resubscribe failed']);
+      await control.dispose();
+    });
+  });
+
+  it('restores the original history when the cleared-history restore fails', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const sessionId = 'clear-restore-rollback';
+      const originalHistory = [
+        humanText('initial turn'),
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
+        humanText('later turn'),
+      ];
+      const config = buildFakeConfig(projectRoot);
+      const client = buildFakeClient(originalHistory);
+      const control = new SessionControl(
+        buildDeps(config, client.contract, sessionId),
+      );
+      await control.setRecording({ enabled: true });
+      const recordingPath = control.getRecording().path;
+      expect(recordingPath).toBeDefined();
+      const restoreHistory = client.contract.restoreHistory.bind(
+        client.contract,
+      );
+      let restoreAttempt = 0;
+      client.contract.restoreHistory = async (history) => {
+        restoreAttempt += 1;
+        if (restoreAttempt === 1) throw new Error('remaining restore failed');
+        await restoreHistory(history);
+      };
+
+      await expect(control.clearHistory()).rejects.toThrow(
+        'remaining restore failed',
+      );
+      expect(await client.contract.getHistory()).toStrictEqual(originalHistory);
+      expect(restoreAttempt).toBe(1);
+      expect(client.replacementCount()).toBe(1);
+      const replay = await replaySession(recordingPath!, basename(projectRoot));
+      if (!replay.ok) {
+        throw new Error(`Expected replay success: ${replay.error}`);
+      }
+      expect(replay.history).toStrictEqual(originalHistory);
+      await control.dispose();
     });
   });
 

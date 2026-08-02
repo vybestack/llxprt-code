@@ -44,8 +44,6 @@ export interface CliArgs {
   approvalMode: string | undefined;
   telemetry: boolean | undefined;
   checkpointing: boolean | undefined;
-  telemetryTarget: string | undefined;
-  telemetryOtlpEndpoint: string | undefined;
   telemetryLogPrompts: boolean | undefined;
   telemetryOutfile: string | undefined;
   allowedMcpServerNames: string[] | undefined;
@@ -171,10 +169,6 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     approvalMode: result['approvalMode'] as string | undefined,
     telemetry: result['telemetry'] as boolean | undefined,
     checkpointing: result['checkpointing'] as boolean | undefined,
-    telemetryTarget: result['telemetryTarget'] as string | undefined,
-    telemetryOtlpEndpoint: result['telemetryOtlpEndpoint'] as
-      | string
-      | undefined,
     telemetryLogPrompts: result['telemetryLogPrompts'] as boolean | undefined,
     telemetryOutfile: result['telemetryOutfile'] as string | undefined,
     allowedMcpServerNames: result['allowedMcpServerNames'] as
@@ -258,6 +252,23 @@ function hasNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
 
+/**
+ * yargs coerces a `type: 'string'` option into an array when it is supplied
+ * more than once (e.g. `-i a -i b` yields `['a', 'b']`). For single-valued
+ * options that must stay a string, detect that repetition at parse time and
+ * surface a clear error instead of letting a non-string flow downstream where
+ * it would crash far from the cause (issue #2851 — `initialPrompt.trim`).
+ */
+function rejectRepeatedStringOption(
+  argv: Record<string, unknown>,
+  key: string,
+  label: string,
+): void {
+  if (Array.isArray(argv[key])) {
+    throw new Error(`${label} can only be specified once`);
+  }
+}
+
 function validateLaunchArgs(argv: Record<string, unknown>): true {
   const pw = argv['promptWords'];
   if (hasNonEmptyString(argv['prompt']) && Array.isArray(pw) && pw.length > 0) {
@@ -275,6 +286,12 @@ function validateLaunchArgs(argv: Record<string, unknown>): true {
 }
 
 function validatePromptModeArgs(argv: Record<string, unknown>): void {
+  rejectRepeatedStringOption(argv, 'prompt', '--prompt (-p)');
+  rejectRepeatedStringOption(
+    argv,
+    'promptInteractive',
+    '--prompt-interactive (-i)',
+  );
   if (
     hasNonEmptyString(argv['prompt']) &&
     hasNonEmptyString(argv['promptInteractive'])

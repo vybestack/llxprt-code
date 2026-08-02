@@ -376,8 +376,6 @@ describe('loadCliConfig memory discovery', () => {
       yolo: false,
       approvalMode: undefined,
       telemetry: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,

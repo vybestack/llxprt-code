@@ -13,7 +13,9 @@
  * compliance.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { HistoryService } from '../../../../core/src/services/history/HistoryService.js';
+import { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import {
   performResume,
   SessionRecordingService,
@@ -26,7 +28,6 @@ import {
   createTestSession,
   countFileEvents,
   readJsonlFile,
-  extractSessionId,
   PROJECT_HASH,
   assertResumeOk,
   assertResumeError,
@@ -301,6 +302,134 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
       collectLock(lockHandles, newLock);
     });
+
+    it('restores exact prior history when a replacement listener throws', async () => {
+      const targetId = 'target-for-listener-failure';
+      await createTestSession(chatsDir, {
+        sessionId: targetId,
+        contents: [makeContent('replacement history')],
+      });
+      const previousHistory = [
+        makeContent('previous first'),
+        makeContent('previous second', 'ai'),
+      ];
+      const historyService = new HistoryService();
+      historyService.addAll(previousHistory);
+      await historyService.waitForTokenUpdates();
+      let shouldThrow = true;
+      historyService.on('tokensUpdated', () => {
+        if (shouldThrow) {
+          shouldThrow = false;
+          throw new Error('history listener failed');
+        }
+      });
+      const context = makeResumeContext(chatsDir, {
+        currentSessionId: 'current-before-listener-failure',
+      });
+      context.historyService = historyService;
+
+      const result = await performResume(targetId, context);
+
+      expect(result).toStrictEqual({
+        ok: false,
+        error: 'Failed to commit session transition: history listener failed',
+      });
+      expect(historyService.getAll()).toStrictEqual(previousHistory);
+      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+    });
+
+    it('continues rollback when prepared disposal and session ID restoration fail', async () => {
+      const targetId = 'target-for-independent-rollback';
+      await createTestSession(chatsDir, {
+        sessionId: targetId,
+        contents: [makeContent('replacement history')],
+      });
+      const historyService = new HistoryService();
+      historyService.add(makeContent('previous history'));
+      const context = makeResumeContext(chatsDir, {
+        currentSessionId: 'current-before-independent-rollback',
+      });
+      context.historyService = historyService;
+      const adoptionOutcomes: Array<() => void> = [
+        () => undefined,
+        () => {
+          throw new Error('restore session ID failed');
+        },
+      ];
+      const adoptSessionId = vi.fn(() => adoptionOutcomes.shift()?.());
+      context.adoptSessionId = adoptSessionId;
+      context.recordingCallbacks.setRecording = () => {
+        throw new Error('commit failed');
+      };
+      const disposeSpy = vi
+        .spyOn(RecordingIntegration.prototype, 'dispose')
+        .mockImplementationOnce(() => {
+          throw new Error('prepared disposal failed');
+        });
+
+      try {
+        const result = await performResume(targetId, context);
+
+        expect(result).toStrictEqual({
+          ok: false,
+          error: 'Failed to commit session transition: commit failed',
+        });
+        // Compare the conversation payload only: every history item also
+        // carries a client-side chronology marker (#1721) that this rollback
+        // assertion is not about.
+        expect(
+          historyService
+            .getAll()
+            .map(({ speaker, blocks }) => ({ speaker, blocks })),
+        ).toStrictEqual([makeContent('previous history')]);
+        expect(disposeSpy).toHaveBeenCalled();
+        expect(adoptSessionId).toHaveBeenCalledTimes(2);
+        expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(
+          false,
+        );
+      } finally {
+        disposeSpy.mockRestore();
+      }
+    });
+
+    it('cleans the prepared recording when rollback history restoration throws', async () => {
+      const targetId = 'target-for-rollback-cleanup';
+      await createTestSession(chatsDir, {
+        sessionId: targetId,
+        contents: [makeContent('replacement history')],
+      });
+
+      const historyService = new HistoryService();
+      historyService.add(makeContent('previous history'));
+      let shouldThrow = false;
+      historyService.on('tokensUpdated', () => {
+        if (shouldThrow) throw new Error('rollback restore failed');
+      });
+      const context = makeResumeContext(chatsDir, {
+        currentSessionId: 'current-before-rollback',
+      });
+      context.historyService = historyService;
+      context.recordingCallbacks.setRecording = () => {
+        shouldThrow = true;
+        throw new Error('commit failed');
+      };
+
+      const result = await performResume(targetId, context);
+      expect(result).toStrictEqual({
+        ok: false,
+        error:
+          'Failed to commit session transition: commit failed; failed to restore prior history: rollback restore failed',
+      });
+      // Compare the conversation payload only: every history item also
+      // carries a client-side chronology marker (#1721) that this assertion
+      // is not about.
+      expect(
+        historyService
+          .getAll()
+          .map(({ speaker, blocks }) => ({ speaker, blocks })),
+      ).toStrictEqual([makeContent('replacement history')]);
+      expect(await SessionLockManager.isLocked(chatsDir, targetId)).toBe(false);
+    });
   });
 
   describe('"latest" Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
@@ -317,11 +446,11 @@ describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10',
 
       const lock1 = await SessionLockManager.acquire(
         chatsDir,
-        extractSessionId(session1.filePath),
+        session1.sessionId,
       );
       const lock2 = await SessionLockManager.acquire(
         chatsDir,
-        extractSessionId(session2.filePath),
+        session2.sessionId,
       );
       lockHandles.push(lock1, lock2);
 

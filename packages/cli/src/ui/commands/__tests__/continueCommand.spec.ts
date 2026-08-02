@@ -9,8 +9,13 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { continueCommand } from '../continueCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import type {
   CommandContext,
   SlashCommandActionReturn,
@@ -311,6 +316,61 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       const completions = await firstArg.completer(ctx, '', mockTokenInfo());
       expect(Array.isArray(completions)).toBe(true);
+    });
+
+    it('completion includes recording-native checkpoints when storage is available', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'continue-completion-'));
+      const projectTempDir = join(root, 'completion-project');
+      const chatsDir = join(projectTempDir, 'chats');
+      const recording = new SessionRecordingService({
+        sessionId: randomUUID(),
+        projectHash: 'completion-project',
+        chatsDir,
+        workspaceDirs: [root],
+        provider: 'test-provider',
+        model: 'test-model',
+      });
+
+      try {
+        recording.recordContent({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'checkpoint content' }],
+        });
+        await recording.createCheckpoint('release-ready');
+        const sessionId = recording.getSessionId();
+
+        ctx = createMockCommandContext({
+          services: {
+            config: {
+              isInteractive: () => true,
+              storage: {
+                getProjectChatsDir: () => chatsDir,
+                getProjectTempDir: () => projectTempDir,
+              },
+            } as unknown as CommandContext['services']['config'],
+          },
+        });
+
+        const schema = continueCommand.schema;
+        assertDefined(schema);
+        const firstArg = schema[0];
+        assertDefined(firstArg);
+        assertType(firstArg, isValueArgument);
+        assertDefined(firstArg.completer);
+
+        const completions = await firstArg.completer(ctx, '', mockTokenInfo());
+        const values = completions.map((completion) =>
+          typeof completion === 'string' ? completion : completion.value,
+        );
+        expect(values).toContain('release-ready');
+        expect(values).toContain(sessionId);
+      } finally {
+        try {
+          await recording.dispose();
+        } finally {
+          await rm(root, { recursive: true, force: true });
+        }
+      }
     });
   });
 

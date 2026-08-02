@@ -3,32 +3,9 @@
  */
 
 import * as fs from 'fs/promises';
-import * as fsSync from 'fs';
 import * as path from 'path';
-import { existsSync } from 'fs';
-import { createRequire } from 'node:module';
+import { existsSync, type Dirent } from 'fs';
 import { debugLogger } from '../utils/debugLogger.js';
-
-const requireFromHere = createRequire(import.meta.url);
-
-interface ChokidarLike {
-  watch(
-    baseDir: string,
-    options: {
-      persistent: boolean;
-      recursive: boolean;
-      ignoreInitial: boolean;
-    },
-  ): ChokidarWatcherLike;
-}
-
-interface ChokidarWatcherLike {
-  on(
-    event: 'add' | 'change' | 'unlink',
-    listener: (filePath: string) => void,
-  ): void;
-  close(): void;
-}
 // Types for file loading results
 export interface LoadFileResult {
   success: boolean;
@@ -52,6 +29,15 @@ export type FileChangeCallback = (
   eventType: string,
   relativePath: string,
 ) => void;
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === code
+  );
+}
 
 /**
  * PromptLoader handles file I/O operations for prompt configuration files
@@ -130,7 +116,7 @@ export class PromptLoader {
 
       return { success: true, content: finalContent, error: null };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if (hasErrorCode(error, 'ENOENT')) {
         return { success: false, content: '', error: 'File not found' };
       }
       return {
@@ -392,102 +378,110 @@ export class PromptLoader {
     ].some(Boolean);
   }
 
+  private async addMarkdownFile(
+    files: Map<string, number>,
+    filePath: string,
+  ): Promise<void> {
+    try {
+      files.set(filePath, (await fs.stat(filePath)).mtimeMs);
+    } catch (error) {
+      if (!hasErrorCode(error, 'ENOENT')) {
+        throw error;
+      }
+    }
+  }
+
+  private async collectMarkdownFiles(
+    baseDir: string,
+  ): Promise<Map<string, number>> {
+    const files = new Map<string, number>();
+    const directories = [baseDir];
+
+    while (directories.length > 0) {
+      const directory = directories.pop()!;
+      let entries: Dirent[];
+      try {
+        entries = await fs.readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if (!hasErrorCode(error, 'ENOENT')) {
+          throw error;
+        }
+        continue;
+      }
+      for (const entry of entries) {
+        const filePath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          directories.push(filePath);
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          await this.addMarkdownFile(files, filePath);
+        }
+      }
+    }
+
+    return files;
+  }
+
   /**
-   * Create a chokidar-based file watcher
+   * Create a polling file watcher for the prompt tree
    */
-  private createChokidarWatcher(
+  private createPollingWatcher(
     baseDir: string,
     handleChange: (eventType: string, filePath: string) => void,
     timeouts: Map<string, NodeJS.Timeout>,
-  ): FileWatcher | null {
-    const chokidar = requireFromHere('chokidar') as ChokidarLike;
+  ): FileWatcher {
+    let knownFiles = new Map<string, number>();
+    let stopped = false;
+    let scanInProgress = false;
 
-    const watcher = chokidar.watch(baseDir, {
-      persistent: true,
-      recursive: true,
-      ignoreInitial: true,
-    });
+    // Gate every emission here so an in-flight scan that resumes after stop()
+    // (its await straddled teardown) cannot schedule a debounce timer whose
+    // callback would fire past the watcher's lifetime.
+    const emit = (eventType: string, filePath: string): void => {
+      if (!stopped) {
+        handleChange(eventType, filePath);
+      }
+    };
 
-    watcher.on('add', (filePath: string) => handleChange('add', filePath));
-    watcher.on('change', (filePath: string) =>
-      handleChange('change', filePath),
-    );
-    watcher.on('unlink', (filePath: string) =>
-      handleChange('unlink', filePath),
-    );
+    const scan = async (): Promise<void> => {
+      if (stopped || scanInProgress) {
+        return;
+      }
+      scanInProgress = true;
+      try {
+        const currentFiles = await this.collectMarkdownFiles(baseDir);
+        for (const [filePath, mtimeMs] of currentFiles) {
+          const previousMtime = knownFiles.get(filePath);
+          if (previousMtime === undefined) {
+            emit('add', filePath);
+          } else if (previousMtime !== mtimeMs) {
+            emit('change', filePath);
+          }
+        }
+        for (const filePath of knownFiles.keys()) {
+          if (!currentFiles.has(filePath)) {
+            emit('unlink', filePath);
+          }
+        }
+        knownFiles = currentFiles;
+      } finally {
+        scanInProgress = false;
+      }
+    };
+
+    void scan();
+    const interval = setInterval(() => void scan(), 100);
+    interval.unref();
 
     return {
       stop: () => {
+        stopped = true;
+        clearInterval(interval);
         for (const timeout of timeouts.values()) {
           clearTimeout(timeout);
         }
         timeouts.clear();
-        watcher.close();
       },
     };
-  }
-
-  /** Handle a file change from fs.watch fallback with debouncing */
-  private handleFsWatchChange(
-    eventType: string | null,
-    filename: string | Buffer | null,
-    callback: FileChangeCallback,
-    timeouts: Map<string, NodeJS.Timeout>,
-  ): void {
-    if (filename === null) {
-      return;
-    }
-    const filenameStr =
-      typeof filename === 'string' ? filename : filename.toString();
-    if (!filenameStr.endsWith('.md')) {
-      return;
-    }
-    if (timeouts.has(filenameStr)) {
-      clearTimeout(timeouts.get(filenameStr));
-    }
-
-    timeouts.set(
-      filenameStr,
-      setTimeout(() => {
-        callback(
-          eventType === null || eventType === '' ? 'change' : eventType,
-          filenameStr,
-        );
-        timeouts.delete(filenameStr);
-      }, 100),
-    );
-  }
-
-  /**
-   * Create an fs.watch-based fallback file watcher
-   */
-  private createFsWatcher(
-    baseDir: string,
-    callback: FileChangeCallback,
-    timeouts: Map<string, NodeJS.Timeout>,
-  ): FileWatcher | null {
-    try {
-      const fsWatcher = fsSync.watch(baseDir, { recursive: true });
-
-      fsWatcher.on(
-        'change',
-        (eventType: string | null, filename: string | Buffer | null) => {
-          this.handleFsWatchChange(eventType, filename, callback, timeouts);
-        },
-      );
-
-      return {
-        stop: () => {
-          for (const timeout of timeouts.values()) {
-            clearTimeout(timeout);
-          }
-          timeouts.clear();
-          fsWatcher.close();
-        },
-      };
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -529,20 +523,7 @@ export class PromptLoader {
       );
     };
 
-    // Step 3: Try chokidar first, then fallback to fs.watch
-    try {
-      const chokidarWatcher = this.createChokidarWatcher(
-        baseDir,
-        handleChange,
-        timeouts,
-      );
-      if (chokidarWatcher) {
-        return chokidarWatcher;
-      }
-    } catch {
-      // chokidar not available
-    }
-
-    return this.createFsWatcher(baseDir, callback, timeouts);
+    // Step 3: Watch markdown files recursively
+    return this.createPollingWatcher(baseDir, handleChange, timeouts);
   }
 }

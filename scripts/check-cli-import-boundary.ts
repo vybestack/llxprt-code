@@ -66,7 +66,7 @@ import { scanBannedRuntimeAssembly } from './cli-boundary/banned-assembly-scanne
  * up from the script directory.
  *
  * An override via the CLI_BOUNDARY_ROOT env var is supported for the script's
- * own synthetic-fixture test suite (scripts/tests/cli-import-boundary.test.js),
+ * own synthetic-fixture test suite (scripts/tests/cli-import-boundary.test.ts),
  * which builds throwaway trees under temp dirs. Production/CI invocations never
  * set this env var and always resolve against the script-anchored root.
  */

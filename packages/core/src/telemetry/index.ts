@@ -8,9 +8,6 @@
  * names that collide with core's own types (e.g., ToolCall, HookEventName).
  */
 export {
-  TelemetryTarget,
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
   initializeTelemetry,
   shutdownTelemetry,
   isTelemetrySdkInitialized,

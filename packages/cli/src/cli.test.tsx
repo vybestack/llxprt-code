@@ -5,6 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   main,
   setupUnhandledRejectionHandler,
@@ -211,6 +215,7 @@ describe('cli.tsx main function', () => {
   let loadSettingsMock: ReturnType<typeof vi.mocked<typeof loadSettings>>;
   let originalEnvGeminiSandbox: string | undefined;
   let originalEnvSandbox: string | undefined;
+  let projectTempDir: string;
   let initialUnhandledRejectionListeners: NodeJS.UnhandledRejectionListener[] =
     [];
 
@@ -220,8 +225,9 @@ describe('cli.tsx main function', () => {
       throw new MockProcessExitError(code);
     });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     loadSettingsMock = vi.mocked(loadSettings);
+    projectTempDir = await mkdtemp(join(tmpdir(), 'cli-main-'));
     dynamicSettingsRegistry.reset();
     // Re-establish the default resolved value after afterEach's
     // vi.restoreAllMocks() clears mock implementations.
@@ -241,7 +247,9 @@ describe('cli.tsx main function', () => {
       process.listeners('unhandledRejection');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await rm(projectTempDir, { recursive: true, force: true });
+
     // Restore original env variables
     if (originalEnvGeminiSandbox !== undefined) {
       process.env.LLXPRT_SANDBOX = originalEnvGeminiSandbox;
@@ -463,6 +471,7 @@ describe('cli.tsx main function', () => {
   });
 
   it('initializes content generator config before interactive provider usage', async () => {
+    const freshSessionId = randomUUID();
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
       getActiveProviderName: vi.fn().mockReturnValue('gemini'),
@@ -489,7 +498,7 @@ describe('cli.tsx main function', () => {
       getModel: vi.fn(() => 'gemini-2.5-pro'),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => 'session-1'),
+      getSessionId: vi.fn(() => freshSessionId),
       getQuestion: vi.fn(() => ''),
       isContinueSession: vi.fn(() => false),
       getExperimentalZedIntegration: vi.fn(() => false),
@@ -497,7 +506,7 @@ describe('cli.tsx main function', () => {
       getTrustedFolder: vi.fn(() => true),
       getScreenReader: vi.fn(() => false),
       storage: {},
-      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getProjectTempDir: vi.fn(() => projectTempDir),
       getContinueSessionRef: vi.fn(() => null),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -533,8 +542,6 @@ describe('cli.tsx main function', () => {
       approvalMode: undefined,
       telemetry: undefined,
       checkpointing: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
@@ -618,6 +625,7 @@ describe('cli.tsx main function', () => {
   });
 
   it('should call setupTerminalAndTheme when isInteractive is true', async () => {
+    const freshSessionId = randomUUID();
     const { setupTerminalAndTheme } = await import('./utils/terminalTheme.js');
     const providerManager = {
       getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
@@ -645,7 +653,7 @@ describe('cli.tsx main function', () => {
       getModel: vi.fn(() => 'gemini-2.5-pro'),
       getProjectRoot: vi.fn(() => '/tmp/project'),
       isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => 'session-1'),
+      getSessionId: vi.fn(() => freshSessionId),
       getQuestion: vi.fn(() => ''),
       isContinueSession: vi.fn(() => false),
       getExperimentalZedIntegration: vi.fn(() => false),
@@ -653,7 +661,7 @@ describe('cli.tsx main function', () => {
       getTrustedFolder: vi.fn(() => true),
       getScreenReader: vi.fn(() => false),
       storage: {},
-      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getProjectTempDir: vi.fn(() => projectTempDir),
       getContinueSessionRef: vi.fn(() => null),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
@@ -689,8 +697,6 @@ describe('cli.tsx main function', () => {
       approvalMode: undefined,
       telemetry: undefined,
       checkpointing: undefined,
-      telemetryTarget: undefined,
-      telemetryOtlpEndpoint: undefined,
       telemetryLogPrompts: undefined,
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,

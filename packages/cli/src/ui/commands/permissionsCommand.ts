@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as path from 'node:path';
 import * as process from 'node:process';
 import type {
   OpenDialogActionReturn,
@@ -17,6 +16,7 @@ import {
   resolveLocalWorkspaceTrust,
   TrustLevel,
 } from '../../config/trustedFolders.js';
+import { normalizeTrustPathInput } from '../../config/trustPaths.js';
 import {
   combineTrustUpdateFailure,
   getTrustCommitErrorMessage,
@@ -73,15 +73,15 @@ function parsePermissionsArgs(
 
   const trustLevel = trustLevelStr as TrustLevel;
 
-  // Normalize path (resolve relative paths, handle ~, etc.)
-  let normalizedPath: string;
-  if (path.isAbsolute(targetPath)) {
-    normalizedPath = path.normalize(targetPath);
-  } else {
-    normalizedPath = path.resolve(workingDirectory, targetPath);
+  const normalized = normalizeTrustPathInput(targetPath, workingDirectory);
+  if (!normalized.ok) {
+    return {
+      error:
+        'Target path is required. Usage: /permissions <TRUST_LEVEL> <path>',
+    };
   }
 
-  return { trustLevel, targetPath: normalizedPath };
+  return { trustLevel, targetPath: normalized.normalizedPath };
 }
 
 export const permissionsCommand: SlashCommand = {

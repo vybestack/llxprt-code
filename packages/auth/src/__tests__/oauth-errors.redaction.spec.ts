@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   OAuthError,
   OAuthErrorType,
@@ -209,9 +209,9 @@ describe('RetryHandler sanitized delay logging', () => {
     const handler = new RetryHandler(
       {
         maxAttempts: 3,
-        baseDelayMs: 100,
-        backoffMultiplier: 2,
-        maxDelayMs: 1000,
+        baseDelayMs: 0,
+        backoffMultiplier: 1,
+        maxDelayMs: 0,
         jitter: false,
       },
       fakeLogger,
@@ -232,24 +232,16 @@ describe('RetryHandler sanitized delay logging', () => {
       return 'success';
     };
 
-    // Use fake timers to avoid actual sleep delay
-    vi.useFakeTimers();
-    try {
-      const promise = handler.executeWithRetry(operation, 'test-provider');
-      await vi.advanceTimersByTimeAsync(300);
-      const result = await promise;
+    const result = await handler.executeWithRetry(operation, 'test-provider');
 
-      expect(result).toBe('success');
-      expect(captured.length).toBeGreaterThanOrEqual(1);
+    expect(result).toBe('success');
+    expect(captured.length).toBeGreaterThanOrEqual(1);
 
-      // The debug message must match the sanitized numeric pattern
-      expect(captured[0]).toMatch(/retrying in \d+ms/);
-      // Must NOT contain any non-numeric or sensitive artifact in the delay position
-      expect(captured[0]).not.toMatch(/retrying in NaN/);
-      expect(captured[0]).not.toMatch(/retrying in undefined/);
-    } finally {
-      vi.useRealTimers();
-    }
+    // The debug message must match the sanitized numeric pattern
+    expect(captured[0]).toMatch(/retrying in \d+ms/);
+    // Must NOT contain any non-numeric or sensitive artifact in the delay position
+    expect(captured[0]).not.toMatch(/retrying in NaN/);
+    expect(captured[0]).not.toMatch(/retrying in undefined/);
   });
 });
 

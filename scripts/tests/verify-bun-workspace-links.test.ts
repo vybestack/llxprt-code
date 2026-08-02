@@ -14,7 +14,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { verifyBunWorkspaceLinks } from '../verify-bun-workspace-links.mjs';
+import { verifyBunWorkspaceLinks } from '../verify-bun-workspace-links.ts';
 
 // The fixtures build real `node_modules/<name>` symlinks via symlinkSync. On
 // Windows, creating a directory symlink throws EPERM unless the process is

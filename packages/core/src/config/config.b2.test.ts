@@ -8,16 +8,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
-import {
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
-} from '../telemetry/index.js';
 import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 
 import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
 import {
+  buildFsMockBody,
+  buildToolsMockBody,
+  buildContentGeneratorMockBody,
+  buildTelemetryMockBody,
+  buildGitServiceMockBody,
+  buildSettingsMockBody,
+  buildIdeIntegrationMockBody,
+  buildMemoryDiscoveryMockBody,
+  buildEventsMockBody,
+  buildFetchMockBody,
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
@@ -37,64 +43,38 @@ const hoistedConfigMocks = vi.hoisted<HoistedConfigMocks>(() => ({
 const mockCoreEvents = hoistedConfigMocks.coreEvents;
 const mockSetGlobalProxy = hoistedConfigMocks.setGlobalProxy;
 
-vi.mock('fs', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildFsMockBody(await importOriginal());
-});
+vi.mock('fs', (importOriginal) => buildFsMockBody(importOriginal()));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
-vi.mock('@vybestack/llxprt-code-tools', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildToolsMockBody(
-    await importOriginal<typeof import('@vybestack/llxprt-code-tools')>(),
-  );
-});
+vi.mock('@vybestack/llxprt-code-tools', (importOriginal) =>
+  buildToolsMockBody(importOriginal()),
+);
 
 // Mock individual tools if their constructors are complex or have side effects
 
-vi.mock('../core/contentGenerator.js', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildContentGeneratorMockBody(await importOriginal());
-});
+vi.mock('../core/contentGenerator.js', (importOriginal) =>
+  buildContentGeneratorMockBody(importOriginal()),
+);
 
-vi.mock('../telemetry/index.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildTelemetryMockBody();
-});
+vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
-vi.mock('../services/gitService.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildGitServiceMockBody();
-});
+vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-vi.mock('@vybestack/llxprt-code-settings', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildSettingsMockBody();
-});
+vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
-vi.mock('@vybestack/llxprt-code-ide-integration', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildIdeIntegrationMockBody(
-    await importOriginal<
-      typeof import('@vybestack/llxprt-code-ide-integration')
-    >(),
-  );
-});
+vi.mock('@vybestack/llxprt-code-ide-integration', (importOriginal) =>
+  buildIdeIntegrationMockBody(importOriginal()),
+);
 
-vi.mock('../utils/memoryDiscovery.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildMemoryDiscoveryMockBody(hoistedConfigMocks);
-});
+vi.mock('../utils/memoryDiscovery.js', () =>
+  buildMemoryDiscoveryMockBody(hoistedConfigMocks),
+);
 
-vi.mock('../utils/events.js', async (importOriginal) => {
-  const h = await import('./configTestHarness.js');
-  return h.buildEventsMockBody(await importOriginal(), hoistedConfigMocks);
-});
+vi.mock('../utils/events.js', (importOriginal) =>
+  buildEventsMockBody(importOriginal(), hoistedConfigMocks),
+);
 
-vi.mock('../utils/fetch.js', async () => {
-  const h = await import('./configTestHarness.js');
-  return h.buildFetchMockBody(hoistedConfigMocks);
-});
+vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(
@@ -105,34 +85,6 @@ describe('Server Config (config.ts)', () => {
     resetAgentClientMock();
   });
   describe('Telemetry Settings', () => {
-    it('should return default telemetry target if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryTarget()).toBe(DEFAULT_TELEMETRY_TARGET);
-    });
-
-    it('should return provided OTLP endpoint', () => {
-      const endpoint = 'http://custom.otel.collector:4317';
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true, otlpEndpoint: endpoint },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(endpoint);
-    });
-
-    it('should return default OTLP endpoint if not provided', () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        telemetry: { enabled: true },
-      };
-      const config = new Config(params);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
-    });
-
     it('should return provided logPrompts setting', () => {
       const params: ConfigParameters = {
         ...baseParams,
@@ -156,20 +108,6 @@ describe('Server Config (config.ts)', () => {
       delete paramsWithoutTelemetry.telemetry;
       const config = new Config(paramsWithoutTelemetry);
       expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
-    });
-
-    it('should return default telemetry target if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryTarget()).toBe(DEFAULT_TELEMETRY_TARGET);
-    });
-
-    it('should return default OTLP endpoint if telemetry object is not provided', () => {
-      const paramsWithoutTelemetry: ConfigParameters = { ...baseParams };
-      delete paramsWithoutTelemetry.telemetry;
-      const config = new Config(paramsWithoutTelemetry);
-      expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
     });
   });
 

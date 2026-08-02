@@ -14,7 +14,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-describe('SecureStore - Linux Keyring Fallback Reliability', () => {
+describe('SecureStore — Keyring Write Verification and Fallback Policy', () => {
   let tempDir: string;
   let store: SecureStore;
 
@@ -26,181 +26,334 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  describe('Issue #1895: Keyring write succeeds but later reads fail', () => {
-    it('should read from fallback when keyring returns null after successful write on Linux', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: 'linux',
+  /**
+   * Helper: checks whether a fallback .enc file exists for the given key
+   * in the tempDir.
+   */
+  async function fallbackFileExists(key: string): Promise<boolean> {
+    const fallbackFile = path.join(tempDir, `${key}.enc`);
+    return fs.access(fallbackFile).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  describe('Issue #2556: No fallback after successful, verified keyring write', () => {
+    it('should NOT write a fallback file when keyring write succeeds and read-back verifies (verified write)', async () => {
+      const stored: Record<string, string> = {};
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async (_service, account) => stored[account] ?? null,
+        setPassword: async (_service, account, password) => {
+          stored[account] = password;
+        },
+        deletePassword: async (_service, account) => delete stored[account],
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
       });
 
-      try {
-        let keyringValue: string | null = null;
-        let shouldDropReadback = false;
+      await store.set('verified-key', 'secret-value');
 
+      // A successful + verified keyring write must NOT create a fallback file.
+      expect(await fallbackFileExists('verified-key')).toBe(false);
+
+      // The keyring holds the value.
+      expect(await store.get('verified-key')).toBe('secret-value');
+    });
+
+    it('should clean up a stale fallback file after a verified keyring write', async () => {
+      // Pre-seed a stale fallback file from a prior (unverified) write.
+      const staleStore = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => null,
+      });
+      await staleStore.set('stale-key', 'old-value');
+      expect(await fallbackFileExists('stale-key')).toBe(true);
+
+      // Now write the same key with a working keyring that verifies read-back.
+      const stored: Record<string, string> = {};
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async (_service, account) => stored[account] ?? null,
+        setPassword: async (_service, account, password) => {
+          stored[account] = password;
+        },
+        deletePassword: async (_service, account) => delete stored[account],
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      await store.set('stale-key', 'new-value');
+
+      // The stale fallback must be removed after a verified keyring write.
+      expect(await fallbackFileExists('stale-key')).toBe(false);
+      expect(await store.get('stale-key')).toBe('new-value');
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'should clean up both current and legacy fallback paths after a verified OAuth write',
+      async () => {
+        const key = 'oauth:default';
+        const staleStore = new SecureStore('test-service', {
+          fallbackDir: tempDir,
+          fallbackPolicy: 'allow',
+          keyringLoader: async () => null,
+        });
+        await staleStore.set(key, 'old-value');
+        const currentPath = path.join(tempDir, 'oauth%3Adefault.enc');
+        const legacyPath = path.join(tempDir, 'oauth:default.enc');
+        await fs.rename(currentPath, legacyPath);
+
+        const stored: Record<string, string> = {};
         const mockKeyring: KeyringAdapter = {
-          getPassword: async () => (shouldDropReadback ? null : keyringValue),
-          setPassword: async (_service, _account, password) => {
-            keyringValue = password;
+          getPassword: async (_service, account) => stored[account] ?? null,
+          setPassword: async (_service, account, password) => {
+            stored[account] = password;
           },
-          deletePassword: async () => false,
+          deletePassword: async (_service, account) => delete stored[account],
         };
-
         store = new SecureStore('test-service', {
           fallbackDir: tempDir,
           fallbackPolicy: 'allow',
           keyringLoader: async () => mockKeyring,
         });
 
-        await store.set('test-key', 'secret-value');
-        shouldDropReadback = true;
-        keyringValue = null;
+        await store.set(key, 'new-value');
+        await expect(fs.access(currentPath)).rejects.toThrow('ENOENT');
+        await expect(fs.access(legacyPath)).rejects.toThrow('ENOENT');
+        expect(await store.get(key)).toBe('new-value');
+      },
+    );
 
-        const retrieved = await store.get('test-key');
-        expect(retrieved).toBe('secret-value');
-      } finally {
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: originalPlatform,
+    it.runIf(process.platform === 'win32')(
+      'should clean up the current fallback path after a verified OAuth write on Windows',
+      async () => {
+        const key = 'oauth:default';
+        const staleStore = new SecureStore('test-service', {
+          fallbackDir: tempDir,
+          fallbackPolicy: 'allow',
+          keyringLoader: async () => null,
         });
-      }
-    });
+        await staleStore.set(key, 'old-value');
+        const currentPath = path.join(tempDir, 'oauth%3Adefault.enc');
 
-    it('should persist fallback file even when keyring write succeeds on Linux', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: 'linux',
-      });
-
-      try {
+        const stored: Record<string, string> = {};
         const mockKeyring: KeyringAdapter = {
-          getPassword: async () => null,
-          setPassword: async () => {
-            /* succeeds */
+          getPassword: async (_service, account) => stored[account] ?? null,
+          setPassword: async (_service, account, password) => {
+            stored[account] = password;
           },
-          deletePassword: async () => false,
+          deletePassword: async (_service, account) => delete stored[account],
         };
-
         store = new SecureStore('test-service', {
           fallbackDir: tempDir,
           fallbackPolicy: 'allow',
           keyringLoader: async () => mockKeyring,
         });
 
-        await store.set('persisted-key', 'my-secret');
+        await store.set(key, 'new-value');
+        await expect(fs.access(currentPath)).rejects.toThrow('ENOENT');
+        expect(await store.get(key)).toBe('new-value');
+      },
+    );
+  });
 
-        const fallbackFile = path.join(tempDir, 'persisted-key.enc');
-        const fileExists = await fs
-          .access(fallbackFile)
-          .then(() => true)
-          .catch(() => false);
-        expect(fileExists).toBe(true);
+  describe('Issue #1895 fallback safety: keyring write succeeds but read-back fails', () => {
+    it('should write a fallback file when keyring accepts write but read-back returns null', async () => {
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => null,
+        setPassword: async () => {
+          /* accepts but does not actually persist */
+        },
+        deletePassword: async () => false,
+      };
 
-        const retrieved = await store.get('persisted-key');
-        expect(retrieved).toBe('my-secret');
-      } finally {
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: originalPlatform,
-        });
-      }
-    });
-
-    it('should skip fallback file writes after keyring success on non-Linux platforms', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: 'darwin',
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
       });
 
-      try {
-        const mockKeyring: KeyringAdapter = {
-          getPassword: async () => 'keyring-secret',
-          setPassword: async () => {
-            /* succeeds */
-          },
-          deletePassword: async () => false,
-        };
+      await store.set('unreliable-key', 'my-secret');
 
-        store = new SecureStore('test-service', {
-          fallbackDir: tempDir,
-          fallbackPolicy: 'allow',
-          keyringLoader: async () => mockKeyring,
-        });
+      // Read-back failed — fallback must be written so the credential survives.
+      expect(await fallbackFileExists('unreliable-key')).toBe(true);
 
-        await store.set('non-linux-key', 'my-secret');
-
-        const fallbackFile = path.join(tempDir, 'non-linux-key.enc');
-        const fileExists = await fs
-          .access(fallbackFile)
-          .then(() => true)
-          .catch(() => false);
-
-        expect(fileExists).toBe(false);
-      } finally {
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: originalPlatform,
-        });
-      }
+      // The credential must be recoverable via the fallback.
+      expect(await store.get('unreliable-key')).toBe('my-secret');
     });
 
-    it('should treat fallback write failures as best-effort after keyring success on Linux', async () => {
-      const originalPlatform = process.platform;
-      const fileWriteError = new Error('disk full');
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: 'linux',
+    it('should make fallback authoritative when keyring read-back returns a stale value', async () => {
+      let keyringValue: string | null = 'stale-wrong-value';
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => keyringValue,
+        setPassword: async () => {
+          /* accepts but does not replace the stale value */
+        },
+        deletePassword: async () => {
+          keyringValue = null;
+          return true;
+        },
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+      await store.set('mismatch-key', 'correct-value');
+
+      const freshStore = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+      expect(await fallbackFileExists('mismatch-key')).toBe(true);
+      // The stale keyring value must have been cleared so it does not shadow
+      // the fallback on subsequent reads.
+      expect(keyringValue).toBeNull();
+      expect(await freshStore.get('mismatch-key')).toBe('correct-value');
+    });
+
+    it('should throw UNAVAILABLE when keyring read-back returns a stale value and fallbackPolicy is deny', async () => {
+      // The deny path still clears the stale keyring value before throwing so
+      // the credential is not left in an unrecoverable state.
+      let keyringValue: string | null = 'stale-wrong-value';
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => keyringValue,
+        setPassword: async () => {
+          /* accepts but does not replace the stale value */
+        },
+        deletePassword: async () => {
+          keyringValue = null;
+          return true;
+        },
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'deny',
+        keyringLoader: async () => mockKeyring,
       });
 
-      try {
-        const mockKeyring: KeyringAdapter = {
-          getPassword: async () => 'keyring-secret',
-          setPassword: async () => {
-            /* succeeds */
-          },
-          deletePassword: async () => false,
-        };
-
-        store = new SecureStore('test-service', {
-          fallbackDir: tempDir,
-          fallbackPolicy: 'allow',
-          keyringLoader: async () => mockKeyring,
-        });
-
-        const originalWriteFallbackFile = (
-          store as unknown as {
-            writeFallbackFile: (key: string, value: string) => Promise<void>;
-          }
-        ).writeFallbackFile.bind(store);
-
-        (
-          store as unknown as {
-            writeFallbackFile: (key: string, value: string) => Promise<void>;
-          }
-        ).writeFallbackFile = async () => {
-          throw fileWriteError;
-        };
-
-        await expect(
-          store.set('linux-key', 'my-secret'),
-        ).resolves.toBeUndefined();
-
-        (
-          store as unknown as {
-            writeFallbackFile: (key: string, value: string) => Promise<void>;
-          }
-        ).writeFallbackFile = originalWriteFallbackFile;
-      } finally {
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: originalPlatform,
-        });
-      }
+      const error = await store
+        .set('stale-denied-key', 'correct-value')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('UNAVAILABLE');
+      expect(error.message).toBe(
+        'Keyring write could not be verified and fallback is denied',
+      );
+      expect(await fallbackFileExists('stale-denied-key')).toBe(false);
+      // The stale value must have been cleared even though the write was
+      // rejected, so a retry can succeed.
+      expect(keyringValue).toBeNull();
     });
 
-    it('should NOT write fallback when fallbackPolicy is deny and no keyring adapter is available', async () => {
+    it('should reject without writing a fallback when a stale keyring value cannot be removed', async () => {
+      // The keyring reports a stale value on read-back and refuses deletion.
+      // The compensating transaction writes the fallback, then attempts to
+      // clear the stale keyring value. Since the clear fails, the fallback is
+      // rolled back (deleted) and UNAVAILABLE is thrown — no orphaned fallback
+      // artifact is left on disk.
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => 'stale-wrong-value',
+        setPassword: async () => {
+          /* accepts but does not replace the stale value */
+        },
+        deletePassword: async () => false,
+      };
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      const error = await store
+        .set('stuck-key', 'correct-value')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('UNAVAILABLE');
+      expect(error.message).toBe(
+        'Mismatched keyring value could not be removed',
+      );
+      // No fallback artifact should be left on disk after a failed clear.
+      expect(await fallbackFileExists('stuck-key')).toBe(false);
+    });
+
+    it('should reject without a fallback when deletePassword throws during stale clear', async () => {
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => 'stale-wrong-value',
+        setPassword: async () => {
+          /* accepts but does not replace the stale value */
+        },
+        deletePassword: async () => {
+          throw new Error('keyring delete error');
+        },
+      };
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      const error = await store
+        .set('throw-delete-key', 'correct-value')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('UNAVAILABLE');
+      expect(await fallbackFileExists('throw-delete-key')).toBe(false);
+    });
+    it('should recover from fallback when keyring read-back throws', async () => {
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => {
+          throw new Error('keyring read error');
+        },
+        setPassword: async () => {
+          /* accepts write */
+        },
+        deletePassword: async () => false,
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+      await store.set('throw-key', 'my-value');
+
+      const freshStore = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+      expect(await fallbackFileExists('throw-key')).toBe(true);
+      expect(await freshStore.get('throw-key')).toBe('my-value');
+    });
+  });
+
+  describe('fallbackPolicy semantics', () => {
+    it('should write fallback when policy is allow and keyring is unavailable', async () => {
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => null,
+      });
+
+      await store.set('fallback-key', 'fallback-secret');
+
+      expect(await fallbackFileExists('fallback-key')).toBe(true);
+      expect(await store.get('fallback-key')).toBe('fallback-secret');
+    });
+
+    it('should NOT write fallback and throw UNAVAILABLE when fallbackPolicy is deny and no keyring adapter is available', async () => {
       store = new SecureStore('test-service', {
         fallbackDir: tempDir,
         fallbackPolicy: 'deny',
@@ -213,13 +366,9 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
         'Keyring is unavailable and fallback is denied',
       );
       expect(error.code).toBe('UNAVAILABLE');
+      expect(error.remediation).toContain('allow encrypted fallback storage');
 
-      const fallbackFile = path.join(tempDir, 'denied-key.enc');
-      const fileExists = await fs
-        .access(fallbackFile)
-        .then(() => true)
-        .catch(() => false);
-      expect(fileExists).toBe(false);
+      expect(await fallbackFileExists('denied-key')).toBe(false);
     });
 
     it('should preserve the classified keyring error when fallbackPolicy is deny', async () => {
@@ -243,97 +392,67 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
       expect(error.code).toBe('LOCKED');
       expect(error.remediation).toBe('Unlock your keyring');
 
-      const fallbackFile = path.join(tempDir, 'locked-key.enc');
-      const fileExists = await fs
-        .access(fallbackFile)
-        .then(() => true)
-        .catch(() => false);
-      expect(fileExists).toBe(false);
+      expect(await fallbackFileExists('locked-key')).toBe(false);
     });
 
-    it('should prefer keyring value over fallback when both exist', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: 'linux',
-      });
-
-      try {
-        const mockKeyring: KeyringAdapter = {
-          getPassword: async (_service, account) =>
-            account === 'shared-key' ? 'keyring-value' : null,
-          setPassword: async () => {},
-          deletePassword: async () => false,
-        };
-
-        store = new SecureStore('test-service', {
-          fallbackDir: tempDir,
-          fallbackPolicy: 'allow',
-          keyringLoader: async () => mockKeyring,
-        });
-
-        await store.set('shared-key', 'fallback-value');
-
-        const retrieved = await store.get('shared-key');
-        expect(retrieved).toBe('keyring-value');
-      } finally {
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: originalPlatform,
-        });
-      }
-    });
-
-    it('should handle keyring that appears available but cannot read back on Linux', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: 'linux',
-      });
-
-      try {
-        let writeCount = 0;
-        const mockKeyring: KeyringAdapter = {
-          getPassword: async (_service, account) => {
-            if (account.startsWith('__securestore_probe__')) {
-              return 'probe-value';
-            }
-            return null;
-          },
-          setPassword: async () => {
-            writeCount++;
-          },
-          deletePassword: async () => false,
-        };
-
-        store = new SecureStore('test-service', {
-          fallbackDir: tempDir,
-          fallbackPolicy: 'allow',
-          keyringLoader: async () => mockKeyring,
-        });
-
-        await store.set('unreliable-key', 'my-value');
-        const retrieved = await store.get('unreliable-key');
-
-        expect(writeCount).toBeGreaterThan(0);
-        expect(retrieved).toBe('my-value');
-      } finally {
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: originalPlatform,
-        });
-      }
-    });
-  });
-
-  describe('fallbackPolicy semantics preservation', () => {
-    it('should allow fallback writes when policy is allow and keyring fails', async () => {
+    it('should reject when an unverified keyring write cannot be backed by fallback', async () => {
+      const blockedFallbackDir = path.join(tempDir, 'not-a-directory');
+      await fs.writeFile(blockedFallbackDir, 'blocks mkdir');
       const mockKeyring: KeyringAdapter = {
         getPassword: async () => null,
         setPassword: async () => {
-          throw new Error('Keyring down');
+          /* accepts but does not persist */
         },
         deletePassword: async () => false,
+      };
+
+      store = new SecureStore('test-service', {
+        fallbackDir: blockedFallbackDir,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      // A blocked fallback directory must cause set() to reject. The
+      // filesystem error propagates so the caller knows the credential
+      // could not be stored.
+      await expect(
+        store.set('unverified-key', 'my-secret'),
+      ).rejects.toThrowError(Error);
+      expect(await fallbackFileExists('unverified-key')).toBe(false);
+    });
+
+    it('should reject an unverified keyring write when fallbackPolicy is deny', async () => {
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async () => null,
+        setPassword: async () => {
+          /* accepts but does not persist */
+        },
+        deletePassword: async () => false,
+      };
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'deny',
+        keyringLoader: async () => mockKeyring,
+      });
+
+      const error = await store
+        .set('unverified-denied', 'secret')
+        .catch((e) => e);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.code).toBe('UNAVAILABLE');
+      expect(await fallbackFileExists('unverified-denied')).toBe(false);
+    });
+  });
+
+  describe('keyring-first read preference (unchanged)', () => {
+    it('should prefer keyring value over fallback when both exist', async () => {
+      const stored: Record<string, string> = {};
+      const mockKeyring: KeyringAdapter = {
+        getPassword: async (_service, account) => stored[account] ?? null,
+        setPassword: async (_service, account, password) => {
+          stored[account] = password;
+        },
+        deletePassword: async (_service, account) => delete stored[account],
       };
 
       store = new SecureStore('test-service', {
@@ -342,31 +461,19 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
         keyringLoader: async () => mockKeyring,
       });
 
-      await store.set('fallback-key', 'fallback-secret');
-      const retrieved = await store.get('fallback-key');
-
-      expect(retrieved).toBe('fallback-secret');
-    });
-
-    it('should throw UNAVAILABLE when keyring fails and fallbackPolicy is deny', async () => {
-      const mockKeyring: KeyringAdapter = {
-        getPassword: async () => null,
-        setPassword: async () => {
-          throw new Error('Keyring down');
-        },
-        deletePassword: async () => false,
-      };
-
-      store = new SecureStore('test-service', {
+      // Seed a fallback-only value first (keyring absent).
+      const fallbackStore = new SecureStore('test-service', {
         fallbackDir: tempDir,
-        fallbackPolicy: 'deny',
-        keyringLoader: async () => mockKeyring,
+        fallbackPolicy: 'allow',
+        keyringLoader: async () => null,
       });
+      await fallbackStore.set('shared-key', 'fallback-value');
 
-      const error = await store.set('test-key', 'value').catch((e) => e);
+      // Now put a different value in the keyring.
+      stored['shared-key'] = 'keyring-value';
 
-      expect(error).toBeInstanceOf(SecureStoreError);
-      expect(error.code).toBe('UNAVAILABLE');
+      const retrieved = await store.get('shared-key');
+      expect(retrieved).toBe('keyring-value');
     });
   });
 });

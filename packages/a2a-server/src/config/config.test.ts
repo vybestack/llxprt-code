@@ -65,6 +65,21 @@ describe('loadConfig auth fallback', () => {
 
     expect(Config.prototype.refreshAuth).toHaveBeenCalledWith('vertex-ai');
   });
+
+  it('does not map an OTLP endpoint environment variable into telemetry settings', async () => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    vi.spyOn(Config.prototype, 'initialize').mockResolvedValue(undefined);
+    vi.spyOn(Config.prototype, 'refreshAuth').mockResolvedValue(undefined);
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://collector.example';
+
+    const config = await loadConfig(
+      { telemetry: { enabled: true, logPrompts: false } },
+      [],
+      'test-task-id',
+    );
+
+    expect(config.getTelemetrySettings()).not.toHaveProperty('otlpEndpoint');
+  });
 });
 
 describe('getApprovalMode LLXPRT_YOLO_MODE', () => {

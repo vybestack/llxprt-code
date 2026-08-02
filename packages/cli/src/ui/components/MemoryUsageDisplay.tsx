@@ -20,7 +20,7 @@ export const MemoryUsageDisplay: React.FC = () => {
   useEffect(() => {
     const updateMemory = () => {
       const usage = process.memoryUsage().rss;
-      setMemoryUsage(formatMemoryUsage(usage));
+      setMemoryUsage(`RSS: ${formatMemoryUsage(usage)}`);
       setMemoryUsageColor(
         usage >= 2 * 1024 * 1024 * 1024
           ? SemanticColors.status.error

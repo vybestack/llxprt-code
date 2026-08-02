@@ -28,7 +28,7 @@ export function extractFailoverSettings(
     retryCount: Math.min(
       typeof settings.failover_retry_count === 'number'
         ? settings.failover_retry_count
-        : 1,
+        : 2,
       100,
     ),
     retryDelayMs:
@@ -114,11 +114,18 @@ export function shouldFailover(
  *
  * These status codes indicate the backend cannot serve requests
  * and retrying the SAME backend would be futile:
- * - 429: Rate limited
  * - 401: Unauthorized (per Issue #902 spec; OAuth bucket failover has
  *        separate auto-renew logic that doesn't apply to load balancer)
  * - 402: Payment required
  * - 403: Forbidden
+ *
+ * Note: 429 (rate limited) is intentionally NOT an immediate-failover error
+ * (issue #2849). A rate-limit is often transient — the same backend may
+ * recover on a retry. Retrying 429 on the same backend (controlled by
+ * failover_retry_count) before failing over gives the LB at least the same
+ * retry behavior as a standalone provider profile, which retries 429s with
+ * backoff. Only after exhausting per-backend retries does the LB advance to
+ * the next backend.
  */
 export function isImmediateFailoverError(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -128,5 +135,5 @@ export function isImmediateFailoverError(error: unknown): boolean {
   if (status === undefined) {
     return false;
   }
-  return status === 429 || status === 401 || status === 402 || status === 403;
+  return status === 401 || status === 402 || status === 403;
 }

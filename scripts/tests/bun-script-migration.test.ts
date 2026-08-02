@@ -15,8 +15,9 @@ import {
 } from 'node:fs';
 import { resolve, join, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { asRecord } from './typed-test-helpers.ts';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -31,9 +32,7 @@ interface PackageJson {
 }
 
 function readRootPackageJson(): PackageJson {
-  return JSON.parse(
-    readFileSync(resolve(repoRoot, 'package.json'), 'utf-8'),
-  ) as PackageJson;
+  return JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf-8'));
 }
 
 const rootPkg = readRootPackageJson();
@@ -58,7 +57,7 @@ function isEnoent(error: unknown): boolean {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return false;
   }
-  return (error as Record<string, unknown>).code === 'ENOENT';
+  return asRecord(error).code === 'ENOENT';
 }
 
 function unquoteToken(token: string): string {
@@ -115,7 +114,6 @@ describe('Issue #2242: package.json scripts use Bun for converted .ts scripts', 
     ['lint:cli-boundary', 'scripts/check-cli-import-boundary.ts'],
     ['prepare:package', 'scripts/prepare-package.ts'],
     ['release:version', 'scripts/version.ts'],
-    ['telemetry', 'scripts/telemetry.ts'],
     ['check:lockfile', 'scripts/check-lockfile.ts'],
     ['clean', 'scripts/clean.ts'],
   ];
@@ -207,7 +205,7 @@ describe('Issue #2242: no stale .js/.mjs references to converted scripts', () =>
     'scripts/generate-settings-schema',
     'scripts/generate-settings-doc',
     'scripts/generate-keybindings-doc',
-  ] as const;
+  ] satisfies readonly string[];
 
   it.each(CONVERTED_SCRIPTS)(
     'no package.json script references the old .js extension for %s',
@@ -242,7 +240,7 @@ describe('Issue #2242: workspace package.json build scripts use Bun', () => {
   function readPackageJson(pkgDir: string): PackageJson | undefined {
     const pkgPath = resolve(packagesDir, pkgDir, 'package.json');
     try {
-      return JSON.parse(readFileSync(pkgPath, 'utf-8')) as PackageJson;
+      return JSON.parse(readFileSync(pkgPath, 'utf-8'));
     } catch (error) {
       if (isEnoent(error)) {
         return undefined;
@@ -393,7 +391,7 @@ describe('Issue #2242: active surfaces do not reference deleted migrated scripts
     'scripts/sandbox_command.js',
     'scripts/telemetry.js',
     'scripts/version.js',
-  ] as const;
+  ] satisfies readonly string[];
 
   const ACTIVE_SCAN_ROOTS = [
     '.github/workflows',
@@ -402,20 +400,24 @@ describe('Issue #2242: active surfaces do not reference deleted migrated scripts
     'dev-docs',
     'shell-scripts',
     'scripts',
-  ] as const;
+  ] satisfies readonly string[];
 
   const ROOT_LEVEL_FILES = [
     'AGENTS.md',
     'CONTRIBUTING.md',
     'README.md',
     'ROADMAP.md',
-  ] as const;
+  ] satisfies readonly string[];
 
   const EXCLUDE_DIR_NAMES = new Set([
     'node_modules',
     'dist',
     '.git',
     'project-plans',
+    // Historical plan records (dev-docs/plans) intentionally reference
+    // obsolete scripts when documenting migrations. Scanning them would
+    // flag legitimate historical context as stale references.
+    'plans',
   ]);
 
   const FIXTURE_EXCLUSIONS = new Set<string>([relativeToRepo(thisFile)]);
@@ -455,24 +457,24 @@ describe('Issue #2242: active surfaces do not reference deleted migrated scripts
   }
 
   function collectScannableFiles(dir: string, acc: string[] = []): string[] {
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: Array<import('node:fs').Dirent>;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       return acc;
     }
     for (const entry of entries) {
-      const childPath = join(dir, entry.name);
+      const childPath = join(dir, String(entry.name));
       if (
         entry.isDirectory() &&
         !entry.isSymbolicLink() &&
-        !EXCLUDE_DIR_NAMES.has(entry.name)
+        !EXCLUDE_DIR_NAMES.has(String(entry.name))
       ) {
         collectScannableFiles(childPath, acc);
       } else if (
         entry.isFile() &&
         !entry.isSymbolicLink() &&
-        isScannableFile(entry.name)
+        isScannableFile(String(entry.name))
       ) {
         acc.push(childPath);
       }
@@ -610,7 +612,7 @@ describe('Issue #2368: Bun startup does not run the compiled-script build warnin
     'check-build-status',
     'llxprt-code-warnings',
     '.last_build',
-  ] as const;
+  ] satisfies readonly string[];
 
   it.each(OBSOLETE_STARTUP_REFERENCES)(
     'scripts/start.ts does not reference %s',

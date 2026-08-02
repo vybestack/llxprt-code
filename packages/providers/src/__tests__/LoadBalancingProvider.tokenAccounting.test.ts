@@ -87,6 +87,63 @@ function createTokenizerFactory(
       _providerName: string,
       model?: string,
     ): RuntimeTokenizer | undefined => tokenizerMap[model ?? _providerName],
+    async estimatePrompt(request) {
+      return {
+        count: await request.legacyEstimate(),
+        method: 'calibrated',
+        family: 'legacy-unregistered',
+        estimatorVersion: 'core-estimate-tokens-v1',
+        assetRevision: 'none',
+        projectionRevision: request.projectionRevision,
+      };
+    },
+  };
+}
+
+function createProjectedProvider(
+  name: string,
+  tokensForOptions: (options: GenerateChatOptions) => number,
+  sentTokens: Array<object | undefined>,
+  failFirstSend = false,
+): IProvider & { readonly projectionTokens: object[] } {
+  const projectionTokens: object[] = [];
+  let sendCount = 0;
+  return {
+    name,
+    projectionTokens,
+    async projectPromptEnvelope(options) {
+      const transportToken = Object.freeze({
+        provider: name,
+        sequence: projectionTokens.length,
+      });
+      projectionTokens.push(transportToken);
+      return {
+        model: options.resolved?.model ?? 'gpt-5.6-sol',
+        protocol: 'openai-responses',
+        method: 'responses/v1',
+        projectionRevision: 3,
+        unsupportedMedia: [],
+        transportToken,
+        finalizedProjection: Object.freeze({
+          kind: 'llxprt-provider-prompt-v3',
+          protocol: 'openai-responses',
+          promptText: 'projected prompt',
+        }),
+        legacyEstimate: () => Promise.resolve(tokensForOptions(options)),
+      };
+    },
+    async *generateChatCompletion(options): AsyncGenerator<IContent> {
+      sentTokens.push(options.promptEnvelopeTransportToken);
+      sendCount += 1;
+      if (failFirstSend && sendCount === 1) {
+        throw new Error('429 rate limited');
+      }
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    },
+    getModels: async () => [],
+    getDefaultModel: () => 'gpt-5.6-sol',
+    getServerTools: () => [],
+    invokeServerTool: async () => ({}),
   };
 }
 
@@ -142,8 +199,8 @@ function setupTwoTargetFailoverGuard(providerManager: ProviderManager): {
         strategy: 'failover',
         contextLimit: 10,
         lbProfileEphemeralSettings: {
-          'failover-retry-count': 1,
-          'failover-retry-delay-ms': 0,
+          failover_retry_count: 1,
+          failover_retry_delay_ms: 0,
         },
         subProfiles: [
           createResolvedSubProfile({
@@ -356,6 +413,117 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
     });
   });
 
+  it('sends the exact round-robin projection token used for estimation', async () => {
+    const sentTokens: Array<object | undefined> = [];
+    const delegate = createProjectedProvider('openai', () => 5, sentTokens);
+    providerManager.setTokenizerFactory(createTokenizerFactory({}));
+    providerManager.registerProvider(delegate);
+    const provider = new LoadBalancingProvider(
+      {
+        profileName: 'projection-round-robin',
+        strategy: 'round-robin',
+        contextLimit: 100,
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-5.6-sol',
+          }),
+        ],
+      },
+      providerManager,
+    );
+
+    await consumeIterator(provider, [createTextContent('request')]);
+
+    expect(delegate.projectionTokens).toHaveLength(1);
+    expect(sentTokens).toStrictEqual(delegate.projectionTokens);
+    expect(provider.getTokenAccountingDiagnostics().accountingSource).toBe(
+      'calibrated:legacy-unregistered:core-estimate-tokens-v1:none:projection-3',
+    );
+  });
+
+  it('uses a new matched projection token for each failover retry', async () => {
+    const sentTokens: Array<object | undefined> = [];
+    const delegate = createProjectedProvider(
+      'openai',
+      () => 5,
+      sentTokens,
+      true,
+    );
+    providerManager.setTokenizerFactory(createTokenizerFactory({}));
+    providerManager.registerProvider(delegate);
+    const provider = new LoadBalancingProvider(
+      {
+        profileName: 'projection-retry',
+        strategy: 'failover',
+        contextLimit: 100,
+        lbProfileEphemeralSettings: {
+          failover_retry_count: 2,
+          failover_retry_delay_ms: 0,
+        },
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-5.6-sol',
+          }),
+          createResolvedSubProfile({
+            name: 'unused-backup',
+            providerName: 'openai',
+            model: 'gpt-5.6-sol',
+          }),
+        ],
+      },
+      providerManager,
+    );
+
+    await consumeIterator(provider, [createTextContent('request')]);
+
+    expect(delegate.projectionTokens).toHaveLength(2);
+    expect(sentTokens).toStrictEqual(delegate.projectionTokens);
+  });
+
+  it('sends the compressed projection token after re-estimation', async () => {
+    const sentTokens: Array<object | undefined> = [];
+    const delegate = createProjectedProvider(
+      'openai',
+      (options) =>
+        options.contents.some((content) =>
+          content.blocks.some(
+            (block) => block.type === 'text' && block.text === 'compressed',
+          ),
+        )
+          ? 5
+          : 20,
+      sentTokens,
+    );
+    providerManager.setTokenizerFactory(createTokenizerFactory({}));
+    providerManager.registerProvider(delegate);
+    const provider = new LoadBalancingProvider(
+      {
+        profileName: 'projection-compression',
+        strategy: 'round-robin',
+        contextLimit: 10,
+        subProfiles: [
+          createResolvedSubProfile({
+            name: 'gpt',
+            providerName: 'openai',
+            model: 'gpt-5.6-sol',
+          }),
+        ],
+      },
+      providerManager,
+    );
+    provider.setCompressionCallback(async () => [
+      createTextContent('compressed'),
+    ]);
+
+    await consumeIterator(provider, [createTextContent('large request')]);
+
+    expect(delegate.projectionTokens).toHaveLength(2);
+    expect(sentTokens).toStrictEqual([delegate.projectionTokens[1]]);
+  });
   it('handles empty contents array without throwing', async () => {
     const factory = createTokenizerFactory({
       'gpt-4.1': createCountingTokenizer(() => {}),
@@ -568,8 +736,8 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
         strategy: 'failover',
         contextLimit: 100,
         lbProfileEphemeralSettings: {
-          'failover-retry-count': 1,
-          'failover-retry-delay-ms': 0,
+          failover_retry_count: 1,
+          failover_retry_delay_ms: 0,
         },
         subProfiles: [
           createResolvedSubProfile({
@@ -615,8 +783,8 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
         strategy: 'failover',
         contextLimit: 10,
         lbProfileEphemeralSettings: {
-          'failover-retry-count': 1,
-          'failover-retry-delay-ms': 0,
+          failover_retry_count: 1,
+          failover_retry_delay_ms: 0,
         },
         subProfiles: [
           createResolvedSubProfile({
@@ -679,8 +847,8 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
         strategy: 'failover',
         contextLimit: 1_000_000,
         lbProfileEphemeralSettings: {
-          'failover-retry-count': 1,
-          'failover-retry-delay-ms': 0,
+          failover_retry_count: 1,
+          failover_retry_delay_ms: 0,
         },
         subProfiles: [
           createResolvedSubProfile({

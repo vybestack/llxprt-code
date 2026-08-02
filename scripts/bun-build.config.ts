@@ -1,0 +1,127 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Bun-based bundling for the a2a-server distributable artifact.
+ * Replaces the retired `esbuild.config.js`.
+ *
+ * The CLI run path no longer requires a bundle or compiled JavaScript entry —
+ * the published bin is a checked-in POSIX sh launcher (`packages/cli/bin/llxprt`)
+ * that resolves the package-local Bun and execs the TypeScript source directly.
+ * This script produces only the self-contained
+ * `packages/a2a-server/dist/a2a-server.mjs` artifact.
+ */
+
+import { copyFileSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = join(__dirname, '..');
+const require = createRequire(import.meta.url);
+const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
+
+/**
+ * Modules that must remain external in the bundle. These are either native
+ * addons (`.node`), Bun-specific UI packages, or optional platform binaries
+ * that cannot be bundled.
+ */
+const EXTERNALS = [
+  '@lydell/node-pty',
+  'node-pty',
+  '@lydell/node-pty-darwin-arm64',
+  '@lydell/node-pty-darwin-x64',
+  '@lydell/node-pty-linux-x64',
+  '@lydell/node-pty-win32-arm64',
+  '@lydell/node-pty-win32-x64',
+  '@napi-rs/keyring',
+  'node:module',
+  // UI package uses opentui which has Bun-specific imports.
+  '@vybestack/llxprt-ui',
+  '@vybestack/opentui-core',
+  '@vybestack/opentui-react',
+  // ast-grep uses native Node.js addons (.node files) that cannot be bundled.
+  '@ast-grep/napi',
+  '@ast-grep/lang-python',
+  '@ast-grep/lang-go',
+  '@ast-grep/lang-rust',
+  '@ast-grep/lang-java',
+  '@ast-grep/lang-cpp',
+  '@ast-grep/lang-c',
+  '@ast-grep/lang-json',
+  '@ast-grep/lang-ruby',
+  '@ast-grep/lang-csharp',
+  '@ast-grep/lang-kotlin',
+  '@ast-grep/lang-php',
+  '@ast-grep/lang-scala',
+  '@ast-grep/lang-swift',
+  // Optional prompt watcher dependency; runtime falls back to fs.watch.
+  'chokidar',
+];
+
+const tiktokenWasmSource = require.resolve('@dqbd/tiktoken/tiktoken_bg.wasm');
+
+// a2a-server bundle: packages/a2a-server/src/http/server.ts -> dist/a2a-server.mjs
+const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
+  target: 'node',
+  format: 'esm',
+  conditions: ['production'],
+  external: EXTERNALS,
+  plugins: [portableTiktokenPlugin],
+  loader: { '.node': 'file' },
+  minify: true,
+  splitting: false,
+  sourcemap: 'none',
+  define: {
+    'process.env.CLI_VERSION': JSON.stringify(pkg.version),
+    'process.env.NODE_ENV': '"production"',
+  },
+  entrypoints: ['packages/a2a-server/src/http/server.ts'],
+  outdir: 'packages/a2a-server/dist',
+  naming: 'a2a-server.mjs',
+  // a2a-server does not import bare 'module'. A static import avoids
+  // Top-Level Await while still exposing require/__filename/__dirname in the
+  // bundled output.
+  banner: `import { createRequire } from 'node:module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
+};
+
+// Execute the a2a-server build. Its output is required by downstream
+// release/packaging workflows, so a failure must fail the command.
+const a2aResult: Bun.BuildOutput | Error = await Bun.build(
+  a2aServerConfig,
+).catch(
+  (error: unknown): Error =>
+    error instanceof Error ? error : new Error(String(error)),
+);
+
+// Bun.build() resolves (does not reject) with a result whose `success` flag
+// can be false when the build produced diagnostics (unresolved imports, etc.).
+// A rejected promise is also possible for hard failures. Both must be treated
+// as failures so stale artifacts are never shipped downstream.
+if (a2aResult instanceof Error || a2aResult.success === false) {
+  if (a2aResult instanceof Error) {
+    console.error('a2a-server build failed:', a2aResult);
+  } else {
+    console.error('a2a-server build completed with errors.');
+    const detail = (a2aResult.logs ?? []).map((log) => log.message).join('; ');
+    console.warn('a2a-server build logs: ' + (detail || '(none)'));
+  }
+  process.exit(1);
+}
+
+const tiktokenBundleAsset = join(
+  root,
+  'packages/a2a-server/dist/tiktoken_bg.wasm',
+);
+copyFileSync(tiktokenWasmSource, tiktokenBundleAsset);
+
+console.log(
+  'bun build complete:',
+  a2aResult.outputs.map((o) => `${o.path}=${o.size}`),
+  tiktokenBundleAsset,
+);

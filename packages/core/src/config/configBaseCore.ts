@@ -46,11 +46,6 @@ import type { OutputFormat } from '../utils/output-format.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type { ExtensionLoader } from '../utils/extensionLoader.js';
-import type { TelemetryTarget } from '../telemetry/index.js';
-import {
-  DEFAULT_TELEMETRY_TARGET,
-  DEFAULT_OTLP_ENDPOINT,
-} from '../telemetry/index.js';
 import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
@@ -669,12 +664,6 @@ export abstract class ConfigBaseCore {
   }
   getTelemetryLogPromptsEnabled(): boolean {
     return this.telemetrySettings.logPrompts ?? true;
-  }
-  getTelemetryOtlpEndpoint(): string {
-    return this.telemetrySettings.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT;
-  }
-  getTelemetryTarget(): TelemetryTarget {
-    return this.telemetrySettings.target ?? DEFAULT_TELEMETRY_TARGET;
   }
   getTelemetryOutfile(): string | undefined {
     return this.telemetrySettings.outfile;

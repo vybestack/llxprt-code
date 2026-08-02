@@ -469,7 +469,7 @@ describe('OAuthBucketManager', () => {
 
       await expect(
         bucketManager.validateBucketExists('anthropic', 'work@company.com'),
-      ).resolves.not.toThrow();
+      ).resolves.toBeUndefined();
     });
 
     /**
@@ -693,9 +693,7 @@ describe('OAuthBucketManager', () => {
       );
       expect(status.authenticated).toBe(true);
 
-      await expect(
-        bucketManager.validateBucketExists('anthropic', 'work@company.com'),
-      ).resolves.not.toThrow();
+      await bucketManager.validateBucketExists('anthropic', 'work@company.com');
 
       const profileBuckets = ['work@company.com', 'personal@gmail.com'];
       const next = bucketManager.getNextBucket(

@@ -109,6 +109,11 @@ export class ShellExecutionService {
         windowsVerbatimArguments: isWindows ? false : undefined,
         shell: false,
         detached: !isWindows,
+        // Prevents child from inheriting parent's console screen buffer on
+        // Windows (sets CREATE_NO_WINDOW). PowerShell Console API writes
+        // (error coloring, progress bars) would otherwise bypass the pipes
+        // and corrupt the terminal UI. Issue #2548
+        windowsHide: isWindows ? true : undefined,
         env: envVars,
       });
 

@@ -44,7 +44,7 @@ import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.j
 import { CoreLspServiceAdapter } from '../tools-adapters/CoreLspServiceAdapter.js';
 import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
 import { CoreSettingsServiceAdapter } from '../tools-adapters/CoreSettingsServiceAdapter.js';
-import { CoreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
+import { coreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
 import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
 import { CoreSubagentServiceAdapter } from '../tools-adapters/CoreSubagentServiceAdapter.js';
@@ -361,7 +361,7 @@ function registerStandardTools(
   const lspServiceAdapter = new CoreLspServiceAdapter(config);
   const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
   const settingsServiceAdapter = new CoreSettingsServiceAdapter(config);
-  const storageServiceAdapter = new CoreStorageServiceAdapter();
+  const storageServiceAdapter = coreStorageServiceAdapter;
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const todoServiceAdapter = new CoreTodoServiceAdapter(() =>
     storageServiceAdapter.getGlobalDataDir(),

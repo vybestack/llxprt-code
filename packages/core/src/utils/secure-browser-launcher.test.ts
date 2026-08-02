@@ -5,38 +5,21 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// IMPORTANT: Must import mock setup BEFORE importing the source module.
+// Bun's mock.module only applies if registered before the source module loads.
+import { secureBrowserMocks } from './secure-browser-launcher-mock-setup.js';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ExecFileOptions } from 'node:child_process';
 import * as nodePath from 'node:path';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './secure-browser-launcher.js';
 
-type ExecFilePromise = (
-  command: string,
-  args: string[],
-  options: ExecFileOptions,
-) => Promise<{ stdout: string; stderr: string }>;
-
-// Create mock function using vi.hoisted
-const mockExecFile = vi.hoisted(() => vi.fn<ExecFilePromise>());
-const mockStat = vi.hoisted(() => vi.fn());
-
-// Mock modules
-vi.mock('node:child_process');
-vi.mock('node:util', () => ({
-  promisify: () => mockExecFile,
-}));
-vi.mock('node:fs/promises', async (importActual) => {
-  const actual = await importActual<typeof import('node:fs/promises')>();
-  return {
-    ...actual,
-    stat: mockStat,
-  };
-});
+const mockExecFile = secureBrowserMocks.execFile;
+const mockStat = secureBrowserMocks.stat;
+const mockPlatform = secureBrowserMocks.platform;
 
 describe('secure-browser-launcher', () => {
   let originalPlatform: PropertyDescriptor | undefined;
@@ -46,6 +29,7 @@ describe('secure-browser-launcher', () => {
     vi.clearAllMocks();
     mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
     mockStat.mockRejectedValue(new Error('ENOENT'));
+    mockPlatform.mockReturnValue(process.platform);
     originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     originalProgramFiles = process.env.PROGRAMFILES;
   });
@@ -67,6 +51,8 @@ describe('secure-browser-launcher', () => {
       value: platform,
       configurable: true,
     });
+    // Bun's os.platform() caches the value; use the mock to override.
+    mockPlatform.mockReturnValue(platform);
   }
 
   function requireWindowsDirectory(
@@ -165,7 +151,7 @@ describe('secure-browser-launcher', () => {
       expect(args.join(' ')).not.toContain('Hidden');
     });
 
-    it.runIf(process.platform === 'win32')(
+    it.skipIf(process.platform !== 'win32')(
       'executes the production PowerShell launch with where.exe and remains usable afterward',
       async () => {
         const windowsDirectory = process.env.SystemRoot ?? process.env.windir;

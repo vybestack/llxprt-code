@@ -14,11 +14,9 @@
  * assert real observable state / round-trips — never a not-implemented signal.
  *
  * Covers:
- * - Checkpoint round-trip: createCheckpoint persists the live history, the
- *   checkpoint is listed, and restoreCheckpoint reproduces the original items
- *   after the history is mutated.
- * - listCheckpoints reflects zero / one / many saves deterministically in an
- *   isolated working dir.
+ * - Recording-native checkpoint creation/listing and self-contained forks.
+ * - Checkpoint continuation preserves source history while installing the
+ *   branch history in the child recording.
  * - Recording reflection: setRecording(enabled:true) activates a recording
  *   with a defined path; setRecording(enabled:false) deactivates it.
  * - resume(target): the no-session path throws a clear, typed (non
@@ -32,7 +30,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -40,7 +38,7 @@ import type {
   Agent,
   AgentMessage,
   AgentHistoryItem,
-  SessionCheckpoint,
+  CheckpointInfo,
 } from '@vybestack/llxprt-code-agents';
 import { buildAgent } from './helpers/agentHarness.js';
 
@@ -101,12 +99,12 @@ function storageTempDirFor(workingDir: string): string {
  */
 async function withIsolatedAgent(
   fixture: string,
-  fn: (agent: Agent) => Promise<void>,
+  fn: (agent: Agent, workingDir: string) => Promise<void>,
 ): Promise<void> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-session-spec-'));
   const { agent, cleanup } = await buildAgent(fixture, { workingDir });
   try {
-    await fn(agent);
+    await fn(agent, workingDir);
   } finally {
     await cleanup();
     rmSync(workingDir, { recursive: true, force: true });
@@ -115,71 +113,116 @@ async function withIsolatedAgent(
 }
 
 describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', () => {
-  it('createCheckpoint persists the live history, listCheckpoints surfaces it, and restoreCheckpoint reproduces it after a mutation @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
-    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      // Seed a known two-message history.
+  it('creates and lists recording-native checkpoints without legacy checkpoint files @plan:2026-07-28-issue-2625', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent, workingDir) => {
       const seeded = [
         textMessage('user', 'remember the magic word: quokka'),
         textMessage('model', 'got it, the magic word is quokka'),
       ];
       await agent.setHistory(seeded);
 
-      // Create a labelled checkpoint over the live history.
-      const checkpoint: SessionCheckpoint =
+      const checkpoint: CheckpointInfo =
         await agent.session.createCheckpoint('milestone-1');
-      expect(checkpoint.label).toBe('milestone-1');
-      expect(checkpoint.id).toBe('milestone-1');
-      expect(checkpoint.messageCount).toBe(seeded.length);
-      expect(typeof checkpoint.createdAt).toBe('string');
+      expect(checkpoint.name).toBe('milestone-1');
+      expect(checkpoint.sessionId.length).toBeGreaterThan(0);
+      expect(checkpoint.sequence).toBeGreaterThan(0);
       expect(Number.isNaN(Date.parse(checkpoint.createdAt))).toBe(false);
 
-      // The checkpoint appears in the listing by id + label.
-      const listed = agent.session.listCheckpoints();
-      const found = listed.find((c) => c.id === 'milestone-1');
-      expect(found).toBeDefined();
-      expect(found?.label).toBe('milestone-1');
-      expect(found?.messageCount).toBe(seeded.length);
-
-      // Mutate the live history away from the checkpoint.
-      await agent.setHistory([textMessage('user', 'a totally different turn')]);
-      const mutated = (await agent.getHistory()).map(messageText);
-      expect(mutated).toContain('a totally different turn');
-      expect(mutated).not.toContain('remember the magic word: quokka');
-
-      // Restore the checkpoint and confirm the original items reappear.
-      await agent.session.restoreCheckpoint('milestone-1');
-      const restored = (await agent.getHistory()).map(messageText);
-      expect(restored).toContain('remember the magic word: quokka');
-      expect(restored).toContain('got it, the magic word is quokka');
-      expect(restored).not.toContain('a totally different turn');
+      const listed = await agent.session.listCheckpoints();
+      expect(listed).toContainEqual(checkpoint);
+      expect(
+        readFileSync(agent.session.getRecording().path ?? '', 'utf8'),
+      ).toContain('checkpoint_created');
+      expect(
+        existsSync(join(storageTempDirFor(workingDir), 'checkpoints')),
+      ).toBe(false);
     });
   });
 
-  it('listCheckpoints is empty before any save and reflects each subsequent createCheckpoint @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
+  it('forks from a checkpoint into a self-contained child while preserving resume history @plan:2026-07-28-issue-2625', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
-      // Deterministic empty start in an isolated working dir.
-      expect(agent.session.listCheckpoints()).toHaveLength(0);
-
-      await agent.setHistory([textMessage('user', 'first turn')]);
-      await agent.session.createCheckpoint('alpha');
-      const afterFirst = agent.session.listCheckpoints();
-      expect(afterFirst.map((c) => c.id)).toContain('alpha');
-      expect(afterFirst).toHaveLength(1);
-
       await agent.setHistory([
-        textMessage('user', 'second turn'),
-        textMessage('model', 'second reply'),
+        textMessage('user', 'branch source'),
+        textMessage('model', 'source reply'),
       ]);
-      await agent.session.createCheckpoint('beta');
-      const afterSecond = agent.session.listCheckpoints();
-      const ids = afterSecond.map((c) => c.id);
-      expect(ids).toContain('alpha');
-      expect(ids).toContain('beta');
-      expect(afterSecond).toHaveLength(2);
+      const checkpoint = await agent.session.createCheckpoint('branch-point');
+      const parentPath = agent.session.getRecording().path ?? '';
+      await agent.restoreHistory([textMessage('user', 'source-only tail')]);
 
-      // The beta checkpoint records the larger message count.
-      const beta = afterSecond.find((c) => c.id === 'beta');
-      expect(beta?.messageCount).toBe(2);
+      const child = await agent.session.forkFromCheckpoint(
+        checkpoint.checkpointId,
+      );
+      expect(child.id).not.toBe(checkpoint.sessionId);
+      expect(child.parentSessionId).toBe(checkpoint.sessionId);
+      expect(child.checkpointId).toBe(checkpoint.checkpointId);
+      expect(child.checkpointName).toBe('branch-point');
+      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
+        'branch source',
+        'source reply',
+      ]);
+      expect(readFileSync(parentPath, 'utf8')).toContain('source-only tail');
+    });
+  });
+
+  it('durably clears recorded history without re-recording restored entries @plan:2026-07-28-issue-2625', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+      const history = [
+        textMessage('user', 'initial question'),
+        textMessage('model', 'initial answer'),
+        textMessage('user', 'later question'),
+        textMessage('model', 'later answer'),
+      ];
+      await agent.setHistory(history);
+      await agent.session.setRecording({ enabled: true });
+      const recordingPath = agent.session.getRecording().path ?? '';
+
+      await agent.resetChat();
+      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
+        'initial question',
+        'initial answer',
+      ]);
+
+      await agent.session.setRecording({ enabled: false });
+      const lines = readFileSync(recordingPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { type: string });
+      expect(lines.filter((line) => line.type === 'rewind')).toHaveLength(1);
+      expect(lines.filter((line) => line.type === 'content')).toHaveLength(
+        history.length,
+      );
+
+      await agent.session.resume('latest');
+      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
+        'initial question',
+        'initial answer',
+      ]);
+    });
+  });
+
+  it('resets an already-empty chat while recording is enabled', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+      await agent.setHistory([textMessage('user', 'stale previous history')]);
+      await agent.session.setRecording({ enabled: true });
+      const recordingPath = agent.session.getRecording().path ?? '';
+      await agent.setHistory([]);
+
+      await agent.resetChat();
+      const rewindCountAfterFirstReset = readFileSync(recordingPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { type: string })
+        .filter((line) => line.type === 'rewind').length;
+      await agent.resetChat();
+      await agent.session.setRecording({ enabled: false });
+      const rewindCountAfterSecondReset = readFileSync(recordingPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { type: string })
+        .filter((line) => line.type === 'rewind').length;
+
+      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(rewindCountAfterSecondReset).toBe(rewindCountAfterFirstReset);
     });
   });
 
@@ -289,6 +332,84 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010',
       // The resumed recording is active and installed as the live recording.
       const afterResume = agent.session.getRecording();
       expect(afterResume.enabled).toBe(true);
+    });
+  });
+
+  it('exposes checkpoint rename/delete, session naming/listing, and safe deletion through the public API', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+      await agent.setHistory([
+        textMessage('user', 'lifecycle source'),
+        textMessage('model', 'lifecycle reply'),
+      ]);
+      const checkpoint = await agent.session.createCheckpoint('before-rename');
+      const activePath = agent.session.getRecording().path;
+
+      await expect(
+        agent.session.deleteSession(checkpoint.sessionId),
+      ).rejects.toThrow('Cannot delete the active session');
+      expect(agent.session.getRecording()).toMatchObject({
+        enabled: true,
+        path: activePath,
+      });
+      expect(await agent.session.listCheckpoints()).toContainEqual(checkpoint);
+
+      await agent.session.renameCheckpoint(
+        checkpoint.checkpointId,
+        'after-rename',
+      );
+      expect(await agent.session.listCheckpoints()).toContainEqual(
+        expect.objectContaining({
+          checkpointId: checkpoint.checkpointId,
+          name: 'after-rename',
+        }),
+      );
+      await agent.session.nameCurrentSession('named-session');
+      expect(await agent.session.listSessions()).toContainEqual(
+        expect.objectContaining({
+          id: checkpoint.sessionId,
+          name: 'named-session',
+        }),
+      );
+
+      await agent.session.deleteCheckpoint(checkpoint.checkpointId);
+      expect(await agent.session.listCheckpoints()).not.toContainEqual(
+        expect.objectContaining({ checkpointId: checkpoint.checkpointId }),
+      );
+      await agent.session.setRecording({ enabled: false });
+      await agent.session.deleteSession(checkpoint.sessionId);
+      expect(await agent.session.listSessions()).not.toContainEqual(
+        expect.objectContaining({ id: checkpoint.sessionId }),
+      );
+    });
+  });
+
+  it('resumes a named session by explicit public API reference', async () => {
+    await withIsolatedAgent('plain-text.jsonl', async (agent) => {
+      const seeded = [
+        textMessage('user', 'explicit resume source'),
+        textMessage('model', 'explicit resume reply'),
+      ];
+      await agent.setHistory(seeded);
+      await agent.session.setRecording({ enabled: true });
+      await agent.session.nameCurrentSession('explicit-resume');
+      const session = (await agent.session.listSessions()).find(
+        (candidate) => candidate.name === 'explicit-resume',
+      );
+      expect(session).toBeDefined();
+      await agent.session.setRecording({ enabled: false });
+      await agent.setHistory([textMessage('user', 'replacement live history')]);
+
+      const resumed = await agent.session.resumeSession('explicit-resume');
+
+      expect(resumed).toMatchObject({
+        id: session?.id,
+        name: 'explicit-resume',
+      });
+      expect((await agent.getHistory()).map(messageText)).toStrictEqual([
+        'explicit resume source',
+        'explicit resume reply',
+      ]);
+      expect(agent.session.getRecording().enabled).toBe(true);
     });
   });
 });

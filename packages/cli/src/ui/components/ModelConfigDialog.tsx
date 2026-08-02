@@ -16,6 +16,10 @@ import { TextInput } from './ProfileCreateWizard/TextInput.js';
 import { parseValue } from '../commands/setCommand.js';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
+import {
+  commitModelParam,
+  type CommitResult,
+} from './modelConfigParamCommit.js';
 
 // Pending values for one field, staged in the dialog until [Save] commits
 // them to the runtime. Cancel/Esc discards them wholesale.
@@ -147,11 +151,6 @@ function formatValue(value: unknown): string {
   if (value === undefined || value === null) return '(not set)';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
-}
-
-interface CommitResult {
-  success: boolean;
-  message?: string;
 }
 
 function valueForField(
@@ -449,31 +448,16 @@ function applyFieldEdit(
   }
 
   if (field.kind === 'param') {
-    const result = commitParam(raw, (value) =>
+    const result = commitModelParam(field.key, raw, (value) =>
       d.runtime.setActiveModelParam(field.key, value),
     );
-    return result.success ? null : (result.message ?? 'Invalid value');
+    return result.success ? null : result.message;
   }
 
   const result = commitEphemeral(field, raw, (value) =>
     d.runtime.setEphemeralSetting(field.key, value),
   );
-  return result.success ? null : (result.message ?? 'Invalid value');
-}
-
-function commitParam(
-  raw: string,
-  setActiveModelParam: (value: unknown) => void,
-): CommitResult {
-  try {
-    setActiveModelParam(parseValue(raw));
-    return { success: true };
-  } catch (e) {
-    return {
-      success: false,
-      message: e instanceof Error ? e.message : String(e),
-    };
-  }
+  return result.success ? null : result.message;
 }
 
 function commitEphemeral(

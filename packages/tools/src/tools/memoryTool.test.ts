@@ -50,8 +50,8 @@ interface FsAdapter {
 
 describe('MemoryTool', () => {
   const mockAbortSignal = new AbortController().signal;
-  const mockWorkingDir = '/mock/project';
-
+  let mockWorkingDir: string;
+  let tempHomeDir: string;
   const mockFsAdapter: {
     readFile: Mock<FsAdapter['readFile']>;
     writeFile: Mock<FsAdapter['writeFile']>;
@@ -85,7 +85,11 @@ describe('MemoryTool', () => {
     });
 
   beforeEach(() => {
-    vi.mocked(os.homedir).mockReturnValue(path.join('/mock', 'home'));
+    // These are string-only values for path construction — all fs operations
+    // are mocked. Use clearly-fake paths rather than real-looking temp dirs.
+    mockWorkingDir = path.join('/mock', 'project');
+    tempHomeDir = path.join('/mock', 'home');
+    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
     mockFsAdapter.readFile.mockReset();
     mockFsAdapter.writeFile.mockReset().mockResolvedValue(undefined);
     mockFsAdapter.mkdir
@@ -359,9 +363,7 @@ describe('MemoryTool', () => {
 
       const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
       expect(editResult.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-      expect(editResult.fileName).toContain(
-        path.join('mock', 'home', '.llxprt'),
-      );
+      expect(editResult.fileName).toContain(path.join(tempHomeDir, '.llxprt'));
       expect(editResult.fileName).toContain('LLXPRT.md');
       expect(editResult.fileDiff).toContain('Index: LLXPRT.md');
       expect(editResult.fileDiff).toContain('+## LLxprt Code Added Memories');
@@ -653,7 +655,7 @@ describe('MemoryTool', () => {
       const normalizedTitle = result.title.replace(/\\/g, '/');
       const normalizedFileName = result.fileName.replace(/\\/g, '/');
       expect(normalizedTitle).toContain('.llxprt/LLXPRT.md');
-      expect(normalizedFileName).toContain(mockWorkingDir);
+      expect(normalizedFileName).toContain(mockWorkingDir.replace(/\\/g, '/'));
       expect(normalizedFileName).toContain('.llxprt');
     });
   });
@@ -712,7 +714,7 @@ describe('MemoryTool', () => {
       const filePath = invocation.getMemoryFilePath();
       // Normalize paths for cross-platform compatibility
       const normalizedPath = filePath.replace(/\\/g, '/');
-      expect(normalizedPath).toContain(mockWorkingDir);
+      expect(normalizedPath).toContain(mockWorkingDir.replace(/\\/g, '/'));
       expect(normalizedPath).toContain('.llxprt');
       expect(normalizedPath).toContain('.LLXPRT_SYSTEM');
     });

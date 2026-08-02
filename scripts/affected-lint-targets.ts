@@ -103,6 +103,11 @@ const NO_TEST_METADATA = new Set<string>([
   '.prettierrc.json',
   '.editorconfig',
   '.prettierignore',
+  '.npmrc',
+  'bunfig.toml',
+  'junit-integration.xml',
+  'tsconfig.scripts.json',
+  'vitest.coverage.ts',
 ]);
 
 const NO_TEST_PATH_RES: readonly RegExp[] = [
@@ -112,6 +117,17 @@ const NO_TEST_PATH_RES: readonly RegExp[] = [
   DEV_DOCS_RE,
   EVALS_RE,
   MARKDOWN_RE,
+];
+
+/** Path prefixes for repo-level config/infra directories that never affect lint. */
+const NO_TEST_PREFIXES: readonly string[] = [
+  '.allstar/',
+  '.claude/',
+  '.gcp/',
+  '.gemini/',
+  '.llxprt/',
+  'shell-scripts/',
+  'test-scripts/',
 ];
 
 /** Builds the reverse-graph and shared-input set from loaded data. */
@@ -174,6 +190,9 @@ function classifyOtherPath(p: string): PathClassification | null {
   }
   if (NO_TEST_PATH_RES.some((re) => re.test(p))) {
     return noTargets(`documentation/metadata path '${p}' selects no package`);
+  }
+  if (NO_TEST_PREFIXES.some((prefix) => p.startsWith(prefix))) {
+    return noTargets(`repo config/infra path '${p}' selects no package`);
   }
   if (
     p.startsWith('.github/workflows/') ||

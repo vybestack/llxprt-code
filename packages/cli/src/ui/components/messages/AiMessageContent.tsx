@@ -8,12 +8,14 @@ import type React from 'react';
 import { Box } from 'ink';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
+import { useResolvedWorkspaceDirectories } from '../../hooks/useResolvedWorkspaceDirectories.js';
 
 interface AiMessageContentProps {
   text: string;
   isPending: boolean;
   availableTerminalHeight?: number;
   terminalWidth: number;
+  workspaceDirectories?: readonly string[];
 }
 
 /*
@@ -27,8 +29,12 @@ export const AiMessageContent: React.FC<AiMessageContentProps> = ({
   isPending,
   availableTerminalHeight,
   terminalWidth,
+  workspaceDirectories,
 }) => {
   const { renderMarkdown } = useUIState();
+  const resolvedWorkspaceDirectories =
+    useResolvedWorkspaceDirectories(workspaceDirectories);
+
   const originalPrefix = '✦ ';
   const prefixWidth = originalPrefix.length;
 
@@ -40,6 +46,7 @@ export const AiMessageContent: React.FC<AiMessageContentProps> = ({
         availableTerminalHeight={availableTerminalHeight}
         terminalWidth={terminalWidth}
         renderMarkdown={renderMarkdown}
+        workspaceDirectories={resolvedWorkspaceDirectories}
       />
     </Box>
   );

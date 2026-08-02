@@ -269,11 +269,13 @@ describe('executeAnthropicApiCall dumpContext behavior', () => {
         result.response as AsyncIterable<Anthropic.MessageStreamEvent>;
 
       const received: Anthropic.MessageStreamEvent[] = [];
-      await expect(async () => {
-        for await (const chunk of stream) {
-          received.push(chunk);
-        }
-      }).rejects.toThrow('Stream interrupted');
+      await expect(
+        (async () => {
+          for await (const chunk of stream) {
+            received.push(chunk);
+          }
+        })(),
+      ).rejects.toThrow('Stream interrupted');
 
       expect(received).toHaveLength(1);
       // Response dump should still be written with accumulated chunks

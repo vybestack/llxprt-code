@@ -9,6 +9,11 @@ import { Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import stringWidth from 'string-width';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  createFilePathLink,
+  createUrlLink,
+  stripControlCharacters,
+} from './terminalLinks.js';
 
 // Constants for Markdown parsing
 const BOLD_MARKER_LENGTH = 2; // For "**"
@@ -24,6 +29,7 @@ interface RenderInlineProps {
   bold?: boolean;
   italic?: boolean;
   wrap?: React.ComponentProps<typeof Text>['wrap'];
+  workspaceDirectories?: readonly string[];
 }
 
 function renderBoldNode(
@@ -129,6 +135,23 @@ function renderInlineCodeNode(
   return null;
 }
 
+/**
+ * Does the candidate contain more `(` than `)`? The markdown-link tokenizer
+ * terminates at the first `)`, so an unbalanced opening parenthesis means the
+ * captured URL was cut short.
+ */
+function hasUnbalancedOpenParen(candidate: string): boolean {
+  let depth = 0;
+  for (const character of candidate) {
+    if (character === '(') {
+      depth++;
+    } else if (character === ')') {
+      depth--;
+    }
+  }
+  return depth > 0;
+}
+
 function renderLinkNode(
   fullMatch: string,
   key: string,
@@ -146,10 +169,31 @@ function renderLinkNode(
     const linkMatch = fullMatch.match(new RegExp(linkPattern));
     if (linkMatch) {
       const [, linkText, url] = linkMatch;
+      // Both halves are cleaned up front so neither the hyperlink label nor
+      // the plain-text fallback can carry escape bytes to the terminal.
+      const safeText = stripControlCharacters(linkText);
+      const safeUrl = stripControlCharacters(url);
+      // Link the visible label and keep the raw `(url)` fallback, itself
+      // linked, so the target stays reachable in terminals without OSC 8.
+      // The markdown-link pattern stops at the first `)`, so a URL containing
+      // an unbalanced `(` was truncated by the tokenizer. Linking a truncated
+      // URL would send the user somewhere they did not ask for, so no
+      // hyperlink is emitted and the text renders exactly as it did before
+      // links were clickable.
+      const combinedLink = hasUnbalancedOpenParen(url)
+        ? null
+        : createUrlLink(url, `${safeText} (${safeUrl})`);
+      if (combinedLink !== null) {
+        return (
+          <Text key={key} color={theme.text.link}>
+            {combinedLink}
+          </Text>
+        );
+      }
       return (
         <Text key={key} color={baseColor}>
-          {linkText}
-          <Text color={theme.text.link}> ({url})</Text>
+          {safeText}
+          <Text color={theme.text.link}> ({safeUrl})</Text>
         </Text>
       );
     }
@@ -174,6 +218,30 @@ function renderUnderlineNode(
     );
   }
   return null;
+}
+
+/**
+ * Render a bare URL token. The URL keeps the link colour whether or not it can
+ * be hyperlinked — it is a URL either way — while trailing sentence
+ * punctuation stays in the surrounding text colour. A URL that cannot be
+ * linkified safely (unparseable, or carrying control characters) is shown
+ * without an OSC 8 escape.
+ */
+function renderBareUrlNode(
+  fullMatch: string,
+  key: string,
+  baseColor: string,
+): React.ReactNode {
+  const { url, trailing } = splitTrailingUrlPunctuation(fullMatch);
+  const urlLink = createUrlLink(url);
+  return (
+    <Text key={key} color={baseColor}>
+      <Text color={theme.text.link}>
+        {urlLink ?? stripControlCharacters(url)}
+      </Text>
+      {trailing.length > 0 && <Text color={baseColor}>{trailing}</Text>}
+    </Text>
+  );
 }
 
 function renderMatchedNode(
@@ -204,35 +272,250 @@ function renderMatchedNode(
   if (underline !== null) return underline;
 
   if (fullMatch.match(/^https?:\/\//)) {
-    return (
-      <Text key={key} color={theme.text.link}>
-        {fullMatch}
-      </Text>
-    );
+    return renderBareUrlNode(fullMatch, key, baseColor);
   }
 
   return null;
 }
 
-export const RenderInlineInternal: React.FC<RenderInlineProps> = ({
-  text,
-  defaultColor,
-  bold,
-  italic,
-  wrap,
-}) => {
-  const baseColor = defaultColor ?? theme.text.primary;
-  // Early return for plain text without markdown or URLs
-  // Static regex for markdown marker detection - no dynamic parts
+/**
+ * Path-like token pattern. Tokens must contain at least one path separator, or
+ * be a `.`/`..` relative path prefix. Bounded quantifiers avoid sonarjs/slow-regex,
+ * and the pattern is passed via an identifier so it is not a static literal
+ * flagged by sonarjs/regular-expr.
+ */
+const FILE_PATH_PATTERN =
+  '(\\S{1,500}[/\\\\]\\S{1,500}|\\.\\.?[/\\\\]\\S{1,500})';
 
-  if (!/[*_~`<[]|https?:\/\//.test(text)) {
-    return (
-      <Text color={baseColor} bold={bold} italic={italic} wrap={wrap}>
-        {text}
-      </Text>
+const PATH_DELIMITERS = new Set([
+  '(',
+  ')',
+  '[',
+  ']',
+  '{',
+  '}',
+  "'",
+  '"',
+  '.',
+  ',',
+  ';',
+  ':',
+  '!',
+  '?',
+]);
+
+/**
+ * Trailing sentence-punctuation characters that should be stripped from a bare
+ * URL link target so prose like "see https://example.com." does not include the
+ * period in the link.
+ */
+const URL_TRAILING_PUNCTUATION = new Set(['.', ',', ';', ':', '!', '?']);
+
+/**
+ * Split a bare URL token into the URL portion and any trailing punctuation
+ * that should be excluded from the link target. A trailing `)` is only stripped
+ * when the URL contains no `(`, so Wikipedia-style `..._(disambiguation)` URLs
+ * stay intact. Uses a character-set lookup instead of a regex to avoid
+ * backtracking-vulnerable patterns.
+ */
+function splitTrailingUrlPunctuation(token: string): {
+  url: string;
+  trailing: string;
+} {
+  let end = token.length;
+  let trimmed = true;
+  while (trimmed && end > 0) {
+    trimmed = false;
+    while (end > 0 && URL_TRAILING_PUNCTUATION.has(token[end - 1])) {
+      end--;
+      trimmed = true;
+    }
+    if (
+      end > 0 &&
+      token[end - 1] === ')' &&
+      !token.slice(0, end).includes('(')
+    ) {
+      end--;
+      trimmed = true;
+    }
+  }
+  return { url: token.slice(0, end), trailing: token.slice(end) };
+}
+
+function renderPlainSegment(
+  textSlice: string,
+  baseColor: string,
+  key: string,
+  bold?: boolean,
+  italic?: boolean,
+): React.ReactNode {
+  return (
+    <Text key={key} color={baseColor} bold={bold} italic={italic}>
+      {textSlice}
+    </Text>
+  );
+}
+
+/**
+ * Strip leading and trailing sentence-punctuation delimiters from a candidate
+ * path token so that prose like `src/utils.ts.` or `(src/utils.ts)` resolves
+ * correctly. Uses a character-set lookup instead of a regex to avoid
+ * backtracking-vulnerable patterns.
+ */
+function trimPathDelimiters(candidate: string): string {
+  let start = 0;
+  let end = candidate.length;
+  while (start < end && PATH_DELIMITERS.has(candidate[start])) {
+    start++;
+  }
+  while (end > start && PATH_DELIMITERS.has(candidate[end - 1])) {
+    end--;
+  }
+  return candidate.slice(start, end);
+}
+
+/**
+ * Scan a plain-text segment for path-like tokens, resolving each against the
+ * workspace directories. Tokens that exist on disk become OSC 8 link nodes;
+ * intervening text becomes plain `<Text>` nodes. Returns null if no links were
+ * produced (caller should render a single plain segment instead).
+ */
+function collectLinkNodes(
+  textSegment: string,
+  workspaceDirectories: readonly string[],
+  baseColor: string,
+  keyPrefix: string,
+  bold?: boolean,
+  italic?: boolean,
+): React.ReactNode[] | null {
+  const pathRegex = new RegExp(FILE_PATH_PATTERN, 'g');
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let segmentIndex = 0;
+
+  while ((match = pathRegex.exec(textSegment)) !== null) {
+    const rawCandidate = match[0];
+    const candidate = trimPathDelimiters(rawCandidate);
+    const link = createFilePathLink(candidate, workspaceDirectories);
+    if (link === null) {
+      continue;
+    }
+
+    if (match.index > lastIndex) {
+      nodes.push(
+        renderPlainSegment(
+          textSegment.slice(lastIndex, match.index),
+          baseColor,
+          `${keyPrefix}-p${segmentIndex}`,
+          bold,
+          italic,
+        ),
+      );
+      segmentIndex++;
+    }
+
+    nodes.push(
+      <Text key={`${keyPrefix}-l${segmentIndex}`} color={theme.text.link}>
+        {link}
+      </Text>,
+    );
+    segmentIndex++;
+    lastIndex = match.index + rawCandidate.length;
+  }
+
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  if (lastIndex < textSegment.length) {
+    nodes.push(
+      renderPlainSegment(
+        textSegment.slice(lastIndex),
+        baseColor,
+        `${keyPrefix}-p${segmentIndex}`,
+        bold,
+        italic,
+      ),
     );
   }
 
+  return nodes;
+}
+
+/**
+ * Process a plain-text segment (text that is NOT inside markdown tokens) for
+ * file-path links. Path-like tokens are resolved against the workspace
+ * directories; absolute paths are resolved directly. Tokens that exist on disk
+ * are rendered as OSC 8 links, the remaining text renders as plain `<Text>`
+ * nodes.
+ */
+function processPlainTextForLinks(
+  textSegment: string,
+  workspaceDirectories: readonly string[] | undefined,
+  baseColor: string,
+  keyPrefix: string,
+  bold?: boolean,
+  italic?: boolean,
+): React.ReactNode {
+  const linkNodes = collectLinkNodes(
+    textSegment,
+    workspaceDirectories ?? [],
+    baseColor,
+    keyPrefix,
+    bold,
+    italic,
+  );
+  return (
+    linkNodes ??
+    renderPlainSegment(textSegment, baseColor, keyPrefix, bold, italic)
+  );
+}
+
+function renderPlainTextNodes(
+  text: string,
+  baseColor: string,
+  bold: boolean | undefined,
+  italic: boolean | undefined,
+  wrap: React.ComponentProps<typeof Text>['wrap'],
+): React.ReactNode {
+  return (
+    <Text color={baseColor} bold={bold} italic={italic} wrap={wrap}>
+      {text}
+    </Text>
+  );
+}
+
+/**
+ * Determine whether the text needs full markdown/path tokenization or can be
+ * rendered as a single plain-text node. When workspace directories are present,
+ * path separators (`/` `\`) also trigger tokenization so file paths can be linked.
+ * Without workspace directories we still tokenize for absolute paths
+ * (`/...` or `C:\...`) so direct paths can be linked.
+ */
+function needsTokenization(text: string, hasWorkspaceDirs: boolean): boolean {
+  if (/[*_~`<[]|https?:\/\//.test(text)) {
+    return true;
+  }
+  if (hasWorkspaceDirs) {
+    return /[/\\]/.test(text);
+  }
+  // Without workspace dirs, still tokenize for absolute paths (/... or C:\...)
+  return /(^|\s)[/\\]|[A-Za-z]:[\\/]/.test(text);
+}
+
+/**
+ * Tokenize `text` into inline markdown nodes and plain-text segments. Plain-text
+ * segments are additionally processed for file-path links when workspace
+ * directories are available.
+ */
+function tokenizeInlineMarkdown(
+  text: string,
+  workspaceDirectories: readonly string[] | undefined,
+  baseColor: string,
+  bold?: boolean,
+  italic?: boolean,
+): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
   let lastIndex = 0;
   // Inline markdown tokens. The bounded lazy quantifiers avoid sonarjs/slow-regex
@@ -246,9 +529,14 @@ export const RenderInlineInternal: React.FC<RenderInlineProps> = ({
   while ((match = inlineRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       nodes.push(
-        <Text key={`t-${lastIndex}`} color={baseColor}>
-          {text.slice(lastIndex, match.index)}
-        </Text>,
+        processPlainTextForLinks(
+          text.slice(lastIndex, match.index),
+          workspaceDirectories,
+          baseColor,
+          `t-${lastIndex}`,
+          bold,
+          italic,
+        ),
       );
     }
 
@@ -282,15 +570,47 @@ export const RenderInlineInternal: React.FC<RenderInlineProps> = ({
 
   if (lastIndex < text.length) {
     nodes.push(
-      <Text key={`t-${lastIndex}`} color={baseColor}>
-        {text.slice(lastIndex)}
-      </Text>,
+      processPlainTextForLinks(
+        text.slice(lastIndex),
+        workspaceDirectories,
+        baseColor,
+        `t-${lastIndex}`,
+        bold,
+        italic,
+      ),
     );
   }
 
+  return nodes.filter((node) => node !== null);
+}
+
+export const RenderInlineInternal: React.FC<RenderInlineProps> = ({
+  text,
+  defaultColor,
+  bold,
+  italic,
+  wrap,
+  workspaceDirectories,
+}) => {
+  const baseColor = defaultColor ?? theme.text.primary;
+  const hasWorkspaceDirs =
+    workspaceDirectories !== undefined && workspaceDirectories.length > 0;
+
+  if (!needsTokenization(text, hasWorkspaceDirs)) {
+    return renderPlainTextNodes(text, baseColor, bold, italic, wrap);
+  }
+
+  const nodes = tokenizeInlineMarkdown(
+    text,
+    workspaceDirectories,
+    baseColor,
+    bold,
+    italic,
+  );
+
   return (
     <Text color={baseColor} bold={bold} italic={italic} wrap={wrap}>
-      {nodes.filter((node) => node !== null)}
+      {nodes}
     </Text>
   );
 };

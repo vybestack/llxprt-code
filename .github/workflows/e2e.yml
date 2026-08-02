@@ -44,8 +44,8 @@ jobs:
       paths_result: ${{ steps.skip_check.outputs.paths_result }}
     steps:
       - id: skip_check
-        # ratchet:fkirc/skip-duplicate-actions@v5.3.1
-        uses: 'fkirc/skip-duplicate-actions@f75f66ce1886f00957d99748a42c724f4330bdcf'
+        # ratchet:fkirc/skip-duplicate-actions@v5.3.2
+        uses: 'fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578'
         with:
           concurrent_skipping: 'same_content'
           skip_after_successful_duplicate: 'true'
@@ -82,7 +82,7 @@ jobs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
       - name: 'Checkout'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -207,21 +207,34 @@ jobs:
 
     steps:
       - name: 'Checkout trusted quota selector'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           ref: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.base.sha || github.event.inputs.branch_ref || github.ref }}
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
+
+      - name: 'Setup Bun'
+        # The trusted quota selector runs under Bun before PR code is checked
+        # out, so Bun must be on PATH before that step. npm run build below is
+        # also backed by bun scripts/build.ts.
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
 
       - name: 'Check API quota and select optimal key'
         id: 'quota'
         shell: 'bash'
         run: |
           set -euo pipefail
-          node scripts/ci-quota-check.js
+          quota_selectors=(scripts/ci-quota-check.*)
+          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
+            echo 'Trusted checkout must contain exactly one quota selector' >&2
+            exit 1
+          fi
+          bun "${quota_selectors[0]}"
 
           # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
           # it before checking out PR code; downstream steps resolve one secret.
@@ -247,7 +260,7 @@ jobs:
           OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
 
       - name: 'Checkout PR head (internal target)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         if: "github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository"
         with:
           ref: '${{ github.event.pull_request.head.sha }}'
@@ -255,19 +268,12 @@ jobs:
           persist-credentials: false
 
       - name: 'Checkout PR merge ref (internal)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         if: "github.event_name == 'pull_request'"
         with:
           ref: '${{ github.ref }}'
           persist-credentials: false
           clean: false
-
-      - name: 'Setup Bun'
-        # npm run build below is backed by bun scripts/build.ts and requires
-        # the Bun runtime to be on PATH.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies'
         run: 'npm ci'
@@ -277,7 +283,7 @@ jobs:
 
       - name: 'Set up Docker'
         if: "matrix.sandbox == 'sandbox:docker'"
-        uses: 'docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435' # ratchet:docker/setup-buildx-action@v3
+        uses: 'docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c' # ratchet:docker/setup-buildx-action@v4
 
       - name: 'Validate E2E provider environment (Linux)'
         shell: 'bash'
@@ -312,18 +318,18 @@ jobs:
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
             npm run test:integration:sandbox:docker -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               --exclude="**/run_shell_command.test.ts"
             npm run test:integration:sandbox:docker -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
               --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           else
             npm run test:integration:sandbox:none -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               --exclude="**/run_shell_command.test.ts"
             npm run test:integration:sandbox:none -- \
-              --exclude="**/todo-continuation.e2e.test.js" \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
               --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           fi
@@ -368,21 +374,34 @@ jobs:
     continue-on-error: true
     steps:
       - name: 'Checkout trusted quota selector'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
           ref: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.base.sha || github.event.inputs.branch_ref || github.ref }}
 
       - name: 'Set up Node.js 24.x'
-        uses: 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e' # ratchet:actions/setup-node@v6
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '24.x'
+
+      - name: 'Setup Bun'
+        # The trusted quota selector runs under Bun before PR code is checked
+        # out, so Bun must be on PATH before that step. npm run build below is
+        # also backed by bun scripts/build.ts.
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
 
       - name: 'Check API quota and select optimal key (macOS)'
         id: 'quota_macos'
         shell: 'bash'
         run: |
           set -euo pipefail
-          node scripts/ci-quota-check.js
+          quota_selectors=(scripts/ci-quota-check.*)
+          if (( ${#quota_selectors[@]} != 1 )) || [[ ! -f "${quota_selectors[0]}" ]]; then
+            echo 'Trusted checkout must contain exactly one quota selector' >&2
+            exit 1
+          fi
+          bun "${quota_selectors[0]}"
 
           # The trusted legacy selector writes the secret to GITHUB_ENV. Remove
           # it before checking out PR code; downstream steps resolve one secret.
@@ -408,7 +427,7 @@ jobs:
           OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
 
       - name: 'Checkout PR head (internal target)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         if: "github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository"
         with:
           ref: '${{ github.event.pull_request.head.sha }}'
@@ -416,19 +435,12 @@ jobs:
           persist-credentials: false
 
       - name: 'Checkout PR merge ref (internal)'
-        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         if: "github.event_name == 'pull_request'"
         with:
           ref: '${{ github.ref }}'
           persist-credentials: false
           clean: false
-
-      - name: 'Setup Bun'
-        # npm run build below is backed by bun scripts/build.ts and requires
-        # the Bun runtime to be on PATH.
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
 
       - name: 'Install dependencies'
         run: 'npm ci'
@@ -474,9 +486,9 @@ jobs:
         shell: 'bash'
         run: |
           npm run test:integration:sandbox:none -- \
-            --exclude="**/todo-continuation.e2e.test.js" \
+            --exclude="**/todo-continuation.e2e.test.ts" \
             --exclude="**/run_shell_command.test.ts"
           npm run test:integration:sandbox:none -- \
-            --exclude="**/todo-continuation.e2e.test.js" \
+            --exclude="**/todo-continuation.e2e.test.ts" \
             integration-tests/run_shell_command.test.ts \
             --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"

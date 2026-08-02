@@ -11,7 +11,10 @@ import { Box, Text } from 'ink';
 import type React from 'react';
 import { useCallback } from 'react';
 
-import type { SessionSummary } from '@vybestack/llxprt-code-core';
+import type {
+  ContinueTarget,
+  SessionRecordingService,
+} from '@vybestack/llxprt-code-core';
 
 import { SemanticColors } from '../colors.js';
 import type { PerformResumeResult } from '../../services/performResume.js';
@@ -33,7 +36,8 @@ export interface SessionBrowserDialogProps {
   projectHash: string;
   currentSessionId: string;
   hasActiveConversation: boolean;
-  onSelect: (session: SessionSummary) => Promise<PerformResumeResult>;
+  activeRecording?: SessionRecordingService | null;
+  onSelect: (target: ContinueTarget) => Promise<PerformResumeResult>;
   onClose: () => void;
 }
 
@@ -114,6 +118,16 @@ const SessionPreview: React.FC<{
   }
 };
 
+function getTargetLabel(session: EnrichedSessionSummary): string {
+  if (session.target.kind === 'checkpoint') {
+    return `checkpoint ${session.target.checkpointName}`;
+  }
+  if (session.target.session.name) {
+    return `session ${session.target.session.name}`;
+  }
+  return `session ${session.sessionId.slice(0, 8)}`;
+}
+
 const NarrowSessionRow: React.FC<{
   session: EnrichedSessionSummary;
   isSelected: boolean;
@@ -121,7 +135,7 @@ const NarrowSessionRow: React.FC<{
   relTime: string;
   isNarrow: boolean;
 }> = ({ session, isSelected, display, relTime, isNarrow }) => (
-  <Box key={session.sessionId} flexDirection="column">
+  <Box key={session.targetKey} flexDirection="column">
     <Box>
       <Text
         color={
@@ -135,9 +149,12 @@ const NarrowSessionRow: React.FC<{
           isSelected ? SemanticColors.text.accent : SemanticColors.text.primary
         }
       >
-        {display.provider}
+        {getTargetLabel(session)}
       </Text>
-      <Text color={SemanticColors.text.secondary}> · </Text>
+      <Text color={SemanticColors.text.secondary}>
+        {' '}
+        · {display.provider} ·{' '}
+      </Text>
       <Text color={SemanticColors.text.secondary}>{relTime}</Text>
       {session.isLocked ? (
         <Text color={SemanticColors.status.warning}> (in use)</Text>
@@ -163,7 +180,7 @@ const WideSessionRow: React.FC<{
   oneBasedIndex: number;
   isNarrow: boolean;
 }> = ({ session, isSelected, display, relTime, oneBasedIndex, isNarrow }) => (
-  <Box key={session.sessionId} flexDirection="column">
+  <Box key={session.targetKey} flexDirection="column">
     <Box>
       <Text
         color={
@@ -178,9 +195,9 @@ const WideSessionRow: React.FC<{
           isSelected ? SemanticColors.text.accent : SemanticColors.text.primary
         }
       >
-        {display.provider}
+        {getTargetLabel(session)}
       </Text>
-      <Text color={SemanticColors.text.secondary}>/</Text>
+      <Text color={SemanticColors.text.secondary}> · {display.provider}/</Text>
       <Text color={SemanticColors.text.primary}>
         {truncateEnd(display.model, 30)}
       </Text>
@@ -315,7 +332,7 @@ const SearchBarWide: React.FC<{
       <Text color={SemanticColors.text.primary}>{state.searchTerm}</Text>
       <Text color={SemanticColors.text.secondary}>
         {' '}
-        ({matchCount} {matchCount === 1 ? 'session' : 'sessions'} found)
+        ({matchCount} {matchCount === 1 ? 'target' : 'targets'} found)
         {state.isSearching ? ' (Tab to navigate)' : ''}
       </Text>
     </Box>
@@ -386,7 +403,8 @@ const SelectionDetail: React.FC<{
   return (
     <Box marginTop={1}>
       <Text color={SemanticColors.text.secondary}>Selected: </Text>
-      <Text color={SemanticColors.text.primary}>{session.sessionId}</Text>
+      <Text color={SemanticColors.text.primary}>{getTargetLabel(session)}</Text>
+      <Text color={SemanticColors.text.secondary}> [{session.sessionId}]</Text>
       <Text color={SemanticColors.text.secondary}> · </Text>
       <Text color={SemanticColors.text.primary}>
         {display.provider}/{display.model}
@@ -430,6 +448,19 @@ const ErrorMessage: React.FC<{ error: string | null }> = ({ error }) => {
   );
 };
 
+const ErrorState: React.FC<{ error: string; isNarrow: boolean }> = ({
+  error,
+  isNarrow,
+}) => (
+  <Box flexDirection="column" padding={1}>
+    <Text bold color={SemanticColors.text.primary}>
+      {isNarrow ? 'Sessions' : 'Session Browser'}
+    </Text>
+    <ErrorMessage error={error} />
+    <Text color={SemanticColors.text.secondary}>Press Esc to close</Text>
+  </Box>
+);
+
 const SkippedNotice: React.FC<{ skippedCount: number }> = ({
   skippedCount,
 }) => {
@@ -456,13 +487,15 @@ const ResumingStatus: React.FC<{ isResuming: boolean }> = ({ isResuming }) => {
 
 const DeleteConfirmation: React.FC<{
   deleteConfirmIndex: number | null;
-}> = ({ deleteConfirmIndex }) => {
+  selectedSession: EnrichedSessionSummary | null;
+}> = ({ deleteConfirmIndex, selectedSession }) => {
   if (deleteConfirmIndex === null) return null;
+  const kind = selectedSession?.target.kind ?? 'session';
 
   return (
     <Box marginY={1}>
       <Text color={SemanticColors.status.warning}>
-        Delete this session? Press Y to confirm, N or Esc to cancel.
+        Delete this {kind}? Press Y to confirm, N or Esc to cancel.
       </Text>
     </Box>
   );
@@ -491,7 +524,7 @@ const EmptySearchResults: React.FC<{
   return (
     <Box marginY={1}>
       <Text color={SemanticColors.text.secondary}>
-        No sessions match &quot;{searchTerm}&quot;
+        No targets match &quot;{searchTerm}&quot;
       </Text>
     </Box>
   );
@@ -519,7 +552,7 @@ const SessionList: React.FC<{
         if (isNarrow) {
           return (
             <NarrowSessionRow
-              key={session.sessionId}
+              key={session.targetKey}
               session={session}
               isSelected={isSelected}
               display={display}
@@ -532,7 +565,7 @@ const SessionList: React.FC<{
         const oneBasedIndex = state.page * 20 + index + 1;
         return (
           <WideSessionRow
-            key={session.sessionId}
+            key={session.targetKey}
             session={session}
             isSelected={isSelected}
             display={display}
@@ -582,7 +615,10 @@ const SessionContent: React.FC<{
     <ResumingStatus isResuming={state.isResuming} />
 
     {/* Delete confirmation */}
-    <DeleteConfirmation deleteConfirmIndex={state.deleteConfirmIndex} />
+    <DeleteConfirmation
+      deleteConfirmIndex={state.deleteConfirmIndex}
+      selectedSession={state.selectedSession}
+    />
 
     {/* Conversation confirmation */}
     <ConversationConfirmation
@@ -616,6 +652,7 @@ export function SessionBrowserDialog(
     projectHash,
     currentSessionId,
     hasActiveConversation,
+    activeRecording,
     onSelect,
     onClose,
   } = props;
@@ -626,6 +663,7 @@ export function SessionBrowserDialog(
     projectHash,
     currentSessionId,
     onSelect,
+    activeRecording,
     onClose,
     hasActiveConversation,
   });
@@ -643,7 +681,12 @@ export function SessionBrowserDialog(
     return <LoadingState isNarrow={isNarrow} />;
   }
 
-  if (state.sessions.length === 0 && state.searchTerm === '') {
+  const noLoadedSessionState =
+    state.sessions.length + state.pageItems.length + state.skippedCount === 0;
+  if (noLoadedSessionState && state.searchTerm === '') {
+    if (state.error !== null) {
+      return <ErrorState error={state.error} isNarrow={isNarrow} />;
+    }
     return <EmptyState isNarrow={isNarrow} />;
   }
 

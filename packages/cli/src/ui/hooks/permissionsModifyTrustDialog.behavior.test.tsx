@@ -6,6 +6,7 @@
 
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
 import { renderHook } from '../../test-utils/render.js';
 import { createDeferred } from '../../test-utils/async.js';
 import {
@@ -44,14 +45,20 @@ vi.mock('../../config/trustedFolders.js', async () => {
         config: mockedUserConfig.value,
       },
       errors: [],
-      rules: [],
+      get rules() {
+        return Object.entries(mockedUserConfig.value).map(
+          ([rulePath, trustLevel]) => ({ path: rulePath, trustLevel }),
+        );
+      },
       setValue: mockedSetValue,
       deleteValue: mockedDeleteValue,
+      removeRule: vi.fn(),
       getValue: mockedGetValue,
       snapshotValue: mockedSnapshotValue,
       restoreSnapshot: mockedRestoreSnapshot,
       resolvePathTrust: mockedResolvePathTrust,
-      isPathTrusted: vi.fn(() => undefined),
+      isPathTrusted: (folderPath: string) =>
+        mockedResolvePathTrust(folderPath)?.trusted,
     })),
   };
 });
@@ -61,6 +68,12 @@ vi.mock('./useIdeTrustListener.js', () => ({
 }));
 
 import { usePermissionsModifyTrust } from './usePermissionsModifyTrust.js';
+
+const CONFIGURED_WORKSPACE = path.resolve('/configured/workspace');
+const WORKSPACE_ROOT = path.resolve('/workspace');
+const WORKSPACE_FIRST = path.join(WORKSPACE_ROOT, 'first');
+const WORKSPACE_SECOND = path.join(WORKSPACE_ROOT, 'second');
+const WORKSPACE_PROJECT = path.join(WORKSPACE_ROOT, 'project');
 
 describe('PermissionsModifyTrustDialog trust provenance', () => {
   beforeEach(() => {
@@ -112,7 +125,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
     mockedIdeTrust.value = true;
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/workspace',
+      getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => true,
@@ -134,7 +147,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       .mockImplementation(() => undefined);
     let liveTrust = true;
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/workspace',
+      getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => liveTrust,
@@ -157,7 +170,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     expect(firstResult).toMatchObject({ success: false, phase: 'live' });
     expect(result.current.effectiveTrust).toBe(true);
     expect(mockedSetValue).toHaveBeenCalledWith(
-      '/configured/workspace',
+      CONFIGURED_WORKSPACE,
       TrustLevel.TRUST_FOLDER,
     );
     expect(result.current.committedTrustLevel).toBeUndefined();
@@ -177,7 +190,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
   it('preserves unrelated rule changes while rolling back a live failure', async () => {
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/workspace',
+      getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
@@ -199,13 +212,13 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
   it('preserves the pending selection when persistence fails', async () => {
     mockedUserConfig.value = {
-      '/configured/workspace': TrustLevel.DO_NOT_TRUST,
+      [CONFIGURED_WORKSPACE]: TrustLevel.DO_NOT_TRUST,
     };
     mockedSetValue.mockImplementationOnce(() => {
       throw new Error('disk full');
     });
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/workspace',
+      getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
@@ -225,10 +238,11 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
   it('reads and persists the direct rule by normalized working directory', async () => {
     mockedUserConfig.value = {
-      '/configured/workspace': TrustLevel.DO_NOT_TRUST,
+      [CONFIGURED_WORKSPACE]: TrustLevel.DO_NOT_TRUST,
     };
+    const unnormalizedWorkspace = `${path.resolve('/configured')}${path.sep}child${path.sep}..${path.sep}workspace`;
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/child/../workspace',
+      getWorkingDir: () => unnormalizedWorkspace,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
@@ -238,30 +252,30 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     const { result } = renderHook(() => usePermissionsModifyTrust(config));
 
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
-    expect(result.current.workingDirectory).toBe('/configured/workspace');
+    expect(result.current.workingDirectory).toBe(CONFIGURED_WORKSPACE);
     await act(async () => {
       await result.current.commitTrustLevel(TrustLevel.TRUST_FOLDER);
     });
     expect(mockedSetValue).toHaveBeenCalledWith(
-      '/configured/workspace',
+      CONFIGURED_WORKSPACE,
       TrustLevel.TRUST_FOLDER,
     );
   });
 
   it('resets dialog trust state when the runtime working directory changes', async () => {
     mockedUserConfig.value = {
-      '/workspace/first': TrustLevel.TRUST_FOLDER,
-      '/workspace/second': TrustLevel.DO_NOT_TRUST,
+      [WORKSPACE_FIRST]: TrustLevel.TRUST_FOLDER,
+      [WORKSPACE_SECOND]: TrustLevel.DO_NOT_TRUST,
     };
     const firstConfig: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/workspace/first',
+      getWorkingDir: () => WORKSPACE_FIRST,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => true,
       setTrustedFolderLive: vi.fn(),
     };
     const secondConfig: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/workspace/second',
+      getWorkingDir: () => WORKSPACE_SECOND,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
@@ -281,7 +295,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
     rerender({ config: secondConfig });
 
-    expect(result.current.workingDirectory).toBe('/workspace/second');
+    expect(result.current.workingDirectory).toBe(WORKSPACE_SECOND);
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.effectiveTrust).toBe(false);
     expect(result.current.committedTrustLevel).toBeUndefined();
@@ -289,11 +303,11 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
   it('does not publish a completed commit into a different working directory', async () => {
     mockedUserConfig.value = {
-      '/workspace/first': TrustLevel.DO_NOT_TRUST,
-      '/workspace/second': TrustLevel.DO_NOT_TRUST,
+      [WORKSPACE_FIRST]: TrustLevel.DO_NOT_TRUST,
+      [WORKSPACE_SECOND]: TrustLevel.DO_NOT_TRUST,
     };
     const liveUpdate = createDeferred<void>();
-    let workingDirectory = '/workspace/first';
+    let workingDirectory = WORKSPACE_FIRST;
     let liveTrust = false;
     const setTrustedFolderLive = vi.fn(async (trusted: boolean) => {
       await liveUpdate.promise;
@@ -316,9 +330,9 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
     await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
 
-    workingDirectory = '/workspace/second';
+    workingDirectory = WORKSPACE_SECOND;
     rerender();
-    expect(result.current.workingDirectory).toBe('/workspace/second');
+    expect(result.current.workingDirectory).toBe(WORKSPACE_SECOND);
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
 
     liveUpdate.resolve();
@@ -326,7 +340,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
       await commit;
     });
 
-    expect(result.current.workingDirectory).toBe('/workspace/second');
+    expect(result.current.workingDirectory).toBe(WORKSPACE_SECOND);
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
     expect(result.current.committedTrustLevel).toBeUndefined();
     expect(result.current.effectiveTrust).toBe(false);
@@ -345,7 +359,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
         liveTrust = trusted;
       });
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/workspace',
+      getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => liveTrust,
@@ -361,7 +375,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
     await vi.waitFor(() => expect(setTrustedFolderLive).toHaveBeenCalledOnce());
 
-    expect(mockedUserConfig.value['/configured/workspace']).toBe(
+    expect(mockedUserConfig.value[CONFIGURED_WORKSPACE]).toBe(
       TrustLevel.TRUST_FOLDER,
     );
     firstLiveUpdate.resolve();
@@ -370,7 +384,7 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
 
     expect(setTrustedFolderLive).toHaveBeenCalledTimes(2);
-    expect(mockedUserConfig.value['/configured/workspace']).toBe(
+    expect(mockedUserConfig.value[CONFIGURED_WORKSPACE]).toBe(
       TrustLevel.DO_NOT_TRUST,
     );
     expect(result.current.committedTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
@@ -379,10 +393,10 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
   it('restores the exact saved rule when live application throws', async () => {
     mockedUserConfig.value = {
-      '/configured/workspace': TrustLevel.DO_NOT_TRUST,
+      [CONFIGURED_WORKSPACE]: TrustLevel.DO_NOT_TRUST,
     };
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/configured/workspace',
+      getWorkingDir: () => CONFIGURED_WORKSPACE,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
@@ -397,28 +411,28 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
 
     expect(mockedSetValue).toHaveBeenCalledExactlyOnceWith(
-      '/configured/workspace',
+      CONFIGURED_WORKSPACE,
       TrustLevel.TRUST_FOLDER,
     );
     expect(mockedRestoreSnapshot).toHaveBeenCalledOnce();
     expect(mockedDeleteValue).not.toHaveBeenCalled();
-    expect(mockedUserConfig.value['/configured/workspace']).toBe(
+    expect(mockedUserConfig.value[CONFIGURED_WORKSPACE]).toBe(
       TrustLevel.DO_NOT_TRUST,
     );
   });
 
   it('saves a direct cwd rule when selecting the same level as inherited trust', async () => {
     mockedUserConfig.value = {
-      '/workspace': TrustLevel.TRUST_FOLDER,
+      [WORKSPACE_ROOT]: TrustLevel.TRUST_FOLDER,
     };
     mockedResolvePathTrust.mockReturnValue({
-      rule: { path: '/workspace', trustLevel: TrustLevel.TRUST_FOLDER },
-      effectivePath: '/workspace',
+      rule: { path: WORKSPACE_ROOT, trustLevel: TrustLevel.TRUST_FOLDER },
+      effectivePath: WORKSPACE_ROOT,
       trusted: true,
       provenance: 'inherited',
     });
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/workspace/project',
+      getWorkingDir: () => WORKSPACE_PROJECT,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => true,
@@ -437,14 +451,14 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
     });
 
     expect(mockedSetValue).toHaveBeenCalledWith(
-      '/workspace/project',
+      WORKSPACE_PROJECT,
       TrustLevel.TRUST_FOLDER,
     );
   });
 
   it('recomputes the winning rule after persisting a direct override', async () => {
     mockedUserConfig.value = {
-      '/workspace': TrustLevel.TRUST_FOLDER,
+      [WORKSPACE_ROOT]: TrustLevel.TRUST_FOLDER,
     };
     mockedResolvePathTrust.mockImplementation((folderPath: string) => {
       if (folderPath in mockedUserConfig.value) {
@@ -457,14 +471,14 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
         };
       }
       return {
-        rule: { path: '/workspace', trustLevel: TrustLevel.TRUST_FOLDER },
-        effectivePath: '/workspace',
+        rule: { path: WORKSPACE_ROOT, trustLevel: TrustLevel.TRUST_FOLDER },
+        effectivePath: WORKSPACE_ROOT,
         trusted: true,
         provenance: 'inherited',
       };
     });
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/workspace/project',
+      getWorkingDir: () => WORKSPACE_PROJECT,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,
@@ -486,16 +500,16 @@ describe('PermissionsModifyTrustDialog trust provenance', () => {
 
   it('reflects inherited DO_NOT_TRUST in effectiveLocalTrustLevel when the form opens', async () => {
     mockedUserConfig.value = {
-      '/workspace': TrustLevel.DO_NOT_TRUST,
+      [WORKSPACE_ROOT]: TrustLevel.DO_NOT_TRUST,
     };
     mockedResolvePathTrust.mockReturnValue({
-      rule: { path: '/workspace', trustLevel: TrustLevel.DO_NOT_TRUST },
-      effectivePath: '/workspace',
+      rule: { path: WORKSPACE_ROOT, trustLevel: TrustLevel.DO_NOT_TRUST },
+      effectivePath: WORKSPACE_ROOT,
       trusted: false,
       provenance: 'inherited',
     });
     const config: PermissionsTrustRuntime = {
-      getWorkingDir: () => '/workspace/project',
+      getWorkingDir: () => WORKSPACE_PROJECT,
       getFolderTrust: () => true,
       getIdeClient: () => undefined,
       isTrustedFolder: () => false,

@@ -110,11 +110,13 @@ describe('FakeProvider', () => {
       // noop
     }
 
-    await expect(async () => {
-      for await (const _chunk of provider.generateChatCompletion([])) {
-        // noop
-      }
-    }).rejects.toThrow(/no more canned responses/);
+    await expect(
+      (async () => {
+        for await (const _chunk of provider.generateChatCompletion([])) {
+          // noop
+        }
+      })(),
+    ).rejects.toThrow(/no more canned responses/);
   });
 
   it('returns fake auth token and model metadata', async () => {

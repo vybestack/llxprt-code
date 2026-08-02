@@ -191,13 +191,13 @@ export async function getAllJsonlSessionFiles(
 export async function shouldDeleteSession(
   entry: JsonlSessionFileEntry,
 ): Promise<'delete' | 'skip' | 'stale-lock-only'> {
-  let lockPath: string;
-  try {
-    lockPath = SessionLockManager.getLockPathFromFilePath(entry.filePath);
-  } catch {
-    // File name doesn't match session-<id>.jsonl pattern — safe to delete
+  if (entry.sessionInfo === null) {
     return 'delete';
   }
+  const lockPath = SessionLockManager.getLockPath(
+    path.dirname(entry.filePath),
+    entry.sessionInfo.id,
+  );
 
   let lockExists: boolean;
   try {
@@ -224,10 +224,10 @@ export async function shouldDeleteSession(
  * @requirement REQ-CLN-004
  * @pseudocode session-cleanup.md lines 85-130
  *
- * Cleans up stale and orphaned `.lock` files in the chats directory.
- * Orphaned locks (no corresponding `.jsonl` file) are always removed.
- * Stale locks (PID no longer running) are removed but the data file is
- * left for normal retention policy evaluation.
+ * Cleans up stale `.lock` files in the chats directory.
+ * Locks are removed only when their PID is missing or no longer running,
+ * including locks whose corresponding `.jsonl` file is absent. A live PID's
+ * lock is retained because its session file may not have materialized yet.
  *
  * @param chatsDir - Path to the chats directory to scan for lock files
  * @returns Number of lock files cleaned up
@@ -245,29 +245,6 @@ export async function cleanupStaleLocks(chatsDir: string): Promise<number> {
 
   for (const lockFileName of lockFiles) {
     const lockPath = path.join(chatsDir, lockFileName);
-
-    const sessionId = lockFileName.replace(/\.lock$/, '');
-    const dataFileName = `session-${sessionId}.jsonl`;
-    const dataPath = path.join(chatsDir, dataFileName);
-
-    let dataExists: boolean;
-    try {
-      await fs.access(dataPath);
-      dataExists = true;
-    } catch {
-      dataExists = false;
-    }
-
-    if (!dataExists) {
-      try {
-        await fs.unlink(lockPath);
-        cleaned++;
-      } catch {
-        // Best-effort
-      }
-      continue;
-    }
-
     const pid = await readLockPid(lockPath);
     const isStale = pid === null || !isPidAlive(pid);
 

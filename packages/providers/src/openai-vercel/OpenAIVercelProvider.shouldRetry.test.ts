@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
+import { importActualSync } from '@vybestack/llxprt-code-test-utils';
 
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
@@ -17,10 +18,10 @@ const mockSettingsService = vi.hoisted(() => ({
   getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
-vi.mock('@vybestack/llxprt-code-settings', async () => ({
-  ...(await vi.importActual<typeof import('@vybestack/llxprt-code-settings')>(
+vi.mock('@vybestack/llxprt-code-settings', () => ({
+  ...importActualSync<typeof import('@vybestack/llxprt-code-settings')>(
     '@vybestack/llxprt-code-settings',
-  )),
+  ),
   getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));
