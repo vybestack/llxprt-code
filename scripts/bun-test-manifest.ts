@@ -589,6 +589,16 @@ export const BUN_NATIVE_TEST_MANIFEST: readonly BunTestWorkspaceEntry[] = [
     ],
   },
   {
+    workspace: 'storage',
+    preload: 'test-setup-storage-isolation.ts',
+    files: [
+      'src/secure-store/credential-write-lock.test.ts',
+      'src/secure-store/keyring-write-verification.test.ts',
+      'src/secure-store/machine-secret.concurrent-write.test.ts',
+      'src/secure-store/secure-store.concurrent-write.test.ts',
+    ],
+  },
+  {
     workspace: 'telemetry',
     preload: 'test-setup-storage-isolation.ts',
     files: [

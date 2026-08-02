@@ -19,7 +19,7 @@ Bun execution command (or explains why it still requires Vitest).
 | packages/policy               | 6                | 6             | 0                 | 0                         |
 | packages/providers            | 478              | 1             | 0                 | 477                       |
 | packages/settings             | 13               | 0             | 0                 | 13                        |
-| packages/storage              | 24               | 0             | 0                 | 24                        |
+| packages/storage              | 31               | 4             | 0                 | 27                        |
 | packages/telemetry            | 11               | 11 (manifest) | 0                 | 0                         |
 | packages/test-utils           | 5                | 2             | 1                 | 2                         |
 | packages/tools                | 62               | 0             | 0                 | 62                        |
@@ -138,6 +138,25 @@ primary `test` script still uses Vitest for the bulk of files.
 
 - `src/BaseProvider.test.ts`
 
+### packages/storage (4 files)
+
+Four storage secure-store test files are verified Bun-native and run via
+`scripts/run_bun_tests.ts --workspace storage` (isolated process per file).
+They use the `test-setup-storage-isolation.ts` preload (the same setup file the
+Vitest config uses) so `isolateStorageRoots()` runs before any test module
+imports the `Storage` singleton.
+
+The workspace primary `test` script still uses Vitest (`vitest run`) because
+the broader storage migration is deferred. The 4 Bun-native files must pass
+under **both** runners — they are verified green under `bun test` and
+`vitest run`. The remaining 27 storage test files are deferred to a future
+slice.
+
+- `src/secure-store/credential-write-lock.test.ts`
+- `src/secure-store/keyring-write-verification.test.ts`
+- `src/secure-store/machine-secret.concurrent-write.test.ts`
+- `src/secure-store/secure-store.concurrent-write.test.ts`
+
 ### packages/telemetry (11 files)
 
 All 11 telemetry test files are verified Bun-native and run via
@@ -175,7 +194,7 @@ will be migrated in a bounded vertical slice:
 1. **packages/test-utils** (remaining 2 PTY-based files) — Slice 2
 2. **packages/settings** (13 files) — Slice 3
 3. **packages/ide-integration** (10 files) — Slice 4
-4. **packages/storage** (24 files) — Slice 5
+4. **packages/storage** (27 remaining files) — Slice 5
 5. **packages/vscode-ide-companion** (6 files) — Slice 6
 6. **packages/mcp** (46 files) — Slice 7
 7. **packages/tools** (62 files) — Slice 8

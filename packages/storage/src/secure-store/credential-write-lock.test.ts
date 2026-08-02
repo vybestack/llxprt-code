@@ -21,7 +21,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -39,6 +39,28 @@ function asSecureStoreError(error: unknown): SecureStoreError {
     throw new Error(`Expected a SecureStoreError, received: ${String(error)}`);
   }
   return error;
+}
+
+/**
+ * Reads the canonical process start time (epoch ms) via `ps -o lstart=`, the
+ * same mechanism production's `readProcessStartTimeMs` uses. A fabricated
+ * owner record carrying `startTimeSource: 'canonical'` must use this value —
+ * not the approximate `Date.now() - process.uptime() * 1000` — otherwise the
+ * record is internally inconsistent: `probeOwnerLiveness` trusts the
+ * `'canonical'` claim, re-reads the real `ps` value, and the quantization
+ * error (lstart is rounded to the whole second) plus uptime drift can exceed
+ * the 2000 ms tolerance, causing a live owner to be misjudged dead.
+ */
+function readCanonicalProcessStartTimeMs(): number {
+  const raw = execFileSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
+  }).trim();
+  const value = Date.parse(`${raw} UTC`);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Could not parse canonical process start time: ${raw}`);
+  }
+  return value;
 }
 
 // ─── Shared temp-dir lifecycle helper (DRY-setup per dev-docs/RULES.md) ──────
@@ -514,7 +536,7 @@ describe('CredentialWriteLock', () => {
     await fs.mkdir(ld, { recursive: true });
     // Place a lock owned by a live process (this process) so it will never
     // be reclaimable as dead.
-    const startTimeMs = Date.now() - process.uptime() * 1000;
+    const startTimeMs = readCanonicalProcessStartTimeMs();
     const stallPayload = {
       version: 1,
       ownerToken: 'perpetual-owner',
@@ -662,78 +684,84 @@ describe('CredentialWriteLock', () => {
   describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'OS-observed subprocess owner identity',
     () => {
-      it.skipIf(process.versions.bun !== undefined)(
-        'rejects with TIMEOUT while a real live subprocess holds the lock, then recovers after it exits',
-        async () => {
-          const ld = lockDir();
-          await fs.mkdir(ld, { recursive: true });
-          const lock = new CredentialWriteLock({ lockDir: ld, waitMs: 3_000 });
-          const lockPath = lock.lockFilePath('subprocess-svc', 'acct');
+      // Runs under both Vitest and Bun. It previously had to be skipped under
+      // Bun because `bun test` forces the test process's JS timezone to UTC
+      // without setting process.env.TZ, so a spawned `ps` inherited the real
+      // system timezone while the parent parsed its output as UTC — a whole
+      // UTC-offset error (measured: 10,801,053 ms on a UTC-3 system) that
+      // exceeded PROCESS_START_TOLERANCE_MS and made a live owner look dead.
+      // readProcessStartTimeMs now pins the `ps` child to TZ=UTC and parses
+      // explicitly as UTC, so the reading no longer depends on either
+      // timezone and the drift is back to ~1 s.
+      it('rejects with TIMEOUT while a real live subprocess holds the lock, then recovers after it exits', async () => {
+        const ld = lockDir();
+        await fs.mkdir(ld, { recursive: true });
+        const lock = new CredentialWriteLock({ lockDir: ld, waitMs: 3_000 });
+        const lockPath = lock.lockFilePath('subprocess-svc', 'acct');
 
-          const child = spawn(
-            process.execPath,
+        const child = spawn(
+          process.execPath,
+          [
+            '-e',
             [
-              '-e',
-              [
-                "const fs=require('node:fs')",
-                "const os=require('node:os')",
-                "const cp=require('node:child_process')",
-                "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
-                "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
-                "process.stdout.write('ready\\n')",
-                'setInterval(()=>{},1000)',
-              ].join(';'),
-              lockPath,
-            ],
-            {
-              env: { ...process.env, LC_ALL: 'C' },
-            },
-          );
+              "const fs=require('node:fs')",
+              "const os=require('node:os')",
+              "const cp=require('node:child_process')",
+              "const started=Date.parse(cp.execFileSync('ps',['-o','lstart=','-p',String(process.pid)],{encoding:'utf8'}).trim())",
+              "fs.writeFileSync(process.argv[1],JSON.stringify({version:1,ownerToken:'child-owner',pid:process.pid,hostname:os.hostname(),startTimeMs:started,startTimeSource:'canonical'}),{mode:0o600})",
+              "process.stdout.write('ready\\n')",
+              'setInterval(()=>{},1000)',
+            ].join(';'),
+            lockPath,
+          ],
+          {
+            env: { ...process.env, LC_ALL: 'C' },
+          },
+        );
 
-          try {
-            await waitForChildReady(child);
-            // While the child holds the lock, our operation must NOT run.
-            // It must reject with TIMEOUT, and the child's lock file must
-            // be untouched.
-            let callbackRan = false;
-            const error = await lock
-              .withLock(
-                'subprocess-svc',
-                'acct',
-                async () => {
-                  callbackRan = true;
-                  return 'parent-ran';
-                },
-                { waitMs: 200 },
-              )
-              .catch((e: unknown) => e);
+        try {
+          await waitForChildReady(child);
+          // While the child holds the lock, our operation must NOT run.
+          // It must reject with TIMEOUT, and the child's lock file must
+          // be untouched.
+          let callbackRan = false;
+          const error = await lock
+            .withLock(
+              'subprocess-svc',
+              'acct',
+              async () => {
+                callbackRan = true;
+                return 'parent-ran';
+              },
+              { waitMs: 200 },
+            )
+            .catch((e: unknown) => e);
 
-            expect(callbackRan).toBe(false);
-            expect(error).toBeInstanceOf(SecureStoreError);
-            expect(asSecureStoreError(error).code).toBe('TIMEOUT');
-            // The child's lock file must still be intact (not stolen).
+          expect(callbackRan).toBe(false);
+          expect(error).toBeInstanceOf(SecureStoreError);
+          expect(asSecureStoreError(error).code).toBe('TIMEOUT');
+          // The child's lock file must still be intact (not stolen).
+          const content = await fs.readFile(lockPath, 'utf8');
+          expect(content).toContain('child-owner');
+        } finally {
+          await stopChild(child);
+        }
+
+        // After the child exits, a new lock acquisition should succeed and
+        // own the lock (dead-owner recovery via fenced takeover).
+        const result2 = await lock.withLock(
+          'subprocess-svc',
+          'acct',
+          async () => {
             const content = await fs.readFile(lockPath, 'utf8');
-            expect(content).toContain('child-owner');
-          } finally {
-            await stopChild(child);
-          }
-
-          // After the child exits, a new lock acquisition should succeed and
-          // own the lock (dead-owner recovery via fenced takeover).
-          const result2 = await lock.withLock(
-            'subprocess-svc',
-            'acct',
-            async () => {
-              const content = await fs.readFile(lockPath, 'utf8');
-              expect(content).not.toContain('child-owner');
-              expect(content).toContain(String(process.pid));
-              return 'parent-recovered';
-            },
-            { waitMs: 2_000 },
-          );
-          expect(result2).toBe('parent-recovered');
-        },
-      );
+            expect(content).not.toContain('child-owner');
+            expect(content).toContain(String(process.pid));
+            return 'parent-recovered';
+          },
+          { waitMs: 2_000 },
+        );
+        expect(result2).toBe('parent-recovered');
+      });
     },
   );
 });

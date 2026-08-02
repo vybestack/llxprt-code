@@ -197,10 +197,19 @@ async function readProcessStartTimeMs(
       {
         timeout: Math.max(1, timeoutMs),
         killSignal: 'SIGKILL',
-        env: { ...process.env, LC_ALL: 'C' },
+        env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
       },
     );
-    const value = Date.parse(stdout.trim());
+    // `ps -o lstart=` prints a local-time string carrying no UTC offset, so
+    // the epoch value depends on two timezones agreeing: the one `ps`
+    // formats in (the child's) and the one Date.parse interprets in (this
+    // process's JS timezone). Pinning the child to UTC and parsing as UTC
+    // removes both dependencies, so writer and prober always agree on the
+    // same instant even when a runtime desynchronizes its JS timezone from
+    // the environment. Without this, a probe can misread a live owner's
+    // start time by a whole UTC offset, judge it dead, and steal its lock —
+    // defeating the serialization this lock exists to provide.
+    const value = Date.parse(`${stdout.trim()} UTC`);
     return Number.isFinite(value) ? value : null;
   } catch {
     return null;
