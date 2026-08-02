@@ -290,6 +290,7 @@ describe('.github/workflows/ocr-review.yml', () => {
     expect(installRun).not.toContain('${OCR_PREFIX}/bin');
     expect(installRun).not.toContain('npm install -g');
     expect(installRun).not.toContain('@alibaba-group/open-code-review@1.6.1');
+    expect(installRun).not.toContain('@alibaba-group/open-code-review@1.7.17');
     expect(installRun).not.toContain('@alibaba-group/open-code-review@latest');
   });
 
@@ -375,7 +376,7 @@ describe('.github/workflows/ocr-review.yml', () => {
       'if ! cp ocr-stdout.raw ocr-result.json; then',
       ': > ocr-result.json',
       'echo "$status" > ocr-exit-code.txt',
-      'if grep -Eqi "all [0-9]+ file review(\\(s\\)|s)? failed" ocr-stderr.log; then',
+      'grep -Eqi "all [0-9]+ file review(\\(s\\)|s)? failed"',
       'mark_infrastructure_failure "review" "all OCR per-file reviews failed; likely LLM provider/config/auth failure"',
       'else',
       'mark_infrastructure_failure "review" "OCR review command failed"',

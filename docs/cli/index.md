@@ -1,22 +1,61 @@
 # LLxprt Code
 
-LLxprt Code is an AI-powered coding assistant that works with any LLM provider. Within LLxprt Code, `packages/cli` is the frontend for users to send and receive prompts and interact with AI-powered tools. For a general overview of LLxprt Code, see the [main documentation page](../index.md).
+LLxprt Code is an AI-powered coding assistant that works with any LLM provider.
+For a general overview, see the [main documentation page](../index.md).
 
-## Navigating this section
+## Where to start
 
-- **[Authentication](./authentication.md):** A guide to setting up authentication with AI providers, including OAuth buckets.
-- **[Commands](./commands.md):** A reference for LLxprt Code commands (e.g., `/help`, `/tools`, `/theme`).
-- **[Profiles](./profiles.md):** Save and manage configuration profiles, load balancing, and OAuth bucket failover.
-- **[Sandbox Profiles](./sandbox-profiles.md):** Configure container-based sandboxing for secure code execution.
-- **[Configuration](./configuration.md):** A guide to tailoring LLxprt Code behavior using configuration files.
-- **[Enterprise](./enterprise.md):** A guide to enterprise configuration.
-- **[Token Caching](./token-caching.md):** Optimize API costs through token caching.
-- **[Themes](./themes.md)**: A guide to customizing the CLI's appearance with different themes.
-- **[Tutorials](tutorials.md)**: Tutorials for using LLxprt Code features.
+| If you want to…                           | Read this                                             |
+| ----------------------------------------- | ----------------------------------------------------- |
+| Get authenticated with a provider         | [Authentication](./authentication.md)                 |
+| Save and switch between configurations    | [Profiles](./profiles.md)                             |
+| Tailor how LLxprt Code behaves            | [Configuration](./configuration.md)                   |
+| Run LLxprt Code in scripts and automation | [Non-interactive mode](#non-interactive-mode) (below) |
+| Customise the CLI's appearance            | [Themes](./themes.md)                                 |
+
+## Get authenticated
+
+- **[Authentication](./authentication.md)** — set up authentication with AI
+  providers, including OAuth buckets.
+- **[Google Cloud Auth](./google-cloud-auth.md)** — configure Google Cloud
+  service-account or workload-identity authentication.
+
+## Configure behaviour
+
+- **[Configuration](./configuration.md)** — tailor LLxprt Code behaviour using
+  configuration files.
+- **[Profiles](./profiles.md)** — save and manage configuration profiles, load
+  balancing, and OAuth bucket failover.
+- **[Enterprise](./enterprise.md)** — enterprise configuration options.
+- **[Sandbox Profiles](./sandbox-profiles.md)** — configure container-based
+  sandboxing for secure code execution.
+- **[Token Caching](./token-caching.md)** — optimize API costs through token
+  caching.
+- **[Retry Settings](./retry-settings.md)** — configure retry behaviour for API
+  calls.
+- **[Token Tracking](./token-tracking.md)** — track token usage and costs.
+
+## Run non-interactively
+
+- **[Commands](./commands.md)** — reference for LLxprt Code commands (e.g.,
+  `/help`, `/tools`, `/theme`).
+- See [Non-interactive mode](#non-interactive-mode) below for scripting and
+  automation.
+
+## Customise appearance
+
+- **[Themes](./themes.md)** — customise the CLI's appearance with different
+  themes.
+
+## Learn more
+
+- **[Skills](./skills.md)** — extend LLxprt Code with custom skills.
+- **[Tutorials](./tutorials.md)** — tutorials for using LLxprt Code features.
 
 ## Non-interactive mode
 
-LLxprt Code can be run in a non-interactive mode, which is useful for scripting and automation.
+LLxprt Code can be run in a non-interactive mode, which is useful for scripting
+and automation.
 
 ### Basic non-interactive usage
 
@@ -42,13 +81,15 @@ llxprt --profile-load my-claude-profile "Explain this code"
 
 ### Interactive mode with initial prompt (`-i`)
 
-The `-i` flag starts an interactive session with an initial prompt. Unlike non-interactive mode, the session continues after the first response:
+The `-i` flag starts an interactive session with an initial prompt. Unlike
+non-interactive mode, the session continues after the first response:
 
 ```bash
 llxprt -i "Let's work on improving this codebase"
 ```
 
-This is useful when you want to start a conversation with context but continue interacting afterward.
+This is useful when you want to start a conversation with context but continue
+interacting afterward.
 
 ### Comparison of modes
 
