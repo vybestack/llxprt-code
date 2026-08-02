@@ -13,15 +13,29 @@ import {
 
 const SUPPORTED_INPUT_EXTENSIONS = ['.png'];
 
+/**
+ * A value must be double-quoted when it is empty or contains any character the
+ * tokenizer treats specially: whitespace (a token separator), a quote character
+ * (would open a quoted run), or a backslash (an escape introducer).
+ */
 function needsQuoting(value: string): boolean {
-  return value.includes(' ');
+  return value === '' || /[\s"'\\]/.test(value);
 }
 
+/**
+ * Render a path as a token the shared tokenizer decodes back to the exact input.
+ *
+ * Inside a double-quoted run the tokenizer treats a backslash as an escape
+ * introducer, so the backslash must be escaped BEFORE the quote character.
+ * Escaping only the quote leaves a trailing backslash able to consume the
+ * escape marker and terminate the string early.
+ */
 function quotePath(value: string): string {
   if (!needsQuoting(value)) {
     return value;
   }
-  return `"${value.replace(/"/g, '\\"')}"`;
+  const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
 }
 
 /**

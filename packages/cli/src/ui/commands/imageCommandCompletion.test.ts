@@ -12,6 +12,7 @@ import {
   analyzeImageCompletion,
   completeImageCommand,
 } from './imageCommandCompletion.js';
+import { tokenizeImageCommandRaw } from './imageCommandTokenizer.js';
 
 describe('analyzeImageCompletion', () => {
   it('returns output phase for empty input', () => {
@@ -157,4 +158,98 @@ describe('completeImageCommand (real workspace filesystem)', () => {
     );
     expect(suggestions).toStrictEqual([]);
   });
+});
+
+/**
+ * A completion suggestion is only useful if the shared tokenizer decodes it
+ * back to the exact filename it came from. These cases round-trip through the
+ * REAL tokenizer rather than asserting the escaping implementation's own
+ * output, so a quoting bug surfaces as a decode mismatch.
+ */
+describe('completion suggestions round-trip through the tokenizer', () => {
+  // Built from char codes so the literal backslash/quote content is
+  // unambiguous and cannot be altered by source-level escaping.
+  const BACKSLASH = String.fromCharCode(92);
+  const QUOTE = String.fromCharCode(34);
+
+  let workspaceRoot = '';
+
+  // Windows forbids " and \ in filenames; probe once rather than assuming.
+  const exoticNamesSupported = ((): boolean => {
+    const probeDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'llxprt-nameprobe-'),
+    );
+    try {
+      fs.writeFileSync(path.join(probeDir, `a${QUOTE}b${BACKSLASH}c.png`), 'x');
+      return true;
+    } catch {
+      return false;
+    } finally {
+      fs.rmSync(probeDir, { recursive: true, force: true });
+    }
+  })();
+
+  beforeEach(async () => {
+    workspaceRoot = await fs.promises.realpath(
+      await fs.promises.mkdtemp(path.join(os.tmpdir(), 'llxprt-image-quote-')),
+    );
+  });
+  afterEach(async () => {
+    await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
+  });
+
+  /** Decode the single input token produced for `/image out.png <suggestion>`. */
+  function decodeInputToken(suggestion: string): string {
+    const tokens = tokenizeImageCommandRaw(`out.png ${suggestion}`);
+    expect(tokens).toHaveLength(2);
+    return tokens[1].value;
+  }
+
+  /**
+   * Create `name` in the workspace, ask for input-path completions, and decode
+   * the matching suggestion back through the tokenizer.
+   */
+  async function suggestAndDecode(
+    name: string,
+    match: string,
+  ): Promise<string | undefined> {
+    await fs.promises.writeFile(path.join(workspaceRoot, name), 'x');
+
+    const suggestions = await completeImageCommand('out.png ', workspaceRoot);
+    const suggestion = suggestions.find((s) => s.includes(match));
+    return suggestion === undefined ? undefined : decodeInputToken(suggestion);
+  }
+
+  it('round-trips a filename containing spaces', async () => {
+    const name = 'my cat.png';
+    expect(await suggestAndDecode(name, 'my cat')).toBe(name);
+  });
+
+  it.skipIf(!exoticNamesSupported)(
+    'round-trips a filename with a backslash immediately before a quote',
+    async () => {
+      // The case CodeQL flagged: escaping only the quote leaves the preceding
+      // backslash able to consume the escape marker and end the string early.
+      const name = `a${BACKSLASH}${QUOTE}b.png`;
+      expect(await suggestAndDecode(name, 'b.png')).toBe(name);
+    },
+  );
+
+  it.skipIf(!exoticNamesSupported)(
+    'round-trips a filename containing a quote but no space',
+    async () => {
+      // Without a space the old needsQuoting returned false and emitted the
+      // raw name, which the tokenizer then read as an unterminated quote.
+      const name = `a${QUOTE}b.png`;
+      expect(await suggestAndDecode(name, 'b.png')).toBe(name);
+    },
+  );
+
+  it.skipIf(!exoticNamesSupported)(
+    'round-trips a filename containing a lone backslash',
+    async () => {
+      const name = `trail${BACKSLASH}.png`;
+      expect(await suggestAndDecode(name, '.png')).toBe(name);
+    },
+  );
 });
