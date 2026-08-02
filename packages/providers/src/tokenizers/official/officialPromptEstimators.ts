@@ -172,6 +172,21 @@ function getCounter(
   }
 }
 
+/**
+ * Counts the finalized projection as ordinary text.
+ *
+ * `promptSegments` is one segment per top-level request-body key (system /
+ * messages / tools), not a framing-versus-content split, and the projection
+ * is the raw JSON request body rather than a rendered chat template. Model
+ * control tokens are therefore absent from this text — the provider applies
+ * the chat template server-side — so ordinary encoding is the correct
+ * reading, and text that merely looks like a control token can never be
+ * promoted into one.
+ *
+ * The consequence is that server-side template overhead is not represented
+ * here, which is a pre-existing limitation shared with the other estimators
+ * built on this projection.
+ */
 function countProjection(
   counter: OfficialSegmentCounter,
   projection: ProviderFinalizedPromptProjection,

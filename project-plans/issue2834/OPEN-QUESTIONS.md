@@ -97,7 +97,46 @@ prompt actually tokenizes identically — I would not just widen the set.
 
 ---
 
-## Question 2 — Kimi K3 structural-marker (XTML) handling
+## Question 2 — RESOLVED, and my original framing of it was wrong
+
+I dug into how the projection is actually built, and it turns out option (b)
+rested on a false premise of mine. Correcting the record.
+
+**What I claimed.** That `promptSegments` is a flat `string[]` which "loses"
+the framing-vs-content distinction, and that option (b) could recover exactness
+by typing the segments.
+
+**What is actually true.** `serializePromptSegments` produces **one segment per
+top-level request-body key** — `system` / `messages` / `tools` for
+anthropic-messages, `messages` / `tools` for openai-chat. Each segment is the
+serialized value of that key. It was never a framing-vs-content split, and was
+never intended as one.
+
+More importantly: **the projection is the raw JSON API request body, not a
+rendered chat template.** I checked — nothing applies a chat template before
+projection (the only `chat_template` hit in the tree is an unrelated passthrough
+parameter name in a profile test). So Kimi's XTML markers such as
+`<|im_start|>` are **not present in the projected text at all**. The provider
+applies the chat template server-side, after we send the body.
+
+**Why that settles it.** Encoding every projected segment as ordinary text is
+not a compromise — it is the only correct behaviour, because there are no
+special tokens in the projected text to preserve. Option (b) would not have
+improved exactness, because the framing it aimed to count exactly never reaches
+the estimator.
+
+**The real limitation, stated honestly.** Server-side chat-template tokens are
+invisible to this estimator, so counts run slightly *low* by the template
+overhead. That is a pre-existing, universal gap that applies equally to main's
+GPT-5.6 estimator — it is not introduced by this PR and not something this PR
+should try to fix.
+
+**No decision needed** unless you want the server-side template overhead
+modelled, which I would raise as its own issue against the projector.
+
+---
+
+## Original Question 2 (kept for context) — Kimi K3 structural-marker handling
 
 ### Background
 
