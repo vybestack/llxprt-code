@@ -35,6 +35,7 @@ import type {
   ToolRegistry,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
+import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type {
   DiscoveredMCPPrompt,
   MCPDiscoveryState,
@@ -453,19 +454,7 @@ export interface StreamRuntime {
    * or undefined when no image backend is configured. Forwarded from the bare
    * source so nested runtime consumers can resolve image capability.
    */
-  getRunImageOperation?: () =>
-    | ((request: {
-        readonly prompt: string;
-        readonly outputPath: string;
-        readonly inputPaths?: readonly string[];
-        readonly signal?: AbortSignal;
-      }) => Promise<{
-        readonly operation: 'generate' | 'edit';
-        readonly absoluteOutputPath: string;
-        readonly relativeOutputPath: string;
-        readonly mimeType: string;
-      }>)
-    | undefined;
+  getRunImageOperation?: () => ImageOperationRunner | undefined;
 }
 
 /**
@@ -513,19 +502,7 @@ export interface StreamRuntimeBareSource
    * slash command. Exposed as a getter so the runtime adapts the Config
    * capability without exposing a mutable property.
    */
-  getRunImageOperation?: () =>
-    | ((request: {
-        readonly prompt: string;
-        readonly outputPath: string;
-        readonly inputPaths?: readonly string[];
-        readonly signal?: AbortSignal;
-      }) => Promise<{
-        readonly operation: 'generate' | 'edit';
-        readonly absoluteOutputPath: string;
-        readonly relativeOutputPath: string;
-        readonly mimeType: string;
-      }>)
-    | undefined;
+  getRunImageOperation?: () => ImageOperationRunner | undefined;
 }
 
 export interface UiRuntimeBareSource
@@ -744,7 +721,7 @@ function buildStreamRuntimeFromSource(
     },
     storage: source.storage,
     ...(source.getRunImageOperation !== undefined
-      ? { getRunImageOperation: source.getRunImageOperation }
+      ? { getRunImageOperation: () => source.getRunImageOperation!() }
       : {}),
   };
 }

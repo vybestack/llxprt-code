@@ -9,6 +9,38 @@ import { imageCommand } from './imageCommand.js';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
 
+/**
+ * A real class-style capability holder whose `getRunImageOperation` is a
+ * prototype METHOD (not an arrow function). Invoking it detached would lose
+ * `this`, so this genuinely exercises the receiver-binding contract: the
+ * runtime must forward via a wrapper, and the command must invoke it as a
+ * method. If `this` is lost, `#runner` is undefined and the command reports
+ * unavailable instead of succeeding.
+ */
+class ImageCapabilityHolder {
+  #runner:
+    | ((req: {
+        prompt: string;
+        outputPath: string;
+        inputPaths: readonly string[];
+      }) => Promise<{ absoluteOutputPath: string }>)
+    | undefined;
+
+  constructor(
+    runner?: (req: {
+      prompt: string;
+      outputPath: string;
+      inputPaths: readonly string[];
+    }) => Promise<{ absoluteOutputPath: string }>,
+  ) {
+    this.#runner = runner;
+  }
+
+  getRunImageOperation() {
+    return this.#runner;
+  }
+}
+
 function makeMockContext(overrides?: {
   runImageOperation?: (req: {
     prompt: string;
@@ -16,16 +48,17 @@ function makeMockContext(overrides?: {
     inputPaths: readonly string[];
   }) => Promise<{ absoluteOutputPath: string }>;
 }): CommandContext {
+  const capability =
+    overrides?.runImageOperation !== undefined
+      ? new ImageCapabilityHolder(overrides.runImageOperation)
+      : new ImageCapabilityHolder();
   return {
     services: {
       config: {
-        // Mirror the REAL Config/CliUiRuntime surface: capability resolved via
-        // a getter, not a mutable property. A config exposing only a property
-        // must report unavailable so the wiring defect is caught.
-        getRunImageOperation:
-          overrides?.runImageOperation !== undefined
-            ? () => overrides!.runImageOperation!
-            : undefined,
+        // Expose the capability holder directly so `getRunImageOperation` is a
+        // prototype method. The runtime forwards it via a wrapper that
+        // preserves `this`; extracting and calling it detached would break.
+        getRunImageOperation: capability.getRunImageOperation.bind(capability),
       } as never,
       agent: null,
       settings: {} as never,
@@ -62,7 +95,7 @@ describe('imageCommand', () => {
   });
 
   it('documents syntax, no-overwrite, five-input limit, and examples in its description', () => {
-    const desc = imageCommand.description ?? '';
+    const desc = imageCommand.description;
     // Syntax must be documented.
     expect(desc).toMatch(/<output\.png>/i);
     expect(desc).toMatch(/<input\.png>|input/i);
@@ -216,5 +249,24 @@ describe('imageCommand', () => {
     await imageCommand.action?.(ctx, 'out.png "draw a cat"');
     const after = process.listenerCount('SIGINT');
     expect(after).toBe(before);
+  });
+
+  it('exercises receiver binding: a prototype-method capability works via the runtime wrapper', async () => {
+    // This test proves the receiver-binding contract is genuinely exercised.
+    // The capability is a prototype METHOD that reads `this.#runner`.
+    // If `getRunImageOperation` were copied as a bare value and invoked
+    // detached, `this` would be undefined and the runner would never resolve,
+    // causing an "unavailable" error instead of success.
+    const runner = vi.fn().mockResolvedValue({
+      absoluteOutputPath: '/workspace/out.png',
+    });
+    const ctx = makeMockContext({ runImageOperation: runner });
+    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    expect(runner).toHaveBeenCalledTimes(1);
+    const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
+    const infoCall = calls.find(
+      (c) => (c[0] as { type: string }).type === MessageType.INFO,
+    );
+    expect(infoCall).toBeDefined();
   });
 });

@@ -52,8 +52,7 @@ export const imageCommand: SlashCommand = {
       return;
     }
 
-    const resolveRunner = context.services.config?.getRunImageOperation;
-    const runner = resolveRunner !== undefined ? resolveRunner() : undefined;
+    const runner = context.services.config?.getRunImageOperation?.();
     if (typeof runner !== 'function') {
       context.ui.addItem(
         {

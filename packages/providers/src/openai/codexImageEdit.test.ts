@@ -137,8 +137,8 @@ describe('buildCodexImageEditEndpoint', () => {
 describe('CodexImageBackend.edit', () => {
   let workspaceRoot = '';
   beforeEach(async () => {
-    workspaceRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'llxprt-image-edit-'),
+    workspaceRoot = await fs.promises.realpath(
+      await fs.promises.mkdtemp(path.join(os.tmpdir(), 'llxprt-image-edit-')),
     );
   });
   afterEach(async () => {
@@ -172,10 +172,23 @@ describe('CodexImageBackend.edit', () => {
     >;
     expect(body['model']).toBe('gpt-image-2');
     expect(body['prompt']).toBe('add a mouse');
-    expect(Array.isArray(body['image'])).toBe(true);
-    const images = body['image'] as string[];
+    // The Codex /images/edits contract requires `images: [{ image_url }]`.
+    // A bare string array or the singular `image` key is rejected with
+    // 400 missing_required_parameter.
+    expect(body['image']).toBeUndefined();
+    expect(Array.isArray(body['images'])).toBe(true);
+    const images = body['images'] as Array<{ image_url: string }>;
     expect(images).toHaveLength(1);
-    expect(images[0]).toMatch(/^data:image\/png;base64,/);
+    expect(images[0].image_url).toMatch(/^data:image\/png;base64,/);
+    expect(body['background']).toBe('auto');
+    expect(body['quality']).toBe('auto');
+    expect(body['size']).toBe('auto');
+    // The edit contract must NOT include generate-only keys.
+    expect(body['n']).toBeUndefined();
+    // The body must contain ONLY the documented edit keys.
+    expect(Object.keys(body).sort()).toStrictEqual(
+      ['background', 'images', 'model', 'prompt', 'quality', 'size'].sort(),
+    );
   });
 
   it('includes the full header set on edit', async () => {
@@ -343,5 +356,56 @@ describe('CodexImageBackend.edit', () => {
         controller.signal,
       ),
     ).rejects.toThrow('aborted');
+  });
+
+  it('rejects a RIFF file that is NOT WebP (e.g. WAV renamed .webp)', async () => {
+    // A RIFF container whose bytes 8..12 are NOT "WEBP" must be rejected,
+    // not misclassified as image/webp.
+    const wavBytes = Buffer.concat([
+      Buffer.from([0x52, 0x49, 0x46, 0x46]), // "RIFF"
+      Buffer.alloc(4), // file size (dummy)
+      Buffer.from([0x57, 0x41, 0x56, 0x45]), // "WAVE" (not "WEBP")
+      Buffer.alloc(16), // padding
+    ]);
+    const inputPath = path.join(workspaceRoot, 'fake.webp');
+    await fs.promises.writeFile(inputPath, wavBytes);
+    const backend = makeBackend();
+    await expect(
+      backend.edit(
+        { prompt: 'edit', inputPaths: [inputPath] },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow(/unsupported|unrecognized/i);
+  });
+
+  it('accepts a valid WebP file as an input image', async () => {
+    // A real WebP file: RIFF + size + "WEBP" + VP8 chunk header.
+    const webpBytes = Buffer.concat([
+      Buffer.from([0x52, 0x49, 0x46, 0x46]), // "RIFF"
+      Buffer.alloc(4), // file size (dummy)
+      Buffer.from([0x57, 0x45, 0x42, 0x50]), // "WEBP"
+      Buffer.alloc(16), // VP8 chunk (dummy, not parsed)
+    ]);
+    const inputPath = path.join(workspaceRoot, 'valid.webp');
+    await fs.promises.writeFile(inputPath, webpBytes);
+    const { fetchImpl, captured } = makeStubFetch({
+      status: 200,
+      body: { data: [{ b64_json: 'aGVsbG8=' }] },
+    });
+    const backend = makeBackend({ fetchImpl });
+
+    await backend.edit(
+      { prompt: 'edit', inputPaths: [inputPath] },
+      new AbortController().signal,
+    );
+
+    const req = captured();
+    // The body must contain a data URL with image/webp MIME.
+    const body = JSON.parse(req?.init.body as string) as Record<
+      string,
+      unknown
+    >;
+    const images = body['images'] as Array<{ image_url: string }>;
+    expect(images[0].image_url).toMatch(/^data:image\/webp;base64,/);
   });
 });

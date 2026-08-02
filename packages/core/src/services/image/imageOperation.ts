@@ -354,7 +354,9 @@ export async function writeImageAtomically(
 
   let published = false;
   const cleanupTemp = async (): Promise<void> => {
-    await fs.rm(tempPath, { force: true });
+    // Swallow cleanup rejections so a temp-removal failure can never mask
+    // the original write/publish error that surfaces from the try block.
+    await fs.rm(tempPath, { force: true }).catch(() => {});
   };
 
   const onAbort = () => {

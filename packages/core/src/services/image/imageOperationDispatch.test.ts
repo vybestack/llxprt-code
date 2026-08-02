@@ -152,8 +152,8 @@ function makeTrackingResolver(): {
 describe('runImageOperation', () => {
   let workspaceRoot = '';
   beforeEach(async () => {
-    workspaceRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'llxprt-dispatch-'),
+    workspaceRoot = await fs.promises.realpath(
+      await fs.promises.mkdtemp(path.join(os.tmpdir(), 'llxprt-dispatch-')),
     );
   });
   afterEach(async () => {
@@ -213,7 +213,8 @@ describe('runImageOperation', () => {
     });
   });
 
-  it('propagates abort', async () => {
+  it('propagates abort and does not call the backend (signal already aborted)', async () => {
+    const { resolver, generateCalled } = makeTrackingResolver();
     const controller = new AbortController();
     controller.abort();
     await expect(
@@ -221,11 +222,13 @@ describe('runImageOperation', () => {
         { prompt: 'a cat', outputPath: 'cat.png' },
         {
           workspaceRoot,
-          resolveBackend: makeStubResolver({}),
+          resolveBackend: resolver,
           signal: controller.signal,
         },
       ),
     ).rejects.toBeInstanceOf(ImageOperationError);
+    // The backend must NOT have been called — no billable provider request.
+    expect(generateCalled()).toBe(0);
   });
 
   it('rejects when the output path escapes the workspace', async () => {
@@ -448,15 +451,18 @@ describe('runImageOperation', () => {
     expect(fs.existsSync(path.join(workspaceRoot, 'cat.png'))).toBe(false);
   });
 
-  it('honors a signal passed via input (overrides deps signal)', async () => {
+  it('honors a signal passed via input and does not call the backend (overrides deps signal)', async () => {
+    const { resolver, generateCalled } = makeTrackingResolver();
     const controller = new AbortController();
     controller.abort();
     await expect(
       runImageOperation(
         { prompt: 'a cat', outputPath: 'cat.png', signal: controller.signal },
-        { workspaceRoot, resolveBackend: makeStubResolver({}) },
+        { workspaceRoot, resolveBackend: resolver },
       ),
     ).rejects.toBeInstanceOf(ImageOperationError);
+    // The backend must NOT have been called — no billable provider request.
+    expect(generateCalled()).toBe(0);
   });
 
   it('rejects a backend result with a non-image/png mimeType before write', async () => {

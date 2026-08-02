@@ -434,7 +434,14 @@ function resolveBackendFromHost(
   if (resolver === null || resolver === undefined) {
     return null;
   }
-  return resolver() as ImageOperationBackend | null;
+  const resolved = resolver();
+  // Coerce undefined and any non-object to null so runImageOperation's
+  // `backend === null` capability check always fires the graceful
+  // TOOL_DISABLED path instead of a TypeError (EXECUTION_FAILED).
+  if (resolved === null || typeof resolved !== 'object') {
+    return null;
+  }
+  return resolved as ImageOperationBackend;
 }
 
 function registerImageTool(

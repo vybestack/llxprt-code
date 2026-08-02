@@ -399,4 +399,43 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
       expect.arrayContaining([expect.stringContaining(savedPath)]),
     );
   });
+
+  it('maps a resolver returning undefined to the graceful TOOL_DISABLED path (not a TypeError)', async () => {
+    // A resolver that returns undefined must be coerced to null so the
+    // runImageOperation `backend === null` capability check fires, producing
+    // TOOL_DISABLED — NOT a TypeError mapped to EXECUTION_FAILED.
+    const tempWorkspace = await fs.promises.realpath(
+      await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-registry-undef-'),
+      ),
+    );
+    try {
+      const host = createHost({
+        getImageBackendResolver: () => () => undefined,
+      });
+
+      const configBoundary = createConfigBoundary({
+        getTargetDir: () => tempWorkspace,
+      });
+
+      const { registry } = await createToolRegistry(
+        host,
+        configBoundary,
+        new MessageBus(),
+      );
+
+      const tool = registry.getTool('generate_image');
+      expect(tool).toBeDefined();
+
+      const result = await tool!
+        .build({ prompt: 'a cat', output_path: 'cat.png' })
+        .execute(new AbortController().signal);
+
+      // The capability path must fire: TOOL_DISABLED, not EXECUTION_FAILED.
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe('tool_disabled');
+    } finally {
+      await fs.promises.rm(tempWorkspace, { recursive: true, force: true });
+    }
+  });
 });

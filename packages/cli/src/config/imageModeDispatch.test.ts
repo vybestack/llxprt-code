@@ -188,7 +188,7 @@ describe('resolveDirectImageMode (real parser/dispatch seam)', () => {
     expect(result?.operation).toBe('generate');
     expect(result?.outputPath).toBe('cat.png');
     expect(result?.prompt).toBe('draw a cat');
-    expect(result?.inputPaths).toEqual([]);
+    expect(result?.inputPaths).toStrictEqual([]);
   });
 
   it('detects edit mode from repeated -I (preserves order, no comma split)', () => {
@@ -200,7 +200,7 @@ describe('resolveDirectImageMode (real parser/dispatch seam)', () => {
       }),
     );
     expect(result?.operation).toBe('edit');
-    expect(result?.inputPaths).toEqual(['a.png', 'b.png', 'c.png']);
+    expect(result?.inputPaths).toStrictEqual(['a.png', 'b.png', 'c.png']);
   });
 
   it('rejects missing -O', () => {
@@ -288,8 +288,10 @@ describe('runDirectImageModeAndExit', () => {
   let workspaceRoot = '';
 
   beforeEach(async () => {
-    workspaceRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'llxprt-image-dispatch-'),
+    workspaceRoot = await fs.promises.realpath(
+      await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-image-dispatch-'),
+      ),
     );
     stdoutChunks.length = 0;
     stderrChunks.length = 0;

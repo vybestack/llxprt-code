@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -19,6 +19,26 @@ import {
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
+
+/**
+ * Probe symlink support once at module load.
+ *
+ * Symlink creation requires elevation or Developer Mode on Windows. The skip
+ * decision is made at declaration time via `it.skipIf` rather than through the
+ * vitest per-test context, because a test callback that declares a parameter
+ * is interpreted by Bun's runner as a `done`-callback test and would hang.
+ */
+const SYMLINKS_SUPPORTED = ((): boolean => {
+  const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-symprobe-'));
+  try {
+    fs.symlinkSync(path.join(probeDir, 'target'), path.join(probeDir, 'link'));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(probeDir, { recursive: true, force: true });
+  }
+})();
 
 /**
  * Compute the PNG CRC32 for a chunk's type+data bytes.
@@ -162,8 +182,10 @@ describe('persistBase64ImageResult', () => {
   // require-top-level-describe rule is satisfied and cleanup is preserved.
   let workspaceRoot = '';
   beforeEach(async () => {
-    workspaceRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'llxprt-image-persist-'),
+    workspaceRoot = await fs.promises.realpath(
+      await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-image-persist-'),
+      ),
     );
   });
   afterEach(async () => {
@@ -528,40 +550,73 @@ describe('persistBase64ImageResult', () => {
   });
 
   describe('symlink/reparse-point escape prevention', () => {
-    it('rejects persistence when the output directory is a symlink/junction to outside the workspace and leaves the target empty', async (context) => {
-      // Outside temp directory that the symlink would point at.
-      const outsideDir = await fs.promises.mkdtemp(
-        path.join(os.tmpdir(), 'llxprt-image-escape-'),
-      );
-      try {
-        const linkDir = path.join(workspaceRoot, 'generated-images');
+    it.skipIf(!SYMLINKS_SUPPORTED)(
+      'rejects persistence when the output directory is a symlink/junction to outside the workspace and leaves the target empty',
+      async () => {
+        // Outside temp directory that the symlink would point at.
+        const outsideDir = await fs.promises.realpath(
+          await fs.promises.mkdtemp(
+            path.join(os.tmpdir(), 'llxprt-image-escape-'),
+          ),
+        );
         try {
+          const linkDir = path.join(workspaceRoot, 'generated-images');
           await fs.promises.symlink(outsideDir, linkDir, 'dir');
-        } catch (err) {
-          const code = (err as NodeJS.ErrnoException).code;
-          if (
-            code === 'EPERM' ||
-            code === 'ENOSYS' ||
-            code === 'UNKNOWN' ||
-            code === 'EACCES'
-          ) {
-            context.skip(`Symlink creation is unavailable (${code}).`);
-            return;
-          }
-          throw err;
+
+          const result = makePngResult();
+
+          await expect(
+            persistBase64ImageResult(result, workspaceRoot),
+          ).rejects.toBeInstanceOf(ImagePersistenceError);
+
+          // The outside directory must remain empty — nothing was written there.
+          const outsideEntries = await fs.promises.readdir(outsideDir);
+          expect(outsideEntries).toHaveLength(0);
+        } finally {
+          await fs.promises.rm(outsideDir, { recursive: true, force: true });
         }
+      },
+    );
+  });
 
-        const result = makePngResult();
+  describe('cleanup-in-catch error masking', () => {
+    it('surfaces the original ImagePersistenceError even when temp cleanup fails', async () => {
+      // When the write/rename fails AND the cleanup fs.rm also rejects
+      // (e.g. EPERM/EBUSY on Windows), the original ImagePersistenceError
+      // with its cause must always win — the raw rm rejection must not
+      // propagate instead.
+      //
+      // We spy on fs.promises.rename to simulate a real filesystem rename
+      // failure (the original persistence error), and fs.promises.rm to
+      // simulate the platform-specific cleanup rejection. Both are external
+      // filesystem conditions that are non-deterministic in CI.
+      const renameError = new Error('EXDEV: cross-device link');
+      const rmSpy = vi
+        .spyOn(fs.promises, 'rm')
+        .mockRejectedValue(
+          Object.assign(new Error('EPERM: cleanup failed'), { code: 'EPERM' }),
+        );
+      const renameSpy = vi
+        .spyOn(fs.promises, 'rename')
+        .mockRejectedValue(renameError);
 
-        await expect(
-          persistBase64ImageResult(result, workspaceRoot),
-        ).rejects.toBeInstanceOf(ImagePersistenceError);
+      try {
+        const error = await persistBase64ImageResult(
+          makePngResult(),
+          workspaceRoot,
+        ).catch((e) => e);
 
-        // The outside directory must remain empty — nothing was written there.
-        const outsideEntries = await fs.promises.readdir(outsideDir);
-        expect(outsideEntries).toHaveLength(0);
+        // The surfaced error must be the ImagePersistenceError, NOT the
+        // raw EPERM cleanup error.
+        expect(error).toBeInstanceOf(ImagePersistenceError);
+        const persistError = error as ImagePersistenceError;
+        // The cause must be the original rename failure, NOT the cleanup EPERM.
+        expect(persistError.message).toMatch(/Failed to persist/i);
+        expect(persistError.cause).toBe(renameError);
+        expect((persistError.cause as Error).message).not.toMatch(/EPERM/i);
       } finally {
-        await fs.promises.rm(outsideDir, { recursive: true, force: true });
+        renameSpy.mockRestore();
+        rmSpy.mockRestore();
       }
     });
   });

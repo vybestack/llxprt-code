@@ -129,17 +129,33 @@ function isImageOperationRunnerError(
 }
 
 function isAbortError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
+  // Walk the `cause` chain so an AbortError wrapped inside an
+  // ImageOperationError (stage 'provider') is still classified as a
+  // cancellation, not EXECUTION_FAILED. Bounded depth + a visited Set guard
+  // against self-referential or cyclic cause chains.
+  let current: unknown = error;
+  const visited = new Set<unknown>();
+  for (let depth = 0; depth < 10 && current !== null; depth++) {
+    if (visited.has(current)) {
+      return false;
+    }
+    visited.add(current);
+    if (!(current instanceof Error)) {
+      return false;
+    }
+    if (current.name === 'AbortError') {
+      return true;
+    }
+    if (
+      typeof DOMException === 'function' &&
+      current instanceof DOMException &&
+      current.name === 'AbortError'
+    ) {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
   }
-  if (error.name === 'AbortError') {
-    return true;
-  }
-  return (
-    typeof DOMException === 'function' &&
-    error instanceof DOMException &&
-    error.name === 'AbortError'
-  );
+  return false;
 }
 
 /**
@@ -193,6 +209,19 @@ export class GenerateImageTool extends BaseDeclarativeTool<
     );
   }
 
+  /**
+   * Reject an empty/whitespace-only prompt at build time so an unusable request
+   * never reaches the shared service or a billable provider call.
+   */
+  protected override validateToolParamValues(
+    params: GenerateImageToolParams,
+  ): string | null {
+    if (params.prompt.trim() === '') {
+      return 'prompt must not be empty';
+    }
+    return null;
+  }
+
   protected createInvocation(
     params: GenerateImageToolParams,
     messageBus?: IToolMessageBus,
@@ -218,6 +247,12 @@ class GenerateImageToolInvocation extends BaseToolInvocation<
   }
 
   getDescription(): string {
+    const hasInputs =
+      this.params.input_paths !== undefined &&
+      this.params.input_paths.length > 0;
+    if (hasInputs) {
+      return `Edit image (${this.params.input_paths.join(', ')}): ${this.params.prompt}`;
+    }
     return `Generate image: ${this.params.prompt}`;
   }
 

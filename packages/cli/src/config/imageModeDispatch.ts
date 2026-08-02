@@ -10,7 +10,11 @@ import {
   writeToStdout,
   writeToStderr,
 } from '@vybestack/llxprt-code-core';
-import { detectImageMode, ImageModeError } from './imageMode.js';
+import {
+  detectImageMode,
+  ImageModeError,
+  type ImageModeFlags,
+} from './imageMode.js';
 import type { ParsedCliArgs } from '../cliBootstrap.js';
 
 /**
@@ -30,6 +34,27 @@ export interface DirectImageResult {
 }
 
 /**
+ * Map parsed CLI args onto the pure {@link ImageModeFlags} shape.
+ *
+ * Shared by direct image-mode dispatch and by the CLI entry point's decision to
+ * bypass the conversational stdin guard, so both agree on exactly when image
+ * mode is active. Empty/blank values are treated as absent.
+ */
+export function buildImageModeFlags(argv: ParsedCliArgs): ImageModeFlags {
+  return {
+    ...(argv.imageInput !== undefined && argv.imageInput.length > 0
+      ? { imageInput: argv.imageInput }
+      : {}),
+    ...(argv.imageOutput !== undefined && argv.imageOutput.trim() !== ''
+      ? { imageOutput: argv.imageOutput }
+      : {}),
+    ...(argv.imagePrompt !== undefined && argv.imagePrompt.trim() !== ''
+      ? { imagePrompt: argv.imagePrompt }
+      : {}),
+  };
+}
+
+/**
  * Resolve the direct-image-mode request from parsed CLI args, or null when
  * image mode is not active. Throws {@link ImageModeError} when image flags are
  * present but invalid (missing required, conflicts, stream-json).
@@ -40,36 +65,23 @@ export interface DirectImageResult {
 export function resolveDirectImageMode(
   argv: ParsedCliArgs,
 ): ReturnType<typeof detectImageMode> {
-  return detectImageMode(
-    {
-      ...(argv.imageInput !== undefined && argv.imageInput.length > 0
-        ? { imageInput: argv.imageInput }
-        : {}),
-      ...(argv.imageOutput !== undefined && argv.imageOutput.trim() !== ''
-        ? { imageOutput: argv.imageOutput }
-        : {}),
-      ...(argv.imagePrompt !== undefined && argv.imagePrompt.trim() !== ''
-        ? { imagePrompt: argv.imagePrompt }
-        : {}),
-    },
-    {
-      ...(argv.prompt !== undefined && argv.prompt !== ''
-        ? { prompt: argv.prompt }
-        : {}),
-      ...(argv.promptInteractive !== undefined && argv.promptInteractive !== ''
-        ? { promptInteractive: argv.promptInteractive }
-        : {}),
-      positionalPrompt:
-        argv.promptWords !== undefined &&
-        argv.promptWords.length > 0 &&
-        argv.promptWords.some((w) => w.trim() !== '')
-          ? argv.promptWords.join(' ')
-          : undefined,
-      ...(argv.outputFormat !== undefined
-        ? { outputFormat: argv.outputFormat }
-        : {}),
-    },
-  );
+  return detectImageMode(buildImageModeFlags(argv), {
+    ...(argv.prompt !== undefined && argv.prompt !== ''
+      ? { prompt: argv.prompt }
+      : {}),
+    ...(argv.promptInteractive !== undefined && argv.promptInteractive !== ''
+      ? { promptInteractive: argv.promptInteractive }
+      : {}),
+    positionalPrompt:
+      argv.promptWords !== undefined &&
+      argv.promptWords.length > 0 &&
+      argv.promptWords.some((w) => w.trim() !== '')
+        ? argv.promptWords.join(' ')
+        : undefined,
+    ...(argv.outputFormat !== undefined
+      ? { outputFormat: argv.outputFormat }
+      : {}),
+  });
 }
 
 function formatJsonResult(result: DirectImageResult): string {

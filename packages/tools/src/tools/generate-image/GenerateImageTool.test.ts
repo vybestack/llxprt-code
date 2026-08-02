@@ -247,4 +247,84 @@ describe('GenerateImageTool', () => {
       (runImageCalls[0] as Record<string, unknown>)['model'],
     ).toBeUndefined();
   });
+
+  it('maps a wrapped AbortError (inside ImageOperationError cause chain) to TIMEOUT', async () => {
+    // The runner wraps backend AbortErrors in ImageOperationError (stage
+    // 'provider') with a cause. The top-level error name is no longer
+    // 'AbortError', so isAbortError must walk the cause chain to classify
+    // this correctly as a cancellation (TIMEOUT), not EXECUTION_FAILED.
+    const abortError = new Error('The operation was aborted.');
+    abortError.name = 'AbortError';
+    const wrapped = makeRunnerError(
+      'Image generate failed: The operation was aborted.',
+      'provider',
+    );
+    wrapped.cause = abortError;
+    const { tool, runImageCalls } = makeTool({ runImageError: wrapped });
+
+    const result = await tool
+      .build({ prompt: 'a sunset', output_path: 'out.png' })
+      .execute(new AbortController().signal);
+
+    expect(result.error?.type).toBe(ToolErrorType.TIMEOUT);
+    expect(runImageCalls).toHaveLength(1);
+  });
+
+  it('getDescription says "Generate image" for generation (no input paths)', () => {
+    const { tool } = makeTool();
+    const invocation = tool.build({
+      prompt: 'a cat',
+      output_path: 'out.png',
+    });
+    expect(invocation.getDescription()).toBe('Generate image: a cat');
+  });
+
+  it('getDescription says "Edit image" with input paths for editing', () => {
+    const { tool } = makeTool();
+    const invocation = tool.build({
+      prompt: 'fix the text',
+      output_path: 'out.png',
+      input_paths: ['original.png', 'reference.png'],
+    });
+    const desc = invocation.getDescription();
+    expect(desc).toMatch(/Edit image/i);
+    expect(desc).toContain('original.png');
+    expect(desc).toContain('reference.png');
+    expect(desc).toContain('fix the text');
+  });
+
+  it('rejects an empty prompt at build time and never invokes the runner', () => {
+    const { tool, runImageCalls } = makeTool();
+
+    expect(() => tool.build({ prompt: '', output_path: 'out.png' })).toThrow(
+      /empty/i,
+    );
+    expect(runImageCalls).toHaveLength(0);
+  });
+
+  it('rejects a whitespace-only prompt at build time and never invokes the runner', () => {
+    const { tool, runImageCalls } = makeTool();
+    const wsPrompt = [
+      ' ',
+      String.fromCharCode(9),
+      String.fromCharCode(10),
+      ' ',
+    ].join('');
+
+    expect(() =>
+      tool.build({ prompt: wsPrompt, output_path: 'out.png' }),
+    ).toThrow(/empty/i);
+    expect(runImageCalls).toHaveLength(0);
+  });
+
+  it('validateToolParams reports the empty-prompt violation', () => {
+    const { tool } = makeTool();
+
+    expect(
+      tool.validateToolParams({ prompt: '   ', output_path: 'out.png' }),
+    ).toMatch(/empty/i);
+    expect(
+      tool.validateToolParams({ prompt: 'a cat', output_path: 'out.png' }),
+    ).toBeNull();
+  });
 });

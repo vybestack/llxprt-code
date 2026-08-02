@@ -147,6 +147,17 @@ async function listWorkspaceEntries(
   const dir = path.isAbsolute(prefix)
     ? path.dirname(prefix)
     : path.resolve(workspaceRoot, path.dirname(prefix) || '.');
+
+  // Contain the resolved directory to the canonical workspace root: an
+  // absolute prefix like `/etc/` or a relative `../` resolves outside the
+  // workspace and must return no suggestions (no directory enumeration, no
+  // `../…` suggestions emitted).
+  const canonicalWorkspace = path.resolve(workspaceRoot);
+  const relativeToWorkspace = path.relative(canonicalWorkspace, dir);
+  if (relativeToWorkspace.startsWith('..')) {
+    return { dirs: [], images: [] };
+  }
+
   const base = path.basename(prefix);
 
   let entries: string[];
@@ -179,6 +190,32 @@ async function listWorkspaceEntries(
 }
 
 /**
+ * Determine whether a partial prefix resolves outside the canonical workspace
+ * root. An absolute prefix pointing elsewhere or a relative `../` traversal
+ * escapes and must produce zero suggestions.
+ */
+function prefixEscapesWorkspace(
+  prefix: string,
+  workspaceRoot: string,
+): boolean {
+  const canonicalWorkspace = path.resolve(workspaceRoot);
+  const resolvedDir = path.isAbsolute(prefix)
+    ? path.dirname(prefix)
+    : path.resolve(canonicalWorkspace, path.dirname(prefix) || '.');
+  const relativeDir = path.relative(canonicalWorkspace, resolvedDir);
+  if (relativeDir.startsWith('..')) {
+    return true;
+  }
+  // Also check the full prefix path (handles `../` where dirname is `.` but
+  // the basename `..` still resolves outside the workspace).
+  const resolvedFull = path.isAbsolute(prefix)
+    ? prefix
+    : path.resolve(canonicalWorkspace, prefix);
+  const relativeFull = path.relative(canonicalWorkspace, resolvedFull);
+  return relativeFull.startsWith('..');
+}
+
+/**
  * Produce completion suggestions for a partial `/image` argument against a real
  * workspace filesystem.
  *
@@ -205,6 +242,14 @@ export async function completeImageCommand(
   }
 
   if (state.phase === 'none') {
+    return [];
+  }
+
+  // Containment: if the partial prefix resolves outside the workspace root
+  // (absolute path elsewhere or relative `../` traversal), return NO
+  // suggestions — not even the prompt hint — so the completion never
+  // acknowledges or enumerates directories outside the workspace.
+  if (prefixEscapesWorkspace(state.partial, workspaceRoot)) {
     return [];
   }
 

@@ -128,6 +128,14 @@ describe('CodexImageBackend', () => {
       expect(body['quality']).toBe('auto');
       expect(body['size']).toBe('auto');
       expect(body['n']).toBe(1);
+      // The generation contract must NOT include edit-only keys.
+      expect(body['images']).toBeUndefined();
+      expect(body['image']).toBeUndefined();
+      // The body must contain ONLY the documented generation keys — no
+      // extra/undocumented fields that the provider might reject.
+      expect(Object.keys(body).sort()).toStrictEqual(
+        ['background', 'model', 'n', 'prompt', 'quality', 'size'].sort(),
+      );
     });
   });
 
@@ -376,6 +384,41 @@ describe('CodexImageBackend', () => {
       await expect(
         backend.generate({ prompt: 'hello' }, new AbortController().signal),
       ).rejects.toBeInstanceOf(ImageGenerationError);
+    });
+  });
+
+  describe('body-read failure preservation', () => {
+    it('preserves the underlying cause when response.text() rejects on a 2xx response', async () => {
+      // When the response body read fails (stream/abort/encoding), the
+      // surfaced error must preserve the original error as `cause` and must
+      // NOT be misreported as a "non-JSON response" parse error.
+      const bodyReadError = new Error('stream disturbed');
+      const fetchImpl: typeof fetch = (() =>
+        Promise.resolve(
+          new Response(
+            // A ReadableStream whose read() rejects, so response.text() fails.
+            new ReadableStream({
+              start(controller) {
+                controller.error(bodyReadError);
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )) as typeof fetch;
+      const backend = makeBackend({ fetchImpl });
+
+      const error = await backend
+        .generate({ prompt: 'hello' }, new AbortController().signal)
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(ImageGenerationError);
+      const genError = error as ImageGenerationError;
+      // The cause must be the original body-read error.
+      expect(genError.cause).toBe(bodyReadError);
+      // Must NOT be a "non-JSON response" message (that would indicate the
+      // body read failure was swallowed and misreported).
+      expect(genError.message).not.toMatch(/non-JSON/i);
+      expect(genError.message).toMatch(/could not be read/i);
     });
   });
 });

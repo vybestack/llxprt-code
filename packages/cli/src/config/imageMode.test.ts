@@ -76,7 +76,7 @@ describe('validateImageModeArgs', () => {
     expect(result.operation).toBe('generate');
     expect(result.outputPath).toBe('cat.png');
     expect(result.prompt).toBe('draw a cat');
-    expect(result.inputPaths).toEqual([]);
+    expect(result.inputPaths).toStrictEqual([]);
   });
 
   it('passes with output + prompt + inputs (edit)', () => {
@@ -86,7 +86,7 @@ describe('validateImageModeArgs', () => {
       imageInput: ['in.png'],
     });
     expect(result.operation).toBe('edit');
-    expect(result.inputPaths).toEqual(['in.png']);
+    expect(result.inputPaths).toStrictEqual(['in.png']);
   });
 
   it('preserves input order without comma-splitting', () => {
@@ -95,7 +95,7 @@ describe('validateImageModeArgs', () => {
       imagePrompt: 'edit',
       imageInput: ['a.png', 'b.png', 'c.png'],
     });
-    expect(result.inputPaths).toEqual(['a.png', 'b.png', 'c.png']);
+    expect(result.inputPaths).toStrictEqual(['a.png', 'b.png', 'c.png']);
   });
 
   it('rejects more than five inputs', () => {

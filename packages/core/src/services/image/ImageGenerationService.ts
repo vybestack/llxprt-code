@@ -275,6 +275,87 @@ export function strictBase64Decode(input: string): Buffer {
   return bytes;
 }
 
+/** Byte offsets of a single PNG chunk within the buffer. */
+interface PngChunkBounds {
+  readonly dataLength: number;
+  readonly typeStart: number;
+  readonly dataStart: number;
+  readonly crcStart: number;
+  readonly chunkEnd: number;
+}
+
+function assertPngSignature(bytes: Buffer): void {
+  if (bytes.length < PNG_SIGNATURE.length) {
+    throw new ImagePersistenceError(
+      'Decoded image bytes are shorter than a valid PNG signature.',
+    );
+  }
+  if (!bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    throw new ImagePersistenceError(
+      'Decoded image bytes do not start with a valid PNG signature.',
+    );
+  }
+}
+
+/**
+ * Read one chunk's bounds at `offset`, rejecting truncated headers and lengths
+ * that run past the end of the buffer.
+ *
+ * Layout: 4 bytes length + 4 bytes type + data + 4 bytes CRC.
+ */
+function readPngChunkBounds(bytes: Buffer, offset: number): PngChunkBounds {
+  if (offset + 8 > bytes.length) {
+    throw new ImagePersistenceError('PNG chunk header is truncated.');
+  }
+  const dataLength = bytes.readUInt32BE(offset);
+  const typeStart = offset + 4;
+  const dataStart = typeStart + 4;
+  const crcStart = dataStart + dataLength;
+  const chunkEnd = crcStart + 4;
+  if (chunkEnd > bytes.length) {
+    throw new ImagePersistenceError(
+      'PNG chunk length exceeds the buffer bounds.',
+    );
+  }
+  return { dataLength, typeStart, dataStart, crcStart, chunkEnd };
+}
+
+/** The first chunk must be an IHDR of length 13 with positive dimensions. */
+function assertFirstChunkIsValidIhdr(
+  bytes: Buffer,
+  type: Buffer,
+  chunk: PngChunkBounds,
+): void {
+  if (!type.equals(PNG_IHDR_TYPE)) {
+    throw new ImagePersistenceError('PNG first chunk is not IHDR.');
+  }
+  if (chunk.dataLength !== 13) {
+    throw new ImagePersistenceError(
+      `PNG IHDR chunk length must be 13 (received ${chunk.dataLength}).`,
+    );
+  }
+  const width = bytes.readUInt32BE(chunk.dataStart);
+  const height = bytes.readUInt32BE(chunk.dataStart + 4);
+  if (width === 0 || height === 0) {
+    throw new ImagePersistenceError('PNG IHDR dimensions must be positive.');
+  }
+}
+
+/** Validate the stored CRC against a CRC computed over chunk type + data. */
+function assertPngChunkCrc(
+  bytes: Buffer,
+  type: Buffer,
+  chunk: PngChunkBounds,
+): void {
+  const crcRegion = bytes.subarray(chunk.typeStart, chunk.crcStart);
+  const storedCrc = bytes.readUInt32BE(chunk.crcStart);
+  if (storedCrc !== pngCrc32(crcRegion)) {
+    throw new ImagePersistenceError(
+      `PNG chunk has an invalid CRC (type=${type.toString('ascii')}).`,
+    );
+  }
+}
+
 /**
  * Validate the structural integrity of a PNG byte buffer beyond the signature.
  *
@@ -289,16 +370,7 @@ export function strictBase64Decode(input: string): Buffer {
  * Throws {@link ImagePersistenceError} on any structural violation.
  */
 export function validatePngStructure(bytes: Buffer): void {
-  if (bytes.length < PNG_SIGNATURE.length) {
-    throw new ImagePersistenceError(
-      'Decoded image bytes are shorter than a valid PNG signature.',
-    );
-  }
-  if (!bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
-    throw new ImagePersistenceError(
-      'Decoded image bytes do not start with a valid PNG signature.',
-    );
-  }
+  assertPngSignature(bytes);
 
   let offset = PNG_SIGNATURE.length;
   let sawIhdr = false;
@@ -315,62 +387,32 @@ export function validatePngStructure(bytes: Buffer): void {
         'PNG has trailing bytes after the IEND chunk.',
       );
     }
-    // Each chunk: 4 bytes length + 4 bytes type + data + 4 bytes CRC.
-    if (offset + 8 > bytes.length) {
-      throw new ImagePersistenceError('PNG chunk header is truncated.');
-    }
-    const dataLength = bytes.readUInt32BE(offset);
-    const typeStart = offset + 4;
-    const dataStart = typeStart + 4;
-    const crcStart = dataStart + dataLength;
-    const chunkEnd = crcStart + 4;
-    if (chunkEnd > bytes.length) {
-      throw new ImagePersistenceError(
-        'PNG chunk length exceeds the buffer bounds.',
-      );
-    }
 
-    const type = bytes.subarray(typeStart, typeStart + 4);
-    const isFirstChunk = !sawIhdr;
-    if (isFirstChunk) {
-      if (!type.equals(PNG_IHDR_TYPE)) {
-        throw new ImagePersistenceError('PNG first chunk is not IHDR.');
-      }
-      if (dataLength !== 13) {
+    const chunk = readPngChunkBounds(bytes, offset);
+    const type = bytes.subarray(chunk.typeStart, chunk.typeStart + 4);
+
+    if (sawIhdr) {
+      if (type.equals(PNG_IHDR_TYPE)) {
         throw new ImagePersistenceError(
-          `PNG IHDR chunk length must be 13 (received ${dataLength}).`,
+          'PNG contains more than one IHDR chunk.',
         );
       }
-      const width = bytes.readUInt32BE(dataStart);
-      const height = bytes.readUInt32BE(dataStart + 4);
-      if (width === 0 || height === 0) {
-        throw new ImagePersistenceError(
-          'PNG IHDR dimensions must be positive.',
-        );
-      }
+    } else {
+      assertFirstChunkIsValidIhdr(bytes, type, chunk);
       sawIhdr = true;
-    } else if (type.equals(PNG_IHDR_TYPE)) {
-      throw new ImagePersistenceError('PNG contains more than one IHDR chunk.');
-    }
-
-    if (type.equals(PNG_IEND_TYPE) && dataLength !== 0) {
-      throw new ImagePersistenceError('PNG IEND chunk must have zero length.');
-    }
-
-    // Validate the CRC over type + data.
-    const crcRegion = bytes.subarray(typeStart, crcStart);
-    const storedCrc = bytes.readUInt32BE(crcStart);
-    const computedCrc = pngCrc32(crcRegion);
-    if (storedCrc !== computedCrc) {
-      throw new ImagePersistenceError(
-        `PNG chunk has an invalid CRC (type=${type.toString('ascii')}).`,
-      );
     }
 
     if (type.equals(PNG_IEND_TYPE)) {
+      if (chunk.dataLength !== 0) {
+        throw new ImagePersistenceError(
+          'PNG IEND chunk must have zero length.',
+        );
+      }
       sawIend = true;
     }
-    offset = chunkEnd;
+
+    assertPngChunkCrc(bytes, type, chunk);
+    offset = chunk.chunkEnd;
   }
 
   if (!sawIhdr) {
@@ -501,7 +543,10 @@ export async function persistBase64ImageResult(
     await fs.writeFile(tempPath, bytes, { flag: 'wx' });
     await fs.rename(tempPath, finalPath);
   } catch (err) {
-    await fs.rm(tempPath, { force: true });
+    // Best-effort cleanup: a cleanup failure must NEVER mask the original
+    // persistence error. Swallow rm rejections so the ImagePersistenceError
+    // with its original `cause` is always what surfaces.
+    await fs.rm(tempPath, { force: true }).catch(() => {});
     throw new ImagePersistenceError(
       `Failed to persist generated image to ${finalPath}.`,
       { cause: err },

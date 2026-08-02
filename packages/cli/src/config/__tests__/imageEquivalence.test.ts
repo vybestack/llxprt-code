@@ -43,9 +43,9 @@ describe('entry-point equivalence (real slash parse, real CLI mapping, common se
       inputPaths: mode!.inputPaths,
     });
 
-    expect(slashRequest).toEqual(cliRequest);
+    expect(slashRequest).toStrictEqual(cliRequest);
     expect(cliRequest.operation).toBe('generate');
-    expect(cliRequest.inputPaths).toEqual([]);
+    expect(cliRequest.inputPaths).toStrictEqual([]);
   });
 
   it('edit: /image parse and CLI flags produce the same normalized request', () => {
@@ -72,9 +72,9 @@ describe('entry-point equivalence (real slash parse, real CLI mapping, common se
       inputPaths: mode!.inputPaths,
     });
 
-    expect(slashRequest).toEqual(cliRequest);
+    expect(slashRequest).toStrictEqual(cliRequest);
     expect(cliRequest.operation).toBe('edit');
-    expect(cliRequest.inputPaths).toEqual([inputPath]);
+    expect(cliRequest.inputPaths).toStrictEqual([inputPath]);
   });
 
   it('all entry points preserve multi-input order identically', () => {
@@ -102,9 +102,9 @@ describe('entry-point equivalence (real slash parse, real CLI mapping, common se
       inputPaths: mode!.inputPaths,
     });
 
-    expect(slashRequest.inputPaths).toEqual(inputs);
-    expect(cliRequest.inputPaths).toEqual(inputs);
-    expect(slashRequest).toEqual(cliRequest);
+    expect(slashRequest.inputPaths).toStrictEqual(inputs);
+    expect(cliRequest.inputPaths).toStrictEqual(inputs);
+    expect(slashRequest).toStrictEqual(cliRequest);
   });
 
   it('tool surface produces the same normalized request shape', () => {
@@ -124,7 +124,7 @@ describe('entry-point equivalence (real slash parse, real CLI mapping, common se
       outputPath,
     });
 
-    expect(toolRequest).toEqual(cliRequest);
+    expect(toolRequest).toStrictEqual(cliRequest);
     expect(toolRequest.operation).toBe('generate');
   });
 });

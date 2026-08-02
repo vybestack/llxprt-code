@@ -27,7 +27,14 @@ const PNG_SIGNATURE_BYTES = Buffer.from([
 
 const JPEG_SIGNATURE_BYTES_PREFIX = Buffer.from([0xff, 0xd8, 0xff]);
 
-const WEBP_SIGNATURE_BYTES = Buffer.from([0x52, 0x49, 0x46, 0x46]);
+const WEBP_SIGNATURE_BYTES = Buffer.from([
+  0x52,
+  0x49,
+  0x46,
+  0x46, // "RIFF"
+]);
+
+const WEBP_FOURCC_BYTES = Buffer.from([0x57, 0x45, 0x42, 0x50]); // "WEBP"
 
 /**
  * Model identifier for the Codex image-generation backend.
@@ -176,7 +183,19 @@ export class CodexImageBackend implements ImageGenerationBackend {
     });
 
     if (!response.ok) {
-      const bodyText = await response.text().catch(() => '');
+      let bodyText = '';
+      try {
+        bodyText = await response.text();
+      } catch (readError) {
+        throw new ImageGenerationError(
+          `Codex image ${operationName} failed with status ${response.status} ${response.statusText} and the error body could not be read.`,
+          {
+            status: response.status,
+            endpoint,
+            cause: readError,
+          },
+        );
+      }
       throw new ImageGenerationError(
         `Codex image ${operationName} failed with status ${response.status} ${response.statusText}`,
         {
@@ -187,7 +206,19 @@ export class CodexImageBackend implements ImageGenerationBackend {
       );
     }
 
-    const rawBody = await response.text().catch(() => '');
+    let rawBody: string;
+    try {
+      rawBody = await response.text();
+    } catch (readError) {
+      throw new ImageGenerationError(
+        `Codex image ${operationName} response body could not be read.`,
+        {
+          status: response.status,
+          endpoint,
+          cause: readError,
+        },
+      );
+    }
     let parsed: CodexImageGenerateResponse;
     try {
       parsed = JSON.parse(rawBody) as CodexImageGenerateResponse;
@@ -303,10 +334,16 @@ export class CodexImageBackend implements ImageGenerationBackend {
     const credential = await this.getCredential();
     const endpoint = buildCodexImageEditEndpoint(this.getBaseUrl());
 
+    // The Codex `/images/edits` contract requires `images` to be an array of
+    // `{ image_url }` objects, NOT an array of bare data-URL strings and not
+    // the singular `image` key. Anything else is rejected by the service with
+    // `400 missing_required_parameter: images`.
     const body = {
       model: CODEX_IMAGE_MODEL,
       prompt: request.prompt,
-      image: dataUrls,
+      images: dataUrls.map((imageUrl) => ({ image_url: imageUrl })),
+      background: 'auto',
+      quality: 'auto',
       size: 'auto',
     };
 
@@ -414,11 +451,24 @@ function detectImageMimeType(ext: string, bytes: Buffer): string | null {
     return null;
   }
   if (ext === '.webp') {
+    // Verify BOTH the RIFF container prefix AND the WEBP fourCC at byte
+    // offset 8, so a RIFF file that is NOT WebP (e.g. WAV/AVI renamed .webp)
+    // is rejected instead of being misclassified as image/webp.
     if (
-      bytes.length >= 4 &&
-      bytes.subarray(0, 4).equals(WEBP_SIGNATURE_BYTES)
+      bytes.length >= WEBP_SIGNATURE_BYTES.length &&
+      bytes
+        .subarray(0, WEBP_SIGNATURE_BYTES.length)
+        .equals(WEBP_SIGNATURE_BYTES)
     ) {
-      return 'image/webp';
+      const fourccStart = WEBP_SIGNATURE_BYTES.length + 4; // skip RIFF(4) + size(4)
+      if (
+        bytes.length >= fourccStart + WEBP_FOURCC_BYTES.length &&
+        bytes
+          .subarray(fourccStart, fourccStart + WEBP_FOURCC_BYTES.length)
+          .equals(WEBP_FOURCC_BYTES)
+      ) {
+        return 'image/webp';
+      }
     }
     return null;
   }

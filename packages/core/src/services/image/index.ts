@@ -42,3 +42,9 @@ export type {
   ImageOperationDispatchDeps,
 } from './imageOperationDispatch.js';
 export { runImageOperation } from './imageOperationDispatch.js';
+
+export type {
+  ImageOperationRunner,
+  ImageOperationRunnerInput,
+  ImageOperationRunnerResult,
+} from './imageCapability.js';

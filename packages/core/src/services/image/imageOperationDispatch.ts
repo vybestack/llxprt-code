@@ -114,6 +114,28 @@ function validateBackendResultMime(backendResult: {
 }
 
 /**
+ * Run `step`, tagging any non-{@link ImageOperationError} failure with the
+ * stage it occurred in so callers can always identify where an operation broke.
+ * An error that already carries a stage is rethrown unchanged.
+ */
+async function inStage<T>(
+  stage: ImageOperationError['stage'],
+  label: string,
+  step: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await step();
+  } catch (error) {
+    if (error instanceof ImageOperationError) throw error;
+    throw new ImageOperationError(
+      `${label} failed: ${error instanceof Error ? error.message : String(error)}`,
+      stage,
+      { cause: error },
+    );
+  }
+}
+
+/**
  * Run a complete image operation (generate or edit) end-to-end.
  *
  * This is the single shared service entry point that the `generate_image`
@@ -126,54 +148,27 @@ export async function runImageOperation(
   deps: ImageOperationDispatchDeps,
 ): Promise<ImageOperationResult> {
   const signal = input.signal ?? deps.signal ?? new AbortController().signal;
-  let request;
-  try {
-    request = buildNormalizedImageRequest(input);
-  } catch (error) {
-    if (error instanceof ImageOperationError) throw error;
-    throw new ImageOperationError(
-      `Image request validation failed: ${error instanceof Error ? error.message : String(error)}`,
-      'input-validation',
-      { cause: error },
-    );
-  }
 
-  let resolvedOutputPath: {
-    readonly absolute: string;
-    readonly relative: string;
-  };
-  try {
-    resolvedOutputPath = await resolveOutputPath(
-      request.outputPath,
-      deps.workspaceRoot,
-    );
-  } catch (error) {
-    if (error instanceof ImageOperationError) throw error;
-    throw new ImageOperationError(
-      `Output path validation failed: ${error instanceof Error ? error.message : String(error)}`,
-      'input-validation',
-      { cause: error },
-    );
-  }
-  const { absolute, relative } = resolvedOutputPath;
+  const request = await inStage(
+    'input-validation',
+    'Image request validation',
+    () => buildNormalizedImageRequest(input),
+  );
+
+  const { absolute, relative } = await inStage(
+    'input-validation',
+    'Output path validation',
+    () => resolveOutputPath(request.outputPath, deps.workspaceRoot),
+  );
 
   // Prevalidate ALL input paths before any billable provider request so a
   // validation failure never reaches the backend. Canonical absolute paths
   // are passed to the backend (the backend owns encoding them as data URLs).
-  let resolvedInputPaths: readonly string[];
-  try {
-    resolvedInputPaths = await resolveInputPaths(
-      request.inputPaths,
-      deps.workspaceRoot,
-    );
-  } catch (error) {
-    if (error instanceof ImageOperationError) throw error;
-    throw new ImageOperationError(
-      `Input path validation failed: ${error instanceof Error ? error.message : String(error)}`,
-      'input-validation',
-      { cause: error },
-    );
-  }
+  const resolvedInputPaths = await inStage(
+    'input-validation',
+    'Input path validation',
+    () => resolveInputPaths(request.inputPaths, deps.workspaceRoot),
+  );
 
   const backend = deps.resolveBackend();
   if (backend === null) {
@@ -183,43 +178,40 @@ export async function runImageOperation(
     );
   }
 
-  let backendResult;
-  try {
-    backendResult = await dispatchBackend(
-      backend,
-      {
-        operation: request.operation,
-        prompt: request.prompt,
-        inputPaths: resolvedInputPaths,
-        ...(request.sessionId !== undefined
-          ? { sessionId: request.sessionId }
-          : {}),
-      },
-      signal,
-    );
-  } catch (error) {
-    if (error instanceof ImageOperationError) throw error;
+  // Enforce cancellation BEFORE the billable provider call: an already-aborted
+  // request must not reach the backend at all.
+  if (signal.aborted) {
     throw new ImageOperationError(
-      `Image ${request.operation} failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Image ${request.operation} was cancelled before the provider call.`,
       'provider',
-      { cause: error },
     );
   }
+
+  const backendResult = await inStage(
+    'provider',
+    `Image ${request.operation}`,
+    () =>
+      dispatchBackend(
+        backend,
+        {
+          operation: request.operation,
+          prompt: request.prompt,
+          inputPaths: resolvedInputPaths,
+          ...(request.sessionId !== undefined
+            ? { sessionId: request.sessionId }
+            : {}),
+        },
+        signal,
+      ),
+  );
 
   validateBackendResultMime(backendResult);
 
   const bytes = decodeBackendResult(backendResult.data);
 
-  try {
-    await writeImageAtomically(bytes, absolute, signal);
-  } catch (error) {
-    if (error instanceof ImageOperationError) throw error;
-    throw new ImageOperationError(
-      `Failed to write image artifact: ${error instanceof Error ? error.message : String(error)}`,
-      'artifact-write',
-      { cause: error },
-    );
-  }
+  await inStage('artifact-write', 'Image artifact write', () =>
+    writeImageAtomically(bytes, absolute, signal),
+  );
 
   return {
     operation: request.operation,

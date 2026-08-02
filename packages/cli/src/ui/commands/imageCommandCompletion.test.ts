@@ -53,8 +53,10 @@ describe('completeImageCommand (real workspace filesystem)', () => {
   let workspaceRoot = '';
 
   beforeEach(async () => {
-    workspaceRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'llxprt-image-completion-'),
+    workspaceRoot = await fs.promises.realpath(
+      await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-image-completion-'),
+      ),
     );
     await fs.promises.writeFile(
       path.join(workspaceRoot, 'cat.png'),
@@ -119,7 +121,7 @@ describe('completeImageCommand (real workspace filesystem)', () => {
       'out.png "draw a cat',
       workspaceRoot,
     );
-    expect(suggestions).toEqual([]);
+    expect(suggestions).toStrictEqual([]);
   });
 
   it('correctly quotes paths with spaces', async () => {
@@ -138,5 +140,21 @@ describe('completeImageCommand (real workspace filesystem)', () => {
     );
     expect(suggestions.some((s) => s.includes('cat.png'))).toBe(true);
     expect(suggestions.some((s) => s.includes('dog.png'))).toBe(false);
+  });
+
+  it('returns no suggestions for an absolute prefix outside the workspace', async () => {
+    const suggestions = await completeImageCommand(
+      'out.png /etc/',
+      workspaceRoot,
+    );
+    expect(suggestions).toStrictEqual([]);
+  });
+
+  it('returns no suggestions for a ../ traversal prefix', async () => {
+    const suggestions = await completeImageCommand(
+      'out.png ../',
+      workspaceRoot,
+    );
+    expect(suggestions).toStrictEqual([]);
   });
 });
